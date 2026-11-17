@@ -203,15 +203,15 @@ pub(crate) fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections
 
 pub(crate) fn directly_under(path: &str, under: &str) -> Option<String> {
     if !path.starts_with(AsRef::<str>::as_ref(under)) { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(path.chars());
-    let u: Vec<scalar> = nikaia_std::list::chars(under.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(path.chars());
+    let u: Vec<scalar> = nikaia_std::list::scalars(under.chars());
     let rest = between(&c, u.len() as i64, c.len() as i64);
     if rest.contains("::") { return None; }
     Some(rest)
 }
 
 pub(crate) fn before_colon(written: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     let mut end = c.len() as i64;
     for at in 0..c.len() as i64 { if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && end == c.len() as i64 { end = at; } }
     let head = between(&c, 0, end);

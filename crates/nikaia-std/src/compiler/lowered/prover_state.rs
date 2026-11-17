@@ -901,7 +901,7 @@ pub(crate) fn returned_before(before_return: &collections::BTreeMap<i64, String>
 }
 
 pub(crate) fn without_full_stops(text: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut end = c.len() as i64;
     while end > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(end, 1)) as usize) } == '.' { end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) }; }
     let mut out: String = String::from("");

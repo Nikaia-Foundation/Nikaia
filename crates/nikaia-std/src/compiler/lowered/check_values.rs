@@ -130,10 +130,9 @@ impl CheckState {
     pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
         let at = check_span_at(world, call, span);
         for said in self.findings.iter() { if said.code == "NK1353" && said.span.start == at.start { return; } }
-        let mut warned = check_refusal("NK1353", &at, String::from("`chars()` is not one of the views text is read through."), vec![String::from("Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.")], Some(String::from("Write `.scalars` for `.chars()`.")));
-        warned.severity = CheckSeverity::Warning;
-        warned.edit = chars_renamed(world, call, receiver);
-        self.findings.push(warned);
+        let mut refused = check_refusal("NK1353", &at, String::from("`chars()` is not one of the views text is read through."), vec![String::from("Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.")], Some(String::from("Write `.scalars` for `.chars()`; `nikaia fix` writes it.")));
+        refused.edit = chars_renamed(world, call, receiver);
+        self.findings.push(refused);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

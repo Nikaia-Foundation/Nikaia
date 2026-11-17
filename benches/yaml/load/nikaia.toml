@@ -1,0 +1,9 @@
+# The program `bench.nika` builds as `load`, here as the package it checks in:
+# `bench.nika` copies `load.nika` into a project of its own with the same
+# dependency and its build settings (README, *How it is measured*).
+[package]
+name = "load"
+version = "0.1.0"
+
+[dependencies]
+yaml = { path = "../../../packages/yaml" }

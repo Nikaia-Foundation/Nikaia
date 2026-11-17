@@ -3237,22 +3237,10 @@ touches = []
 returns = "ref(self)"
 signature = "(ref self) -> Seq[u8] sync ends"
 
-# The characters, one at a time.
-#
-# They are **characters** and not bytes: a character outside ASCII is more than
-# one byte, and this walks one of it rather than several.
-[fn."String::chars"]
-pub = true
-panics = false
-sync = true
-touches = []
-returns = "ref(self)"
-signature = "(ref self) -> Seq[scalar] sync ends"
-
 # How many **bytes** the text is.
 #
 # Not how many characters: text is UTF-8, so a character outside ASCII is more
-# than one byte. `chars().count()` is the other question.
+# than one byte. `.scalars.count()` is the other question.
 [fn."String::len"]
 pub = true
 panics = false
@@ -3906,7 +3894,7 @@ signature = "[T](self: Seq[T], f: fn(T))"
 # The same elements, from the last to the first.
 #
 # Nothing is collected on the way: the sequence is walked from its back end,
-# which is why it has to have one - a range, a list's `iter()`, `chars()`.
+# which is why it has to have one - a range, a list's `iter()`, a text's `.scalars`.
 [fn."Seq::rev"]
 pub = true
 panics = false
@@ -4526,22 +4514,10 @@ touches = []
 returns = "ref(self)"
 signature = "(self: ref String) -> Seq[u8] sync ends"
 
-# The characters, one at a time.
-#
-# They are **characters** and not bytes: a character outside ASCII is more than
-# one byte, and this walks one of it rather than several.
-[fn."str::chars"]
-pub = true
-panics = false
-sync = true
-touches = []
-returns = "ref(self)"
-signature = "(self: ref String) -> Seq[scalar] sync ends"
-
 # How many **bytes** the text is.
 #
 # Not how many characters: text is UTF-8, so a character outside ASCII is more
-# than one byte. `chars().count()` is the other question.
+# than one byte. `.scalars.count()` is the other question.
 [fn."str::len"]
 pub = true
 panics = false

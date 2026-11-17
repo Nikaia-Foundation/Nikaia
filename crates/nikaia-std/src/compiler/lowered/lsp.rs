@@ -350,7 +350,7 @@ pub(crate) fn lsp_uri_of(path: &str, uris: &collections::BTreeMap<String, String
 
 pub(crate) fn lsp_path_uri(path: &str) -> String {
     let mut out: String = String::from("file://");
-    let digits: Vec<scalar> = nikaia_std::list::chars("0123456789ABCDEF".chars());
+    let digits: Vec<scalar> = nikaia_std::list::scalars("0123456789ABCDEF".chars());
     for b in path.bytes() {
         let d = b as i64;
         let kept = d >= 48 && d <= 57 || d >= 65 && d <= 90 || d >= 97 && d <= 122 || d == 45 || d == 46 || d == 95 || d == 126 || d == 47;

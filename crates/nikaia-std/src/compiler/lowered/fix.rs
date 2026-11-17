@@ -68,7 +68,7 @@ pub(crate) fn fix_diagnosed<H: LspHost>(host: &H, file: &str, key: &str, open: &
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown]) -> FixPlan {
-    for shown in found.iter() { if !shown.warning { return FixPlan { text: nikaia_std::block::Text::from(source.to_string()), said: vec![format!("{}: not fixed: its check has errors", path)], left: true }; } }
+    for shown in found.iter() { if !shown.warning && shown.edit.is_none() { return FixPlan { text: nikaia_std::block::Text::from(source.to_string()), said: vec![format!("{}: not fixed: its check has errors", path)], left: true }; } }
     let size = source.as_bytes().len() as i64;
     let mut edits: Vec<FixEdit> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for shown in found.iter() {

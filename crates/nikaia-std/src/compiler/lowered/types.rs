@@ -59,7 +59,7 @@ pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spa
 
 pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet<String>) {
     known.insert(nikaia_std::block::Text::from(key.to_string()));
-    let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(key.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     if last >= 0 { known.insert(slice(&c, unsafe { nikaia_std::proven::add::<i64>(last, 2) }, c.len() as i64)); }
@@ -462,7 +462,7 @@ pub(crate) fn nothing_declares(name: &str, known: &collections::BTreeSet<String>
 
 pub(crate) fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
     if nikaia_std::list::contains(&BUILT_IN, &name) || own.types.contains_key(name) || library.types.contains_key(name) { return false; }
-    let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     let wanted = if last < 0 { format!("::{}", name) } else { format!("{}::", slice(&c, 0, last)) };
@@ -477,7 +477,7 @@ pub(crate) fn std_module_of(name: &str, known: &collections::BTreeSet<String>) -
     let ending = format!("::{}", name);
     for key in known.iter() {
         if key.ends_with(AsRef::<str>::as_ref(&ending)) {
-            let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
+            let c: Vec<scalar> = nikaia_std::list::scalars(key.chars());
             let at = find_text(&c, 0, "::");
             let module = slice(&c, 0, at);
             for one in STD_MODULES.iter() {

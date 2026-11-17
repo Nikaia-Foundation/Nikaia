@@ -496,7 +496,7 @@ pub(crate) fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Ty
     let mut name = nikaia_std::block::Text::from(written.to_string());
     let segments: Vec<&str> = written.split("::").collect::<Vec<_>>();
     if segments.len() > 1 { name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }).to_string()); } ::core::mem::drop(segments);
-    let first: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let first: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let a_word = !first.is_empty() && (*unsafe { nikaia_std::proven::read(&first, (0) as usize) }).is_alphabetic();
     if a_word && !rsrc_plain_name(&name) && name != "Self" && !unit.fields.contains_key(&name) {
         if asked.own.types.contains_key(&name) {

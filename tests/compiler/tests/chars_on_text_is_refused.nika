@@ -1,0 +1,7 @@
+// #1974: `"ab".chars()` is refused, `NK1353`: `std` has no `chars`, and text
+// is read through a view that names its unit (ADR-320 D3). The refusal's help
+// names its edit, `.scalars` for `.chars()`, which `nikaia fix` makes
+// (`fix_writes_scalars.nika`).
+fn main() throws {
+    println("ab".chars().count())
+}

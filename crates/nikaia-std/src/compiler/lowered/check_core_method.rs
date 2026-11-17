@@ -378,6 +378,13 @@ pub(crate) fn check_core_method_views_of_text(on: &Ty) -> bool {
     }
 }
 
+pub(crate) fn check_core_method_text_receiver(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => args.is_empty() && (name == "String" || name == "str"),
+        _ => false,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -431,7 +438,6 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "String" || name == "str"),
         _ => false,
     };
-    if text && name == "chars" && args.is_empty() { state.a_chars_call(world, expr, receiver, span); }
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") { state.facts.text_finds.insert(id_of(receiver) as i64); }
     if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {
@@ -459,7 +465,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if text && pattern_at >= 0 && pattern_at < args.len() as i64 {
         match unsafe { nikaia_std::proven::read(&args, (pattern_at) as usize) } {
             Expr::LitStr { text: written, .. } => {
-                let scalars: Vec<scalar> = nikaia_std::list::chars(written.chars());
+                let scalars: Vec<scalar> = nikaia_std::list::scalars(written.chars());
                 if scalars.len() == 1 {
                     let literal = check_core_method_char_literal(*unsafe { nikaia_std::proven::read(&scalars, (0) as usize) });
                     if literal != "" { state.facts.char_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (pattern_at) as usize) }) as i64, literal); }
@@ -928,6 +934,10 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within, on_timeout)", span);
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);
+    }
+    if name == "chars" && args.is_empty() && config.is_empty() && check_core_method_text_receiver(&on) {
+        state.a_chars_call(world, expr, receiver, span);
+        return Ty::Seq { item: std::boxed::Box::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)

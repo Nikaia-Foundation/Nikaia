@@ -2,7 +2,7 @@
 // Edit parse_notes.nika in the directory above, not this file.
 
 pub(crate) fn previous_token(source: &str, end: i64) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     if end <= 0 { return String::from(""); }
     let last = *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(end, 1) }));
     let mut start = unsafe { nikaia_std::proven::sub::<i64>(end, 1) };
@@ -15,7 +15,7 @@ pub(crate) fn a_word_char(c: scalar) -> bool { c.is_alphanumeric() || c == '_' }
 pub(crate) fn an_operator_char(c: scalar) -> bool { c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>' || c == '!' || c == '&' || c == '|' }
 
 pub(crate) fn unclosed_quote(source: &str) -> i64 {
-    let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut open: i64 = -1;
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -35,7 +35,7 @@ pub(crate) fn unclosed_quote(source: &str) -> i64 {
 }
 
 pub(crate) fn unclosed_bracket(source: &str) -> i64 {
-    let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut stack: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut in_string = false;
     let mut at: i64 = 0;
@@ -63,7 +63,7 @@ pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
 }
 
 pub(crate) fn opening_of_an_unclosed_comment(source: &str) -> i64 {
-    let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut open: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -100,7 +100,7 @@ pub(crate) fn opening_of_an_unclosed_comment(source: &str) -> i64 {
 }
 
 pub(crate) fn first_sentence(text: &str) -> Vec<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut quoted = false;
     for at in 0..c.len() as i64 {
         if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.' && !quoted && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ' ' {

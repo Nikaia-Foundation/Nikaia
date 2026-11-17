@@ -65,7 +65,7 @@ pub fn literal_length(segments: &[Segment]) -> i64 {
 }
 
 pub fn split(body: &str) -> Result<Vec<Segment>, nikaia_std::error::Thrown<Refused>> {
-    let mut splitter = Splitter { c: nikaia_std::list::chars(body.chars()), at: 0, scan: Scan { state: ScanState::Text, tail: vec![], attribute: String::from("") } };
+    let mut splitter = Splitter { c: nikaia_std::list::scalars(body.chars()), at: 0, scan: Scan { state: ScanState::Text, tail: vec![], attribute: String::from("") } };
     let segments = splitter.until(false)?;
     if splitter.at < splitter.c.len() as i64 { return Err(nikaia_std::error::throwing(Refused::Because(String::from("`</for>` without a `<for …>` before it")), &"split")); }
     Ok(segments)

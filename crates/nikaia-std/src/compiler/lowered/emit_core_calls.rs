@@ -681,7 +681,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_method_call_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
-        if self.emit_call_chars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
+        if self.emit_call_scalars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
         if receiver.is_some() && args.len() == 1 {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             match on {
@@ -1124,22 +1124,14 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_call_chars<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, name: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_call_scalars<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, name: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if receiver.is_none() || name != "collect" || !args.is_empty() { return Ok(false); }
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
         Ok(match on {
-            Expr::MethodCall { receiver: text, method: chars, args: none, .. } => {
-                let text = nikaia_std::boxed::open(text); let chars = *chars;
-                if !none.is_empty() || emit_text(world, chars) != "chars" || self.facts.collected_into.contains(&node_key(on)) { return Ok(false); }
-                out.push("nikaia_std::list::chars(");
-                self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
-                out.push(".chars())");
-                return Ok(true);
-            },
             Expr::Field { base: text, .. } => {
                 let text = nikaia_std::boxed::open(text);
                 if !self.facts.text_scalars.contains(&node_key(on)) || self.facts.collected_into.contains(&node_key(on)) { return Ok(false); }
-                out.push("nikaia_std::list::chars(");
+                out.push("nikaia_std::list::scalars(");
                 self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
                 out.push(".chars())");
                 return Ok(true);
@@ -1325,8 +1317,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple98162| {
-        let (i, word) = __nikaia_tuple98162;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97587| {
+        let (i, word) = __nikaia_tuple97587;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

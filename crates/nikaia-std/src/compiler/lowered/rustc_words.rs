@@ -42,8 +42,8 @@ pub(crate) fn both_sides_the_same(message: &str) -> Option<String> {
 }
 
 pub(crate) fn backticked_after(message: &str, word: &str) -> Option<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(message.chars());
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(message.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     let at = find_text(&c, 0, word);
     if at < 0 { return None; }
     let open = find(&c, at + w.len() as i64, '`');
@@ -54,7 +54,7 @@ pub(crate) fn backticked_after(message: &str, word: &str) -> Option<String> {
 }
 
 pub(crate) fn shared_names(message: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(message.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(message.chars());
     let mut out: String = String::from("");
     let mut last = ' ';
     let mut at: i64 = 0;
@@ -63,7 +63,7 @@ pub(crate) fn shared_names(message: &str) -> String {
         for hull in ["std::rc::Rc<", "alloc::rc::Rc<", "std::sync::Arc<", "alloc::sync::Arc<", "Rc<", "Arc<"] {
             if !taken && begins_at(&c, at, hull) {
                 let preceded_by_a_name = !hull.contains("::") && at > 0 && (last.is_alphanumeric() || last == '_' || last == ':');
-                let h: Vec<scalar> = nikaia_std::list::chars(hull.chars());
+                let h: Vec<scalar> = nikaia_std::list::scalars(hull.chars());
                 let close = closing_angle(&c, at + h.len() as i64);
                 if !preceded_by_a_name && close >= 0 {
                     out.push_str("Shared[");
@@ -96,15 +96,15 @@ pub(crate) fn closing_angle(c: &[scalar], from: i64) -> i64 {
 }
 
 pub(crate) fn begins_at(c: &[scalar], at: i64, word: &str) -> bool {
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     if (at + w.len() as i64) > c.len() as i64 { return false; }
     for k in 0..w.len() as i64 { if *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != *unsafe { nikaia_std::proven::read(&w, (k) as usize) } { return false; } }
     true
 }
 
 pub(crate) fn replaced(text: &str, from: &str, to: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
-    let f: Vec<scalar> = nikaia_std::list::chars(from.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
+    let f: Vec<scalar> = nikaia_std::list::scalars(from.chars());
     let mut out: String = String::from("");
     let mut at: i64 = 0;
     let mut next = find_text(&c, 0, from);
@@ -119,7 +119,7 @@ pub(crate) fn replaced(text: &str, from: &str, to: &str) -> String {
 }
 
 pub fn said(text: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.trim_end().chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.trim_end().chars());
     if c.is_empty() { return String::from(""); }
     let mut first: String = String::from("");
     first.push(*unsafe { nikaia_std::proven::read(&c, (0) as usize) });
@@ -140,8 +140,8 @@ pub(crate) fn headed(level: &str, code: &str) -> String {
 }
 
 pub(crate) fn word_in(line: &str, column: i64, word: &str) -> (i64, i64) {
-    let c: Vec<scalar> = nikaia_std::list::chars(line.chars());
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(line.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     if w.is_empty() { return (column, 1); }
     let starts_wordy = a_wordy_char(*unsafe { nikaia_std::proven::read(&w, (0) as usize) });
     let ends_wordy = a_wordy_char(*unsafe { nikaia_std::proven::read(&w, (nikaia_std::proven::sub::<i64>(w.len() as i64, 1)) as usize) });

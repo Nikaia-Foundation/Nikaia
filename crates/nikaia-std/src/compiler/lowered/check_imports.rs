@@ -15,7 +15,7 @@ pub(crate) fn has_a_self_parameter(contract: &FnContract) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn starts_with_a_capital(name: &str) -> bool {
-    let letters: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let letters: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     if letters.is_empty() { return false; }
     (*unsafe { nikaia_std::proven::read(&letters, (0) as usize) }).to_ascii_lowercase() != *unsafe { nikaia_std::proven::read(&letters, (0) as usize) }
 }

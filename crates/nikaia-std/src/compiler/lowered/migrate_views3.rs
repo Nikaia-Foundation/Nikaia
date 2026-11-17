@@ -357,7 +357,7 @@ pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut 
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_letter(position: i64) -> String {
     let letters = "abcdefghijklmnopqrstuvwxyz";
-    let chars: Vec<scalar> = nikaia_std::list::chars(letters.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(letters.chars());
     if position < 26 {
         let mut one: String = String::from("");
         one.push(*nikaia_std::index::get(&chars, nikaia_std::index::at(position)));
@@ -479,7 +479,7 @@ pub fn migrate_views3_markdown_unwritten(source: &str) -> Vec<String> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
@@ -517,7 +517,7 @@ pub(crate) fn migrate_ordinal_of(items: &[i64], wanted: i64) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_lent(code: &str) -> Vec<bool> {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let mut out: Vec<bool> = vec![];
     for k in migrate_parameters(&lexer.tokens) { out.push(migrate_text_at(&lexer.tokens, unsafe { nikaia_std::proven::add::<i64>(k, 2) }) == "ref" && migrate_text_at(&lexer.tokens, unsafe { nikaia_std::proven::add::<i64>(k, 3) }) != "mut"); }
@@ -527,7 +527,7 @@ pub fn migrate_views3_lent(code: &str) -> Vec<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_selves(code: &str) -> Vec<bool> {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let mut out: Vec<bool> = vec![];
     for (_, bare) in migrate_receivers(&lexer.tokens) { out.push(bare); }
@@ -537,7 +537,7 @@ pub fn migrate_views3_selves(code: &str) -> Vec<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent: &[bool]) -> String {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
     let n = tokens.len() as i64;

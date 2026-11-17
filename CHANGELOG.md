@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1422] — 2026-11-17
+
+**chars() on text is an error, std has no chars (#1974 steps 5-6)**
+- `chars()` on text is now an error (NK1353) whose `.scalars` edit `nikaia fix` still makes, and std no longer has `String::chars` or `str::chars`.
+
 ## [0.0.1421] — 2026-11-17
 
 **Merge origin/develop into develop (y10 sweep for #1974; lowered digest written by lower-std)**
