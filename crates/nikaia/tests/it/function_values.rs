@@ -32,7 +32,7 @@ fn a_function_named_as_a_value_is_typed() {
     for (value, ty) in [
         ("double", "fn(i64) -> i64 sync"),
         ("P", "fn() -> P sync"),
-        ("P::merge", "fn(ref P, P) sync"),
+        ("P::merge", "fn(P, keep P) sync"),
     ] {
         let source = format!(
             "{DECLARED}fn main() throws {{\n    let wrong: bool = {value}\n    println(\"x\")\n}}\n"

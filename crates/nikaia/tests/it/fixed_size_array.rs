@@ -214,7 +214,9 @@ fn an_element_of_the_wrong_type_is_the_lets_own_refusal() {
     assert_eq!(found.len(), 1, "{found:#?}");
     assert!(found[0].message.contains("Array[i64, 1]"), "{found:#?}");
     assert!(
-        found[0].message.contains("Array[ref String, 1]"),
+        found[0]
+            .message
+            .contains("`Array[String, 1]` whose items are views"),
         "{found:#?}"
     );
 }
