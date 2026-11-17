@@ -660,7 +660,9 @@ grammar Yaml {
 	// The first property is read once; the second, after blanks, may follow.
 	rule Props(ds: Vec[Dir]) -> Props =
 		a:here t:Tag(ds) n:AnchorAfter? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
-		| a:here n:Anchor t:TagAfter(ds)? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+		| a:here n:Anchor t:TagAfter(ds)? b:here -> {
+			Props { start: a, end: b, anchor: n, tag: t }
+		}
 	rule AnchorAfter -> String = Sep1 n:Anchor -> { n }
 	rule TagAfter(ds: Vec[Dir]) -> String = Sep1 t:Tag(ds) -> { t }
 	rule Sep1 = (" " | "\t")+ -> { }
@@ -1560,22 +1562,25 @@ fn plain_kind(s: String) -> Kind sync {
 	return Kind::Str
 }
 
+// Whether `s` holds only digits of `radix` from byte `from` on, and one at
+// least. A digit is ASCII, so the bytes are read in place (ADR-320 D6).
 fn digits_in(s: String, from: i64, radix: i64) -> bool sync {
-	let cs: Vec[scalar] = s.chars().collect()
-	if from >= cs.len() as i64 {
+	let bs = s.bytes
+	let n = bs.len() as i64
+	if from >= n {
 		return false
 	}
 	let mut i = from
-	while i < cs.len() as i64 {
-		let c = cs[i]
+	while i < n {
+		let c = bs[i]
 		let ok = if radix == 2 {
-			c == '0' || c == '1'
+			c == 48 || c == 49
 		} else if radix == 8 {
-			c >= '0' && c <= '7'
+			c >= 48 && c <= 55
 		} else if radix == 16 {
-			(c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+			(c >= 48 && c <= 57) || (c >= 97 && c <= 102) || (c >= 65 && c <= 70)
 		} else {
-			c >= '0' && c <= '9'
+			c >= 48 && c <= 57
 		}
 		if !ok {
 			return false
@@ -1606,7 +1611,8 @@ fn is_int(s: String) -> bool sync {
 // `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?`, and `.inf`, `.nan`
 // in their three spellings.
 fn is_float(s: String) -> bool sync {
-	let cs: Vec[scalar] = s.chars().collect()
+	let bs = s.bytes
+	let n = bs.len() as i64
 	let mut i = 0
 	if s.starts_with("-") || s.starts_with("+") {
 		i = 1
@@ -1619,14 +1625,14 @@ fn is_float(s: String) -> bool sync {
 		return true
 	}
 	let mut whole = 0
-	while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+	while i < n && bs[i] >= 48 && bs[i] <= 57 {
 		whole += 1
 		i += 1
 	}
 	let mut fraction = 0
-	if i < cs.len() as i64 && cs[i] == '.' {
+	if i < n && bs[i] == 46 {
 		i += 1
-		while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+		while i < n && bs[i] >= 48 && bs[i] <= 57 {
 			fraction += 1
 			i += 1
 		}
@@ -1634,13 +1640,13 @@ fn is_float(s: String) -> bool sync {
 	if whole == 0 && fraction == 0 {
 		return false
 	}
-	if i < cs.len() as i64 && (cs[i] == 'e' || cs[i] == 'E') {
+	if i < n && (bs[i] == 101 || bs[i] == 69) {
 		i += 1
-		if i < cs.len() as i64 && (cs[i] == '-' || cs[i] == '+') {
+		if i < n && (bs[i] == 45 || bs[i] == 43) {
 			i += 1
 		}
 		let mut exponent = 0
-		while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+		while i < n && bs[i] >= 48 && bs[i] <= 57 {
 			exponent += 1
 			i += 1
 		}
@@ -1648,7 +1654,7 @@ fn is_float(s: String) -> bool sync {
 			return false
 		}
 	}
-	return i == cs.len() as i64
+	return i == n
 }
 
 // The decimal number at the start of `t`, 0 where none is or where it does
@@ -2856,14 +2862,14 @@ pub fn as_i64(v: ref Value) -> i64 sync throws {
 // (63 bits, `0o777777777777777777777`), 22 or more never. A digit's value is
 // `hex_value`'s, branch free.
 fn radix_value(t: String, radix: i64) -> i64? sync {
-	let cs: Vec[scalar] = t.chars().collect()
-	let n = cs.len() as i64
+	let bs = t.bytes
+	let n = bs.len() as i64
 	let mut i = 2
-	while i < n && cs[i] == '0' {
+	while i < n && bs[i] == 48 {
 		i += 1
 	}
 	let digits = n - i
-	if radix == 16 && (digits > 16 || (digits == 16 && cs[i] > '7')) {
+	if radix == 16 && (digits > 16 || (digits == 16 && bs[i] > 55)) {
 		return null
 	}
 	if radix == 8 && digits > 21 {
@@ -2871,7 +2877,7 @@ fn radix_value(t: String, radix: i64) -> i64? sync {
 	}
 	let mut value = 0
 	while i < n {
-		value = value * radix + hex_value(cs[i])
+		value = value * radix + hex_value(bs[i] as scalar)
 		i += 1
 	}
 	return value
@@ -3488,11 +3494,12 @@ fn uri_escaped(t: String) -> String sync {
 
 // `width` upper-case hexadecimal digits of `v`.
 fn hex(v: i64, width: i64) -> String sync {
-	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
 	let mut out = String()
 	let mut k = (width - 1) * 4
 	while k >= 0 {
-		out.push(digits[(v >> k) & 15])
+		// `0`-`9` from 48 on, `A`-`F` from 65 on.
+		let d = ((v >> k) & 15) as u8
+		out.push((if d < 10 { d + 48 } else { d + 55 }) as scalar)
 		k -= 4
 	}
 	return out

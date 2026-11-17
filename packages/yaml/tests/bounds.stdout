@@ -1,23 +1,23 @@
-bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 79 proved
-  1421  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  1427  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  1427  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  2016  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
-  2016  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
-  2028  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
-  2030  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
-  2030  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
-  2066  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2080  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2108  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2117  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2118  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2655  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
-  2679  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
-  2874  value * radix + hex_value(cs[i])      justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  2874  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  3079  self.column += 1                      justified: a column of the text the library writes, which its length bounds
-  3138  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
-  3411  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
-  3431  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
-  3493  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
+bounds in src/main.nika: 65 indexes, 65 proved; 103 operations, 81 proved
+  1423  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  1429  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  1429  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  2022  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
+  2022  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
+  2034  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
+  2036  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
+  2036  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
+  2072  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2086  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2114  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2123  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2124  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2661  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
+  2685  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
+  2880  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  2880  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  3085  self.column += 1                      justified: a column of the text the library writes, which its length bounds
+  3144  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
+  3417  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
+  3437  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
+  3498  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
