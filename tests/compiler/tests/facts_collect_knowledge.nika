@@ -1,0 +1,41 @@
+// A `knowledge: <section> | <fact>` answer (the debrief's question (5), or the
+// `Issue:` field of the report beside the debrief) is entered as a facts line
+// of its section by `facts-collect.nika -- --apply`, as a `Fact:` line is; a
+// wrapped line starting `#N]` does not end a section (#2002).
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    process::run("mkdir", ["-p", f"{tmp}/docs/briefs/lane"])
+    fs::write(f"{tmp}/docs/builder-facts.md", fs::Root::Anywhere, "# Builder facts\n\n## Core\n\n### Every run\n\n* a core fact\n")
+    fs::write(f"{tmp}/docs/builder-facts-lookup.md", fs::Root::Anywhere, "# Lookup\n\n### Packages\n\nPaths: `nikaia.toml`\n\n* a package trap\n\n### Lowering and lower-std\n\nPaths: `lowered/`\n\nA paragraph wrapped at **[defect\n#N]**: still the same paragraph.\n")
+    fs::write(f"{tmp}/docs/briefs/lane/issue-1.md.debrief.md", fs::Root::Anywhere, "(5) knowledge: Packages | cargo judges path crates by mtime.\n(6) Fact: none\n")
+    fs::write(f"{tmp}/docs/briefs/lane/issue-1.md.report.md", fs::Root::Anywhere, "Result: done\nIssue: rules-gap: no rule names it; knowledge: Lowering | a lowered file names its source.\n")
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/facts-collect.nika", "--", "--apply"]; dir: tmp.clone())
+    println(out.stdout.trim())
+    println(fs::read_to_string(f"{tmp}/docs/builder-facts-lookup.md", fs::Root::Anywhere))
+    process::run("rm", ["-rf", tmp])
+}

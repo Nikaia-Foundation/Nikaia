@@ -1,0 +1,59 @@
+// A brief that names no `Facts:` sections gets, besides `Core`, each section of
+// docs/builder-facts-lookup.md whose `Paths:` line has a fragment in the
+// brief's text (or the issues inlined into its prompt), at most three, those
+// with most fragments found first (scripts/agent.nika, #2002); a `Facts:` line
+// wins. Run in a directory of its own with a small facts file.
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+// The prompt of a dry run, without its first line (the brief's path) and
+// without the options after it.
+fn prompt(nikaia: String, repo: String, tmp: String, brief: String) -> String throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/{brief}", "--dry-run"]; dir: tmp.clone())
+    if !out.ok { return f"code={out.code} {out.stdout.trim()}" }
+    let lines = out.stdout.split("\n").collect()
+    let mut kept: Vec[String] = []
+    for i in 1..<lines.len() { kept.push(lines[i].clone()) }
+    return kept.join("\n").split(" --agent ").collect()[0].clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    process::run("mkdir", [f"{tmp}/docs"])
+    fs::write(f"{tmp}/docs/builder-facts.md", fs::Root::Anywhere, "# Builder facts\n\n## Core\n\n* a core fact\n\n## Traps\n\n### Lowering and lower-std\n\nPaths: `lowered/`, `lower-std`, `sysroot`\n\n* a lowering trap\n\n### Grammar\n\nPaths: `grammar`, `parser`\n\n* a grammar trap\n\n### Prover\n\nPaths: `sv_`, prover, `--bounds`\n\n* a prover trap\n\n### Scripts\n\nPaths: `scripts/`\n\n* a scripts trap\n\n### Probes\n\n* a probe trap, no paths\n")
+    // An issue's files name a lowered file: the Lowering section, beside Core.
+    fs::write(f"{tmp}/lowered.md", fs::Root::Anywhere, "Brief.\n\n## Files and limits\n\n`crates/nikaia-std/src/compiler/lowered/emit_item.rs`\n")
+    // A `Facts:` line wins over the paths.
+    fs::write(f"{tmp}/named.md", fs::Root::Anywhere, "Facts: Grammar\nTouches crates/nikaia-std/src/compiler/lowered/x.rs\n")
+    // Four sections match: three, the one with most fragments found first.
+    fs::write(f"{tmp}/many.md", fs::Root::Anywhere, "Brief: scripts/x.nika, the Parser's grammar block, lowered/a.rs, sv_cut.nika.\n")
+    // Nothing matches: Core alone.
+    fs::write(f"{tmp}/none.md", fs::Root::Anywhere, "Brief about the website.\n")
+    for brief in ["lowered.md", "named.md", "many.md", "none.md"] {
+        println(f"== {brief}")
+        println(prompt(nikaia.clone(), repo.clone(), tmp.clone(), brief))
+    }
+    process::run("rm", ["-rf", tmp])
+}

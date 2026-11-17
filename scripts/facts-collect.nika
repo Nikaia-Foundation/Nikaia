@@ -8,7 +8,9 @@
 // Reads every `docs/briefs/**/*.debrief.md` not listed in
 // `docs/briefs/facts-reviewed.txt` and prints, per debrief, its `Fact:` lines
 // (the debrief's question (6), `Fact: <section> | <line>`) and, from debriefs
-// written before that question, the lines that name a facts file. The
+// written before that question, the lines that name a facts file; a
+// `knowledge: <section> | <fact>` answer (question (5), or the `Issue:` field
+// of the report beside the debrief, #2002) counts as `Fact: <section> | <fact>`. The
 // supervisor takes what holds into `docs/builder-facts-lookup.md` (Core only
 // for a trap of every run) and runs `--mark`, which appends the debriefs shown
 // to the reviewed list.
@@ -40,16 +42,42 @@ fn facts_reviewed() -> Vec[String] throws {
 	return out
 }
 
-// The proposed lines of one debrief.
+// The `knowledge: <section> | <fact>` answers in LINE (the debrief's question
+// (5), or a report's `Issue:` field), each as `Fact: <section> | <fact>`: an
+// answer runs to the next `;` (#2002).
+fn facts_knowledge(line: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let parts: Vec[String] = line.split("knowledge:").collect()
+	let mut i = 1
+	while i < parts.len() {
+		let answer = parts[i].split(";").collect()[0].trim().trim_end_matches("`").trim().clone()
+		if answer != "" { out.push(f"Fact: {answer}") }
+		i = i + 1
+	}
+	return out
+}
+
+// The proposed lines of one debrief, and the `knowledge:` answers of the
+// `Issue:` field of the report beside it.
 fn facts_lines(path: String) -> Vec[String] throws {
 	let mut out: Vec[String] = []
-	for l in fs::read_to_string(path, fs::Root::Anywhere).split("\n") {
+	for l in fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n") {
 		let t = l.trim()
 		let bare = t.trim_start_matches("-").trim_start_matches("*").trim()
 		if bare.starts_with("Fact:") {
 			if bare != "Fact: none" { out.push(bare.clone()) }
+		} else if t.contains("knowledge:") {
+			for k in facts_knowledge(t.clone()) { out.push(k) }
 		} else if t.contains("builder-facts") {
 			out.push(f"(older) {t}")
+		}
+	}
+	let report = path.replace(".debrief.md", ".report.md")
+	if report != path && fs::exists(report.clone(), fs::Root::Anywhere) {
+		for l in fs::read_to_string(report, fs::Root::Anywhere).split("\n") {
+			if l.starts_with("Issue:") {
+				for k in facts_knowledge(l.clone()) { out.push(k) }
+			}
 		}
 	}
 	return out

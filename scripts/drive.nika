@@ -3190,6 +3190,10 @@ fn drive_improve_points(text: String) -> Vec[String] {
 //                  (`broke I3: ...`, `I4b not followed: ...`, `wrong I7:
 //                  ...`, a wrong suspected cause): the author
 //                  fixes the issue (docs/issues.md), so it is said there;
+//   `drop knowledge` an `Issue:` answer `knowledge: <section> | <fact>`,
+//                  something the run had to find out that no rule asks an
+//                  issue to hold: facts-collect.nika enters it as a facts
+//                  line at the block's end (#2002);
 //   `drop settled` the point says the run closed or built it itself
 //                  (drive_improve_settled);
 //   `drop built F` the point names a rules file F (under `docs/`,
@@ -3225,6 +3229,7 @@ fn drive_improve_point(line: String) -> String {
 
 // Where POINT goes, the first column of drive_improve_sorted.
 fn drive_improve_where(point: String, issue: String, touched: Vec[String], existing: String) -> String {
+	if (point.strip_prefix("Issue: ") ?? "").to_lowercase().starts_with("knowledge") { return "drop knowledge" }
 	if issue != "" && drive_improve_broke(point.clone()) { return f"comment #{issue}" }
 	if drive_improve_settled(point.clone()) { return "drop settled" }
 	let tokens = drive_improve_tokens(point.clone())
@@ -3440,7 +3445,7 @@ fn drive_improve_existing() -> String throws {
 // `fits docs/issues.md`, #1837: #1820's run wrote it, in any case);
 // empty when none is left. A part that does not open with a kind
 // (`complete`, `meets`, `fits`, `none`, `broke`, `rules-gap`, `wrong`,
-// `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
+// `knowledge`, `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
 // second half of #1819's `rules-gap (built)` answer was filed alone).
 fn drive_issue_answers(value: String) -> Vec[String] {
 	let mut parts: Vec[String] = []
@@ -3449,7 +3454,7 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 		let low = t.to_lowercase()
 		let cs: Vec[scalar] = low.chars().collect()
 		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
-		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "-"] {
+		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "knowledge", "-"] {
 			if low.starts_with(word) { kind = true }
 		}
 		if !kind && parts.len() > 0 {
