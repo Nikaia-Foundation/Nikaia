@@ -4482,6 +4482,11 @@ struct TierLate {
     /// D8).
     viewing: collections::BTreeSet[String],
     viewing_methods: collections::BTreeSet[String],
+    /// **The methods of `std` (and the libraries) whose result may view what
+    /// they are given** (ADR-views-3 D9, #1537), by name: the positions their
+    /// ledger entries name the result from (`-> ref(self) String`), -1 the
+    /// receiver. A name the program declares a method by is left to its own.
+    viewing_library: collections::BTreeMap[String, collections::BTreeSet[i64]],
     /// The variants of the program's enums, `E::V`.
     variants: collections::BTreeSet[String],
     /// The bindings whose text a binding's value may view, by `name serial`.
@@ -4521,7 +4526,7 @@ struct TierLate {
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
 fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet(), temporaries: collections::BTreeSet(), lendable: collections::BTreeSet(), lent: collections::BTreeSet() }
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), viewing_library: collections::BTreeMap(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet(), temporaries: collections::BTreeSet(), lendable: collections::BTreeSet(), lent: collections::BTreeSet() }
     for (key, function) in declared.fns {
         let result = function.result ?? continue
         if late_holds_text(result, declared, ask, 0) {
@@ -4536,6 +4541,38 @@ fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk)
                     late.changing_methods.insert(name.clone())
                 }
             }
+        }
+    }
+    // **A view a library method hands back is one too** (ADR-views-3 D9,
+    // #1537): `s.trim()` is `-> ref(self) String`, so it views `s`, and
+    // `pieces.next()` is `[T](self: Seq[T]) -> T?`, an element of what it is
+    // called on, so it views what `pieces` views. Read off the ledger
+    // entries, every entry by that name alike (#663), not off a list.
+    for (name, keys) in ask.methods.keys {
+        if declared.methods.contains_key(name) {
+            continue
+        }
+        let mut from: collections::BTreeSet[i64] = collections::BTreeSet()
+        let mut every = true
+        for key in keys {
+            let contract = ask.library.functions[key] ?? continue
+            let signature = contract.signature ?? continue
+            if !signature.takes_a_receiver() {
+                continue
+            }
+            let mut one: collections::BTreeSet[i64] = collections::BTreeSet()
+            if sources_of_a_method(contract, one) {
+                for at in one {
+                    from.insert(at)
+                }
+            } else if late_hands_back_an_element(signature) {
+                from.insert(-1)
+            } else {
+                every = false
+            }
+        }
+        if every && !from.is_empty() {
+            late.viewing_library.insert(name.clone(), from)
         }
     }
     for (key, field) in declared.fields {
@@ -4631,6 +4668,50 @@ fn late_bind(name: String, mut late: TierLate) {
     let mut frame = late.frames.pop() ?? []
     frame.push(name)
     late.frames.push(frame)
+}
+
+/// **A library method that hands back what its receiver holds** (#1537):
+/// its result names a type parameter its receiver's type takes as an
+/// argument, `[T](self: Seq[T]) -> T?` or `[K, V](self: ref Map[K, V], key: ?)
+/// -> V?`. One whose receiver is the parameter itself, `[T](self: ref T)`,
+/// hands back no part of it.
+fn late_hands_back_an_element(signature: ref Signature) -> bool {
+    let result = signature.result ?? return false
+    let mut held: Vec[String] = []
+    match signature.params[0].1 {
+        Ty::Named { args, .. } => {
+            for arg in args {
+                late_type_variables(arg, held)
+            }
+        }
+        Ty::Seq { item, .. } => late_type_variables(item, held),
+        else => {}
+    }
+    let mut named: Vec[String] = []
+    late_type_variables(result, named)
+    return named.iter().any(fn(one) { held.contains(one) })
+}
+
+/// The type parameters a type is written with (`Ty::Var`, as the ledger
+/// reads `[T]`), its arguments' too.
+fn late_type_variables(ty: ref Ty, mut out: Vec[String]) {
+    match ty {
+        Ty::Named { args, .. } => {
+            for arg in args {
+                late_type_variables(arg, out)
+            }
+        }
+        Ty::Var { name, .. } => out.push(name.clone()),
+        Ty::Tuple(parts) => {
+            for part in parts {
+                late_type_variables(part, out)
+            }
+        }
+        Ty::Nullable(inner) => late_type_variables(inner, out),
+        Ty::Seq { item, .. } => late_type_variables(item, out),
+        Ty::Pointed { item, .. } => late_type_variables(item, out),
+        else => {}
+    }
 }
 
 /// The serial of the binding a name reads here, and -1 for none.
@@ -5112,8 +5193,8 @@ fn late_place_root(value: ref Expr, ask: ref TierAsk) -> String? {
 }
 
 /// The bindings whose text `value` may view: what a call of this program's
-/// that may hand back a view is given, and what a place read off a view
-/// views.
+/// that may hand back a view is given, what a library method's ledger entry
+/// says its result is from (#1537), and what a place read off a view views.
 fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[String] {
     let mut out: Vec[String] = []
     match value {
@@ -5125,15 +5206,33 @@ fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[St
             }
         }
         Expr::MethodCall { receiver, method, args, .. } => {
-            if late.viewing_methods.contains(ask.names.resolve(method)) {
+            let name = ask.names.resolve(method)
+            if late.viewing_methods.contains(name) {
                 late_given(receiver, ask, late, out)
                 for arg in args {
                     late_given(arg, ask, late, out)
+                }
+            } else if late.viewing_library.contains_key(name) {
+                let from = late.viewing_library[name] ?? return out
+                if from.contains(-1) {
+                    late_given(receiver, ask, late, out)
+                }
+                let mut at = 0
+                for arg in args {
+                    if from.contains(at) {
+                        late_given(arg, ask, late, out)
+                    }
+                    at += 1
                 }
             }
         }
         Expr::Try(inner, _) => return late_sources(inner, ask, late),
         Expr::Async(inner, _, _, _) => return late_sources(inner, ask, late),
+        // Either side of a `??` is what the value may be (#1537).
+        Expr::Coalesce { value: first, fallback, .. } => {
+            late_given(first, ask, late, out)
+            late_given(fallback, ask, late, out)
+        }
         else => late_read_off(value, ask, late, out),
     }
     return out
@@ -5149,18 +5248,49 @@ fn late_given(arg: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[
                 out.push(key.clone())
             }
         }
+        // **What a call handed on views** (#1537): `u.split(" ").next()`
+        // views what `u.split(" ")` views.
+        Expr::Call { .. } => late_given_sources(arg, ask, late, out),
+        Expr::MethodCall { .. } => late_given_sources(arg, ask, late, out),
+        Expr::Try(_, _) => late_given_sources(arg, ask, late, out),
+        Expr::Coalesce { .. } => late_given_sources(arg, ask, late, out),
         else => {}
     }
     late_read_off(arg, ask, late, out)
 }
 
+fn late_given_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[String]) {
+    for source in late_sources(value, ask, late) {
+        if !out.contains(source) {
+            out.push(source)
+        }
+    }
+}
+
 fn late_read_off(value: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[String]) {
+    // **A place read off a call's result** views what the result views
+    // (#1537): `u.split(" ").collect()[0]`.
+    match value {
+        Expr::Index { base, .. } => late_read_off_a_call(base, ask, late, out),
+        Expr::Field { base, .. } => late_read_off_a_call(base, ask, late, out),
+        Expr::SafeField { base, .. } => late_read_off_a_call(base, ask, late, out),
+        else => {}
+    }
     let root = late_place_root(value, ask) ?? return
     let key = late_key(root, late) ?? return
     for source in late.views[key]?.clone() ?? [] {
         if !out.contains(source) {
             out.push(source)
         }
+    }
+}
+
+fn late_read_off_a_call(base: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[String]) {
+    match base {
+        Expr::Call { .. } => late_given_sources(base, ask, late, out),
+        Expr::MethodCall { .. } => late_given_sources(base, ask, late, out),
+        Expr::Try(_, _) => late_given_sources(base, ask, late, out),
+        else => late_read_off(base, ask, late, out),
     }
 }
 

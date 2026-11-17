@@ -1,0 +1,29 @@
+// A view a `std` method hands back is followed as one of the program's own
+// is (ADR-views-3 D9, #1537): `s.trim()` views `s`, so the literal that takes
+// `s` while `t` is still read lends it, and rustc never sees a move out of a
+// borrowed `s`. An element of a `std` method's result (`next`, an index) and
+// either side of a `??` view what the result views.
+
+struct Named { name: String }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str(" x ")
+    return g
+}
+
+fn main() throws {
+    let s = make()
+    let t = s.trim()
+    let w = Named { name: s }
+    println(t)
+    println(f"[{w.name}]")
+    let u = make()
+    let first = u.split(" ").next() ?? ""
+    let v = Named { name: u }
+    println(f"[{first}] [{v.name}]")
+    let r = make()
+    let last = r.split(" ").collect()[2]
+    let q = Named { name: r }
+    println(f"[{last}] [{q.name}]")
+}
