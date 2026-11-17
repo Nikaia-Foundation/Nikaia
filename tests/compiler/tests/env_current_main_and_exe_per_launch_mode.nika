@@ -1,0 +1,36 @@
+// ADR-program-path-1, the table of D1 and D2 row by row: `nikaia run FILE`
+// stands in as FILE, `nikaia run` in a project as its entry point, both with
+// the toolchain as the program that was started; a built program is both
+// itself. The child `nikaia` does not inherit this test's own file (D3).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn shown(label: String, out: String, tmp: String, nikaia: String) throws {
+    println(f"-- {label}")
+    for line in out.lines() {
+        println(line.replace(tmp, "TMP").replace(nikaia, "NIKAIA"))
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "cd \"$(mktemp -d)\" && pwd -P"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let resolved = process::run("readlink", ["-f", nikaia.clone()]).stdout.trim().clone()
+    let probe = "use std::env\n\nfn main() throws {\n    println(f\"main: {env::current_main()?.display() ?? \"null\"}\")\n    println(f\"exe: {env::current_exe()?.display() ?? \"null\"}\")\n}\n"
+    fs::write(f"{tmp}/probe.nika", fs::Root::Anywhere, probe)
+    shown("nikaia run probe.nika", process::run(nikaia.clone(), ["run", "probe.nika"]; dir: tmp.clone()).stdout, tmp.clone(), resolved.clone())
+    process::run("mkdir", ["-p", f"{tmp}/proj/src"])
+    fs::write(f"{tmp}/proj/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/proj/src/main.nika", fs::Root::Anywhere, probe)
+    let project = f"{tmp}/proj"
+    shown("nikaia run in a project", process::run(nikaia.clone(), ["run"]; dir: project.clone()).stdout, tmp.clone(), resolved.clone())
+    process::run(nikaia.clone(), ["build"]; dir: project.clone())
+    shown("the built program", process::run(f"{project}/target/nikaia/bin/proj", []; dir: tmp.clone()).stdout, tmp.clone(), resolved.clone())
+    process::run("rm", ["-rf", tmp])
+}

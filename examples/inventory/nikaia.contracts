@@ -50,6 +50,7 @@ sync = "inferred"
 panics = false
 touches = []
 views = ["entry: borrowed"]
+inferred = ["result == entry.count"]
 signature = "(entry: ref Entry) -> i64"
 
 [type."Entry"]
