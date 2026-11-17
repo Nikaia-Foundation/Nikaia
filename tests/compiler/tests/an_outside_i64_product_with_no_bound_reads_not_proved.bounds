@@ -1,0 +1,5 @@
+bounds in tests/an_outside_i64_product_with_no_bound_reads_not_proved.nika: 0 indexes, 0 proved; 2 operations, 0 proved
+    10  n * 1000  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    12  w * 1000  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  outside  10  `n * 1000`, `n` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  12  `w * 1000`, `w` from `io::read_to_string`: checked: not proved within 0..2^62, an NK1303 site (ADR-396 D8)

@@ -1882,10 +1882,10 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
     let first = prover_outside_name(&walk, goal, index, scope, words, written_of);
     let source = outside_source(index, &scope.tainted, &scope.sources, words, library, &walk.state, holes_of);
     if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) {
-        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, false, true, -1) });
+        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, false, true, "", -1) });
         return;
     }
-    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, false, goal.is_some(), -1);
+    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, false, goal.is_some(), "", -1);
     let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
     if goal.is_some() {
         let found = model(&walk.arena, &scope.facts, nikaia_std::index::or(goal, || 0));
@@ -1905,7 +1905,7 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool, site: i64) {
+pub(crate) fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool, within: &str, site: i64) {
     let mut guard_at: i64 = -1;
     let mut condition: String = String::from("");
     match guard {
@@ -1919,7 +1919,7 @@ pub(crate) fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written:
     walk.outside.insert((at, nikaia_std::block::Text::from(written.to_string())), OutsideIndex { at, written, name: nikaia_std::block::Text::from(name.to_string()), source: nikaia_std::index::or(match source {
         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
-    }, || "".into()), proved, guard_at, guard: condition, operation, stated, site });
+    }, || "".into()), proved, guard_at, guard: condition, operation, stated, within: nikaia_std::block::Text::from(within.to_string()), site });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1927,10 +1927,17 @@ pub(crate) fn prover_outside_operation(walk: &mut ProverWalk, expr: &Expr, reach
     let first = prover_outside_name(&walk, goal, reached, scope, words, written_of);
     let source = outside_source(reached, &scope.tainted, &scope.sources, words, library, &walk.state, holes_of);
     if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) {
-        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, true, true, site) });
+        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, true, true, "", site) });
         return;
     }
-    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, true, goal.is_some(), site);
+    let mut within = String::new();
+    if goal.is_some() {
+        within = nikaia_std::block::Text::from(prover_proof_window(&nikaia_std::index::or(match *nikaia_std::index::get(&walk.state.arithmetic, &site) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into())).to_string());
+    }
+    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, true, goal.is_some(), &within, site);
 }
 
 pub(crate) fn prover_division_goal(walk: &mut ProverWalk, lhs: &Expr, rhs: &Expr, op_at: i64, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -2006,7 +2013,7 @@ pub(crate) fn prover_overflow_check(walk: &mut ProverWalk, expr: &Expr, op_at: i
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    let (lo, hi) = match prover_stated_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let (lo, hi) = match prover_type_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     if !walk.state.unfit_numbers.is_empty() { return; }
     let term = match lin_term(expr, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
     if walk.arena.constant(term).is_some() { return; }
@@ -2020,12 +2027,46 @@ pub(crate) fn prover_overflow_check(walk: &mut ProverWalk, expr: &Expr, op_at: i
         holds = format!("{} <= {} <= {}", lo, written_of(expr), nikaia_std::index::or(hi, || 0));
     }
     let fails = format!("goes past what {} `{}` holds", an_or_a(&ty), ty);
+    let help: String = String::from("Use a wider type where the number needs more room, or check the operands before the operation.");
+    if ty == "i64" {
+        if !walk.state.collecting { prover_i64_refuted_check(walk, goal, term, &written_of(expr), &fails, help, span, scope, ask, model); }
+        return;
+    }
     if walk.state.collecting {
         let check = UnwrittenCheck { term: goal, written: written_of(expr), fails, holds, index: false, within: String::from(""), site: span };
         walk.state.an_unwritten_check(&mut walk.arena, check, scope, at, ask, model);
         return;
     }
-    prover_refuted_check(walk, goal, &written_of(expr), &fails, nikaia_std::block::Text::from("Use a wider type where the number needs more room, or check the operands before the operation."), span, scope, ask, model);
+    prover_refuted_check(walk, goal, &written_of(expr), &fails, help, span, scope, ask, model);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_i64_refuted_check(walk: &mut ProverWalk, goal: i64, term: i64, written: &str, fails: &str, help: String, span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    walk.arena.variables(goal, &mut read);
+    for name in read.iter() { if scope.tainted.contains(name) { return; } }
+    let always = refuting_values(&mut walk.arena, &scope.facts, goal, ask, model);
+    let values = match match always.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => match breaking_values(&mut walk.arena, scope, goal, model) { Some(__nikaia_value) => __nikaia_value, None => return } };
+    for name in read.iter() { if !values.contains_key(name) { return; } }
+    if walk.arena.int_value(term, &values).is_some() { return; }
+    if always.is_some() {
+        walk.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` {} every time it is reached.", written, fails), notes: vec![format!("What is known before it rules the check out: {}.", shown(&values))], help: Some(help), warning: false, labels: vec![] });
+        return;
+    }
+    walk.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` {} when {}.", written, fails, shown(&values)), notes: vec![String::from("That state reaches it: what is known here pins every name the check depends on.")], help: Some(help), warning: false, labels: vec![] });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_type_range(ty: &str) -> Option<(i64, Option<i64>)> {
+    match ty {
+        "i64" => Some((-9223372036854775807i64 - 1i64, Some(9223372036854775807i64))),
+        "u64" => Some((0, None)),
+        _ => prover_stated_range(ty),
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -2035,8 +2076,19 @@ pub(crate) fn prover_stated_range(ty: &str) -> Option<(i64, Option<i64>)> {
         "i32" => Some((-2147483648, Some(2147483647))),
         "u8" => Some((0, Some(255))),
         "u32" => Some((0, Some(4294967295i64))),
-        "u64" => Some((0, None)),
+        "u64" => Some((0, Some(solvable()))),
+        "i64" => Some((unsafe { nikaia_std::proven::sub::<i64>(0, solvable()) }, Some(solvable()))),
         _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_proof_window(ty: &str) -> &'static str {
+    match ty {
+        "i64" => "±2^62",
+        "u64" => "0..2^62",
+        _ => "",
     }
 }
 

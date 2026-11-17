@@ -1,0 +1,29 @@
+// A tuple literal at one end of a `match` whose other end is a call holds
+// each `T?` part as a `T?` (#1810): `(0, 4)` beside `else => other(t)` for
+// `(i64, i64?)?` was `(0, 4)` to rustc, an internal error.
+fn other(t: String) -> (i64, i64?)? sync {
+    if t == "b" {
+        return (5, null)
+    }
+    return null
+}
+
+fn by_match(t: String) -> (i64, i64?)? sync {
+    return match t {
+        "a" => (0, 4),
+        else => other(t),
+    }
+}
+
+fn by_if(t: String) -> (i64, i64?)? sync {
+    let x: (i64, i64?)? = if t == "a" { (1, 7) } else { other(t) }
+    return x
+}
+
+fn main() throws {
+    for t in ["a", "b", "c"] {
+        let m = by_match(t)
+        let i = by_if(t)
+        println(f"{t}: {m?.0 ?? -1} {m?.1 ?? -1} {i?.0 ?? -1} {i?.1 ?? -1}")
+    }
+}

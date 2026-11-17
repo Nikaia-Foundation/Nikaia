@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1416 (Draft)
+**Version:** 0.0.1417 (Draft)
 **Date:** 2026-11-17
 
 ---
@@ -34,7 +34,7 @@ Nikaia provides one command-line interface, `nikaia`. It builds and runs a proje
 * `nikaia bench`: runs performance benchmarks.
 * `nikaia fmt`: formats the package's `.nika` files in place, in one style that nothing configures: one tab per level and nothing aligned, `{` at the end of the line, a line broken at 100 columns (a tab counts four) with a trailing `,` where a list is broken, at most one blank line in a row. A file indented with spaces is read like any other and written back with tabs. Every comment stays where it was, a `dsl` block's body is kept as written, and what the file lowers to does not change. `--check` writes nothing and fails where a file would change.
 * `nikaia describe <crate>`: writes the draft ledger for a Rust crate the program calls, from the crate's own `pub` signatures (15.2). `<crate>` is the name a program writes after `use` (`low_bits` for the manifest key `low-bits`); a manifest key that differs from it is refused, and the refusal names the word to write. `--project` names the project directory. The default walks up from the working directory to the nearest `nikaia.toml`.
-* `nikaia bind <language>`: writes a binding for a library build from the ledger: `python` over `ctypes`, `js` for a WebAssembly build (15.1). `--features a,b` binds those features of `[features]` and the core, and the default is `default` (13.3, [ADR-393](adr/adr-393.md) D5).
+* `nikaia bind <language>`: writes a binding for a library build from the ledger: `python` over `ctypes`, `node` as an N-API module, `java` over `java.lang.foreign` (Java 22 or later), `js` for a WebAssembly build (15.1). `--features a,b` binds those features of `[features]` and the core, and the default is `default` (13.3, [ADR-393](adr/adr-393.md) D5).
 * `nikaia lower-std`: re-lowers `std`'s Nikaia half (13.2b).
 * `nikaia prove --propose`: hands each loop problem the build left open to the proposers `[prove]` names (13.3), checks every invariant they answer with, and writes those that pass to `nikaia.proofs` (14.2, [ADR-361](adr/adr-361.md) D6). No other command runs a proposer.
 
@@ -764,8 +764,13 @@ generates `<package>.h` from the ledger. The caller owns the memory, and a call 
   compiles — an `Error` whose `code` is the header's name for the status, `string` and `Buffer` for
   buffers, an `i64` a `number` where it is a safe integer and a `bigint` beyond, classes for handles,
   plain objects for `extern` structs, functions for callbacks, a Promise with `cancel()` for
-  `_async` — and `nikaia bind js` is the
-  WebAssembly build's `.js`; there is no second artifact.
+  `_async` — `nikaia bind java` writes one Java 22 source over `java.lang.foreign` (JEP 454,
+  [ADR-284](adr/adr-284.md) D34): a `MethodHandle` per entry point made once, exceptions for
+  statuses, `String`/`byte[]` for buffers, `AutoCloseable` classes for handles with a `Cleaner` as
+  the fallback, `record`s for `extern` structs, a `sealed interface` of records for an `extern enum`,
+  a Java `enum` for a plain one, `Optional` for `T?` and upcall stubs for callbacks; its `_async` as
+  a `CompletableFuture` and its streams as an `Iterator` are not built yet — and `nikaia bind js` is
+  the WebAssembly build's `.js`; there is no second artifact.
 
 ### 15.2. Rust Integration (Deep Integration)
 The compiler verifies safety properties at the boundary with a Rust crate.

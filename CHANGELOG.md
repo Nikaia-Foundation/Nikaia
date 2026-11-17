@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1417] — 2026-11-17
+
+**Builders' changes (#1338, #1810)**
+- `scripts/solver.nika` fetches a 1097-file SMT-LIB set (QF_LIA, QF_LRA) from GitHub at fixed commits, runs a 50-file sample of it in CI, and compares ours with z3 and cvc5 (solved, wrong, PAR-2, memory, instructions); the result is in docs/solver-workload.md (#1338).
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type (#1810).
+
 ## [0.0.1416] — 2026-11-17
 
 **Builders' changes (#1582, #1584, #1591, #1600, #1610, #1657, #1672, #1694, #1705, #1750, #1915, #1919, #1956)**

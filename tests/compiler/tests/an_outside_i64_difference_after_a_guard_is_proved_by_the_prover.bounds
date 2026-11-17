@@ -1,0 +1,7 @@
+bounds in tests/an_outside_i64_difference_after_a_guard_is_proved_by_the_prover.nika: 0 indexes, 0 proved; 3 operations, 1 proved
+    11  a - b  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    11  b - a  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    14  a - b  proved
+  outside  11  `a - b`, `a` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  11  `b - a`, `a` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  14  `a - b`, `a` from `io::read_to_string`: proved by the guard on line 11 (`a - b > 10 || b - a > 10`)

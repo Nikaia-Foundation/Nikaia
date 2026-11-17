@@ -5,7 +5,7 @@ bounds in tests/outside_data_reaching_a_divisor_or_an_operation_is_marked.nika: 
     19  100 / d        proved
     21  small + 1      proved
   outside  13  `100 / n`, `n` from `io::read_to_string`: checked: not proved, an NK1303 site (ADR-396 D8)
-  outside  14  `n * 1000`, `n` from `io::read_to_string`: checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)
+  outside  14  `n * 1000`, `n` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
   outside  16  `total / parts` in `share`, `n` from `io::read_to_string`: checked: not proved, an NK1303 site (ADR-396 D8)
   outside  19  `100 / d`, `d` from `io::read_to_string`: proved by the guard on line 18 (`d <= 0 || d > 1000`)
   outside  21  `small + 1`, `small` from `io::read_to_string`: proved

@@ -1,0 +1,43 @@
+bind java: exit 0
+binding: TMP/target/nikaia/c-library/java/geo_kit/GeoKit.java
+package geo_kit;
+public final class GeoKit
+    public static class GeoKitException extends RuntimeException
+    public static class GeoKitBoundaryException extends GeoKitException
+    public static final class ArgumentException extends GeoKitBoundaryException
+    public static final class TooSmallException extends GeoKitBoundaryException
+    public static final class NotRunningException extends GeoKitBoundaryException
+    public static final class PanickedException extends GeoKitBoundaryException
+    public static final class ReentrantException extends GeoKitBoundaryException
+    public static final class CleanupException extends GeoKitBoundaryException
+    public static final class CancelledException extends GeoKitBoundaryException
+    public static final class NegativeException extends GeoKitException
+    public static synchronized void init()
+    public static synchronized void shutdown()
+    public enum Light
+    public enum Refusal
+    public record Point(double x, int y)
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(JAVA_DOUBLE.withName("x"), JAVA_INT.withName("y"), MemoryLayout.paddingLayout(4));
+        public static Point read(MemorySegment s)
+        public void write(MemorySegment s)
+        public MemorySegment segment(Arena arena)
+        public double sum()
+        public static void shift(MemorySegment self, double by)
+    public sealed interface Figure
+        record Dot(double _0) implements Figure
+        record Frame(double w, double h) implements Figure
+        record Nothing() implements Figure
+    public static final class Board implements AutoCloseable
+        public void close()
+        public Board(String name)
+        public long grow(long by)
+        public String name()
+        public long cells()
+    public interface EachLightEach
+    public static long checked(long n)
+    public static String greet(String name)
+    public static OptionalLong find(long n)
+    public static Optional<Point> nearest(long n)
+    public static Figure turned(Figure f)
+    public static List<Point> diagonal(List<Point> points)
+    public static long eachLight(long n, EachLightEach each)
