@@ -2736,11 +2736,7 @@ impl Project {
             .ok_or_else(|| refused!("{}", project_members::project_members_project_unnamed()))?;
         let resolved = resolved_versions(&self.build_dir().join("Cargo.lock"), name)?;
 
-        let mut lock = Lockfile::load(
-            &lock_path,
-            env!("NIKAIA_RUSTC_VERSION"),
-            crate::compiler_identity(),
-        )?;
+        let mut lock = Lockfile::load(&lock_path, env!("NIKAIA_RUSTC_VERSION"))?;
         if lock.dependencies == resolved {
             return Ok(());
         }
