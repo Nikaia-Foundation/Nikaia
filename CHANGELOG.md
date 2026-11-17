@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1426] — 2026-11-17
+
+**Builders' changes (#2024, #2025)**
+- `text::parse_f64`'s shape check (ADR-285 D35) is now written in Nikaia, in std's runtime package; Rust keeps only the correctly rounding conversion.
+- Self-hosting: `text::Form` is declared in Nikaia (`runtime/text_normal.nika`); Rust keeps only `normalized`.
+
 ## [0.0.1425] — 2026-11-17
 
 **Builders' changes (#1996, #1997, #1999, #2007)**
