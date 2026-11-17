@@ -1,0 +1,9 @@
+-- nikaia run probe.nika
+main: TMP/probe.nika
+exe: NIKAIA
+-- nikaia run in a project
+main: TMP/proj/src/main.nika
+exe: NIKAIA
+-- the built program
+main: TMP/proj/target/nikaia/bin/proj
+exe: TMP/proj/target/nikaia/bin/proj
