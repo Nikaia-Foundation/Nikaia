@@ -1033,6 +1033,10 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
             },
         }
     }
+    match env::var("NIKAIA_CAP_LINTS") {
+        None => { },
+        Some(ref level) => { host.push_arg(&format!("--cap-lints={}", level)); },
+    }
     let code = host.run()?;
     if code == 0 {
         let mut inputs = sources;
