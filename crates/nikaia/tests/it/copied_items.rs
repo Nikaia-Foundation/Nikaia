@@ -100,7 +100,7 @@ fn main() throws {
         }
     }
     let m = xs.iter().map(fn(x) { x * 10 }).filter(fn(x) { x > 15 }).count()
-    let a = "a-b".chars().filter(fn(c) { c != '-' }).count()
+    let a = "a-b".scalars.filter(fn(c) { c != '-' }).count()
     let c = text.lines().filter(fn(l) { l != "port = 8080" }).count()
     let owned: Vec[String] = [f"a", f"bb"]
     let d = owned.iter().filter(fn(s) { s.len() > 1 && s != "x" }).count()
