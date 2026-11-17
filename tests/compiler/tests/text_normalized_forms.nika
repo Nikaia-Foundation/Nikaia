@@ -1,0 +1,13 @@
+// `text::Form`, declared in Nikaia (runtime/text_normal.nika, #2025), as
+// `s.normalized` takes it (ADR-320 D8, D10): `Nfkc` folds the ligature `ﬁ`
+// to `fi`, `Nfd` splits `é` into `e` and a combining acute (three bytes),
+// and `Nfc` composes it back into one scalar (two bytes).
+fn main() throws {
+    println("ﬁ".normalized(text::Form::Nfkc))
+    let decomposed = "é".normalized(text::Form::Nfd)
+    println(decomposed.len())
+    let composed = decomposed.normalized(text::Form::Nfc)
+    println(composed.len())
+    println(composed == "é")
+    println(text::Form::Nfkd == text::Form::Nfkd)
+}
