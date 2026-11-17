@@ -396,7 +396,7 @@ fn sv_back_substituted(
 	let mut i = solved.len()
 	while i > 0 {
 		i -= 1
-		let s = solved[i].clone()
+		let s = solved[i]
 		let mut rest: i64 = s.row.constant
 		let mut unit: i64 = 0
 		let mut j = 0

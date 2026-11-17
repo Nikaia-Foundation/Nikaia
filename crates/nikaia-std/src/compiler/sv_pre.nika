@@ -87,12 +87,17 @@ fn sv_pre(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvPre {
 		SvChecked::Consistent => {},
 		SvChecked::Conflict(lemma) => {
 			let mut hints: Vec[u32] = []
+			// One hint per literal: a second unit clause of the same
+			// literal is already true once the first is unit (#1957's ERK
+			// files), and the checker refuses a hint that is.
+			let mut hinted: Vec[u32] = []
 			let mut i = 0
 			while i < unit_lits.len() {
 				let l = unit_lits[i]
 				// `l ^ 1` written as a branch: #1286.
 				let negation = if l % 2 == 0 { l + 1 } else { l - 1 }
-				if lemma.lits.contains(negation) && !hints.contains(unit_ids[i]) {
+				if lemma.lits.contains(negation) && !hinted.contains(l) {
+					hinted.push(l)
 					hints.push(unit_ids[i])
 				}
 				i += 1

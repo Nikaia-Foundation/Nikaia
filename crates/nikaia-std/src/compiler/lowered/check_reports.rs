@@ -80,7 +80,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
-        self.changed.push(nikaia_std::block::Text::from(name.to_string()));
+        self.a_change_noted(name);
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let without_mut = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return };
         let declared = without_mut.at.start as i64;

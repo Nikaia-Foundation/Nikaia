@@ -1348,7 +1348,9 @@ fn prover_plain_maybe(expr: ref Expr?) -> bool {
     return prover_plain(e)
 }
 
-/// An expression with no block, lambda, `match`, jump or `?` inside.
+/// An expression with no block, lambda, `match`, jump or `?` inside. A
+/// field or an element read is plain: an exit whose value or path reads one
+/// gives no fact, and the other exits keep theirs (ADR-359 D14, #1904).
 fn prover_plain(expr: ref Expr) -> bool {
     return match expr {
         Expr::LitInt { .. } => true,
@@ -1359,7 +1361,8 @@ fn prover_plain(expr: ref Expr) -> bool {
         Expr::Unary { expr, .. } => prover_plain(expr),
         Expr::Cast { expr, .. } => prover_plain(expr),
         Expr::Binary { lhs, rhs, .. } => prover_plain(lhs) && prover_plain(rhs),
-        Expr::Field { .. } => false,
+        Expr::Field { base, .. } => prover_plain(base),
+        Expr::Index { base, index, .. } => prover_plain(base) && prover_plain(index),
         Expr::Call { func, args, config, .. } => config.is_empty() && prover_plain(func) && prover_all_plain(args),
         Expr::MethodCall { receiver, args, config, .. } => config.is_empty() && prover_plain(receiver) && prover_all_plain(args),
         else => false,

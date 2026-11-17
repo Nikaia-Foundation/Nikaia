@@ -3501,7 +3501,7 @@ pub mod check_fallible {
 pub mod check_fields {}
 pub mod check_flow {
     #[allow(unused_imports)]
-    pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckClone};
+    pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckPlaceClone, CheckClone};
 }
 pub mod check_function {}
 pub mod check_glue {
@@ -4249,4 +4249,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "437904c8e54c943d6d1dc23b0bde5ddb34020636e64b7d05836c7d6808c11ee9";
+pub const LOWERED_DIGEST: &str = "7ff730fdc5504b6fffb81c9ac44bf659a51d1852cafe659fafae395125d412b8";

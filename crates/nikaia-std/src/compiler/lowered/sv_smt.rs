@@ -90,7 +90,7 @@ impl SvTh for SvBoth {
                 self.ran_at = here;
                 self.exact_checks += 1;
                 return match self.exact.check(false, limit, book) {
-                    SvChecked::Conflict(ref c) => SvChecked::Conflict(c.clone()),
+                    SvChecked::Conflict(c) => SvChecked::Conflict(c),
                     _ => got,
                 };
             },
@@ -279,7 +279,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     }
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) }).copy_owned();
+        let clause = unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) };
         if clause.len() == 2 {
             for k in [0, 1] {
                 let d = *nikaia_std::index::get(&clause, nikaia_std::index::at(k));
@@ -294,7 +294,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     }
     c = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) }).copy_owned();
+        let clause = unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) };
         let mut defined = clause.len() >= 2;
         for l in clause.iter() {
             let l = nikaia_std::num::value(l);
@@ -331,7 +331,7 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
         let mut found = false;
         let mut i: i64 = 0;
         while i < n && !found {
-            let pr = (*unsafe { nikaia_std::proven::read(&rows, (i) as usize) }).clone();
+            let pr = unsafe { nikaia_std::proven::read(&rows, (i) as usize) };
             i += 1;
             if pr.row.ks != vec![1] { continue; }
             let x = *nikaia_std::index::get(&pr.row.cols, 0) as i64;
@@ -406,7 +406,7 @@ pub(crate) fn sv_smt_engine_set(arena: &TermArena, facts: &[i64], goal: i64, bud
 }
 
 pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, cnf: &SvCnf, p: &SvParams, phases: &[bool]) -> SvEngineRun {
-    let theory = nikaia_std::block::Text::from(p.theory.to_string());
+    let theory = &p.theory;
     let real = !cnf.query.reals.is_empty();
     if real && theory == "fm" { return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0); }
     let mut book = match sv_book(&cnf.query) { Some(__nikaia_value) => __nikaia_value, None => return sv_engine_unknown(LgUnknown::Overflow, 0) };

@@ -256,7 +256,7 @@ pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, s
     let mut i = solved.len() as i64;
     while i > 0 {
         i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
-        let s = (*unsafe { nikaia_std::proven::read(&solved, (i) as usize) }).clone();
+        let s = unsafe { nikaia_std::proven::read(&solved, (i) as usize) };
         let mut rest: i64 = s.row.constant;
         let mut unit: i64 = 0;
         let mut j: i64 = 0;

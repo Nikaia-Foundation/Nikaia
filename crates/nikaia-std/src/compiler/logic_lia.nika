@@ -448,7 +448,7 @@ impl LgIndexed {
             if !item.atom {
                 continue
             }
-            let atom = self.atoms[item.n].clone()
+            let atom = self.atoms[item.n]
             let mut at = 0
             let mut placed = false
             while at < by_form.len() {
@@ -925,7 +925,7 @@ fn lg_consistent(names: ref Vec[String], bounds: ref Vec[Vec[LgLin]]) -> LgClose
     let mut round = names.len()
     while round > 0 {
         round -= 1
-        let name = names[round].clone()
+        let name = names[round]
         let mut low: i64? = null
         let mut high: i64? = null
         for bound in bounds[round] {
@@ -999,7 +999,7 @@ fn lg_traced(steps: ref Vec[LgStep], last: i64) -> LgRefutation {
     let mut at = last
     while at >= 0 {
         if needed[at] {
-            match steps[at].clone() {
+            match steps[at] {
                 LgStep::Hypothesis(_) => {},
                 LgStep::Tighten(from) => {
                     needed[from] = true
@@ -1021,7 +1021,7 @@ fn lg_traced(steps: ref Vec[LgStep], last: i64) -> LgRefutation {
     while at <= last {
         if needed[at] {
             renumbered[at] = kept.len()
-            match steps[at].clone() {
+            match steps[at] {
                 LgStep::Hypothesis(i) => kept.push(LgStep::Hypothesis(i)),
                 LgStep::Tighten(from) => kept.push(LgStep::Tighten(renumbered[from])),
                 LgStep::Combine { left, by_left, right, by_right } => kept.push(LgStep::Combine { left: renumbered[left], by_left: by_left, right: renumbered[right], by_right: by_right }),

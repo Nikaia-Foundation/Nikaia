@@ -336,6 +336,26 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
     Some(live)
 }
 
+pub(crate) fn loop_read_parts(arena: &mut TermArena, cond: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, holds: bool) -> Vec<i64> {
+    match cond {
+        Expr::Unary { op, expr, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            if *op == UnaryOp::Not { return loop_read_parts(arena, expr, path, ints, pinned, words, !holds); }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
+                let mut parts = loop_read_parts(arena, lhs, path, ints, pinned, words, holds);
+                parts.extend(loop_read_parts(arena, rhs, path, ints, pinned, words, holds));
+                return parts;
+            }
+        },
+        _ => { },
+    }
+    let c = match loop_read(arena, cond, path, ints, &pinned, words, true) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    vec![if holds { c } else { arena.not(c) }]
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, path: &LoopPath, next: &mut Vec<LoopPath>, ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<bool> {
     match expr {
@@ -347,6 +367,9 @@ pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, pa
             if c.is_some() {
                 yes.constraints.push(nikaia_std::index::or(c, || 0));
                 no.constraints.push(arena.not(nikaia_std::index::or(c, || 0)));
+            } else {
+                yes.constraints.extend(loop_read_parts(arena, cond, path, ints, &pinned, words, true));
+                no.constraints.extend(loop_read_parts(arena, cond, path, ints, &pinned, words, false));
             }
             let after_yes = match loop_block(arena, then_branch, &vec![yes], ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             next.extend(after_yes);

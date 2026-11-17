@@ -303,7 +303,7 @@ pub(crate) fn path_root(path: &str) -> String {
 }
 
 pub(crate) fn path_within(path: &str, within: &str) -> bool {
-    path == within || nikaia_std::index::or(match path.strip_prefix(AsRef::<str>::as_ref(within)) {
+    path == within || !path.contains('@') && nikaia_std::index::or(match path.strip_prefix(AsRef::<str>::as_ref(within)) {
         Some(__nikaia_it) => Some(__nikaia_it.starts_with(".")),
         None => None,
     }, || false)

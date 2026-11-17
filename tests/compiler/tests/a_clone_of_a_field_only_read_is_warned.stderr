@@ -1,0 +1,8 @@
+warning[NK1350]: `lo` is a copy of a part of `self` that is only read: nothing changes `self` while `lo` is in use.
+  --> tests/a_clone_of_a_field_only_read_is_warned.nika:9:12
+   |
+ 9 | 		let lo = self.lower[v].clone()
+   |            ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A `let` over a field or an element is a view of it (ADR-094 D4), so it can read the place itself.
+   = help: Delete `.clone()`; the copy is only read.

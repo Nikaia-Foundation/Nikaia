@@ -111,6 +111,10 @@ pub struct BoundsContext {
 	/// **What each function of the file is found to return** (ADR-306 D23),
 	/// by name: never published, like a frame (ADR-391 D4).
 	pub returns: collections::BTreeMap[String, BoundsReturns],
+	/// **The type whose own `impl` holds the body walked**, `""` outside
+	/// one: a call `self.m(…)` there is `T::m`, whose result summary the
+	/// walk assumes (ADR-359 D14, #1904).
+	pub owner: String,
 }
 
 /// **A callee's found postcondition** (ADR-306 D23): the list parameters, by
@@ -2892,7 +2896,8 @@ fn bounding_forget_parts(walk: ref BoundsWalk, mut facts: BoundsFacts, name: ref
 		walk.arena.variables(fact, read)
 		let mut touched = false
 		for v in read {
-			if (v.starts_with(under) || v.starts_with(f"{name}[")) && v != length {
+			// A loop's value where it was reached (`at.len()@98`) is no part.
+			if (v.starts_with(under) || v.starts_with(f"{name}[")) && v != length && !v.contains("@") {
 				touched = true
 			}
 		}
@@ -3195,6 +3200,14 @@ fn bounding_lin(
 				walk.axioms.insert(name, held)
 				return result
 			}
+			// **A call `self.m(…)` to the type's own method has its result
+			// summary** (ADR-359 D14, #1904), as the prover reads it.
+			if !context.owner.is_empty() && bounding_on_self(receiver, words) {
+				let summed = context.ensured[f"{context.owner}::{words.resolve(method)}"]
+				if summed != null {
+					return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+				}
+			}
 			// **What `std`'s ledger ensures of a method's result** (ADR-314
 			// D3): `x.trailing_zeros()` of a `u64` is in `0..=64`.
 			let ty = context.std_receivers[node_key(expr)] ?? return null
@@ -3486,13 +3499,42 @@ fn bounding_ensured(
 	walk.codes += 1
 	let result = walk.arena.var(name)
 	given.insert("result", result)
-	let mut holds: Vec[i64] = []
+	let mut read: Vec[i64] = []
+	let mut names: collections::BTreeSet[String] = collections::BTreeSet()
 	for nodes in ensured.conditions {
-		let read = walk.arena.adopt(nodes)
-		holds.push(walk.arena.substitute(read, given))
+		let condition = walk.arena.adopt(nodes)
+		walk.arena.variables(condition, names)
+		read.push(condition)
+	}
+	// **A parameter's length is the argument's** (ADR-359 D14): a result
+	// summary reads `t.len()`. Any other name it reads is a number of its own
+	// at each call, never one two calls share.
+	for name in names {
+		if given.contains_key(name) {
+			continue
+		}
+		let mut length: i64? = null
+		for k in 0..<args.len() {
+			if length_of(ensured.params[k]) == name {
+				let path = path_of(args[k], words)
+				if path != null && !walk.pinned.contains(path_root(path ?? "")) {
+					length = bounding_length_named(walk, path ?? "", true)
+				}
+			}
+		}
+		given.insert(name.clone(), length ?? bounding_fresh(walk))
+	}
+	let mut holds: Vec[i64] = []
+	for condition in read {
+		holds.push(walk.arena.substitute(condition, given))
 	}
 	walk.axioms.insert(name, holds)
 	return result
+}
+
+/// Whether a call's receiver is `self` itself.
+fn bounding_on_self(receiver: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+	return (path_of(receiver, words) ?? "") == "self"
 }
 
 /// **A method call's precondition, proved where the call stands** (ADR-269
@@ -5576,6 +5618,30 @@ fn bounding_past_loop(
 			wanted.insert(name.clone())
 		}
 	}
+	// **A flag the loop raised, read where a goal past it was left open**
+	// (ADR-361 D15): `if !seen { return }` or `if at.len() == 0 { return }`
+	// before `args[0]` asks the loop for what held where the flag rose,
+	// though the goal reads no name the loop changes. Such a search is
+	// walked only where its candidates could pay.
+	let mut only_flags: i64? = null
+	if wanted.is_empty() {
+		for missed in walk.missed_goals {
+			if missed.stamp <= past.open {
+				continue
+			}
+			for fact in missed.facts {
+				let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+				walk.arena.variables(fact, read)
+				for name in read {
+					if bounding_changes_name(changed, name)
+						&& (walk.flagged.contains_key(name) || name.ends_with(".len()")) {
+							wanted.insert(name.clone())
+						}
+				}
+			}
+		}
+		only_flags = past.open
+	}
 	if wanted.is_empty() {
 		return leaves
 	}
@@ -5589,7 +5655,7 @@ fn bounding_past_loop(
 		poisoned,
 		changed,
 		wanted,
-		null,
+		only_flags,
 		context,
 		program,
 		words,
@@ -5987,10 +6053,50 @@ fn bounding_while_proposals(
 ) -> BoundsProposals {
 	let mut out = BoundsProposals { ghosts: [], fixed: [], candidates: [] }
 	let mut state: Vec[String] = []
+	let mut ints = entry.ints.clone()
 	for name in changed.values {
 		if entry.ints.contains(name) && !walk.pinned.contains(path_root(name)) {
 			state.push(name.clone())
 		}
+	}
+	// **A flag is a name of the state too** (ADR-361 D15): a `bool` the
+	// body sets `true` (`flagged`) and a plain list's length the body grows,
+	// so the prover's `loop_flagged` offers what held where they rose.
+	let none: collections::BTreeSet[String] = collections::BTreeSet()
+	// The lengths what held where the loop is reached reads are whole
+	// numbers its turns read too: `if i < args.len() as i64` is a branch
+	// the problem follows.
+	for fact in entry.facts {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, read)
+		for name in read {
+			if name.ends_with(".len()") {
+				ints.insert(name.clone())
+			}
+		}
+	}
+	for name in changed.values {
+		if !entry.ints.contains(name)
+			&& walk.flagged.contains_key(name)
+			&& !name.contains(".")
+			&& !walk.pinned.contains(name)
+			&& !walk.shape.constants.contains_key(name) {
+				state.push(name.clone())
+				ints.insert(name.clone())
+			}
+	}
+	for list in changed.lengths {
+		let length = length_of(list)
+		if !list.contains(".")
+			&& !list.contains("#")
+			&& !list.contains("[")
+			&& !list.contains("(")
+			&& !walk.pinned.contains(list)
+			&& !state.contains(length)
+			&& prover_length_follows(length, cond, body, none, words) {
+				state.push(length.clone())
+				ints.insert(length)
+			}
 	}
 	if state.is_empty() {
 		return out
@@ -6002,7 +6108,7 @@ fn bounding_while_proposals(
 		start,
 		state,
 		entry.facts,
-		entry.ints,
+		ints,
 		fn(name) { constants[name] },
 		cond,
 		body,

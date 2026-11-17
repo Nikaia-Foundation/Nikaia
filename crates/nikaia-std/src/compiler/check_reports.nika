@@ -115,7 +115,7 @@ impl CheckState {
     /// a body that changes one usually does so several times. Only where the
     /// change is certain.
     fn a_changed_binding_says_mut(ref mut self, name: ref String, how: ref String, changed_at: Span) sync {
-        self.changed.push(name.clone())
+        self.a_change_noted(name)
         let local = self.binding(name) ?? return
         let without_mut = local.without_mut ?? return
         let declared = without_mut.at.start as i64

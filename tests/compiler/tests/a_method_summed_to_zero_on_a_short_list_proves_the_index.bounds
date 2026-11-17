@@ -1,0 +1,3 @@
+bounds in tests/a_method_summed_to_zero_on_a_short_list_proves_the_index.nika: 1 indexes, 1 proved; 1 operations, 0 proved
+    14  self.base + 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    22  t[0]           proved

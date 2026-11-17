@@ -45,16 +45,16 @@ pub(crate) fn sv_rat_abs(b: &SvRat) -> Option<SvRat> {
 #[cfg(test)]
 pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
     if l.def < 0 || l.def >= defs.len() as i64 { return None; }
-    let t = (*unsafe { nikaia_std::proven::read(&defs, (l.def) as usize) }).clone();
+    let t = unsafe { nikaia_std::proven::read(&defs, (l.def) as usize) };
     let m = nikaia_std::block::Text::from(t.name.to_string());
     let x = nikaia_std::block::Text::from(t.a.to_string());
     let y = nikaia_std::block::Text::from(t.b.to_string());
     let zero = sv_int(0);
     let one = sv_int(1);
-    let s = nikaia_std::block::Text::from(l.schema.to_string());
+    let s = &l.schema;
     if s == "mono" || s == "pow2-mono" || s == "congruence" {
         if l.other < 0 || l.other >= defs.len() as i64 || unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) }.op != t.op { return None; }
-        let u = (*unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) }).clone();
+        let u = unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) };
         if s == "congruence" {
             let mut parts: Vec<i64> = vec![match sv_lvv(arena, "distinct", &x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None }];
             if t.op != "pow2" { parts.push(match sv_lvv(arena, "distinct", &y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None }); }

@@ -1247,8 +1247,9 @@ impl CheckState {
 // ---------------------------------------------------------------------------
 // **`NK1350`: a `.clone()` that copies nothing new** (#1318). A warning, the
 // author decides: the clone of a value whose type copies, the clone of a
-// `let` at its last use, and the clone of a place a `for` only walks. One
-// code, three sentences.
+// `let` at its last use, the clone of a place a `for` only walks, and the
+// clone of a field or an element a `let` only reads (#1988). One code, four
+// sentences.
 // ---------------------------------------------------------------------------
 
 impl CheckState {
@@ -1396,6 +1397,122 @@ impl CheckState {
         self.a_needless_clone(check_span_at(world, iter, span), f"`{path}` is copied only to be walked: nothing in the loop changes it or takes it.", ["A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself."], "Delete `.clone()`.", clone_deleted(world, iter, receiver))
     }
 
+    /// **A `let` bound to a clone of a field or an element** (`NK1350`,
+    /// #1988): `let lo = self.lower[v].clone()`, not `mut`, with no type
+    /// written, of a type that does not copy. Held to the body's end.
+    fn a_let_of_a_place_clone(ref mut self, world: ref CheckWorld, id: i64, name: ref String, value: ref Expr, bound: ref Ty, span: ref Span) sync {
+        if self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let receiver = match value {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if args.len() != 0 || world.words.resolve(method) != "clone" {
+                    return
+                }
+                receiver.clone()
+            },
+            else => return,
+        }
+        // A field or an element of a name, not of a call's owned result.
+        if !check_core_stmt_a_place(self, receiver) {
+            return
+        }
+        let root: String = place_clone_root(world, receiver) ?? return
+        if bound.is_a_view() || clone_holds_a_view(bound) || clone_of_the_unknown(bound) || !self.takes_away(world, bound) {
+            return
+        }
+        let binding: i64? = id
+        self.flow.place_clones.push(CheckPlaceClone { name: name.clone(), binding: binding, root: root, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, receiver) })
+    }
+
+    /// **A read of a place clone's name inside a loop or a lambda** the
+    /// `let` stands outside of: the name is read again on the next turn.
+    fn a_place_clone_read(ref mut self, binding: i64?) sync {
+        let mut at = 0
+        while at < self.flow.place_clones.len() as i64 {
+            if self.flow.place_clones[at].binding == binding && self.repeats.len() as i64 > self.flow.place_clones[at].repeats {
+                self.flow.place_clones[at].escaped = true
+            }
+            at += 1
+        }
+    }
+
+    /// **A place clone's name handed back** in a result that does not copy:
+    /// the copy leaves the function.
+    fn place_clones_handed_back(ref mut self, world: ref CheckWorld, returned: ref Expr) sync {
+        if self.flow.place_clones.len() == 0 {
+            return
+        }
+        let result = self.expected ?? return
+        if !clone_of_the_unknown(result) && !self.takes_away(world, result) {
+            return
+        }
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(returned, world.words, named)
+        let mut at = 0
+        while at < self.flow.place_clones.len() as i64 {
+            let name = self.flow.place_clones[at].name.clone()
+            if named.contains(name) && self.binding(name)?.id == self.flow.place_clones[at].binding {
+                self.flow.place_clones[at].escaped = true
+            }
+            at += 1
+        }
+    }
+
+    /// **A change of a name**, in the order of the walk's reads.
+    fn a_change_noted(ref mut self, name: ref String) sync {
+        self.changed.push(name.clone())
+        self.flow.changes_seen.push((name.clone(), self.reads_on_paths.len() as i64))
+    }
+
+    /// **The place clones only read**, said where the body ends: not handed
+    /// over, not handed back, read in no loop or lambda around, and nothing
+    /// changed or took the place's root between the `let` and its last read.
+    fn needless_place_clones_said(ref mut self) sync {
+        let places = self.flow.place_clones.clone()
+        let changes = self.flow.changes_seen.clone()
+        self.flow.place_clones = []
+        self.flow.changes_seen = []
+        for one in places {
+            if one.escaped {
+                continue
+            }
+            let mut last: i64 = -1
+            let mut at = 0
+            while at < self.reads_on_paths.len() as i64 {
+                if self.reads_on_paths[at].binding == one.binding && at >= one.reads {
+                    last = at
+                }
+                at += 1
+            }
+            if last < 0 {
+                continue
+            }
+            let last_seq = self.reads_on_paths[last].seq
+            let mut needed = false
+            for change in changes {
+                if change.0 == one.name && change.1 >= one.reads {
+                    needed = true
+                }
+                if change.0 == one.root && change.1 >= one.reads && change.1 <= last {
+                    needed = true
+                }
+            }
+            for taken in self.handed {
+                if taken.binding == one.binding {
+                    needed = true
+                }
+                if a_root_segment(taken.path) == one.root && taken.seq > one.seq && taken.seq <= last_seq {
+                    needed = true
+                }
+            }
+            if needed {
+                continue
+            }
+            self.a_needless_clone(one.span, f"`{one.name}` is a copy of a part of `{one.root}` that is only read: nothing changes `{one.root}` while `{one.name}` is in use.", ["A `let` over a field or an element is a view of it (ADR-094 D4), so it can read the place itself."], "Delete `.clone()`; the copy is only read.", one.edit?.clone())
+        }
+    }
+
     /// **The clones no read followed**, said where the body ends.
     fn needless_clones_said(ref mut self) sync {
         let clones = self.flow.clones.clone()
@@ -1466,6 +1583,16 @@ fn clone_deleted(world: ref CheckWorld, call: ref Expr, receiver: ref Expr) -> C
         return null
     }
     return CheckEdit { span: Span { start: of.end, end: whole.end }, text: "" }
+}
+
+// The name a field or an index chain starts from: `self` in `self.lower[v]`.
+fn place_clone_root(world: ref CheckWorld, place: ref Expr) -> String? sync {
+    return match place {
+        Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+        Expr::Field { base, .. } => place_clone_root(world, base),
+        Expr::Index { base, .. } => place_clone_root(world, base),
+        else => null,
+    }
 }
 
 // Whether a binding is a `let`'s: written so, `mut` or not, and no parameter.
