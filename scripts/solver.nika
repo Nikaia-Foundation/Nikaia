@@ -1259,8 +1259,8 @@ fn solver_compare_row(
 	let mut instructions = 0
 	let mut counted = 0
 	for i in at {
-		let r = runs[i][k].clone()
-		let status = statuses[i].clone()
+		let r = runs[i][k]
+		let status = statuses[i]
 		let answered = r.answer == "sat" || r.answer == "unsat"
 		if answered && status != "" && r.answer != status { wrong += 1 }
 		if r.answer == "rejected" { wrong += 1 }
@@ -1358,7 +1358,7 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 			let file = path.split("/").last() ?? path
 			let mut shown: Vec[String] = []
 			for k in 0..<solvers.len() {
-				let r = row[k].clone()
+				let r = row[k]
 				let counted = if r.instructions >= 0 { f" {r.instructions}i" } else { "" }
 				shown.push(f"{solvers[k]} {r.answer} {r.millis}ms {r.kib}KiB{counted}")
 			}
