@@ -1,0 +1,31 @@
+// Code whose type keeps a parameter is given what is passed there (Part I
+// 5.4 C, ADR-293 D29, #1990), whether it is a parameter or a `let`: a name
+// used again after is NK2105, a view is NK1102 (ADR-views-3 D5).
+struct Holder {
+    name: String,
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn eat(keep a: String) -> i64 {
+    let v: Vec[String] = [a]
+    return v[0].len()
+}
+
+fn given_again(f: fn(keep a: String) -> i64) throws {
+    let s = make()
+    println(f(s))
+    println(s)
+}
+
+fn main() throws {
+    given_again(eat)
+    let h = Holder { name: make() }
+    let s = h.name
+    let f: fn(keep a: String) -> i64 = eat
+    println(f(s))
+}

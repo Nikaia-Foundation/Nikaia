@@ -111,7 +111,31 @@ pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_
             continue;
         }
         if (*unsafe { nikaia_std::proven::read(&params, (i) as usize) }).is_a_view() && !(*unsafe { nikaia_std::proven::read(&found, (i) as usize) }).is_a_view() && !check_core_call_opaque(unsafe { nikaia_std::proven::read(&found, (i) as usize) }) && !(moves(unsafe { nikaia_std::proven::read(&found, (i) as usize) }) && state.a_map_read_past_a_jump(world, given)) { state.facts.lent_args.insert(id_of(given) as i64); }
+        if !(*unsafe { nikaia_std::proven::read(&params, (i) as usize) }).is_a_view() { check_core_call_kept_by_code(state, world, given, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, unsafe { nikaia_std::proven::read(&params, (i) as usize) }, name, unsafe { nikaia_std::proven::add::<i64>(i, 1) }, span); }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_kept_by_code(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr, found: &Ty, want: &Ty, name: &str, nth: i64, span: &Span) {
+    if a_text_literal_expr(given) || check_core_call_opaque(found) { return; }
+    let mut handed = found.clone();
+    if is_a_view_of_a_string(&handed) { handed = Ty::Named { name: String::from("str"), args: vec![], view: true }; }
+    let keeper = format!("`{}` keeps its argument {} after the call returns", name, nth);
+    let named = check_arguments_named(world, Some(given));
+    let mut refusal: Option<CheckKept> = state.a_view_kept(&handed, want, (named).as_deref(), &keeper);
+    if refusal.is_none() && state.a_view_of_what_does_not_copy(world, &handed, want) { refusal = Some(CheckKept { notes: vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("{}, so it needs a `{}` of its own.", capitalised(&keeper), want.text())], help: String::from("Write `.clone()` to copy it here.") }); }
+    if refusal.is_some() {
+        let why = match refusal { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.findings.push(check_refusal("NK1102", &check_span_at(world, given, span), format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want.text(), handed.text()), why.notes, Some(why.help)));
+        return;
+    }
+    match found {
+        Ty::Fn { .. } => { return; },
+        _ => { },
+    }
+    state.hands_over(world, given, found, &format!("passed to `{}`, which keeps it", name), span);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
