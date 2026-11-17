@@ -143,7 +143,7 @@ pub(crate) fn widen(ledger: &mut Ledger, name: String, types: &collections::BTre
 }
 
 pub(crate) fn qualified_default(text: &str, prefix: &str, declared: &collections::BTreeSet<String>) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut out: String = String::from("");
     let mut at: i64 = 0;
     let mut quoted = false;

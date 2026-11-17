@@ -656,7 +656,7 @@ pub(crate) fn emit_seeds_between(c: &[scalar], from: i64, to: i64) -> String {
 }
 
 pub(crate) fn emit_seeds_last(name: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     emit_seeds_between(&c, emit_seeds_last_start(&c), c.len() as i64)
 }
 
@@ -666,7 +666,7 @@ pub(crate) fn emit_seeds_is_map(name: &str) -> bool {
 }
 
 pub(crate) fn emit_seeds_renamed(path: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(path.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(path.chars());
     let from = emit_seeds_last_start(&c);
     let head = emit_seeds_between(&c, 0, from);
     let word = emit_seeds_between(&c, from, c.len() as i64);
@@ -702,7 +702,7 @@ pub(crate) fn emit_seeds_closing(c: &[scalar], open: i64) -> i64 {
 pub(crate) fn emit_seeds_put(run: &mut EmitSeedsRun, text: &str) { for ch in text.chars() { run.out.push(ch); } }
 
 pub fn emit_seeds_write(text: &str, place: &mut EmitSeedsPlace, fast: bool, tables: &EmitSeedsTables) -> String {
-    let mut run = EmitSeedsRun { c: nikaia_std::list::chars(text.chars()), at: 0, out: vec![] };
+    let mut run = EmitSeedsRun { c: nikaia_std::list::scalars(text.chars()), at: 0, out: vec![] };
     emit_seeds_run(&mut run, place, fast, tables, false);
     let mut out: String = String::from("");
     for ch in run.out.iter() {

@@ -41,4 +41,4 @@ pub mod main {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "1716a32af6b253cf3e1628b0a8b0f14c7b577fc8e43e98b74468a91510bf2cdf";
+pub const LOWERED_DIGEST: &str = "f9e092164a298d5cb426272d662675241f8bef2f21350f67a439f404dd5782fe";

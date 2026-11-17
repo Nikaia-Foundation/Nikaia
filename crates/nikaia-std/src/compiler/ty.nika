@@ -588,7 +588,7 @@ fn viewed_parts(ty: ref Ty) -> String? {
 
 /// `a` or `an`, by the sound the written type starts with.
 fn article_of(written: ref String) -> String {
-    let first = written.chars().next() ?? 'x'
+    let first = written.scalars.next() ?? 'x'
     if first == 'A' || first == 'E' || first == 'I' || first == 'O' || first == 'U' || first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u' {
         return "an"
     }
@@ -805,7 +805,7 @@ pub fn split_args(written: ref String) -> Vec[String] {
     let mut parts: Vec[String] = []
     let mut depth = 0
     let mut current: String = ""
-    for c in written.chars() {
+    for c in written.scalars {
         if c == '[' || c == '(' {
             depth += 1
             current.push(c)
@@ -835,7 +835,7 @@ fn a_view_of(written: ref String) -> String? {
     // into** (ADR-251 D4): a view of `T` like any other, and the names are the
     // ledger's to read, beside the type.
     if written.starts_with("ref(") {
-        let c: Vec[scalar] = written.chars().collect()
+        let c: Vec[scalar] = written.scalars.collect()
         let close = closing(c, 4, ')')
         if close >= 0 {
             let rest = between(c, close + 1, c.len())
@@ -874,7 +874,7 @@ fn between(c: ref Array[scalar], from: i64, to: i64) -> String {
 /// `written` with `front` characters taken off the front and `back` off the
 /// back.
 fn cut(written: ref String, front: i64, back: i64) -> String {
-    let c: Vec[scalar] = written.chars().collect()
+    let c: Vec[scalar] = written.scalars.collect()
     return between(c, front, c.len() - back)
 }
 
@@ -909,8 +909,8 @@ fn word_off(tail: ref String, word: ref String) -> String? {
     if !tail.ends_with(word) {
         return null
     }
-    let c: Vec[scalar] = tail.chars().collect()
-    let w: Vec[scalar] = word.chars().collect()
+    let c: Vec[scalar] = tail.scalars.collect()
+    let w: Vec[scalar] = word.scalars.collect()
     let shorter = between(c, 0, c.len() - w.len())
     if shorter.len() == 0 {
         return shorter
@@ -971,7 +971,7 @@ fn pointed_at(viewed: ref String) -> Ty? {
 /// the end, and the words read off the back, because the result is whatever
 /// stands in front of them (ADR-277 D6).
 fn a_function(written: ref String) -> Ty? {
-    let c: Vec[scalar] = written.chars().collect()
+    let c: Vec[scalar] = written.scalars.collect()
     let close = closing(c, 3, ')')
     if close < 0 {
         return null
@@ -1019,13 +1019,13 @@ fn a_sequence(written: ref String, word: ref String, parallel: bool) -> Ty? {
     if !written.starts_with(word) {
         return null
     }
-    let w: Vec[scalar] = word.chars().collect()
+    let w: Vec[scalar] = word.scalars.collect()
     let after_word = cut(written, w.len(), 0)
     let rest: String = after_word.trim_start().clone()
     if !rest.starts_with("[") {
         return null
     }
-    let c: Vec[scalar] = rest.chars().collect()
+    let c: Vec[scalar] = rest.scalars.collect()
     let close = closing(c, 1, ']')
     if close < 0 {
         return null
@@ -1107,7 +1107,7 @@ fn a_name(rest: ref String, view: bool) -> Ty {
     if !rest.ends_with("]") {
         return Ty::Named { name: rest.clone(), args: [], view: view }
     }
-    let c: Vec[scalar] = rest.chars().collect()
+    let c: Vec[scalar] = rest.scalars.collect()
     let mut open = -1
     for at in 0..<c.len() {
         if open < 0 && c[at] == '[' {
@@ -2589,7 +2589,7 @@ fn renamed_name(name: ref String, renames: ref collections::BTreeMap[String, Str
 
 // The package before the first `::`, renamed where the map has it.
 fn renamed_path(name: ref String, renames: ref collections::BTreeMap[String, String]) -> String {
-    let c: Vec[scalar] = name.chars().collect()
+    let c: Vec[scalar] = name.scalars.collect()
     for at in 0..<c.len() {
         if at + 1 < c.len() && c[at] == ':' && c[at + 1] == ':' {
             let package = between(c, 0, at)

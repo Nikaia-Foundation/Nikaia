@@ -14,7 +14,7 @@ impl Writer {
 	}
 
 	fn put_text(ref mut self, s: String) sync {
-		for c in s.chars() {
+		for c in s.scalars {
 			self.put(c)
 		}
 	}

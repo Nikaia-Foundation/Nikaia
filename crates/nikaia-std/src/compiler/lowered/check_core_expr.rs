@@ -35,7 +35,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
     let count = value.chars().count() as i64;
     if count <= 1 { return; }
     let composed = host.composed(&value);
-    let scalars: Vec<scalar> = nikaia_std::list::chars(composed.chars());
+    let scalars: Vec<scalar> = nikaia_std::list::scalars(composed.chars());
     if scalars.len() == 1 {
         let one = *unsafe { nikaia_std::proven::read(&scalars, (0) as usize) };
         let hex = hex_of(one as i64);

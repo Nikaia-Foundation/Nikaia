@@ -10,7 +10,7 @@ pub(crate) fn claim_names_in(expr: &Expr, words: &winnow_grammar::InternerContex
 pub(crate) fn is_a_parameter(name: &str, params: &collections::BTreeSet<String>) -> bool {
     if params.contains(name) { return true; }
     if !name.ends_with(".len()") { return false; }
-    let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let mut base: String = String::from("");
     for k in 0..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 6) } { base.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     params.contains(&base)

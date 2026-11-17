@@ -275,7 +275,7 @@ pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nik
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn parse(text: &str) -> Result<Value, nikaia_std::error::Thrown<Error>> {
-    let mut r = Reader { cs: nikaia_std::list::chars(text.chars()), pos: 0 };
+    let mut r = Reader { cs: nikaia_std::list::scalars(text.chars()), pos: 0 };
     let v = value(&mut r, "$", 0)?;
     blanks(&mut r);
     if r.pos < r.cs.len() as i64 { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character after the value"), String::from("$")), &"parse")); }

@@ -945,7 +945,7 @@ fn emit_seeds_between(c: ref Vec[scalar], from: i64, to: i64) -> String {
 }
 
 fn emit_seeds_last(name: ref String) -> String {
-    let c: Vec[scalar] = name.chars().collect()
+    let c: Vec[scalar] = name.scalars.collect()
     return emit_seeds_between(c, emit_seeds_last_start(c), c.len())
 }
 
@@ -956,7 +956,7 @@ fn emit_seeds_is_map(name: ref String) -> bool {
 
 /// `TrustedMap` is `HashMap` with a hasher of its own.
 fn emit_seeds_renamed(path: ref String) -> String {
-    let c: Vec[scalar] = path.chars().collect()
+    let c: Vec[scalar] = path.scalars.collect()
     let from = emit_seeds_last_start(c)
     let head = emit_seeds_between(c, 0, from)
     let word = emit_seeds_between(c, from, c.len())
@@ -994,7 +994,7 @@ fn emit_seeds_closing(c: ref Vec[scalar], open: i64) -> i64 {
 }
 
 fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
-    for ch in text.chars() {
+    for ch in text.scalars {
         run.out.push(ch)
     }
 }
@@ -1003,7 +1003,7 @@ fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
 /// fills an ordinary mention with; `tables` how many parameters a type name
 /// declares.
 pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool, tables: ref EmitSeedsTables) -> String {
-    let mut run = EmitSeedsRun { c: text.chars().collect(), at: 0, out: [] }
+    let mut run = EmitSeedsRun { c: text.scalars.collect(), at: 0, out: [] }
     emit_seeds_run(run, place, fast, tables, false)
     let mut out: String = ""
     for ch in run.out {

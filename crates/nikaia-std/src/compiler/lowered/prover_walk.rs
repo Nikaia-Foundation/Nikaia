@@ -2882,7 +2882,7 @@ pub(crate) fn prover_a_test_function(name: Option<&str>) -> bool {
     let text = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     let prefix = "__nikaia_test_";
     if !text.starts_with(AsRef::<str>::as_ref(prefix)) || (text.len() as i64) == prefix.len() as i64 { return false; }
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     for k in 14..c.len() as i64 { if *unsafe { nikaia_std::proven::read(&c, (k) as usize) } < '0' || *unsafe { nikaia_std::proven::read(&c, (k) as usize) } > '9' { return false; } }
     true
 }

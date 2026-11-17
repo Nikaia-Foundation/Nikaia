@@ -60,7 +60,7 @@ fn panics_in(text: String) -> (i64, i64) {
         let parts: Vec[String] = code.split("panic(").map(fn(p) { p.to_string() }).collect()
         for k in 0..<parts.len() - 1 {
             // `a_panic(` is another function's name, not the call.
-            let before = parts[k].chars().last() ?? ' '
+            let before = parts[k].scalars.last() ?? ' '
             if before.is_alphanumeric() || before == '_' { continue }
             calls += 1
         }

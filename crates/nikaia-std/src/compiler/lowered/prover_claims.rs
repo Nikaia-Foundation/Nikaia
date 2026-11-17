@@ -163,7 +163,7 @@ pub(crate) fn assert_of(contract: &FnContract, at: i64) -> String {
     if at >= contract.from.len() as i64 { return String::from(""); }
     let from = unsafe { nikaia_std::proven::read(&contract.from, (at) as usize) };
     if !from.starts_with("assert(") || !from.ends_with(')') { return String::from(""); }
-    let c: Vec<scalar> = nikaia_std::list::chars(from.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(from.chars());
     let mut inner: String = String::from("");
     for k in 7..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) } { inner.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     inner

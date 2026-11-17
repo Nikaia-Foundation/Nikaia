@@ -4,8 +4,8 @@
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn distance(a: &str, b: &str) -> i64 {
-    let x: Vec<scalar> = nikaia_std::list::chars(a.chars());
-    let y: Vec<scalar> = nikaia_std::list::chars(b.chars());
+    let x: Vec<scalar> = nikaia_std::list::scalars(a.chars());
+    let y: Vec<scalar> = nikaia_std::list::scalars(b.chars());
     let rows = unsafe { nikaia_std::proven::add::<i64>(x.len() as i64, 1) };
     let cols = unsafe { nikaia_std::proven::add::<i64>(y.len() as i64, 1) };
     let mut d: Vec<Vec<i64>> = Vec::new();
@@ -32,8 +32,8 @@ pub fn distance(a: &str, b: &str) -> i64 {
 // this was written - see `contracts::sync`.
 pub fn one_edit_apart(a: &str, b: &str) -> bool {
     if a == b { return false; }
-    let x: Vec<scalar> = nikaia_std::list::chars(a.chars());
-    let y: Vec<scalar> = nikaia_std::list::chars(b.chars());
+    let x: Vec<scalar> = nikaia_std::list::scalars(a.chars());
+    let y: Vec<scalar> = nikaia_std::list::scalars(b.chars());
     if (x.len() as i64) == y.len() as i64 {
         let mut differ = 0;
         for i in 0..x.len() as i64 { if *unsafe { nikaia_std::proven::read(&x, (i) as usize) } != *unsafe { nikaia_std::proven::read(&y, (i) as usize) } { differ += 1; } }
@@ -47,7 +47,7 @@ pub fn one_edit_apart(a: &str, b: &str) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn one_put_in(long: &str, short: &str) -> bool {
-    let kept: Vec<scalar> = nikaia_std::list::chars(short.chars());
+    let kept: Vec<scalar> = nikaia_std::list::scalars(short.chars());
     let mut at: i64 = 0;
     let mut skipped = false;
     for c in long.chars() { if ((at) as usize) < kept.len() && *unsafe { nikaia_std::proven::read(&kept, (at) as usize) } == c { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; } else if skipped { return false; } else { skipped = true; } }

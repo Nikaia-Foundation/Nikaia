@@ -56,7 +56,7 @@ pub fn parse_i64(text: ref String) -> i64? sync {
     let mut negative = false
     let mut digits = 0
     let mut first = true
-    for c in text.chars() {
+    for c in text.scalars {
         let signed = first && (c == '-' || c == '+')
         first = false
         if signed {
@@ -122,7 +122,7 @@ pub fn parse_u64(text: ref String) -> u64? sync {
     let mut value: u64 = 0
     let mut digits = 0
     let mut first = true
-    for c in text.chars() {
+    for c in text.scalars {
         let signed = first && c == '+'
         first = false
         if signed {
@@ -157,7 +157,7 @@ pub fn parse_u64(text: ref String) -> u64? sync {
 // from the lowered program.
 pub fn escape_control(s: String) -> String sync {
     let mut out = String()
-    for c in s.chars() {
+    for c in s.scalars {
         let code = c as i64
         if c == '\n' {
             out.push_str("\\n")

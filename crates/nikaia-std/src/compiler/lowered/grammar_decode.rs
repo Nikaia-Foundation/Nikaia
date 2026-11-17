@@ -76,7 +76,7 @@ impl GrCursor {
 }
 
 pub fn gr_decode(source: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> GrDecoded {
-    let mut at = GrCursor { chars: nikaia_std::list::chars(source.chars()), at: 0, detail: String::from(""), failed: false };
+    let mut at = GrCursor { chars: nikaia_std::list::scalars(source.chars()), at: 0, detail: String::from(""), failed: false };
     let value = gr_read(&mut at, char_of);
     if at.failed || value.is_none() { return GrDecoded::Unreadable(nikaia_std::block::Text::from(at.detail.to_string())); }
     GrDecoded::Value(nikaia_std::index::or(value, || BuildValue::Bool(false)))

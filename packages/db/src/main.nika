@@ -145,7 +145,7 @@ pub fn raw(text: String) -> Raw {
 /// `bool` call, so a guard on it is a fact the prover reads (ADR-381).
 pub fn is_identifier(part: ref String) -> bool sync {
     let mut first = true
-    for c in part.chars() {
+    for c in part.scalars {
         let fits = match c {
             'a'..'z' => true,
             'A'..'Z' => true,

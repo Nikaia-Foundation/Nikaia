@@ -803,7 +803,7 @@ fn refused_header(key: ref String, count: i64, operations: ref Vec[Operation], p
 // `text` padded with spaces on the right to `width` characters.
 fn padded_right(text: ref String, width: i64) -> String {
     let mut out = text.clone()
-    let mut have = text.chars().count()
+    let mut have = text.scalars.count()
     while have < width {
         out.push(' ')
         have += 1

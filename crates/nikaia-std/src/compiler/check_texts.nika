@@ -29,7 +29,7 @@ fn literal_is_a_byte(written: ref String) -> bool sync {
         return true
     }
     let text = decoded(written) fn(n) { ascii_scalar(n) } ?? return false
-    return text.chars().count() == 1 && text.len() == 1
+    return text.scalars.count() == 1 && text.len() == 1
 }
 
 /// A `'…'` that is a byte, as the language below writes it: `b'x'`, with `\`

@@ -250,7 +250,7 @@ impl CheckState {
     /// the escape as the literal has it and `why` one clause about it; `all` is
     /// the list of escapes there are.
     pub fn an_escape_nothing_names(ref mut self, text: ref String, written: ref String, why: ref String, all: ref String, span: ref Span) sync {
-        let letters: Vec[scalar] = written.chars().collect()
+        let letters: Vec[scalar] = written.scalars.collect()
         let mut help: String = ""
         if letters.len() > 1 && (letters[1] == 'x' || letters[1] == 'u') {
             help = "Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."

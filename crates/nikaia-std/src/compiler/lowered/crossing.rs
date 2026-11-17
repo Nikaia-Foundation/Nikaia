@@ -46,17 +46,17 @@ pub(crate) fn is_plain(name: &str) -> bool {
 pub fn generic_of(written: &str, name: &str) -> Option<String> {
     let text = written.trim();
     if !text.starts_with(AsRef::<str>::as_ref(name)) { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
-    let n: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
+    let n: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let after = slice(&c, n.len() as i64, c.len() as i64);
     let rest = after.trim_start();
     if !rest.starts_with('<') || !rest.ends_with('>') { return None; }
-    let r: Vec<scalar> = nikaia_std::list::chars(rest.chars());
+    let r: Vec<scalar> = nikaia_std::list::scalars(rest.chars());
     Some(slice(&r, 1, unsafe { nikaia_std::proven::sub::<i64>(r.len() as i64, 1) }))
 }
 
 pub fn bounds_send(text: &str) -> bool {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut start: i64 = 0;
     for at in 0..unsafe { nikaia_std::proven::add::<i64>(c.len() as i64, 1) } {
         let ends = at == c.len() as i64 || !((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_');

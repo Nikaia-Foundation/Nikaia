@@ -2774,7 +2774,7 @@ fn drive_sweep() -> i64 throws {
 	for entry in fs::read_dir(tmp.clone(), fs::Root::Anywhere) {
 		let path = entry.to_text()
 		let parts: Vec[String] = path.split("/").collect()
-		let name = parts[parts.len() - 1].clone()
+		let name = parts[parts.len() - 1]
 		let rest = name.strip_prefix("nikaia-test-") ?? ""
 		let pid = rest.split("-").collect()[0].clone()
 		if pid == "" || (text::parse_i64(pid.clone()) ?? 0) <= 0 { continue }
@@ -2924,7 +2924,7 @@ fn drive_pickup(dir: String) throws {
 	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
 		let path = entry.to_text()
 		let parts: Vec[String] = path.split("/").collect()
-		let name = parts[parts.len() - 1].clone()
+		let name = parts[parts.len() - 1]
 		let stem = name.strip_suffix(".running") ?? ""
 		if stem != "" { briefs.push(f"{dir}/{stem}") }
 	}
@@ -3030,7 +3030,7 @@ fn drive_found_labels(found: String, needs: String) -> Vec[String] {
 // The title of an issue filed from FOUND: its first 80 characters, cut at a
 // word, `...` when cut.
 fn drive_found_title(found: String) -> String {
-	let chars: Vec[scalar] = found.trim().chars().collect()
+	let chars: Vec[scalar] = found.trim().scalars.collect()
 	if chars.len() <= 80 { return found.trim().clone() }
 	let mut out: String = ""
 	let mut word: String = ""
@@ -3330,7 +3330,7 @@ fn drive_improve_tokens(point: String) -> Vec[String] {
 fn drive_improve_words_all(text: String) -> Vec[String] {
 	let mut out: Vec[String] = []
 	let mut word: String = ""
-	for c in f"{text.to_lowercase()} ".chars() {
+	for c in f"{text.to_lowercase()} ".scalars {
 		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
 			word = f"{word}{c}"
 			continue
@@ -3454,7 +3454,7 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 	for raw in value.split(";") {
 		let t = raw.trim()
 		let low = t.to_lowercase()
-		let cs: Vec[scalar] = low.chars().collect()
+		let cs: Vec[scalar] = low.scalars.collect()
 		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
 		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "knowledge", "-"] {
 			if low.starts_with(word) { kind = true }
@@ -3486,7 +3486,7 @@ fn drive_comment_issue(value: String) -> String {
 	let space = t.find(" ") ?? t.len()
 	if space == t.len() || space < "#0".len() { return "" }
 	let number = f"{t["#".len()..<space]}"
-	for c in number.chars() {
+	for c in number.scalars {
 		if c < '0' || c > '9' { return "" }
 	}
 	return number
@@ -4228,7 +4228,7 @@ fn drive_queue_prune(dir: String) throws {
 	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, gone))
 	for tag in closed { println(f"DROPPED {tag} closed") }
 	for i in 0..<blocked.len() {
-		let line = blocked_lines[i].clone()
+		let line = blocked_lines[i]
 		println(line.replace("SKIPPED", "DROPPED"))
 		let words: Vec[String] = line.split(" ").collect()
 		drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line)
@@ -4273,9 +4273,9 @@ fn drive_hash_numbers(text: String) -> Vec[String] {
 	let mut out: Vec[String] = []
 	let pieces: Vec[String] = text.split("#").collect()
 	for i in 1..<pieces.len() {
-		let piece = pieces[i].clone()
+		let piece = pieces[i]
 		let mut n = String()
-		for c in piece.chars() {
+		for c in piece.scalars {
 			if c < '0' || c > '9' { break }
 			n.push(c)
 		}
@@ -4387,7 +4387,7 @@ fn drive_unquoted(body: String) -> String {
 		let pieces: Vec[String] = raw.split("`").collect()
 		let mut line = String()
 		for i in 0..<pieces.len() {
-			let piece = pieces[i].clone()
+			let piece = pieces[i]
 			// An odd piece is inside a span, unless it is the last (an unclosed `).
 			if i % 2 == 1 && i + 1 < pieces.len() && piece.contains("#") { continue }
 			line.push_str(piece)
@@ -4397,7 +4397,7 @@ fn drive_unquoted(body: String) -> String {
 		let quoted: Vec[String] = line.split("\"").collect()
 		let mut kept = String()
 		for i in 0..<quoted.len() {
-			let piece = quoted[i].clone()
+			let piece = quoted[i]
 			if i % 2 == 1 && i + 1 < quoted.len() && piece.contains("#") { continue }
 			kept.push_str(piece)
 		}
@@ -4923,7 +4923,7 @@ fn main() throws {
 		// `--cause-check N|FILE` (owner, 2026-11-16): the supervisor runs it
 		// before it labels a bug issue `ready` (docs/supervisor.md); exit 1
 		// with the reason when the cause is not marked as I7 asks.
-		let source = args[2].clone()
+		let source = args[2]
 		let text = if source.ends_with(".md") || source.contains("/") { drive_read(source.clone()) } else { process::run("gh", ["api", f"repos/{drive_repo()}/issues/{source}", "--jq", ".body // \"\""]).stdout }
 		let marking = drive_cause_marking(text)
 		if marking == "" { println(f"ok {source}: cause marked"); return }

@@ -25,13 +25,16 @@ use std::text
 /// checked; nothing emitted, cached or written. Each finding comes with the
 /// path of the file it is about, warnings too. `alone` checks `entry` as a
 /// single file, in no package: a document with no `file://` path (#1365).
+/// `tests` reads the program as `nikaia test` builds it, its `test` blocks
+/// checked too (ADR-269 D1): what `nikaia fix` asks (#1974); the server does
+/// not.
 ///
 /// `definition` checks the same program and gives where the name at byte
 /// `offset` of `entry` is declared (#1396): the file's path, the span of the
 /// declaration and the name declared there; nothing on a place that names
 /// nothing it resolved, or where the file does not parse.
 pub trait LspHost {
-    fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool) -> Vec[(String, Shown)] sync
+    fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool, tests: bool) -> Vec[(String, Shown)] sync
     fn definition(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool, offset: i64) -> (String, Span, String)? sync
 }
 
@@ -244,7 +247,7 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
     let mut line = 0
     let mut column = 0
     let mut byte = 0
-    for c in source.chars() {
+    for c in source.scalars {
         if byte >= at {
             break
         }
@@ -291,7 +294,7 @@ fn lsp_offset(source: ref String, line: i64, character: i64) -> i64 {
     let mut at_line = 0
     let mut column = 0
     let mut byte = 0
-    for c in source.chars() {
+    for c in source.scalars {
         if at_line == line && (column >= character || c == '\n') {
             break
         }
@@ -321,7 +324,7 @@ fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections:
         null => path.clone(),
         dir => if alone { path.clone() } else { dir.text_of().clone() },
     }
-    let found = host.diagnose(path, open, alone)
+    let found = host.diagnose(path, open, alone, false)
     let mut by_file: collections::BTreeMap[String, Vec[json::Value]] = collections::BTreeMap()
     by_file.insert(path.clone(), [])
     let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
@@ -393,7 +396,7 @@ fn lsp_uri_of(path: ref String, uris: ref collections::BTreeMap[String, String])
 /// `.`, `_`, `~` and `/` written as `%XX` (RFC 3986 2.3).
 fn lsp_path_uri(path: ref String) -> String {
     let mut out: String = "file://"
-    let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+    let digits: Vec[scalar] = "0123456789ABCDEF".scalars.collect()
     for b in path.bytes() {
         let d = b as i64
         let kept = (d >= 48 && d <= 57) || (d >= 65 && d <= 90) || (d >= 97 && d <= 122) || d == 45 || d == 46 || d == 95 || d == 126 || d == 47
@@ -467,7 +470,7 @@ fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Valu
     let mut covered = 0
     let mut pending = 0
     let mut bytes = start
-    for c in text.chars() {
+    for c in text.scalars {
         if bytes < at {
             column += 1
         } else if bytes < end {
@@ -491,7 +494,7 @@ fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Valu
 fn lsp_units(line: ref String, count: i64) -> i64 {
     let mut units = 0
     let mut seen = 0
-    for c in line.chars() {
+    for c in line.scalars {
         if seen >= count {
             break
         }

@@ -130,7 +130,7 @@ pub(crate) enum LgParsedSexps {
 }
 
 pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
-    let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut stack: Vec<Vec<LgSexp>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {

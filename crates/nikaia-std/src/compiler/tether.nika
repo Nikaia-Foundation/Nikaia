@@ -317,7 +317,7 @@ fn buffer_named(plan: ref BufferPlan, wanted: i64) -> String? {
 
 fn padded(word: ref String, width: i64) -> String {
     let mut out = word.clone()
-    let mut n = word.chars().collect().len()
+    let mut n = word.scalars.collect().len()
     while n < width {
         out.push(' ')
         n = n + 1

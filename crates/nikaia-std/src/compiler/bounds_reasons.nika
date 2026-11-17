@@ -587,7 +587,6 @@ fn reason_a_walk(method: ref String) -> bool {
 		|| method == "enumerate"
 		|| method == "copied"
 		|| method == "cloned"
-		|| method == "chars"
 		|| method == "bytes"
 }
 

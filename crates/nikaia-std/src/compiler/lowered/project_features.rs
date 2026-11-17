@@ -120,7 +120,7 @@ pub(crate) fn features_hashes_follow(c: &[scalar], at: i64, hashes: i64) -> bool
 }
 
 pub(crate) fn features_scan_line(line: &str, lexer: &mut FeatureLexer) -> FeatureLine {
-    let c: Vec<scalar> = nikaia_std::list::chars(line.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(line.chars());
     let n = c.len() as i64;
     #[allow(unused_mut)] let mut words: Vec<String> = vec![];
     let mut last = ' ';

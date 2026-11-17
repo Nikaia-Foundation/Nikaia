@@ -363,7 +363,7 @@ pub fn unaliased_in(aliases: ref collections::BTreeMap[String, String], name: re
     let mut bare = name.clone()
     if name.starts_with("&") {
         amp = "&"
-        let chars: Vec[scalar] = name.chars().collect()
+        let chars: Vec[scalar] = name.scalars.collect()
         bare = ""
         for k in 1..<chars.len() {
             bare.push(chars[k])
@@ -1059,7 +1059,7 @@ fn tier_part_index(field: ref String) -> i64 {
         return -1
     }
     let mut at = 0
-    for c in field.chars() {
+    for c in field.scalars {
         if c < '0' || c > '9' || field.len() > 4 {
             return -1
         }
@@ -2083,7 +2083,7 @@ fn variant_handed_on(written: ref String, ask: ref TierAsk, mut walk: TierWalk) 
 
 /// A name that begins with a capital is a type's, or one of its variants'.
 fn names_a_type(name: ref String) -> bool {
-    let first = name.chars().next() ?? return false
+    let first = name.scalars.next() ?? return false
     return first >= 'A' && first <= 'Z'
 }
 

@@ -70,7 +70,7 @@ fn project_batch_ranges(names: ref Vec[String], modules: ref Vec[String]) -> Str
 fn project_batch_cited(said: ref String, ranges: ref String, file: ref String) -> Vec[String] {
     let mut lines: Vec[i64] = []
     for piece in said.split(f"{file}.rs:").skip(1) {
-        let digits: String = piece.chars().take_while(fn(c) { c.is_ascii_digit() }).collect()
+        let digits: String = piece.scalars.take_while(fn(c) { c.is_ascii_digit() }).collect()
         let line = text::parse_i64(digits) ?? continue
         lines.push(line)
     }

@@ -119,7 +119,7 @@ impl GrCursor {
 
 /// What the sub-program printed, as a value.
 pub fn gr_decode(source: ref String, char_of: fn(i64) -> scalar? sync) -> GrDecoded {
-    let mut at = GrCursor { chars: source.chars().collect(), at: 0, detail: "", failed: false }
+    let mut at = GrCursor { chars: source.scalars.collect(), at: 0, detail: "", failed: false }
     let value = gr_read(at, char_of)
     if at.failed || value == null {
         return GrDecoded::Unreadable(at.detail.clone())

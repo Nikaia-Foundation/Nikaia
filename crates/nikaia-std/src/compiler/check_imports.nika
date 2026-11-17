@@ -46,7 +46,7 @@ fn has_a_self_parameter(contract: ref FnContract) -> bool sync {
 
 /// Whether a name starts with a capital: a type, and not a module.
 fn starts_with_a_capital(name: ref String) -> bool sync {
-    let letters: Vec[scalar] = name.chars().collect()
+    let letters: Vec[scalar] = name.scalars.collect()
     if letters.len() == 0 {
         return false
     }

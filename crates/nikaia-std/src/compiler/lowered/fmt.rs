@@ -767,7 +767,7 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
 }
 
 pub fn fmt_source(source: &str, starts: Vec<i64>, ends: Vec<i64>) -> Result<String, nikaia_std::error::Thrown<Refused>> {
-    let mut lexer = FmtLexer { c: nikaia_std::list::chars(source.chars()), at: 0, starts, ends, next: 0, tokens: vec![] };
+    let mut lexer = FmtLexer { c: nikaia_std::list::scalars(source.chars()), at: 0, starts, ends, next: 0, tokens: vec![] };
     lexer.run()?;
     let lines = fmt_joined(&fmt_lines(&lexer.tokens));
     let mut work: Vec<FmtLine> = vec![];

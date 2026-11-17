@@ -15,7 +15,7 @@ impl CheckState {
         // `access`, not `SharedMut::access`.
         let parts: Vec[ref String] = called.split("::").collect()
         let method = parts[parts.len() - 1].clone()
-        let letters: Vec[scalar] = called.chars().collect()
+        let letters: Vec[scalar] = called.scalars.collect()
         let mut written = called.clone()
         if letters.len() > 0 && letters[0].to_ascii_lowercase() != letters[0] {
             written = method.clone()

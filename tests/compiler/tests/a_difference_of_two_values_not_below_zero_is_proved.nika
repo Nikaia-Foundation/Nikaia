@@ -2,7 +2,7 @@
 // inside a signed type, though `i` has no upper bound after its loop; an
 // unsigned difference can still fall below zero and keeps its check.
 fn rest(t: String) -> i64 sync {
-	let cs: Vec[scalar] = t.chars().collect()
+	let cs: Vec[scalar] = t.scalars.collect()
 	let n = cs.len() as i64
 	let mut i = 2
 	while i < n && cs[i] == '0' {

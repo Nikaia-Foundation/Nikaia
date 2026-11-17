@@ -133,7 +133,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     if (prev == "let" || prev == "mut") && has_found {
         let word = nikaia_std::block::Text::from(found_word.to_string());
         if !word.is_empty() {
-            let letters: Vec<scalar> = nikaia_std::list::chars(word.chars());
+            let letters: Vec<scalar> = nikaia_std::list::scalars(word.chars());
             let first = *nikaia_std::index::get(&letters, 0);
             if is_digit(first) || first == '"' || first == '\'' { return Some(reading_at(at, &word, &format!("`let` names what it binds, but `{}` is a value.", word), "Write a name: `let x = …`, then use `x`.")); }
         }
@@ -151,7 +151,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     if closer_wanted && has_found {
         let word = nikaia_std::block::Text::from(found_word.to_string());
         if !word.is_empty() {
-            let letters: Vec<scalar> = nikaia_std::list::chars(word.chars());
+            let letters: Vec<scalar> = nikaia_std::list::scalars(word.chars());
             let first = *nikaia_std::index::get(&letters, 0);
             if first.is_alphabetic() || first == '_' {
                 let separated = format!("{},{}", upto(c, prev_end), slice(c, prev_end, c.len() as i64));
@@ -173,7 +173,7 @@ pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at:
     if !listed { return None; }
     let rest = slice(c, at, c.len() as i64);
     if !rest.starts_with(AsRef::<str>::as_ref(&token)) { return None; }
-    let letters: Vec<scalar> = nikaia_std::list::chars(token.chars());
+    let letters: Vec<scalar> = nikaia_std::list::scalars(token.chars());
     let width = letters.len() as i64;
     if token == "pub" && a_declaration_word(&word_after(c, at + width)) { return None; }
     let mut with_a_name = upto(c, at);
@@ -250,7 +250,7 @@ pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
 }
 
 pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
-    let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut at = error.offset;
     if at > c.len() as i64 { at = c.len() as i64; }
     let before = last_line_to(&c, at);

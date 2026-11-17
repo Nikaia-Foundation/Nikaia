@@ -76,7 +76,7 @@ pub fn indented_text(text: &str) -> String {
 }
 
 pub(crate) fn brace_groups(text: &str) -> Vec<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     #[allow(unused_mut)] let mut found: Vec<String> = vec![];
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while ((at) as usize) < c.len() {
@@ -109,7 +109,7 @@ pub(crate) fn brace_groups(text: &str) -> Vec<String> {
 }
 
 pub(crate) fn collapsed_doubled_braces(text: &str) -> Option<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut out: String = String::from("");
     let mut doubled = false;
     let mut open = 0;
@@ -174,7 +174,7 @@ pub(crate) fn boxed_member(owner: &str, at: i64, field: &str) -> String {
 }
 
 pub fn articles(text: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut out: String = String::from("");
     let mut before: Vec<scalar> = vec![];
     let mut at: i64 = 0;
