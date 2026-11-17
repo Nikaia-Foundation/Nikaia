@@ -491,6 +491,10 @@ fn lower_std_caches_each_file_of_a_package() {
     let tools = root.join("nikaia-std").join("src").join("compiler");
     std::fs::create_dir_all(&tools).expect("a sysroot to lower");
     let write = |name: &str, text: &str| std::fs::write(tools.join(name), text).expect(name);
+    write(
+        "nikaia.toml",
+        "[package]\nname = \"compiler\"\nwithin = \"std\"\n",
+    );
     write("one.nika", "pub fn one() -> i64 { return 1 }\n");
     write(
         "two.nika",

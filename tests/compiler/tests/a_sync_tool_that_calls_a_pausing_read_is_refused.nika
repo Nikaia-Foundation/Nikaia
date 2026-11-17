@@ -31,6 +31,7 @@ fn main() throws {
     // toolchain's own.
     process::run("mkdir", ["-p", f"{tmp}/root/nikaia-std/src/compiler"])
     fs::write(f"{tmp}/root/nikaia-std/src/compiler/probe.nika", fs::Root::Anywhere, source)
+    fs::write(f"{tmp}/root/nikaia-std/src/compiler/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"compiler\"\nwithin = \"std\"\n")
     said("a tools file", process::run(nikaia, ["lower-std", "--sysroot", f"{tmp}/root"]; dir: tmp.clone()), tmp)
     process::run("rm", ["-rf", tmp])
 }
