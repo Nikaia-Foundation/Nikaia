@@ -10,7 +10,12 @@ from each; nobody writes briefs by hand. **The release is the driver's**: after
 each push it runs `scripts/release.nika`, which raises the version and writes
 the `CHANGELOG.md` entry from the reports' `Changelog:` lines; the session
 checks that it ran (`DIR/released.txt` must exist) and does not do it by hand.
-None commits another session's rows or headings. A collision in the version
+None commits another session's rows or headings. **A session's checkout is
+its own** (owner, 2026-11-17): no other session writes into it, so an
+uncommitted change found there is this session's, its driver's or its agents',
+never "another session's" (`docs/tokenspeed.md`, whose rows the driver writes
+after each agent, belongs to the session running the lane), and is committed
+with its work. A collision in the version
 lines or `CHANGELOG.md` is repaired by whoever pushes second (*Versions and
 error codes*). Builders do not need this file; the rules for everyone are in
 `CLAUDE.md`. Since the owner removed the architect role (2026-11-01) the
@@ -246,6 +251,10 @@ What the owner expects from such a round:
   (doing nothing included), the advantages and disadvantages of each, how
   other languages do it, and a recommendation. A bare yes/no question in
   chat, even with a recommendation, is not a decision basis.
+* **One question at a time, and the message holds only it** (owner,
+  2026-11-17): the message that asks the owner carries the decision paper's
+  question and nothing else, no status or other topic before or after it;
+  the next question waits for the answer.
 * **Do not ask which issue to take next**: the order is arbitrary, pick one.
 * **What the language offers is decided from what it is for**, the coherence of
   its types and what other languages count as basic - never from what this
@@ -545,6 +554,11 @@ own driver run:
   rules and diagnostics. It does not make the prover stronger: where a rule
   waits for a proof the prover cannot give, the lane files that for the solver
   lane and the rule's issue is `blocked` on it.
+* **Views lane, `docs/briefs/views/`** (owner, 2026-11-17): the issues
+  labelled `views`: ownership as ADR-views-3 states it (`keep`, lent
+  parameters, `from`, the views of text and lists, the ownership matrix), and
+  every program of that kind that the checker accepts and `rustc` refuses
+  (NK1343). Its decisions follow *Language decisions*.
 * **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
