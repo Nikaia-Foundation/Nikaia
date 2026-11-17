@@ -245,15 +245,15 @@ impl EmitState {
             let made = match arg {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => { let method = *method; owns_its_text(&emit_text(world, method)) },
-                Expr::Binary { .. } => self.emit_core_a_concatenation(&arg),
+                Expr::Binary { .. } => self.emit_core_a_concatenation(arg),
                 _ => false,
             };
             if !made { continue; }
-            let key = node_key(&arg);
+            let key = node_key(arg);
             walk.held.remove(&key);
             let name = format!("__nikaia_held_{}", walk.held.len() as i64);
             out.push(&format!("let {} = ", name));
-            self.emit_expr(world, walk, out, host, &arg, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
             walk.held.insert(key, name);
         }

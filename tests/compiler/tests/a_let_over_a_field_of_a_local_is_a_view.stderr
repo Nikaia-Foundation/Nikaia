@@ -1,0 +1,48 @@
+error[NK1104]: You're returning a view of a `P`, but the function is declared to return a `P` of its own.
+   --> tests/a_let_over_a_field_of_a_local_is_a_view.nika:30:12
+    |
+ 30 |     return q
+    |            ^
+    |
+    = help: Write `.clone()` to turn this view into a value of its own.
+error[NK1102]: `eat` expects `a` to be a `P` of its own, but you're passing a view of a `P`.
+   --> tests/a_let_over_a_field_of_a_local_is_a_view.nika:36:17
+    |
+ 36 |     println(eat(q))
+    |                 ^
+    |
+    = note: It's declared as `eat(keep a: P) -> i64`.
+    = note: This is a view: it points into a `P` that something else owns.
+    = note: `eat` keeps its `a` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `eat` a copy of its own.
+error[NK1102]: `eat_k` expects `k` to be a `K` of its own, but you're passing a view of a `K`.
+   --> tests/a_let_over_a_field_of_a_local_is_a_view.nika:38:19
+    |
+ 38 |     println(eat_k(k))
+    |                   ^
+    |
+    = note: It's declared as `eat_k(keep k: K) -> i64`.
+    = note: This is a view: it points into a `K` that something else owns.
+    = note: `eat_k` keeps its `k` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `eat_k` a copy of its own.
+error[NK1102]: `eat_items` expects `a` to be a `Vec[i64]` of its own, but you're passing a view of a `Vec[i64]`.
+   --> tests/a_let_over_a_field_of_a_local_is_a_view.nika:40:23
+    |
+ 40 |     println(eat_items(items))
+    |                       ^^^^^
+    |
+    = note: It's declared as `eat_items(keep a: Vec[i64]) -> i64`.
+    = note: This is a view: it points into a `Vec[i64]` that something else owns.
+    = note: `eat_items` keeps its `a` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `eat_items` a copy of its own.
+error[NK1102]: `eat` expects `a` to be a `P` of its own, but you're passing a view of a `P`.
+   --> tests/a_let_over_a_field_of_a_local_is_a_view.nika:43:17
+    |
+ 43 |     println(eat(e))
+    |                 ^
+    |
+    = note: It's declared as `eat(keep a: P) -> i64`.
+    = note: This is a view: it points into a `P` that something else owns.
+    = note: `eat` keeps its `a` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `eat` a copy of its own.
+5 type errors

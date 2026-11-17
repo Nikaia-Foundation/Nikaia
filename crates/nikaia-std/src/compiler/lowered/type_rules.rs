@@ -680,9 +680,9 @@ pub fn tr_expand(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str)
     if ruled.is_empty() { return None; }
     let fields: collections::BTreeMap<String, collections::BTreeSet<String>> = ruled.iter().map(|pair| { (nikaia_std::block::Text::from(pair.0.to_string()), pair.1.fields.copy_owned()) }).collect();
     let mut changed = tr_changed_outside(words, &fields, &items);
-    changed.extend(tr_fails_changed(words, &ruled, &items));
+    changed.extend(tr_fails_changed(words, ruled, &items));
     let own = tr_methods_of(words, &items);
-    for item in items.iter_mut() { tr_rewrite_item(words, intern, renew, &ruled, &changed, &own, spans, &mut *item); }
+    for item in items.iter_mut() { tr_rewrite_item(words, intern, renew, ruled, &changed, &own, spans, &mut *item); }
     None
 }
 

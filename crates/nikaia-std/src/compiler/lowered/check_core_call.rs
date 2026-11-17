@@ -452,8 +452,8 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let origin = match check_handed_carries(world, &world.here, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let written = match check_handed_written(world, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let origin = match check_handed_carries(world, &world.here, &current, arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let written = match check_handed_written(world, &current, arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.split('.').next(), || "").to_string());
         let what = if owner == "Vec" { "list" } else { "text" };
         let mut whence = format!("`{}` holds what `{}` was handed, so it was built by a caller the compiler does not see.", root, origin);
@@ -472,7 +472,7 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
             if parameter { whence = format!("`{}` is a parameter of `pub fn {}`, so it was built by a caller the compiler does not see.", root, current); }
         }
         let notes: Vec<String> = vec![format!("`{}` takes its `{}` as Rust's `{}`, and a {} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", name, param, owner, what), whence];
-        state.findings.push(check_refusal("NK2506", &check_span_at(world, &arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
+        state.findings.push(check_refusal("NK2506", &check_span_at(world, arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
     }
 }
 

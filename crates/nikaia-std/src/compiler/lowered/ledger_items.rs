@@ -300,14 +300,14 @@ pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrow
                 },
                 Item::Enum { name, variants, is_public, .. } => {
                     let is_public = *is_public; let name = *name;
-                    ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, &borrowing_names));
+                    ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, borrowing_names));
                 },
                 Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                     let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                     let key = view.text(name);
                     let mut contract = TypeContract::empty();
                     contract.public = is_public;
-                    contract.tethered = tethered_fields(view.words, fields, &borrowing_names);
+                    contract.tethered = tethered_fields(view.words, fields, borrowing_names);
                     contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern);
                     for (at, f) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) {
                         let d = match f.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };

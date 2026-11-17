@@ -88,7 +88,7 @@ pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64,
         }
     }
     let found = match best { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let package = site_package_of(&here);
+    let package = site_package_of(here);
     match found {
         CheckDeclared::Binding(id) => {
             let at = match *nikaia_std::index::get(&facts.bound_at, &id) { Some(__nikaia_value) => __nikaia_value, None => return None };

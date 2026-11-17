@@ -595,7 +595,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 if (list == "Vec" || list == "List") && items.len() == 1 {
                     let item = unsafe { nikaia_std::proven::read(&items, (0) as usize) };
                     match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(&item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
+                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
                         _ => { },
                     }
                 }

@@ -487,7 +487,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
     let mut at: i64 = 0;
     while at < count {
         let lock = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let found = check_core_expr(state, world, host, &lock, span);
+        let found = check_core_expr(state, world, host, lock, span);
         let content = locked_content_of(&found);
         if content.is_some() {
             let inside: Ty = nikaia_std::index::or(content, || Ty::Unknown);
@@ -499,7 +499,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
                 }
             }
             held.push(view);
-        } else if found.is_unknown() && !state.is_a_number(world, &lock) { held.push(Ty::Unknown); } else {
+        } else if found.is_unknown() && !state.is_a_number(world, lock) { held.push(Ty::Unknown); } else {
             let door = check_core_args_door(writing);
             state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1124"), message: format!("`{}` takes locks, but this is a `{}`.", door, found.shown()), notes: vec![String::from("Taking several locks together keeps them in one order, and only a lock can be taken.")], help: Some(String::from("Pass `SharedMut[T]` values or `Locked[T]` fields.")), labels: vec![], edit: None });
             held.push(Ty::Unknown);

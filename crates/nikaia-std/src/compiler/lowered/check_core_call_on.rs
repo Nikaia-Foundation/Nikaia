@@ -685,22 +685,22 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
         let want = unsafe { nikaia_std::proven::read(&expected, (i) as usize) };
         let have = unsafe { nikaia_std::proven::read(&found, (i) as usize) };
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-        state.a_map_read_kept(world, &have, &want, given, span);
-        if check_overflow_a_nullable(&want) && !check_overflow_a_nullable(&have) && check_core_stmt_element_view(&state, world, given, &have, &want) == 1 {
+        state.a_map_read_kept(world, have, want, given, span);
+        if check_overflow_a_nullable(want) && !check_overflow_a_nullable(have) && check_core_stmt_element_view(&state, world, given, have, want) == 1 {
             state.facts.lent_reads.insert(node_key(given));
             state.facts.nullable_args.insert(id_of(given) as i64, FactWrap::Constructor);
             continue;
         }
-        let how = check_widened_slot(state, world, host, &have, &want, Some(given), span);
+        let how = check_widened_slot(state, world, host, have, want, Some(given), span);
         if how.is_some() {
             state.facts.nullable_args.insert(id_of(given) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
             continue;
         }
         let lent_here = own && lends_in_own(contract, unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(i, 1), offset) }, &vec![world.library]);
-        if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
-        if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
+        if !lent_here && state.a_view_copied_out(world, have, want, Some(given)) { continue; }
+        if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: spoken_in(&format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), &want, Some(&have)), notes: vec![], help: Some(shown_in(&way_out_of_a_mismatch(&have, &want), &want, Some(&have))), labels: vec![], edit: None });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: spoken_in(&format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), want, Some(have)), notes: vec![], help: Some(shown_in(&way_out_of_a_mismatch(have, want), want, Some(have))), labels: vec![], edit: None });
         }
     }
 }

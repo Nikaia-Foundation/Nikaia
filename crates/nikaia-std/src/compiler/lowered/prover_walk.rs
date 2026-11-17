@@ -243,7 +243,7 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
             let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words);
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
-        if prover_stmt(walk, &stmt, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition) { return true; }
+        if prover_stmt(walk, stmt, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition) { return true; }
         prover_follow_mutables(walk, &stmt.node, &stmt.span, scope, &untracked, &pinned, words);
         if !prover_a_branch(&stmt.node) && leaves_stmt(&stmt.node, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true) { scope.exact = false; }
     }
@@ -659,9 +659,9 @@ pub(crate) fn prover_found_facts(walk: &mut ProverWalk, name: &str, found: &Expr
                 names.insert(length_of(param));
                 if ((k) as usize) < args.len() {
                     let arg = unsafe { nikaia_std::proven::read(&args, (k) as usize) };
-                    let term = lin_term(&arg, words, &|n| { scope.ints.contains(n) }, &|n| { prover_pinned(&walk.state.pinned, scope, n) }, &mut walk.arena.nodes);
+                    let term = lin_term(arg, words, &|n| { scope.ints.contains(n) }, &|n| { prover_pinned(&walk.state.pinned, scope, n) }, &mut walk.arena.nodes);
                     if term.is_some() { given.insert(nikaia_std::block::Text::from(param.to_string()), nikaia_std::index::or(term, || 0)); }
-                    let length = prover_length_of(walk, &arg, scope, words);
+                    let length = prover_length_of(walk, arg, scope, words);
                     if length.is_some() { given.insert(length_of(param), nikaia_std::index::or(length, || 0)); }
                 }
                 k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
@@ -1159,28 +1159,28 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
             if prover_an_assert_call(func, args, &span, &walk.claims) {
                 let cond = nikaia_std::index::get(&args, 0);
                 if prover_a_given_rule(config, words) {
-                    let given = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                    let given = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                     if given.is_some() { scope.facts.push(nikaia_std::index::or(given, || 0)); }
-                    walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
+                    walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved);
                     return false;
                 }
                 if prover_an_assume(func, words) {
-                    prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
-                    let vouched = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                    prover_expr(walk, cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+                    let vouched = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                     if vouched.is_some() { scope.facts.push(nikaia_std::index::or(vouched, || 0)); }
-                    walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
+                    walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved);
                     return false;
                 }
-                prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+                prover_expr(walk, cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                 let message = prover_message(config, words);
-                let names = claim_names_in(&cond, words, &holes_of);
+                let names = claim_names_in(cond, words, &holes_of);
                 let mut leaned: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 if !walk.state.in_test {
-                    prover_call_results(walk, &cond, false, scope, program, words, own, &unaliased, &condition, &written_of);
-                    leaned = prover_pin_divisors(walk, &cond, &scope, words, &ask, &model);
+                    prover_call_results(walk, cond, false, scope, program, words, own, &unaliased, &condition, &written_of);
+                    leaned = prover_pin_divisors(walk, cond, &scope, words, &ask, &model);
                     leaned.extend(leaned_notes(&walk.arena, &scope, &names));
                 }
-                let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, &written_of(&cond), &names, message, span, scope, at, &ask, &model);
+                let outcome = walk.state.an_assert(&mut walk.arena, words, cond, &written_of(cond), &names, message, span, scope, at, &ask, &model);
                 let mut held = outcome.held.clone();
                 let mut findings: Vec<Finding> = vec![];
                 for found in outcome.findings.iter() {
@@ -1189,14 +1189,14 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                     findings.push(one);
                 }
                 if !walk.state.in_test {
-                    let read = prover_known_calls(walk, &cond, &scope, program, words, own, &holes_of, &unaliased, &condition);
+                    let read = prover_known_calls(walk, cond, &scope, program, words, own, &holes_of, &unaliased, &condition);
                     if !read.is_empty() {
-                        let ran = prover_claim_ran(walk, &read, &held, &findings, &written_of(&cond), span, &written_of);
+                        let ran = prover_claim_ran(walk, &read, &held, &findings, &written_of(cond), span, &written_of);
                         held = ran.held;
                         findings = ran.findings;
                     }
                 }
-                walk.held.insert((span.start as i64, node_key(&cond)), held);
+                walk.held.insert((span.start as i64, node_key(cond)), held);
                 for found in findings.iter() { walk.findings.push(found.clone()); }
                 return false;
             }
