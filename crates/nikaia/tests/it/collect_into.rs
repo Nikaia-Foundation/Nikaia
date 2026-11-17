@@ -92,7 +92,7 @@ fn main() throws {
     let m: collections::HashMap[String, i64] = text.lines().map(fn(l) { (l, l.len()) }).collect()
     let s: collections::HashSet[String] = text.split(" ").collect()
     let d: collections::BTreeSet[String] = text.lines().collect()
-    let t: String = "ab".chars().collect()
+    let t: String = "ab".scalars.collect()
     let xs = text.lines().collect()
     println(f"{m.len()} {m["port = 8080"] ?? 0} {s.len()} {d.len()} {t} {xs.len()}")
 }
