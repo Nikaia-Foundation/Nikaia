@@ -1440,8 +1440,10 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let from = state.taken_so_far()
     let (_, handed_from) = state.taken_so_far()
     let changed_from = state.changed.len() as i64
+    let pending_before = state.pending_coalesce_keys()
     check_core_flow_a_guard(state, world, host, arm.pattern, arm.guard, span)
     let ty = check_core_flow_guarded_body(state, world, host, arm.guard, arm.body, span)
+    state.pending_coalesces_of_an_arm_are_taken(world, pending_before)
     // **A name that is a view binds by reference by itself** (D30), and so
     // does a map's read, a view of what the map keeps (ADR-293 D15), and a
     // list's `get` of a tuple.
