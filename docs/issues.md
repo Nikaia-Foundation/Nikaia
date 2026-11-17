@@ -251,6 +251,9 @@ it, like the checks in `docs/supervisor.md`.
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
+  So is a guard of several conjuncts, one conjunct at a time (`i < n &&
+  f(i)` also as `i < n`): #1848 did not say that the call conjunct
+  of site 3's guard dropped the whole guard, and its run found it (#1980).
 
 ## Work to build (bug or feature)
 
