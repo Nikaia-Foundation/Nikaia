@@ -447,7 +447,7 @@ fn dependency_ledgers(
     let mut names = BTreeSet::new();
     let mut ledgers = Vec::new();
     for (name, root) in tools_dependencies(dir)? {
-        let (_, _, parsed) = read_tools_package(&tools_sources(&root.join("src"))?)?;
+        let (_, _, parsed, _) = read_tools_package(&tools_sources(&root.join("src"))?)?;
         let (_, library, _) = tools_library()?;
         let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
         let (own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
@@ -508,24 +508,19 @@ pub fn lower_compiler_files_on(
     .map(|(package, _)| package)
 }
 
-/// **The source with every body taken out** (#667): what another file of the
-/// package can see of this one - its names, signatures, types and constants.
-/// The ranges are the statements' extent, so a comment between two statements
-/// goes with them and a comment outside a body stays.
-fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
-    nikaia_std::compiler::sysroot_package::sysroot_package_without_bodies(
-        source,
-        &parsed.program.items,
-    )
-}
-
 /// **The package's files read and parsed**: each file's size and text, and
-/// its parse with the package's text tiers refined over all of them; refused
-/// where a name is declared twice (ADR-286 D1).
+/// its parse with the package's text tiers refined over all of them, and
+/// what the tiers read of the files beside (a file's key reads it per name,
+/// #1909); refused where a name is declared twice (ADR-286 D1).
 #[allow(clippy::type_complexity)]
 fn read_tools_package(
     paths: &[PathBuf],
-) -> Result<(Vec<usize>, Vec<String>, Vec<crate::parser::Parsed>)> {
+) -> Result<(
+    Vec<usize>,
+    Vec<String>,
+    Vec<crate::parser::Parsed>,
+    crate::text_tiers::BesideFields,
+)> {
     let mut sizes: Vec<usize> = Vec::new();
     let mut texts: Vec<String> = Vec::new();
     for path in paths {
@@ -547,9 +542,12 @@ fn read_tools_package(
     .collect::<Result<_>>()?;
     // **The package's text tiers, once all its files are parsed** (ADR-282
     // D17, #956): a file reads the published fields of the others.
-    {
-        let mut files: Vec<&mut crate::parser::Parsed> = parsed.iter_mut().collect();
-        crate::text_tiers::refine_package(&mut files);
+    let beside = {
+        let read: Vec<&crate::parser::Parsed> = parsed.iter().collect();
+        crate::text_tiers::beside_fields(&read)
+    };
+    for one in parsed.iter_mut() {
+        crate::text_tiers::refine_with(one, &beside);
     }
     // **One package, one namespace** (ADR-286 D1), as a project's files are.
     let files: Vec<(&Path, &crate::parser::Parsed, &str)> = paths
@@ -559,7 +557,7 @@ fn read_tools_package(
         .collect();
     crate::modules::declared_once(&files)?;
     drop(files);
-    Ok((sizes, texts, parsed))
+    Ok((sizes, texts, parsed, beside))
 }
 
 /// **The ledger the tools package is checked against**: the described one,
@@ -630,7 +628,7 @@ pub fn bounds_tools(
     asserts_report: bool,
 ) -> Result<String> {
     let paths = tools_sources(&sysroot.tools_dir())?;
-    let (sizes, texts, parsed) = read_tools_package(&paths)?;
+    let (sizes, texts, parsed, _) = read_tools_package(&paths)?;
     let (_, mut library, _) = tools_library()?;
     let (packages, theirs) = dependency_ledgers(&sysroot.tools_dir())?;
     for (name, ledger) in &theirs {
@@ -705,10 +703,11 @@ pub fn bounds_tools(
 }
 
 /// The same with the per-file cache of [`LoweredBefore`]: `reused` counts the
-/// files taken from it. A file's key is its own text and the package's
-/// interface - the others' signatures, the ledger and the trust it is checked
-/// against - and not the others' bodies, so a body change lowers one file and
-/// a signature change (or a change the ledger shows) lowers all.
+/// files taken from it. A file's key is its own text and what of the package
+/// its text names (#1909, `sysroot_named_key`): the others' declarations,
+/// ledger rows, call graph rows and tier facts it reaches by name, and not
+/// the others' bodies, so a body change lowers one file and a signature
+/// change lowers the files that name it.
 ///
 /// **A dependency is lowered first, as a package of its own** (#1163), and
 /// its ledger absorbed under its name, as a project absorbs one (ADR-286
@@ -733,7 +732,7 @@ fn lower_package(
     }
     let packages: BTreeSet<String> = ledgers.iter().map(|(name, _)| name.clone()).collect();
     let mut timer = Phases::from_env();
-    let (sizes, texts, parsed) = read_tools_package(paths)?;
+    let (sizes, texts, parsed, beside) = read_tools_package(paths)?;
     timer.lap("parse");
     let (described, mut library, facts_reusable) = tools_library()?;
     for (name, ledger) in &ledgers {
@@ -754,51 +753,6 @@ fn lower_package(
         crate::contracts::trust::analyse_package_checked(&units, &library, &checked).provenance;
     drop(checked);
     timer.lap("trust");
-    // **The package's interface**, the same for every file of it.
-    let interface: Option<String> = cache.compiler.as_ref().map(|compiler| {
-        let names: Vec<String> = paths
-            .iter()
-            .map(|path| {
-                let name = path.file_name().unwrap_or_default();
-                name.to_string_lossy().to_text()
-            })
-            .collect();
-        let bodiless: Vec<String> = texts
-            .iter()
-            .zip(&parsed)
-            .map(|(text, one)| without_bodies(text, one))
-            .collect();
-        sysroot_cache::sysroot_interface(
-            compiler,
-            &std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default(),
-            &format!("{build:?}{provenance:?}{facts_reusable}"),
-            &format!("{own:?}"),
-            &names,
-            &bodiless,
-            &Host,
-        )
-    });
-    // A file is keyed on what only tests reach of it too (#1160): another
-    // file that starts or stops calling one of them, in a test or not,
-    // changes its lowering, and nothing else of the other files does.
-    let file_key = |at: usize, only_tests: &BTreeSet<String>| -> Option<String> {
-        let name = paths[at].file_name()?.to_string_lossy();
-        let interface = interface.as_deref()?;
-        let text = if only_tests.is_empty() {
-            std::borrow::Cow::Borrowed(texts[at].as_str())
-        } else {
-            let names: Vec<&str> = only_tests.iter().map(String::as_str).collect();
-            std::borrow::Cow::Owned(std::format!(
-                "{}\n// only tests reach: {}",
-                texts[at],
-                names.join(" ")
-            ))
-        };
-        Some(sysroot_cache::sysroot_file_key(
-            interface, &name, &text, &Host,
-        ))
-    };
-
     // **What only `test` blocks reach, over the whole package** (#1160): the
     // files share one namespace, so a helper only another file's tests call
     // is test-only too.
@@ -819,11 +773,59 @@ fn lower_package(
 
     // **The package's call graphs, worked out once** (#1279): they are the
     // same for every file, read over all of them against `own`.
-    let graphs = {
-        let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
-        nikaia_std::compiler::emit_contracts::emit_contracts_package_graphs(&views, &own)
-    };
+    let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
+    let graphs = nikaia_std::compiler::emit_contracts::emit_contracts_package_graphs(&views, &own);
     timer.lap("graphs");
+
+    // **Each file's declarations and the package's tables, by name** (#1909):
+    // a file's key reads what its text names of them (`sysroot_named_key`),
+    // so a change another file does not name lowers it again no more.
+    let names: Option<sysroot_cache::SysrootNames> = cache.compiler.as_ref().map(|compiler| {
+        let files: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                let name = path.file_name().unwrap_or_default();
+                name.to_string_lossy().to_text()
+            })
+            .collect();
+        let mut declared = Vec::new();
+        let mut wholes = Vec::new();
+        for (text, view) in texts.iter().zip(&views) {
+            let (theirs, whole) = sysroot_cache::sysroot_declared(text, view);
+            declared.push(theirs);
+            wholes.push(whole);
+        }
+        sysroot_cache::sysroot_names(
+            compiler,
+            &std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default(),
+            &format!("{build:?}{provenance:?}{facts_reusable}"),
+            &files,
+            &declared,
+            &wholes,
+            &own,
+            &graphs,
+            &beside.fields,
+            &beside.fills,
+            &beside.calls,
+        )
+    });
+    drop(views);
+    timer.lap("names");
+
+    // A file is keyed on what only tests reach of it too (#1160): another
+    // file that starts or stops calling one of them, in a test or not,
+    // changes its lowering, and nothing else of the other files does.
+    let file_key = |at: usize, only_tests: &BTreeSet<String>| -> Option<String> {
+        let name = paths[at].file_name()?.to_string_lossy().to_text();
+        let names = names.as_ref()?;
+        let reach: Vec<&str> = only_tests.iter().map(String::as_str).collect();
+        Some(sysroot_cache::sysroot_named_key(
+            names,
+            &name,
+            &texts[at],
+            &reach.join(" "),
+        ))
+    };
 
     // **Each file checked and lowered on its own, on every core** (#667): a
     // file's lowering reads the package (`beside`, `own`, `provenance`) and

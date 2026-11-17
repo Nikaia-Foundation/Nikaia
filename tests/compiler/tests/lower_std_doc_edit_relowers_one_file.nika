@@ -1,9 +1,9 @@
 // A change to a `///` doc of one file of the tools package re-lowers that
 // file alone (#1909, step D): no pass reads another file's docs (the one
 // reader, `main_words` in `emit_entry.nika`, reads the file's own `main`),
-// so `sysroot_package_without_bodies` leaves them out of the package's
-// interface. A body change that leaves the ledger as it was (a local
-// renamed) re-lowers that file too; a signature change re-lowers every file.
+// so a file's key leaves them out of what it reads of the others. A body
+// change that leaves the ledger as it was (a local renamed) re-lowers that
+// file too, and so does a function added that `b` does not name (C).
 use std::fs
 use std::process
 
