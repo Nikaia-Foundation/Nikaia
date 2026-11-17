@@ -1,0 +1,5 @@
+run 1: 0, exit 3
+run 2: 0, exit 3
+second: 1
+first: 0
+without a command: exit 2

@@ -44,7 +44,7 @@
 // `run` puts the logic layer's files of `crates/nikaia-std/src/compiler/` (read,
 // never copied), the new engine's files there too (moved in #1285),
 // and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
-// one package in a temporary directory, each its own file, builds it with the `nikaia` that runs
+// one package in a fixed slot of the user's cache, each its own file, builds it with the `nikaia` that runs
 // this script (the binary kept in `target/solver-rod/`, see `solver_build`),
 // and answers every `.smt2` file: one line per file (`name answer work`),
 // then a row per directory: solved, unknown (overflow and files the reader
@@ -161,11 +161,39 @@ fn solver_build_env() -> Vec[(String, String)] {
 	return [("NIKAIA_CAP_LINTS", "allow")]
 }
 
+// The key of the kept binary: a hash of the program's files, as
+// `solver_program` writes them, and of the `nikaia` that builds it (its size
+// and age). "" where it cannot be taken.
+fn solver_key(repo: String, nikaia: String) -> String throws {
+	let mut args: Vec[String] = [
+		"-c",
+		"n=$1; shift; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== main.nika'; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
+		"sh",
+		nikaia,
+	]
+	for f in solver_program_files(repo) { args.push(f.clone()) }
+	let out = process::run("sh", args)
+	if !out.ok { return "" }
+	return out.stdout.trim().clone()
+}
+
+// The user's cache directory, where the build's stores live (ADR-021 D12):
+// `$NIKAIA_CACHE_DIR`, else `$XDG_CACHE_HOME/nikaia`, else
+// `$HOME/.cache/nikaia`.
+fn solver_cache_dir() -> String {
+	let set = env::var("NIKAIA_CACHE_DIR") ?? ""
+	if set != "" { return set.clone() }
+	let xdg = env::var("XDG_CACHE_HOME") ?? ""
+	if xdg != "" { return f"{xdg}/nikaia" }
+	let home = env::var("HOME") ?? "/tmp"
+	return f"{home}/.cache/nikaia"
+}
+
 // Builds the program and gives the binary's path, or an empty text after
 // printing why it did not build. The binary is kept in
-// `target/solver-rod/<key>/`, the key a hash of the program's files and of the
-// `nikaia` that builds it: a second run of the same program with the same
-// toolchain (the tests run it eight times) builds nothing.
+// `target/solver-rod/<key>/`, the key `solver_key`: a second run of the same
+// program with the same toolchain (the tests run it eight times) builds
+// nothing.
 //
 // **One build per key at a time** (#1915): `solver_run` and `solver_fuzz`,
 // each at both settings, start cold on the same key, and every one of them
@@ -173,66 +201,75 @@ fn solver_build_env() -> Vec[(String, String)] {
 // others, which pushed `solver_run` past its 300 s on a loaded runner. The
 // build and the copy into the kept place run under a lock of the key's
 // directory; a run that waited finds the binary there and builds nothing.
+//
+// **Built in a fixed place** (ADR-021 D14, #2015): the program is written
+// into a slot of `<user cache>/solver/` (scripts/slot.nika), not a fresh
+// temporary directory, so a new `nikaia` whose emitted Rust is the same hits
+// the rustc store and skips rustc. This script, run again as
+// `--build-in <slot> REPO NIKAIA KEPT`, writes and builds it there.
 fn solver_build(repo: String, nikaia: String) -> String throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	solver_program(repo, tmp.clone())
-	let key = process::run(
-		"sh",
-		[
-			"-c",
-			"{ (cd \"$1/src\" && for f in *.nika; do echo \"== $f\"; cat \"$f\"; done); stat -L -c '%s %Y %n' \"$2\"; } | sha256sum | cut -c1-16",
-			"sh",
-			tmp.clone(),
-			nikaia.clone(),
-		],
-	).stdout.trim().clone()
-	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
+	let key = solver_key(repo.clone(), nikaia.clone())
 	if key == "" {
-		let built = process::run(nikaia, ["build"]; dir: tmp.clone(), env: solver_build_env())
-		if built.ok && fs::exists(bin.clone(), fs::Root::Anywhere) { return bin }
-		solver_build_failed(built.stderr, tmp)
+		println("the solver program did not build: its files could not be read")
 		return ""
 	}
 	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
-	if fs::exists(kept.clone(), fs::Root::Anywhere) {
-		process::run("rm", ["-rf", tmp])
-		return kept
-	}
+	if fs::exists(kept.clone(), fs::Root::Anywhere) { return kept }
 	process::run("mkdir", ["-p", f"{repo}/target/solver-rod/{key}"])
-	// Under the lock: built only where no run before this one kept it, then
-	// copied under a name of its own and renamed, so the kept place never
-	// holds half a binary.
+	let main = env::current_main()?.display() ?? f"{repo}/scripts/solver.nika"
+	// Under the lock: built only where no run before this one kept it.
 	let built = process::run(
 		"flock",
 		[
 			f"{repo}/target/solver-rod/{key}/lock",
 			"sh",
 			"-c",
-			"[ -e \"$1\" ] && exit 0; \"$2\" build || exit 1; [ -e \"$3\" ] || exit 1; cp \"$3\" \"$1.$$\" && mv -f \"$1.$$\" \"$1\"",
+			"[ -e \"$1\" ] && exit 0; shift; exec \"$@\"",
 			"sh",
 			kept.clone(),
+			nikaia.clone(),
+			"run",
+			f"{repo}/scripts/slot.nika",
+			"--",
+			f"{solver_cache_dir()}/solver",
+			nikaia.clone(),
+			"run",
+			main,
+			"--",
+			"--build-in",
+			"{slot}",
+			repo,
 			nikaia,
-			bin,
-		];
-		dir: tmp.clone(),
-		env: solver_build_env(),
+			kept.clone(),
+		]; stdout: process::Stream::Inherited,
 	)
 	if !built.ok || !fs::exists(kept.clone(), fs::Root::Anywhere) {
-		solver_build_failed(built.stderr, tmp)
+		if built.ok { println("the solver program did not build") }
 		return ""
 	}
-	process::run("rm", ["-rf", tmp])
 	return kept
 }
 
-// Says why the program did not build, from the build's `stderr`, and removes
-// its directory `tmp`.
-fn solver_build_failed(stderr: String, tmp: String) throws {
-	println("the solver program did not build:")
-	for line in stderr.lines() {
-		if line.starts_with("error") || line.contains("-->") { println(line) }
+// `--build-in DIR REPO NIKAIA KEPT`: writes the program into DIR, an empty
+// slot, builds it with NIKAIA and copies the binary to KEPT, under a name of
+// its own first and then renamed, so KEPT never holds half a binary. Exit 1,
+// after saying why, where it did not build.
+fn solver_build_in(dir: String, repo: String, nikaia: String, kept: String) throws {
+	solver_program(repo, dir.clone())
+	let built = process::run(nikaia, ["build"]; dir: dir.clone(), env: solver_build_env())
+	let bin = f"{dir}/target/nikaia/bin/solver_rod"
+	if !built.ok || !fs::exists(bin.clone(), fs::Root::Anywhere) {
+		println("the solver program did not build:")
+		for line in built.stderr.lines() {
+			if line.starts_with("error") || line.contains("-->") { println(line) }
+		}
+		process::exit(1)
 	}
-	process::run("rm", ["-rf", tmp])
+	let copied = process::run("sh", ["-c", "cp \"$1\" \"$2.$$\" && mv -f \"$2.$$\" \"$2\"", "sh", bin, kept])
+	if !copied.ok {
+		println(f"the solver program was built but not kept: {copied.stderr.trim()}")
+		process::exit(1)
+	}
 }
 
 // --- run ---
@@ -1674,7 +1711,9 @@ fn main() throws {
 	}
 	let repo = solver_root()
 	let nikaia = solver_toolchain(repo.clone())
-	if command == "run" {
+	if command == "--build-in" && rest.len() == 4 {
+		solver_build_in(rest[0].clone(), rest[1].clone(), rest[2].clone(), rest[3].clone())
+	} else if command == "run" {
 		solver_run(repo, nikaia, rest)
 	} else if command == "gen" {
 		solver_gen(rest)
