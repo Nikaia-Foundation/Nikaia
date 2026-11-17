@@ -3,8 +3,8 @@
 //
 //   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
-//   nikaia run scripts/solver.nika -- oracle [--write] FILE...
-//   nikaia run scripts/solver.nika -- fuzz N SEED
+//   nikaia run scripts/solver.nika -- oracle [--write] [--rlimit R] DIR|FILE...
+//   nikaia run scripts/solver.nika -- fuzz N SEED [--size S] [--rlimit R]
 //   nikaia run scripts/solver.nika -- fuzz --self-test
 //   nikaia run scripts/solver.nika -- tune [--timeout S] [DIR]
 //   nikaia run scripts/solver.nika -- fetch [DIR]
@@ -18,6 +18,10 @@
 // (`tests/solver/SOURCES.md`). `sample` takes N files per logic (default 25)
 // of at most 64 KiB, at even steps of the sorted list, into OUT: the CI
 // sample `tests/solver/sample`.
+//
+// `oracle` and `fuzz` check our solver against z3 (`$Z3` or `PATH`) under
+// its deterministic resource limit, and exit 1 on a disagreement: the nightly
+// `.github/workflows/z3.yml` (#1989, `tests/solver/SOURCES.md`).
 //
 // `compare` (#1338 items 3-4) answers each file with ours (the rod), z3 and
 // cvc5 (`$Z3`, `$CVC5` or `PATH`), all under the same wall-clock limit
@@ -135,7 +139,11 @@ fn solver_program(repo: String, tmp: String) throws {
 	let mut args: Vec[String] = solver_program_files(repo)
 	args.push(f"{tmp}/src/")
 	process::run("cp", args)
-	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    sv_rod_main()\n}\n")
+	fs::write(
+		f"{tmp}/src/main.nika",
+		fs::Root::Anywhere,
+		"fn main() throws {\n    sv_rod_main()\n}\n",
+	)
 }
 
 // The environment the program builds in: the program's lints capped (#1949),
@@ -441,18 +449,57 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 
 // --- oracle ---
 
-fn solver_has_z3() -> bool throws {
-	return process::run("sh", ["-c", "command -v z3"]).ok
+// z3's deterministic resource limit (`rlimit=N`), the budget of the oracle
+// and the fuzzer (#1989): it counts z3's own steps, so a query past it is
+// `unknown` on every runner, unlike a time limit. The largest file under
+// `tests/solver/` takes z3 4.15.4 6.7 million (`regress3-arith_prp-13-24`).
+fn solver_rlimit() -> i64 {
+	return 50000000
 }
 
-// z3's answer to a file: `sat`, `unsat` or `unknown`.
-fn solver_z3(path: String) -> String throws {
-	let out = process::run("z3", ["-smt2", "-T:30", path])
-	for line in out.stdout.lines() {
-		let w = line.trim()
-		if w == "sat" || w == "unsat" || w == "unknown" { return w.to_string() }
+// The z3 to ask: `$Z3` where it is set, else `z3` on the path; `""` where
+// neither runs.
+fn solver_z3_exe() -> String throws {
+	return solver_exe("Z3", "z3")
+}
+
+// z3's answer to a file under `rlimit`: `sat`, `unsat`, `unknown`, or `error`
+// where it wrote an `(error ...)` before any (its answer is then to another
+// query than the file's). The wall clock `-T:30` stays an outer guard.
+fn solver_z3(exe: String, path: String, rlimit: i64) -> String throws {
+	let out = process::run(exe, ["-smt2", "-T:30", f"rlimit={rlimit}", path])
+	return solver_cli_answer(out.stdout.to_string())
+}
+
+// The value after a flag such as `--rlimit`, `fallback` without the flag;
+// a value that is no number stops the run.
+fn solver_flag(args: Vec[String], flag: String, fallback: i64) -> i64 throws {
+	for k in 0..<args.len() {
+		if args[k] != flag { continue }
+		if k + 1 < args.len() {
+			let n = text::parse_i64(args[k + 1].clone()) ?? -1
+			if n > 0 { return n }
+		}
+		println(f"{flag} needs a positive number")
+		process::exit(2)
 	}
-	return "unknown"
+	return fallback
+}
+
+// The arguments without the flags that take a value (`--rlimit N`, `--size N`).
+fn solver_plain(args: Vec[String]) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let mut skip = false
+	for a in args {
+		if skip {
+			skip = false
+		} else if a == "--rlimit" || a == "--size" {
+			skip = true
+		} else {
+			out.push(a.clone())
+		}
+	}
+	return out
 }
 
 // The status a file states, as the driver reads it.
@@ -495,36 +542,55 @@ fn solver_with_status(source: String, status: String) -> String {
 	return out.join("\n") + "\n"
 }
 
+// Every file of PATHS that states a status (`--write`: every file without
+// one, which gets z3's answer written), checked against z3 under the rlimit
+// (#1989 item 1). A disagreement is printed and makes the run exit 1; z3's
+// `unknown` and `error` are none, and only counted.
 fn solver_oracle(args: Vec[String]) throws {
-	if !solver_has_z3() {
-		println("z3 is not on the path: no oracle")
-		return
+	let z3_exe = solver_z3_exe()
+	if z3_exe == "" {
+		println("z3 is not on the path (nor `$Z3`): no oracle")
+		process::exit(2)
 	}
+	let rlimit = solver_flag(args.clone(), "--rlimit", solver_rlimit())
 	let mut write = false
 	let mut paths: Vec[String] = []
-	for a in args {
+	for a in solver_plain(args) {
 		if a == "--write" {
 			write = true
 		} else {
 			for (_, p) in solver_files(a) { paths.push(p) }
 		}
 	}
+	let mut checked = 0
 	let mut disagree = 0
+	let mut unknown = 0
+	let mut errors = 0
 	for p in paths {
 		let source = fs::read_to_string(p.clone(), fs::Root::Anywhere)
 		let said = solver_status(source.clone())
-		let z3 = solver_z3(p.clone())
-		if write && z3 != "unknown" && said == "" {
-			fs::write(p.clone(), fs::Root::Anywhere, solver_with_status(source, z3.clone()))
-			println(f"{p} {z3} written")
-		} else if said != "" && z3 != "unknown" && said != z3 {
+		if said == "" && !write { continue }
+		let z3 = solver_z3(z3_exe.clone(), p.clone(), rlimit)
+		if said == "" {
+			if z3 == "sat" || z3 == "unsat" {
+				fs::write(p.clone(), fs::Root::Anywhere, solver_with_status(source, z3.clone()))
+				println(f"{p} {z3} written")
+			}
+			continue
+		}
+		checked += 1
+		if z3 == "unknown" {
+			unknown += 1
+		} else if z3 == "error" {
+			errors += 1
+			println(f"{p} z3 error")
+		} else if said != z3 {
 			disagree += 1
 			println(f"{p} status {said}, z3 {z3}")
-		} else {
-			println(f"{p} {z3}")
 		}
 	}
-	println(f"{paths.len()} files, {disagree} disagree with z3")
+	println(f"{checked} files with a status, {disagree} disagree with z3, {unknown} unknown to z3 (rlimit {rlimit}), {errors} z3 errors")
+	if disagree > 0 { process::exit(1) }
 }
 
 // --- gen: the stress families of D9 ---
@@ -622,7 +688,7 @@ fn solver_two(n: i64) -> String {
 
 fn solver_gen(args: Vec[String]) throws {
 	let dir = if args.len() > 0 { args[0].clone() } else { "tests/solver/stress" }
-	let oracle = solver_has_z3()
+	let oracle = solver_z3_exe()
 	let mut written = 0
 	for family in ["guards", "disjunctions", "steps", "parity", "blank"] {
 		process::run("mkdir", ["-p", f"{dir}/{family}"])
@@ -637,22 +703,22 @@ fn solver_gen(args: Vec[String]) throws {
 			}
 			let path = f"{dir}/{family}/{family}-{solver_two(n)}.smt2"
 			fs::write(path.clone(), fs::Root::Anywhere, source.clone())
-			if oracle {
-				let z3 = solver_z3(path.clone())
-				if z3
-					!= "unknown" {
-						fs::write(path.clone(), fs::Root::Anywhere, solver_with_status(source, z3))
+			if oracle != "" {
+				let z3 = solver_z3(oracle.clone(), path.clone(), solver_rlimit())
+				if z3 == "sat"
+					|| z3
+					== "unsat" {
+						fs::write(path, fs::Root::Anywhere, solver_with_status(source, z3))
 					}
 			}
 			written += 1
 		}
 	}
-	let note = if oracle { "status from z3" } else { "no z3 on the path: no status written" }
+	let note = if oracle != "" { "status from z3" } else { "no z3 on the path: no status written" }
 	println(f"{written} files in {dir}, {note}")
 }
 
 // --- fuzz ---
-
 // A linear congruential generator: the same seed, the same queries.
 struct SolverRandom {
 	state: i64,
@@ -665,63 +731,222 @@ impl SolverRandom {
 	}
 }
 
-fn solver_atom(mut r: SolverRandom, vars: i64) -> String {
-	let mut terms: Vec[String] = []
-	for v in 0..<vars {
-		let c = r.below(7) - 3
-		if c == 0 || r.below(2) == 0 { continue }
-		if c
-			== 1 { terms.push(f"x{v}") } else if c
-			< 0 { terms.push(f"(* (- {-c}) x{v})") } else { terms.push(f"(* {c} x{v})") }
-	}
-	if terms.len() == 0 { terms.push(f"x{r.below(vars)}") }
-	let lhs = if terms.len() == 1 { terms[0].clone() } else { f"(+ {terms.join(" ")})" }
-	let d = r.below(21) - 10
-	let rhs = if d < 0 { f"(- {-d})" } else { f"{d}" }
-	let ops: Vec[String] = ["<=", "<", "=", ">=", ">", "distinct"]
-	let op = ops[r.below(6)].clone()
-	return f"({op} {lhs} {rhs})"
+// One atom of a generated query: `coeffs[v]·x{v}` summed, `op`, `rhs`.
+struct SolverAtom {
+	coeffs: Vec[i64],
+	op: String,
+	rhs: i64,
 }
 
-// A random query over 1-8 variables: atoms, and disjunctions of two or three.
-fn solver_query(mut r: SolverRandom) -> String {
-	let vars = 1 + r.below(8)
-	let names = solver_names("x", 0, vars - 1)
-	let mut asserts: Vec[String] = []
-	let count = 1 + r.below(6)
-	for _ in 0..<count {
-		if r.below(3) == 0 {
-			let width = 2 + r.below(2)
-			let mut parts: Vec[String] = []
-			for _ in 0..<width { parts.push(solver_atom(r, vars)) }
-			asserts.push(f"(or {parts.join(" ")})")
+// A generated query over `x0 .. x{vars - 1}`: the conjunction of its
+// clauses, each the disjunction of its atoms (one atom: a plain assertion).
+struct SolverQuery {
+	vars: i64,
+	clauses: Vec[Vec[SolverAtom]],
+}
+
+// The size budget of the `size`th step (#1989): at most `size` variables and
+// `size` assertions, coefficients within ±(1 + size / 2), right-hand sides
+// within ±(10 + size). The fuzzer grows `size` from 1 to its `--size`.
+fn solver_atom(mut r: SolverRandom, vars: i64, size: i64) -> SolverAtom {
+	let bound = 1 + size / 2
+	let mut coeffs: Vec[i64] = []
+	let mut any = false
+	for _ in 0..<vars {
+		let c = r.below(2 * bound + 1) - bound
+		if c == 0 || r.below(2) == 0 {
+			coeffs.push(0)
 		} else {
-			asserts.push(solver_atom(r, vars))
+			coeffs.push(c)
+			any = true
 		}
 	}
-	return solver_script(names, asserts)
+	if !any { coeffs[r.below(vars)] = 1 }
+	let reach = 10 + size
+	let rhs = r.below(2 * reach + 1) - reach
+	let ops: Vec[String] = ["<=", "<", "=", ">=", ">", "distinct"]
+	return SolverAtom { coeffs: coeffs, op: ops[r.below(6)].clone(), rhs: rhs }
 }
 
-// z3's status of the `i`th query, or the self-test's stub: `unsat` for every
-// third query, `sat` otherwise; it exercises the comparison, not the queries.
-fn solver_fuzz_oracle(stub: bool, i: i64, path: String) -> String throws {
-	if !stub { return solver_z3(path) }
+// A random query within the budget of `size`: atoms, and disjunctions of two
+// or three.
+fn solver_query(mut r: SolverRandom, size: i64) -> SolverQuery {
+	let vars = 1 + r.below(size)
+	let mut clauses: Vec[Vec[SolverAtom]] = []
+	let count = 1 + r.below(size)
+	for _ in 0..<count {
+		let mut parts: Vec[SolverAtom] = []
+		if r.below(3) == 0 {
+			let width = 2 + r.below(2)
+			for _ in 0..<width { parts.push(solver_atom(r, vars, size)) }
+		} else {
+			parts.push(solver_atom(r, vars, size))
+		}
+		clauses.push(parts)
+	}
+	return SolverQuery { vars: vars, clauses: clauses }
+}
+
+fn solver_number(n: i64) -> String {
+	return if n < 0 { f"(- {-n})" } else { f"{n}" }
+}
+
+fn solver_atom_text(a: SolverAtom) -> String {
+	let mut terms: Vec[String] = []
+	for v in 0..<a.coeffs.len() {
+		let c = a.coeffs[v]
+		if c == 0 { continue }
+		if c == 1 { terms.push(f"x{v}") } else { terms.push(f"(* {solver_number(c)} x{v})") }
+	}
+	if terms.len() == 0 { terms.push("0") }
+	let lhs = if terms.len() == 1 { terms[0].clone() } else { f"(+ {terms.join(" ")})" }
+	return f"({a.op} {lhs} {solver_number(a.rhs)})"
+}
+
+fn solver_query_text(q: SolverQuery) -> String {
+	let mut asserts: Vec[String] = []
+	for clause in q.clauses {
+		let mut parts: Vec[String] = []
+		for a in clause { parts.push(solver_atom_text(a)) }
+		asserts.push(if parts.len() == 1 { parts[0].clone() } else { f"(or {parts.join(" ")})" })
+	}
+	return solver_script(solver_names("x", 0, q.vars - 1), asserts)
+}
+
+// A random order of `0 ..< n` (Fisher-Yates).
+fn solver_permutation(mut r: SolverRandom, n: i64) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for k in 0..<n { out.push(k) }
+	let mut k = n - 1
+	while k > 0 {
+		let j = r.below(k + 1)
+		let held = out[k]
+		out[k] = out[j]
+		out[j] = held
+		k -= 1
+	}
+	return out
+}
+
+// The atom that holds exactly where `a` does not.
+fn solver_negated(a: SolverAtom) -> SolverAtom {
+	let op = match a.op {
+		"<=" => ">",
+		"<" => ">=",
+		"=" => "distinct",
+		">=" => "<",
+		">" => "<=",
+		else => "=",
+	}
+	return SolverAtom { coeffs: a.coeffs.clone(), op: op.to_string(), rhs: a.rhs }
+}
+
+// The mutations of a query (#1989 item 2), each `(kind, query, same)`:
+// `same` where the mutant has the original's status. `shuffle` permutes the
+// clauses and the atoms in each, `rename` the variables; `scale` multiplies
+// one atom by 2-5 on both sides (an integer `k·a op k·b` holds exactly where
+// `a op b` does, k > 0); `redundant` adds a clause one of the query's own
+// clauses implies (that clause and one atom more); `negate` replaces one
+// clause by its negation, the conjunction of its atoms negated, whose status
+// is z3's to say.
+fn solver_mutants(mut r: SolverRandom, q: SolverQuery) -> Vec[(String, SolverQuery, bool)] {
+	let mut out: Vec[(String, SolverQuery, bool)] = []
+	let n = q.clauses.len()
+
+	let mut shuffled: Vec[Vec[SolverAtom]] = []
+	for k in solver_permutation(r, n) {
+		let clause = q.clauses[k].clone()
+		let mut atoms: Vec[SolverAtom] = []
+		for j in solver_permutation(r, clause.len()) { atoms.push(clause[j].clone()) }
+		shuffled.push(atoms)
+	}
+	out.push(("shuffle", SolverQuery { vars: q.vars, clauses: shuffled }, true))
+
+	let names = solver_permutation(r, q.vars)
+	let mut renamed: Vec[Vec[SolverAtom]] = []
+	for clause in q.clauses {
+		let mut atoms: Vec[SolverAtom] = []
+		for a in clause {
+			let mut coeffs: Vec[i64] = []
+			for _ in 0..<q.vars { coeffs.push(0) }
+			for v in 0..<q.vars { coeffs[names[v]] = a.coeffs[v] }
+			atoms.push(SolverAtom { coeffs: coeffs, op: a.op.clone(), rhs: a.rhs })
+		}
+		renamed.push(atoms)
+	}
+	out.push(("rename", SolverQuery { vars: q.vars, clauses: renamed }, true))
+
+	let at = r.below(n)
+	let within = r.below(q.clauses[at].len())
+	let k = 2 + r.below(4)
+	let mut scaled = q.clauses.clone()
+	let old = scaled[at][within].clone()
+	let mut coeffs: Vec[i64] = []
+	for c in old.coeffs { coeffs.push(c * k) }
+	scaled[at][within] = SolverAtom { coeffs: coeffs, op: old.op.clone(), rhs: old.rhs * k }
+	out.push(("scale", SolverQuery { vars: q.vars, clauses: scaled }, true))
+
+	let mut wider = q.clauses[r.below(n)].clone()
+	wider.push(solver_atom(r, q.vars, q.vars))
+	let mut redundant = q.clauses.clone()
+	redundant.push(wider)
+	out.push(("redundant", SolverQuery { vars: q.vars, clauses: redundant }, true))
+
+	let gone = r.below(n)
+	let mut negated: Vec[Vec[SolverAtom]] = []
+	for j in 0..<n {
+		if j != gone {
+			negated.push(q.clauses[j].clone())
+			continue
+		}
+		for a in q.clauses[j].clone() { negated.push([solver_negated(a)]) }
+	}
+	out.push(("negate", SolverQuery { vars: q.vars, clauses: negated }, false))
+	return out
+}
+
+// z3's status of the `i`th question, or the self-test's stub: `unsat` for
+// every third question, `sat` otherwise; it exercises the comparison, not the
+// queries.
+fn solver_fuzz_oracle(z3: String, i: i64, path: String, rlimit: i64) -> String throws {
+	if z3 != "" { return solver_z3(z3, path, rlimit) }
 	if i % 3 == 0 { return "unsat" }
 	return "sat"
 }
 
+// The engine's answer as a status: `unsat` for *proved*, `sat` for
+// *refuted*, `""` for any other.
+fn solver_engine_status(answer: String) -> String {
+	if answer == "proved" { return "unsat" }
+	if answer == "refuted" { return "sat" }
+	return ""
+}
+
+// The differential fuzzer (#1989 item 2): N random queries, their size grown
+// from 1 to `--size` (default 8), each with its five mutants; z3 (under the
+// rlimit) and the engine answer each. A disagreement is an engine answer
+// against z3's, or a status-keeping mutant answered against the original's
+// status (z3's where it decided, else the engine's own on the original); it
+// is written to `tests/solver/bugs/` with the expected status, printed, and
+// the run exits 1 with the command that reproduces it. `unknown` on either
+// side is none. Per size, the closing lines count what z3 decided within its
+// budget.
 fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	let self_test = args.contains("--self-test")
-	if !self_test && args.len() < 2 {
-		println("fuzz N SEED, or fuzz --self-test")
+	let plain = solver_plain(args.clone())
+	if !self_test && plain.len() < 2 {
+		println("fuzz N SEED [--size S] [--rlimit R], or fuzz --self-test")
 		process::exit(2)
 	}
-	if !self_test && !solver_has_z3() {
-		println("z3 is not on the path: no oracle, no fuzzing")
-		return
+	let z3_exe = if self_test { "" } else { solver_z3_exe() }
+	if !self_test && z3_exe == "" {
+		println("z3 is not on the path (nor `$Z3`): no oracle, no fuzzing")
+		process::exit(2)
 	}
-	let n = if self_test { 8 } else { text::parse_i64(args[0].clone()) ?? 0 }
-	let seed = if self_test { 7 } else { text::parse_i64(args[1].clone()) ?? 0 }
+	let n = if self_test { 8 } else { text::parse_i64(plain[0].clone()) ?? 0 }
+	let seed = if self_test { 7 } else { text::parse_i64(plain[1].clone()) ?? 0 }
+	let max = solver_flag(args.clone(), "--size", 8)
+	let rlimit = solver_flag(args.clone(), "--rlimit", solver_rlimit())
 	let bugs: String = if self_test { process::run("mktemp", ["-d"]).stdout.trim().clone() } else {
 		f"{repo}/tests/solver/bugs"
 	}
@@ -729,36 +954,79 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	process::run("mkdir", ["-p", bugs.clone()])
 	let bin = solver_build(repo, nikaia)
 	if bin == "" { process::exit(1) }
+	println(f"fuzz: {n} queries, seed {seed}, size 1 to {max}, z3 rlimit {rlimit}")
 	let mut r = SolverRandom { state: seed }
 	let mut proved = 0
 	let mut refuted = 0
 	let mut unknown = 0
 	let mut found = 0
-	for i in 0..<n {
-		let source = solver_query(r)
-		let name = f"fuzz-{seed}-{i}.smt2"
-		let path = f"{work}/{name}"
-		fs::write(path.clone(), fs::Root::Anywhere, source.clone())
-		let z3 = solver_fuzz_oracle(self_test, i, path.clone())
-		let (answer, _, _) = solver_answer(bin.clone(), "new", path.clone(), 60)
-		if answer == "proved" { proved += 1 }
-		if answer == "refuted" { refuted += 1 }
-		if answer.starts_with("unknown") { unknown += 1 }
-		let against = (answer == "proved" && z3 == "sat") || (answer == "refuted" && z3 == "unsat")
-		if against || answer.starts_with("wrong") {
-			found += 1
-			fs::write(
-				f"{bugs}/{name}",
-				fs::Root::Anywhere,
-				solver_with_status(source.clone(), z3.clone()),
-			)
-			println(f"{name}: engine {answer}, z3 {z3}")
-		}
-		if self_test && i == 0 { print(source) }
+	let mut asked = 0
+	let mut decided: Vec[i64] = []
+	let mut undecided: Vec[i64] = []
+	for _ in 0..<(max + 1) {
+		decided.push(0)
+		undecided.push(0)
 	}
-	println(f"{n} queries (seed {seed}): proved {proved}, refuted {refuted}, unknown {unknown}, disagreements {found}")
+	for i in 0..<n {
+		let size = 1 + i * max / (if n > 0 { n } else { 1 })
+		let q = solver_query(r, size)
+		let mut questions: Vec[(String, SolverQuery, bool)] = [("", q.clone(), false)]
+		for m in solver_mutants(r, q) { questions.push(m) }
+		let mut original: String = ""
+		for (kind, query, same) in questions {
+			let source = solver_query_text(query)
+			let name = if kind
+				== "" { f"fuzz-{seed}-{i}.smt2" } else { f"fuzz-{seed}-{i}-{kind}.smt2" }
+			let path = f"{work}/{name}"
+			fs::write(path.clone(), fs::Root::Anywhere, source.clone())
+			let (answer, _, _) = solver_answer(bin.clone(), "new", path.clone(), 60)
+			if answer == "proved" { proved += 1 }
+			if answer == "refuted" { refuted += 1 }
+			if answer.starts_with("unknown") { unknown += 1 }
+			let mut expected: String = original.clone()
+			let mut by = "the original's status"
+			if !same {
+				expected = solver_fuzz_oracle(z3_exe.clone(), asked, path, rlimit)
+				asked += 1
+				by = "z3"
+				if expected == "sat"
+					|| expected == "unsat" { decided[size] += 1 } else { undecided[size] += 1 }
+				if kind == "" {
+					original = if expected == "sat"
+						|| expected == "unsat" { expected.clone() } else {
+							solver_engine_status(answer.clone())
+						}
+				}
+			}
+			let got = solver_engine_status(answer.clone())
+			let against = got != "" && (expected == "sat" || expected == "unsat") && got != expected
+			if against || answer.starts_with("wrong") {
+				found += 1
+				fs::write(
+					f"{bugs}/{name}",
+					fs::Root::Anywhere,
+					solver_with_status(source.clone(), expected.clone()),
+				)
+				println(f"{name}: engine {answer}, {by} {expected}")
+			}
+			if self_test && i == 0 {
+				println(f"-- {name}")
+				print(source)
+			}
+		}
+	}
+	println(f"{n} queries and {n * 5} mutants (seed {seed}): proved {proved}, refuted {refuted}, unknown {unknown}, disagreements {found}")
+	for s in 1..max {
+		if decided[s] + undecided[s] > 0 {
+			println(f"size {s}: z3 decided {decided[s]}, undecided {undecided[s]}")
+		}
+	}
 	if self_test { process::run("rm", ["-rf", bugs]) }
 	process::run("rm", ["-rf", work])
+	if found > 0 {
+		println(f"reproduce: nikaia run scripts/solver.nika -- fuzz {n} {seed} --size {max} --rlimit {rlimit}")
+		process::exit(1)
+	}
 }
 
 // --- tune: the parameters on one half, the report on the other ---

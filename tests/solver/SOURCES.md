@@ -13,7 +13,40 @@ its `; EXPECT:` line.
 | `qflra/` | QF_LRA, non-incremental, under 64 KiB | see below | see below |
 | `sample/` | the fixed 50-file sample of the SMT-LIB set below (25 QF_LIA, 25 QF_LRA), run in CI by `tests/compiler/tests/solver_sample.nika` (#1338) | `scripts/solver.nika sample target/smtlib tests/solver/sample 25` | per family, see below |
 | `compiler/` | the compiler's own questions (D9's set, #1285 item 3): 4884 distinct normal forms the bounds walk and the prover ask over the tools package, 3014 `unsat`, 1854 `sat`, 16 with no status (unknown to both engines); file name the `nikaia.proofs` key | `NIKAIA_DUMP_QUERIES=DIR nikaia lower-std --bounds`, status the compiler's checked answer (Fourier-Motzkin, then the new engine) | the repository's |
-| `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with z3's status (none yet: 300 queries of seed 1 agree, over Fourier-Motzkin and the CDCL(T) engine) | generated | the repository's |
+| `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with the expected status (z3's, or for a status-keeping mutant the original's); none committed | generated | the repository's |
+
+## Checked against z3, nightly (#1989)
+
+`.github/workflows/z3.yml` runs nightly and by hand. It is never part of
+`develop`'s CI. It installs **z3 4.15.4**, pinned: the release asset
+`z3-4.15.4-x64-glibc-2.39.zip`, checked against its SHA-256 in the workflow.
+Every z3 answer is under z3's deterministic resource limit `rlimit=50000000`
+(`solver_rlimit` in `scripts/solver.nika`; the largest file here takes 6.7
+million), with `-T:30` as an outer guard. A query past the limit is
+`unknown`, which is never a failure. The workflow runs two checks:
+
+* `scripts/solver.nika oracle tests/solver` asks z3 about every file that
+  states a status. Each disagreement is printed and the run exits 1; z3's
+  `unknown` and `error` are only counted. An error means z3 dropped a
+  command, so its answer does not count. With 4.15.4, 12 of the 5029 files
+  draw one: cvc5 options z3 does not know (`ite_simp`, `produce_abducts`),
+  nonlinear terms in a linear logic, and a sequential `let` in
+  `pysmt-issue_159`. First run by hand (2026-11-17): 0 disagreements, 0
+  unknown; `fuzz 300 1`: 1800 questions, 0 disagreements, all decided.
+* `scripts/solver.nika fuzz N SEED` (the seed is the run number) generates N
+  random queries. Their size budget (variables, assertions, coefficients,
+  right-hand sides) grows from 1 to `--size` (default 8). Each query gets
+  five mutants: `shuffle` (clauses and atoms reordered), `rename` (variables
+  permuted), `scale` (one atom times 2-5), `redundant` (a clause the query
+  implies added) and `negate` (one clause negated). The first four keep the
+  original's status. `negate` is asked of z3. A disagreement goes to `bugs/`
+  and makes the run exit 1. The run prints the command that repeats it, and
+  per size how many queries z3 decided within its budget.
+
+A disagreement is looked at by hand: a status here is not rewritten
+automatically, since a wrong expectation can sit beside a wrong verdict. The
+ci lane checks each run and files what it finds (`docs/supervisor.md`,
+*Lanes*).
 
 ## `qflia/` and `qflra/`
 
