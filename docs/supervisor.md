@@ -625,7 +625,10 @@ brief* (*Core* comes from `docs/builder-facts.md`), so it does not read the
 file whole; the rest it looks up with `scripts/syntax.nika`. Name the narrowest topics
 (`Tests and the gate, Probes, Grammar`), not the whole *Traps already met*;
 *Core* is never named. A heading ending in a parenthetical is named
-without it (`Moving Rust into Nikaia`); an unknown one stops the run.
+without it (`Moving Rust into Nikaia`); an unknown one stops the run. A brief
+without the line (every brief rendered from an issue) gets, besides *Core*, the
+`###` sections whose `Paths:` line has a fragment in the brief or its issues'
+text, at most three (#2002).
 
 **Issues are written in brief form** (owner, 2026-10-25): frontmatter, facts,
 *Locations*, *To build* steps with tests, rules, report form, so a builder can
@@ -647,7 +650,8 @@ issue instead of copying it and adds only the decision and the probe it lacks.
   builder needs, by their exact `##` or `###` heading; `agent.nika` inlines
   them after *Core*. A new
   trap goes into its topic's section there, not into each brief; only a trap
-  of every run goes into *Core* (`docs/builder-facts.md`).
+  of every run goes into *Core* (`docs/builder-facts.md`, at most 120 lines,
+  #2002). A new section gets a `Paths:` line under its heading.
 
 **Before a brief is written, the supervisor checks** (each tag is the run that
 paid for the rule):
