@@ -47,6 +47,7 @@ fn justified() -> Vec[(String, String)] {
 		("self.expanded", f"{memory}: the nodes alias expansion made, at most `limit`"),
 		("n + d", f"{input}: an indentation and an indicator digit"),
 		("from + (", f"{input}: an offset into the scalar's text"),
+		("row", f"{input}: a count of a block scalar's lines"),
 		("at + utf8_length(", f"{input}: a byte offset into the scalar's text"),
 		("self.column", "a column of the text the library writes, which its length bounds"),
 		("self.indent", "an indentation of the text the library writes, at most twice the depth"),
