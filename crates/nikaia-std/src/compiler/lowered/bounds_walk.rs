@@ -1606,7 +1606,7 @@ pub(crate) fn bounding_forget_parts(walk: &BoundsWalk, facts: &mut BoundsFacts, 
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(fact, &mut read);
         let mut touched = false;
-        for v in read.iter() { if (v.starts_with(&*under) || v.starts_with(&*format!("{}[", name))) && *v != length { touched = true; } }
+        for v in read.iter() { if (v.starts_with(&*under) || v.starts_with(&*format!("{}[", name))) && *v != length && !v.contains('@') { touched = true; } }
         if !touched { kept.push(fact); }
     }
     facts.facts = kept;
@@ -3195,9 +3195,22 @@ pub(crate) fn bounding_past_loop(walk: &mut BoundsWalk, block: &Block, from: i64
         let stamp = nikaia_std::num::value(stamp);
         if stamp > past.open && bounding_changes_name(&changed, name) { wanted.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
+    let mut only_flags: Option<i64> = None;
+    if wanted.is_empty() {
+        for missed in walk.missed_goals.iter() {
+            if missed.stamp <= past.open { continue; }
+            for fact in missed.facts.iter() {
+                let fact = nikaia_std::num::value(fact);
+                let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+                walk.arena.variables(fact, &mut read);
+                for name in read.iter() { if bounding_changes_name(&changed, name) && (walk.flagged.contains_key(name) || name.ends_with(".len()")) { wanted.insert(nikaia_std::block::Text::from(name.to_string())); } }
+            }
+        }
+        only_flags = Some(past.open);
+    }
     if wanted.is_empty() { return leaves; }
     let end = bounding_mark(&walk, &facts, &bound);
-    let found = bounding_loop_invariant(walk, stmt, start, entry, &written, &poisoned, &changed, &wanted, None, context, program, words, &ask);
+    let found = bounding_loop_invariant(walk, stmt, start, entry, &written, &poisoned, &changed, &wanted, only_flags, context, program, words, &ask);
     if found.is_some() {
         let invariant = match found { Some(__nikaia_value) => __nikaia_value, None => return leaves };
         if invariant.settled {
@@ -3410,11 +3423,32 @@ pub(crate) fn bounding_loop_proposals(walk: &mut BoundsWalk, stmt: &Stmt, start:
 pub(crate) fn bounding_while_proposals(walk: &mut BoundsWalk, start: i64, cond: &Expr, body: &Block, entry: &BoundsFacts, changed: &BoundsChanged, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProposals {
     let mut out = BoundsProposals { ghosts: vec![], fixed: vec![], candidates: vec![] };
     #[allow(unused_mut)] let mut state: Vec<String> = vec![];
+    let mut ints = entry.ints.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
     for name in changed.values.iter() { if entry.ints.contains(name) && !walk.pinned.contains(&path_root(name)) { state.push(nikaia_std::block::Text::from(name.to_string())); } }
+    let none: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
+    for fact in entry.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        walk.arena.variables(fact, &mut read);
+        for name in read.iter() { if name.ends_with(".len()") { ints.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    }
+    for name in changed.values.iter() {
+        if !entry.ints.contains(name) && walk.flagged.contains_key(name) && !name.contains('.') && !walk.pinned.contains(name) && !walk.shape.constants.contains_key(name) {
+            state.push(nikaia_std::block::Text::from(name.to_string()));
+            ints.insert(nikaia_std::block::Text::from(name.to_string()));
+        }
+    }
+    for list in changed.lengths.iter() {
+        let length = length_of(list);
+        if !list.contains('.') && !list.contains('#') && !list.contains('[') && !list.contains('(') && !walk.pinned.contains(list) && !nikaia_std::list::contains(&state, &length) && prover_length_follows(&length, cond, body, &none, words) {
+            state.push(nikaia_std::block::Text::from(length.to_string()));
+            ints.insert(length);
+        }
+    }
     if state.is_empty() { return out; }
     let constants = walk.shape.constants.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
     let claims: collections::BTreeSet<(i64, i64)> = collections::BTreeSet::new();
-    let record = match loop_record(&mut walk.arena, start, &state, &entry.facts, &entry.ints, &|name| { (*nikaia_std::index::get(&constants, name)).copied() }, cond, body, words, &claims, &|e| { bounding_no_throw(e) }, &|e| { bounding_no_holes(e) }) { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let record = match loop_record(&mut walk.arena, start, &state, &entry.facts, &ints, &|name| { (*nikaia_std::index::get(&constants, name)).copied() }, cond, body, words, &claims, &|e| { bounding_no_throw(e) }, &|e| { bounding_no_holes(e) }) { Some(__nikaia_value) => __nikaia_value, None => return out };
     for name in state.iter() {
         let here = walk.arena.var(name);
         let before = walk.arena.var(&loop_before_name(name, start));

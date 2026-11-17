@@ -503,6 +503,30 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
     return live
 }
 
+/// **The parts of `cond` known where it is `holds`**, each read on `path`:
+/// both sides of an `&&` that holds or of an `||` that fails, and the part
+/// itself otherwise. A part no term reads is left out, which only weakens
+/// what the branch knows (#1848).
+fn loop_read_parts(mut arena: TermArena, cond: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, holds: bool) -> Vec[i64] {
+    match cond {
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Not {
+                return loop_read_parts(arena, expr, path, ints, pinned, words, !holds)
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if (op == BinaryOp::And && holds) || (op == BinaryOp::Or && !holds) {
+                let mut parts = loop_read_parts(arena, lhs, path, ints, pinned, words, holds)
+                parts.extend(loop_read_parts(arena, rhs, path, ints, pinned, words, holds))
+                return parts
+            }
+        },
+        else => {},
+    }
+    let c = loop_read(arena, cond, path, ints, pinned, words, true) ?? return []
+    return [if holds { c } else { arena.not(c) }]
+}
+
 /// An `if` or an `assert` standing as a statement, on one path: whether it
 /// was handled - the paths it leaves running pushed onto `next` - or is an
 /// ordinary statement. Nothing where a branch leaves in a way not followed.
@@ -515,6 +539,11 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
             if c != null {
                 yes.constraints.push(c ?? 0)
                 no.constraints.push(arena.not(c ?? 0))
+            } else {
+                // A condition with a part no term reads (`i < n && ok(i)`)
+                // still says the parts it does on the branch they hold on.
+                yes.constraints.extend(loop_read_parts(arena, cond, path, ints, pinned, words, true))
+                no.constraints.extend(loop_read_parts(arena, cond, path, ints, pinned, words, false))
             }
             let after_yes = loop_block(arena, then_branch, [yes], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
             next.extend(after_yes)

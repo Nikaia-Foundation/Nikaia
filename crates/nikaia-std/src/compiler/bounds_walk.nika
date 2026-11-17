@@ -2889,7 +2889,8 @@ fn bounding_forget_parts(walk: ref BoundsWalk, mut facts: BoundsFacts, name: ref
 		walk.arena.variables(fact, read)
 		let mut touched = false
 		for v in read {
-			if (v.starts_with(under) || v.starts_with(f"{name}[")) && v != length {
+			// A loop's value where it was reached (`at.len()@98`) is no part.
+			if (v.starts_with(under) || v.starts_with(f"{name}[")) && v != length && !v.contains("@") {
 				touched = true
 			}
 		}
@@ -5566,6 +5567,30 @@ fn bounding_past_loop(
 			wanted.insert(name.clone())
 		}
 	}
+	// **A flag the loop raised, read where a goal past it was left open**
+	// (ADR-361 D15): `if !seen { return }` or `if at.len() == 0 { return }`
+	// before `args[0]` asks the loop for what held where the flag rose,
+	// though the goal reads no name the loop changes. Such a search is
+	// walked only where its candidates could pay.
+	let mut only_flags: i64? = null
+	if wanted.is_empty() {
+		for missed in walk.missed_goals {
+			if missed.stamp <= past.open {
+				continue
+			}
+			for fact in missed.facts {
+				let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+				walk.arena.variables(fact, read)
+				for name in read {
+					if bounding_changes_name(changed, name)
+						&& (walk.flagged.contains_key(name) || name.ends_with(".len()")) {
+							wanted.insert(name.clone())
+						}
+				}
+			}
+		}
+		only_flags = past.open
+	}
 	if wanted.is_empty() {
 		return leaves
 	}
@@ -5579,7 +5604,7 @@ fn bounding_past_loop(
 		poisoned,
 		changed,
 		wanted,
-		null,
+		only_flags,
 		context,
 		program,
 		words,
@@ -5977,10 +6002,50 @@ fn bounding_while_proposals(
 ) -> BoundsProposals {
 	let mut out = BoundsProposals { ghosts: [], fixed: [], candidates: [] }
 	let mut state: Vec[String] = []
+	let mut ints = entry.ints.clone()
 	for name in changed.values {
 		if entry.ints.contains(name) && !walk.pinned.contains(path_root(name)) {
 			state.push(name.clone())
 		}
+	}
+	// **A flag is a name of the state too** (ADR-361 D15): a `bool` the
+	// body sets `true` (`flagged`) and a plain list's length the body grows,
+	// so the prover's `loop_flagged` offers what held where they rose.
+	let none: collections::BTreeSet[String] = collections::BTreeSet()
+	// The lengths what held where the loop is reached reads are whole
+	// numbers its turns read too: `if i < args.len() as i64` is a branch
+	// the problem follows.
+	for fact in entry.facts {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, read)
+		for name in read {
+			if name.ends_with(".len()") {
+				ints.insert(name.clone())
+			}
+		}
+	}
+	for name in changed.values {
+		if !entry.ints.contains(name)
+			&& walk.flagged.contains_key(name)
+			&& !name.contains(".")
+			&& !walk.pinned.contains(name)
+			&& !walk.shape.constants.contains_key(name) {
+				state.push(name.clone())
+				ints.insert(name.clone())
+			}
+	}
+	for list in changed.lengths {
+		let length = length_of(list)
+		if !list.contains(".")
+			&& !list.contains("#")
+			&& !list.contains("[")
+			&& !list.contains("(")
+			&& !walk.pinned.contains(list)
+			&& !state.contains(length)
+			&& prover_length_follows(length, cond, body, none, words) {
+				state.push(length.clone())
+				ints.insert(length)
+			}
 	}
 	if state.is_empty() {
 		return out
@@ -5992,7 +6057,7 @@ fn bounding_while_proposals(
 		start,
 		state,
 		entry.facts,
-		entry.ints,
+		ints,
 		fn(name) { constants[name] },
 		cond,
 		body,

@@ -269,7 +269,7 @@ impl LgReader {
             if op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=" {
                 let mut links: Vec<i64> = vec![];
                 let mut next: i64 = 0;
-                while next + 1 < n {
+                while unsafe { nikaia_std::proven::add::<i64>(next, 1) } < n {
                     let a = *unsafe { nikaia_std::proven::read(&args, (next) as usize) };
                     let b = *unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::add::<i64>(next, 1)) as usize) };
                     if op == "<=" { links.push(self.arena.le(a, b)); } else if op == "<" { links.push(self.arena.lt(a, b)); } else if op == ">=" { links.push(self.arena.ge(a, b)); } else if op == ">" { links.push(self.arena.gt(a, b)); } else { links.push(self.arena.equal(a, b)); }

@@ -430,7 +430,9 @@ fn path_root(path: ref String) -> String {
 /// within `t.slots`, not within `t.used`.
 fn path_within(path: ref String, within: ref String) -> bool {
     // No text is made for the test (#727): what follows `within` starts a field.
-    return path == within || (path.strip_prefix(within)?.starts_with(".") ?? false)
+    // A loop's value where it was reached (`at.len()@98`, ADR-361 D15) is a
+    // name of its own: no change after it moves it.
+    return path == within || (!path.contains("@") && (path.strip_prefix(within)?.starts_with(".") ?? false))
 }
 
 /// Whether `expr` is a path that `list` is, or is a part of: a change there

@@ -1,0 +1,16 @@
+bounds in tests/an_index_after_a_loop_that_grew_a_list_is_proved.nika: 6 indexes, 3 proved; 9 operations, 7 proved
+    14  i += 1    proved
+    19  args[0]   proved
+    29  i += 1    proved
+    34  args[0]   proved
+    42  i += 1    proved
+    47  args[0]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    53  0 - m     checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    57  i -= 1    checked: a counter the loop on line 53 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    62  args[0]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    80  i - skip  proved
+    81  i - skip  proved
+    83  i += 1    proved
+    88  args[0]   proved
+    98  i += 1    proved
+   103  args[0]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
