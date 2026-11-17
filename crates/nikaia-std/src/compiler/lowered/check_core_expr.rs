@@ -233,7 +233,14 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; check_core_field(state, world, host, expr, true, base, name, span) },
         Expr::StructLit { name, fields, .. } => { let name = *name; check_core_struct_literal(state, world, host, expr, name, fields, span) },
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); check_core_with(state, world, host, expr, base, fields, span) },
-        Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
+        Expr::Closure { params, mutable, body, .. } => {
+            let changed_from = state.flow.changes_bound.len() as i64;
+            let floor = state.next_binding;
+            let ty = check_core_ops_closure(state, world, host, params, mutable, body, span);
+            let outer: Option<String> = state.an_outer_binding_changed(changed_from, floor);
+            if outer.is_some() { state.flow.lambda_outer_changes.insert(id_of(expr) as i64, nikaia_std::index::or(outer, || "".into())); }
+            ty
+        },
         Expr::Unary { op, expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_expr_unary(state, world, host, expr, op, inner, span) },
         Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, op, lhs, rhs), || check_core_ops_binary(state, world, host, op, lhs, rhs, at, span).into()) },
         Expr::Cast { expr: inner, ty, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_cast(state, world, host, inner, ty, span) },

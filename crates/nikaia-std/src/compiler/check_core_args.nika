@@ -221,9 +221,17 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     state.a_lambdas_text_is_its_own(world, code, arg)
                     let changed_from = state.changed.len()
                     let runs_from = state.run_calls.len()
+                    let bound_from = state.flow.changes_bound.len()
+                    let floor = state.next_binding
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
                     if runs {
                         check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from)
+                    } else {
+                        // **A kept lambda changes only its own copy** (#2047).
+                        let outer: String? = state.an_outer_binding_changed(bound_from, floor)
+                        if outer != null {
+                            state.a_kept_lambda_changes_a_capture(outer ?? "", check_span_at(world, arg, span))
+                        }
                     }
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)

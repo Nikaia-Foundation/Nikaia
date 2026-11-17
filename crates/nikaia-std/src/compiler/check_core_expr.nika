@@ -290,7 +290,18 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Expr::SafeField { base, name, .. } => check_core_field(state, world, host, expr, true, base, name, span),
         Expr::StructLit { name, fields, .. } => check_core_struct_literal(state, world, host, expr, name, fields, span),
         Expr::With { base, fields, .. } => check_core_with(state, world, host, expr, base, fields, span),
-        Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
+        Expr::Closure { params, mutable, body, .. } => {
+            // **What the lambda changes from outside it** (#2047), asked when
+            // a use keeps it.
+            let changed_from = state.flow.changes_bound.len()
+            let floor = state.next_binding
+            let ty = check_core_ops_closure(state, world, host, params, mutable, body, span)
+            let outer: String? = state.an_outer_binding_changed(changed_from, floor)
+            if outer != null {
+                state.flow.lambda_outer_changes.insert(id_of(expr) as i64, outer ?? "")
+            }
+            ty
+        },
         Expr::Unary { op, expr: inner, .. } => check_core_expr_unary(state, world, host, expr, op, inner, span),
         Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
         Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),

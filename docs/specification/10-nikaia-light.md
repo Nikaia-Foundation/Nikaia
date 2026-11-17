@@ -2312,7 +2312,12 @@ callee's promises about pausing follow the type, so a `listen` that calls a stor
 **A function type stands wherever a type does**: a struct field, a result, a
 `let`, an element of a list. A function value in any of them is **kept**: the
 lambda moves what it captures, and a copy of the value shares the one closure.
-A field that holds one is called like a method, `button.on_click(4)`, where the
+So a kept lambda that changes a binding it captures from the function around
+it (an assignment, `+=`, a `mut` method) is refused with `NK2101`, naming the
+binding: the change would reach only the lambda's own copy, never the binding
+the reader sees (#2047). A kept lambda that only reads what it captures, or
+changes its own locals, is unchanged, and so is a lambda run in place, which
+changes the binding itself ([ADR-views-3](adr/adr-views-3.md) D17). A field that holds one is called like a method, `button.on_click(4)`, where the
 struct has no method of that name. A named function stands where a function
 value is wanted. A kept value handed to a parameter that only runs it is lent.
 Two values of a type that holds a function are not compared (`NK1188`).

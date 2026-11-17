@@ -169,8 +169,13 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     state.a_lambdas_text_is_its_own(world, &code, arg);
                     let changed_from = state.changed.len() as i64;
                     let runs_from = state.run_calls.len() as i64;
+                    let bound_from = state.flow.changes_bound.len() as i64;
+                    let floor = state.next_binding;
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);
-                    if runs { check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from); }
+                    if runs { check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from); } else {
+                        let outer: Option<String> = state.an_outer_binding_changed(bound_from, floor);
+                        if outer.is_some() { state.a_kept_lambda_changes_a_capture(nikaia_std::index::or(outer.as_deref(), || ""), &check_span_at(world, arg, span)); }
+                    }
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);
