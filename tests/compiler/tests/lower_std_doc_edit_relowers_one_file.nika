@@ -31,6 +31,7 @@ fn main() throws {
     let nikaia = toolchain()
     let dir = f"{tmp}/crates/nikaia-std/src/compiler"
     process::run("mkdir", ["-p", dir.clone()])
+    fs::write(f"{dir}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"compiler\"\nwithin = \"std\"\n")
     fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "/// A number.\npub fn a_one() -> i64 sync {\n    let x = 1\n    return x\n}\n")
     fs::write(f"{dir}/b.nika", fs::Root::Anywhere, "/// Two.\npub fn b_two() -> i64 sync {\n    return a_one() + 1\n}\n")
     lower(nikaia, tmp, "cold")
