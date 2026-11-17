@@ -500,7 +500,7 @@ impl CheckState {
         for (k, part) in found_parts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let whole = (*nikaia_std::index::get(&wanted, nikaia_std::index::at(k))).clone();
             if a_text_literal_expr(unsafe { nikaia_std::proven::read(&given, (k) as usize) }) || !(views_into_text(part, &whole) || self.a_view_of_what_does_not_copy(world, part, &whole)) { continue; }
-            self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but part {} of the tuple is `{}`.", key, name, want.text(), k, part.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", whole.text()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, whole.text())], Some(String::from("Write `.clone()` to copy it here."))));
+            self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("`{}` expects `{}` to be `{}` here, but part {} of the tuple is `{}`.", key, name, want.text(), k, part.text()), want, Some(part)), vec![format!("This is a view: it points into a `{}` that something else owns.", whole.shown()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, whole.shown())], Some(String::from("Write `.clone()` to copy it here."))));
             return true;
         }
         false

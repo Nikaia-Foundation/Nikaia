@@ -1,4 +1,4 @@
-error[NK1102]: `f` expects argument 1 to be `String`, but you're passing `ref String`.
+error[NK1102]: `f` expects argument 1 to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_kept_fn_field.nika:27:17
     |
  27 |     println(a.f(s))

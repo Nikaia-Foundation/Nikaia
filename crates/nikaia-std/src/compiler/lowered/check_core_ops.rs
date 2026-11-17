@@ -744,7 +744,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
     }
     if nullable && check_core_ops_own_type(&inner) && !state.jumps(world, fallback) {
         if check_core_ops_a_number_written(fallback) {
-            let held = inner.text();
+            let held = inner.shown();
             state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.")], Some(format!("Write a `{}` as the fallback.", held))));
         } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
     }
@@ -753,13 +753,13 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
         let mut given_kind = check_core_ops_kind(&other);
         if check_core_ops_a_number_written(fallback) { given_kind = String::from("number"); }
         if held_kind != "" && given_kind != "" && held_kind != given_kind {
-            let held = inner.text();
-            let mut given: String = format!("`{}`", other.text());
+            let held = inner.shown();
+            let mut given: String = format!("`{}`", other.shown());
             if check_core_ops_a_number_written(fallback) { given = String::from("a number"); }
             state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).")], Some(format!("Write a `{}` as the fallback.", held))));
         }
         if held_kind == "number" && given_kind == "number" {
-            let held = inner.text();
+            let held = inner.shown();
             let written = check_core_ops_number_written_kind(fallback);
             let held_float = a_float_type(&inner);
             if written == "integer" && held_float || written == "float" && !held_float {
@@ -806,7 +806,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
         names.push(if name.starts_with("__nikaia_tuple") { String::from("(…)") } else { nikaia_std::block::Text::from(name.to_string()) });
     }
     let joined = nikaia_std::block::Text::from(names.join(", "));
-    let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*unsafe { nikaia_std::proven::read(&handed, (0) as usize) }).text()).to_string())];
+    let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*unsafe { nikaia_std::proven::read(&handed, (0) as usize) }).shown()).to_string())];
     let help: String = format!("Take the tuple apart in the parameter, with brackets around the names: `fn(({})) {{ … }}`.", joined); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes {} arguments, but it is handed one tuple.", names.len() as i64), notes, Some(help)));
 }

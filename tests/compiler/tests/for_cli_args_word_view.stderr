@@ -1,4 +1,4 @@
-error[NK1105]: You're assigning `ref String` to something that holds `String`.
+error[NK1105]: You're assigning a view of a `String` to something that holds a `String` of its own.
   --> tests/for_cli_args_word_view.nika:8:11
    |
  8 | 			path = name.strip_prefix("/") ?? ""

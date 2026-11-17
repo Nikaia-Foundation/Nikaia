@@ -107,7 +107,7 @@ impl CheckState {
                 if !can_throw { return; }
                 name = match item {
                     Ty::Unknown => String::from("a sequence"),
-                    _ => format!("a sequence of `{}`", item.text()),
+                    _ => format!("a sequence of `{}`", item.shown()),
                 };
             },
             _ => { return; },
@@ -231,7 +231,7 @@ impl CheckState {
         for teardown in ["Drop", "Cleanup"] { if check_implements_in(world.own, teardown, &base) || check_implements_in(world.library, teardown, &base) { return Some(format!("`impl {} for {}`", teardown, base)); } }
         for field in self.fields_of_base(world, &base) {
             let how = self.tears_down(world, &field, seen);
-            if how.is_some() { return Some(format!("through its `{}` field, {}", field.text(), nikaia_std::index::or(how.as_deref(), || ""))); }
+            if how.is_some() { return Some(format!("through its `{}` field, {}", field.shown(), nikaia_std::index::or(how.as_deref(), || ""))); }
         }
         None
     }

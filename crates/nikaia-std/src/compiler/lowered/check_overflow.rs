@@ -169,8 +169,8 @@ pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &Check
 // this was written - see `contracts::sync`.
 pub(crate) fn check_overflow_wanted(want: &Ty) -> String {
     match want {
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", unviewed_type(inner).text()) },
-        _ => want.text(),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", unviewed_type(inner).shown()) },
+        _ => want.shown(),
     }
 }
 
@@ -397,8 +397,8 @@ pub(crate) fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Null
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_unsigned_slot_refused(slot: &CheckUnsignedSlot) -> CheckFinding {
-    let found = slot.found.text();
-    let want = slot.want.text();
+    let found = slot.found.shown();
+    let want = slot.want.shown();
     let value = nikaia_std::block::Text::from(slot.written.to_string());
     let into = nikaia_std::block::Text::from(slot.into.to_string());
     let mut finding = nikaia_std::index::or(match slot.refusal.as_ref() {

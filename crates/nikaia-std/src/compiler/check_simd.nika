@@ -366,7 +366,7 @@ impl CheckState {
         }
         for index in indices ?? [] {
             if count > 0 && index >= count {
-                self.findings.push(check_refusal("NK1298", span, f"The shuffle index {index} is outside the {count} lanes of a `{on.text()}`.", [f"Each index names a lane, from 0 to {count - 1}.".clone()], f"Write an index below {count}.".clone()))
+                self.findings.push(check_refusal("NK1298", span, f"The shuffle index {index} is outside the {count} lanes of a `{on.shown()}`.", [f"Each index names a lane, from 0 to {count - 1}.".clone()], f"Write an index below {count}.".clone()))
                 return
             }
         }
@@ -405,7 +405,7 @@ impl CheckState {
         }
         let float = check_simd_float(lane)
         if float && check_simd_integer_only(method) {
-            self.findings.push(check_refusal("NK1171", span, f"`{on.text()}` has no method called `{method}`.", [f"`{method}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9)."], "Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))
+            self.findings.push(check_refusal("NK1171", span, f"`{on.shown()}` has no method called `{method}`.", [f"`{method}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9)."], "Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))
             return
         }
         if !float && check_simd_float_only(method) {
@@ -413,7 +413,7 @@ impl CheckState {
             if method == "sum" {
                 help = "Write `wrapping_sum()`, which names what a lane does where the sum does not fit."
             }
-            self.findings.push(check_refusal("NK1171", span, f"`{on.text()}` has no method called `{method}`.", [f"`{method}` is a float lane's operation (ADR-377 D9)."], help))
+            self.findings.push(check_refusal("NK1171", span, f"`{on.shown()}` has no method called `{method}`.", [f"`{method}` is a float lane's operation (ADR-377 D9)."], help))
         }
     }
 }

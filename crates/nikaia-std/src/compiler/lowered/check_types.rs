@@ -213,6 +213,7 @@ pub(crate) fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
     if found.is_a_view() && !want.is_a_view() && found.owned().text() == want_text { return String::from("Write `.clone()` to turn this view into a value of its own."); }
     if want_text == "time::Duration" && a_number_name(&found_text) { return String::from("Make the number a span: `20.seconds()` or `20.millis()`."); }
     if a_number_name(&found_text) && a_number_name(&want_text) { return format!("Convert it with `as {}`. A number goes into another type on its own only where every value it can hold fits.", want_text); }
+    if found.shown() == want.shown() && !found.is_a_view() && !want.is_a_view() { return format!("Make it {}.", spoken(want, Some(found))); }
     let keeps_where_lent = code_keeps_where_lent(found, want);
     let found_written = if keeps_where_lent { nikaia_std::index::or(code_as_written(found), || found_text.into()) } else { nikaia_std::block::Text::from(found_text.to_string()) };
     let shown = if keeps_where_lent { nikaia_std::index::or(code_as_written(want), || want.owned().text().into()) } else { want.owned().text() };

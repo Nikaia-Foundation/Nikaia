@@ -255,7 +255,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
 
 pub(crate) fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
     let mut found: String = String::from("");
-    if !asking.of(left) { found = left.text(); } else if !asking.of(right) { found = right.text(); }
+    if !asking.of(left) { found = left.shown(); } else if !asking.of(right) { found = right.shown(); }
     if found == "" { return None; }
     let note: String = String::from("A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared.");
     Some(check_refusal("NK1188", span, format!("You can't compare two `{}` values with `==`.", found), vec![note], Some(String::from("Compare the parts that matter, or give the type a method that says what being equal means for it."))))
@@ -410,7 +410,7 @@ pub(crate) fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '
             if wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Hash" && wanted_trait != "Clone" || asking.own.traits.contains_key(wanted_trait) { continue; }
             if wanted_trait == "Hash" {
                 let own_bounds = compare_parameter_bounds(&held, parameters);
-                let shown = held.text(); #[allow(clippy::redundant_locals)] let own_bounds = own_bounds;
+                let shown = held.shown(); #[allow(clippy::redundant_locals)] let own_bounds = own_bounds;
                 if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" {
                     if asking.hashes(&held) { continue; }
                     refused.push(check_refusal("NK1164", span, format!("`{}` needs a `Hash` here, but `{}` isn't one.", key, shown), vec![format!("`{}` declares `[{}: Hash]`, so the type passed has to hash, and `{}` doesn't: a float has no equality to hash by, and a type with its own `impl Eq` hashes only with an `impl Hash`.", key, parameter, shown)], Some(String::from("Pass a type that hashes: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those."))));
@@ -426,7 +426,7 @@ pub(crate) fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '
             }
             if wanted_trait == "Clone" {
                 if asking.clones(&held, parameters) { continue; }
-                let shown = held.text();
+                let shown = held.shown();
                 refused.push(check_refusal("NK1164", span, format!("`{}` needs a `Clone` here, but `{}` isn't one.", key, shown), vec![format!("`{}` declares `[{}: Clone]`, so the type passed has to copy, and `{}` can't: a task's handle and a lock are never copied.", key, parameter, shown)], Some(String::from("Pass a type that copies, or hand the value itself to a function without the bound."))));
                 continue;
             }
@@ -435,7 +435,7 @@ pub(crate) fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '
             let own_bounds = compare_parameter_bounds(&held, parameters);
             if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && (own == "Eq" || own == "Hash") { met = true; } } }
             if met { continue; }
-            let shown = held.text();
+            let shown = held.shown();
             let mut what: &'static str = "an equality that is an equivalence";
             if ordered { what = "an order"; }
             let mut help: String = String::from("Pass a type that has one: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those, or a type you declare with an `impl`.");
@@ -489,9 +489,9 @@ pub(crate) fn compare_keys_that_do_not_hash(asking: &CheckComparable<'_, '_, '_,
 }
 
 pub(crate) fn compare_unhashed_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, what: &str, key: &Ty, span: &Span) -> CheckFinding {
-    let shown = key.text();
+    let shown = key.shown();
     let part = asking.unhashed(key);
-    let part_shown = part.text();
+    let part_shown = part.shown();
     let part_name = match part {
         Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => String::from(""),

@@ -20,7 +20,7 @@ fn errors(source: &str) -> Vec<nikaia::check::Finding> {
 }
 
 fn refused_as(found: &[nikaia::check::Finding], ty: &str) -> usize {
-    let message = format!("This value is `{ty}`, but the `let` declares `String`.");
+    let message = format!("This value is {ty}, but the `let` declares `String`.");
     found
         .iter()
         .filter(|f| f.code == "NK1103" && f.message == message)
@@ -39,8 +39,8 @@ fn a_nested_pattern_binds_typed_names() {
          else => 0,\n    }\n}\n\n\
          fn main() {\n    println(f\"{f(E::Num(1))}\")\n}\n",
     );
-    assert_eq!(refused_as(&found, "i64"), 1, "{found:#?}");
-    assert_eq!(refused_as(&found, "ref E"), 1, "{found:#?}");
+    assert_eq!(refused_as(&found, "`i64`"), 1, "{found:#?}");
+    assert_eq!(refused_as(&found, "a view of an `E`"), 1, "{found:#?}");
 }
 
 /// **A lambda's parameters are what the place it stands in declares**: a
@@ -55,7 +55,7 @@ fn a_lambdas_parameters_come_from_the_place() {
          fn main() {\n    let f: fn(i64) -> i64 = fn(z) {\n        let u: String = z\n        z\n    }\n    \
          let g = adder(1)\n    println(f\"{g(2)} {f(3)} {step(1).apply(1)}\")\n}\n",
     );
-    assert_eq!(refused_as(&found, "i64"), 3, "{found:#?}");
+    assert_eq!(refused_as(&found, "`i64`"), 3, "{found:#?}");
 }
 
 /// **A grammar binds `dec[f64](…)` as an `f64`** (Part II 10.8: any number
@@ -114,5 +114,5 @@ fn a_typed_arm_beside_a_literal_types_the_if() {
         "fn f(at: i64) -> i64 {\n    let from = if at >= 2 { at - 2 } else { 0 }\n    let s: String = from\n    0\n}\n\n\
          fn main() {\n    println(f\"{f(3)}\")\n}\n",
     );
-    assert_eq!(refused_as(&found, "i64"), 1, "{found:#?}");
+    assert_eq!(refused_as(&found, "`i64`"), 1, "{found:#?}");
 }

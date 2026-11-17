@@ -1,4 +1,4 @@
-error[NK1103]: This value is `ref D`, but the `let` declares `D`.
+error[NK1103]: This value is a view of a `D`, but the `let` declares a `D` of its own.
   --> tests/a_view_that_does_not_copy_is_not_copied.nika:8:13
    |
  8 | 	let g: D = e

@@ -1,4 +1,4 @@
-error[NK1125]: A `ref String?` may be missing, so you can't reach its method directly.
+error[NK1125]: A `String?` may be missing, so you can't reach its method directly.
   --> tests/a_struct_field_without_its_null_arm_stays_nullable.nika:6:5
    |
  6 |     match v {

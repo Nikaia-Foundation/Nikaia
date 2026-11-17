@@ -35,7 +35,7 @@ impl CheckState {
             },
             _ => { },
         }
-        self.findings.push(check_refusal("NK1167", span, format!("`{}` is a `{}`, which {} can't hold.", bound, held.text(), holder), vec![format!("{} allocates memory, and a value computed at build time can't. It can hold {} instead.", capitalised(&owns), fixed)], Some(way_out)));
+        self.findings.push(check_refusal("NK1167", span, format!("`{}` is a `{}`, which {} can't hold.", bound, held.shown(), holder), vec![format!("{} allocates memory, and a value computed at build time can't. It can hold {} instead.", capitalised(&owns), fixed)], Some(way_out)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -44,7 +44,7 @@ impl CheckState {
         if first != "?" && !first.is_empty() { one = format!("`{}`", first); }
         let other_text = other.text();
         let mut two = nikaia_std::block::Text::from(other_kind.to_string());
-        if other_text != "?" && !other_text.is_empty() { two = format!("`{}`", other_text); }
+        if other_text != "?" && !other_text.is_empty() { two = spoken(other, None); }
         self.findings.push(check_refusal("NK1154", span, format!("This list mixes {} and {}, but a list holds one type.", one, two), vec![String::from("The first element with a known type sets the type for the rest.")], Some(String::from("Convert the element that doesn't fit, or use two lists."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

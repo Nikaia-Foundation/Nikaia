@@ -1066,7 +1066,7 @@ pub(crate) fn check_core_stmt_changes_through_another_owner(state: &CheckState, 
 pub(crate) fn check_core_stmt_a_changing_part(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
     match ty {
         Ty::Named { name, args, .. } => {
-            if check_core_stmt_changes_through_another_owner(state, world, name) { return Some(format!("{}: {}", path, ty.text())); }
+            if check_core_stmt_changes_through_another_owner(state, world, name) { return Some(format!("{}: {}", path, ty.shown())); }
             let mut inner_path: String = format!("{}[…]", path);
             if name == "Shared" || name == "Box" { inner_path = nikaia_std::block::Text::from(path.to_string()); }
             for arg in args.iter() {

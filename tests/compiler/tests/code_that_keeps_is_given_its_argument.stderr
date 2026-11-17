@@ -7,7 +7,7 @@ error[NK2105]: You're using `s` again, but it was passed to `f`, which keeps it.
     = note: `s` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
     = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
     = help: If both need it, hand over a copy: `s.clone()`.
-error[NK1102]: `f` expects argument 1 to be `String`, but you're passing `ref String`.
+error[NK1102]: `f` expects argument 1 to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/code_that_keeps_is_given_its_argument.nika:30:15
     |
  30 |     println(f(s))

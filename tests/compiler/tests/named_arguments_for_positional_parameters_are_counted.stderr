@@ -30,7 +30,7 @@ error[NK1101]: `Tls::files` takes `certificate` and `key` by position, but you p
  27 | 	println(t.files(key: "b", certificate: c))
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: It's declared as `Tls::files(ref Tls, certificate: String, key: String) -> String`.
+    = note: It's declared as `Tls::files(self, certificate: String, key: String) -> String`.
     = note: The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1).
     = help: Write `t.files(c, "b")`.
 4 type errors

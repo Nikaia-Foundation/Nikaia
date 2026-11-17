@@ -1,4 +1,4 @@
-error[NK1102]: `counter` expects `a` to be `String`, but you're passing `ref String`.
+error[NK1102]: `counter` expects `a` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_kept_capture.nika:21:21
     |
  21 |     let c = counter(s)

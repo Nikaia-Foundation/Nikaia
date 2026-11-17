@@ -104,7 +104,7 @@ pub(crate) fn check_core_args_lambda_says_mut(state: &mut CheckState, world: &Ch
         let p = *p;
         if ((at) as usize) < given.len() && lent_mut(unsafe { nikaia_std::proven::read(&given, (at) as usize) }).is_some() && !mutable.contains(&p) {
             let name = nikaia_std::block::Text::from(world.words.resolve(p).to_string());
-            let wanted = code.text();
+            let wanted = code.shown();
             let position: i64 = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             state.findings.push(check_refusal("NK1102", &check_span_at(world, arg, span), format!("This lambda takes `{}` without `mut`, but `{}` lends parameter {} as `mut`.", name, wanted, position), vec![String::from("`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place.")], Some(format!("Write `mut {}`.", name))));
         }
@@ -455,7 +455,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
             held.push(view);
         } else if found.is_unknown() && !state.is_a_number(world, &lock) { held.push(Ty::Unknown); } else {
             let door = check_core_args_door(writing);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1124"), message: format!("`{}` takes locks, but this is a `{}`.", door, found.text()), notes: vec![String::from("Taking several locks together keeps them in one order, and only a lock can be taken.")], help: Some(String::from("Pass `SharedMut[T]` values or `Locked[T]` fields.")), labels: vec![], edit: None });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1124"), message: format!("`{}` takes locks, but this is a `{}`.", door, found.shown()), notes: vec![String::from("Taking several locks together keeps them in one order, and only a lock can be taken.")], help: Some(String::from("Pass `SharedMut[T]` values or `Locked[T]` fields.")), labels: vec![], edit: None });
             held.push(Ty::Unknown);
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -629,7 +629,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
             if !has_kind {
                 has_kind = true;
                 first_kind = nikaia_std::block::Text::from(kind.to_string());
-                first_written = found.text();
+                first_written = found.shown();
             } else if first_kind != kind && !said {
                 said = true;
                 state.a_list_whose_elements_disagree(&first_kind, &first_written, &kind, &found, span);
@@ -654,7 +654,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
             said = true;
             let first = agreed.clone();
             let kind: String = nikaia_std::block::Text::from(nikaia_std::index::or(element_kind(item, &first), || "a value".into()).to_string());
-            state.a_list_whose_elements_disagree(&kind, &first.text(), "a value", &found, span);
+            state.a_list_whose_elements_disagree(&kind, &first.shown(), "a value", &found, span);
         }
     }
     if !said {
@@ -669,7 +669,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
         if float.is_some() && an_integer {
             said = true;
             let first: Ty = nikaia_std::index::or(float, || Ty::Unknown);
-            state.a_list_whose_elements_disagree("a float", &first.text(), "an integer", &Ty::Unknown, span);
+            state.a_list_whose_elements_disagree("a float", &first.shown(), "an integer", &Ty::Unknown, span);
         }
     }
     let common = check_core_args_plain_name(&agreed); #[allow(unused_mut, clippy::redundant_locals)] let mut integers = integers;

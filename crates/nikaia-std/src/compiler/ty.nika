@@ -189,7 +189,7 @@ pub fn text(ty: ref Ty) -> String {
         // `T?` and never `Option[T]`: the program cannot write the second.
         Ty::Nullable(inner) => f"{text(inner)}?",
         Ty::Named { name, args, view } => named_text(name, args, view),
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(item, is_sync, pauses, can_throw, parallel, shape),
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(text(item), is_sync, pauses, can_throw, parallel, shape),
     }
 }
 
@@ -298,9 +298,9 @@ fn named_text(name: ref String, args: ref Array[Ty], view: bool) -> String {
 /// `Seq[T] sync pauses throws ends sized replays`, the words in the order they
 /// are read, so a ledger that goes through this comes out byte for byte (Part
 /// III, 13.5).
-fn sequence(item: ref Ty, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: ref Shape) -> String {
+fn sequence(item: String, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: ref Shape) -> String {
     let word = if parallel { PAR } else { SEQ }
-    let mut out = f"{word}[{text(item)}]"
+    let mut out = f"{word}[{item}]"
     if is_sync {
         out.push_str(" sync")
     }
@@ -312,6 +312,330 @@ fn sequence(item: ref Ty, is_sync: bool, pauses: bool, can_throw: bool, parallel
     }
     for word in Shape::none().missing(shape) {
         out.push_str(ref f" {word}")
+    }
+    return out
+}
+
+impl Ty {
+    /// **A type as a message prints it** (ADR-views-3 D4, D10, #1528): in the
+    /// source's spelling, which writes no `ref` outside `extern "C"`. A view,
+    /// and a view's element or field type, prints as written (`Vec[String]`,
+    /// not `Vec[ref String]`); whether a part is a view is said in words, by
+    /// [`spoken`]. What the C boundary lends keeps its `ref`, because it is
+    /// still written there. [`Ty::text`], which keys tables and `parse`
+    /// reads back, is not this.
+    pub fn shown(ref self) -> String {
+        return ty_shown(self)
+    }
+
+    /// Whether a view stands anywhere in this type ([`holds_a_view`]).
+    fn holds_views(ref self) -> bool {
+        return holds_a_view(self)
+    }
+}
+
+/// [`Ty::shown`], as a function the arms below recurse through.
+pub fn ty_shown(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Var { name, .. } => f"${name}",
+        Ty::Named { name, args, .. } => shown_named(name, args),
+        Ty::Tuple(parts) => f"({shown_listed(parts)})",
+        Ty::Nullable(inner) => f"{ty_shown(inner)}?",
+        Ty::Fn { params, result, is_sync, can_throw } => shown_code(params, result, is_sync, can_throw),
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(ty_shown(item), is_sync, pauses, can_throw, parallel, shape),
+        else => text(ty),
+    }
+}
+
+/// `a, b, c`, each part as a message prints it.
+fn shown_listed(parts: ref Array[Ty]) -> String {
+    let mut out: String = ""
+    for part in parts {
+        if !out.is_empty() {
+            out.push_str(", ")
+        }
+        out.push_str(ref ty_shown(part))
+    }
+    return out
+}
+
+/// `Vec[String]`: the name, `String` for the compiler's noun of a view of
+/// text (ADR-184 D2), and the arguments as written.
+fn shown_named(name: ref String, args: ref Array[Ty]) -> String {
+    let mut out: String = if name == TEXT_VIEW { TEXT.clone() } else { name.clone() }
+    if args.len() > 0 {
+        out.push_str(ref f"[{shown_listed(args)}]")
+    }
+    return out
+}
+
+/// `fn(mut S, String) -> String sync throws`, as a signature writes it.
+fn shown_code(params: ref Array[Ty], result: ref Ty?, is_sync: bool, can_throw: bool) -> String {
+    let mut listed: String = ""
+    for part in params {
+        if !listed.is_empty() {
+            listed.push_str(", ")
+        }
+        listed.push_str(ref shown_param(part))
+    }
+    let mut out = f"fn({listed})"
+    if result != null {
+        let returned = result?.shown() ?? ""
+        out.push_str(ref f" -> {returned}")
+    }
+    if is_sync {
+        out.push_str(" sync")
+    }
+    if can_throw {
+        out.push_str(" throws")
+    }
+    return out
+}
+
+/// **A function type's parameter as a signature writes it** (decision 2 on
+/// #1528, point 3; #1504): one it lends plain, one it changes `mut`, one it
+/// keeps `keep`. A value that copies, an option, a tuple, code and text,
+/// which reads `String` lent or kept (ADR-184 D2), are written plain.
+fn shown_param(part: ref Ty) -> String {
+    let changed = lent_mut(part)
+    if changed != null {
+        return f"mut {changed?.shown() ?? ""}"
+    }
+    let written = ty_shown(part)
+    if a_whole_view(part) {
+        return written
+    }
+    let kept = match part {
+        Ty::Named { name, args, .. } => !(args.is_empty() && (a_number_name(written) || name == "int" || name == "bool" || name == "char" || name == "scalar" || name == TEXT || name == TEXT_VIEW)),
+        Ty::Var { .. } => true,
+        else => false,
+    }
+    if kept {
+        return f"keep {written}"
+    }
+    return written
+}
+
+/// Whether a type is a view as a whole: `ref T` in the compiler's own words.
+fn a_whole_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { view, .. } => view,
+        Ty::Var { view, .. } => view,
+        else => false,
+    }
+}
+
+/// Whether a view stands anywhere in a type, outside what the C boundary
+/// lends.
+fn holds_a_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { args, view, .. } => view || args.iter().any(fn(arg) { holds_a_view(arg) }),
+        Ty::Var { view, .. } => view,
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { holds_a_view(part) }),
+        Ty::Nullable(inner) => holds_a_view(inner),
+        Ty::Fn { result, .. } => (result?.holds_views() ?? false),
+        Ty::Seq { item, .. } => holds_a_view(item),
+        else => false,
+    }
+}
+
+/// **Which parts of a type are views, in words** (decision 2 on #1528,
+/// point 2): `items`, `values`, `keys and values`, `content`, `parts`, the
+/// `result` of code, or `null` where no part below the whole is one.
+fn viewed_parts(ty: ref Ty) -> String? {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if args.len() == 0 {
+                return null
+            }
+            let mapping = name == "HashMap" || name == "BTreeMap" || name.ends_with("::HashMap") || name.ends_with("::BTreeMap")
+            if mapping && args.len() == 2 {
+                let keys = holds_a_view(args[0])
+                let values = holds_a_view(args[1])
+                if keys && values {
+                    return "keys and values"
+                }
+                if keys {
+                    return "keys"
+                }
+                if values {
+                    return "values"
+                }
+                return null
+            }
+            if args.iter().any(fn(arg) { holds_a_view(arg) }) {
+                return "items"
+            }
+            return null
+        },
+        Ty::Tuple(parts) => {
+            if parts.iter().any(fn(part) { holds_a_view(part) }) {
+                return "parts"
+            }
+            return null
+        },
+        Ty::Nullable(inner) => {
+            if holds_a_view(inner) {
+                return "content"
+            }
+            return null
+        },
+        Ty::Seq { item, .. } => {
+            if holds_a_view(item) {
+                return "items"
+            }
+            return null
+        },
+        Ty::Fn { result, .. } => {
+            if (result?.holds_views() ?? false) {
+                return "result"
+            }
+            return null
+        },
+        else => {
+            return null
+        },
+    }
+}
+
+/// `a` or `an`, by the sound the written type starts with.
+fn article_of(written: ref String) -> String {
+    let first = written.chars().next() ?? 'x'
+    if first == 'A' || first == 'E' || first == 'I' || first == 'O' || first == 'U' || first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u' {
+        return "an"
+    }
+    return "a"
+}
+
+/// **What the parts a type holds as views are, said of a type that holds
+/// them**: `whose items are views`, or of code `whose result is a view of
+/// its argument`.
+fn parts_said_as_views(ty: ref Ty, parts: ref String) -> String {
+    if parts == "content" {
+        return "whose content is a view"
+    }
+    if parts == "result" {
+        let taken = match ty {
+            Ty::Fn { params, .. } => params.len(),
+            else => 0,
+        }
+        if taken == 0 {
+            return "whose result is a view"
+        }
+        if taken == 1 {
+            return "whose result is a view of its argument"
+        }
+        return "whose result is a view of its arguments"
+    }
+    return f"whose {parts} are views"
+}
+
+/// The same parts, said of a type that owns them: `whose items are their own`.
+fn parts_said_as_own(parts: ref String) -> String {
+    if parts == "content" || parts == "result" {
+        return f"whose {parts} is its own"
+    }
+    return f"whose {parts} are their own"
+}
+
+/// **A type said in a message** (ADR-views-3 D4, D10; decision 2 on #1528):
+/// `` `T` `` where no part of it is a view; a view in words, ``a view of a
+/// `String` ``, ``a `Vec[String]` whose items are views``. Against `other`,
+/// where the two differ only in what is a view, the side that owns its
+/// value says so: ``a `String` of its own``.
+pub fn spoken(ty: ref Ty, other: ref Ty?) -> String {
+    let written = ty_shown(ty)
+    if holds_a_view(ty) {
+        let mut out = if a_whole_view(ty) { f"a view of {article_of(written)} `{written}`" } else { f"{article_of(written)} `{written}`" }
+        let parts = viewed_parts(ty)
+        if parts != null {
+            out.push_str(ref f" {parts_said_as_views(ty, parts ?? "")}")
+        }
+        return out
+    }
+    let against = other ?? return f"`{written}`"
+    if !holds_a_view(against) || ty_shown(against) != written {
+        return f"`{written}`"
+    }
+    if a_whole_view(against) {
+        return f"{article_of(written)} `{written}` of its own"
+    }
+    let parts = viewed_parts(against) ?? return f"`{written}`"
+    return f"{article_of(written)} `{written}` {parts_said_as_own(parts)}"
+}
+
+/// **A message with its types said** (ADR-views-3 D4, D10, #1528): each
+/// written `` `T` `` that is the text of `first` or `second` is replaced by
+/// [`spoken`], each against the other, and an `a` in front of it that the
+/// words already bring is dropped. The message is written with
+/// [`Ty::text`] and said here once, so two types whose text differs only in
+/// a view are told apart in words, not printed alike.
+pub fn spoken_in(message: ref String, first: ref Ty, second: ref Ty?) -> String {
+    let first_text = text(first)
+    let second_text = if second != null { text(second ?? Ty::Unknown) } else { "" }
+    let parts: Vec[ref String] = message.split("`").collect()
+    let mut out: String = ""
+    let mut at: i64 = 0
+    while at < parts.len() {
+        let part = parts[at]
+        if at % 2 == 1 {
+            if at == parts.len() - 1 {
+                out.push_str("`")
+                out.push_str(part)
+            } else {
+                let said = said_for(part, first, first_text, second, second_text)
+                if said != null {
+                    out.push_str(ref said ?? "")
+                } else {
+                    out.push_str(ref f"`{part}`")
+                }
+            }
+            at += 1
+            continue
+        }
+        let mut led = false
+        if at + 1 < parts.len() - 1 {
+            let next = said_for(parts[at + 1], first, first_text, second, second_text) ?? ""
+            led = next.starts_with("a ") || next.starts_with("an ")
+        }
+        if led && (part == "a " || part.ends_with(" a ")) {
+            out.push_str(part.strip_suffix("a ") ?? part)
+        } else if led && (part == "an " || part.ends_with(" an ")) {
+            out.push_str(part.strip_suffix("an ") ?? part)
+        } else {
+            out.push_str(part)
+        }
+        at += 1
+    }
+    return out
+}
+
+/// The words for one written type of a message: [`spoken`] where it is the
+/// text of `first` or `second` and the words differ from the text, `null`
+/// where it stays as written.
+fn said_for(part: ref String, first: ref Ty, first_text: ref String, second: ref Ty?, second_text: ref String) -> String? {
+    let mut said: String = ""
+    if part == first_text {
+        said = spoken(first, second)
+    } else if second != null && part == second_text {
+        said = spoken(second ?? Ty::Unknown, first)
+    } else {
+        return null
+    }
+    if said == f"`{part}`" {
+        return null
+    }
+    return said
+}
+
+/// **The types in a help or a note, as a message prints them**: each written
+/// `` `T` `` that is the text of `first` or `second` becomes [`Ty::shown`].
+/// A help tells what to write, so a view is written as the source writes it.
+pub fn shown_in(message: ref String, first: ref Ty, second: ref Ty?) -> String {
+    let mut out = message.replace(f"`{text(first)}`", f"`{ty_shown(first)}`")
+    if second != null {
+        let other = second ?? Ty::Unknown
+        out = out.replace(f"`{text(other)}`", f"`{ty_shown(other)}`")
     }
     return out
 }
@@ -1106,18 +1430,36 @@ impl Signature {
 
     /// The ledger's spelling of it.
     pub fn text(ref self) -> String {
+        return self.written(false)
+    }
+
+    /// **As a message prints it** (ADR-views-3 D4, D10, #1528): the
+    /// declaration's spelling, `self` for the receiver and each type as
+    /// [`Ty::shown`] writes it, with no `ref`.
+    pub fn shown(ref self) -> String {
+        return self.written(true)
+    }
+
+    /// [`Signature::text`], or [`Signature::shown`] where `said`.
+    fn written(ref self, said: bool) -> String {
         let mut inside: String = ""
         for (name, ty) in self.params {
             if !inside.is_empty() {
                 inside.push_str(", ")
             }
-            if name == "self" {
+            if name == "self" && said {
+                if self.mutable.contains(name) {
+                    inside.push_str("mut ")
+                }
+                inside.push_str("self")
+            } else if name == "self" {
                 inside.push_str(ref ty.text())
             } else {
                 if self.mutable.contains(name) {
                     inside.push_str("mut ")
                 }
-                inside.push_str(ref f"{name}: {ty.text()}")
+                let typed = if said { ty.shown() } else { ty.text() }
+                inside.push_str(ref f"{name}: {typed}")
             }
         }
         if self.config.len() > 0 {
@@ -1128,7 +1470,8 @@ impl Signature {
                     inside.push_str(", ")
                 }
                 first = false
-                inside.push_str(ref f"{option.name}: {option.ty.text()} = {option.default}")
+                let typed = if said { option.ty.shown() } else { option.ty.text() }
+                inside.push_str(ref f"{option.name}: {typed} = {option.default}")
             }
         }
         // **In front, where the declaration writes them** (ADR-295 D18).
@@ -1159,7 +1502,8 @@ impl Signature {
         if self.result == null {
             return f"{before}({inside})"
         }
-        return f"{before}({inside}) -> {self.result_or_unit().text()}"
+        let returned = if said { self.result_or_unit().shown() } else { self.result_or_unit().text() }
+        return f"{before}({inside}) -> {returned}"
     }
 }
 

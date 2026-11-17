@@ -325,8 +325,10 @@ fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> C
         article = "`if`"
     }
     let mut shown: Vec[String] = []
+    // Each type as a message says it (ADR-views-3 D4, #1528), a view in
+    // words.
     for ty in known {
-        let text = ty.text()
+        let text = spoken(ty, null)
         if !shown.contains(text) {
             shown.push(text)
         }
@@ -339,11 +341,11 @@ fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> C
     while index < shown.len() {
         let one = shown[index].clone()
         if index + 1 == shown.len() {
-            listed = f"{listed} and `{one}`"
+            listed = f"{listed} and {one}"
         } else if index == 0 {
-            listed = f"`{one}`"
+            listed = one.clone()
         } else {
-            listed = f"{listed}, `{one}`"
+            listed = f"{listed}, {one}"
         }
         index = index + 1
     }

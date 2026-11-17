@@ -411,7 +411,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
     let kind = check_attributes_literal_misfit(arg, &want);
     if kind.is_some() {
         let said = match kind { Some(__nikaia_value) => __nikaia_value, None => return };
-        let wanted = want.text();
+        let wanted = want.shown();
         state.findings.push(check_refusal("NK1102", span, format!("`@{}`'s `{}` is `{}`, and this gives {}.", owner, field_name, wanted, said), vec![], Some(format!("Give `{}` a `{}`.", field_name, wanted))));
         return;
     }

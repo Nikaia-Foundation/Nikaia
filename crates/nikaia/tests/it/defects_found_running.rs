@@ -359,7 +359,8 @@ fn a_lent_element_kept_whole_is_refused() {
     );
     assert!(
         found.iter().any(|f| f.code == "NK1102"
-            && f.message.contains("`Vec::push` expects `value` to be `P`")
+            && f.message
+                .contains("`Vec::push` expects `value` to be a `P` of its own")
             && f.help
                 .as_deref()
                 .is_some_and(|help| help.contains(".clone()"))),

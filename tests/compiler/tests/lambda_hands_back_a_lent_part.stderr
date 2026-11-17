@@ -14,7 +14,7 @@ error[NK1131]: You can't give away `row.name` here: `row` is only borrowed.
     |
     = note: `row` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `row.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
     = help: Write `row.name.clone()` for a copy: a lambda hands back a value of its own.
-error[NK1104]: This lambda returns `ref String`, a view, but `sort_by_key` wants a key of its own.
+error[NK1104]: This lambda returns a view of a `String`, but `sort_by_key` wants a key of its own.
    --> tests/lambda_hands_back_a_lent_part.nika:31:34
     |
  31 |     texts.sort_by_key fn (row) { row }
@@ -22,7 +22,7 @@ error[NK1104]: This lambda returns `ref String`, a view, but `sort_by_key` wants
     |
     = note: `sort_by_key` moves the items while it compares their keys, so a key may not point into an item.
     = help: Hand back a copy with `.clone()`.
-error[NK1104]: This lambda returns `ref String`, a view, but `sort_by_key` wants a key of its own.
+error[NK1104]: This lambda returns a view of a `String`, but `sort_by_key` wants a key of its own.
    --> tests/lambda_hands_back_a_lent_part.nika:32:33
     |
  32 |     rows.sort_by_key fn (row) { row.name.trim() }

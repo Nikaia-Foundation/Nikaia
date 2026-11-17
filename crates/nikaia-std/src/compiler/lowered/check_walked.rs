@@ -114,7 +114,7 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
             if written != function { continue; }
             any = true;
             out.push_str(&format!("comptime: `{}` unrolled over `{}` as `{}`\n", function, on, check_specialised(function, on)));
-            for field in fields.iter() { out.push_str(&format!("    {}: {}\n", field.name, field.ty.text())); }
+            for field in fields.iter() { out.push_str(&format!("    {}: {}\n", field.name, field.ty.shown())); }
         }
         if !any { out.push_str(&format!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }
     }

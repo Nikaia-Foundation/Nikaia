@@ -197,11 +197,11 @@ fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, gi
     let named = check_arguments_named(world, given)
     let mut refusal: CheckKept? = state.a_view_kept(handed, want, named, keeper)
     if refusal == null && state.a_view_of_what_does_not_copy(world, handed, want) {
-        refusal = CheckKept { notes: [f"This is a view: it points into a `{want.text()}` that something else owns.", f"{capitalised(keeper)}, so it needs a `{want.text()}` of its own."], help: "Write `.clone()` to copy it here." }
+        refusal = CheckKept { notes: [f"This is a view: it points into a `{want.shown()}` that something else owns.", f"{capitalised(keeper)}, so it needs a `{want.shown()}` of its own."], help: "Write `.clone()` to copy it here." }
     }
     if refusal != null {
         let why = refusal ?? return
-        state.findings.push(check_refusal("NK1102", check_span_at(world, given, span), f"`{name}` expects argument {nth} to be `{want.text()}`, but you're passing `{handed.text()}`.", why.notes, why.help))
+        state.findings.push(check_refusal("NK1102", check_span_at(world, given, span), spoken_in(f"`{name}` expects argument {nth} to be `{want.text()}`, but you're passing `{handed.text()}`.", want, handed), why.notes, why.help))
         return
     }
     // Code handed to code is kept as the lowering shares it (#1120).

@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/for_over_lines_of_a_throwing_call_refused.nika:16:61
     |
  16 |             if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
@@ -8,7 +8,7 @@ error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passi
     = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/for_over_lines_of_a_throwing_call_refused.nika:21:20
     |
  21 |         parts.push(part)
@@ -18,7 +18,7 @@ error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passi
     = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/for_over_lines_of_a_throwing_call_refused.nika:24:18
     |
  24 |     trimmed.push(text().trim())

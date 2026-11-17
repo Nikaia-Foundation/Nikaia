@@ -13,7 +13,7 @@ use std::collections
 fn members_named(members: ref Vec[Ty]) -> String sync {
     let mut names: Vec[String] = []
     for member in members {
-        names.push(f"`{member.text()}`")
+        names.push(f"`{member.shown()}`")
     }
     return names.join(", ")
 }

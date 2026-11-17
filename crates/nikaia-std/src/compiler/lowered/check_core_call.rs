@@ -125,10 +125,10 @@ pub(crate) fn check_core_call_kept_by_code(state: &mut CheckState, world: &Check
     let keeper = format!("`{}` keeps its argument {} after the call returns", name, nth);
     let named = check_arguments_named(world, Some(given));
     let mut refusal: Option<CheckKept> = state.a_view_kept(&handed, want, (named).as_deref(), &keeper);
-    if refusal.is_none() && state.a_view_of_what_does_not_copy(world, &handed, want) { refusal = Some(CheckKept { notes: vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("{}, so it needs a `{}` of its own.", capitalised(&keeper), want.text())], help: String::from("Write `.clone()` to copy it here.") }); }
+    if refusal.is_none() && state.a_view_of_what_does_not_copy(world, &handed, want) { refusal = Some(CheckKept { notes: vec![format!("This is a view: it points into a `{}` that something else owns.", want.shown()), format!("{}, so it needs a `{}` of its own.", capitalised(&keeper), want.shown())], help: String::from("Write `.clone()` to copy it here.") }); }
     if refusal.is_some() {
         let why = match refusal { Some(__nikaia_value) => __nikaia_value, None => return };
-        state.findings.push(check_refusal("NK1102", &check_span_at(world, given, span), format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want.text(), handed.text()), why.notes, Some(why.help)));
+        state.findings.push(check_refusal("NK1102", &check_span_at(world, given, span), spoken_in(&format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want.text(), handed.text()), want, Some(&handed)), why.notes, Some(why.help)));
         return;
     }
     match found {

@@ -1,4 +1,4 @@
-error[NK1102]: `enrol` expects `p` to be `Person`, but you're passing `ref Person`.
+error[NK1102]: `enrol` expects `p` to be a `Person` of its own, but you're passing a view of a `Person`.
    --> tests/a_for_element_is_refused_to_a_parameter_that_keeps.nika:12:15
     |
  12 |         enrol(p, club)

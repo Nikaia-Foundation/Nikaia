@@ -56,7 +56,7 @@ impl CheckState {
         let function = self.current?.clone() ?? return
         let named: String = match thrown {
             Ty::Unknown => "",
-            else => f" `{thrown.text()}`",
+            else => f" `{thrown.shown()}`",
         }
         let mut help: String = f"Add `throws` to `{function}`, or handle the failure with `… catch {{ … }}` where it is called."
         if self.inside_a_drop && function.ends_with("::drop") {

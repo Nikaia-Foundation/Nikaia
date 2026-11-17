@@ -1,4 +1,4 @@
-error[NK1106]: `Named.name` holds `String`, but you're giving it `ref String`.
+error[NK1106]: `Named.name` holds a `String` of its own, but you're giving it a view of a `String`.
    --> tests/ownership_matrix_view_kept_field.nika:22:28
     |
  22 |     all.push(Named { name: s })

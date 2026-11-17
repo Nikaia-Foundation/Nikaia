@@ -1067,7 +1067,7 @@ fn a_variant_field_of_the_wrong_type_is_refused() {
     assert!(
         found[0]
             .message
-            .contains("`Shape::Spot.x` holds `i64`, but you're giving it `ref String`"),
+            .contains("`Shape::Spot.x` holds `i64`, but you're giving it a view of a `String`"),
         "{}",
         found[0].message
     );

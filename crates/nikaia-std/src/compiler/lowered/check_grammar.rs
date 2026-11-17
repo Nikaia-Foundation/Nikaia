@@ -402,9 +402,9 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat);
                 self.grammar_values(world, host, gram, pat, rules, scope.copy_owned());
                 let whole = pattern_named("i64", false);
-                self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."));
+                self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.");
                 match high {
-                    Some(bound) => { self.grammar_fixed(world, host, bound, &whole, &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.")); },
+                    Some(bound) => { self.grammar_fixed(world, host, bound, &whole, &scope, &pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."); },
                     None => { },
                 }
                 return scope;
@@ -417,7 +417,7 @@ impl CheckState {
                 return scope;
             },
             Pattern::Guard { cond, .. } => {
-                self.grammar_fixed(world, host, cond, &pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
+                self.grammar_fixed(world, host, cond, &pattern_named("bool", false), &scope, &pattern.span, "A guard", "A guard is a condition: compare, as in `if(m > n)`.");
                 return scope;
             },
             Pattern::Call { name, args, config } => {
@@ -431,7 +431,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
+    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: &str) {
         self.scope.push(scope.copy_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
@@ -440,7 +440,7 @@ impl CheckState {
         self.repeats.pop();
         self.scope.pop();
         if found.is_unknown() || found.text() == want.text() { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("{} here is `{}`, but it has to be `{}`.", what, found.text(), want.text()), vec![], Some(help)));
+        self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("{} here is `{}`, but it has to be `{}`.", what, found.text(), want.text()), &found, Some(&want)), vec![], Some(shown_in(help, &found, Some(&want)))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

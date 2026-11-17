@@ -103,7 +103,7 @@ impl CheckState {
             return;
         }
         let written = written_expression(world.words, hole);
-        let mut what: String = format!("`{}`", held.text());
+        let mut what: String = format!("`{}`", held.shown());
         let mut help: String = String::from("Write the parts you want in holes of their own, or build the text in a loop first.");
         if printed { help = String::from("Print the parts you want in holes of an `f\"…\"`, or build the text in a loop first."); }
         if is_a_list_type(held) {
@@ -163,12 +163,12 @@ impl CheckState {
             },
             Ty::Named { ref name, .. } => {
                 if name == "SharedMut" || name == "Locked" {
-                    let mut message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.text());
-                    let mut note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                    let mut message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.shown());
+                    let mut note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.shown());
                     let mut out = format!("Take the value out first: `let value = {}.get()`, then write `{{value}}`.", shown);
                     if printed {
-                        message = format!("You can't print a `{}`.", held.text());
-                        note = format!("A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                        message = format!("You can't print a `{}`.", held.shown());
+                        note = format!("A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.shown());
                         out = format!("Take the value out first: `let value = {}.get()`, then print `value`.", shown);
                     }
                     self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(out)));
@@ -229,7 +229,7 @@ impl CheckState {
             },
             _ => { return; },
         }
-        let mut called: String = format!("`{}`", held.text());
+        let mut called: String = format!("`{}`", held.shown());
         if what == "a range" || what == "a tuple" { called = nikaia_std::block::Text::from(what.to_string()); }
         if printed {
             let note = format!("A print call writes its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
@@ -243,11 +243,11 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let inner = match over {
-            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.text() },
+            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.shown() },
             _ => return,
         };
         let written = written_expression(world.words, iter);
-        let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.text(), inner);
+        let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.shown(), inner);
         let help = format!("Say what `null` walks first: `for … in {} ?? [] {{ … }}`, or check it for `null` before the loop.", written);
         self.findings.push(check_refusal("NK1206", span, format!("`{}` may be `null`, so a `for` can't walk it directly.", written), vec![note], Some(help)));
     }
@@ -277,9 +277,9 @@ impl CheckState {
         };
         if !moves(held) || self.copies_in_the_package.contains(&name) { return; }
         let written = written_expression(world.words, read);
-        let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.text());
+        let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.shown());
         let notes: Vec<String> = vec![String::from("The map keeps its values, so reading one gives a view of it, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back.")];
-        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written); #[allow(clippy::redundant_locals)] let notes = notes;
+        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.shown(), written); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -329,7 +329,7 @@ impl CheckState {
         let wanted = Ty::Named { name: String::from("bool"), args: vec![], view: false };
         if found.fits(&wanted) { return; }
         let help: String = String::from("Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.");
-        self.findings.push(check_refusal("NK1108", span, format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), vec![nikaia_std::block::Text::from(why.to_string())], Some(help)));
+        self.findings.push(check_refusal("NK1108", span, spoken_in(&format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), found, None), vec![nikaia_std::block::Text::from(why.to_string())], Some(help)));
     }
 }
 

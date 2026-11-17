@@ -501,7 +501,7 @@ impl CheckState {
             again = f"a {what} only reads the labels of its alternative: they stay the alternative's, for its action"
         }
         let copy = a_copy_said(path, ty)
-        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
+        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.shown()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
     }
 
     /// **A taking in a loop that a `break` or a `return` may end** (#1366):
@@ -808,7 +808,7 @@ impl CheckState {
                 continue
             }
             said.insert(used.at)
-            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{a_copy_said(name, taken.ty)}`."))
+            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.shown()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{a_copy_said(name, taken.ty)}`."))
         }
         self.handed = []
         for one in found {
@@ -912,11 +912,11 @@ impl CheckState {
             if given_back {
                 continue
             }
-            let mut first: String = f"A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the task."
+            let mut first: String = f"A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.shown()}`, so it went to the task."
             if who == "a detached task" {
-                first = f"A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the task."
+                first = f"A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.shown()}`, so it went to the task."
             } else if who != "a background task" {
-                first = f"A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the function."
+                first = f"A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{name}` is a `{ty.shown()}`, so it went to the function."
             }
             found.push(check_refusal("NK2101", Span { start: used as u32, end: used as u32 }, f"You're using `{name}` after {who} took it.", [first, "Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied."], f"Make a copy before and hand over the copy: `let copy = {name}.clone()`, then use `copy` inside."))
         }
@@ -1262,7 +1262,7 @@ impl CheckState {
         let at = check_span_at(world, expr, span)
         if self.a_clone_that_copies(world, copy) {
             let what: String = dotted_path(world, receiver) ?? "the value"
-            self.a_needless_clone(at, f"`{what}` is a `{copy.text()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.", clone_deleted(world, expr, receiver))
+            self.a_needless_clone(at, f"`{what}` is a `{copy.shown()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.", clone_deleted(world, expr, receiver))
             return
         }
         let name = match receiver {

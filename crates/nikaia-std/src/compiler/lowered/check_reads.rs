@@ -103,10 +103,10 @@ impl CheckState {
             return;
         }
         if self.flow.list_gets.contains(&node) {
-            self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a list's `get` is a view of what the list keeps.", want.text()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `xs.get(i)?.clone()`."))));
+            self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a list's `get` is a view of what the list keeps.", want.shown()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `xs.get(i)?.clone()`."))));
             return;
         }
-        self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", want.text()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", want.shown()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -134,7 +134,7 @@ impl CheckState {
                     let added = self.facts.copied_reads.insert(node);
                     return;
                 }
-                self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", into.text()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
+                self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", into.shown()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
             },
             _ => { },
         }

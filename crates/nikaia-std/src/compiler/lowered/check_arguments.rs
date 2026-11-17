@@ -126,7 +126,7 @@ pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &C
     let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if !names.is_empty() { takes = names_listed(&names); }
     let message = format!("`{}` takes {} by position, but you passed {} and {} by position.", key, takes, counted(passed.len() as i64, "named argument"), given.len() as i64);
-    let declared = format!("It's declared as `{}{}`.", key, signature.text());
+    let declared = format!("It's declared as `{}{}`.", key, signature.shown());
     if (unsafe { nikaia_std::proven::add::<i64>(given.len() as i64, passed.len() as i64) }) != wanted.len() as i64 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
     #[allow(unused_mut)] let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
@@ -158,14 +158,14 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let mut help: String = format!("Call it without arguments: `{}()`.", key);
         if !wanted.is_empty() {
             let mut takes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.text())); }
+            for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.shown())); }
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
         if !passed.is_empty() {
             state.findings.push(check_arguments_named_for_positional(&state, world, key, signature, &wanted, given, passed, help, span));
             return signature.result_or_unit();
         }
-        state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
+        state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.shown())], Some(help)));
         return signature.result_or_unit();
     }
     state.a_length_that_fits_its_buffer(world, written, &wanted, given, found, span);
@@ -231,7 +231,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
     if contract.interns && !passed.iter().any(|p| { p.0 == "words" }) && !signature.config.iter().any(|o| { o.name == "words" }) {
         let result = signature.result_or_unit();
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.text()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
+        if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.shown()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
     }
     let text_view = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut expanded: Vec<CheckArgument<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -446,7 +446,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
                 value = names_of(world, arg);
             }
             let mut message: String = format!("`{}` takes a shared value, but this isn't one.", key);
-            let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.text());
+            let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.shown());
             let hull: String = match want {
                 Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
                 _ => String::from(""),
@@ -456,7 +456,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
                 message = format!("`{}` takes a shared value, but `{}` isn't one.", key, shown);
                 if !hull.is_empty() { help = format!("Wrap it: `{}({})`.", hull, shown); }
             } else if !hull.is_empty() { help = format!("Wrap it: `{}(…)`.", hull); }
-            state.findings.push(check_refusal("NK1115", span, message, vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
+            state.findings.push(check_refusal("NK1115", span, message, vec![format!("It's declared as `{}{}`.", key, signature.shown())], Some(help)));
             continue;
         }
         if state.a_name_in_text(world, &want, given_here, span) { continue; }
@@ -469,7 +469,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.shown())];
         let mut help: String = way_out_of_a_mismatch(&found_here, &want); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
@@ -477,21 +477,21 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
             for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
             help = nikaia_std::block::Text::from(kept_why.help.to_string());
         } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
-            notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.text()));
+            notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.shown()));
             notes.push(format!("{}, so it needs one of its own.", capitalised(&keeper)));
             help = format!("Write `.clone()` to hand `{}` a copy of its own.", key);
         }
         let differs: i64 = check_arguments_mut_differs(&found_here, &want);
         if differs > 0 {
             notes.push(format!("Parameter {} differs in `mut`: `fn(S)` and `fn(mut S)` are different types, and the code a `fn(mut S)` stands for changes that argument in place.", differs));
-            help = format!("Declare parameter {} the way `{}` says, with or without `mut`.", differs, want.text());
+            help = format!("Declare parameter {} the way `{}` says, with or without `mut`.", differs, want.shown());
         }
         let mut at_span = span.clone();
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             at_span = check_span_at(world, value, span);
         }
-        state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, declared.text(), found_here.text()), notes, Some(help)));
+        state.findings.push(check_refusal("NK1102", &at_span, spoken_in(&format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, declared.text(), found_here.text()), &declared, Some(&found_here)), notes, Some(shown_in(&help, &declared, Some(&found_here)))));
     }
     signature.result_or_unit()
 }

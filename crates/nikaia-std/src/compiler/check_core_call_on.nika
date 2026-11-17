@@ -385,7 +385,7 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
             let shown = given.text()
             let mut said: String = f"`add` feeds the hasher, and `{shown}` doesn't hash."
             if part.text() != shown {
-                said = f"`add` feeds the hasher, and `{shown}` doesn't hash: its part `{part.text()}` doesn't."
+                said = f"`add` feeds the hasher, and `{shown}` doesn't hash: its part `{part.shown()}` doesn't."
             }
             state.findings.push(check_refusal("NK1260", span, said, ["What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself)."], "Feed it the parts `eq` compares that hash, such as an integer or a text made from the value."))
         }
@@ -883,7 +883,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: spoken_in(f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
         }
     }
 }
@@ -914,7 +914,7 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
         return
     }
     let at = check_span_at(world, args[0], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: spoken_in(f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
 }
 
 /// A type with every view dropped and a text literal's `str` called `String`,
@@ -1047,7 +1047,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
     // number has no type yet, so it read as `?` and fit; the receiver's
     // binding is the use that decides it (ADR-285 D2), and none can.
     if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, args[at]) && state.no_integer_is(world, want) {
-        let wanted = want.text()
+        let wanted = want.shown()
         let number_at = check_span_at(world, args[at], span)
         let message: String = f"`{key}` expects `{wanted}` here, but you're passing a number."
         let help: String = f"Make it a `{wanted}`, or give the number to a place that holds one."
@@ -1058,7 +1058,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
         return
     }
     let at_span = check_span_at(world, args[at], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: spoken_in(f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
 }
 
 /// **A list literal handed to `extend` is a list of the receiver's elements**
@@ -1802,7 +1802,7 @@ fn check_core_call_on_a_viewed_key(mut state: CheckState, world: ref CheckWorld,
         },
         else => {},
     }
-    state.findings.push(check_refusal("NK1104", at, f"This lambda returns `{key.text()}`, a view, but `sort_by_key` wants a key of its own.", ["`sort_by_key` moves the items while it compares their keys, so a key may not point into an item."], "Hand back a copy with `.clone()`."))
+    state.findings.push(check_refusal("NK1104", at, spoken_in(f"This lambda returns `{key.text()}`, but `sort_by_key` wants a key of its own.", key, null), ["`sort_by_key` moves the items while it compares their keys, so a key may not point into an item."], "Hand back a copy with `.clone()`."))
 }
 
 /// Whether a type is a view or a tuple with one among its parts.
