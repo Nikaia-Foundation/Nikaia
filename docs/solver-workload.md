@@ -513,6 +513,8 @@ solve:
 | QF_LRA seeds | 24 | 4.1 M | 8.7 M | 17.6 M | 776 M | 217 M | 467 M |
 | all | 47 | 12.5 M | 14.0 M | 18.9 M | 16 060 M | 1 909 M | 2 366 M |
 
+Without the copies the solver only read (#1987, 2026-11-17), ours, median / total: Bromberger 408.1 M, SMPT 80.4 M / 14 176 M, QF_LIA seeds 60.4 M / 655 M, QF_LRA seeds 4.1 M / 769 M, all 12.5 M / 16 007 M (0.3 % fewer), the same answers.
+
 A small query costs ours fewer instructions than either (the QF_LRA seeds:
 a half of z3's median, a quarter of cvc5's): no start-up to pay. A hard one
 costs many times more: SMPT's total is 38 times z3's, one file

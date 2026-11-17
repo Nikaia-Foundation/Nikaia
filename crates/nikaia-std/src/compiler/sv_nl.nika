@@ -308,14 +308,14 @@ fn sv_nl_isqrt(n: i64) -> i64? {
 fn sv_nl_candidates(defs: ref Vec[SvNl], values: ref collections::BTreeMap[String, SvRat]) -> Vec[SvLemma] {
 	let mut out: Vec[SvLemma] = []
 	for i in 0..<defs.len() {
-		let t = defs[i].clone()
+		let t = defs[i]
 		let a = sv_real_named(values, t.a)
 		let b = sv_real_named(values, t.b)
 		for j in 0..<defs.len() {
 			if j != i && defs[j].op == t.op {
 				let mut c = sv_lemma("congruence", i)
 				c.other = j
-				out.push(c.clone())
+				out.push(c)
 				if t.op == "*" || t.op == "pow2" {
 					let mut mono = sv_lemma(if t.op == "*" { "mono" } else { "pow2-mono" }, i)
 					mono.other = j

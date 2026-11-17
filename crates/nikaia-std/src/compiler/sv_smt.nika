@@ -185,7 +185,7 @@ impl SvTh for SvBoth {
 				self.ran_at = here
 				self.exact_checks += 1
 				return match self.exact.check(false, limit, book) {
-					SvChecked::Conflict(c) => SvChecked::Conflict(c.clone()),
+					SvChecked::Conflict(c) => SvChecked::Conflict(c),
 					else => got,
 				}
 			},
@@ -459,7 +459,7 @@ fn sv_smt_congruences(
 	}
 	let mut c = 0
 	while c < cnf.query.clauses.len() {
-		let clause = cnf.query.clauses[c].clone()
+		let clause = cnf.query.clauses[c]
 		if clause.len() == 2 {
 			for k in [0, 1] {
 				let d = clause[k]
@@ -474,7 +474,7 @@ fn sv_smt_congruences(
 	}
 	c = 0
 	while c < cnf.query.clauses.len() {
-		let clause = cnf.query.clauses[c].clone()
+		let clause = cnf.query.clauses[c]
 		let mut defined = clause.len() >= 2
 		for l in clause {
 			if l % 2 == 0 || !cnf.definition[(l / 2) as i64] {
@@ -538,7 +538,7 @@ fn sv_smt_congruence(
 		let mut found = false
 		let mut i = 0
 		while i < n && !found {
-			let pr = rows[i].clone()
+			let pr = rows[i]
 			i += 1
 			if pr.row.ks != [1] {
 				continue
@@ -673,7 +673,7 @@ fn sv_smt_search_cnf(
 	p: ref SvParams,
 	phases: ref Vec[bool],
 ) -> SvEngineRun {
-	let theory = p.theory.clone()
+	let theory = p.theory
 	let real = cnf.query.reals.len() > 0
 	if real && theory == "fm" {
 		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)

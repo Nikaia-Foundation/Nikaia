@@ -156,7 +156,7 @@ fn sv_mod_hat(a: i64, m: i64) -> i64 {
 fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32? {
 	let mut low = lo
 	let mut high = hi
-	let r = held[lo].row.clone()
+	let r = held[lo].row
 	let mut k = 0
 	let mut i = 1
 	while i < r.ks.len() {
@@ -169,8 +169,9 @@ fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32
 		low = hi
 		high = lo
 	}
-	let row = held[low].row.clone()
+	let row = held[low].row
 	let m = row.ks[k].checked_add(1) ?? return null
+	let col = row.cols[k]
 	let mut terms: Vec[SvTerm] = []
 	for j in 0..<row.cols.len() {
 		let h = sv_mod_hat(row.ks[j], m)
@@ -191,7 +192,7 @@ fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32
 		let made = (book.bounds.get(id) ?? return null).row.clone()
 		held.push(SvHeld { row: made, src: SvSrc::Fact(id) })
 	}
-	return row.cols[k]
+	return col
 }
 
 /// The products `N_u·N_v` and `N_v·N_v` of two columns' vectors over the
@@ -605,7 +606,7 @@ fn sv_omega_test_holds(atoms: ref Vec[SvAtom], names: ref Vec[String], values: r
 		let mut sum = a.row.constant
 		let mut i = 0
 		while i < a.row.cols.len() {
-			let name = names[a.row.cols[i] as i64].clone()
+			let name = names[a.row.cols[i] as i64]
 			let v = values.get(name) ?? return false
 			sum = sum + a.row.ks[i] * v
 			i += 1

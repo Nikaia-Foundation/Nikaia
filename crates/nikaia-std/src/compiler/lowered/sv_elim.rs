@@ -94,7 +94,7 @@ pub(crate) fn sv_mod_hat(a: i64, m: i64) -> i64 {
 pub(crate) fn sv_extended(held: &mut Vec<SvHeld>, lo: i64, hi: i64, book: &mut SvBook) -> Option<u32> {
     let mut low = lo;
     let mut high = hi;
-    let r = unsafe { nikaia_std::proven::read(&held, (lo) as usize) }.row.clone();
+    let r = &unsafe { nikaia_std::proven::read(&held, (lo) as usize) }.row;
     let mut k: i64 = 0;
     let mut i: i64 = 1;
     while ((i) as usize) < r.ks.len() {
@@ -105,8 +105,9 @@ pub(crate) fn sv_extended(held: &mut Vec<SvHeld>, lo: i64, hi: i64, book: &mut S
         low = hi;
         high = lo;
     }
-    let row = nikaia_std::index::get(&held, nikaia_std::index::at(low)).row.clone();
+    let row = &nikaia_std::index::get(&held, nikaia_std::index::at(low)).row;
     let m = match (*nikaia_std::index::get(&row.ks, nikaia_std::index::at(k))).checked_add(1) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let col = *nikaia_std::index::get(&row.cols, nikaia_std::index::at(k));
     let mut terms: Vec<SvTerm> = vec![];
     for j in 0..row.cols.len() as i64 {
         let h = sv_mod_hat(*nikaia_std::index::get(&row.ks, (j) as usize), m);
@@ -123,7 +124,7 @@ pub(crate) fn sv_extended(held: &mut Vec<SvHeld>, lo: i64, hi: i64, book: &mut S
         let made = match book.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None }.row.clone();
         held.push(SvHeld { row: made, src: SvSrc::Fact(id) });
     }
-    Some(*nikaia_std::index::get(&row.cols, nikaia_std::index::at(k)))
+    Some(col)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -439,8 +440,8 @@ pub(crate) fn sv_omega_test_holds(atoms: &[SvAtom], names: &[String], values: &c
         let mut sum = a.row.constant;
         let mut i: i64 = 0;
         while ((i) as usize) < a.row.cols.len() {
-            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&a.row.cols, (i) as usize) } as i64))).to_string());
-            let v = match values.get(&name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
+            let name = nikaia_std::index::get(&names, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&a.row.cols, (i) as usize) } as i64));
+            let v = match values.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
             sum = sum + *nikaia_std::index::get(&a.row.ks, (i) as usize) * v;
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }

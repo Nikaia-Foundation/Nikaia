@@ -213,14 +213,14 @@ pub(crate) fn sv_nl_isqrt(n: i64) -> Option<i64> {
 pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Vec<SvLemma> {
     let mut out: Vec<SvLemma> = vec![];
     for i in 0..defs.len() as i64 {
-        let t = (*unsafe { nikaia_std::proven::read(&defs, (i) as usize) }).clone();
+        let t = unsafe { nikaia_std::proven::read(&defs, (i) as usize) };
         let a = sv_real_named(values, &t.a);
         let b = sv_real_named(values, &t.b);
         for j in 0..defs.len() as i64 {
             if j != i && unsafe { nikaia_std::proven::read(&defs, (j) as usize) }.op == t.op {
                 let mut c = sv_lemma(String::from("congruence"), i);
                 c.other = j;
-                out.push(c.clone());
+                out.push(c);
                 if t.op == "*" || t.op == "pow2" {
                     let mut mono = sv_lemma(if t.op == "*" { String::from("mono") } else { String::from("pow2-mono") }, i);
                     mono.other = j;

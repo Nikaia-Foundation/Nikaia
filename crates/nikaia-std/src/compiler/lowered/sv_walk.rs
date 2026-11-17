@@ -195,7 +195,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
     }
     let mut a: i64 = 0;
     while a < atoms {
-        let row = unsafe { nikaia_std::proven::read(&query.atoms, (a) as usize) }.row.clone();
+        let row = &unsafe { nikaia_std::proven::read(&query.atoms, (a) as usize) }.row;
         let mut i: i64 = 0;
         while ((i) as usize) < row.cols.len() {
             let col = *unsafe { nikaia_std::proven::read(&row.cols, (i) as usize) } as i64;

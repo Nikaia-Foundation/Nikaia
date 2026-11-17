@@ -314,7 +314,7 @@ impl LgIndexed {
         for item in alternative.iter() {
             let item = *item;
             if !item.atom { continue; }
-            let atom = (*nikaia_std::index::get(&self.atoms, nikaia_std::index::at(item.n))).clone();
+            let atom = nikaia_std::index::get(&self.atoms, nikaia_std::index::at(item.n));
             let mut at: i64 = 0;
             let mut placed = false;
             while at < by_form.len() as i64 {
@@ -669,15 +669,15 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
     let mut round = names.len() as i64;
     while round > 0 {
         round = unsafe { nikaia_std::proven::sub::<i64>(round, 1) };
-        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (round) as usize) }).to_string());
+        let name = unsafe { nikaia_std::proven::read(&names, (round) as usize) };
         let mut low: Option<i64> = None;
         let mut high: Option<i64> = None;
         for bound in (*nikaia_std::index::get(&bounds, nikaia_std::index::at(round))).iter() {
-            let k = nikaia_std::index::or(bound.terms.get(&name), || 0);
+            let k = nikaia_std::index::or(bound.terms.get(name), || 0);
             let mut rest = bound.constant;
             for (other, c) in bound.terms.iter() {
                 let c = nikaia_std::num::value(c);
-                if *other != name {
+                if other != name {
                     let value = values.get(other);
                     if value.is_none() { return LgClosed::Consistent { found: false, values: collections::BTreeMap::new() }; }
                     let product = c.checked_mul(nikaia_std::index::or(value, || 0));
@@ -716,7 +716,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
     let mut at = last;
     while at >= 0 {
         if *nikaia_std::index::get(&needed, nikaia_std::index::at(at)) {
-            match (*unsafe { nikaia_std::proven::read(&steps, (at) as usize) }).clone() {
+            match *unsafe { nikaia_std::proven::read(&steps, (at) as usize) } {
                 LgStep::Hypothesis(_) => { },
                 LgStep::Tighten(from) => { { let __nikaia_stored = true; nikaia_std::index::set(&mut needed, nikaia_std::index::at(from), __nikaia_stored); } },
                 LgStep::Combine { left, right, .. } => {
@@ -734,7 +734,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
     while at <= last {
         if *nikaia_std::index::get(&needed, nikaia_std::index::at(at)) {
             { let __nikaia_stored = kept.len() as i64; unsafe { nikaia_std::proven::write(&mut renumbered, (at) as usize, __nikaia_stored) }; }
-            match (*unsafe { nikaia_std::proven::read(&steps, (at) as usize) }).clone() {
+            match *unsafe { nikaia_std::proven::read(&steps, (at) as usize) } {
                 LgStep::Hypothesis(i) => { kept.push(LgStep::Hypothesis(i)); },
                 LgStep::Tighten(from) => { kept.push(LgStep::Tighten(*nikaia_std::index::get(&renumbered, nikaia_std::index::at(from)))); },
                 LgStep::Combine { left, by_left, right, by_right } => { kept.push(LgStep::Combine { left: *nikaia_std::index::get(&renumbered, nikaia_std::index::at(left)), by_left, right: *nikaia_std::index::get(&renumbered, nikaia_std::index::at(right)), by_right }); },

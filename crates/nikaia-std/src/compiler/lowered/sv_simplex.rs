@@ -104,16 +104,14 @@ pub(crate) fn sv_simplex(names: Vec<String>) -> SvSimplex { SvSimplex { names, c
 
 pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClause> {
     let mult = match sv_sx_multipliers(parts) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let sources = mult.sources.copy_owned();
-    let ms = mult.ms.copy_owned();
     let mut row = sv_row_constant(0);
     let mut equality = true;
     let mut strict = false;
     let mut assumed: Vec<u32> = vec![];
     let mut i: i64 = 0;
-    while ((i) as usize) < sources.len() {
-        let b = match book.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let m = *nikaia_std::index::get(&ms, (i) as usize);
+    while ((i) as usize) < mult.sources.len() {
+        let b = match book.source(unsafe { nikaia_std::proven::read(&mult.sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let m = *nikaia_std::index::get(&mult.ms, (i) as usize);
         let is_eq = matches!(b.rel, SvRel::Eq);
         let is_lt = matches!(b.rel, SvRel::Lt);
         if !is_eq && m < 0 { return None; }
@@ -133,7 +131,7 @@ pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClaus
         lits.push(sv_sx_not(l));
     }
     lits.sort();
-    let id = book.log.farkas(lits.copy_owned(), sources, ms, 1);
+    let id = book.log.farkas(lits.copy_owned(), mult.sources, mult.ms, 1);
     Some(SvClause { id, lits })
 }
 
@@ -203,7 +201,7 @@ impl SvSimplex {
     pub(crate) fn form_var(&mut self, form: &SvRow) -> Option<i64> {
         if form.cols.len() == 1 && *nikaia_std::index::get(&form.ks, 0) == 1 { return Some(self.column_var(*unsafe { nikaia_std::proven::read(&form.cols, (0) as usize) })); }
         let key = sv_row_text(form);
-        let known: Option<i64> = self.slack_of.get(&nikaia_std::block::Text::from(key.to_string())).copied();
+        let known: Option<i64> = self.slack_of.get(&key).copied();
         if known.is_some() { return Some(nikaia_std::index::or(known, || 0)); }
         let mut terms: Vec<SvTerm> = vec![];
         let mut i: i64 = 0;
@@ -289,7 +287,7 @@ impl SvSimplex {
             let order = sv_delta_cmp(&had.value, &side.value);
             if upper && order <= 0 || !upper && order >= 0 { return SvChecked::Consistent; }
         }
-        let other = if upper { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone() } else { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone() };
+        let other = if upper { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)) } else { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)) };
         if other.set {
             let order = sv_delta_cmp(&side.value, &other.value);
             if upper && order < 0 || !upper && order > 0 { return self.conflict(&vec![sv_side_part(&side, upper, 1), sv_side_part(&other, !upper, 1)], book); }
@@ -325,7 +323,7 @@ impl SvSimplex {
             if v == b { continue; }
             let positive = a > 0;
             let wants_upper = positive == up;
-            let side = if wants_upper { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone() } else { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone() };
+            let side = if wants_upper { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)) } else { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)) };
             if !side.set { return None; }
             parts.push(sv_side_part(&side, wants_upper, match a.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return None }));
         }
@@ -346,7 +344,7 @@ impl SvSimplex {
             }
             let positive = a > 0;
             let wants_upper = positive == up;
-            let side = if wants_upper { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone() } else { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone() };
+            let side = if wants_upper { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)) } else { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)) };
             if !side.set { return None; }
             let term = match sv_delta_scale(&side.value, &sv_int(a)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             sum = match sv_delta_add(&sum, &term) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -356,23 +354,22 @@ impl SvSimplex {
     }
     pub(crate) fn pivot(&mut self, r: i64, j: i64) -> bool {
         let col = match u32::try_from(j).ok() { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let mut pr = (*nikaia_std::index::get(&self.rows, nikaia_std::index::at(r))).clone();
-        if sv_row_coef(&pr, col) > 0 { pr = match sv_row_scale(&pr, -1) { Some(__nikaia_value) => __nikaia_value, None => return false }; }
+        let turn = sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), col) > 0;
         let mut changed: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut made: Vec<SvRow> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut t: i64 = 0;
         while t < self.rows.len() as i64 {
             if t != r && sv_row_coef(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, col) != 0 {
-                made.push(match sv_row_eliminate(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, &pr, col) { Some(__nikaia_value) => __nikaia_value, None => return false });
+                made.push(match sv_row_eliminate(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }, col) { Some(__nikaia_value) => __nikaia_value, None => return false });
                 changed.push(t);
             }
             t = unsafe { nikaia_std::proven::add::<i64>(t, 1) };
         }
-        { let __nikaia_stored = pr; unsafe { nikaia_std::proven::write(&mut self.rows, (r) as usize, __nikaia_stored) }; }
-        let mut i: i64 = 0;
-        while ((i) as usize) < changed.len() {
-            { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&made, (i) as usize) }).clone(); unsafe { nikaia_std::proven::write(&mut self.rows, (*nikaia_std::proven::read(&changed, (i) as usize)) as usize, __nikaia_stored) }; }
-            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        if turn { { let __nikaia_stored = match sv_row_scale(unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }, -1) { Some(__nikaia_value) => __nikaia_value, None => return false }; unsafe { nikaia_std::proven::write(&mut self.rows, (r) as usize, __nikaia_stored) }; } }
+        let mut i = changed.len() as i64;
+        while i > 0 {
+            i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
+            { let __nikaia_stored = match made.pop() { Some(__nikaia_value) => __nikaia_value, None => return false }; unsafe { nikaia_std::proven::write(&mut self.rows, (*nikaia_std::proven::read(&changed, (i) as usize)) as usize, __nikaia_stored) }; }
         }
         let old = *nikaia_std::index::get(&self.basic, nikaia_std::index::at(r));
         { let __nikaia_stored = -1; nikaia_std::index::set(&mut self.row_of, nikaia_std::index::at(old), __nikaia_stored); }
@@ -427,7 +424,7 @@ impl SvSimplex {
             if candidates.is_empty() {
                 let mut parts = match self.row_parts(r, at.below) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
                 let d = match sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), nikaia_std::index::or(u32::try_from(b).ok(), || 0u32)).checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
-                let side = if at.below { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(b))).clone() } else { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(b))).clone() };
+                let side = if at.below { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)) } else { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)) };
                 parts.push(sv_side_part(&side, !at.below, d));
                 return self.conflict(&parts, book);
             }
@@ -450,7 +447,7 @@ impl SvSimplex {
     pub(crate) fn fractional(&self) -> i64 {
         let mut v: i64 = 0;
         while v < self.var_col.len() as i64 {
-            let value = (*unsafe { nikaia_std::proven::read(&self.values, (v) as usize) }).clone();
+            let value = *unsafe { nikaia_std::proven::read(&self.values, (v) as usize) };
             if *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) } >= 0 && !self.is_real(v) && (value.c.den != 1 || value.k.num != 0) { return v; }
             v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
@@ -468,9 +465,9 @@ impl SvSimplex {
         let mut delta = sv_int(1);
         let mut v: i64 = 0;
         while ((v) as usize) < self.var_col.len() {
-            let value = (*unsafe { nikaia_std::proven::read(&self.values, (v) as usize) }).clone();
-            let lo = (*unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) }).clone();
-            let hi = (*unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) }).clone();
+            let value = *unsafe { nikaia_std::proven::read(&self.values, (v) as usize) };
+            let lo = *unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) };
+            let hi = *unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) };
             if lo.set && sv_rat_cmp(&value.c, &lo.value.c) > 0 && sv_rat_cmp(&value.k, &lo.value.k) < 0 {
                 let gap = match sv_rat_sub(&value.c, &lo.value.c) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let slope = match sv_rat_sub(&lo.value.k, &value.k) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -490,7 +487,7 @@ impl SvSimplex {
         while ((v) as usize) < self.var_col.len() {
             let col = *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) };
             if col >= 0 {
-                let value = (*unsafe { nikaia_std::proven::read(&self.values, (v) as usize) }).clone();
+                let value = *unsafe { nikaia_std::proven::read(&self.values, (v) as usize) };
                 let shift = match sv_rat_mul(&value.k, &delta) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let at = match sv_rat_add(&value.c, &shift) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 out.insert(sv_column_name(match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return None }, &self.names), at);
@@ -563,7 +560,7 @@ impl SvTh for SvSimplex {
         if self.splits >= limit.cases { return SvChecked::Unknown(LgUnknown::TooManyCases); }
         self.splits = unsafe { nikaia_std::proven::add::<i64>(self.splits, 1) };
         let col = *nikaia_std::index::get(&self.var_col, nikaia_std::index::at(v));
-        let value = (*unsafe { nikaia_std::proven::read(&self.values, (v) as usize) }).clone();
+        let value = *unsafe { nikaia_std::proven::read(&self.values, (v) as usize) };
         let floor = sv_rat_floor(&value.c);
         let k = if value.c.den == 1 && value.k.num < 0 { match floor.checked_sub(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } } else { floor };
         let le = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![1], constant: match k.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
@@ -582,9 +579,9 @@ impl SvTh for SvSimplex {
             }
             self.backtrack(level);
             match got {
-                SvChecked::Conflict(ref clause) => {
-                    if !clause.lits.contains(&sv_sx_not(side)) { return SvChecked::Conflict(clause.clone()); }
-                    refuted.push(clause.clone());
+                SvChecked::Conflict(clause) => {
+                    if !clause.lits.contains(&sv_sx_not(side)) { return SvChecked::Conflict(clause); }
+                    refuted.push(clause);
                 },
                 _ => { return got; },
             }
@@ -618,7 +615,7 @@ impl SvTh for SvSimplex {
                 let reading = match sv_reading(&mine.row, &mine.rel) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let v = match self.form_var(&reading.form) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let up = reading.upper;
-                let side = if up { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone() } else { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone() };
+                let side = if up { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)) } else { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)) };
                 if side.set {
                     let order = sv_delta_cmp(&side.value, &reading.value);
                     if up && order <= 0 || !up && order >= 0 {
@@ -664,9 +661,7 @@ impl SvTh for SvSimplex {
         self.trail.truncate(nikaia_std::count::of(*unsafe { nikaia_std::proven::read(&self.marks, (level) as usize) }));
         self.levels.truncate(nikaia_std::count::of(level));
         self.marks.truncate(nikaia_std::count::of(level));
-        let mut kept: Vec<SvImplied> = vec![];
-        for i in self.implied.iter() { if i.level <= level { kept.push(i.clone()); } }
-        self.implied = kept;
+        self.implied.retain(|i| { i.level <= level });
     }
     fn model(&self) -> collections::BTreeMap<String, i64> { self.found.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { self.found_real.copy_owned() }
@@ -720,9 +715,9 @@ pub(crate) fn sv_sx_relit(lits: &[u32], drop: &[u32], add: &[u32]) -> Vec<u32> {
 
 impl SvSimplex {
     pub(crate) fn active(&self, u: i64) -> Option<SvActive> {
-        let lo = (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(u))).clone();
+        let lo = *nikaia_std::index::get(&self.lower, nikaia_std::index::at(u));
         if lo.set && lo.value.k.num == 0 && sv_delta_cmp(unsafe { nikaia_std::proven::read(&self.values, (u) as usize) }, &lo.value) == 0 { return Some(SvActive { side: lo, upper: false }); }
-        let up = (*unsafe { nikaia_std::proven::read(&self.upper, (u) as usize) }).clone();
+        let up = *unsafe { nikaia_std::proven::read(&self.upper, (u) as usize) };
         if up.set && up.value.k.num == 0 && sv_delta_cmp(unsafe { nikaia_std::proven::read(&self.values, (u) as usize) }, &up.value) == 0 { return Some(SvActive { side: up, upper: true }); }
         None
     }
@@ -750,7 +745,7 @@ impl SvSimplex {
     }
     pub(crate) fn row_gcd(&mut self, r: i64, book: &mut SvBook) -> Option<SvClause> {
         if self.row_real(r) { return None; }
-        let row = (*unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }).clone();
+        let row = unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) };
         let mut g: i64 = 0;
         let mut constant = sv_int(0);
         let mut above: Vec<SvPart> = vec![];
@@ -760,8 +755,8 @@ impl SvSimplex {
             let v = *unsafe { nikaia_std::proven::read(&row.cols, (i) as usize) } as i64;
             let k = *nikaia_std::index::get(&row.ks, (i) as usize);
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-            let lo = (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone();
-            let hi = (*unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) }).clone();
+            let lo = *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v));
+            let hi = *unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) };
             let fixed = lo.set && hi.set && lo.value.k.num == 0 && hi.value.k.num == 0 && sv_rat_cmp(&lo.value.c, &hi.value.c) == 0;
             if !fixed {
                 g = match sv_gcd(g, k) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -792,7 +787,7 @@ impl SvSimplex {
     pub(crate) fn fractional_basic(&self) -> i64 {
         let mut v: i64 = 0;
         while ((v) as usize) < self.var_col.len() {
-            let value = (*unsafe { nikaia_std::proven::read(&self.values, (v) as usize) }).clone();
+            let value = *unsafe { nikaia_std::proven::read(&self.values, (v) as usize) };
             let basic = *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) } >= 0 && *unsafe { nikaia_std::proven::read(&self.row_of, (v) as usize) } >= 0;
             if basic && value.c.den != 1 && value.k.num == 0 && !self.row_real(*unsafe { nikaia_std::proven::read(&self.row_of, (v) as usize) }) { return v; }
             v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
@@ -835,11 +830,11 @@ impl SvSimplex {
         book.round(id)
     }
     pub(crate) fn gomory_gmi(&mut self, b: i64, terms: &[SvGomory], book: &mut SvBook) -> Option<SvGmi> {
-        let v = nikaia_std::index::get(&self.values, nikaia_std::index::at(b)).c.clone();
+        let v = nikaia_std::index::get(&self.values, nikaia_std::index::at(b)).c;
         let f0 = match sv_rat_sub(&v, &sv_int(sv_rat_floor(&v))) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let rest = match sv_rat_sub(&sv_int(1), &f0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut l_terms: Vec<SvTerm> = vec![];
-        let form_b = (*unsafe { nikaia_std::proven::read(&self.var_form, (b) as usize) }).clone();
+        let form_b = unsafe { nikaia_std::proven::read(&self.var_form, (b) as usize) };
         let mut i: i64 = 0;
         while ((i) as usize) < form_b.cols.len() {
             l_terms.push(SvTerm { col: *unsafe { nikaia_std::proven::read(&form_b.cols, (i) as usize) }, k: *nikaia_std::index::get(&form_b.ks, (i) as usize) });
@@ -853,7 +848,7 @@ impl SvSimplex {
         for t in terms.iter() {
             let t = *t;
             let s: i64 = if t.upper { -1 } else { 1 };
-            let bound = t.side.value.c.clone();
+            let bound = t.side.value.c;
             let mut k: i64 = 0;
             if bound.den == 1 {
                 let fl = sv_rat_floor(&t.beta);
@@ -866,7 +861,7 @@ impl SvSimplex {
             let ra = match sv_rat_mul(&rest, &alpha) { Some(__nikaia_value) => __nikaia_value, None => return None };
             side1.push(match sv_rat_add(&g, &fa) { Some(__nikaia_value) => __nikaia_value, None => return None });
             side2.push(match sv_rat_sub(&ra, &g) { Some(__nikaia_value) => __nikaia_value, None => return None });
-            let form = (*nikaia_std::index::get(&self.var_form, nikaia_std::index::at(t.var))).clone();
+            let form = nikaia_std::index::get(&self.var_form, nikaia_std::index::at(t.var));
             let ks = match match k.checked_mul(s) { Some(__nikaia_value) => __nikaia_value, None => return None }.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None };
             let a_s = match sv_rat_mul(&alpha, &sv_int(s)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let mut j: i64 = 0;
@@ -899,7 +894,7 @@ impl SvSimplex {
         let mut c_terms: Vec<SvTerm> = vec![];
         let mut n: i64 = 0;
         while ((n) as usize) < cut_cols.len() {
-            let r = (*nikaia_std::index::get(&cut_ks, (n) as usize)).clone();
+            let r = *nikaia_std::index::get(&cut_ks, (n) as usize);
             c_terms.push(SvTerm { col: *unsafe { nikaia_std::proven::read(&cut_cols, (n) as usize) }, k: match r.num.checked_mul(den / r.den) { Some(__nikaia_value) => __nikaia_value, None => return None } });
             n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
         }
@@ -1194,13 +1189,13 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn sv_real_test_answer(source: &str) -> String {
     let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
     let script = match sv_smtlib_script(source) {
-        SvSmtRead::Script(ref s, ref sorts) => {
-            reals = sorts.reals.copy_owned();
-            s.clone()
+        SvSmtRead::Script(s, sorts) => {
+            reals = sorts.reals;
+            s
         },
         _ => { return String::from("unreadable"); },
     };
-    let mut arena = script.arena.clone();
+    let mut arena = script.arena;
     let goal = arena.boolean(false);
     let run = sv_smt_engine_sorted(&arena, &script.assertions, goal, &lg_budget(), String::from("both"), &reals);
     match run.driven {
@@ -1226,10 +1221,10 @@ pub(crate) fn sv_real_test_answer(source: &str) -> String {
 
 #[cfg(test)]
 pub(crate) fn sv_real_test_each(name: &str, source: &str) -> String {
-    let mut out: String = format!("{}: {}\n", name, sv_real_test_answer(&nikaia_std::block::Text::from(source.to_string())));
-    let simplex = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new-simplex");
-    let fm = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new-fm");
-    let both = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new");
+    let mut out: String = format!("{}: {}\n", name, sv_real_test_answer(source));
+    let simplex = sv_line(source, "new-simplex");
+    let fm = sv_line(source, "new-fm");
+    let both = sv_line(source, "new");
     let old = sv_line(source, "fm");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  rod: simplex {}; new-fm {}; both {}; fm {}\n", simplex, fm, both, old)));
     out
@@ -1465,7 +1460,7 @@ pub(crate) fn sv_cuts_test_run(title: &str, names: Vec<String>, atoms: Vec<SvAto
 pub(crate) fn sv_cuts_test_every(title: &str, names: &[String], atoms: &[SvAtom]) -> String {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, title)), "\n"));
-    for kind in ["gcd", "cg", "gmi", "branch"] { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cuts_test_run(&nikaia_std::block::Text::from(title.to_string()), names.copy_owned(), atoms.copy_owned(), kind, ""))); }
+    for kind in ["gcd", "cg", "gmi", "branch"] { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cuts_test_run(title, names.copy_owned(), atoms.copy_owned(), kind, ""))); }
     out
 }
 

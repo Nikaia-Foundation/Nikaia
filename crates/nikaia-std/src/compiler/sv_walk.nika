@@ -316,7 +316,7 @@ fn sv_walk_start(query: ref SvQuery, carried: ref Vec[Vec[u32]]) -> SvWalk? {
 	}
 	let mut a = 0
 	while a < atoms {
-		let row = query.atoms[a].row.clone()
+		let row = query.atoms[a].row
 		let mut i = 0
 		while i < row.cols.len() {
 			let col = row.cols[i] as i64
