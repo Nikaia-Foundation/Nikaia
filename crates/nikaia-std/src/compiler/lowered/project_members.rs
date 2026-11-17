@@ -78,6 +78,8 @@ pub struct ProjectMembersManifest {
     pub foreign: Vec<String>,
     pub has_build: bool,
     pub uses_in: Option<fs::Path>,
+    pub within_std: bool,
+    pub described: Option<fs::Path>,
 }
 
 pub trait ProjectMembersHost {
@@ -440,9 +442,11 @@ pub struct ProjectMembersForeign {
     pub moved: collections::BTreeMap<String, Vec<String>>,
     pub descriptions: Ledger,
     pub beneath: collections::BTreeSet<String>,
+    pub within_std: bool,
+    pub over_std: Ledger,
 }
 
-pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new() } }
+pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank() } }
 
 pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::HashSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
     let manifest = match manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -485,7 +489,12 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
     project_members_crates_beneath(root, &mut seen, &mut beneath, manifests);
-    ProjectMembersForeign { declared, described, descriptions, moved, beneath }
+    let over_std = match manifest.as_ref().and_then(|__nikaia_it| __nikaia_it.described.as_ref()) {
+        None => host.empty_ledger(),
+        Some(path) => nikaia_std::index::or(host.read_beside(path), || host.empty_ledger().into()),
+    };
+    let within_std = nikaia_std::index::or(manifest.as_ref().map(|__nikaia_it| __nikaia_it.within_std), || false);
+    ProjectMembersForeign { declared, described, descriptions, moved, beneath, within_std, over_std }
 }
 
 impl ProjectMembersForeign {

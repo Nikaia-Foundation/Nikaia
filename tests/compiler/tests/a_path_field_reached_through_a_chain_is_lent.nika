@@ -1,0 +1,37 @@
+// A method of an `fs::Path?` field reached through `?.` on a borrowed value
+// lends the field (ADR-278 D18, #1976): whether the receiver is lent is
+// asked of `fs::Path`'s `join`, not of another type's `join` that changes
+// its own value (`Rope`'s here, `TaskHandle`'s `join(within)` in `std`);
+// moving the field out of the borrow did not compile.
+use std::fs
+
+struct Rope {
+    parts: Vec[String],
+}
+
+impl Rope {
+    fn join(mut self, part: String) sync {
+        self.parts.push(part.clone())
+    }
+}
+
+struct Place {
+    root: fs::Path?,
+}
+
+fn beside(place: ref Place, name: String) -> fs::Path {
+    let bare: fs::Path = name.clone()
+    return place.root?.join(name) ?? bare
+}
+
+fn main() throws {
+    let data: fs::Path = "data"
+    let place = Place { root: data }
+    let none = Place { root: null }
+    let name = "a.toml"
+    println(beside(place, name).display())
+    println(beside(none, name).display())
+    let mut rope = Rope { parts: [] }
+    rope.join(name)
+    println(rope.parts.len())
+}

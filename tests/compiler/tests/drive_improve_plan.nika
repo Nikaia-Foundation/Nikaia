@@ -53,6 +53,12 @@ fn main() throws {
     // A `;` inside one answer's prose does not cut it in two (#1827): the
     // built answer stays dropped whole, the next kind starts a new one.
     let cut = report("Result: done\nIssue: rules-gap (built): I4 named no form a script reads; the example run named its dependency only in prose; rules-gap: no rule names the cut\nNeeds: none\nFriction: none\n")
-    drive(repo, nikaia, ["--improve-plan", "issue-1819", "1819", cut.clone(), existing.clone()])
-    process::run("rm", ["-f", existing, each, seen, settled, cut])
+    drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1819", "1819", cut.clone(), existing.clone()])
+    // A `#N` list with one bracketed reason is a wait, filed nowhere (#1978);
+    // a `#N` inside prose is still a point.
+    let wait = report("Result: partial\nNeeds: #1909 (step 2, the per-unit store, needs its name-based key)\nFriction: none\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1954", "1954", wait.clone(), existing.clone()])
+    let prose = report("Result: partial\nNeeds: the store needs #1909's key\nFriction: none\n")
+    drive(repo, nikaia, ["--improve-plan", "issue-1955", "1955", prose.clone(), existing.clone()])
+    process::run("rm", ["-f", existing, each, seen, settled, cut, wait, prose])
 }

@@ -4292,9 +4292,17 @@ fn drive_hash_list(text: String) -> Vec[String] {
 }
 
 // Whether TEXT names issues and nothing else: every word (after `,`, `:`,
-// `` ` `` and `*`) is a `#N` or `and`, and there is at least one `#N`.
+// `` ` `` and `*`) is a `#N` or `and`, and there is at least one `#N`. One
+// bracketed explanation at the end says why and names no more
+// (`#1909 (step 2, the per-unit store)`, #1978).
 fn drive_only_hashes(text: String) -> bool {
-	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut list = text.trim().clone()
+	if list.ends_with(")") {
+		let (head, why) = list.split_once("(") ?? return false
+		if why.contains("(") { return false }
+		list = head.clone()
+	}
+	let rest = list.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
 	let mut any = false
 	for w in rest.split(" ") {
 		let t = w.trim()

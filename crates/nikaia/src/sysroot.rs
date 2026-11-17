@@ -54,14 +54,11 @@ const TOOLS_PACKAGE: &str = "lowered.rs";
 /// one `.nika` recompiles one module.
 const TOOLS_FILES: &str = "lowered";
 
-/// **The packages the toolchain's package depends on** (#1163): a manifest
-/// beside its files that holds only `[dependencies]`, each a Nikaia package by
-/// `path`, as a project's `nikaia.toml` names one. Not a `nikaia.toml`: that
-/// would make the directory a project for every file in it.
-const TOOLS_DEPENDENCIES: &str = "dependencies.toml";
-
-/// What the Rust a tool module reads says it does (ADR-294 D9.3).
-const TOOLS_DESCRIBED: &str = include_str!("../../nikaia-std/src/compiler/described.contracts");
+/// **A toolchain package's manifest** (#1976): a `nikaia.toml` beside its
+/// files, read as every project's is, which says what the package is: its
+/// dependencies (#1163), whether it is `within = "std"`, and the ledger of
+/// described names it is checked against (ADR-294 D9.3).
+const TOOLS_MANIFEST: &str = "nikaia.toml";
 
 /// A sysroot: a directory with `nikaia-std/` in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -405,7 +402,7 @@ pub fn tools_build() -> crate::emit::Build {
 pub fn lower_compiler_at(dir: &Path, build: crate::emit::Build) -> Result<Package> {
     lower_package(
         &tools_sources(dir)?,
-        &tools_dependencies(dir)?,
+        &ToolsManifest::of(dir)?,
         build,
         None,
         &LoweredBefore::none(),
@@ -414,27 +411,58 @@ pub fn lower_compiler_at(dir: &Path, build: crate::emit::Build) -> Result<Packag
     .map(|(package, _)| package)
 }
 
-/// **The packages `dir`'s package depends on** (#1163), by the name its files
-/// `use`, with the directory each stands in: the `path` entries of
-/// [`TOOLS_DEPENDENCIES`], resolved against it. None where there is no such
-/// file.
-fn tools_dependencies(dir: &Path) -> Result<Vec<(String, PathBuf)>> {
-    let manifest = dir.join(TOOLS_DEPENDENCIES);
-    if !manifest.is_file() {
-        return Ok(Vec::new());
-    }
-    let read = crate::manifest::Manifest::read(&manifest)?;
-    read.dependencies()
-        .iter()
-        .map(|(name, dependency)| match dependency {
-            crate::manifest::Dependency::Path(path) => Ok((name.clone(), dir.join(path))),
-            _ => Err(anyhow::anyhow!(
-                "{}: `{name}` is not a Nikaia package named by `path`, the only kind the \
-                 toolchain's package depends on",
-                manifest.display()
-            )),
+/// **What a toolchain package's [`TOOLS_MANIFEST`] says** (#1976), read
+/// with [`crate::manifest::Manifest`] as a project's: the one source of what
+/// the package is. A directory with no manifest says nothing.
+#[derive(Debug, Default)]
+struct ToolsManifest {
+    /// The manifest read, where there is one: a key of the package.
+    path: Option<PathBuf>,
+    /// The packages it depends on (#1163), by the name its files `use`, with
+    /// the directory each stands in, resolved against the manifest's.
+    dependencies: Vec<(String, PathBuf)>,
+    /// `[package] within = "std"`: checked as `std` is.
+    within_std: bool,
+    /// `[package] described`, resolved: the ledger it is checked against.
+    described: Option<PathBuf>,
+}
+
+impl ToolsManifest {
+    fn of(dir: &Path) -> Result<ToolsManifest> {
+        let manifest = dir.join(TOOLS_MANIFEST);
+        if !manifest.is_file() {
+            return Ok(ToolsManifest::default());
+        }
+        let read = crate::manifest::Manifest::read(&manifest)?;
+        let dependencies = read
+            .dependencies()
+            .iter()
+            .map(|(name, dependency)| match dependency {
+                crate::manifest::Dependency::Path(path) => Ok((name.clone(), dir.join(path))),
+                _ => Err(anyhow::anyhow!(
+                    "{}: `{name}` is not a Nikaia package named by `path`, the only kind the \
+                     toolchain's package depends on",
+                    manifest.display()
+                )),
+            })
+            .collect::<Result<_>>()?;
+        Ok(ToolsManifest {
+            dependencies,
+            within_std: read.within_std(),
+            described: read.described(),
+            path: Some(manifest),
         })
-        .collect()
+    }
+
+    /// The text of the described ledger, empty where it names none.
+    fn described_text(&self) -> Result<String> {
+        match &self.described {
+            Some(path) => std::fs::read_to_string(path)
+                .map(String::from)
+                .with_context(|| format!("reading {}", path.display())),
+            None => Ok(String::new()),
+        }
+    }
 }
 
 /// **Each dependency's ledger as its own package infers it** (#1163), by
@@ -446,9 +474,9 @@ fn dependency_ledgers(
 ) -> Result<(BTreeSet<String>, Vec<(String, crate::contracts::Ledger)>)> {
     let mut names = BTreeSet::new();
     let mut ledgers = Vec::new();
-    for (name, root) in tools_dependencies(dir)? {
+    for (name, root) in ToolsManifest::of(dir)?.dependencies {
         let (_, _, parsed, _) = read_tools_package(&tools_sources(&root.join("src"))?)?;
-        let (_, library, _) = tools_library()?;
+        let (_, library, _) = tools_library(&ToolsManifest::of(&root)?)?;
         let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
         let (own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
         names.insert(name.clone());
@@ -461,11 +489,13 @@ fn dependency_ledgers(
 /// manifest and every file of each dependency.
 fn tools_inputs(dir: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut inputs = Vec::from(paths);
-    let dependencies = tools_dependencies(dir)?;
-    if !dependencies.is_empty() {
-        inputs.push(dir.join(TOOLS_DEPENDENCIES));
-    }
-    for (_, root) in dependencies {
+    let manifest = ToolsManifest::of(dir)?;
+    inputs.extend(manifest.path.clone());
+    inputs.extend(manifest.described.clone());
+    for (_, root) in manifest.dependencies {
+        let theirs = ToolsManifest::of(&root)?;
+        inputs.extend(theirs.path.clone());
+        inputs.extend(theirs.described.clone());
         inputs.extend(tools_sources(&root.join("src"))?);
     }
     Ok(inputs)
@@ -492,14 +522,14 @@ pub fn lower_compiler_files_on(
     build: crate::emit::Build,
     threads: Option<usize>,
 ) -> Result<Package> {
-    // The dependencies are those of the directory the files stand in (#1163).
-    let dependencies = match paths.first().and_then(|path| path.parent()) {
-        Some(dir) => tools_dependencies(dir)?,
-        None => Vec::new(),
+    // The manifest is that of the directory the files stand in (#1163).
+    let manifest = match paths.first().and_then(|path| path.parent()) {
+        Some(dir) => ToolsManifest::of(dir)?,
+        None => ToolsManifest::default(),
     };
     lower_package(
         paths,
-        &dependencies,
+        &manifest,
         build,
         threads,
         &LoweredBefore::none(),
@@ -560,12 +590,18 @@ fn read_tools_package(
     Ok((sizes, texts, parsed, beside))
 }
 
-/// **The ledger the tools package is checked against**: the described one,
-/// `std` with the described entries over it, and whether the file check's
-/// facts may serve the emitter.
-fn tools_library() -> Result<(crate::contracts::Ledger, crate::contracts::Ledger, bool)> {
-    let described =
-        crate::contracts::Ledger::parse(TOOLS_DESCRIBED).context("the tools' described ledger")?;
+/// **The ledger a toolchain package is checked against**: the described one
+/// its manifest names (#1976, blank where it names none), `std` with the
+/// described entries over it, and whether the file check's facts may serve
+/// the emitter.
+fn tools_library(
+    manifest: &ToolsManifest,
+) -> Result<(crate::contracts::Ledger, crate::contracts::Ledger, bool)> {
+    let described = match &manifest.described {
+        Some(path) => crate::contracts::Ledger::parse(&manifest.described_text()?)
+            .with_context(|| format!("the described ledger {}", path.display()))?,
+        None => crate::contracts::Ledger::blank(),
+    };
     let mut library = crate::contracts::std_library();
     library.types.extend(described.types.clone());
     library.functions.extend(described.functions.clone());
@@ -583,13 +619,15 @@ fn tools_library() -> Result<(crate::contracts::Ledger, crate::contracts::Ledger
 }
 
 /// **A tools file checked as `lower-std` checks it** (Part III C.1): with the
-/// package beside it, and `assume` refused in the toolchain.
+/// package beside it, and, in a package `within = "std"` (#1976), `assume`
+/// refused and `std`'s helpers reached.
 fn check_tools_file(
     unit: &crate::parser::Parsed,
     beside: &[&crate::parser::Parsed],
     own: &crate::contracts::Ledger,
     library: &crate::contracts::Ledger,
     packages: &BTreeSet<String>,
+    within_std: bool,
 ) -> crate::check::Checked {
     let mut checked = crate::check::check_against(
         unit,
@@ -600,8 +638,10 @@ fn check_tools_file(
         &crate::check::Newly::default(),
         &crate::assets::Reads::none(),
     );
-    crate::check::refuse_assumes_in_std(&mut checked);
-    crate::check::allow_std_helpers_in_std(&mut checked);
+    if within_std {
+        crate::check::refuse_assumes_in_std(&mut checked);
+        crate::check::allow_std_helpers_in_std(&mut checked);
+    }
     checked
 }
 
@@ -629,7 +669,8 @@ pub fn bounds_tools(
 ) -> Result<String> {
     let paths = tools_sources(&sysroot.tools_dir())?;
     let (sizes, texts, parsed, _) = read_tools_package(&paths)?;
-    let (_, mut library, _) = tools_library()?;
+    let manifest = ToolsManifest::of(&sysroot.tools_dir())?;
+    let (_, mut library, _) = tools_library(&manifest)?;
     let (packages, theirs) = dependency_ledgers(&sysroot.tools_dir())?;
     for (name, ledger) in &theirs {
         library.absorb(Some(name), ledger.clone());
@@ -646,7 +687,14 @@ pub fn bounds_tools(
             .filter(|(other, _)| *other != at)
             .map(|(_, other)| other)
             .collect();
-        let checked = check_tools_file(&parsed[at], &beside, &own, &library, &packages);
+        let checked = check_tools_file(
+            &parsed[at],
+            &beside,
+            &own,
+            &library,
+            &packages,
+            manifest.within_std,
+        );
         let path = paths[at].display().to_text();
         let refused = checked
             .findings
@@ -715,7 +763,7 @@ pub fn bounds_tools(
 /// the package with its dependencies' files under it, and its own ledger.
 fn lower_package(
     paths: &[PathBuf],
-    dependencies: &[(String, PathBuf)],
+    manifest: &ToolsManifest,
     build: crate::emit::Build,
     threads: Option<usize>,
     cache: &LoweredBefore,
@@ -723,11 +771,19 @@ fn lower_package(
 ) -> Result<(Package, crate::contracts::Ledger)> {
     let mut theirs: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut ledgers: Vec<(String, crate::contracts::Ledger)> = Vec::new();
-    for (name, root) in dependencies {
+    for (name, root) in &manifest.dependencies {
         let sources = tools_sources(&root.join("src"))?;
         // Its files are not the package's: `reused` counts the package's own.
-        let (package, ledger) = lower_package(&sources, &[], build, threads, cache, &mut 0)
-            .with_context(|| format!("lowering the dependency `{name}` ({})", root.display()))?;
+        // It is lowered as its own manifest says, and its dependencies are
+        // its own build's.
+        let theirs_said = ToolsManifest {
+            dependencies: Vec::new(),
+            ..ToolsManifest::of(root)?
+        };
+        let (package, ledger) =
+            lower_package(&sources, &theirs_said, build, threads, cache, &mut 0).with_context(
+                || format!("lowering the dependency `{name}` ({})", root.display()),
+            )?;
         theirs.push((name.clone(), package.files));
         ledgers.push((name.clone(), ledger));
     }
@@ -735,7 +791,10 @@ fn lower_package(
     let mut timer = Phases::from_env();
     let (sizes, texts, parsed, beside) = read_tools_package(paths)?;
     timer.lap("parse");
-    let (described, mut library, facts_reusable) = tools_library()?;
+    let (described, mut library, facts_reusable) = tools_library(manifest)?;
+    // What the manifest says is part of each file's key: the described
+    // ledger is read, not compiled into this binary (#1976).
+    let said = format!("{}{}", manifest.within_std, manifest.described_text()?);
     for (name, ledger) in &ledgers {
         library.absorb(Some(name), ledger.clone());
     }
@@ -799,7 +858,7 @@ fn lower_package(
         sysroot_cache::sysroot_names(
             compiler,
             &std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default(),
-            &format!("{build:?}{provenance:?}{facts_reusable}"),
+            &format!("{build:?}{provenance:?}{facts_reusable}{said}"),
             &files,
             &declared,
             &wholes,
@@ -858,7 +917,14 @@ fn lower_package(
             .collect();
         // **Checked before it is lowered** (Part III C.1), with the package
         // beside it.
-        let checked = check_tools_file(unit, &beside, &own, &library, &packages);
+        let checked = check_tools_file(
+            unit,
+            &beside,
+            &own,
+            &library,
+            &packages,
+            manifest.within_std,
+        );
         let refusals: Vec<&crate::check::Finding> = checked
             .findings
             .iter()
@@ -1073,7 +1139,8 @@ impl std::fmt::Display for Package {
 
 /// **Where `lower-std`'s time goes** (#667): with `NIKAIA_LOWER_TIMES` set,
 /// each phase's total and the slowest files of the per-file phases go to
-/// stderr. Unset, it reads no clock.
+/// stderr, and each phase's end as a `lower-std~` line the moment it ends.
+/// Unset, it reads no clock.
 struct Phases {
     on: bool,
     last: Option<std::time::Instant>,
@@ -1108,6 +1175,10 @@ impl Phases {
 
     fn lap(&mut self, phase: &str) {
         if let Some(spent) = self.take() {
+            // The phase's end, as it happens (#1979): a mark to take a
+            // profiler's dump at (`callgrind_control -d`), where `report`
+            // prints only at the end. `gate.nika` logs no `lower-std~` line.
+            eprintln!("lower-std~ {phase} ended ({:.3}s)", spent.as_secs_f64());
             self.add(phase, spent);
         }
     }
@@ -1241,10 +1312,17 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
         lowered.push((lowered_path(&nika), rust));
     }
     // **Two packages, each lowered alone** (#723): the compiler's and the
-    // one every program runs; neither sees the other's names.
+    // one every program runs; neither sees the other's names. Each says
+    // what it is in its manifest (#1976), read as a project's is.
     for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
         if !package.is_dir() {
             continue;
+        }
+        if !package.join(TOOLS_MANIFEST).is_file() {
+            anyhow::bail!(
+                "{}: a toolchain package has no {TOOLS_MANIFEST}",
+                package.display()
+            );
         }
         // **Keyed per file** (#667): see `lower_package`.
         let paths = tools_sources(&package)?;
@@ -1264,7 +1342,7 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
                 let mut reused = 0;
                 let (rust, _) = lower_package(
                     &paths,
-                    &tools_dependencies(&package)?,
+                    &ToolsManifest::of(&package)?,
                     tools_build(),
                     None,
                     &cache,
@@ -1311,9 +1389,9 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
 /// so a second run with nothing changed takes the answer from the user cache
 /// instead of five minutes.
 ///
-/// The key is the compiler's own bytes - its lowering, `std`'s ledger and the
-/// tools' described one are all compiled into it - and the name and text of
-/// every file read, in order. Each entry is a directory of the cache's
+/// The key is the compiler's own bytes - its lowering and `std`'s ledger are
+/// compiled into it - and the name and text of every file read, in order: a
+/// package's manifest and the described ledger it names among them (#1976). Each entry is a directory of the cache's
 /// `lower-std/`, so `cache::prune` keeps that from piling up.
 /// Failure here is never a failed lowering: no key or an unreadable entry
 /// lowers again, and an entry that cannot be written is not written.
@@ -1465,7 +1543,7 @@ mod tests {
             let mut reused = 0;
             lower_package(
                 &[a.clone(), b.clone()],
-                &[],
+                &ToolsManifest::default(),
                 tools_build(),
                 Some(1),
                 &cache,

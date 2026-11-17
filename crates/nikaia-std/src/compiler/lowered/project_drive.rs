@@ -287,7 +287,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if library && header.is_none() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(cx_nothing_exported()), &"project_drive_drive_to")); }
     if subcommand == "run" || subcommand == "check" { build_args.push(String::from("--quiet")); }
     let verb = if subcommand == "check" { "check" } else { "build" }; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
-    let record = nikaia_std::index::or(match nikaia_std::fs::path::parent(&(manifest)) {
+    let record = nikaia_std::index::or(match nikaia_std::fs::path::parent(&(manifest)).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::join(&(__nikaia_it), std::path::Path::new(&("cargo-fresh")))),
         None => None,
     }, || nikaia_std::fs::path::join(&(host.gen_dir()), std::path::Path::new(&("cargo-fresh"))).into());
@@ -917,7 +917,16 @@ pub trait ProjectDriveKeptHost {
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
 }
 
-pub fn project_drive_not_the_entry(file: &std::path::Path, root: &std::path::Path, entry: &str) -> String { format!("{} is not the entry point of the project at {}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{}`. Run `nikaia run --project {}`, or `nikaia lower {}` to lower the file to Rust.", nikaia_std::fs::path::display(&(file)), nikaia_std::fs::path::display(&(root)), entry, nikaia_std::fs::path::display(&(root)), nikaia_std::fs::path::display(&(file))) }
+pub fn project_drive_not_the_entry(file: &std::path::Path, root: &std::path::Path, entry: &str) -> String {
+    let told = format!("{} is not the entry point of the project at {}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{}`. Run `nikaia run --project {}`, or `nikaia lower {}` to lower the file to Rust.", nikaia_std::fs::path::display(&(file)), nikaia_std::fs::path::display(&(root)), entry, nikaia_std::fs::path::display(&(root)), nikaia_std::fs::path::display(&(file)));
+    let tests = nikaia_std::fs::path::join(&(project_members_canonical(root)), std::path::Path::new(&("tests")));
+    if !nikaia_std::fs::path::starts_with(&(project_members_canonical(file)), &tests) { return told; }
+    let name = nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(file), std::path::Path::new(&(""))))).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
+        None => None,
+    }, || "".into());
+    format!("{}\nIt is a test program: run it with `nikaia test --project {} --filter {}`, and add `--bless` to record its expected output.", told, nikaia_std::fs::path::display(&(root)), name)
+}
 
 pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
     let canonical_file = project_members_canonical(file);
@@ -981,8 +990,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple69803| {
-        let (a, b) = __nikaia_tuple69803;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple70302| {
+        let (a, b) = __nikaia_tuple70302;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
