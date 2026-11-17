@@ -142,11 +142,14 @@ pub mod text {
 /// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27). `too_many_arguments`
 /// and `useless_conversion`, as there too: `process::shell` takes `run`'s
 /// options, and a `?? default` is lowered `index::or(x, || d.into())` (#1253).
+/// `needless_borrow`, as there too: a `Bytes` local is lowered a `&[u8]` and
+/// still handed on and indexed as `&b` (`text_float.nika`, #2024).
 #[doc(hidden)]
 #[allow(
     clippy::unnecessary_cast,
     clippy::too_many_arguments,
-    clippy::useless_conversion
+    clippy::useless_conversion,
+    clippy::needless_borrow
 )]
 pub mod runtime {
     include!("runtime/lowered.rs");
