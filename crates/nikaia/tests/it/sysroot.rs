@@ -483,7 +483,7 @@ fn the_first_refused_file_is_the_one_reported_on_every_core() {
 
 /// **Each file of a package is cached on its own** (#667): nothing changed
 /// lowers no file; a body change lowers that file only, to the bytes a cold
-/// run writes; a signature change lowers every file.
+/// run writes; a new function no other file names lowers its own file only.
 #[test]
 fn lower_std_caches_each_file_of_a_package() {
     let root = std::env::temp_dir().join(format!("nikaia-lower-files-{}", std::process::id()));
@@ -548,7 +548,10 @@ fn lower_std_caches_each_file_of_a_package() {
         "pub fn three() -> i64 { return 3 }\npub fn four() -> i64 { return 4 }\n",
     );
     let (reused, wider) = lower("warm");
-    assert_eq!(reused, 0, "a new signature lowers every file");
+    assert_eq!(
+        reused, 2,
+        "a function no other file names lowers its own file only (#1909)"
+    );
     assert_eq!(lower("cold2").1, wider);
     let _ = std::fs::remove_dir_all(&root);
 }
