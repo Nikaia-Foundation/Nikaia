@@ -364,7 +364,7 @@ impl ProverState {
             if self.collecting {
                 let mut carrying: Option<String> = None;
                 if at.no_precondition.is_none() { carrying = carrying_function((at.function).as_deref()); }
-                self.carry_back(arena, goal, &pre, callee, site, scope, (carrying).as_deref(), &at.params, ask, model);
+                self.carry_back(arena, goal, pre, callee, site, scope, (carrying).as_deref(), &at.params, ask, model);
                 continue;
             }
             if self.carried_here((at.function).as_deref(), &site) {
@@ -377,7 +377,7 @@ impl ProverState {
             let broken_always = always.is_some();
             if broken_always {
                 let values = nikaia_std::index::or(always, || collections::BTreeMap::new().into());
-                let given = values_given(&arena, &given_by, &read, &values);
+                let given = values_given(&arena, given_by, read, &values);
                 let computed = claim_text_of((pre.computed).as_deref());
                 let mut written = nikaia_std::block::Text::from(pre.written.to_string());
                 let mut notes: Vec<String> = vec![format!("Here {}.", shown(&given))];
@@ -392,7 +392,7 @@ impl ProverState {
                 let breaking = breaking_values(arena, scope, nikaia_std::index::or(goal, || 0), model);
                 if breaking.is_some() {
                     let values = nikaia_std::index::or(breaking, || collections::BTreeMap::new().into());
-                    let given = values_given(&arena, &given_by, &read, &values);
+                    let given = values_given(&arena, given_by, read, &values);
                     let computed = claim_text_of((pre.computed).as_deref());
                     let has_computed = computed.is_some();
                     let written = nikaia_std::index::or(computed, || nikaia_std::block::Text::from(pre.written.to_string()).into());

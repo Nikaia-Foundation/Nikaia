@@ -245,15 +245,15 @@ impl EmitState {
             let made = match arg {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => { let method = *method; owns_its_text(&emit_text(world, method)) },
-                Expr::Binary { .. } => self.emit_core_a_concatenation(&arg),
+                Expr::Binary { .. } => self.emit_core_a_concatenation(arg),
                 _ => false,
             };
             if !made { continue; }
-            let key = node_key(&arg);
+            let key = node_key(arg);
             walk.held.remove(&key);
             let name = format!("__nikaia_held_{}", walk.held.len() as i64);
             out.push(&format!("let {} = ", name));
-            self.emit_expr(world, walk, out, host, &arg, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
             walk.held.insert(key, name);
         }
@@ -362,7 +362,10 @@ impl EmitState {
             n += 1;
             let change = self.facts.mut_args.contains(&node_key(arg));
             if change && self.facts.reborrowed_args.contains(&node_key(arg)) { out.push("&mut *"); } else if change { out.push("&mut "); } else if self.facts.lent_args.contains(&node_key(arg)) && !self.facts.views_handed_on.contains(&node_key(arg)) { out.push("&"); }
+            let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(arg))?;
+            out.push(&before);
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+            out.push(&after);
         }
         out.push(")");
         if pauses { out.push(&emit_async_pause(&walk)); }

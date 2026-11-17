@@ -300,7 +300,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
             let l = nikaia_std::num::value(l);
             if l % 2u32 == 0u32 || !*nikaia_std::index::get(&cnf.definition, nikaia_std::index::at((l / 2u32) as i64)) { defined = false; }
         }
-        if defined && !sv_smt_congruence(&clause, *nikaia_std::index::get(&ids, (c) as usize), &short_lit, &short_id, book, units, unit_ids, facts) { return false; }
+        if defined && !sv_smt_congruence(clause, *nikaia_std::index::get(&ids, (c) as usize), &short_lit, &short_id, book, units, unit_ids, facts) { return false; }
         c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
     }
     true

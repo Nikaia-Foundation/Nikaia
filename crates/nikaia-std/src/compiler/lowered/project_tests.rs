@@ -933,7 +933,7 @@ pub(crate) fn project_tests_explain_output(output: &OutputTest, outcome: &Projec
             Some(ref got) => {
                 if got != want {
                     nikaia_std::io::println(format_args!("{} (- expected, + written):", relative))?;
-                    nikaia_std::io::print(format_args!("{}", project_tests_difference(&want, got)))?;
+                    nikaia_std::io::print(format_args!("{}", project_tests_difference(want, got)))?;
                 }
             },
         }

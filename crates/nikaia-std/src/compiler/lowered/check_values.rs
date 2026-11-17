@@ -100,7 +100,7 @@ impl CheckState {
             Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw: true }.shown() },
+            }), is_sync, can_throw: true, spelled: CodeNames::none() }.shown() },
             _ => format!("{} throws", shown),
         };
         self.findings.push(check_refusal("NK1102", span, format!("This lambda can fail, but `{}` says the code it names never fails.", shown), vec![String::from("A function type without `throws` cannot fail, so a lambda that can is not of that type.")], Some(format!("Write `{}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`.", wanted))));

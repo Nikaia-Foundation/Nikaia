@@ -223,10 +223,10 @@ impl CheckState {
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
         let buffer = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
         let count = unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
-        if kind_the_buffers_own_length(world, &count, &buffer) { return; }
-        let folded = self.constant_of(world, &count);
+        if kind_the_buffers_own_length(world, count, buffer) { return; }
+        let folded = self.constant_of(world, count);
         if kind_a_count_fits((folded).as_ref(), kind_array_room(found, at)) { return; }
-        self.a_length_that_may_not_fit(world, written, &buffer, span);
+        self.a_length_that_may_not_fit(world, written, buffer, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -301,7 +301,7 @@ impl CheckState {
                 let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end;
                 let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end;
                 if !before || inside || held || (later.span.start as i64) >= earlier.until { continue; }
-                let clash = check_walks_task_clash(&earlier, &later);
+                let clash = check_walks_task_clash(earlier, later);
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());

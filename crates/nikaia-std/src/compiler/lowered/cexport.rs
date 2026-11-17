@@ -666,7 +666,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             { let __nikaia_stored = true; nikaia_std::index::set(&mut *crossing, (at) as usize, __nikaia_stored); }
             params.rust_params.push(format!("{}: std::ffi::c_int", local));
             params.c_params.push(format!("{}_{} {}", prefix, plain.name, param));
-            let arms = cx_choice_arms_in(&plain);
+            let arms = cx_choice_arms_in(plain);
             params.checks.push_str(&format!("    let {} = match {} {{ {} _ => return -1 }};\n", local, local, arms));
             if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
@@ -697,7 +697,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
                         rust_args.push(String::from("std::ffi::c_int"));
                         c_args.push(format!("{}_{}", prefix, plain.name));
                         closure_params.push(format!("{}: &{}", name, plain.name));
-                        passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(&plain)));
+                        passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(plain)));
                     },
                     CxLent::Text => {
                         rust_args.push(String::from("*const u8, usize"));

@@ -2607,7 +2607,7 @@ pub(crate) fn lent_element(base: &Expr, made: bool, ask: &TierAsk<'_, '_, '_, '_
     let list = match list_place(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) { return false; }
     let element = unsafe { nikaia_std::proven::read(&list.ty.generics, (0) as usize) };
-    if !plain_string(ask.names, &element) || element.is_nullable { return false; }
+    if !plain_string(ask.names, element) || element.is_nullable { return false; }
     match base {
         Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) || made && made_list_local(ask.names.resolve(name), &walk) },
         Expr::Field { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); !list.ty.is_view && lent_root(inner, ask, walk) },
@@ -2827,7 +2827,7 @@ pub(crate) fn lent_text_container(base: &Expr, maps: bool, lists: bool, ask: &Ti
     let mut at: i64 = 0;
     if is_a_map_name(&container) && maps && list.ty.generics.len() == 2 { at = 1; } else if !(lists && (container == "Vec" || container == "Array") && list.ty.generics.len() == 1) { return false; }
     let element = nikaia_std::index::get(&list.ty.generics, (at) as usize);
-    plain_string(ask.names, &element) && !element.is_nullable
+    plain_string(ask.names, element) && !element.is_nullable
 }
 
 pub(crate) fn lent_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
@@ -6956,7 +6956,7 @@ pub(crate) fn hb_call_sources<'r>(expr: &'r Expr, words: &winnow_grammar::Intern
         let at = nikaia_std::num::value(at);
         if at < 0 || at >= given.len() as i64 { return None; }
         let argument = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
-        if hb_place_root(&argument, words).is_some() { out.push(argument); } else { out.extend(match hb_call_sources(&argument, words, views) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+        if hb_place_root(argument, words).is_some() { out.push(argument); } else { out.extend(match hb_call_sources(argument, words, views) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     }
     Some(out)
 }

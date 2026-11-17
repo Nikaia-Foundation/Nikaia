@@ -367,11 +367,11 @@ pub(crate) fn check_overflow_tuple_into_nullables(state: &mut CheckState, given:
         let part = unsafe { nikaia_std::proven::read(&wants, (i) as usize) };
         let had = unsafe { nikaia_std::proven::read(&founds, (i) as usize) };
         let is_null = matches!(item, Expr::LitNull(_));
-        let lent = state.facts.nullable_args.contains_key(&(id_of(&item) as i64));
-        if check_overflow_a_nullable(&part) && !check_overflow_a_nullable(&had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(&item)) {
-            state.facts.wrapped.insert(id_of(&item) as i64, FactWrap::Constructor);
+        let lent = state.facts.nullable_args.contains_key(&(id_of(item) as i64));
+        if check_overflow_a_nullable(part) && !check_overflow_a_nullable(had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(item)) {
+            state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor);
             any = true;
-        } else if check_overflow_list_into_nullables(state, &item, &had, &part) { any = true; }
+        } else if check_overflow_list_into_nullables(state, item, had, part) { any = true; }
     }
     any
 }

@@ -1242,6 +1242,37 @@ impl CheckState {
             }
         }
     }
+
+    /// The keys of the `??` still pending, for `pending_coalesces_of_an_arm_are_taken`.
+    fn pending_coalesce_keys(ref self) -> collections::BTreeSet[i64] sync {
+        return self.flow.pending_coalesces.iter().map(fn(one) { one.key }).collect()
+    }
+
+    /// **A `??` an arm's body left pending is taken at the arm's end** (#1999),
+    /// as a block's statement's is at the statement's end: nothing after the
+    /// arm lends it, and the arm decides by what was handed over whether it
+    /// binds its parts `ref`. `deep(result ?? T::A)` to a parameter that keeps
+    /// takes `result`, so the arm binds it by value. A `??` pending before the
+    /// arm (`before`) waits for its own position.
+    fn pending_coalesces_of_an_arm_are_taken(ref mut self, world: ref CheckWorld, before: ref collections::BTreeSet[i64]) sync {
+        let pending = self.flow.pending_coalesces.clone()
+        self.flow.pending_coalesces = []
+        let mut waiting: Vec[CheckPendingCoalesce] = []
+        for one in pending {
+            if before.contains(one.key) {
+                waiting.push(one.clone())
+                continue
+            }
+            let key = (one.left, one.span.start as i64)
+            let found = self.flow.read_index[key]
+            if found != null {
+                let at: i64 = (found ?? continue).clone()
+                let read = self.reads_on_paths[at].clone()
+                self.hands_over_path(world, read.path.clone(), one.ty, read.seq, "given to `??`", one.span)
+            }
+        }
+        self.flow.pending_coalesces = waiting
+    }
 }
 
 // ---------------------------------------------------------------------------

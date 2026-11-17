@@ -19,6 +19,8 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::prelude::Hasher;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -4218,7 +4220,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -4249,4 +4251,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "f0b7028096ace86c7744e4b5cae9537735b219ea07f222228ddcb8e77e551a1c";
+pub const LOWERED_DIGEST: &str = "c17d260ccbad599ab64ba423b4b4ebceeb86f49ef7cb53ea40ace559af3e10ea";

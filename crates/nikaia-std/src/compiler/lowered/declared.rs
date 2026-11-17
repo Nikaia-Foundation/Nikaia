@@ -38,8 +38,9 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         let read = code_as_read(names, ty);
         let code = match (*read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &read.generics);
-        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: std::boxed::Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw } };
-        return Ty::Fn { params, result: std::boxed::Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw };
+        let spelled = code_spelled(names, ty);
+        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: std::boxed::Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw, spelled } };
+        return Ty::Fn { params, result: std::boxed::Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw, spelled };
     }
     if ty.is_nullable {
         let mut inner = ty.clone();
@@ -79,6 +80,23 @@ pub(crate) fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -
     written.result_from = vec![];
     (*read.code) = Some(written);
     read
+}
+
+pub(crate) fn code_spelled(names: &winnow_grammar::InternerContext, ty: &Type) -> CodeNames {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
+    if (code.param_names.len() as i64) != ty.generics.len() as i64 { return CodeNames::none(); }
+    #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+    for one in code.param_names.iter() {
+        let one = *one;
+        let name = match one { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
+        params.push(nikaia_std::block::Text::from(names.resolve(name).to_string()));
+    }
+    let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+    for source in code.result_from.iter() {
+        let source = *source;
+        from.push(nikaia_std::block::Text::from(names.resolve(source).to_string()));
+    }
+    CodeNames { params, from }
 }
 
 pub(crate) fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64) -> bool {
