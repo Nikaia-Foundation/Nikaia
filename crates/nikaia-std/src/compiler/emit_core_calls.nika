@@ -664,7 +664,12 @@ impl EmitState {
                         // **What it takes as a view is lent to it** (D20).
                         out.push("&")
                     }
+                    // Part I 2.3: a plain value where its type asks for a
+                    // `T?` (#1996), as at a named call.
+                    let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(arg))
+                    out.push(before)
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+                    out.push(after)
                 }
                 out.push(")")
                 if pauses {

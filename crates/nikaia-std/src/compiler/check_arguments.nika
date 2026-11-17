@@ -142,7 +142,7 @@ fn check_arguments_named(world: ref CheckWorld, value: ref Expr?) -> String? syn
 /// the call misses, the subject was written as options (Part I 5.1: the
 /// subject goes by position, only what follows the `;` is named), and the
 /// help shows the call with them in place.
-fn check_arguments_named_for_positional(state: ref CheckState, world: ref CheckWorld, key: ref String, signature: ref Signature, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], passed: ref Vec[(String, Ty)], help: String, span: ref Span) -> CheckFinding sync {
+fn check_arguments_named_for_positional(state: ref CheckState, world: ref CheckWorld, key: ref String, signature: ref Signature, keeps: ref Vec[String], wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], passed: ref Vec[(String, Ty)], help: String, span: ref Span) -> CheckFinding sync {
     let mut names: Vec[String] = []
     for (n, _) in wanted {
         names.push(n.clone())
@@ -152,7 +152,7 @@ fn check_arguments_named_for_positional(state: ref CheckState, world: ref CheckW
         takes = names_listed(names)
     }
     let message = f"`{key}` takes {takes} by position, but you passed {counted(passed.len() as i64, "named argument")} and {given.len()} by position."
-    let declared = f"It's declared as `{key}{signature.shown()}`."
+    let declared = f"It's declared as `{key}{signature.shown(keeps)}`."
     if given.len() + passed.len() != wanted.len() {
         return check_refusal("NK1101", span, message, [declared], help)
     }
@@ -212,10 +212,10 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             help = f"It takes {takes.join(", ")}{a_root_is_one_of_two(wanted)}."
         }
         if passed.len() > 0 {
-            state.findings.push(check_arguments_named_for_positional(state, world, key, signature, wanted, given, passed, help, span))
+            state.findings.push(check_arguments_named_for_positional(state, world, key, signature, contract.keeps, wanted, given, passed, help, span))
             return signature.result_or_unit()
         }
-        state.findings.push(check_refusal("NK1101", span, f"`{key}` takes {counted(wanted.len() as i64, "argument")}, but you passed {found.len()}.", [f"It's declared as `{key}{signature.shown()}`."], help))
+        state.findings.push(check_refusal("NK1101", span, f"`{key}` takes {counted(wanted.len() as i64, "argument")}, but you passed {found.len()}.", [f"It's declared as `{key}{signature.shown(contract.keeps)}`."], help))
         return signature.result_or_unit()
     }
 
@@ -715,7 +715,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             } else if !hull.is_empty() {
                 help = f"Wrap it: `{hull}(…)`."
             }
-            state.findings.push(check_refusal("NK1115", span, message, [f"It's declared as `{key}{signature.shown()}`."], help))
+            state.findings.push(check_refusal("NK1115", span, message, [f"It's declared as `{key}{signature.shown(contract.keeps)}`."], help))
             continue
         }
         if state.a_name_in_text(world, want, given_here, span) {
@@ -731,7 +731,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         }
         let named = check_arguments_named(world, given_here)
         let keeper = f"`{key}` keeps its `{name}` after the call returns"
-        let mut notes: Vec[String] = [f"It's declared as `{key}{signature.shown()}`."]
+        let mut notes: Vec[String] = [f"It's declared as `{key}{signature.shown(contract.keeps)}`."]
         let mut help: String = way_out_of_a_mismatch(found_here, want)
         let why = state.a_view_kept(found_here, want, named, keeper)
         if why != null {
@@ -823,8 +823,8 @@ impl CheckState {
             return false
         }
         let contract = world.own.functions.get(name) ?? return false
-        let (params, result, is_sync, can_throw) = match found {
-            Ty::Fn { params, result, is_sync, can_throw } => (params.clone(), result?.clone(), is_sync, can_throw),
+        let (params, result, is_sync, can_throw, spelled) = match found {
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => (params.clone(), result?.clone(), is_sync, can_throw, spelled.clone()),
             else => return false,
         }
         let wanted = match want {
@@ -844,6 +844,6 @@ impl CheckState {
                 eased.push(params[at].clone())
             }
         }
-        return any && Ty::Fn { params: eased, result: result, is_sync: is_sync, can_throw: can_throw }.fits(want)
+        return any && Ty::Fn { params: eased, result: result, is_sync: is_sync, can_throw: can_throw, spelled: spelled }.fits(want)
     }
 }

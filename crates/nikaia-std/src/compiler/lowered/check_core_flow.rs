@@ -1117,8 +1117,10 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let from = state.taken_so_far();
     let (_, handed_from) = state.taken_so_far();
     let changed_from = state.changed.len() as i64;
+    let pending_before = state.pending_coalesce_keys();
     check_core_flow_a_guard(state, world, host, &arm.pattern, (arm.guard).as_ref(), span);
     let ty = check_core_flow_guarded_body(state, world, host, (arm.guard).as_ref(), &arm.body, span);
+    state.pending_coalesces_of_an_arm_are_taken(world, &pending_before);
     let name = check_core_flow_variable(world, value);
     let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
     let lent_subject = state.facts.lent_scrutinees.contains(&(id_of(value) as i64)) && !state.facts.text_scrutinees.contains(&(id_of(value) as i64));

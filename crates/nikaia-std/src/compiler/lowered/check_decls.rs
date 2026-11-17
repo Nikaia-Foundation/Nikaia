@@ -223,11 +223,17 @@ impl CheckState {
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut params: Vec<Ty> = vec![];
-        for param in signature.params.iter() { if nikaia_std::list::contains(&signature.mutable, &param.0) { params.push(Ty::Pointed { item: std::boxed::Box::new(param.1.clone()), slice: false, mutable: true }); } else { params.push(param.1.clone()); } }
+        let mut spelled = CodeNames::none();
+        for param in signature.params.iter() {
+            spelled.params.push(nikaia_std::block::Text::from(param.0.to_string()));
+            if nikaia_std::list::contains(&signature.mutable, &param.0) { params.push(Ty::Pointed { item: std::boxed::Box::new(param.1.clone()), slice: false, mutable: true }); } else { params.push(param.1.clone()); }
+        }
+        spelled.from = contract.borrows.copy_owned();
+        if signature.takes_a_receiver() { spelled = CodeNames::none(); }
         Some(Ty::Fn { params, result: std::boxed::Box::new(match signature.result.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }), is_sync: contract.sync_claim.is_sync(), can_throw: !contract.fails_with.is_empty() })
+        }), is_sync: contract.sync_claim.is_sync(), can_throw: !contract.fails_with.is_empty(), spelled })
     }
 }
 

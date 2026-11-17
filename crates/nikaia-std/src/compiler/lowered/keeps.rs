@@ -606,7 +606,7 @@ pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
     let subject = &nikaia_std::index::get(&signature.params, 0).1;
     if subject.is_a_view() { return false; }
     match subject {
-        Ty::Named { .. } => moves(&subject),
+        Ty::Named { .. } => moves(subject),
         _ => true,
     }
 }

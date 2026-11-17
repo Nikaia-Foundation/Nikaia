@@ -12,6 +12,6 @@ error[NK1102]: `total` expects `p` to be `Par[i64]`, but you're passing `Par[?] 
  10 |     println(f"{total(xs.par_iter(within: 1.millis()))}")
     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: It's declared as `total(p: Par[i64]) -> i64`.
+    = note: It's declared as `total(keep p: Par[i64]) -> i64`.
     = help: Make it a `Par[i64]`, or change the declaration to `Par[?] sync ends sized`.
 2 type errors

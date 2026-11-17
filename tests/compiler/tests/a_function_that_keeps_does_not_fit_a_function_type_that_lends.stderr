@@ -1,4 +1,4 @@
-error[NK1102]: `total` expects `make` to be `fn(Vec[i64]) -> Held`, but you're passing `fn(keep Vec[i64]) -> Held sync`.
+error[NK1102]: `total` expects `make` to be `fn(Vec[i64]) -> Held`, but you're passing `fn(keep xs: Vec[i64]) -> Held sync`.
    --> tests/a_function_that_keeps_does_not_fit_a_function_type_that_lends.nika:18:24
     |
  18 |     println(total([1], wrap))

@@ -346,12 +346,12 @@ fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
 /// any other type.
 fn code_as_written(ty: ref Ty) -> String? {
     return match ty {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let mut listed: Vec[String] = []
             for part in params {
                 listed.push(code_param_as_written(part))
             }
-            let bare = Ty::Fn { params: [], result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+            let bare = Ty::Fn { params: [], result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: CodeNames::none() }
             let whole = bare.text()
             let rest = whole.strip_prefix("fn()") ?? ""
             let joined = listed.join(", ")

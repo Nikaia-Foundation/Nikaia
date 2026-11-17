@@ -140,7 +140,7 @@ pub(crate) fn sv_extended(held: &mut Vec<SvHeld>, lo: i64, hi: i64, book: &mut S
     }
     let l = match sv_row_of(terms, sv_mod_hat(row.constant, m)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mq = SvRow { cols: vec![book.log.columns], ks: vec![m], constant: 0 };
-    match sv_row_sum(1, &row, 1, &match sv_row_sum(-1, &l, 1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match sv_row_sum(1, row, 1, &match sv_row_sum(-1, &l, 1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ext = match book.extend(l, m) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let le = match book.combine(vec![unsafe { nikaia_std::proven::read(&held, (low) as usize) }.src.clone(), SvSrc::Fact(ext.first)], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ge0 = match book.combine(vec![nikaia_std::index::get(&held, nikaia_std::index::at(high)).src.clone(), SvSrc::Fact(ext.first + 1u32)], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return None };

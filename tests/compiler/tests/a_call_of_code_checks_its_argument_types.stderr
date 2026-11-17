@@ -1,0 +1,33 @@
+error[NK1102]: `f` expects argument 1 to be `String`, but you're passing `i64`.
+  --> tests/a_call_of_code_checks_its_argument_types.nika:9:48
+   |
+ 9 | fn via(f: fn(String) -> i64) -> i64 { return f(5) }
+   |                                                ^
+   |
+   = note: Its type takes a `String` there: a function type's parameters are typed as a signature's (Part I 5.4).
+   = help: Make it a `String`, or change the declaration to `i64`.
+error[NK1102]: `g` expects argument 1 to be `String`, but you're passing `i64`.
+   --> tests/a_call_of_code_checks_its_argument_types.nika:13:15
+    |
+ 13 |     println(g(5))
+    |               ^
+    |
+    = note: Its type takes a `String` there: a function type's parameters are typed as a signature's (Part I 5.4).
+    = help: Make it a `String`, or change the declaration to `i64`.
+error[NK1102]: `f` expects argument 1 to be `String`, but you're passing `i64`.
+   --> tests/a_call_of_code_checks_its_argument_types.nika:16:17
+    |
+ 16 |     println(a.f(5))
+    |                 ^
+    |
+    = note: Its type takes a `String` there: a function type's parameters are typed as a signature's (Part I 5.4).
+    = help: Make it a `String`, or change the declaration to `i64`.
+error[NK1101]: `g` takes 1 argument, but you passed 2.
+   --> tests/a_call_of_code_checks_its_argument_types.nika:17:5
+    |
+ 17 |     println(g("a", "b"))
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Its type takes 1 parameter (Part I 5.4).
+    = help: Pass 1 argument.
+4 type errors

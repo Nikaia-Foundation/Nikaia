@@ -19,6 +19,8 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::prelude::Hasher;
+#[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
 use nikaia_std::process;
@@ -117,4 +119,4 @@ pub mod target {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e4fc8e8b1e6e4ebc3c3b226d4ace664f246847334d0b84186529b2ad39add241";
+pub const LOWERED_DIGEST: &str = "aaa83725639b817842c60d448aff425d7a141284290caa431b47bbb8859a1502";

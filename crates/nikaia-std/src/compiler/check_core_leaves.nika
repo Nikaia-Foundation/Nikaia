@@ -368,7 +368,7 @@ fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref Chec
                 }
             }
         }
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             match value {
                 Expr::Closure { .. } => {
                     state.facts.kept_lambdas.insert(id_of(value) as i64, (!is_sync, can_throw))

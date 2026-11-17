@@ -72,8 +72,9 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
         let read = code_as_read(names, ty)
         let code = read.code ?? return Ty::Unknown
         let params = written_all(names, aliases, read.generics)
-        let result = code.result ?? return Ty::Fn { params: params, result: null, is_sync: code.is_sync, can_throw: code.can_throw }
-        return Ty::Fn { params: params, result: written_ty(names, aliases, result), is_sync: code.is_sync, can_throw: code.can_throw }
+        let spelled = code_spelled(names, ty)
+        let result = code.result ?? return Ty::Fn { params: params, result: null, is_sync: code.is_sync, can_throw: code.can_throw, spelled: spelled }
+        return Ty::Fn { params: params, result: written_ty(names, aliases, result), is_sync: code.is_sync, can_throw: code.can_throw, spelled: spelled }
     }
     // The `?` wraps whatever the rest of the declaration says.
     if ty.is_nullable {
@@ -144,6 +145,26 @@ fn code_as_read(names: ref winnow_grammar::InternerContext, ty: ref Type) -> Typ
     written.result_from = []
     read.code = written
     return read
+}
+
+/// **The names a written function type gives its parameters**, and the
+/// ones its `from` names, for messages (#2007, ADR-views-3 D14): none where
+/// a parameter goes unnamed.
+fn code_spelled(names: ref winnow_grammar::InternerContext, ty: ref Type) -> CodeNames {
+    let code = ty.code ?? return CodeNames::none()
+    if code.param_names.len() != ty.generics.len() {
+        return CodeNames::none()
+    }
+    let mut params: Vec[String] = []
+    for one in code.param_names {
+        let name = one ?? return CodeNames::none()
+        params.push(names.resolve(name).clone())
+    }
+    let mut from: Vec[String] = []
+    for source in code.result_from {
+        from.push(names.resolve(source).clone())
+    }
+    return CodeNames { params: params, from: from }
 }
 
 /// **Whether a function type lends its parameter at `at` as a view**
