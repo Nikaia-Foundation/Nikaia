@@ -490,7 +490,7 @@ test "interval and difference queries take their fast paths" {
 		"difference-unsat.smt2: proved 4/difference",
 		"difference-sat.smt2: refuted 3/difference",
 		"difference-wide.smt2: proved 12/difference",
-		"choice.smt2: refuted 3",
+		"choice.smt2: refuted 2",
 	]
 	assert(out == expected.join("\n") + "\n")
 }

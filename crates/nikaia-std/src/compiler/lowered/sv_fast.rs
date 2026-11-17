@@ -316,7 +316,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
         let name = *name;
         out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{}.smt2: {}\n", name, sv_line(text, "new"))));
     }
-    let expected = vec!["interval-unsat.smt2: proved 1/interval", "interval-sat.smt2: refuted 1/interval", "interval-round.smt2: proved 1/interval", "difference-unsat.smt2: proved 4/difference", "difference-sat.smt2: refuted 3/difference", "difference-wide.smt2: proved 12/difference", "choice.smt2: refuted 3"];
+    let expected = vec!["interval-unsat.smt2: proved 1/interval", "interval-sat.smt2: refuted 1/interval", "interval-round.smt2: proved 1/interval", "difference-unsat.smt2: proved 4/difference", "difference-sat.smt2: refuted 3/difference", "difference-wide.smt2: proved 12/difference", "choice.smt2: refuted 2"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }

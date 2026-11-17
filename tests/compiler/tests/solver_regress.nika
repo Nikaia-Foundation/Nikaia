@@ -4,7 +4,10 @@
 // shows as `unknown` in the diff. QF_LIA bofill-scheduling
 // SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
-// and about 2 s since.
+// and about 2 s since. QF_LIA 20231117-c_inference 30_30_86_7_sat ended
+// `unknown (cases) 1024` (1151 checks) while every partial theory check
+// counted toward the budget; since only a check that pivots or ends in a
+// conflict counts (#2011), it is refuted under `lg_budget()`.
 use std::fs
 use std::process
 
