@@ -269,6 +269,9 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             if args.len() == 0 && world.words.resolve(method) == "clone" {
                 state.a_clone_seen(world, expr, receiver, read, span)
             }
+            if args.len() == 0 && world.words.resolve(method) == "len" {
+                state.a_collect_only_counted(world, expr, receiver, span)
+            }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {

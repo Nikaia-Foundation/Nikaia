@@ -482,6 +482,28 @@ impl CheckState {
         self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied)
     }
 
+    /// **What an expression does that a read does not** (ADR-269 D3), each
+    /// in a sentence: the methods its walk reached (`frame`, pushed before
+    /// it was walked) that are not pure, and its free calls and forms. Empty
+    /// for a pure one: an `assert` condition (`NK1194`), and the steps of a
+    /// sequence a `for` walks without its `.collect()` (`NK1354`, #1975).
+    fn not_pure_in[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, frame: ref CheckStoredCode, condition: ref Expr) -> Vec[String] sync {
+        let mut not_pure: Vec[String] = []
+        if frame.unresolved {
+            not_pure.push("It calls a method the compiler knows nothing about, so it might change something.")
+        }
+        for key in frame.resolved {
+            let method = resolve_method(world, key) ?? continue
+            let why = check_not_pure_because(method.contract)
+            if why != null {
+                let because = why ?? ""
+                not_pure.push(f"`{key}` {because}")
+            }
+        }
+        self.a_claim_reaches(world, host, condition, not_pure)
+        return not_pure
+    }
+
     /// **The free calls and the forms in a claim that are not a read**
     /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
     fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
