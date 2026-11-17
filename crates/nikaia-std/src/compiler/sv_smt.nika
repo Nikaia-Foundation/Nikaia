@@ -226,11 +226,6 @@ impl SvTh for SvBoth {
 	fn shared(ref self) -> Vec[u32] {
 		return []
 	}
-
-	/// `work()`: the simplex's pivots and Fourier-Motzkin's checks.
-	fn work(ref self) -> i64 {
-		return self.simplex.pivots + self.exact_checks
-	}
 }
 
 /// The search: the SAT core (which holds the book), the theory, which
@@ -242,10 +237,8 @@ pub struct SvSmt[T: SvTh] {
 	/// The SAT trail's entries handed to the theory.
 	pub head: i64,
 	pub budget: LgBudget,
-	/// Theory checks that did work, capped by `budget.cases`: every final
-	/// check, and a partial one that repaired (`work()` grew) or ended in a
-	/// conflict; a partial check that only compared bounds is not counted
-	/// (#2011).
+	/// Theory checks, partial and final: the work, capped by
+	/// `budget.cases`.
 	pub checks: i64,
 	/// Theory conflicts and the literals the theory propagated.
 	pub conflicts: i64,
@@ -406,16 +399,10 @@ fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
 			}
 		}
 		s.fresh = false
-		let before = s.th.work()
+		s.checks += 1
 		let partial = s.th.check(false, s.budget, s.sat.book)
-		if s.th.work() != before {
-			s.checks += 1
-		}
 		match partial {
 			SvChecked::Conflict(_) => {
-				if s.th.work() == before {
-					s.checks += 1
-				}
 				let end = sv_smt_answer(s, partial)
 				if end != null {
 					return end ?? SvSmtEnd::Sat
@@ -1096,9 +1083,9 @@ test "two-way disjunctions are searched with learned clauses over each theory" {
 	]
 	let out = sv_smt_test_lines(files)
 	let expected = [
-		"bits-20.smt2: simplex proved 20; fm proved 402; both proved 37",
+		"bits-20.smt2: simplex proved 344; fm proved 402; both proved 344",
 		"  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0",
-		"bits-sat.smt2: simplex refuted 10; fm refuted 72; both refuted 12",
+		"bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49",
 		"  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0",
 	]
 	assert(out == expected.join("\n") + "\n")

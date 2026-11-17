@@ -31,10 +31,9 @@ pub struct SvTheory {
     pub values: collections::BTreeMap<String, i64>,
     pub facts: Vec<u32>,
     pub exact: bool,
-    pub eliminations: i64,
 }
 
-pub(crate) fn sv_theory(names: Vec<String>) -> SvTheory { SvTheory { names, trail: vec![], levels: vec![], implied: vec![], implied_by: vec![], values: collections::BTreeMap::new(), facts: vec![], exact: true, eliminations: 0 } }
+pub(crate) fn sv_theory(names: Vec<String>) -> SvTheory { SvTheory { names, trail: vec![], levels: vec![], implied: vec![], implied_by: vec![], values: collections::BTreeMap::new(), facts: vec![], exact: true } }
 
 pub(crate) fn sv_lin(row: &SvRow, names: &[String]) -> LgLin {
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -138,7 +137,6 @@ pub trait SvTh {
     fn model(&self) -> collections::BTreeMap<String, i64>;
     fn real_values(&self) -> collections::BTreeMap<String, SvRat>;
     fn shared(&self) -> Vec<u32>;
-    fn work(&self) -> i64;
 }
 
 impl SvTh for SvTheory {
@@ -211,7 +209,6 @@ impl SvTh for SvTheory {
     }
     fn check(&mut self, r#final: bool, limit: &LgBudget, book: &mut SvBook) -> SvChecked {
         if !book.reals.is_empty() { return SvChecked::Unknown(LgUnknown::OutsideTheTheory); }
-        self.eliminations += 1;
         let mut held: Vec<SvHeld> = vec![];
         for l in self.trail.iter() {
             let l = nikaia_std::num::value(l);
@@ -252,7 +249,6 @@ impl SvTh for SvTheory {
     fn model(&self) -> collections::BTreeMap<String, i64> { self.values.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { sv_rat_values(&self.values) }
     fn shared(&self) -> Vec<u32> { vec![] }
-    fn work(&self) -> i64 { self.eliminations }
 }
 
 pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, solved: &[SvSolved], names: &[String]) -> Option<collections::BTreeMap<String, i64>> {

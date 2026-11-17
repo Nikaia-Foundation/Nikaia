@@ -11,12 +11,12 @@ stress/steps: 12 files, solved 12 (proved 6, refuted 6), unknown 0 (overflow 0, 
 all: 59 files, solved 35 (proved 18, refuted 17), unknown 24 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 835.5, certificates checked 18, models evaluated 17
 smoke/refused-function.smt2 unknown (unreadable) 0
 smoke/sat-dotted-symbol.smt2 refuted 1/interval
-smoke/sat-interval.smt2 refuted 2/pre:l2f0
+smoke/sat-interval.smt2 refuted 3/pre:l2f0
 smoke/unsat-bounds.smt2 proved 3/difference
-smoke: 4 files, solved 3 (proved 1, refuted 2), unknown 1 (overflow 0, unreadable 1), malformed 0, wrong 0, PAR-2 513.5, certificates checked 1, models evaluated 2
-pre/sat-tighten.smt2 refuted 3/pre:l3f0
+smoke: 4 files, solved 3 (proved 1, refuted 2), unknown 1 (overflow 0, unreadable 1), malformed 0, wrong 0, PAR-2 513.7, certificates checked 1, models evaluated 2
+pre/sat-tighten.smt2 refuted 5/pre:l3f0
 pre/unsat-fixed.smt2 proved 1/pre:l3f4
 pre/unsat-gcd.smt2 proved 0/pre
 pre/unsat-repeated-unit.smt2 proved 0/pre
 pre/unsat-tighten.smt2 proved 0/pre:l3f0
-pre: 5 files, solved 5 (proved 4, refuted 1), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 0.8, certificates checked 4, models evaluated 1
+pre: 5 files, solved 5 (proved 4, refuted 1), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 1.2, certificates checked 4, models evaluated 1

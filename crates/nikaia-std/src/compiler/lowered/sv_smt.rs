@@ -118,7 +118,6 @@ impl SvTh for SvBoth {
         self.simplex.real_values()
     }
     fn shared(&self) -> Vec<u32> { vec![] }
-    fn work(&self) -> i64 { self.simplex.pivots + self.exact_checks }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -244,12 +243,10 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
             }
         }
         s.fresh = false;
-        let before = s.th.work();
+        s.checks = unsafe { nikaia_std::proven::add::<i64>(s.checks, 1) };
         let partial = s.th.check(false, &s.budget, &mut s.sat.book);
-        if s.th.work() != before { s.checks += 1; }
         match partial {
             SvChecked::Conflict(_) => {
-                if s.th.work() == before { s.checks += 1; }
                 let end = sv_smt_answer(s, &partial);
                 if end.is_some() { return nikaia_std::index::or(end, || SvSmtEnd::Sat); }
                 continue;
@@ -632,7 +629,7 @@ pub(crate) fn sv_smt_test_lines(files: &[(String, String)]) -> String {
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("bits-20"), sv_smt_test_family(20, 1, 21, "unsat", "")), (String::from("bits-sat"), sv_smt_test_family(12, 1, 5, "sat", "(assert (<= (+ x1 x2 x3) 1))\n(assert (>= (+ x4 x5) 2))\n"))];
     let out = sv_smt_test_lines(&files);
-    let expected = vec!["bits-20.smt2: simplex proved 20; fm proved 402; both proved 37", "  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0", "bits-sat.smt2: simplex refuted 10; fm refuted 72; both refuted 12", "  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0"];
+    let expected = vec!["bits-20.smt2: simplex proved 344; fm proved 402; both proved 344", "  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0", "bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49", "  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }

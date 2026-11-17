@@ -58,8 +58,6 @@ pub struct SvTheory {
 	/// Whether `check` eliminates equalities before Fourier-Motzkin (#1282
 	/// item 6).
 	pub exact: bool,
-	/// The checks that eliminated: each is work (`work()`).
-	pub eliminations: i64,
 }
 
 fn sv_theory(names: Vec[String]) -> SvTheory {
@@ -72,7 +70,6 @@ fn sv_theory(names: Vec[String]) -> SvTheory {
 		values: collections::BTreeMap(),
 		facts: [],
 		exact: true,
-		eliminations: 0,
 	}
 }
 
@@ -216,10 +213,6 @@ pub trait SvTh {
 	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] sync
 	/// `shared()`: the equalities a theory shares with others (D13).
 	fn shared(ref self) -> Vec[u32] sync
-	/// `work()`: a count that grows with each repair a check makes (the
-	/// simplex's pivots, a Fourier-Motzkin elimination), never shrinks:
-	/// a partial check that leaves it unchanged did no work (#2011).
-	fn work(ref self) -> i64 sync
 }
 
 impl SvTh for SvTheory {
@@ -330,7 +323,6 @@ impl SvTh for SvTheory {
 		if book.reals.len() > 0 {
 			return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
 		}
-		self.eliminations += 1
 		let mut held: Vec[SvHeld] = []
 		for l in self.trail {
 			let a = book.asserted(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
@@ -390,11 +382,6 @@ impl SvTh for SvTheory {
 	/// none while it is the only one.
 	fn shared(ref self) -> Vec[u32] {
 		return []
-	}
-
-	/// `work()`: every check eliminates, so each is work.
-	fn work(ref self) -> i64 {
-		return self.eliminations
 	}
 }
 

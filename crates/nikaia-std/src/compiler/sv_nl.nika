@@ -465,12 +465,12 @@ test "non-linear terms are abstracted and refined with lemmas" {
 		"sat-repaired.smt2: refuted 2; lemmas []",
 		"sat-refined.smt2: refuted 5; lemmas [pow2-low]",
 		"arguments.smt2: proved 3; lemmas [tangent]; changed tangent: refused",
-		"square.smt2: proved 1; lemmas [square]",
+		"square.smt2: proved 2; lemmas [square]",
 		"division.smt2: proved 1; lemmas [division]; changed division: refused",
-		"remainder.smt2: proved 3; lemmas [division]; changed division: refused",
-		"free.smt2: proved 2; lemmas [congruence, congruence]",
+		"remainder.smt2: proved 4; lemmas [division]; changed division: refused",
+		"free.smt2: proved 3; lemmas [congruence, congruence]",
 		"point.smt2: proved 1; lemmas [tangent]; changed tangent: refused",
-		"irrational.smt2: unknown (non-linear, budget) 8; lemmas [zero, tangent, tangent, tangent, tangent, tangent, tangent]",
+		"irrational.smt2: unknown (non-linear, budget) 93; lemmas [zero, tangent, tangent, tangent, tangent, tangent, tangent]",
 	]
 	assert(out == expected.join("\n") + "\n")
 }

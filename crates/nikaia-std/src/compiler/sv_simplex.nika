@@ -1131,12 +1131,6 @@ impl SvTh for SvSimplex {
 	fn shared(ref self) -> Vec[u32] {
 		return []
 	}
-
-	/// `work()`: the pivots so far; a check that leaves every variable
-	/// inside its bounds compares bounds and pivots none (#2011).
-	fn work(ref self) -> i64 {
-		return self.pivots
-	}
 }
 
 /// The side a non-basic variable sits on.
@@ -1994,11 +1988,11 @@ test "real scripts are answered with rational models and checked proofs" {
 	}
 	let expected = [
 		"half.smt2: refuted, model x = 1/2 checked",
-		"  rod: simplex refuted 1; new-fm unknown (theory) 0; both refuted 1; fm unknown (theory) 0",
+		"  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0",
 		"half-int.smt2: proved, log of 4 steps checked",
 		"  rod: simplex proved 1/interval; new-fm proved 1/interval; both proved 1/interval; fm proved 1",
 		"inside.smt2: refuted, model x = 1/2 checked",
-		"  rod: simplex refuted 1; new-fm unknown (theory) 0; both refuted 1; fm unknown (theory) 0",
+		"  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0",
 		"empty.smt2: proved, log of 4 steps checked",
 		"  rod: simplex proved 0; new-fm unknown (theory) 0; both proved 0; fm unknown (theory) 0",
 		"mixed.smt2: refuted, model n = 1, x = 1/3 checked",
