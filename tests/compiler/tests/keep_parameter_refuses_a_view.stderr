@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `l[0]` here: it is an element of `l`, which keeps it.
+   --> tests/keep_parameter_refuses_a_view.nika:15:5
+    |
+ 15 |     println(f(l[0]))
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `l[0]` reads an element `l` keeps, and what `l` keeps is lent, whether `l` is owned here or borrowed. Giving it away by value would take it out of `l`, and Nikaia never copies behind your back.
+    = help: Write `l[0].clone()` for a copy.
+1 type error

@@ -573,7 +573,7 @@ impl CheckState {
         if found.is_unknown() || found.text() == want.text() {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"{what} here is `{found.text()}`, but it has to be `{want.text()}`.", [], help))
+        self.findings.push(check_refusal("NK1102", span, spoken_in(f"{what} here is `{found.text()}`, but it has to be `{want.text()}`.", found, want), [], shown_in(help, found, want)))
     }
 
     /// **Whether a rule's value is lent** (ADR-grammar-1 D6): written plain or

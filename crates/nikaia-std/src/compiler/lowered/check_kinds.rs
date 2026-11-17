@@ -247,7 +247,7 @@ impl CheckState {
         }
         if !shapes_has_a_null_arm(arms) { return; }
         let written = written_expression(world.words, value);
-        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some(String::from("Remove the `null` arm."))));
+        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.shown()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some(String::from("Remove the `null` arm."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -257,7 +257,7 @@ impl CheckState {
         let known = self.kind_of_the_matched(on);
         if known.is_some() {
             kind = nikaia_std::block::Text::from(nikaia_std::index::or(known.as_deref(), || "").to_string());
-            shown = format!("a `{}`", on.text());
+            shown = format!("a `{}`", on.shown());
         } else {
             kind = match kind_of_a_literal(value) { Some(__nikaia_value) => __nikaia_value, None => return };
             shown = match &*kind {
@@ -349,11 +349,11 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true;
                 let bound = kind_some_binding(world, &arm.pattern);
-                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.text()), vec![String::from("A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.")], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
+                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.shown()), vec![String::from("A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.")], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
             }
             if which == "None" && !none_seen {
                 none_seen = true;
-                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.text()), vec![String::from("A `T?` has no `None`: its nothing is written `null`.")], Some(String::from("Write `null => …`."))));
+                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.shown()), vec![String::from("A `T?` has no `None`: its nothing is written `null`.")], Some(String::from("Write `null => …`."))));
             }
         }
         some_seen || none_seen
@@ -374,7 +374,7 @@ impl CheckState {
                     MatchPattern::Literal(literal) => written_expression(world.words, literal),
                     _ => written_pattern(world.words, &arm.pattern),
                 };
-                let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.text(), inner.text(), inner.text());
+                let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.shown(), inner.shown(), inner.shown());
                 self.findings.push(check_refusal("NK1205", span, format!("`{}` may be `null`, so `{}` can't be matched on it directly.", written, variant), vec![note], Some(format!("Say what `null` stands for first: `let value = {} ?? …`, and `match value`.", written))));
                 return;
             }

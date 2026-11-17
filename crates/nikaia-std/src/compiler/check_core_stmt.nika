@@ -1506,7 +1506,7 @@ fn check_core_stmt_a_changing_part(state: ref CheckState, world: ref CheckWorld,
     match ty {
         Ty::Named { name, args, .. } => {
             if check_core_stmt_changes_through_another_owner(state, world, name) {
-                return f"{path}: {ty.text()}"
+                return f"{path}: {ty.shown()}"
             }
             // `Shared[T]` and `Box[T]` hold one value at the same path; a
             // collection's arguments are its elements, keys and values.

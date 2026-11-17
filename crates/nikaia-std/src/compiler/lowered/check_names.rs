@@ -70,7 +70,7 @@ impl CheckState {
                     _ => { },
                 }
             }
-            self.findings.push(check_refusal("NK1198", at, format!("`{}` works on integers, but this is a `{}`.", written, side.text()), vec![String::from("Bit operators work on the bits of an integer.")], Some(help)));
+            self.findings.push(check_refusal("NK1198", at, format!("`{}` works on integers, but this is a `{}`.", written, side.shown()), vec![String::from("Bit operators work on the bits of an integer.")], Some(help)));
             return;
         }
     }

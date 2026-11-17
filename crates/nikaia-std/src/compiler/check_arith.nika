@@ -352,11 +352,11 @@ impl CheckState {
             } else if declared_with_no_arithmetic(world.here, right) != null {
                 self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
             } else if text_or_bool_in_arithmetic(op, left, right) {
-                let mut culprit = left.text()
+                let mut culprit = left.shown()
                 if is_text_type(left.unseen()) {
                     culprit = "String"
                 } else if !is_a_bool_type(left) {
-                    culprit = right.text()
+                    culprit = right.shown()
                     if is_text_type(right.unseen()) {
                         culprit = "String"
                     }
@@ -421,7 +421,7 @@ impl CheckState {
             symbol = "-"
             note = "`-` negates a number."
         }
-        let mut shown = seen.text()
+        let mut shown = seen.shown()
         if is_text_type(seen) {
             shown = "String"
         }

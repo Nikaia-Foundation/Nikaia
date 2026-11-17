@@ -1,0 +1,26 @@
+// A `keep` parameter holds a value of its own (ADR-views-3 D5, #1532): a
+// field of a lent value, here a `for` binding, handed to it is refused with
+// a `.clone()` help.
+struct Holder {
+    name: String,
+}
+
+fn f(keep a: String, mut into: Vec[String]) {
+    into.push(a)
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("x")
+    return g
+}
+
+fn main() throws {
+    let ws = [Holder { name: make() }]
+    let mut all: Vec[String] = []
+    for w in ws {
+        f(w.name, all)
+    }
+    println(all[0])
+    println(ws[0].name)
+}

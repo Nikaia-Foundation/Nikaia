@@ -319,7 +319,7 @@ impl CheckState {
         let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
         if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
         let copy = a_copy_said(path, ty);
-        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
+        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.shown(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -527,7 +527,7 @@ impl CheckState {
             if used.path == name { message = format!("You're using `{}` again, but it was {}.", name, taken.to); }
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
-            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.text()), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}`.", a_copy_said(&name, &taken.ty)))));
+            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.shown()), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}`.", a_copy_said(&name, &taken.ty)))));
         }
         self.handed = vec![];
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -587,8 +587,8 @@ impl CheckState {
             let mut given_back = false;
             for when in written.iter() { if when.0 == *name && when.1 >= at && when.1 <= used { given_back = true; } }
             if given_back { continue; }
-            let mut first: String = format!("A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the task.", name, ty.text());
-            if who == "a detached task" { first = format!("A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the task.", name, ty.text()); } else if who != "a background task" { first = format!("A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the function.", name, ty.text()); }
+            let mut first: String = format!("A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the task.", name, ty.shown());
+            if who == "a detached task" { first = format!("A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the task.", name, ty.shown()); } else if who != "a background task" { first = format!("A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the function.", name, ty.shown()); }
             found.push(check_refusal("NK2101", &Span { start: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("You're using `{}` after {} took it.", name, who), vec![first, String::from("Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.")], Some(format!("Make a copy before and hand over the copy: `let copy = {}.clone()`, then use `copy` inside.", name))));
         }
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -813,7 +813,7 @@ impl CheckState {
         let at = check_span_at(world, expr, span);
         if self.a_clone_that_copies(world, copy) {
             let what: String = nikaia_std::index::or(dotted_path(world, receiver), || "the value".into());
-            self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.text()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."), clone_deleted(world, expr, receiver));
+            self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.shown()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."), clone_deleted(world, expr, receiver));
             return;
         }
         let name = match receiver {

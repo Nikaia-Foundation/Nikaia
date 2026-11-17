@@ -86,7 +86,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                 let result = signature.result ?? Ty::Unknown
                 let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
                 if check_holds_a_symbol(state, world, result, seen) {
-                    state.findings.push(check_refusal("NK1330", span, f"`{key}` hands back `{result.text()}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", ["Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2)."], f"Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{key}(input; words: table)`; `table.resolve(symbol)` reads a name back."))
+                    state.findings.push(check_refusal("NK1330", span, f"`{key}` hands back `{result.shown()}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", ["Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2)."], f"Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{key}(input; words: table)`; `table.resolve(symbol)` reads a name back."))
                 }
             }
         },
@@ -407,8 +407,8 @@ fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, wo
     // place, and what is handed back would be a view of that view, which no
     // signature can name. The view is copied into a local first.
     if ty.is_a_view() && what == "handed back" {
-        let notes: Vec[String] = [f"`mut {name}: {ty.text()}` changes the caller's view in place, so handing it back hands back a view of the caller's view.".clone()]
-        let help: String = f"Take `{name}: {ty.text()}` without `mut`, and walk a local of its own: `let mut at = {name}`, then `return at`."
+        let notes: Vec[String] = [f"`mut {name}: {ty.shown()}` changes the caller's view in place, so handing it back hands back a view of the caller's view.".clone()]
+        let help: String = f"Take `{name}: {ty.shown()}` without `mut`, and walk a local of its own: `let mut at = {name}`, then `return at`."
         state.findings.push(check_refusal("NK1131", span, f"You can't hand back `{name}` here: a `mut` parameter that is a view is only borrowed.", notes, help))
         return
     }
@@ -419,7 +419,7 @@ fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, wo
     if what == "handed back" {
         way = " to return"
     }
-    let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.text()}` is changed in place and stays the caller's. Giving it away would take it from them."]
+    let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.shown()}` is changed in place and stays the caller's. Giving it away would take it from them."]
     // **Views-3 has no `keep mut`** (#1486): a function that uses up the
     // value takes it `keep` and changes a local of its own, since a plain
     // parameter it changes is `NK1138`.
@@ -430,7 +430,7 @@ fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, wo
 /// `NK1282`: an entry handed neither text (a `String`, or a mapping, which is
 /// checked text, ADR-016 D1) nor a `Bytes` (ADR-366 D1).
 fn check_core_grammar_input_refused(key: ref String, given: ref Ty, span: ref Span) -> CheckFinding {
-    let message = f"`{key}` parses a `String` or a `Bytes`, and is handed a `{given.text()}`."
+    let message = f"`{key}` parses a `String` or a `Bytes`, and is handed a `{given.shown()}`."
     let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which."]
     let help: String = "Hand it the text or the bytes to parse."
     return check_refusal("NK1282", span, message, notes, help)

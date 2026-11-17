@@ -1,0 +1,20 @@
+error[NK2105]: You're using `s` again, but it was passed to `f`, which keeps it.
+   --> tests/code_that_keeps_is_given_its_argument.nika:22:5
+    |
+ 22 |     println(s)
+    |     ^
+    |
+    = note: `s` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `s.clone()`.
+error[NK1102]: `f` expects argument 1 to be a `String` of its own, but you're passing a view of a `String`.
+   --> tests/code_that_keeps_is_given_its_argument.nika:30:15
+    |
+ 30 |     println(f(s))
+    |               ^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `f` keeps its argument 1 after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+1 type error

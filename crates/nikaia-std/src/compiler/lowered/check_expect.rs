@@ -111,6 +111,12 @@ impl CheckState {
             said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", found_text), &*format!("an error, one of {}", members_named(&members))));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");
         }
+        if what == "returns" && want.is_a_view() {
+            let sources = written_from_of(world, nikaia_std::index::or(self.current.as_deref(), || ""));
+            if !sources.is_empty() { said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", want_text), &*format!("`{} from {}`", want.shown(), nikaia_std::block::Text::from(sources.join(" | "))))); }
+        }
+        said = spoken_in(&said, found, Some(want));
+        help = shown_in(&help, found, Some(want));
         let finding = check_refusal(&code, span, said, vec![], Some(help));
         if waiting >= 0 {
             let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -126,8 +132,8 @@ impl CheckState {
     pub(crate) fn said_as_declared(&mut self, present: &Ty, value: Option<&Expr>, before: i64) {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         if !self.facts.static_field_reads.contains(&(id_of(check_peeled(given)) as i64)) { return; }
-        let shown = format!("`{}`", present.text());
-        let said = format!("`{}`", present.owned().text());
+        let shown = spoken(present, None);
+        let said = spoken(&present.owned(), None);
         if shown == said { return; }
         let mut at = before;
         while at < self.findings.len() as i64 {

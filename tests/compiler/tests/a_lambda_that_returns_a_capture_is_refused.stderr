@@ -1,4 +1,4 @@
-error[NK1104]: This lambda returns `outer`, which it captures, but `fn(ref String) -> String` returns text of its own.
+error[NK1104]: This lambda returns `outer`, which it captures, but `fn(String) -> String` returns text of its own.
    --> tests/a_lambda_that_returns_a_capture_is_refused.nika:12:25
     |
  12 | 	println(apply(fn(_s) { outer }, g))

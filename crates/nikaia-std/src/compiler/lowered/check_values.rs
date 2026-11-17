@@ -85,7 +85,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.text())], Some(String::from("Write `.clone()` to copy it here.")))); }
+    pub(crate) fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), want, Some(found)), vec![format!("This is a view: it points into a `{}` that something else owns.", want.shown()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.shown())], Some(String::from("Write `.clone()` to copy it here.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_handler_that_does_more_than_the_type_allows(&mut self, promised: &CheckPromises, seen: &CheckHanded, span: &Span) {
@@ -95,12 +95,12 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_failing_lambda_where_the_type_does_not_fail(&mut self, place: &Ty, span: &Span) {
-        let shown = place.text();
+        let shown = place.shown();
         let wanted: String = match place {
             Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw: true }.text() },
+            }), is_sync, can_throw: true }.shown() },
             _ => format!("{} throws", shown),
         };
         self.findings.push(check_refusal("NK1102", span, format!("This lambda can fail, but `{}` says the code it names never fails.", shown), vec![String::from("A function type without `throws` cannot fail, so a lambda that can is not of that type.")], Some(format!("Write `{}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`.", wanted))));

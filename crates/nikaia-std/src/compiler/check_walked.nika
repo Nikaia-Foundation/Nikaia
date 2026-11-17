@@ -171,7 +171,7 @@ pub fn check_walked_unrolling(walks_fields: ref collections::BTreeMap[String, St
             any = true
             out.push_str(f"comptime: `{function}` unrolled over `{on}` as `{check_specialised(function, on)}`\n")
             for field in fields {
-                out.push_str(f"    {field.name}: {field.ty.text()}\n")
+                out.push_str(f"    {field.name}: {field.ty.shown()}\n")
             }
         }
         if !any {

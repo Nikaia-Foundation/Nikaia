@@ -311,7 +311,7 @@ impl CheckState {
         }
         for index in nikaia_std::index::or(indices, || vec![].into()) {
             if count > 0 && index >= count {
-                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", unsafe { nikaia_std::proven::sub::<i64>(count, 1) }).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
+                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.shown()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", unsafe { nikaia_std::proven::sub::<i64>(count, 1) }).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
                 return;
             }
         }
@@ -336,13 +336,13 @@ impl CheckState {
         if lane.is_empty() { return; }
         let float = check_simd_float(&lane);
         if float && check_simd_integer_only(method) {
-            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).", method)], Some(String::from("Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))));
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.shown(), method), vec![format!("`{}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).", method)], Some(String::from("Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))));
             return;
         }
         if !float && check_simd_float_only(method) {
             let mut help: String = String::from("Write the operation lane by lane over `lane(i)`.");
             if method == "sum" { help = String::from("Write `wrapping_sum()`, which names what a lane does where the sum does not fit."); }
-            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is a float lane's operation (ADR-377 D9).", method)], Some(help)));
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.shown(), method), vec![format!("`{}` is a float lane's operation (ADR-377 D9).", method)], Some(help)));
         }
     }
 }

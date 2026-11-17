@@ -97,7 +97,7 @@ impl CheckState {
         let item = note_seq_item(actual)
         let mut what: String = "a sequence"
         if !item.is_unknown() {
-            what = f"a sequence of `{item.text()}`"
+            what = f"a sequence of `{item.shown()}`"
         }
         let notes: Vec[String] = [f"This is {what}. Ranges, a list's `iter()`, `chars()` and `drain()` can be walked from either end; a map's `keys()` and `io::lines()` only from the front, and a `filter` doesn't know its length."]
         self.findings.push(check_refusal("NK2703", span, f"`{written}` {needs}, but {lacks}.", notes, way))

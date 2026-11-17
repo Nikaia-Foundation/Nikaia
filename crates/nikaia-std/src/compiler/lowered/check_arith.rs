@@ -252,9 +252,9 @@ impl CheckState {
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
             if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if text_or_bool_in_arithmetic(&op, left, right) {
-                let mut culprit = left.text();
+                let mut culprit = left.shown();
                 if is_text_type(&left.unseen()) { culprit = String::from("String"); } else if !is_a_bool_type(left) {
-                    culprit = right.text();
+                    culprit = right.shown();
                     if is_text_type(&right.unseen()) { culprit = String::from("String"); }
                 }
                 let note: String = String::from("Operators belong to numbers, and `+` joins two texts; text and `bool` have no other arithmetic.");
@@ -298,7 +298,7 @@ impl CheckState {
             symbol = "-";
             note = String::from("`-` negates a number.");
         }
-        let mut shown = seen.text();
+        let mut shown = seen.shown();
         if is_text_type(&seen) { shown = String::from("String"); }
         self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on `{}`.", symbol, shown), vec![note], None));
     }

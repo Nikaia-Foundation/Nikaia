@@ -138,17 +138,19 @@ fn solver_program(repo: String, tmp: String) throws {
 	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    sv_rod_main()\n}\n")
 }
 
-// The environment the program builds in: rustc's lints capped (#1949). The
-// program leaves out the files' `*_test_*` functions and more, so rustc
-// warns of a hundred and forty functions never used; a build the backend
-// said anything about lowers the whole program a second time to place what
-// it said (`report` in `crates/nikaia/src/project.rs`, ADR-300), about 70 s
-// of a cold build, for warnings `solver_build` never shows. The user's own
-// `RUSTFLAGS` are kept in front.
+// The environment the program builds in: the program's lints capped (#1949),
+// and only the program's (`NIKAIA_CAP_LINTS`, read by the build's `rustc`
+// wrapper in `project_drive.nika`). The program leaves out the files'
+// `*_test_*` functions and more, so rustc warns of a hundred and forty
+// functions never used; a build the backend said anything about lowers the
+// whole program a second time to place what it said (`report` in
+// `crates/nikaia/src/project.rs`, ADR-300), about 70 s of a cold build, for
+// warnings `solver_build` never shows. **Not `RUSTFLAGS=--cap-lints=allow`**,
+// as it was: the flags are part of every dependency's fingerprint, so Cargo
+// built all of them again (`std` and about 70 crates) beside the tree CI
+// restores (#1956), which pushed `solver_fuzz` past its 300 s.
 fn solver_build_env() -> Vec[(String, String)] {
-	let own = env::var("RUSTFLAGS") ?? ""
-	let flags = if own == "" { "--cap-lints=allow" } else { f"{own} --cap-lints=allow" }
-	return [("RUSTFLAGS", flags)]
+	return [("NIKAIA_CAP_LINTS", "allow")]
 }
 
 // Builds the program and gives the binary's path, or an empty text after

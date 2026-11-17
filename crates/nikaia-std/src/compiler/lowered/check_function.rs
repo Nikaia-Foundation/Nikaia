@@ -553,7 +553,7 @@ pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, wor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block, expected: &Ty, at: &Span, is_extern: bool, ends: bool) {
-    let want = expected.text();
+    let want = expected.shown();
     if body.stmts.is_empty() && !is_extern { state.findings.push(check_refusal("NK1104", at, format!("This function returns `()`, but it's declared to return `{}`.", want), vec![String::from("Its body is empty, so it hands nothing back.")], Some(format!("Write the `{}` it returns as the body's last expression, or remove `-> {}`.", want, want)))); }
     if !body.stmts.is_empty() && ends {
         let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };

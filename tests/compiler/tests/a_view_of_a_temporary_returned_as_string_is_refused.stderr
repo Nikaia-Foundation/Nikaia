@@ -1,4 +1,4 @@
-error[NK1104]: You're returning `ref String`, but the function is declared to return `String`.
+error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
    --> tests/a_view_of_a_temporary_returned_as_string_is_refused.nika:10:12
     |
  10 |     return make(n).text.trim()

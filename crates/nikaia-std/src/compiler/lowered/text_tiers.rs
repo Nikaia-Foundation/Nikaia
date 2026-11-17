@@ -384,6 +384,22 @@ pub(crate) fn position_published(owner: &TextOwner, declared: &TextDeclared) -> 
     }
 }
 
+pub(crate) fn a_keep_position(owner: &TextOwner, declared: &TextDeclared) -> bool {
+    match owner {
+        TextOwner::Param(key, at) => {
+            let at = *at;
+            let function = match *nikaia_std::index::get(&declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at))
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn demoted_for_keeping(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
+    let position = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    a_keep_position(&position.owner, declared)
+}
+
 pub(crate) fn field_published(of: &str, field: &str, declared: &TextDeclared) -> bool {
     let key = (nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(field.to_string()));
     let found = match *nikaia_std::index::get(&declared.fields, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -3138,6 +3154,7 @@ pub(crate) struct TierLate {
     pub(crate) branches: i64,
     pub(crate) viewing: collections::BTreeSet<String>,
     pub(crate) viewing_methods: collections::BTreeSet<String>,
+    pub(crate) viewing_library: collections::BTreeMap<String, collections::BTreeSet<i64>>,
     pub(crate) variants: collections::BTreeSet<String>,
     pub(crate) views: collections::BTreeMap<String, Vec<String>>,
     pub(crate) viewers: collections::BTreeMap<String, Vec<(String, i64)>>,
@@ -3152,7 +3169,7 @@ pub(crate) struct TierLate {
 }
 
 pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_, '_>) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new(), lendable: collections::BTreeSet::new(), lent: collections::BTreeSet::new() };
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), viewing_library: collections::BTreeMap::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new(), lendable: collections::BTreeSet::new(), lent: collections::BTreeSet::new() };
     for (key, function) in declared.fns.iter() {
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if late_holds_text(result, declared, ask, 0) { late.viewing.insert(nikaia_std::block::Text::from(key.to_string())); }
@@ -3164,6 +3181,24 @@ pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAs
                 if nikaia_std::index::or((*nikaia_std::index::get(&declared.fns, key)).as_ref().map(|__nikaia_it| __nikaia_it.changes_self), || false) { late.changing_methods.insert(nikaia_std::block::Text::from(name.to_string())); }
             }
         }
+    }
+    for (name, keys) in ask.methods.keys.iter() {
+        if declared.methods.contains_key(name) { continue; }
+        let mut from: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        let mut every = true;
+        for key in keys.iter() {
+            let contract = match *nikaia_std::index::get(&ask.library.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !signature.takes_a_receiver() { continue; }
+            let mut one: collections::BTreeSet<i64> = collections::BTreeSet::new();
+            if sources_of_a_method(contract, &mut one) {
+                for at in one.iter() {
+                    let at = nikaia_std::num::value(at);
+                    from.insert(at);
+                }
+            } else if late_hands_back_an_element(signature) { from.insert(-1); } else { every = false; }
+        }
+        if every && !from.is_empty() { late.viewing_library.insert(nikaia_std::block::Text::from(name.to_string()), from); }
     }
     for (key, field) in declared.fields.iter() { if !field.ty.is_nullable && plain_string(ask.names, &field.ty) { late.text_fields.insert(format!("{}.{}", key.0, key.1)); } }
     for (key, _) in declared.variants.iter() { late.variants.insert(nikaia_std::block::Text::from(key.to_string())); }
@@ -3239,6 +3274,31 @@ pub(crate) fn late_bind(name: String, late: &mut TierLate) {
     let mut frame = nikaia_std::index::or(late.frames.pop(), || vec![].into());
     frame.push(name);
     late.frames.push(frame);
+}
+
+pub(crate) fn late_hands_back_an_element(signature: &Signature) -> bool {
+    let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    #[allow(unused_mut)] let mut held: Vec<String> = vec![];
+    match &nikaia_std::index::get(&signature.params, 0).1 {
+        Ty::Named { args, .. } => { for arg in args.iter() { late_type_variables(arg, &mut held); } },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); late_type_variables(item, &mut held); },
+        _ => { },
+    }
+    let mut named: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut held = held;
+    late_type_variables(result, &mut named);
+    named.iter().any(|one| { nikaia_std::list::contains(&held, &one) })
+}
+
+pub(crate) fn late_type_variables(ty: &Ty, out: &mut Vec<String>) {
+    match ty {
+        Ty::Named { args, .. } => { for arg in args.iter() { late_type_variables(arg, out); } },
+        Ty::Var { name, .. } => { out.push(nikaia_std::block::Text::from(name.to_string())); },
+        Ty::Tuple(parts) => { for part in parts.iter() { late_type_variables(part, out); } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); late_type_variables(inner, out); },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); late_type_variables(item, out); },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); late_type_variables(item, out); },
+        _ => { },
+    }
 }
 
 pub(crate) fn late_serial(name: &str, late: &TierLate) -> i64 {
@@ -3616,13 +3676,27 @@ pub(crate) fn late_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, 
         },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if late.viewing_methods.contains(ask.names.resolve(method)) {
+            let name = ask.names.resolve(method);
+            if late.viewing_methods.contains(name) {
                 late_given(receiver, ask, late, &mut out);
                 for arg in args.iter() { late_given(arg, ask, late, &mut out); }
+            } else if late.viewing_library.contains_key(name) {
+                let from = match *nikaia_std::index::get(&late.viewing_library, name) { Some(__nikaia_value) => __nikaia_value, None => return out };
+                if from.contains(&-1) { late_given(receiver, ask, late, &mut out); }
+                let mut at: i64 = 0;
+                for arg in args.iter() {
+                    if from.contains(&at) { late_given(arg, ask, late, &mut out); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+                }
             }
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
         Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            late_given(first, ask, late, &mut out);
+            late_given(fallback, ask, late, &mut out);
+        },
         _ => { late_read_off(value, ask, late, &mut out); },
     }
     out
@@ -3635,18 +3709,39 @@ pub(crate) fn late_given(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, late
             let key = match late_key(ask.names.resolve(name), late) { Some(__nikaia_value) => __nikaia_value, None => return };
             if !nikaia_std::list::contains(&out, &key) { out.push(nikaia_std::block::Text::from(key.to_string())); }
         },
+        Expr::Call { .. } => { late_given_sources(arg, ask, late, out); },
+        Expr::MethodCall { .. } => { late_given_sources(arg, ask, late, out); },
+        Expr::Try(_, _) => { late_given_sources(arg, ask, late, out); },
+        Expr::Coalesce { .. } => { late_given_sources(arg, ask, late, out); },
         _ => { },
     }
     late_read_off(arg, ask, late, out);
 }
 
+pub(crate) fn late_given_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, late: &TierLate, out: &mut Vec<String>) { for source in late_sources(value, ask, late) { if !nikaia_std::list::contains(&out, &source) { out.push(source); } } }
+
 pub(crate) fn late_read_off(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, late: &TierLate, out: &mut Vec<String>) {
+    match value {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); late_read_off_a_call(base, ask, late, out); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); late_read_off_a_call(base, ask, late, out); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); late_read_off_a_call(base, ask, late, out); },
+        _ => { },
+    }
     let root = match late_place_root(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let key = match late_key(&root, late) { Some(__nikaia_value) => __nikaia_value, None => return };
     for source in nikaia_std::index::or(match *nikaia_std::index::get(&late.views, &key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into()) { if !nikaia_std::list::contains(&out, &source) { out.push(source); } }
+}
+
+pub(crate) fn late_read_off_a_call(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, late: &TierLate, out: &mut Vec<String>) {
+    match base {
+        Expr::Call { .. } => { late_given_sources(base, ask, late, out); },
+        Expr::MethodCall { .. } => { late_given_sources(base, ask, late, out); },
+        Expr::Try(_, _) => { late_given_sources(base, ask, late, out); },
+        _ => { late_read_off(base, ask, late, out); },
+    }
 }
 
 pub(crate) fn late_alias(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, late: &TierLate) -> Option<String> {
@@ -5150,6 +5245,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
 pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collections::BTreeSet<String>, unlent: &mut collections::BTreeSet<String>) -> collections::BTreeMap<String, Tier> {
     let mut positions = flows.positions.copy_owned();
     demoted.extend(flows.demoted.iter().cloned());
+    for (word, position) in flows.known.iter() { if a_keep_position(&position.owner, declared) { demoted.insert(nikaia_std::block::Text::from(word.to_string())); } }
     for word in demoted.iter() {
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -5161,7 +5257,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
     let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut never: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut unmixed = flows.unlinked.copy_owned();
-    for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) { fixed.insert(nikaia_std::block::Text::from(word.to_string())); } }
+    for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) || demoted_for_keeping(word, flows, declared) { fixed.insert(nikaia_std::block::Text::from(word.to_string())); } }
     let mut changed = true;
     while changed {
         changed = false;

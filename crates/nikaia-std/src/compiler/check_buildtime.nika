@@ -62,7 +62,7 @@ impl CheckState {
             }
             else => {}
         }
-        self.findings.push(check_refusal("NK1167", span, f"`{bound}` is a `{held.text()}`, which {holder} can't hold.", [f"{capitalised(owns)} allocates memory, and a value computed at build time can't. It can hold {fixed} instead."], way_out))
+        self.findings.push(check_refusal("NK1167", span, f"`{bound}` is a `{held.shown()}`, which {holder} can't hold.", [f"{capitalised(owns)} allocates memory, and a value computed at build time can't. It can hold {fixed} instead."], way_out))
     }
 
     /// `NK1154`: two elements of one list literal are not the same type
@@ -79,7 +79,7 @@ impl CheckState {
         let other_text = other.text()
         let mut two = other_kind.clone()
         if other_text != "?" && other_text.len() > 0 {
-            two = f"`{other_text}`"
+            two = spoken(other, null)
         }
         self.findings.push(check_refusal("NK1154", span, f"This list mixes {one} and {two}, but a list holds one type.", ["The first element with a known type sets the type for the rest."], "Convert the element that doesn't fit, or use two lists."))
     }

@@ -303,7 +303,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
             let part: Ty = nikaia_std::index::or(unhashed, || Ty::Unknown);
             let shown = given.text();
             let mut said: String = format!("`add` feeds the hasher, and `{}` doesn't hash.", shown);
-            if part.text() != shown { said = format!("`add` feeds the hasher, and `{}` doesn't hash: its part `{}` doesn't.", shown, part.text()); }
+            if part.text() != shown { said = format!("`add` feeds the hasher, and `{}` doesn't hash: its part `{}` doesn't.", shown, part.shown()); }
             state.findings.push(check_refusal("NK1260", span, said, vec![String::from("What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself).")], Some(String::from("Feed it the parts `eq` compares that hash, such as an integer or a text made from the value."))));
         }
         state.facts.hasher_adds.insert(id_of(receiver) as i64);
@@ -700,7 +700,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
         if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: spoken_in(&format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), &want, Some(&have)), notes: vec![], help: Some(shown_in(&way_out_of_a_mismatch(&have, &want), &want, Some(&have))), labels: vec![], edit: None });
         }
     }
 }
@@ -725,7 +725,7 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
     };
     if numbers || have.fits(&want) { return; }
     let at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: spoken_in(&format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), &want, Some(&have)), notes: vec![], help: Some(shown_in(&way_out_of_a_mismatch(&have, &want), &want, Some(&have))), labels: vec![], edit: None });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -822,7 +822,7 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     state.number_asked(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, &want, span, true);
     let have: Ty = check_core_call_on_written(unsafe { nikaia_std::proven::read(&found, (at) as usize) });
     if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }) && state.no_integer_is(world, &want) {
-        let wanted = want.text();
+        let wanted = want.shown();
         let number_at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
         let message: String = format!("`{}` expects `{}` here, but you're passing a number.", key, wanted);
         let help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);
@@ -831,7 +831,7 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     }
     if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: spoken_in(&format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), &want, Some(&have)), notes: vec![], help: Some(shown_in(&way_out_of_a_mismatch(&have, &want), &want, Some(&have))), labels: vec![], edit: None });
 }
 
 pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], expected: &mut Vec<Ty>) {
@@ -1350,7 +1350,7 @@ pub(crate) fn check_core_call_on_a_viewed_key(state: &mut CheckState, world: &Ch
         },
         _ => { },
     }
-    state.findings.push(check_refusal("NK1104", &at, format!("This lambda returns `{}`, a view, but `sort_by_key` wants a key of its own.", key.text()), vec![String::from("`sort_by_key` moves the items while it compares their keys, so a key may not point into an item.")], Some(String::from("Hand back a copy with `.clone()`."))));
+    state.findings.push(check_refusal("NK1104", &at, spoken_in(&format!("This lambda returns `{}`, but `sort_by_key` wants a key of its own.", key.text()), &key, None), vec![String::from("`sort_by_key` moves the items while it compares their keys, so a key may not point into an item.")], Some(String::from("Hand back a copy with `.clone()`."))));
 }
 
 pub(crate) fn check_core_call_on_holds_a_view(ty: &Ty) -> bool {

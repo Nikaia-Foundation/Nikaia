@@ -41,7 +41,7 @@ fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: Check
     if read && is_text_type(ty) {
         return
     }
-    let notes: Vec[String] = [f"`self` and `mut self` borrow the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
+    let notes: Vec[String] = [f"`self` and `mut self` borrow the value, and `{field}` is a `{ty.shown()}`. Giving it away would take a piece out of something this method doesn't own."]
     let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
     // **A view of `self` is handed back without a mark** (ADR-views-3 D4,
     // D7, #1403): `ref` left the language, so the help never offers one,
@@ -327,7 +327,7 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     if state.a_text_bytes_view(world, value) {
         return
     }
-    let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
+    let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.shown()}`. Giving it away would take a piece out of something this function doesn't own."]
     // **The ways out in views-3's words** (ADR-views-3 D2, D4, D8, #1403):
     // a view handed back on every way out needs no mark, and a parameter
     // that only reads is lent without `keep`; none of them writes `ref`.
@@ -668,7 +668,7 @@ fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref Ty, 
             if !check_core_lambda_results_agree(other, one.ty) {
                 let was = one.ty.text()
                 let wanted = other.text()
-                state.findings.push(check_refusal("NK1104", one.at, f"You're returning `{was}`, but this lambda's other result is `{wanted}`.", ["A lambda's `return`s and its last value are its result, so they are of one type."], f"Make it a `{wanted}`, or the others a `{was}`."))
+                state.findings.push(check_refusal("NK1104", one.at, spoken_in(f"You're returning `{was}`, but this lambda's other result is `{wanted}`.", one.ty, other), ["A lambda's `return`s and its last value are its result, so they are of one type."], f"Make it a `{other.shown()}`, or the others a `{one.ty.shown()}`."))
             }
         }
         seen.push(one.ty.clone())
@@ -1026,7 +1026,7 @@ fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWor
         if not_text {
             let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type."
             if !given.is_unknown() {
-                said = f"An `assert`'s `message:` has to be text, but this is `{given.text()}`."
+                said = f"An `assert`'s `message:` has to be text, but this is `{given.shown()}`."
             }
             state.an_assert_of_another_shape(said, span)
         }

@@ -494,7 +494,7 @@ impl CheckState {
         if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(world, want) { return false; }
         let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let hole: String = String::from("\u{0}");
-        let wanted = want.text();
+        let wanted = want.shown();
         let said = message(&hole, &wanted);
         let text = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", hole), &*"a number"));
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");

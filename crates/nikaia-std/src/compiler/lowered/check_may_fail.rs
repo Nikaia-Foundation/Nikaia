@@ -41,7 +41,7 @@ impl CheckState {
         } { Some(__nikaia_value) => __nikaia_value, None => return };
         let named: String = match thrown {
             Ty::Unknown => String::from(""),
-            _ => format!(" `{}`", thrown.text()),
+            _ => format!(" `{}`", thrown.shown()),
         };
         let mut help: String = format!("Add `throws` to `{}`, or handle the failure with `… catch {{ … }}` where it is called.", function);
         if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::block::Text::from(nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string())); }

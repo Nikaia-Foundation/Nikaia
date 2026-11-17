@@ -83,7 +83,7 @@ pub(crate) fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckStat
     let kind = check_attributes_literal_misfit(&default.value, &want);
     if kind.is_some() {
         let said = match kind { Some(__nikaia_value) => __nikaia_value, None => return };
-        let wanted = want.text();
+        let wanted = want.shown();
         state.findings.push(check_refusal("NK1166", &default.span, format!("`{}` holds `{}`, but its default is {}.", name, wanted, said), vec![], Some(format!("Give `{}` a default that is a `{}`.", name, wanted))));
         return;
     }

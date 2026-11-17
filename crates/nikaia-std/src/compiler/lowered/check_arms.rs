@@ -203,7 +203,7 @@ pub(crate) fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span
     }
     #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in known.iter() {
-        let text = ty.text();
+        let text = spoken(ty, None);
         if !nikaia_std::list::contains(&shown, &text) { shown.push(text); }
     }
     if numbers > 0 { shown.push(String::from("a number")); }
@@ -211,7 +211,7 @@ pub(crate) fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span
     let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     while index < shown.len() as i64 {
         let one = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&shown, (index) as usize) }).to_string());
-        if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
+        if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and {}", listed, one); } else if index == 0 { listed = nikaia_std::block::Text::from(one.to_string()); } else { listed = format!("{}, {}", listed, one); }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     Some(check_refusal("NK1245", span, format!("The arms of this {} are {}, so the compiler can't tell what type its value is.", article, listed), vec![format!("What is not known is not checked, so the value of a `{}` whose arms disagree is refused rather than left to the language below.", word)], Some(format!("Make the arms of the {} the same type.", article))))

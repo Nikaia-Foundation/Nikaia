@@ -1,0 +1,62 @@
+== lowered.md
+
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
+
+## Core
+
+* a core fact
+
+### Lowering and lower-std
+
+Paths: `lowered/`, `lower-std`, `sysroot`
+
+* a lowering trap
+
+== named.md
+
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
+
+## Core
+
+* a core fact
+
+### Grammar
+
+Paths: `grammar`, `parser`
+
+* a grammar trap
+
+== many.md
+
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
+
+## Core
+
+* a core fact
+
+### Grammar
+
+Paths: `grammar`, `parser`
+
+* a grammar trap
+
+### Lowering and lower-std
+
+Paths: `lowered/`, `lower-std`, `sysroot`
+
+* a lowering trap
+
+### Prover
+
+Paths: `sv_`, prover, `--bounds`
+
+* a prover trap
+
+== none.md
+
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
+
+## Core
+
+* a core fact
+

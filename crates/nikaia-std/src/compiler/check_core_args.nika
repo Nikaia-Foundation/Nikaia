@@ -145,7 +145,7 @@ fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld,
     for p in params {
         if at < given.len() && lent_mut(given[at]) != null && !mutable.contains(p) {
             let name = world.words.resolve(p).clone()
-            let wanted = code.text()
+            let wanted = code.shown()
             let position = at + 1
             state.findings.push(check_refusal("NK1102", check_span_at(world, arg, span), f"This lambda takes `{name}` without `mut`, but `{wanted}` lends parameter {position} as `mut`.", ["`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place."], f"Write `mut {name}`."))
         }
@@ -647,7 +647,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
             held.push(Ty::Unknown)
         } else {
             let door = check_core_args_door(writing)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [], edit: null })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.shown()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [], edit: null })
             held.push(Ty::Unknown)
         }
         at += 1
@@ -868,7 +868,7 @@ fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref Check
             if !has_kind {
                 has_kind = true
                 first_kind = kind.clone()
-                first_written = found.text()
+                first_written = found.shown()
             } else if first_kind != kind && !said {
                 said = true
                 state.a_list_whose_elements_disagree(first_kind, first_written, kind, found, span)
@@ -896,7 +896,7 @@ fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref Check
             said = true
             let first = agreed.clone()
             let kind: String = (element_kind(item, first) ?? "a value").clone()
-            state.a_list_whose_elements_disagree(kind, first.text(), "a value", found, span)
+            state.a_list_whose_elements_disagree(kind, first.shown(), "a value", found, span)
         }
     }
     // **An integer beside a float** (Part I 2.4, #703): `[1.5, 2]`. A number
@@ -917,7 +917,7 @@ fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref Check
         if float != null && an_integer {
             said = true
             let first: Ty = float ?? Ty::Unknown
-            state.a_list_whose_elements_disagree("a float", first.text(), "an integer", Ty::Unknown, span)
+            state.a_list_whose_elements_disagree("a float", first.shown(), "an integer", Ty::Unknown, span)
         }
     }
     // **And the narrower elements are widened into it** (D32).

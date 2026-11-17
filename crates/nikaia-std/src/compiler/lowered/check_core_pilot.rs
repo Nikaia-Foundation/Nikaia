@@ -53,7 +53,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
             if !handed && !declares_words && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
                 let result = nikaia_std::index::or(signature.result, || Ty::Unknown);
                 let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-                if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.text()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
+                if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.shown()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
             }
         },
         None => { },
@@ -283,21 +283,21 @@ pub(crate) fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut Ch
     if !local.changing { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_a_view() && what == "handed back" {
-        let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.text()).to_string())];
-        let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.text(), name); #[allow(clippy::redundant_locals)] let notes = notes;
+        let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.shown()).to_string())];
+        let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.shown(), name); #[allow(clippy::redundant_locals)] let notes = notes;
         state.findings.push(check_refusal("NK1131", span, format!("You can't hand back `{}` here: a `mut` parameter that is a view is only borrowed.", name), notes, Some(help)));
         return;
     }
     if ty.is_unknown() || state.copied(world, &ty) { return; }
     let mut way: &'static str = "";
     if what == "handed back" { way = " to return"; }
-    let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
+    let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.shown())];
     let help: String = format!("Write `{}.clone()` for a copy{}, or, if the function is meant to use up its value, take `keep {}` and change a local of its own: `let mut own = {}`.", name, way, name, name); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
 }
 
 pub(crate) fn check_core_grammar_input_refused(key: &str, given: &Ty, span: &Span) -> CheckFinding {
-    let message = format!("`{}` parses a `String` or a `Bytes`, and is handed a `{}`.", key, given.text());
+    let message = format!("`{}` parses a `String` or a `Bytes`, and is handed a `{}`.", key, given.shown());
     let notes: Vec<String> = vec![String::from("A grammar reads text or bytes; the argument decides which.")];
     let help: String = String::from("Hand it the text or the bytes to parse."); #[allow(clippy::redundant_locals)] let notes = notes;
     check_refusal("NK1282", span, message, notes, Some(help))

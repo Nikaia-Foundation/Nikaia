@@ -194,7 +194,7 @@ fn an_argument_of_the_wrong_type_is_reported() {
     assert_eq!(code, "NK1102");
     assert_eq!(
         message,
-        "`greet` expects `who` to be `String`, but you're passing `ref String`."
+        "`greet` expects `who` to be a `String` of its own, but you're passing a view of a `String`."
     );
 }
 
@@ -216,7 +216,7 @@ fn a_return_of_the_wrong_type_is_reported() {
     assert_eq!(code, "NK1104");
     assert_eq!(
         message,
-        "You're returning `ref String`, but the function is declared to return `i32`."
+        "You're returning a view of a `String`, but the function is declared to return `i32`."
     );
 }
 
@@ -255,7 +255,7 @@ fn a_struct_field_of_the_wrong_type_is_reported() {
     assert_eq!(code, "NK1106");
     assert_eq!(
         message,
-        "`Reading.name` holds `String`, but you're giving it `ref String`."
+        "`Reading.name` holds a `String` of its own, but you're giving it a view of a `String`."
     );
 }
 
@@ -296,7 +296,7 @@ fn a_while_condition_that_is_not_a_bool_is_reported() {
     assert_eq!(code, "NK1108");
     assert_eq!(
         message,
-        "A condition has to be `true` or `false`, but this is `ref String`."
+        "A condition has to be `true` or `false`, but this is a view of a `String`."
     );
     assert_eq!(
         findings(
@@ -320,7 +320,7 @@ fn a_condition_that_is_not_a_bool_is_reported() {
     assert_eq!(code, "NK1108");
     assert_eq!(
         message,
-        "A condition has to be `true` or `false`, but this is `ref String`."
+        "A condition has to be `true` or `false`, but this is a view of a `String`."
     );
 }
 
@@ -348,7 +348,7 @@ fn a_run_of_digits_binds_text() {
     assert_eq!(code, "NK1104");
     assert_eq!(
         message,
-        "This action builds `ref String`, but its rule returns `i32`."
+        "This action builds a view of a `String`, but its rule returns `i32`."
     );
 }
 
@@ -361,7 +361,7 @@ fn a_grammar_action_of_the_wrong_type_is_reported() {
     assert_eq!(code, "NK1104");
     assert_eq!(
         message,
-        "This action builds `ref String`, but its rule returns `i32`."
+        "This action builds a view of a `String`, but its rule returns `i32`."
     );
 }
 
@@ -412,7 +412,7 @@ fn an_option_of_the_wrong_type_is_reported() {
     assert_eq!(code, "NK1106");
     assert_eq!(
         message,
-        "The option `timeout` of `request` takes `i32`, but you're passing `ref String`."
+        "The option `timeout` of `request` takes `i32`, but you're passing a view of a `String`."
     );
 }
 
@@ -459,7 +459,7 @@ fn an_interpolated_string_is_a_string_and_a_plain_one_is_a_view() {
     assert_eq!(code, "NK1104");
     assert_eq!(
         message,
-        "You're returning `String`, but the function is declared to return `ref String`."
+        "You're returning a `String` of its own, but the function is declared to return a view of a `String`."
     );
 }
 
@@ -1105,7 +1105,7 @@ fn a_view_of_a_generic_type_is_checked_by_this_compiler() {
     let (code, message) = one("fn count(text: ref String) -> i64 { return 1 }\n\
          fn probe(xs: Vec[i64]) -> i64 { return count(ref xs) }");
     assert_eq!(code, "NK1102");
-    assert!(message.contains("ref Vec[i64]"), "{message}");
+    assert!(message.contains("a view of a `Vec[i64]`"), "{message}");
 }
 
 /// And the matching case is accepted, so the rule above is a rule and not a
@@ -1148,7 +1148,7 @@ fn a_transparent_container_does_not_fit_just_anything() {
          fn probe() -> i64 throws { let m = fs::map(\"x\", fs::Root::Anywhere)\n return count(ref m) }",
     );
     assert_eq!(code, "NK1102");
-    assert!(message.contains("ref Mapped"), "{message}");
+    assert!(message.contains("a view of a `Mapped`"), "{message}");
 }
 
 /// A view of a view is the view. `&&str` is not a type this language has.
@@ -1278,7 +1278,7 @@ fn a_shared_value_does_not_fit_a_view_of_just_anything() {
          fn connect() -> Conn { return Conn { host: \"h\" } }\n\
          fn main() { let db = Shared(connect())\n count(ref db) }");
     assert_eq!(code, "NK1102");
-    assert!(message.contains("ref Shared[Conn]"), "{message}");
+    assert!(message.contains("a view of a `Shared[Conn]`"), "{message}");
 }
 
 // --- a literal that does not fit its type (Part I 2.2) -----------------------
@@ -2084,7 +2084,7 @@ fn an_if_arm_of_the_wrong_type_is_refused_where_the_value_returns() {
         findings("fn b(s: ref String, c: bool) -> i64 {\n    return if c { s } else { 1 }\n}\n");
     assert!(
         found.iter().any(|f| f.code == "NK1104"
-            && f.message.contains("`ref String`")
+            && f.message.contains("a view of a `String`")
             && f.message.contains("`i64`")),
         "{found:#?}"
     );
@@ -2147,7 +2147,7 @@ fn arms_that_disagree_with_no_position_are_nk1245() {
     let (code, message) =
         one("fn f(c: bool) throws {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n");
     assert_eq!(code, "NK1245");
-    assert!(message.contains("`ref String`"), "{message}");
+    assert!(message.contains("a view of a `String`"), "{message}");
 }
 
 /// An arm that leaves is no value: the other arm's type is the type.
@@ -2160,7 +2160,7 @@ fn an_arm_that_returns_gives_no_value() {
     assert!(
         found
             .iter()
-            .any(|f| f.code == "NK1103" && f.message.contains("`ref String`")),
+            .any(|f| f.code == "NK1103" && f.message.contains("a view of a `String`")),
         "{found:#?}"
     );
     assert!(found.iter().all(|f| f.code == "NK1103"), "{found:#?}");

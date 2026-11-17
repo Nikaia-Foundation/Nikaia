@@ -1,4 +1,4 @@
-error[NK1102]: `own` expects `a` to be `String`, but you're passing `ref String`.
+error[NK1102]: `own` expects `a` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_given_result.nika:21:17
     |
  21 |     let r = own(s)

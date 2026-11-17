@@ -418,9 +418,9 @@ impl CheckComparable {
 fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
     let mut found: String = ""
     if !asking.of(left) {
-        found = left.text()
+        found = left.shown()
     } else if !asking.of(right) {
-        found = right.text()
+        found = right.shown()
     }
     if found == "" {
         return null
@@ -664,7 +664,7 @@ fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collecti
             // by `Eq` alone is the `NK1248` of a hashed position.
             if wanted_trait == "Hash" {
                 let own_bounds = compare_parameter_bounds(held, parameters)
-                let shown = held.text()
+                let shown = held.shown()
                 if own_bounds.len() == 1 && own_bounds[0] == "?" {
                     if asking.hashes(held) {
                         continue
@@ -687,7 +687,7 @@ fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collecti
                 if asking.clones(held, parameters) {
                     continue
                 }
-                let shown = held.text()
+                let shown = held.shown()
                 refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Clone` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Clone]`, so the type passed has to copy, and `{shown}` can't: a task's handle and a lock are never copied."], "Pass a type that copies, or hand the value itself to a function without the bound."))
                 continue
             }
@@ -710,7 +710,7 @@ fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collecti
             if met {
                 continue
             }
-            let shown = held.text()
+            let shown = held.shown()
             let mut what: String = "an equality that is an equivalence"
             if ordered {
                 what = "an order"
@@ -788,9 +788,9 @@ fn compare_keys_that_do_not_hash(asking: ref CheckComparable, ty: ref Ty, span: 
 
 /// The `NK1260` of one key: `what` is the map or set, `key` its key type.
 fn compare_unhashed_refusal(asking: ref CheckComparable, what: ref String, key: ref Ty, span: ref Span) -> CheckFinding {
-    let shown = key.text()
+    let shown = key.shown()
     let part = asking.unhashed(key)
-    let part_shown = part.text()
+    let part_shown = part.shown()
     let part_name = match part {
         Ty::Named { name, .. } => name.clone(),
         else => "",

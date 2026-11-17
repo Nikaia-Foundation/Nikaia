@@ -295,9 +295,9 @@ fn main() throws {
 "##;
     let found = findings(source);
     assert!(
-        found
-            .iter()
-            .any(|f| f.code == "NK1106" && f.message.contains("`Person.name` holds `String`")),
+        found.iter().any(|f| f.code == "NK1106"
+            && f.message
+                .contains("`Person.name` holds a `String` of its own")),
         "{found:#?}"
     );
     // The same for one that may be absent (ADR-282 D12).
@@ -616,7 +616,7 @@ fn main() throws {
     assert!(
         found.iter().any(|f| f.code == "NK1102"
             && f.message
-                .contains("`Vec::push` expects `value` to be `String` here")
+                .contains("`Vec::push` expects `value` to be a `String` of its own here")
             && f.help.iter().any(|h| h.contains(".clone()"))),
         "{found:#?}"
     );
@@ -1577,7 +1577,7 @@ fn main() throws {
         assert!(
             found.iter().any(|f| f.code == "NK1102"
                 && f.message.contains(
-                    "`greet` expects `who` to be `String`, but you're passing `ref String`"
+                    "`greet` expects `who` to be a `String` of its own, but you're passing a view of a `String`"
                 )),
             "{found:#?}"
         );

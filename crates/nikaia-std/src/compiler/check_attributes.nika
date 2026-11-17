@@ -556,7 +556,7 @@ fn check_attributes_argument[H: CheckHost](mut state: CheckState, world: ref Che
     let kind = check_attributes_literal_misfit(arg, want)
     if kind != null {
         let said = kind ?? return
-        let wanted = want.text()
+        let wanted = want.shown()
         state.findings.push(check_refusal("NK1102", span, f"`@{owner}`'s `{field_name}` is `{wanted}`, and this gives {said}.", [], f"Give `{field_name}` a `{wanted}`."))
         return
     }

@@ -1,4 +1,4 @@
-error[NK1102]: `store` expects `a` to be `String`, but you're passing `ref String`.
+error[NK1102]: `store` expects `a` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_owned_kept_for.nika:19:15
     |
  19 |         store(x, all)

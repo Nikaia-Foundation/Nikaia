@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `(String, i64)` here, but part 0 of the tuple is `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be `(String, i64)` here, but part 0 of the tuple is a view of a `String`.
   --> tests/lent_element_into_tuple.nika:8:9
    |
  8 |         files.push((name, 1))

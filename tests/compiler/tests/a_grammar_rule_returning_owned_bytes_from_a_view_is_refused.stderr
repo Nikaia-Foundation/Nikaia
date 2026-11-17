@@ -1,4 +1,4 @@
-error[NK1104]: This action builds `ref Bytes`, but its rule returns `Bytes`.
+error[NK1104]: This action builds a view of a `Bytes`, but its rule returns a `Bytes` of its own.
   --> tests/a_grammar_rule_returning_owned_bytes_from_a_view_is_refused.nika:2:48
    |
  2 |     rule n -> Bytes = s:bytes(until(";")) -> { s }

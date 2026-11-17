@@ -174,7 +174,42 @@ fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref 
         if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) && !(moves(found[i]) && state.a_map_read_past_a_jump(world, given)) {
             state.facts.lent_args.insert(id_of(given) as i64)
         }
+        if !params[i].is_a_view() {
+            check_core_call_kept_by_code(state, world, given, found[i], params[i], name, i + 1, span)
+        }
     }
+}
+
+/// **A parameter a function type keeps is given to it** (Part I 5.4 C,
+/// ADR-293 D29, #1990), as a named function's kept parameter is: a name
+/// handed there is gone after the call (`NK2105` at a later use), and a view
+/// is no value of its own (`NK1102`, ADR-views-3 D5). A text literal is text
+/// of its own there (`kept_arguments_are_its_own`).
+fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, given: ref Expr, found: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
+    if a_text_literal_expr(given) || check_core_call_opaque(found) {
+        return
+    }
+    let mut handed = found.clone()
+    if is_a_view_of_a_string(handed) {
+        handed = Ty::Named { name: "str", args: [], view: true }
+    }
+    let keeper = f"`{name}` keeps its argument {nth} after the call returns"
+    let named = check_arguments_named(world, given)
+    let mut refusal: CheckKept? = state.a_view_kept(handed, want, named, keeper)
+    if refusal == null && state.a_view_of_what_does_not_copy(world, handed, want) {
+        refusal = CheckKept { notes: [f"This is a view: it points into a `{want.shown()}` that something else owns.", f"{capitalised(keeper)}, so it needs a `{want.shown()}` of its own."], help: "Write `.clone()` to copy it here." }
+    }
+    if refusal != null {
+        let why = refusal ?? return
+        state.findings.push(check_refusal("NK1102", check_span_at(world, given, span), spoken_in(f"`{name}` expects argument {nth} to be `{want.text()}`, but you're passing `{handed.text()}`.", want, handed), why.notes, why.help))
+        return
+    }
+    // Code handed to code is kept as the lowering shares it (#1120).
+    match found {
+        Ty::Fn { .. } => return,
+        else => {},
+    }
+    state.hands_over(world, given, found, f"passed to `{name}`, which keeps it", span)
 }
 
 /// **A kept function value called by name**: a `let`, or a parameter the

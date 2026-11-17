@@ -158,7 +158,7 @@ impl CheckState {
 
     /// The refusal [`Checker::a_view_of_what_does_not_copy`] answers with.
     fn a_view_kept_whole(ref mut self, key: ref String, name: ref String, found: ref Ty, want: ref Ty, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", [f"This is a view: it points into a `{want.text()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so it needs a `{want.text()}` of its own."], "Write `.clone()` to copy it here."))
+        self.findings.push(check_refusal("NK1102", span, spoken_in(f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", want, found), [f"This is a view: it points into a `{want.shown()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so it needs a `{want.shown()}` of its own."], "Write `.clone()` to copy it here."))
     }
 
     /// **`NK2206` and `NK2606`: a handler that does more than its type allows**
@@ -198,9 +198,9 @@ impl CheckState {
     /// type, as a value of another type is not. `NK2606` is the same mistake
     /// where the place is a parameter.
     fn a_failing_lambda_where_the_type_does_not_fail(ref mut self, place: ref Ty, span: ref Span) sync {
-        let shown = place.text()
+        let shown = place.shown()
         let wanted: String = match place {
-            Ty::Fn { params, result, is_sync, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: true }.text(),
+            Ty::Fn { params, result, is_sync, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: true }.shown(),
             else => f"{shown} throws",
         }
         self.findings.push(check_refusal("NK1102", span, f"This lambda can fail, but `{shown}` says the code it names never fails.", ["A function type without `throws` cannot fail, so a lambda that can is not of that type."], f"Write `{wanted}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`."))

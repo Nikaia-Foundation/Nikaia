@@ -1,4 +1,4 @@
-error[NK1106]: `Cursor.input` holds `String`, but you're giving it `ref String`.
+error[NK1106]: `Cursor.input` holds a `String` of its own, but you're giving it a view of a `String`.
   --> tests/a_view_into_a_field_changed_in_place_is_refused.nika:8:30
    |
  8 | 	let mut c = Cursor { input: text.trim(), pos: 0 }
