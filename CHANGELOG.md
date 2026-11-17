@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1418] — 2026-11-17
+
+**Builders' changes (#1976, #1977, #1981)**
+- Toolchain packages are packages: crates/nikaia-std/src/compiler/ and runtime/ carry a nikaia.toml, its new `within = "std"` and `described` keys replace lower-std's path-based rules and dependencies.toml, and `nikaia check`/`fix` on any compiler file now check it with its whole package (#1976).
+- Diagnostics: a warning on an inner step of a chain (`s.chars().count()`, `x.clone().len()`) points at that step, and `nikaia fix` writes its edit (#1977).
+- yaml reads its input in place - the scalar readers walk bytes and scalars as views, copy each run once as a slice and build no Vec[String] or Vec[scalar]: large input 14 % fewer instructions for the events, 16 % for a tree (#1981)
+
 ## [0.0.1417] — 2026-11-17
 
 **Builders' changes (#1338, #1810)**
