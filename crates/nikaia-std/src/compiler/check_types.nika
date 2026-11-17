@@ -30,7 +30,13 @@ fn an_integer_literal(expr: ref Expr) -> bool {
 }
 
 /// A name's last segment: `fs::Root` is `Root`.
-fn type_last_segment(name: ref String) -> String {
+///
+/// **Since ADR-313 D3 a `std` type carries its module**
+/// (`collections::HashMap`, `time::Duration`, `foreign::CStr`): the module
+/// says where the name is *reached from* and the last segment is the type, so
+/// a rule that names a type by hand asks this rather than the written name.
+/// `pub` for the Rust host's tests (`contracts/send.rs`).
+pub fn type_last_segment(name: ref String) -> String {
     return (name.rsplit("::").next() ?? name).clone()
 }
 

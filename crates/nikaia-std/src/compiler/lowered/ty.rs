@@ -813,6 +813,12 @@ impl Notes {
 
 pub const SEEN: &str = "Seen";
 
+pub fn a_named_ty(name: String) -> Ty { Ty::Named { name, args: vec![], view: false } }
+
+pub fn a_view_ty(name: String) -> Ty { Ty::Named { name, args: vec![], view: true } }
+
+pub fn a_seen_ty(inner: Ty) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![inner], view: false } }
+
 impl Ty {
     pub fn is_unknown(&self) -> bool { matches!(self, Ty::Unknown) }
     pub(crate) fn as_a_view(&self) -> Ty {

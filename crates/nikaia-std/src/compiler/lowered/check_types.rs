@@ -18,7 +18,7 @@ pub(crate) fn an_integer_literal(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn type_last_segment(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_string()) }
+pub fn type_last_segment(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_string()) }
 
 pub(crate) fn view_of_type(inner: &Ty) -> Ty {
     match inner {

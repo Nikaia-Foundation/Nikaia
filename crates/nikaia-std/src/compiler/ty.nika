@@ -1483,6 +1483,29 @@ impl Notes {
 /// The stamp a lock puts on what it hands out (ADR-281 D22).
 pub comptime SEEN: ref String = "Seen"
 
+/// A type named by its name alone, with no arguments.
+pub fn a_named_ty(name: String) -> Ty {
+    return Ty::Named { name: name, args: [], view: false }
+}
+
+/// A **view** of the type a name alone names (ADR-278 D19).
+pub fn a_view_ty(name: String) -> Ty {
+    return Ty::Named { name: name, args: [], view: true }
+}
+
+/// **What a lock handed out** (ADR-281 D22).
+///
+/// `Seen[T]` is a type here and in the ledger's type language, and it is
+/// **not** a type in the language below: the emitter erases it, so a
+/// `Seen[i64]` is an `i64`, a field declared `Seen[i64]` is an `i64` field,
+/// and a signature with `Seen` in it is one without. No counter, no marker,
+/// no check at run time, no bytes. What it buys is that the **shape** of a
+/// read-modify-write through two doors is visible: the value a `set` is given
+/// carries where it came from.
+pub fn a_seen_ty(inner: Ty) -> Ty {
+    return Ty::Named { name: SEEN.clone(), args: [inner], view: false }
+}
+
 impl Ty {
     /// Whether this is `?`, the absence of a claim.
     pub fn is_unknown(ref self) -> bool {
