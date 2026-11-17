@@ -4,10 +4,12 @@
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
 02ae374a9a043ac684c26a343770f2551f58aee6e52b683dd05315cfd59fed70 proved S0[R(h4,h5,h11,c0:1:1:1,c2:1:3:1)|R(h3,h12,c0:1:1:1)]
+1acd490d5f0161fc0fd0d0637e37e45675ea1bf8ef549c830fda20e0fd6c61a9 unknown fourier-motzkin-1+sv-1
 1c5d8cc0cb07fa48054a2427879f293a25e1a629ccef56df61b8237422de0111 proved S0[R(h5,h11,c1:1:0:1)|R(h3,h4,h12,c0:1:1:1,c3:1:2:1)]
 1d30b89b9be091ed0008b8ea793d7a3adc035ce3307d93070cbe44a82142b85b refuted v0=0,v1=2,v2=1,v3=2
 2f569e5c7d73f1ef51cabe27b93f5b82d40e0bc1f8e76149bdef363e3569b076 proved R(h0,h3,h4,h6,c0:1:3:1,c2:1:4:1,c1:1:5:1)
 53e80ce8a7758358297d52007f7c53b425e9730614eb04a75b0e6d3a803f34e7 proved R(h1,h4,h7,c0:1:2:1,c1:1:3:1)
+59f50085f60eb28b2b2e20235159b93e133a38bfaed561657ad59c3be5810c70 unknown fourier-motzkin-1+sv-1
 5f047f2d61be98ed38f4a20a30cd612db017551f91846161793b40883a47b961 proved S0[R(h2,h7,c1:1:0:1)|R(h1,h8,c0:1:1:1)]
 62dc13211fc7b32efe3d026dd5ed499eacbb706aa7b1c73e0c0633f0903d9cf8 proved S0[R(h1,h4,c1:1:0:1)|R(h0,h5,c0:1:1:1)]
 97b7fb313028f0ecaf6b5a05fb0272dc761ebca063b8829772556e42c599c0bb refuted v0=0
