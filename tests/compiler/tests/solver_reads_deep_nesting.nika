@@ -38,11 +38,11 @@ fn root() -> String throws {
 
 fn lets(n: i64) -> String {
 	let mut s = "(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-fun x () Int)\n(assert (let ((a0 x)) "
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		s = s + f"(let ((a{i} (+ a{i - 1} 1))) "
 	}
 	s = s + f"(< a{n} x)"
-	for _ in 0..n {
+	for _ in 0..<n + 1 {
 		s = s + ")"
 	}
 	return s + ")\n(check-sat)\n"
@@ -50,11 +50,11 @@ fn lets(n: i64) -> String {
 
 fn nots(n: i64) -> String {
 	let mut s = "(set-logic QF_LIA)\n(set-info :status sat)\n(declare-fun x () Int)\n(assert "
-	for _ in 1..n {
+	for _ in 1..<n + 1 {
 		s = s + "(not "
 	}
 	s = s + "(= x x)"
-	for _ in 1..n {
+	for _ in 1..<n + 1 {
 		s = s + ")"
 	}
 	return s + ")\n(check-sat)\n"
@@ -62,11 +62,11 @@ fn nots(n: i64) -> String {
 
 fn folds(n: i64) -> String {
 	let mut s = "(set-logic QF_LIA)\n(set-info :status unsat)\n"
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		s = s + f"(declare-fun x{i} () Int)\n"
 	}
 	s = s + "(define-fun a0 () Int 0)\n"
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		s = s + f"(define-fun a{i} () Int (ite (= x{i} 0) a{i - 1} 1))\n"
 	}
 	return s + f"(assert (= a{n} 2))\n(assert (< x1 x1))\n(check-sat)\n"
