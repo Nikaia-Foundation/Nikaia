@@ -3341,13 +3341,21 @@ grammar! {
           // ordinary name.
           | KW_REF -> { UnaryOp::Ref }
 
-        rule postfix_expr -> Expr =
-            base:primary_expr tail:postfix_tail* -> { fold_postfix(base, tail) }
+        // `@=` for the chain's first byte: each step's node spans from it to
+        // the step's end (#1977).
+        rule postfix_expr -> Expr @=
+            base:primary_expr tail:postfix_tail* -> { fold_postfix(base, _state.user().cut(_span).start, tail) }
+
+        // **A step with the byte it ends at** (#1977): the node the fold
+        // builds for it spans from the chain's start to there, so a warning
+        // on an inner step stands at that step and its edit can be written.
+        rule postfix_tail -> (Postfix, u32) @=
+            p:postfix_step -> { (p, _state.user().cut(_span).end) }
 
         // The trailing-lambda form first (Kap 5.2): `.map fn: a.id` has no
         // parentheses, so the plain method rule would stop before the `fn:` and
         // leave it stranded.
-        rule postfix_tail -> Postfix =
+        rule postfix_step -> Postfix =
             // `.route("/x") fn { … }`: arguments *and* a trailing lambda. It
             // has to be tried before the plain call, or the call matches and
             // the lambda is left over - which is the parse error this form did
@@ -3891,8 +3899,8 @@ grammar! {
             }
           | e:head_postfix -> { e }
 
-        rule head_postfix -> Expr =
-            base:head_primary tail:postfix_tail* -> { fold_postfix(base, tail) }
+        rule head_postfix -> Expr @=
+            base:head_primary tail:postfix_tail* -> { fold_postfix(base, _state.user().cut(_span).start, tail) }
 
         // **`primary_expr` minus the forms a `{` begins, and nothing else**
         // ([ADR-301](../../../../docs/specification/adr/adr-301.md) D4). What is

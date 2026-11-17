@@ -65,6 +65,14 @@ sync = true
 touches = []
 signature = "(self: node_id::NodeId) -> bool"
 
+# This id with the node read from `start..end`, unless it carries a span
+# already (ADR-383 D4): how the postfix fold gives each step its span (#1977).
+[fn."node_id::NodeId::at"]
+pub = true
+sync = true
+touches = []
+signature = "(self: node_id::NodeId, start: u32, end: u32) -> node_id::NodeId"
+
 # Where the node was read, until the pass numbers it (ADR-383 D4).
 [fn."node_id::NodeId::span"]
 pub = true

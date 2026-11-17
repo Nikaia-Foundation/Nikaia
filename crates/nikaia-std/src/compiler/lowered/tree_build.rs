@@ -83,10 +83,10 @@ pub fn grouped(e: Expr) -> Expr {
     }
 }
 
-pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
+pub fn fold_postfix(base: Expr, start: u32, tail: Vec<(Postfix, u32)>) -> Expr {
     let mut recv = base;
-    for step in tail.into_iter() {
-        let id = node_id::NodeId::parsed();
+    for (step, end) in tail.into_iter() {
+        let id = node_id::NodeId::parsed().at(start, end);
         recv = { let __nikaia_value = match step {
             Postfix::Field(name) => Expr::Field { base: std::boxed::Box::new(recv), name, id },
             Postfix::SafeField(name) => Expr::SafeField { base: std::boxed::Box::new(recv), name, id },
