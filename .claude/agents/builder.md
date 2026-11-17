@@ -11,7 +11,7 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Your prompt holds *Facts for this brief***: `scripts/agent.nika` puts
   `docs/builder-facts.md` (*Core*: where things live, the traps of every run)
   and the sections of `docs/builder-facts-lookup.md` the brief names (`Facts:
-  A, B`) into it. On another topic run `nikaia run scripts/syntax.nika --
+  A, B`), else those whose `Paths:` its text matches, into it. On another topic run `nikaia run scripts/syntax.nika --
   KEYWORD` (spec section, example test, facts lines) instead of reading the
   files whole; probe a snippet with `nikaia run scripts/probe.nika -- SNIPPET`; do not look up again
   what it or the brief's *Locations* say.
@@ -200,7 +200,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   change means another session rewrote it; run `lower-std` again first (m3a,
   2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
   `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
-  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts.md` #1794), never
+  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts-lookup.md`, *Lowering*, #1794), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.

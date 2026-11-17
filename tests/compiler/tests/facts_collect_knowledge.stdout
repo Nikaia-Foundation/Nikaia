@@ -1,0 +1,21 @@
+FACT Packages | cargo judges path crates by mtime.
+FACT Lowering | a lowered file names its source.
+-- 2 proposed lines from 1 debriefs
+marked as reviewed in docs/briefs/facts-reviewed.txt
+# Lookup
+
+### Packages
+
+Paths: `nikaia.toml`
+
+* a package trap
+* cargo judges path crates by mtime. (issue-1.md)
+
+### Lowering and lower-std
+
+Paths: `lowered/`
+
+A paragraph wrapped at **[defect
+#N]**: still the same paragraph.
+* a lowered file names its source. (issue-1.md)
+

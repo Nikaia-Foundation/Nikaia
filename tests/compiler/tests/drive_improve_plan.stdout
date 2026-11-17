@@ -56,4 +56,6 @@ drop settled	Issue: rules-gap: the issue named no driver test, closed, only info
 none
 file	Issue: rules-gap: no rule names the cut
 none
+drop knowledge	Issue: knowledge: Packages | cargo judges path crates by mtime, so a suspected stale build is touched
+file	Issue: rules-gap: no rule names the mtime
 file	Needs: the store needs #1909's key

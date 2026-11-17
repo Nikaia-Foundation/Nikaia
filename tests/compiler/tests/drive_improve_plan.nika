@@ -58,7 +58,11 @@ fn main() throws {
     // a `#N` inside prose is still a point.
     let wait = report("Result: partial\nNeeds: #1909 (step 2, the per-unit store, needs its name-based key)\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1954", "1954", wait.clone(), existing.clone()])
+    // A `knowledge:` answer becomes a facts line (facts-collect.nika), never
+    // an issue, even when it speaks of a suspicion (#2002).
+    let known = report("Result: done\nIssue: knowledge: Packages | cargo judges path crates by mtime, so a suspected stale build is touched; rules-gap: no rule names the mtime\nNeeds: none\nFriction: none\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1971", "1971", known.clone(), existing.clone()])
     let prose = report("Result: partial\nNeeds: the store needs #1909's key\nFriction: none\n")
     drive(repo, nikaia, ["--improve-plan", "issue-1955", "1955", prose.clone(), existing.clone()])
-    process::run("rm", ["-f", existing, each, seen, settled, cut, wait, prose])
+    process::run("rm", ["-f", existing, each, seen, settled, cut, wait, known, prose])
 }

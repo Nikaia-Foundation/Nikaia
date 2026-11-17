@@ -33,7 +33,9 @@
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--fixed-in LOG N...` (drive_fixed_in), `--queue-plan LIST [OPEN...]`
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
-// dependencies taken as open), `--report-aside DIR NAME [HELD...]`
+// dependencies taken as open), `--queue-check LIST [OPEN...]` (the same with
+// the form check, scripts/issue-check.nika, OPEN the issues taken as open,
+// each skipped issue's comment after its line), `--report-aside DIR NAME [HELD...]`
 // (drive_report_aside),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
 // `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
@@ -3190,6 +3192,10 @@ fn drive_improve_points(text: String) -> Vec[String] {
 //                  (`broke I3: ...`, `I4b not followed: ...`, `wrong I7:
 //                  ...`, a wrong suspected cause): the author
 //                  fixes the issue (docs/issues.md), so it is said there;
+//   `drop knowledge` an `Issue:` answer `knowledge: <section> | <fact>`,
+//                  something the run had to find out that no rule asks an
+//                  issue to hold: facts-collect.nika enters it as a facts
+//                  line at the block's end (#2002);
 //   `drop settled` the point says the run closed or built it itself
 //                  (drive_improve_settled);
 //   `drop built F` the point names a rules file F (under `docs/`,
@@ -3225,6 +3231,7 @@ fn drive_improve_point(line: String) -> String {
 
 // Where POINT goes, the first column of drive_improve_sorted.
 fn drive_improve_where(point: String, issue: String, touched: Vec[String], existing: String) -> String {
+	if (point.strip_prefix("Issue: ") ?? "").to_lowercase().starts_with("knowledge") { return "drop knowledge" }
 	if issue != "" && drive_improve_broke(point.clone()) { return f"comment #{issue}" }
 	if drive_improve_settled(point.clone()) { return "drop settled" }
 	let tokens = drive_improve_tokens(point.clone())
@@ -3251,7 +3258,7 @@ fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[Str
 // Whether POINT is an `Issue:` answer about the run's issue alone: it broke a
 // rule (its kind, before the first `: `, starts with `broke` or says `not
 // followed`), or what it claims was false, its suspected cause above all (the
-// kind starts with `wrong` or says `missed`, or the answer speaks of the
+// kind says `wrong`, `partly wrong I7` too, #1991, or says `missed`, or the answer speaks of the
 // issue's diagnosis or suspicion). A wrong guess is said on that issue, not
 // filed as an improvement issue of its own (owner, 2026-11-16: #1917, #1926,
 // #1927, #1928 each filed one run's wrong cause); the supervisor counts these
@@ -3264,7 +3271,7 @@ fn drive_improve_broke(point: String) -> bool {
 	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
 	if kind.starts_with("rules-gap") { return false }
 	if kind.starts_with("broke") || kind.contains("not followed") { return true }
-	if kind.starts_with("wrong") || kind.contains("missed") { return true }
+	if kind.contains("wrong") || kind.contains("missed") { return true }
 	let low = rest.to_lowercase()
 	return low.contains("diagnosis") || low.contains("suspect")
 }
@@ -3440,7 +3447,7 @@ fn drive_improve_existing() -> String throws {
 // `fits docs/issues.md`, #1837: #1820's run wrote it, in any case);
 // empty when none is left. A part that does not open with a kind
 // (`complete`, `meets`, `fits`, `none`, `broke`, `rules-gap`, `wrong`,
-// `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
+// `knowledge`, `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
 // second half of #1819's `rules-gap (built)` answer was filed alone).
 fn drive_issue_answers(value: String) -> Vec[String] {
 	let mut parts: Vec[String] = []
@@ -3449,7 +3456,7 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 		let low = t.to_lowercase()
 		let cs: Vec[scalar] = low.chars().collect()
 		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
-		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "-"] {
+		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "knowledge", "-"] {
 			if low.starts_with(word) { kind = true }
 		}
 		if !kind && parts.len() > 0 {
@@ -4538,16 +4545,74 @@ fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String 
 	return f"SKIPPED #{n} waits for {list}"
 }
 
-// The queue plan of an issue LIST (drive_queue_records) in DIR, OPEN the
-// dependencies still open: a `SKIPPED #N waits for #M` line for each issue
-// that waits for an open one (drive_waits_of), a `QUEUE #N` line for the rest.
-fn drive_queue_plan(dir: String, list: String, open: Vec[String]) -> Vec[String] throws {
+// The findings of scripts/issue-check.nika on issue N's BODY (#2003): one
+// per requirement of docs/issues.md it misses, none when its form holds.
+// KNOWN says OPEN lists the open issues (the tests' form); else the script
+// asks GitHub. A script that fails to run finds nothing, so it holds up nothing.
+fn drive_issue_check(n: String, body: String, known: bool, open: Vec[String]) -> Vec[String] throws {
+	let file = process::run("mktemp", []).stdout.trim().clone()
+	fs::write(file.clone(), fs::Root::Anywhere, body)
+	let mut args = ["run", "scripts/issue-check.nika", "--", "--body", file.clone()]
+	if known {
+		args.push("--open")
+		for m in open {
+			if m != n { args.push(m.clone()) }
+		}
+	}
+	let got = process::run(drive_exe(), args)
+	process::run("rm", ["-f", file])
 	let mut out: Vec[String] = []
-	for (n, body) in drive_queue_records(list) {
-		let line = drive_waits_line(n.clone(), drive_waits_of(dir.clone(), n.clone(), body), open.clone())
-		if line == "" { out.push(f"QUEUE #{n}") } else { out.push(line) }
+	if got.ok { return out }
+	for l in got.stdout.split("\n") {
+		if l.trim() != "" && !l.starts_with("issue-check:") && !l.starts_with("usage:") { out.push(l.trim().clone()) }
 	}
 	return out
+}
+
+// The comment on issue N that FINDINGS (drive_issue_check) kept out of the
+// queue: each finding, and what its writer does.
+fn drive_check_comment(n: String, findings: Vec[String]) -> String {
+	let mut body = f"Driver: #{n} is not queued, its form misses what a builder needs (`nikaia run scripts/issue-check.nika -- {n}`, docs/issues.md, #2003):\n\n"
+	for f in findings { body = body + f"- {f}\n" }
+	body = body
+		+ "\nLabel swapped from `ready` to `decision`: add what is missing (a `Needs #M` line for an issue it waits for, or `Part of #M`), then set `ready` again."
+	return body + drive_footer()
+}
+
+// The queue plan of an issue LIST (drive_queue_records) in DIR, OPEN the
+// dependencies still open: a `SKIPPED #N waits for #M` line for each issue
+// that waits for an open one (drive_waits_of), with CHECK a `SKIPPED #N
+// issue-check: <first finding>` line for each whose form misses a
+// requirement (drive_issue_check, #2003; KNOWN and OPEN as there), a `QUEUE
+// #N` line for the rest.
+fn drive_queue_plan(dir: String, list: String, open: Vec[String], check: bool, known: bool) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	for (n, body) in drive_queue_records(list) {
+		let line = drive_waits_line(n.clone(), drive_waits_of(dir.clone(), n.clone(), body.clone()), open.clone())
+		if line != "" {
+			out.push(line)
+			continue
+		}
+		if check {
+			let findings = drive_issue_check(n.clone(), body, known, open.clone())
+			if findings.len() > 0 {
+				out.push(f"SKIPPED #{n} issue-check: {findings[0]}")
+				continue
+			}
+		}
+		out.push(f"QUEUE #{n}")
+	}
+	return out
+}
+
+// An issue whose form misses a requirement (#2003): `ready` swapped for
+// `decision`, with one comment naming what it misses (drive_check_comment),
+// so its writer fixes it, not a builder.
+fn drive_check_block(n: String, body: String) throws {
+	let findings = drive_issue_check(n.clone(), body, false, [])
+	drive_label_remove(n.clone(), "ready")
+	drive_label_add(n.clone(), "decision")
+	drive_comment(n.clone(), drive_check_comment(n, findings))
 }
 
 // An issue that waits for an open one (#1819): `ready` swapped for
@@ -4566,7 +4631,9 @@ fn drive_wait_block(n: String, line: String) throws {
 // develop`, drive_fixed_on_develop, #1678); so is one that waits for an open
 // issue (`SKIPPED #N waits for #M`, drive_queue_plan, #1819), whose `ready`
 // is swapped for `blocked` with a comment naming #M (drive_wait_block), so
-// it is skipped once. Closed ones still queued are dropped first
+// it is skipped once; so is one whose form misses a requirement (`SKIPPED #N
+// issue-check: ...`, scripts/issue-check.nika, #2003), whose `ready` is
+// swapped for `decision` with one comment of its findings (drive_check_block). Closed ones still queued are dropped first
 // (drive_queue_prune), and so are those that wait for an open issue.
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
@@ -4592,12 +4659,20 @@ fn drive_queue(dir: String, area: String) throws {
 	}
 	let fixed = drive_fixed_on_develop(open)
 	let mut numbers: Vec[String] = []
-	for line in drive_queue_plan(dir.clone(), list, waits) {
+	let bodies: Vec[(String, String)] = drive_queue_records(list.clone())
+	for line in drive_queue_plan(dir.clone(), list, waits, true, false) {
 		let n = (line.strip_prefix("QUEUE #") ?? "").clone()
 		if n == "" {
 			println(line.clone())
 			let words: Vec[String] = line.split(" ").collect()
-			drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line.clone())
+			let m = (words[1].strip_prefix("#") ?? "").clone()
+			if line.contains(" issue-check: ") {
+				for (k, body) in bodies {
+					if k == m { drive_check_block(m.clone(), body.clone()) }
+				}
+			} else {
+				drive_wait_block(m, line.clone())
+			}
 		} else if fixed.contains(n.clone()) {
 			println(f"SKIPPED #{n} fixed on develop")
 		} else {
@@ -4881,11 +4956,21 @@ fn main() throws {
 		println(drive_fixed_in(drive_read(args[2]), numbers).join(" "))
 		return
 	}
-	if args.len() >= 3 && args[1] == "--queue-plan" {
+	if args.len() >= 3 && (args[1] == "--queue-plan" || args[1] == "--queue-check") {
+		let check = args[1] == "--queue-check"
 		let mut open: Vec[String] = []
 		for k in 3..<args.len() { open.push(args[k].clone()) }
 		let dir = process::run("dirname", [args[2].clone()]).stdout.trim().clone()
-		for line in drive_queue_plan(dir, drive_read(args[2]), open) { println(line) }
+		let list = drive_read(args[2].clone())
+		for line in drive_queue_plan(dir, list.clone(), open.clone(), check, true) {
+			println(line.clone())
+			if !line.contains(" issue-check: ") { continue }
+			let words: Vec[String] = line.split(" ").collect()
+			let m = (words[1].strip_prefix("#") ?? "").clone()
+			for (k, body) in drive_queue_records(list.clone()) {
+				if k == m { print(drive_check_comment(m.clone(), drive_issue_check(m.clone(), body, true, open.clone()))) }
+			}
+		}
 		return
 	}
 	if args.len() >= 4 && args[1] == "--report-aside" {
