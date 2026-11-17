@@ -3850,7 +3850,7 @@ pub mod libraries {
 }
 pub mod locks {
     #[allow(unused_imports)]
-    pub use super::{BodyCalls, Reaches, stored_reaches, unit_reaches, free_calls, declared_types, locking_of, Locking, locking};
+    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
 }
 pub mod logic_alethe {
     #[allow(unused_imports)]
@@ -4234,4 +4234,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b030c6a7bcf6214955937e7d93166a534b858a1c2a0153ff270148f0d0270cbb";
+pub const LOWERED_DIGEST: &str = "e56f7e1dcac38f849ab480973bd25e8d2d42e39a633a5c9a3201f4cb46865f35";
