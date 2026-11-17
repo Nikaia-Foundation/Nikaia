@@ -405,6 +405,8 @@ pub struct Lowered {
     pub python: Option<String>,
     /// Its N-API module in C, which `nikaia bind node` writes (ADR-284 D28).
     pub node: Option<String>,
+    /// Its Java source, which `nikaia bind java` writes (ADR-284 D34).
+    pub java: Option<String>,
 }
 
 /// **The packages a project depends on by path**
@@ -826,7 +828,7 @@ pub fn lower_reading(
     // (ADR-284 D4, D7, D12), whether the cache answered or not; the header
     // carries the digest of the ledger this lowering wrote.
     let digest = crate::assets::digest(ledger.as_bytes());
-    let (rust, header, python, node) = match exported {
+    let (rust, header, python, node, java) = match exported {
         Some(exported) => (
             rust + &exported.rust,
             Some(
@@ -847,8 +849,14 @@ pub fn lower_reading(
                     .replace(crate::cexport::LEDGER_DIGEST, &digest)
                     .into(),
             ),
+            Some(
+                exported
+                    .java
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest)
+                    .into(),
+            ),
         ),
-        None => (rust, None, None, None),
+        None => (rust, None, None, None, None),
     };
 
     Ok(Lowered {
@@ -862,6 +870,7 @@ pub fn lower_reading(
         header,
         python,
         node,
+        java,
     })
 }
 
@@ -1162,12 +1171,13 @@ impl LowerHost<'_> {
             Some(&kept),
         )?;
         if let Some(exported) = self.exported.borrow_mut().as_mut() {
-            let (python, node) = match narrowed {
-                Some(narrowed) => (narrowed.python, narrowed.node),
-                None => (String::new(), String::new()),
+            let (python, node, java) = match narrowed {
+                Some(narrowed) => (narrowed.python, narrowed.node, narrowed.java),
+                None => (String::new(), String::new(), String::new()),
             };
             exported.python = python;
             exported.node = node;
+            exported.java = java;
         }
         Ok(())
     }
@@ -3637,6 +3647,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             header: lowered.header.take(),
             python: lowered.python.take(),
             node: lowered.node.take(),
+            java: lowered.java.take(),
         };
         self.kept.borrow_mut().insert(at, lowered);
         Ok(out)

@@ -340,6 +340,19 @@ jobs:
       # What were the bootstrap job's last steps; they need the compiler only,
       # so they are a shard of their own beside the tests (CI speed: on it-1
       # they made it one of the longest shards).
+      # `nikaia bind java` (ADR-284 D34, #1337) is written against Java 22's
+      # java.lang.foreign; the runner's default JDK may be older.
+      - name: JDK 22 for the Java binding
+        if: matrix.shard == 'ledgers'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '22'
+
+      - name: The Java binding prints what use.c prints
+        if: matrix.shard == 'ledgers'
+        run: ./target/release/nikaia run scripts/java_binding.nika -- --exe "$PWD/target/release/nikaia"
+
       - name: The samples, the page examples and the ledgers
         if: matrix.shard == 'ledgers'
         env:

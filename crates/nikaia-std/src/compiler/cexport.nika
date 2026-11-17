@@ -34,6 +34,8 @@ pub struct CxExported {
     pub python: String,
     /// `node/<package>.c`, what `nikaia bind node` writes (D28).
     pub node: String,
+    /// `<package>/<Package>.java`, what `nikaia bind java` writes (D34).
+    pub java: String,
 }
 
 /// What every entry point is written against.
@@ -57,6 +59,7 @@ pub struct CxBuild {
     pub any_pause: bool,
     pub python: CxPython,
     pub node: CxNode,
+    pub java: CxJava,
 }
 
 /// The generated sum of a set of error types (ADR-280 D15), named from its
@@ -241,7 +244,7 @@ pub fn cx_export(words: ref winnow_grammar::InternerContext, items: ref Vec[Span
     for own in ["last_error", "init", "shutdown", "set_allocator", "alloc_fn", "free_fn"] {
         symbols.insert(f"{prefix}_{own}")
     }
-    let mut build = CxBuild { rust: rust, declarations: "", crossing: crossing, symbols: symbols, any_pause: false, python: CxPython::empty(), node: CxNode::empty() }
+    let mut build = CxBuild { rust: rust, declarations: "", crossing: crossing, symbols: symbols, any_pause: false, python: CxPython::empty(), node: CxNode::empty(), java: CxJava::empty() }
     let mut at = 0
     while at < handles.len() {
         if held[at] {
@@ -302,10 +305,11 @@ pub fn cx_export(words: ref winnow_grammar::InternerContext, items: ref Vec[Span
     let header = cx_header(package, prefix, upper, guard, constants, types, build.declarations)
     let python = build.python.module(package, prefix, ctx, held, build.any_pause)
     let node = build.node.module(package, prefix, ctx, held)
+    let java = build.java.module(package, prefix, ctx, held)
     if build.declarations.len() == 0 {
         return null
     }
-    return CxExported { rust: build.rust, header: header, python: python, node: node }
+    return CxExported { rust: build.rust, header: header, python: python, node: node, java: java }
 }
 
 fn cx_handle_named(handles: ref Vec[CxHandled], name: ref String) -> i64? {
@@ -695,6 +699,7 @@ fn cx_wrapper(words: ref winnow_grammar::InternerContext, ctx: ref CxCtx, contra
     }
     build.python.entry(words, ctx, entry, symbol, text_out, pauses)
     build.node.entry(words, ctx, entry, symbol, text_out, pauses)
+    build.java.entry(words, ctx, entry, symbol, text_out)
     // **The `_async` form** (D9, D19): the same call on a library thread, `done`
     // called exactly once with its status, and a ticket that cancels it at its
     // next pause point. What C handed it stays C's to keep until `done`.

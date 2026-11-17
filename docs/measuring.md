@@ -41,3 +41,21 @@ quotes a figure.
   callgrind_annotate. Quote the control's count beside the loss (#1614:
   fannkuch-redux 516 against a control of 499 a permutation, Rust #6 81.5).
 
+* **A JVM caller is counted as a difference, with its JIT flags named**
+  (#1337). A JVM's own start costs tens of millions of instructions, more
+  than any crossing, so one run means nothing: count the same program twice
+  under `valgrind --tool=callgrind --smc-check=all --trace-children=no`, once
+  with a loop of N calls and once with N = 0, and divide the difference by N.
+  The loop calls a no-op entry point (`pub extern fn nothing() sync {}`)
+  through the generated binding, so the figure is the crossing alone. The JIT
+  decides what is counted, so its flags are fixed and quoted with the figure:
+  `-Xbatch -XX:-TieredCompilation -XX:+UseSerialGC -XX:CICompilerCount=1`
+  (compiled before it runs, by C2 only, one thread), and a warm-up loop of
+  the same fixed length (20 000 calls) runs before the counted one in both
+  runs, so that both count the compiled crossing. The Python and Node
+  bindings are counted the same way, with their interpreter's version named.
+  The first figure (2026-11-17, OpenJDK 21.0.12 with `--enable-preview`, the
+  `java.lang.foreign` that Java 22 makes final; the compiler at
+  `--profile fast`): 822,513,063 Ir at N = 0 and 882,972,451 at N = 200,000,
+  so about 302 instructions per crossing, the library's own entry wrapper
+  included. A figure on Java 22 replaces it when it is counted.

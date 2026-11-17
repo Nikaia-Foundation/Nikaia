@@ -73,6 +73,7 @@ pub struct ProjectDriveLowered {
     pub header: Option<String>,
     pub python: Option<String>,
     pub node: Option<String>,
+    pub java: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -207,6 +208,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let mut header: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     let mut python: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     let mut node: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
+    let mut java: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     #[allow(unused_mut)] let mut link_flags: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     for at in order.iter() {
         let at = nikaia_std::num::value(at);
@@ -228,6 +230,10 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
                 None => None,
             };
             node = match lowered.node.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            java = match lowered.java.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
@@ -315,7 +321,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if code == 0 && subcommand != "check" {
         match header {
             None => { },
-            Some(ref text) => { project_drive_c_library(host, text, (python).as_deref(), (node).as_deref(), &messages)?; },
+            Some(ref text) => { project_drive_c_library(host, text, (python).as_deref(), (node).as_deref(), (java).as_deref(), &messages)?; },
         }
     }
     let built = diagnostics_executable_in(&messages);
@@ -602,7 +608,7 @@ pub async fn project_drive_publishable(root: &std::path::Path, file: &ManifestFi
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: Option<&str>, node: Option<&str>, messages: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: Option<&str>, node: Option<&str>, java: Option<&str>, messages: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let made = nikaia_std::fs::path::join(&(host.own_dir()), std::path::Path::new(&("c-library")));
     project_drive_make_dir(&made)?;
     let package = nikaia_std::index::or(host.package_name(), || "program".into());
@@ -628,6 +634,18 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package)))), text)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&("binding.gyp"))), &cx_node_gyp(&package))?;
                 nikaia_std::io::println(format_args!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package))))))))?;
+            },
+        }
+    }
+    if bind == "java" {
+        match java {
+            None => { },
+            Some(text) => {
+                let module = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(made), std::path::Path::new(&("java")))), std::path::Path::new(&(nikaia_std::block::Text::from(package.replace('-', "_")))));
+                project_drive_make_dir(&module)?;
+                let file = cx_java_file(&package);
+                host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&(file))), text)?;
+                nikaia_std::io::println(format_args!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&(file)))))))?;
             },
         }
     }
@@ -963,8 +981,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple69132| {
-        let (a, b) = __nikaia_tuple69132;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple69803| {
+        let (a, b) = __nikaia_tuple69803;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

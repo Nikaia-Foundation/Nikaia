@@ -172,7 +172,7 @@ pub fn cli_commands_lowered_std(std_dir: &std::path::Path, changed: &[fs::Path])
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn cli_commands_bind_refusal(language: &str) -> Option<String> {
-    if language == "python" || language == "node" { return None; }
-    Some(format!("`nikaia bind {}` is not built: `python` and `node` are (ADR-284 D26, D28). JavaScript in a browser is served by the WebAssembly build, which is not built yet.", language))
+    if language == "python" || language == "node" || language == "java" { return None; }
+    Some(format!("`nikaia bind {}` is not built: `python`, `node` and `java` are (ADR-284 D26, D28, D34). JavaScript in a browser is served by the WebAssembly build, which is not built yet.", language))
 }
 
