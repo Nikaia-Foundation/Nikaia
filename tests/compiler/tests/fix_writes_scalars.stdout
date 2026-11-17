@@ -1,11 +1,25 @@
 dry run: TMP/main.nika:11: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:22: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:23: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:25: NK1353: replaced `.chars()` with `.scalars`
 --- TMP/main.nika
 +++ TMP/main.nika
 @@ -11,1 +11,1 @@
 -    for c in s.chars() {
 +    for c in s.scalars {
+@@ -22,2 +22,2 @@
+-    println(s.chars().count())
+-    let v: Vec[scalar] = "abc".chars().collect()
++    println(s.scalars.count())
++    let v: Vec[scalar] = "abc".scalars.collect()
+@@ -25,1 +25,1 @@
+-    println("  hi ".trim().chars().all(fn(c) { c.is_alphabetic() }))
++    println("  hi ".trim().scalars.all(fn(c) { c.is_alphabetic() }))
 unchanged after the dry run: true
 fix: TMP/main.nika:11: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:22: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:23: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:25: NK1353: replaced `.chars()` with `.scalars`
 struct W { n: i64 }
 
 impl W {
@@ -27,38 +41,14 @@ fn vowels(s: ref str) -> i64 {
 fn main() throws {
     let s = "tea"
     println(vowels(s))
-    println(s.chars().count())
-    let v: Vec[scalar] = "abc".chars().collect()
+    println(s.scalars.count())
+    let v: Vec[scalar] = "abc".scalars.collect()
     println(v.len())
-    println("  hi ".trim().chars().all(fn(c) { c.is_alphabetic() }))
+    println("  hi ".trim().scalars.all(fn(c) { c.is_alphabetic() }))
     let w = W { n: 7 }
     println(w.chars())
 }
 check: Checked TMP/main.nika
-warning[NK1353]: `chars()` is not one of the views text is read through.
-   --> TMP/main.nika:22:5
-    |
- 22 |     println(s.chars().count())
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
-    = help: Write `.scalars` for `.chars()`.
-warning[NK1353]: `chars()` is not one of the views text is read through.
-   --> TMP/main.nika:23:5
-    |
- 23 |     let v: Vec[scalar] = "abc".chars().collect()
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
-    = help: Write `.scalars` for `.chars()`.
-warning[NK1353]: `chars()` is not one of the views text is read through.
-   --> TMP/main.nika:25:5
-    |
- 25 |     println("  hi ".trim().chars().all(fn(c) { c.is_alphabetic() }))
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
-    = help: Write `.scalars` for `.chars()`.
 same output: true
 2
 3
