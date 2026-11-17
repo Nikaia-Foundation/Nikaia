@@ -12,6 +12,7 @@
 use std::env
 use std::fs
 use std::hash
+use std::process
 
 /// **What one member's lowering hands back** (`project.rs`'s `Lowered`): the
 /// Rust, the files it read, the notes to say after the build, and a library's
@@ -1282,6 +1283,17 @@ pub trait ProjectDriveWrapperHost {
     fn push_arg(ref self, arg: ref String) sync
     /// Adds `inputs` to the dependency file `rustc` wrote, where it wrote one.
     fn record_dependencies(ref self, inputs: ref Vec[fs::Path]) sync throws
+    /// The `rustc` Cargo named, which [`run`] runs.
+    fn rustc(ref self) -> String sync
+    /// The user's cache directory (`Layout::user_cache_dir`).
+    fn user_cache_dir(ref self) -> fs::Path sync
+    /// Marks `entry` of the user cache as used now, so it is pruned last (#724).
+    fn use_entry(ref self, entry: ref fs::Path) sync
+    /// Runs the invocation as [`run`] does, and keeps what `rustc` wrote to
+    /// its standard error in `said` as well, where it can be written.
+    fn run_saying(ref self, said: ref fs::Path) -> i32 sync throws
+    /// Writes `text` to the standard error, as `rustc` would have.
+    fn eprint(ref self, text: ref String) sync
 }
 
 /// **The wrapper: what Cargo runs in `rustc`'s place**, for workspace
@@ -1376,7 +1388,16 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
         null => {},
         level => host.push_arg(f"--cap-lints={level}"),
     }
-    let code = host.run()
+    // **`rustc` runs only on Rust it has not compiled before** (ADR-021
+    // D14): a compiler commit that left this crate's Rust as it was finds
+    // its outputs in the second store.
+    let code = match project_drive_rustc_store(host, rust, generated) {
+        null => {
+            host.trace("rustc ran")
+            host.run()
+        },
+        store => project_drive_rustc_through(host, store),
+    }
     // Cargo believes the dependency file `rustc` wrote, and `rustc` saw only
     // the generated Rust: without the sources an edit to a `.nika` file leaves
     // the binary stale. **And the switches**, one step further out: a build
@@ -1394,4 +1415,245 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
         host.record_dependencies(inputs)
     }
     return code
+}
+
+/// **One `rustc` invocation as the second store sees it** (ADR-021 D14):
+/// its entry, named by the key, the directory `rustc` writes into and the
+/// names of what it writes there.
+struct ProjectDriveRustcStore {
+    entry: fs::Path,
+    out_dir: fs::Path,
+    outputs: Vec[String],
+    generated: fs::Path,
+}
+
+/// **The store's view of an invocation, where it has one** (ADR-021 D14):
+/// null where the outputs cannot be named from the arguments alone (an
+/// `-o`, an argument file, an `--emit` that names a path, a crate type
+/// other than a program or a library, a Windows target), or the key cannot
+/// be taken. Each null is a build without the store, never a failed one.
+fn project_drive_rustc_store[H: ProjectDriveWrapperHost](host: ref H, rust: ref String, generated: ref fs::Path) -> ProjectDriveRustcStore? {
+    let args = host.args()
+    let (out_dir, outputs) = project_drive_rustc_outputs(args) ?? return null
+    let key = project_drive_rustc_key(host.rustc(), args, rust) ?? return null
+    let entry = host.user_cache_dir().join("rustc").join(key)
+    return ProjectDriveRustcStore { entry: entry, out_dir: out_dir, outputs: outputs, generated: generated.clone() }
+}
+
+/// **What `rustc` writes for `args`**: the `--out-dir` and the names of
+/// the files the `--emit` kinds and the one `--crate-type` make there, as
+/// Cargo names them (`-C extra-filename`). Null where that cannot be told.
+fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])? {
+    let mut out_dir: String = ""
+    let mut name: String = ""
+    let mut extra: String = ""
+    let mut kinds: Vec[String] = []
+    let mut types: Vec[String] = []
+    let mut k = 0
+    while k < args.len() {
+        let arg = args[k]
+        let next = if k + 1 < args.len() { args[k + 1] } else { "" }
+        if arg == "-o" || arg.starts_with("@") || arg.contains("windows") {
+            return null
+        }
+        if arg == "--out-dir" {
+            out_dir = next.clone()
+        } else if arg == "--crate-name" {
+            name = next.clone()
+        } else if arg == "--crate-type" {
+            types.push(next.clone())
+        } else if arg == "--emit" {
+            for kind in next.split(",") {
+                kinds.push(kind.clone())
+            }
+        } else if arg == "-C" && next.starts_with("extra-filename=") {
+            extra = next.strip_prefix("extra-filename=") ?? ""
+        } else if arg.starts_with("--out-dir=") {
+            out_dir = arg.strip_prefix("--out-dir=") ?? ""
+        } else if arg.starts_with("--emit=") {
+            for kind in (arg.strip_prefix("--emit=") ?? "").split(",") {
+                kinds.push(kind.clone())
+            }
+        } else if arg.starts_with("-Cextra-filename=") {
+            extra = arg.strip_prefix("-Cextra-filename=") ?? ""
+        }
+        k = k + 1
+    }
+    if out_dir == "" || name == "" || kinds.len() == 0 || types.len() != 1 {
+        return null
+    }
+    let made = f"{name}{extra}"
+    let mut outputs: Vec[String] = []
+    for kind in kinds {
+        if kind == "dep-info" {
+            outputs.push(f"{made}.d")
+        } else if kind == "metadata" {
+            outputs.push(f"lib{made}.rmeta")
+        } else if kind == "link" && types[0] == "bin" {
+            outputs.push(made.clone())
+        } else if kind == "link" && (types[0] == "lib" || types[0] == "rlib") {
+            outputs.push(f"lib{made}.rlib")
+        } else {
+            return null
+        }
+    }
+    let dir: fs::Path = out_dir
+    return (dir, outputs)
+}
+
+/// **The key of D14**: SHA256 over the toolchain (`rustc -vV`), every
+/// argument but the paths `rustc` writes to (`--out-dir`, `-C
+/// incremental`), the bytes of every `--extern` file and the emitted Rust.
+/// The compiler's identity is no part of it: it reaches the key only
+/// through the Rust it wrote. Null where a part cannot be read.
+fn project_drive_rustc_key(rustc: String, args: ref Vec[String], rust: ref String) -> String? {
+    let told = process::run(rustc, ["-vV"]) catch { return null }
+    if !told.ok {
+        return null
+    }
+    let mut text: String = f"toolchain\n{told.stdout}\n"
+    let mut k = 0
+    while k < args.len() {
+        let arg = args[k]
+        let next = if k + 1 < args.len() { args[k + 1] } else { "" }
+        if arg == "--out-dir" || (arg == "-C" && next.starts_with("incremental=")) {
+            k = k + 2
+            continue
+        }
+        if arg.starts_with("--out-dir=") || arg.starts_with("-Cincremental=") {
+            k = k + 1
+            continue
+        }
+        text.push_str(f"arg {arg}\n")
+        if arg == "--extern" {
+            match next.split_once("=") {
+                null => {},
+                (crate_name, at) => {
+                    let path: fs::Path = at.clone()
+                    let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+                    text.push_str(f"extern {crate_name} {hash::sha256_hex(bytes.iter().collect())}\n")
+                },
+            }
+        }
+        k = k + 1
+    }
+    text.push_str(f"rust {hash::sha256_hex(rust.bytes().collect())}\n")
+    return hash::sha256_hex(text.bytes().collect())
+}
+
+/// **`rustc` through the store** (ADR-021 D14): a hit puts the recorded
+/// outputs in place and says again what `rustc` said; a miss runs it and,
+/// where it succeeded, records its outputs. A store that cannot be read or
+/// written is a miss and nothing more (D12); the entry is marked used, so
+/// the entries used longest ago are the ones collected (D12.5).
+fn project_drive_rustc_through[H: ProjectDriveWrapperHost](host: ref H, store: ref ProjectDriveRustcStore) -> i32 throws {
+    host.use_entry(store.entry)
+    if project_drive_rustc_reused(host, store) {
+        host.trace("rustc reused")
+        return 0
+    }
+    host.trace("rustc ran")
+    // Written aside and renamed into place, so an entry is whole or absent.
+    let side = hash::sha256_hex(f"{store.out_dir.display()}\n{store.generated.display()}".bytes().collect())
+    let staging = store.entry.join(f"new-{side}")
+    fs::remove(staging, fs::Root::Anywhere; recursive: true) catch {}
+    fs::create_dir(staging.join("out"), fs::Root::Anywhere; recursive: true) catch { return host.run() }
+    let code = host.run_saying(staging.join("said"))
+    if code == 0 {
+        project_drive_rustc_record(store, staging)
+    }
+    fs::remove(staging, fs::Root::Anywhere; recursive: true) catch {}
+    return code
+}
+
+/// **A hit**: every input the recorded dependency file named still as it
+/// was (a file's bytes, a variable's value), every output copied into
+/// place, the dependency file and what `rustc` said pointed at this
+/// `--out-dir`. False at the first thing that fails: `rustc` then runs and
+/// writes every output again.
+fn project_drive_rustc_reused[H: ProjectDriveWrapperHost](host: ref H, store: ref ProjectDriveRustcStore) -> bool {
+    let kept = store.entry.join("kept")
+    let inputs = fs::read_to_string(kept.join("inputs"), fs::Root::Anywhere) catch { return false }
+    let was = fs::read_to_string(kept.join("where"), fs::Root::Anywhere) catch { return false }
+    for line in inputs.lines() {
+        let parts: Vec[String] = line.splitn(3, "\t").map(fn(part) { part.clone() }).collect()
+        if parts.len() != 3 {
+            return false
+        }
+        if parts[0] == "file" {
+            let path: fs::Path = parts[2].clone()
+            let bytes = fs::read(path, fs::Root::Anywhere) catch { return false }
+            if hash::sha256_hex(bytes.iter().collect()) != parts[1] {
+                return false
+            }
+        } else if parts[0] == "env" {
+            if (env::var(parts[1]) ?? "\u{0}") != parts[2] {
+                return false
+            }
+        } else {
+            return false
+        }
+    }
+    let now = store.out_dir.display()
+    for name in store.outputs {
+        let from = kept.join("out").join(name)
+        let to = store.out_dir.join(name)
+        if name.ends_with(".d") {
+            let text = fs::read_to_string(from, fs::Root::Anywhere) catch { return false }
+            fs::write(to, fs::Root::Anywhere, text.replace(was, now)) catch { return false }
+        } else {
+            fs::copy(from, to, fs::Root::Anywhere) catch { return false }
+        }
+    }
+    let said = fs::read_to_string(kept.join("said"), fs::Root::Anywhere) catch { "" }
+    if said.len() > 0 {
+        host.eprint(said.replace(was, now))
+    }
+    return true
+}
+
+/// **The record of a run that succeeded**, in `staging` and then renamed
+/// to the entry's `kept`: each output, the `--out-dir` it was written to,
+/// and the inputs the dependency file names beside the generated Rust (a
+/// file an `include!` read, a variable an `env!` read), which the key does
+/// not hold. Nothing is recorded where any of it fails.
+fn project_drive_rustc_record(store: ref ProjectDriveRustcStore, staging: ref fs::Path) {
+    let mut inputs: String = ""
+    for name in store.outputs {
+        fs::copy(store.out_dir.join(name), staging.join("out").join(name), fs::Root::Anywhere) catch { return }
+        if name.ends_with(".d") {
+            let depends = fs::read_to_string(store.out_dir.join(name), fs::Root::Anywhere) catch { return }
+            inputs = project_drive_rustc_inputs(depends, store.generated) ?? return
+        }
+    }
+    fs::write(staging.join("inputs"), fs::Root::Anywhere, inputs) catch { return }
+    fs::write(staging.join("where"), fs::Root::Anywhere, store.out_dir.display()) catch { return }
+    let kept = store.entry.join("kept")
+    fs::remove(kept, fs::Root::Anywhere; recursive: true) catch {}
+    fs::rename(staging, kept, fs::Root::Anywhere) catch {}
+}
+
+/// **The inputs a dependency file names beside `generated`**, one line
+/// each: `file`, the digest and the path; `env`, the variable and its value
+/// (`\u{0}` for unset). Null where a named file cannot be read.
+fn project_drive_rustc_inputs(depends: ref String, generated: ref fs::Path) -> String? {
+    let mut text: String = ""
+    let first = depends.lines().next() ?? return ""
+    let (_, listed) = first.split_once(": ") ?? return ""
+    for word in listed.replace("\\ ", "\u{1f}").split(" ") {
+        let path: fs::Path = word.replace("\u{1f}", " ")
+        if word.len() == 0 || path == generated {
+            continue
+        }
+        let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+        text.push_str(f"file\t{hash::sha256_hex(bytes.iter().collect())}\t{path.display()}\n")
+    }
+    for line in depends.lines() {
+        let named = line.strip_prefix("# env-dep:") ?? continue
+        match named.split_once("=") {
+            null => text.push_str(f"env\t{named}\t\u{0}\n"),
+            (name, value) => text.push_str(f"env\t{name}\t{value}\n"),
+        }
+    }
+    return text
 }

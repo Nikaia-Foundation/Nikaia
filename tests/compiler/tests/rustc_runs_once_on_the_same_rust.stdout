@@ -1,0 +1,8 @@
+first: built 0; reuse rustc ran; says hi
+same Rust, another compiler: built 0; reuse rustc reused; says hi
+changed Rust: built 0; reuse rustc ran; says ho
+changed argument: built 0; same Rust true; reuse rustc ran; says ho
+with a library: built 0; lib rustc ran, app rustc ran; says 1
+changed library: built 0; same program Rust true; lib rustc ran, app rustc ran; says 2
+unusable store: built 0; reuse rustc ran; says without a store
+unusable store, another compiler: built 0; reuse rustc ran; says without a store

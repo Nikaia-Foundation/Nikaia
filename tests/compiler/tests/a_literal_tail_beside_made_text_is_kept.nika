@@ -1,0 +1,37 @@
+// A `let` whose `if` or `match` makes text in one tail and is a literal in
+// another binds text of this frame's own: the literal is lowered as a copy
+// beside the made tail. A view of it that outlives the loop, kept in a name
+// declared `String`, lives in the frame's keep; before, no keep was planned,
+// and rustc refused the view of the loop's local (NK1343).
+fn after(xs: ref Vec[String], key: ref String) -> String {
+	let mut found: String = ""
+	let mut k = 0
+	while k < xs.len() {
+		let next = if k + 1 < xs.len() { f"{xs[k + 1]}" } else { "" }
+		if next.starts_with(key) {
+			found = next.strip_prefix(key) ?? ""
+		}
+		k = k + 1
+	}
+	return found
+}
+
+fn named(xs: ref Vec[String]) -> String {
+	let mut found: String = ""
+	for x in xs {
+		let word = match x.len() {
+			0 => "",
+			else => f"{x}!",
+		}
+		if word.ends_with("!") {
+			found = word.strip_suffix("!") ?? ""
+		}
+	}
+	return found
+}
+
+fn main() throws {
+	let xs: Vec[String] = ["b", "a=1", "c"]
+	println(after(xs, "a="))
+	println(named(xs))
+}
