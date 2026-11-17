@@ -727,6 +727,14 @@ impl InferHost<'_> {
         let started = std::time::Instant::now();
         let out = run();
         let took = started.elapsed();
+        // The pass's end, as it happens (#1979): a mark to take a profiler's
+        // dump at, where the totals print only once the ledger is done.
+        if self.parallel {
+            eprintln!(
+                "lower-std~ ledger {pass} ended ({:.3}s)",
+                took.as_secs_f64()
+            );
+        }
         if let Some(spent) = self.spent.borrow_mut().as_mut() {
             match spent.iter_mut().find(|(name, _)| *name == pass) {
                 Some((_, total)) => *total += took,

@@ -15,6 +15,19 @@ quotes a figure.
   end it (`timeout -s KILL` does; #1874: two hung runs before
   `--trace-syscalls` showed it). `benches/game/game.nika` sets it for every
   Nikaia row; a program counted by hand needs it too.
+* **A criterion over a whole `lower-std` is counted on its parts** (ADR-361
+  D15's "at most 5 % more instructions", #1980). Callgrind takes hours on a
+  whole `lower-std`, which does not fit a run, and there is no `perf` here.
+  Count instead, with a before and an after binary built from the same tree:
+  `nikaia check --bounds FILE` under callgrind on the std file of the site the
+  change targets, and on each file whose verdicts the change moves (a
+  `lower-std --bounds` with each binary, diffed). Give the figure per file and
+  the sum. A phase the change adds outside the walk is cut out of the whole
+  run with `NIKAIA_LOWER_TIMES=1` and `callgrind_control -d` at its
+  `lower-std~ NAME ended` line. The user time of the whole `lower-std`, two
+  interleaved rounds (`docs/builder-facts.md`), only checks that the parts
+  missed nothing and is never quoted. A report that names the files it
+  counted has met the criterion as written; that needs no `Deviation:`.
 * **Against tuned Rust**, `unsafe` allowed, never against a loop this project
   wrote to lose. Each Rust program is a binary of its own: two programs in one
   binary change what LLVM inlines (it cost `tuned` 40 instructions a row).

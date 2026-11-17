@@ -2160,7 +2160,9 @@ signature = "(data: ref Vec[u8]) -> String"
 #
 # **`env::var(name)` is the value of an environment variable, null where it is
 # unset, empty or not Unicode; `env::temp_dir()` is the directory for
-# temporary files; `env::vars(prefix)` lists the variables.** None has a
+# temporary files; `env::vars(prefix)` lists the variables;
+# `env::current_exe()` and `env::current_main()` name the program that was
+# started and the file it stands in as (ADR-program-path-1).** None has a
 # `touches` line: an absent one means *touches everything* (Part III 13.5), so
 # a read of the environment keeps its order against every other effect, one of
 # which may set the variable. All are `sync`: a read of the process's own
@@ -2185,6 +2187,25 @@ pub = true
 panics = false
 sync = true
 signature = "() -> fs::Path"
+
+# The program that was started (ADR-program-path-1 D1): the `nikaia` that runs
+# it under `nikaia run` and `nikaia test`, a built program itself; null where
+# the system cannot name it. A path, so no provenance (ADR-010 D8).
+[fn."env::current_exe"]
+pub = true
+panics = false
+sync = true
+signature = "() -> fs::Path?"
+
+# The file the program stands in as started (ADR-program-path-1 D2): the
+# `.nika` file `nikaia run` was given or the project's entry point, the test's
+# file under `nikaia test`, a built program itself; null where the system
+# cannot name it.
+[fn."env::current_main"]
+pub = true
+panics = false
+sync = true
+signature = "() -> fs::Path?"
 
 # The variables whose name starts with `prefix`, as (name, value) pairs sorted
 # by name; a name or value that is not Unicode, or an empty value, is left out.

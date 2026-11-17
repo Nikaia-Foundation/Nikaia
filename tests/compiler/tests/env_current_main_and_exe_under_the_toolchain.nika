@@ -1,0 +1,23 @@
+// ADR-program-path-1: under `nikaia test` (and `nikaia run`) the program
+// stands in as its own `.nika` file (`env::current_main`, D2), and the
+// program that was started is the toolchain itself (`env::current_exe`, D1).
+// The variables that carry both are the launcher's (D3): `env::var` and
+// `env::vars` do not show them, and a child started with `process::run` does
+// not inherit them.
+use std::env
+use std::fs
+use std::process
+
+fn main() throws {
+    let main = env::current_main()?.display() ?? "none"
+    let main_name = env::current_main()?.file_name()?.display() ?? "none"
+    let exe_name = env::current_exe()?.file_name()?.display() ?? "none"
+    println(f"current_main: {main_name}")
+    println(f"current_main is absolute: {main.starts_with("/")}")
+    println(f"current_exe is the toolchain: {exe_name.starts_with("nikaia")}")
+    println(f"env::var(NIKAIA_MAIN): {env::var("NIKAIA_MAIN") ?? "null"}")
+    println(f"env::var(NIKAIA_EXE): {env::var("NIKAIA_EXE") ?? "null"}")
+    println(f"env::vars(NIKAIA_) lists them: {env::vars("NIKAIA_").len() > 0 && env::vars("NIKAIA_MAIN").len() > 0}")
+    let child = process::run("sh", ["-c", "echo \"${NIKAIA_MAIN:-unset} ${NIKAIA_EXE:-unset}\""]).stdout.trim().clone()
+    println(f"a child sees: {child}")
+}

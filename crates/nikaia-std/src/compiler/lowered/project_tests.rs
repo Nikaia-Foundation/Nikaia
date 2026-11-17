@@ -553,11 +553,11 @@ pub(crate) fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> P
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
     fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -736,7 +736,7 @@ pub async fn project_tests_warm_up<H: ProjectTestsProgramHost>(host: &H, program
     fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, "[package]\nname = \"warm_up\"\nversion = \"0.1.0\"\n", false, true).await?;
     fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &fs::Root::Anywhere, "fn main() {\n}\n", false, true).await?;
     let limit = project_tests_build_time_limit();
-    let out = host.compiler("run", setting, &project, own, own, &Bytes(vec![]), limit, 0)?;
+    let out = host.compiler("run", setting, &project, own, own, &Bytes(vec![]), limit, 0, &nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))))?;
     if out.timed_out { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("the warm-up of the program std (#1955) timed out after {} s\n{}", limit, out.stderr.text_lossy())), &"project_tests_warm_up")); }
     if out.code != 0 { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("the warm-up of the program std (#1955) failed, exit {}:\n{}", out.code, out.stderr.text_lossy())), &"project_tests_warm_up")); }
     Ok(())
@@ -813,12 +813,13 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
+    let main = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(written)));
     let limit = project_tests_time_limit();
     let processes = project_tests_process_limit();
     match batched {
         None => { },
         Some(batch) => {
-            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit, processes)?;
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit, processes, &main)?;
             if out.capped > 0 { return Ok(project_tests_capped_outcome(out.capped, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
@@ -831,15 +832,15 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
     let sharing = nikaia_std::block::Text::from(reports.sharing.to_string());
     let building = project_tests_build_time_limit();
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building, 0)?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building, 0, &main)?;
     if built.timed_out { return Ok(project_tests_build_timed_out_outcome(building, &project_tests_relocated(&built.stderr, &entry, &written, root))); }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts, &sharing));
     }
-    let ran = match host.built(&project, root, own, &program.stdin, limit, processes)? {
+    let ran = match host.built(&project, root, own, &program.stdin, limit, processes, &main)? {
         None => {
-            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit, processes)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit, processes, &main)?;
             let said = out.stderr.copy_of();
             (out, said)
         },

@@ -2853,6 +2853,19 @@ impl Sandbox {
     }
 }
 
+/// **What `nikaia test` hands each program it starts**
+/// ([ADR-program-path-1](../../docs/specification/adr/adr-program-path-1.md)
+/// D3): this `nikaia` as `env::current_exe`, and `main` - the test's own
+/// file, or the package's entry point for a `test` block and an output test -
+/// as `env::current_main`.
+fn test_launch_vars(main: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
+    let mut vars = vec![(nikaia_std::env::MAIN_VAR, main.as_os_str().to_os_string())];
+    if let Ok(exe) = std::env::current_exe() {
+        vars.push((nikaia_std::env::EXE_VAR, exe.into_os_string()));
+    }
+    vars
+}
+
 impl Drop for Sandbox {
     fn drop(&mut self) {
         if self.1.is_none() {
@@ -2863,18 +2876,21 @@ impl Drop for Sandbox {
 
 /// Run a built program with its arguments and its standard input, in `dir`,
 /// with `own` as the directory `fs::scratch` makes its directories in
-/// ([ADR-247](../../docs/specification/adr/adr-247.md) D5).
+/// ([ADR-247](../../docs/specification/adr/adr-247.md) D5), and `main` as the
+/// file it stands in as (`env::current_main`, ADR-program-path-1 D3).
 fn outcome_of(
     binary: &Path,
     args: &[String],
     stdin: &[u8],
     dir: &Path,
     own: &Path,
+    main: &Path,
 ) -> Result<std::process::Output> {
     use std::io::Write;
     let mut child = std::process::Command::new(binary)
         .current_dir(dir)
         .env(nikaia_std::fs::TEST_DIR_VAR, own)
+        .envs(test_launch_vars(main))
         .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -2986,7 +3002,14 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
         // `fs::scratch()`, inside `own`.
         self.held((|| {
             let own = Sandbox::new()?;
-            let out = outcome_of(binary, &[k.to_text()], &[], self.suite.root, &own.0)?;
+            let out = outcome_of(
+                binary,
+                &[k.to_text()],
+                &[],
+                self.suite.root,
+                &own.0,
+                &self.suite.root.join(ENTRY),
+            )?;
             Ok(project_tests::project_tests_block_outcome(
                 exit_code(&out.status),
                 out.stdout.into(),
@@ -3001,7 +3024,14 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
             if let Some(inputs) = &output.inputs {
                 block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
             }
-            let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
+            let out = outcome_of(
+                binary,
+                &output.args,
+                &output.stdin,
+                &own.0,
+                &own.0,
+                &self.suite.root.join(ENTRY),
+            )?;
             Ok(block_on(project_tests::project_tests_output_outcome(
                 output,
                 &own.0,
@@ -3435,12 +3465,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         stdin: &[u8],
         within: i64,
         processes: i64,
+        main: &Path,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
             .args([verb, "--user-parallelism", setting, "--project"])
             .arg(project)
-            .env(nikaia_std::fs::TEST_DIR_VAR, own);
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .env(nikaia_std::env::MAIN_VAR, main);
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
@@ -3469,6 +3501,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         stdin: &[u8],
         within: i64,
         processes: i64,
+        main: &Path,
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -3479,7 +3512,9 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             return Ok(None);
         }
         let mut command = std::process::Command::new(&binary);
-        command.env(nikaia_std::fs::TEST_DIR_VAR, own);
+        command
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .envs(test_launch_vars(main));
         self.held(
             self.ran(&binary, command, dir, stdin, within, processes)
                 .map(Some),
@@ -3522,9 +3557,13 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         stdin: &[u8],
         within: i64,
         processes: i64,
+        main: &Path,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(binary);
-        command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
+        command
+            .arg(name)
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .envs(test_launch_vars(main));
         self.held(self.ran(binary, command, dir, stdin, within, processes))
     }
 }
@@ -3999,29 +4038,73 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             .iter()
             .map(std::string::String::from)
             .collect();
-        self.held(self.cargo().run("run", &args, &after))
+        let mut cargo = self.cargo().clone();
+        cargo.env.extend(self.launch_vars());
+        self.held(cargo.run("run", &args, &after))
     }
 
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
-        self.held(run_directly(binary, self.program_args))
+        self.held(run_directly(binary, self.program_args, &self.launch_vars()))
+    }
+}
+
+impl DriveHost<'_> {
+    /// **What `nikaia run` hands the program it starts**
+    /// ([ADR-program-path-1](../../../docs/specification/adr/adr-program-path-1.md)
+    /// D3): this `nikaia` as `env::current_exe`, and as `env::current_main`
+    /// the file the program stands in as - one its own launcher handed this
+    /// run (`nikaia test`'s test file), else the `.nika` file `run` was
+    /// given, else the project's entry point.
+    fn launch_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
+        let mut vars = std::vec::Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            vars.push((
+                std::string::String::from(nikaia_std::env::EXE_VAR),
+                exe.into_os_string(),
+            ));
+        }
+        let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| {
+                let main = self
+                    .project
+                    .written
+                    .clone()
+                    .unwrap_or_else(|| self.project.entry());
+                std::path::absolute(&main).unwrap_or(main).into_os_string()
+            });
+        vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
+        vars
     }
 }
 
 #[cfg(unix)]
-fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
+fn run_directly(
+    binary: &std::path::Path,
+    args: &[String],
+    vars: &[(std::string::String, std::ffi::OsString)],
+) -> Result<i32> {
     use std::io::Write;
     use std::os::unix::process::CommandExt;
     std::io::stdout().flush().ok();
     std::io::stderr().flush().ok();
     // `exec` returns only when it failed to replace this process.
-    let error = std::process::Command::new(binary).args(args).exec();
+    let error = std::process::Command::new(binary)
+        .args(args)
+        .envs(vars.iter().map(|(name, value)| (name, value)))
+        .exec();
     Err(error).with_context(|| format!("running {}", binary.display()))
 }
 
 #[cfg(not(unix))]
-fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
+fn run_directly(
+    binary: &std::path::Path,
+    args: &[String],
+    vars: &[(std::string::String, std::ffi::OsString)],
+) -> Result<i32> {
     let status = std::process::Command::new(binary)
         .args(args)
+        .envs(vars.iter().map(|(name, value)| (name, value)))
         .status()
         .with_context(|| format!("running {}", binary.display()))?;
     // A program killed by a signal has no exit code. `1` is what a shell would

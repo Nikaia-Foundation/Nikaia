@@ -1139,7 +1139,8 @@ impl std::fmt::Display for Package {
 
 /// **Where `lower-std`'s time goes** (#667): with `NIKAIA_LOWER_TIMES` set,
 /// each phase's total and the slowest files of the per-file phases go to
-/// stderr. Unset, it reads no clock.
+/// stderr, and each phase's end as a `lower-std~` line the moment it ends.
+/// Unset, it reads no clock.
 struct Phases {
     on: bool,
     last: Option<std::time::Instant>,
@@ -1174,6 +1175,10 @@ impl Phases {
 
     fn lap(&mut self, phase: &str) {
         if let Some(spent) = self.take() {
+            // The phase's end, as it happens (#1979): a mark to take a
+            // profiler's dump at (`callgrind_control -d`), where `report`
+            // prints only at the end. `gate.nika` logs no `lower-std~` line.
+            eprintln!("lower-std~ {phase} ended ({:.3}s)", spent.as_secs_f64());
             self.add(phase, spent);
         }
     }

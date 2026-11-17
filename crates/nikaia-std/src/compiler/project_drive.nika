@@ -1204,9 +1204,16 @@ pub trait ProjectDriveKeptHost {
 /// **The refusal of a file of a project that is not its entry**
 /// ([ADR-260](../../docs/specification/adr/adr-260.md) D4): a project has one
 /// program, and running another file of it would run something the project
-/// does not build.
+/// does not build. A file under the project's `tests/` is a test program,
+/// and the refusal names the command that runs it (#1948).
 pub fn project_drive_not_the_entry(file: ref fs::Path, root: ref fs::Path, entry: String) -> String {
-    return f"{file.display()} is not the entry point of the project at {root.display()}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{entry}`. Run `nikaia run --project {root.display()}`, or `nikaia lower {file.display()}` to lower the file to Rust."
+    let told = f"{file.display()} is not the entry point of the project at {root.display()}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{entry}`. Run `nikaia run --project {root.display()}`, or `nikaia lower {file.display()}` to lower the file to Rust."
+    let tests = project_members_canonical(root).join("tests")
+    if !project_members_canonical(file).starts_with(tests) {
+        return told
+    }
+    let name = file.with_extension("").file_name()?.display() ?? ""
+    return f"{told}\nIt is a test program: run it with `nikaia test --project {root.display()} --filter {name}`, and add `--bless` to record its expected output."
 }
 
 /// **The project `nikaia run <file>` keeps for a file outside any project**

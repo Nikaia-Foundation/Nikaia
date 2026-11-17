@@ -222,7 +222,7 @@ grammar Digits {
         x:digit{1,2}
         -> {
             let mut n: i32 = 0
-            for d in x.chars() {
+            for d in x.scalars {
                 n = n * 10 + (d as i32 - 48)
             }
             let most = x.len() * 2000000000000000000

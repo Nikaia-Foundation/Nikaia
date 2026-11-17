@@ -713,8 +713,9 @@ pub trait ProjectTestsProgramHost {
     /// is more than zero, it and every process it started may hold that many
     /// processes and threads, are ended when it ends or this compiler does,
     /// and the run says where it was `capped` (#1919); so for the methods
-    /// below that take them.
-    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan sync throws
+    /// below that take them. `main` is the file the program stands in as
+    /// (`env::current_main`, ADR-program-path-1 D3): the test's own file.
+    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64, main: ref fs::Path) -> ProjectTestsRan sync throws
     /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
     /// `--asserts`): what it printed.
     fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
@@ -722,7 +723,7 @@ pub trait ProjectTestsProgramHost {
     /// puts it (`project_settings_own_copy`'s place, with no variant), in
     /// `dir`, with `own` as the test's directory; nothing where it is not
     /// there. `stdin` goes to its standard input, none where it is empty.
-    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan? sync throws
+    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64, main: ref fs::Path) -> ProjectTestsRan? sync throws
     /// **The batch build** (`project_batch.nika`): this compiler's `build
     /// --user-parallelism SETTING --project PROJECT` in `own`, with
     /// `project_batch_var()` naming `list`, ended after `within` seconds; the
@@ -730,7 +731,7 @@ pub trait ProjectTestsProgramHost {
     fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path, within: i64) -> ProjectTestsBatchBuilt sync throws
     /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
     /// directory and `stdin` on its standard input (none where it is empty).
-    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan sync throws
+    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64, main: ref fs::Path) -> ProjectTestsRan sync throws
 }
 
 /// **How a batch build ended** (`ProjectTestsProgramHost::batched`): the
@@ -961,7 +962,7 @@ pub fn project_tests_warm_up[H: ProjectTestsProgramHost](host: ref H, programs: 
     fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, "[package]\nname = \"warm_up\"\nversion = \"0.1.0\"\n")
     fs::write(project.join("src").join("main.nika"), fs::Root::Anywhere, "fn main() {\n}\n")
     let limit = project_tests_build_time_limit()
-    let out = host.compiler("run", setting, project, own, own, Bytes([]), limit, 0)
+    let out = host.compiler("run", setting, project, own, own, Bytes([]), limit, 0, project.join("src").join("main.nika"))
     if out.timed_out {
         throw ProjectTestsRefusal::Refused(f"the warm-up of the program std (#1955) timed out after {limit} s\n{out.stderr.text_lossy()}")
     }
@@ -1081,6 +1082,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     let project = own.join("project")
     let entry = project_tests_prepared(host, program, root, own)
     let written = f"tests/{program.name}.nika"
+    let main = root.join(written)
     let limit = project_tests_time_limit()
     let processes = project_tests_process_limit()
     // **Run from the batch, where it is in one** (`project_tests_batches`):
@@ -1091,7 +1093,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     match batched {
         null => {},
         batch => {
-            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin, limit, processes)
+            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin, limit, processes, main)
             // One that ran out of time, or into its cap, is not run alone
             // again, to run out of it twice.
             if out.capped > 0 {
@@ -1112,7 +1114,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     let asserts = reports.asserts.clone()
     let sharing = reports.sharing.clone()
     let building = project_tests_build_time_limit()
-    let built = host.compiler("build", setting, project, own, own, Bytes([]), building, 0)
+    let built = host.compiler("build", setting, project, own, own, Bytes([]), building, 0, main)
     if built.timed_out {
         return project_tests_build_timed_out_outcome(building, project_tests_relocated(built.stderr, entry, written, root))
     }
@@ -1124,9 +1126,9 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     // as a `test` block does, so it reads the package's files by relative
     // name; what it writes goes under `fs::scratch()`, inside `own`. Where
     // the program is not where it is expected, `nikaia run` finds it.
-    let ran = match host.built(project, root, own, program.stdin, limit, processes) {
+    let ran = match host.built(project, root, own, program.stdin, limit, processes, main) {
         null => {
-            let out = host.compiler("run", setting, project, root, own, program.stdin, limit, processes)
+            let out = host.compiler("run", setting, project, root, own, program.stdin, limit, processes, main)
             let said = out.stderr.clone()
             (out, said)
         }
