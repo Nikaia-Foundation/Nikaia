@@ -70,7 +70,9 @@ fn facts_place(section: String) -> (String, i64) throws {
 			if lines[i].starts_with("### ") && lines[i].to_lowercase().contains(key.clone()) {
 				let mut end = i
 				let mut j = i + 1
-				while j < lines.len() && !lines[j].starts_with("#") {
+				// A heading ends the section; a wrapped line that starts with
+				// `#N]` does not (#2002).
+				while j < lines.len() && !lines[j].starts_with("# ") && !lines[j].starts_with("## ") && !lines[j].starts_with("### ") {
 					if lines[j].trim() != "" { end = j }
 					j = j + 1
 				}
