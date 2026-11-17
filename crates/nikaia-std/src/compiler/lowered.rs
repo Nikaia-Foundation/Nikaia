@@ -3979,7 +3979,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, project_tests_warm_up, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -4234,4 +4234,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e56f7e1dcac38f849ab480973bd25e8d2d42e39a633a5c9a3201f4cb46865f35";
+pub const LOWERED_DIGEST: &str = "7ea3b97f036978ad0331d2339ac92eecec76585832c1ed123b14991425aac030";
