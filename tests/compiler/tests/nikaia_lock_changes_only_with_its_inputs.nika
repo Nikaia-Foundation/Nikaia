@@ -1,0 +1,81 @@
+// #1945, ADR-021 D2, D3 and D5: `nikaia.lock` records what determines a
+// build (the toolchain, the units' source hashes, the resolved
+// dependencies) and not the compiler's identity, which is in every unit's
+// cache key instead. Each build wrote a `compiler = ...` line, which changed
+// with every compiler commit, so a committed lock was dirty after any
+// build. Two builds of one source now leave it byte for byte the same, one
+// changed source byte changes only that unit's `source` line, and a lock
+// that still has a `compiler` line loads and is written back without it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn lock(p: String) -> String throws {
+	return fs::read_to_string(f"{p}/nikaia.lock", fs::Root::Anywhere)
+}
+
+// The lines of the `diff` of A and B that are changes, without the
+// headers and the context.
+fn changed(a: String, b: String) -> String throws {
+	return process::run(
+		"sh",
+		["-c", f"diff '{a}' '{b}' | grep '^[<>]' | sed 's/\"[0-9a-f]*\"/HASH/'"],
+	).stdout.trim().clone()
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let cache = f"{tmp}/cache"
+	process::run("mkdir", ["-p", f"{tmp}/p/src"])
+	let p = f"{tmp}/p"
+	fs::write(
+		f"{p}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"stable\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n\tprintln(\"a\")\n}\n")
+	let env = [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())]
+	let first = process::run(nikaia.clone(), ["build"]; dir: p.clone(), env: env.clone())
+	let held = lock(p.clone())
+	println(f"built: {first.code}, a compiler line: {held.contains("compiler =")}")
+	process::run("cp", [f"{p}/nikaia.lock", f"{tmp}/first.lock"])
+	let second = process::run(nikaia.clone(), ["build"]; dir: p.clone(), env: env.clone())
+	println(f"built again: {second.code}, the same bytes: {lock(p.clone()) == held}")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n\tprintln(\"b\")\n}\n")
+	let third = process::run(nikaia.clone(), ["build"]; dir: p.clone(), env: env)
+	println(f"one source byte changed: {third.code}")
+	println(changed(f"{tmp}/first.lock", f"{p}/nikaia.lock"))
+	// A lock written before #1945, with its `compiler` line, is met by the
+	// build of a new compiler: a miss (here, an emptied store), which writes
+	// the lock again.
+	process::run("cp", [f"{p}/nikaia.lock", f"{tmp}/third.lock"])
+	process::run(
+		"sed",
+		["-i", "/^toolchain = /a compiler = \"0123\"", "nikaia.lock"]; dir: p.clone(),
+	)
+	println(f"an old lock has one: {lock(p.clone()).contains("compiler =")}")
+	process::run("rm", ["-rf", f"{p}/target/nikaia/cache"])
+	let fourth = process::run(
+		nikaia,
+		["build"]; dir: p.clone(),
+		env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache)],
+	)
+	println(f"built over it: {fourth.code}, a compiler line: {lock(p.clone()).contains("compiler =")}")
+	println(f"otherwise as before: {changed(f"{tmp}/third.lock", f"{p}/nikaia.lock") == ""}")
+	process::run("rm", ["-rf", tmp])
+}
