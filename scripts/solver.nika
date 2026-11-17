@@ -40,7 +40,7 @@
 // `run` puts the logic layer's files of `crates/nikaia-std/src/compiler/` (read,
 // never copied), the new engine's files there too (moved in #1285),
 // and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
-// one program in a temporary directory, builds it with the `nikaia` that runs
+// one package in a temporary directory, each its own file, builds it with the `nikaia` that runs
 // this script (the binary kept in `target/solver-rod/`, see `solver_build`),
 // and answers every `.smt2` file: one line per file (`name answer work`),
 // then a row per directory: solved, unknown (overflow and files the reader
@@ -104,9 +104,14 @@ fn solver_root() -> String throws {
 
 // --- Assembling and building the program ---
 
-// The program: every file's `use std::` lines once at the top, then the files
-// without them, then `main`.
-fn solver_program(repo: String) -> String throws {
+// The program's files: the logic layer's, the engine's and the driver's, each
+// kept a file of its own in the package (Part I 9.1: one namespace), beside
+// a `main.nika` that calls `sv_rod_main`.
+//
+// **Files, not one concatenated text** (#1949): the build's ledger proves its
+// panics unit by unit, and the 17,800 lines as one unit took a cold build
+// about a minute longer than the same lines as 28 files.
+fn solver_program_files(repo: String) -> Vec[String] {
 	let mut paths: Vec[String] = []
 	for name in solver_logic_files() {
 		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
@@ -115,24 +120,40 @@ fn solver_program(repo: String) -> String throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
 	}
 	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
-	let mut uses: Vec[String] = []
-	let mut body = ""
-	for p in paths {
-		let text = fs::read_to_string(p.clone(), fs::Root::Anywhere)
-		for line in text.lines() {
-			if line.starts_with("use std::") {
-				if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
-			} else {
-				body = body + line + "\n"
-			}
-		}
-	}
-	return uses.join("\n") + "\n" + body + "fn main() throws {\n    sv_rod_main()\n}\n"
+	return paths
+}
+
+// Writes the program's package into `tmp`: its manifest, each file of
+// `solver_program_files` under `src/`, and `src/main.nika`.
+fn solver_program(repo: String, tmp: String) throws {
+	process::run("mkdir", ["-p", f"{tmp}/src"])
+	fs::write(
+		f"{tmp}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n",
+	)
+	let mut args: Vec[String] = solver_program_files(repo)
+	args.push(f"{tmp}/src/")
+	process::run("cp", args)
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    sv_rod_main()\n}\n")
+}
+
+// The environment the program builds in: rustc's lints capped (#1949). The
+// program leaves out the files' `*_test_*` functions and more, so rustc
+// warns of a hundred and forty functions never used; a build the backend
+// said anything about lowers the whole program a second time to place what
+// it said (`report` in `crates/nikaia/src/project.rs`, ADR-300), about 70 s
+// of a cold build, for warnings `solver_build` never shows. The user's own
+// `RUSTFLAGS` are kept in front.
+fn solver_build_env() -> Vec[(String, String)] {
+	let own = env::var("RUSTFLAGS") ?? ""
+	let flags = if own == "" { "--cap-lints=allow" } else { f"{own} --cap-lints=allow" }
+	return [("RUSTFLAGS", flags)]
 }
 
 // Builds the program and gives the binary's path, or an empty text after
 // printing why it did not build. The binary is kept in
-// `target/solver-rod/<key>/`, the key a hash of the program's text and of the
+// `target/solver-rod/<key>/`, the key a hash of the program's files and of the
 // `nikaia` that builds it: a second run of the same program with the same
 // toolchain (the tests run it eight times) builds nothing.
 //
@@ -144,18 +165,12 @@ fn solver_program(repo: String) -> String throws {
 // directory; a run that waited finds the binary there and builds nothing.
 fn solver_build(repo: String, nikaia: String) -> String throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/src"])
-	fs::write(
-		f"{tmp}/nikaia.toml",
-		fs::Root::Anywhere,
-		"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n",
-	)
-	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, solver_program(repo))
+	solver_program(repo, tmp.clone())
 	let key = process::run(
 		"sh",
 		[
 			"-c",
-			"{ cat \"$1/src/main.nika\"; stat -L -c '%s %Y %n' \"$2\"; } | sha256sum | cut -c1-16",
+			"{ (cd \"$1/src\" && for f in *.nika; do echo \"== $f\"; cat \"$f\"; done); stat -L -c '%s %Y %n' \"$2\"; } | sha256sum | cut -c1-16",
 			"sh",
 			tmp.clone(),
 			nikaia.clone(),
@@ -163,7 +178,7 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 	).stdout.trim().clone()
 	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
 	if key == "" {
-		let built = process::run(nikaia, ["build"]; dir: tmp.clone())
+		let built = process::run(nikaia, ["build"]; dir: tmp.clone(), env: solver_build_env())
 		if built.ok && fs::exists(bin.clone(), fs::Root::Anywhere) { return bin }
 		solver_build_failed(built.stderr, tmp)
 		return ""
@@ -190,6 +205,7 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 			bin,
 		];
 		dir: tmp.clone(),
+		env: solver_build_env(),
 	)
 	if !built.ok || !fs::exists(kept.clone(), fs::Root::Anywhere) {
 		solver_build_failed(built.stderr, tmp)
