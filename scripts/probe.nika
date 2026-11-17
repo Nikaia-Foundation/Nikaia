@@ -31,7 +31,7 @@ fn probe_usage() throws {
 // #1847), except inside a string literal, where they stay the escape they are
 // (`"a\nb"` keeps its two characters).
 fn probe_newlines(text: String) -> String {
-	let chars: Vec[scalar] = text.chars().collect()
+	let chars: Vec[scalar] = text.scalars.collect()
 	let mut out: String = ""
 	let mut in_string = false
 	let mut i = 0
