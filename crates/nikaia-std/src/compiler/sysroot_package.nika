@@ -69,9 +69,11 @@ pub fn sysroot_package_without_bodies(source: ref String, items: ref Vec[Spanned
         at = end
     }
     kept.push_str(source.bytes[at..<n].text() catch { return source.clone() })
-    // A line that is only a comment says nothing to another file (a `///`
-    // line is a doc and stays).
-    let lines: Vec[String] = kept.lines().filter(fn(line) { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(fn(line) { f"{line}\n" }).collect()
+    // A line that is only a comment says nothing to another file, and
+    // neither does a `///` doc (#1909): no pass reads another file's docs
+    // (the one reader, `main_words` in `emit_entry.nika`, reads the file's
+    // own `main`), so a doc edit re-lowers its own file alone.
+    let lines: Vec[String] = kept.lines().filter(fn(line) { !line.trim_start().starts_with("//") }).map(fn(line) { f"{line}\n" }).collect()
     return lines.join("")
 }
 

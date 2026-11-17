@@ -52,7 +52,7 @@ pub fn sysroot_package_without_bodies(source: &str, items: &[Spanned<Item>]) -> 
         Ok(value) => value,
         Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
     });
-    let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
+    let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
     nikaia_std::block::Text::from(lines.join(""))
 }
 
