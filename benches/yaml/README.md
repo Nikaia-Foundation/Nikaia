@@ -11,7 +11,7 @@ the tuned Rust YAML libraries, at three levels:
 
 ## The table
 
-Nikaia 0.0.1410 (`01027cd6c`), rustc 1.97.0, serde_yaml 0.9.34 over
+Nikaia at `9e585c4d4` (#1981), rustc 1.97.0, serde_yaml 0.9.34 over
 unsafe-libyaml 0.2.11, saphyr and saphyr-parser 0.0.6; an Intel Xeon at
 2.10 GHz; large input 10 MB. Millions of instructions and of mispredicted
 branches; the last column is the instructions with checks off over those of
@@ -19,37 +19,37 @@ the fastest Rust program of the row's input.
 
 | input | program | instructions, checks on | mispredicted, on | instructions, checks off | mispredicted, off | off / fastest Rust |
 |---|---|---:|---:|---:|---:|---:|
-| small | yaml::events | 1.1 | 0.0 | 1.0 | 0.0 | 1.68 |
+| small | yaml::events | 1.0 | 0.0 | 0.9 | 0.0 | 1.52 |
 | small | unsafe-libyaml | 0.7 | 0.0 | 0.7 | 0.0 | 1.10 |
 | small | saphyr-parser | 0.6 | 0.0 | 0.6 | 0.0 | 1.00 |
-| large | yaml::events | 7100.9 | 48.5 | 6519.4 | 43.6 | 2.14 |
+| large | yaml::events | 6030.3 | 43.6 | 5479.2 | 42.8 | 1.80 |
 | large | unsafe-libyaml | 3537.4 | 23.8 | 3562.5 | 22.5 | 1.17 |
 | large | saphyr-parser | 3142.4 | 24.5 | 3040.4 | 21.9 | 1.00 |
-| deep | yaml::events | 214.8 | 0.6 | 194.5 | 0.5 | 2.40 |
+| deep | yaml::events | 197.6 | 0.5 | 177.8 | 0.5 | 2.20 |
 | deep | unsafe-libyaml | 191.1 | 0.3 | 188.6 | 0.3 | 2.33 |
 | deep | saphyr-parser | 88.3 | 0.2 | 80.9 | 0.2 | 1.00 |
-| scalars | yaml::events | 408.9 | 1.8 | 382.8 | 1.8 | 2.46 |
+| scalars | yaml::events | 231.1 | 1.3 | 221.3 | 1.2 | 1.42 |
 | scalars | unsafe-libyaml | 363.6 | 0.3 | 378.4 | 0.3 | 2.43 |
 | scalars | saphyr-parser | 162.8 | 0.3 | 155.6 | 0.3 | 1.00 |
-| suite | yaml::events | 16.9 | 0.2 | 15.9 | 0.2 | 3.00 |
-| suite | unsafe-libyaml | 6.5 | 0.1 | 6.6 | 0.1 | 1.24 |
+| suite | yaml::events | 15.5 | 0.2 | 14.6 | 0.2 | 2.76 |
+| suite | unsafe-libyaml | 6.6 | 0.1 | 6.6 | 0.1 | 1.24 |
 | suite | saphyr-parser | 5.4 | 0.1 | 5.3 | 0.1 | 1.00 |
-| small | yaml::load | 1.1 | 0.0 | 1.1 | 0.0 | 1.54 |
+| small | yaml::load | 1.0 | 0.0 | 1.0 | 0.0 | 1.38 |
 | small | serde_yaml::Value | 0.8 | 0.0 | 0.8 | 0.0 | 1.20 |
 | small | saphyr::Yaml | 0.7 | 0.0 | 0.7 | 0.0 | 1.00 |
-| large | yaml::load | 7519.4 | 53.5 | 6960.8 | 43.4 | 1.72 |
+| large | yaml::load | 6264.8 | 49.0 | 5754.0 | 43.3 | 1.42 |
 | large | serde_yaml::Value | 5756.9 | 39.3 | 5769.3 | 36.3 | 1.42 |
 | large | saphyr::Yaml | 4410.3 | 34.1 | 4054.4 | 30.9 | 1.00 |
-| deep | yaml::load | 223.1 | 0.6 | 203.2 | 0.5 | 1.70 |
+| deep | yaml::load | 204.2 | 0.6 | 184.9 | 0.5 | 1.55 |
 | deep | serde_yaml::Value | 240.0 | 0.4 | 237.3 | 0.3 | 1.99 |
 | deep | saphyr::Yaml | 130.9 | 0.3 | 119.5 | 0.3 | 1.00 |
-| scalars | yaml::load | 410.5 | 1.9 | 384.1 | 1.8 | 2.61 |
+| scalars | yaml::load | 234.3 | 1.3 | 221.3 | 1.2 | 1.50 |
 | scalars | serde_yaml::Value | 356.2 | 0.4 | 370.9 | 0.4 | 2.52 |
 | scalars | saphyr::Yaml | 165.5 | 0.6 | 147.1 | 0.4 | 1.00 |
-| suite | yaml::load | 16.4 | 0.2 | 15.4 | 0.2 | 2.61 |
+| suite | yaml::load | 14.8 | 0.2 | 13.9 | 0.2 | 2.36 |
 | suite | serde_yaml::Value | 8.7 | 0.1 | 8.7 | 0.1 | 1.47 |
 | suite | saphyr::Yaml | 6.4 | 0.1 | 5.9 | 0.1 | 1.00 |
-| large | nikaia_yaml::from_str | 6286.9 | 47.7 | 5698.6 | 43.2 | 1.39 |
+| large | nikaia_yaml::from_str | 5327.8 | 36.5 | 4731.6 | 37.0 | 1.15 |
 | large | serde_yaml::from_str | 4085.5 | 26.4 | 4107.7 | 24.9 | 1.00 |
 
 | program | tokens |
@@ -70,10 +70,12 @@ package's conformance is `packages/yaml/tests`, not this table).
 
 ## Where yaml is behind
 
-yaml is behind on every row: 2.1 to 2.5 times saphyr-parser's instructions for
-the events on large, deep and scalars, 1.7 to 2.6 times saphyr's for a tree,
-1.4 times serde_yaml for typed records. #1548 asks for at most 1.5 times
-saphyr-parser on the events; its causes, from `callgrind_annotate` of the
+yaml is behind saphyr on every row: 1.8 to 2.2 times saphyr-parser's
+instructions for the events on large and deep, 1.4 on scalars, 1.4 to 1.6
+times saphyr's for a tree, 1.15 times serde_yaml for typed records; it is
+ahead of unsafe-libyaml on deep and scalars and level with serde_yaml::Value
+on large. #1548 asks for at most 1.5 times saphyr-parser on the events; its
+causes, from `callgrind_annotate` of the
 inputs at a tenth, checks off:
 
 * **Events copied once per level**: fixed (#1548). `walk` appends to one
@@ -86,18 +88,27 @@ inputs at a tenth, checks off:
   (ADR-grammar-1 D6) and lowered as `&Vec<Dir>`, so no rule value is cloned
   per call (the clone was 4 % of large). The table above is measured with it.
 * **Allocation and copying**: open (with #1518). `malloc`, `free` and
-  `memcpy` are about 15 % of large: the parser builds a `Node` tree with a
-  `String` per scalar and the events are made from that tree, and `text()`
-  captures over the bytes grammar cost `from_utf8` (3 %); saphyr-parser scans
+  `memcpy` are about 20 % of large (events, checks off, at `9e585c4d4`):
+  the parser builds a `Node` tree with a `String` per scalar and the events
+  are made from that tree, and `text()` captures and slices over the bytes
+  cost `from_utf8` (4 %); saphyr-parser scans
   straight into events with spans.
-* **Per character**: open. Plain scalars go through `parse_PlainChar` and
-  `list::chars` a character at a time (7 % of large), where saphyr scans a run
-  of bytes; the grammar macro now scopes a label in a repeated
-  group for its guard (#1561), so a guarded repetition over a run can be
-  written; the package does not use it yet.
+* **Input copied per character**: fixed (#1981). The scalar readers walked
+  `chars()` into a `Vec[scalar]`, split into `Vec[String]` and cloned the
+  text they read; they read `s.bytes` and `.scalars` in place now and copy a
+  run once, as a slice. Large went (`498ca7e80` to `9e585c4d4`, checks
+  off) from 6,373 to 5,479 million for the events (1.80 times saphyr-parser)
+  and from 6,857 to 5,754 million for a tree (1.42 times saphyr);
+  `list::chars` (243 million) and a third of `malloc` / `free` went,
+  `from_utf8` of the slices' `text()` grew by 53 million.
+* **Per character in the grammar**: open. Plain scalars go through
+  `parse_PlainChar` a character at a time, where saphyr scans a run of
+  bytes; the grammar macro now scopes a label in a repeated group for its
+  guard (#1561), so a guarded repetition over a run can be written; the
+  package does not use it yet.
 
-The typed row is the tree row: `nikaia_yaml::from_str` counts 5,699 million
-against `yaml::load`'s 6,961 million on the same input, so the gap is the
+The typed row is the tree row: `nikaia_yaml::from_str` counts 4,732 million
+against `yaml::load`'s 5,754 million on the same input, so the gap is the
 parser's.
 
 ## How it is measured
