@@ -90,7 +90,36 @@ pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world:
             _ => { },
         }
     }
-    state.code_parameters_that_change();
+    state.code_parameters_that_change(&check_program_trait_methods(world));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_program_trait_methods(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
+    let mut groups: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Impl { target, methods, trait_name } => {
+                let trait_name = *trait_name;
+                let named = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let written = world.here.text(named);
+                let owner = world.here.text(target.name);
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, .. } => {
+                            let name = *name;
+                            let sym = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let own = world.here.text(sym);
+                            groups.insert(format!("{}::{}", owner, own), format!("{}::{}", written, own));
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    groups
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

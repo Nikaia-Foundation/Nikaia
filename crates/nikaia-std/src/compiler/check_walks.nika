@@ -649,8 +649,10 @@ impl CheckState {
     /// walked: one handed a lambda that changes a binding it captures, or a
     /// parameter that is one, and the parameters handed on to it in turn. One
     /// the body runs from tasks at once stays shared, and a lambda that changes
-    /// what it captures handed there is `NK2104`, naming the binding.
-    fn code_parameters_that_change(ref mut self) sync {
+    /// what it captures handed there is `NK2104`, naming the binding. A trait
+    /// method and the methods of its impls (`groups`, impl to trait) share
+    /// the choice: the trait declares the parameter as each impl writes it.
+    fn code_parameters_that_change(ref mut self, groups: ref collections::BTreeMap[String, String]) sync {
         let mut changing: collections::BTreeSet[String] = collections::BTreeSet()
         let mut at_once: collections::BTreeSet[String] = self.code_at_once.clone()
         let mut grew = true
@@ -681,6 +683,12 @@ impl CheckState {
                     grew = true
                 }
             }
+            if check_walks_share_in_traits(groups, changing) {
+                grew = true
+            }
+            if check_walks_share_in_traits(groups, at_once) {
+                grew = true
+            }
         }
         let args: Vec[CheckCodeArg] = self.code_args.clone()
         for arg in args {
@@ -707,4 +715,32 @@ impl CheckState {
             }
         }
     }
+}
+
+/// **A code parameter of a trait method and of each impl's method that
+/// answers it, chosen alike** (ADR-views-3 D17): one marked in an impl marks
+/// it in the trait, and one marked in the trait marks it in every impl.
+/// Whether any was added.
+fn check_walks_share_in_traits(groups: ref collections::BTreeMap[String, String], mut marked: collections::BTreeSet[String]) -> bool sync {
+    let mut added: Vec[String] = []
+    for one in marked {
+        for (member, owner) in groups {
+            let in_member = one.strip_prefix(f"{member}::")
+            if in_member != null {
+                added.push(f"{owner}::{in_member ?? ""}")
+            }
+            let in_owner = one.strip_prefix(f"{owner}::")
+            if in_owner != null {
+                added.push(f"{member}::{in_owner ?? ""}")
+            }
+        }
+    }
+    let mut grew = false
+    for one in added {
+        if !marked.contains(one) {
+            marked.insert(one.clone())
+            grew = true
+        }
+    }
+    return grew
 }

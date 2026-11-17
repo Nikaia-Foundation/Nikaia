@@ -470,7 +470,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn code_parameters_that_change(&mut self) {
+    pub(crate) fn code_parameters_that_change(&mut self, groups: &collections::BTreeMap<String, String>) {
         let mut changing: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut at_once: collections::BTreeSet<String> = self.code_at_once.copy_owned();
         let mut grew = true;
@@ -495,6 +495,8 @@ impl CheckState {
                     grew = true;
                 }
             }
+            if check_walks_share_in_traits(groups, &mut changing) { grew = true; }
+            if check_walks_share_in_traits(groups, &mut at_once) { grew = true; }
         }
         let args: Vec<CheckCodeArg> = self.code_args.copy_owned();
         for arg in args.iter() {
@@ -515,5 +517,27 @@ impl CheckState {
         }
         for one in changing.iter() { if !at_once.contains(one) { self.facts.changing_code.insert(nikaia_std::block::Text::from(one.to_string())); } }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_walks_share_in_traits(groups: &collections::BTreeMap<String, String>, marked: &mut collections::BTreeSet<String>) -> bool {
+    let mut added: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for one in marked.iter() {
+        for (member, owner) in groups.iter() {
+            let in_member = one.strip_prefix(&*format!("{}::", member));
+            if in_member.is_some() { added.push(format!("{}::{}", owner, nikaia_std::index::or(in_member, || ""))); }
+            let in_owner = one.strip_prefix(&*format!("{}::", owner));
+            if in_owner.is_some() { added.push(format!("{}::{}", member, nikaia_std::index::or(in_owner, || ""))); }
+        }
+    }
+    let mut grew = false;
+    for one in added.iter() {
+        if !marked.contains(one) {
+            marked.insert(nikaia_std::block::Text::from(one.to_string()));
+            grew = true;
+        }
+    }
+    grew
 }
 
