@@ -158,7 +158,7 @@ impl CheckState {
             return
         }
         let written = written_expression(world.words, hole)
-        let mut what: String = f"`{held.text()}`"
+        let mut what: String = f"`{held.shown()}`"
         let mut help: String = "Write the parts you want in holes of their own, or build the text in a loop first."
         if printed {
             help = "Print the parts you want in holes of an `f\"…\"`, or build the text in a loop first."
@@ -234,12 +234,12 @@ impl CheckState {
                 // 6.3, #704): `SharedMut[T]` and `Locked[T]` have no text of
                 // their own; `get` takes the value out.
                 if name == "SharedMut" || name == "Locked" {
-                    let mut message = f"You can't put a `{held.text()}` in an `f\"…\"` hole."
-                    let mut note = f"A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.text()}`."
+                    let mut message = f"You can't put a `{held.shown()}` in an `f\"…\"` hole."
+                    let mut note = f"A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.shown()}`."
                     let mut out = f"Take the value out first: `let value = {shown}.get()`, then write `{{value}}`."
                     if printed {
-                        message = f"You can't print a `{held.text()}`."
-                        note = f"A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.text()}`."
+                        message = f"You can't print a `{held.shown()}`."
+                        note = f"A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.shown()}`."
                         out = f"Take the value out first: `let value = {shown}.get()`, then print `value`."
                     }
                     self.findings.push(check_refusal("NK1201", span, message, [note], out))
@@ -329,7 +329,7 @@ impl CheckState {
             }
             else => return,
         }
-        let mut called: String = f"`{held.text()}`"
+        let mut called: String = f"`{held.shown()}`"
         if what == "a range" || what == "a tuple" {
             called = what.clone()
         }
@@ -345,11 +345,11 @@ impl CheckState {
     /// `NK1206`: a `for` over a `T?`.
     fn a_loop_over_a_nullable(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
         let inner = match over {
-            Ty::Nullable(held) => held.text(),
+            Ty::Nullable(held) => held.shown(),
             else => return,
         }
         let written = written_expression(world.words, iter)
-        let note = f"`{written}` is a `{over.text()}`: a `{inner}` or nothing, and a `for` walks a list, not the maybe of one."
+        let note = f"`{written}` is a `{over.shown()}`: a `{inner}` or nothing, and a `for` walks a list, not the maybe of one."
         let help = f"Say what `null` walks first: `for … in {written} ?? [] {{ … }}`, or check it for `null` before the loop."
         self.findings.push(check_refusal("NK1206", span, f"`{written}` may be `null`, so a `for` can't walk it directly.", [note], help))
     }
@@ -392,9 +392,9 @@ impl CheckState {
             return
         }
         let written = written_expression(world.words, read)
-        let message = f"The two sides of `??` don't match: the left is a view of the `{held.text()}` in the map, the fallback a value of its own."
+        let message = f"The two sides of `??` don't match: the left is a view of the `{held.shown()}` in the map, the fallback a value of its own."
         let notes: Vec[String] = ["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.", "Nikaia never makes a copy behind your back."]
-        let help = f"Copy the map's value when you need a `{held.text()}` of your own: `{written}?.clone() ?? …`."
+        let help = f"Copy the map's value when you need a `{held.shown()}` of your own: `{written}?.clone() ?? …`."
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }
 
@@ -459,7 +459,7 @@ impl CheckState {
             return
         }
         let help: String = "Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`."
-        self.findings.push(check_refusal("NK1108", span, f"A condition has to be `true` or `false`, but this is `{found.text()}`.", [why.clone()], help))
+        self.findings.push(check_refusal("NK1108", span, spoken_in(f"A condition has to be `true` or `false`, but this is `{found.text()}`.", found, null), [why.clone()], help))
     }
 }
 

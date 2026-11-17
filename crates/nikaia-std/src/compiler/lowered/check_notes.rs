@@ -66,7 +66,7 @@ impl CheckState {
         }
         let item = note_seq_item(actual);
         let mut what: String = String::from("a sequence");
-        if !item.is_unknown() { what = format!("a sequence of `{}`", item.text()); }
+        if !item.is_unknown() { what = format!("a sequence of `{}`", item.shown()); }
         let notes: Vec<String> = vec![format!("This is {}. Ranges, a list's `iter()`, `chars()` and `drain()` can be walked from either end; a map's `keys()` and `io::lines()` only from the front, and a `filter` doesn't know its length.", what)];
         self.findings.push(check_refusal("NK2703", span, format!("`{}` {}, but {}.", written, needs, lacks), notes, Some(way)));
         true

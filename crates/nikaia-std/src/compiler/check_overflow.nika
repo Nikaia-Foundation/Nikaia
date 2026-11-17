@@ -249,8 +249,8 @@ fn check_overflow_block_leaves_none(state: ref CheckState, world: ref CheckWorld
 /// was written, not as the option of a view.
 fn check_overflow_wanted(want: ref Ty) -> String sync {
     return match want {
-        Ty::Nullable(inner) => f"{unviewed_type(inner).text()}?",
-        else => want.text(),
+        Ty::Nullable(inner) => f"{unviewed_type(inner).shown()}?",
+        else => want.shown(),
     }
 }
 
@@ -551,8 +551,8 @@ fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
 /// negative** (ADR-285 D32): the slot's refusal, or `NK1102`, with the two
 /// ways to say it.
 fn check_unsigned_slot_refused(slot: ref CheckUnsignedSlot) -> CheckFinding sync {
-    let found = slot.found.text()
-    let want = slot.want.text()
+    let found = slot.found.shown()
+    let want = slot.want.shown()
     let value = slot.written.clone()
     let into = slot.into.clone()
     let mut finding = slot.refusal?.clone() ?? check_refusal("NK1102", slot.span, f"This is `{found}`, but `{want}` is wanted here.", [], null)

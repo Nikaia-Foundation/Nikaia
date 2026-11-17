@@ -23,7 +23,7 @@ pub(crate) fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     if read && is_text_type(&ty) { return; }
-    let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
+    let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.shown())];
     let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field); #[allow(clippy::redundant_locals)] let notes = notes;
     if what == "handed back" { help = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark.", field); }
     let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field); #[allow(clippy::redundant_locals)] let notes = notes;
@@ -228,7 +228,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
-    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
+    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.shown())];
     let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path); #[allow(clippy::redundant_locals)] let notes = notes;
     if handed_back && !state.flow.lambda_returns.is_empty() { help = format!("Write `{}.clone()` for a copy: a lambda hands back a value of its own.", path); }
     if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it.", path); }
@@ -526,7 +526,7 @@ pub(crate) fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>
             if !check_core_lambda_results_agree(other, &one.ty) {
                 let was = one.ty.text();
                 let wanted = other.text();
-                state.findings.push(check_refusal("NK1104", &one.at, format!("You're returning `{}`, but this lambda's other result is `{}`.", was, wanted), vec![String::from("A lambda's `return`s and its last value are its result, so they are of one type.")], Some(format!("Make it a `{}`, or the others a `{}`.", wanted, was))));
+                state.findings.push(check_refusal("NK1104", &one.at, spoken_in(&format!("You're returning `{}`, but this lambda's other result is `{}`.", was, wanted), &one.ty, Some(other)), vec![String::from("A lambda's `return`s and its last value are its result, so they are of one type.")], Some(format!("Make it a `{}`, or the others a `{}`.", other.shown(), one.ty.shown()))));
             }
         }
         seen.push(one.ty.clone());
@@ -768,7 +768,7 @@ pub(crate) fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: 
         let not_text = is_a_literal_other_than(&option.value, "text") || !given.is_unknown() && !given.fits(&owned) && !given.fits(&viewed);
         if not_text {
             let mut said: String = String::from("An `assert`'s `message:` has to be text, but this is a literal of another type.");
-            if !given.is_unknown() { said = format!("An `assert`'s `message:` has to be text, but this is `{}`.", given.text()); }
+            if !given.is_unknown() { said = format!("An `assert`'s `message:` has to be text, but this is `{}`.", given.shown()); }
             state.an_assert_of_another_shape(said, span);
         }
         message = index;

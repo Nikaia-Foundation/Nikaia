@@ -317,6 +317,12 @@ fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if a_number_name(found_text) && a_number_name(want_text) {
         return f"Convert it with `as {want_text}`. A number goes into another type on its own only where every value it can hold fits."
     }
+    // **Two types a message prints alike** (ADR-views-3 D4, #1528): they
+    // differ only in which parts are views, which no declaration writes, so
+    // the help names what the value has to be.
+    if found.shown() == want.shown() && !found.is_a_view() && !want.is_a_view() {
+        return f"Make it {spoken(want, found)}."
+    }
     // **A function that keeps, where a function type lends** (Part I §C,
     // #1504): both as the source writes them, a lent parameter plain and a
     // kept one `keep`, never the boundary's `ref`.

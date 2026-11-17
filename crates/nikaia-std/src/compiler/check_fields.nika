@@ -126,7 +126,7 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach))
         let note = f"`?.` is for a value that may be missing: it reaches the {what} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{plain}`."
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [], edit: null })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.shown()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [], edit: null })
     }
 
     /// **`??` over a value that is never absent** (`NK1211` over an index,
@@ -157,7 +157,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK1211", span, message, [note.clone()], f"Check the length first: `if {pieces[1]} < {pieces[0]}.len()`."))
             return false
         }
-        let note = f"`??` replaces a `null`, and a value of type `{seen.text()}` is never `null`: only a type written with `?` can be."
+        let note = f"`??` replaces a `null`, and a value of type `{seen.shown()}` is never `null`: only a type written with `?` can be."
         self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [], edit: null })
         return true
     }
@@ -192,9 +192,9 @@ impl CheckState {
         if !a_name || !moves(owned) || !self.takes_away(world, owned) {
             return
         }
-        let message = f"The two sides of `??` don't match: the left is a `{viewed.text()}`, the fallback a `{owned.text()}`."
+        let message = spoken_in(f"The two sides of `??` don't match: the left is a `{viewed.text()}`, the fallback a `{owned.text()}`.", viewed, owned)
         let notes: Vec[String] = ["A view and the value it points into are different types, and `??` has to give back one type.", "Nikaia never makes a copy behind your back, so it can't make the two agree on its own."]
-        let help = f"Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{owned.text()}`, put the value in a name of its own first."
+        let help = f"Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{owned.shown()}`, put the value in a name of its own first."
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }
 }

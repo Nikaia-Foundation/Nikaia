@@ -160,7 +160,7 @@ impl CheckState {
                     else => {}
                 }
             }
-            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.text()}`.", ["Bit operators work on the bits of an integer."], help))
+            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.shown()}`.", ["Bit operators work on the bits of an integer."], help))
             return
         }
     }

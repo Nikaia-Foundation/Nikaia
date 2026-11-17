@@ -330,7 +330,7 @@ impl CheckState {
             return
         }
         let written = written_expression(world.words, value)
-        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm."))
+        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.shown()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm."))
     }
 
     /// **`NK1103`: an arm's pattern of another type than the value** (#704):
@@ -345,7 +345,7 @@ impl CheckState {
         let known = self.kind_of_the_matched(on)
         if known != null {
             kind = (known ?? "").clone()
-            shown = f"a `{on.text()}`"
+            shown = f"a `{on.shown()}`"
         } else {
             // A number written out is typed by its use, and a `match` is none.
             kind = kind_of_a_literal(value) ?? return
@@ -470,11 +470,11 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true
                 let bound = kind_some_binding(world, arm.pattern)
-                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`."], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
+                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.shown()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`."], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
             }
             if which == "None" && !none_seen {
                 none_seen = true
-                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `None`: its nothing is written `null`."], "Write `null => …`."))
+                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.shown()}`.", ["A `T?` has no `None`: its nothing is written `null`."], "Write `null => …`."))
             }
         }
         return some_seen || none_seen
@@ -504,7 +504,7 @@ impl CheckState {
                     MatchPattern::Literal(literal) => written_expression(world.words, literal),
                     else => written_pattern(world.words, arm.pattern),
                 }
-                let note = f"`{written}` is a `{on.text()}`: a `{inner.text()}` or nothing, and a pattern of the `{inner.text()}` says nothing about the nothing."
+                let note = f"`{written}` is a `{on.shown()}`: a `{inner.shown()}` or nothing, and a pattern of the `{inner.shown()}` says nothing about the nothing."
                 self.findings.push(check_refusal("NK1205", span, f"`{written}` may be `null`, so `{variant}` can't be matched on it directly.", [note], f"Say what `null` stands for first: `let value = {written} ?? …`, and `match value`."))
                 return
             }

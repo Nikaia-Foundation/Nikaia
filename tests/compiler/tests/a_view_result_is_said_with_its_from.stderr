@@ -1,0 +1,8 @@
+error[NK1104]: You're returning `i64`, but the function is declared to return `Vec[String] from self`.
+  --> tests/a_view_result_is_said_with_its_from.nika:3:50
+   |
+ 3 |     fn a(self) -> Vec[String] from self { return 3 }
+   |                                                  ^
+   |
+   = help: Make it a view of a `Vec[String]` that something else keeps, or change the declaration to `i64`.
+1 type error

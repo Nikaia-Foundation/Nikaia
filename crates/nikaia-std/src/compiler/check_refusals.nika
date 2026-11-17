@@ -39,7 +39,7 @@ impl CheckState {
             maybe = right.clone()
             value = left.clone()
         }
-        self.findings.push(check_refusal("NK1102", span, f"This compares `{maybe.text()}` with `{value.text()}`.", ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`."], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))
+        self.findings.push(check_refusal("NK1102", span, spoken_in(f"This compares `{maybe.text()}` with `{value.text()}`.", maybe, value), ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`."], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))
     }
 
     /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
@@ -56,7 +56,7 @@ impl CheckState {
             maybe = right.clone()
         }
         let symbol = binary_op_text(op)
-        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`."], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))
+        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`."], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))
     }
 
     /// **`NK1102`: a `T?` as a hole of an `f"…"`** (Part I 2.3): it has no text
@@ -65,7 +65,7 @@ impl CheckState {
         if !a_known_maybe(held) {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
+        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
     }
 
     /// **`NK1102`: a `T?` handed to a print call** (Part I 2.3), for the
@@ -75,7 +75,7 @@ impl CheckState {
         if !a_known_maybe(held) {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"This prints `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))
+        self.findings.push(check_refusal("NK1102", span, f"This prints `{held.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))
     }
 
     /// **`NK1164`: `impl Fatal for T` where `T` has no `impl Error`**
@@ -133,7 +133,7 @@ impl CheckState {
         if kind == "method" {
             safe = f"?.{name}(…)"
         }
-        let mut message: String = f"A `{on.text()}` may be missing, so you can't reach its {kind} directly."
+        let mut message: String = f"A `{on.shown()}` may be missing, so you can't reach its {kind} directly."
         match on {
             Ty::Nullable(inner) => {
                 if inner.is_unknown() {

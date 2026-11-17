@@ -17,7 +17,7 @@ impl CheckState {
             maybe = right.clone();
             value = left.clone();
         }
-        self.findings.push(check_refusal("NK1102", span, format!("This compares `{}` with `{}`.", maybe.text(), value.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.")], Some(String::from("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))));
+        self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("This compares `{}` with `{}`.", maybe.text(), value.text()), &maybe, Some(&value)), vec![String::from("A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.")], Some(String::from("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -28,19 +28,19 @@ impl CheckState {
             maybe = right.clone();
         }
         let symbol = binary_op_text(&op);
-        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_maybe_in_a_hole(&mut self, held: &Ty, span: &Span) {
         if !a_known_maybe(held) { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_maybe_printed(&mut self, held: &Ty, span: &Span) {
         if !a_known_maybe(held) { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("This prints `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("This prints `{}`, which may be `null`.", held.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -76,7 +76,7 @@ impl CheckState {
     pub(crate) fn reaches_into_a_nullable(&mut self, on: &Ty, kind: &str, name: &str, span: &Span) {
         let mut safe: String = format!("?.{}", name);
         if kind == "method" { safe = format!("?.{}(…)", name); }
-        let mut message: String = format!("A `{}` may be missing, so you can't reach its {} directly.", on.text(), kind);
+        let mut message: String = format!("A `{}` may be missing, so you can't reach its {} directly.", on.shown(), kind);
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);

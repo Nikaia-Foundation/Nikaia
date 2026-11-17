@@ -351,6 +351,32 @@ parameter.
 * A function that must hand back a value independent of the parameter writes
   `keep` on it, or copies (`n.clone()`); the checker does not choose for it.
 
+### D17 — A code parameter the body calls one call at a time takes a lambda that changes what it captures.
+
+*Added November 17, 2026 (#1553), by the supervisor under the language
+principles (`docs/supervisor.md`, Language decisions), confirmed by the owner.*
+
+D2 says a lambda handed to a parameter is lent, and Part I 5.4 C says a
+parameter the body only calls is immediate and borrows. Nothing said whether a
+lambda lent that way may change a local it captures. `std`'s entries such as
+`map` allow it (5.4 C: they follow the lambda in everything), so the user's own
+code parameter allows it too: `fn each(xs: Vec[i64], f: fn(i64))` takes
+`fn(v) { total = total + v }`, and `total` holds the sum after the call.
+
+* Nothing is written for it: the type stays `fn(i64)`. Whether a code
+  parameter may run a lambda that changes its captures is inferred from the
+  body, as its context is (5.4 C). A body that calls the parameter one call at
+  a time takes such a lambda; that is Rust's `FnMut`, and the lowering chooses
+  it.
+* A body that calls the parameter from tasks that run at once (`par_iter`,
+  `async`, a group) does not take such a lambda: the two calls would change
+  one value. The call that hands it over is refused with `NK2104`, naming the
+  captured binding, as a binding a task names while the code beside it changes it is refused (Part I 8.1.2). A lambda
+  that changes nothing fits there as before.
+* A kept code parameter (`keep f: fn(i64)`, a field) follows the same rule by
+  where the kept value is called.
+* No such program reaches `rustc` with a borrow error (Part III C.1).
+
 ## 5. Consequences
 
 A signature now tells a reader what a function does with each argument: kept

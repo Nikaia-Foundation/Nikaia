@@ -895,7 +895,10 @@ fn main() throws {
     let library = Ledger::parse(STD).expect("std ships a ledger");
     let found = check::check(&parsed, &own, &library).findings;
     let refused = found.iter().find(|f| f.code == "NK1185").expect("refused");
-    assert!(refused.message.contains("`ref String`"), "{refused:#?}");
+    assert!(
+        refused.message.contains("a view of a `String`"),
+        "{refused:#?}"
+    );
     assert!(refused.message.contains("`String`"), "{refused:#?}");
     // A way out the program can take, which is what C.2 asks of one.
     assert!(

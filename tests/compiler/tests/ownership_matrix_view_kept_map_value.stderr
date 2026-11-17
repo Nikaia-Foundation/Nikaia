@@ -1,10 +1,10 @@
-error[NK1102]: `fill` expects `v` to be `String`, but you're passing `ref String`.
+error[NK1102]: `fill` expects `v` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_kept_map_value.nika:24:13
     |
  24 |     fill(m, s)
     |             ^
     |
-    = note: It's declared as `fill(mut m: collections::HashMap[ref String, String], v: String)`.
+    = note: It's declared as `fill(mut m: collections::HashMap[String, String], v: String)`.
     = note: This is a view: it points into text that something else owns.
     = note: `fill` keeps its `v` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.

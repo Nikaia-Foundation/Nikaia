@@ -172,7 +172,7 @@ impl CheckState {
                 }
                 name = match item {
                     Ty::Unknown => "a sequence",
-                    else => f"a sequence of `{item.text()}`",
+                    else => f"a sequence of `{item.shown()}`",
                 }
             }
             else => return,
@@ -334,7 +334,7 @@ impl CheckState {
         for field in self.fields_of_base(world, base) {
             let how = self.tears_down(world, field, seen)
             if how != null {
-                return f"through its `{field.text()}` field, {how ?? ""}"
+                return f"through its `{field.shown()}` field, {how ?? ""}"
             }
         }
         return null

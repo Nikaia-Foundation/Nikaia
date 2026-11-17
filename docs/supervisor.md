@@ -61,6 +61,15 @@ reports under *Briefs and reports*.
   after the suite.
 * **Before any push, look**: `git log --oneline origin/develop..develop`;
   a commit that is not the supervisor's own means the step above.
+* **Green is green** (owner, 2026-11-17): a batch the full suite passed is
+  not tested in full again only because `develop` moved meanwhile. The driver
+  merges `origin/develop` and runs the short checks, up to three rounds
+  (#2008). Until that is built, and beyond it, the supervisor may push such
+  a merge by judgment: it reads what the incoming commits touch, and where
+  they share no files and no topic with the batch and the short checks are
+  green, it pushes the merge. The full suite runs again only for red short
+  checks, a conflict outside `lowered/*.rs`, or an overlap in topic. CI on
+  `develop` stays the final gate; a red `develop` is fixed forward.
 
 ## Watching CI
 

@@ -70,7 +70,7 @@ pub fn text(ty: &Ty) -> String {
         Ty::Var { name, view } => { let view = *view; if view { format!("ref ${}", name) } else { format!("${}", name) } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", text(inner)) },
         Ty::Named { name, args, view } => { let view = *view; named_text(name, args, view) },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(item, is_sync, pauses, can_throw, parallel, shape) },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&text(item), is_sync, pauses, can_throw, parallel, shape) },
     }
 }
 
@@ -148,13 +148,234 @@ pub(crate) fn named_text(name: &str, args: &[Ty], view: bool) -> String {
     out
 }
 
-pub(crate) fn sequence(item: &Ty, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: &Shape) -> String {
+pub(crate) fn sequence(item: &str, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: &Shape) -> String {
     let word = if parallel { PAR } else { SEQ };
-    let mut out = format!("{}[{}]", word, text(item));
+    let mut out = format!("{}[{}]", word, item);
     if is_sync { out.push_str(" sync"); }
     if pauses { out.push_str(&format!(" {}", PAUSES)); }
     if can_throw { out.push_str(" throws"); }
     for word in Shape::none().missing(shape) { out.push_str(&format!(" {}", word)); }
+    out
+}
+
+impl Ty {
+    pub fn shown(&self) -> String { ty_shown(self) }
+    pub(crate) fn holds_views(&self) -> bool { holds_a_view(self) }
+}
+
+pub fn ty_shown(ty: &Ty) -> String {
+    match ty {
+        Ty::Var { name, .. } => format!("${}", name),
+        Ty::Named { name, args, .. } => shown_named(name, args),
+        Ty::Tuple(parts) => format!("({})", shown_listed(parts)),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", ty_shown(inner)) },
+        Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; shown_code(params, (result).as_ref(), is_sync, can_throw) },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&ty_shown(item), is_sync, pauses, can_throw, parallel, shape) },
+        _ => text(ty),
+    }
+}
+
+pub(crate) fn shown_listed(parts: &[Ty]) -> String {
+    let mut out: String = String::from("");
+    for part in parts.iter() {
+        if !out.is_empty() { out.push_str(", "); }
+        out.push_str(&ty_shown(part));
+    }
+    out
+}
+
+pub(crate) fn shown_named(name: &str, args: &[Ty]) -> String {
+    let mut out: String = if name == TEXT_VIEW { nikaia_std::block::Text::from(TEXT.to_string()) } else { nikaia_std::block::Text::from(name.to_string()) };
+    if !args.is_empty() { out.push_str(&format!("[{}]", shown_listed(args))); }
+    out
+}
+
+pub(crate) fn shown_code(params: &[Ty], result: Option<&Ty>, is_sync: bool, can_throw: bool) -> String {
+    let mut listed: String = String::from("");
+    for part in params.iter() {
+        if !listed.is_empty() { listed.push_str(", "); }
+        listed.push_str(&shown_param(part));
+    }
+    let mut out = format!("fn({})", listed);
+    if result.is_some() {
+        let returned = nikaia_std::index::or(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.shown()),
+            None => None,
+        }, || "".into());
+        out.push_str(&format!(" -> {}", returned));
+    }
+    if is_sync { out.push_str(" sync"); }
+    if can_throw { out.push_str(" throws"); }
+    out
+}
+
+pub(crate) fn shown_param(part: &Ty) -> String {
+    let changed = lent_mut(part);
+    if changed.is_some() {
+        return format!("mut {}", nikaia_std::index::or(match changed.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.shown()),
+            None => None,
+        }, || "".into()));
+    }
+    let written = ty_shown(part);
+    if a_whole_view(part) { return written; }
+    let kept = match part {
+        Ty::Named { name, args, .. } => !(args.is_empty() && (a_number_name(&written) || name == "int" || name == "bool" || name == "char" || name == "scalar" || name == TEXT || name == TEXT_VIEW)),
+        Ty::Var { .. } => true,
+        _ => false,
+    };
+    if kept { return format!("keep {}", written); }
+    written
+}
+
+pub(crate) fn a_whole_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { view, .. } => { let view = *view; view },
+        Ty::Var { view, .. } => { let view = *view; view },
+        _ => false,
+    }
+}
+
+pub(crate) fn holds_a_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { args, view, .. } => { let view = *view; view || args.iter().any(|arg| { holds_a_view(arg) }) },
+        Ty::Var { view, .. } => { let view = *view; view },
+        Ty::Tuple(parts) => parts.iter().any(|part| { holds_a_view(part) }),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); holds_a_view(inner) },
+        Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); nikaia_std::index::or(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.holds_views()),
+            None => None,
+        }, || false) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); holds_a_view(item) },
+        _ => false,
+    }
+}
+
+pub(crate) fn viewed_parts(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if args.is_empty() { return None; }
+            let mapping = name == "HashMap" || name == "BTreeMap" || name.ends_with("::HashMap") || name.ends_with("::BTreeMap");
+            if mapping && args.len() == 2 {
+                let keys = holds_a_view(unsafe { nikaia_std::proven::read(&args, (0) as usize) });
+                let values = holds_a_view(unsafe { nikaia_std::proven::read(&args, (1) as usize) });
+                if keys && values { return Some(String::from("keys and values")); }
+                if keys { return Some(String::from("keys")); }
+                if values { return Some(String::from("values")); }
+                return None;
+            }
+            if args.iter().any(|arg| { holds_a_view(arg) }) { return Some(String::from("items")); }
+            return None;
+        },
+        Ty::Tuple(parts) => {
+            if parts.iter().any(|part| { holds_a_view(part) }) { return Some(String::from("parts")); }
+            return None;
+        },
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if holds_a_view(inner) { return Some(String::from("content")); }
+            return None;
+        },
+        Ty::Seq { item, .. } => {
+            let item = nikaia_std::boxed::open(item);
+            if holds_a_view(item) { return Some(String::from("items")); }
+            return None;
+        },
+        Ty::Fn { result, .. } => {
+            let result = nikaia_std::boxed::open(result);
+            if nikaia_std::index::or(match result {
+                Some(__nikaia_it) => Some(__nikaia_it.holds_views()),
+                None => None,
+            }, || false) { return Some(String::from("result")); }
+            return None;
+        },
+        _ => { return None; },
+    }
+}
+
+pub(crate) fn article_of(written: &str) -> &'static str {
+    let first = nikaia_std::index::or(written.chars().next(), || 'x'.into());
+    if first == 'A' || first == 'E' || first == 'I' || first == 'O' || first == 'U' || first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u' { return "an"; }
+    "a"
+}
+
+pub(crate) fn parts_said_as_views(ty: &Ty, parts: &str) -> String {
+    if parts == "content" { return String::from("whose content is a view"); }
+    if parts == "result" {
+        let taken = match ty {
+            Ty::Fn { params, .. } => params.len() as i64,
+            _ => 0,
+        };
+        if taken == 0 { return String::from("whose result is a view"); }
+        if taken == 1 { return String::from("whose result is a view of its argument"); }
+        return String::from("whose result is a view of its arguments");
+    }
+    format!("whose {} are views", parts)
+}
+
+pub(crate) fn parts_said_as_own(parts: &str) -> String {
+    if parts == "content" || parts == "result" { return format!("whose {} is its own", parts); }
+    format!("whose {} are their own", parts)
+}
+
+pub fn spoken(ty: &Ty, other: Option<&Ty>) -> String {
+    let written = ty_shown(ty);
+    if holds_a_view(ty) {
+        let mut out = if a_whole_view(ty) { format!("a view of {} `{}`", article_of(&written), written) } else { format!("{} `{}`", article_of(&written), written) };
+        let parts = viewed_parts(ty);
+        if parts.is_some() { out.push_str(&format!(" {}", parts_said_as_views(ty, nikaia_std::index::or(parts.as_deref(), || "")))); }
+        return out;
+    }
+    let against = match other { Some(__nikaia_value) => __nikaia_value, None => return format!("`{}`", written) };
+    if !holds_a_view(against) || ty_shown(against) != written { return format!("`{}`", written); }
+    if a_whole_view(against) { return format!("{} `{}` of its own", article_of(&written), written); }
+    let parts = match viewed_parts(against) { Some(__nikaia_value) => __nikaia_value, None => return format!("`{}`", written) };
+    format!("{} `{}` {}", article_of(&written), written, parts_said_as_own(&parts))
+}
+
+pub fn spoken_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
+    let first_text = text(first);
+    let second_text = if second.is_some() { text(nikaia_std::index::or(second, || &Ty::Unknown)) } else { String::from("") };
+    let parts: Vec<&str> = message.split('`').collect::<Vec<_>>();
+    let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut at: i64 = 0;
+    while at < parts.len() as i64 {
+        let part = *unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
+        if at % 2 == 1 {
+            if at == unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } {
+                out.push_str("`");
+                out.push_str(part);
+            } else {
+                let said = said_for(part, first, &first_text, second, &second_text);
+                if said.is_some() { out.push_str(nikaia_std::index::or(&said, || "")); } else { out.push_str(&format!("`{}`", part)); }
+            }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            continue;
+        }
+        let mut led = false;
+        if unsafe { nikaia_std::proven::add::<i64>(at, 1) } < unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } {
+            let next = nikaia_std::index::or(said_for(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }, first, &first_text, second, &second_text), || "".into());
+            led = next.starts_with("a ") || next.starts_with("an ");
+        }
+        if led && (part == "a " || part.ends_with(" a ")) { out.push_str(nikaia_std::index::or(part.strip_suffix("a "), || std::convert::AsRef::<str>::as_ref(part))); } else if led && (part == "an " || part.ends_with(" an ")) { out.push_str(nikaia_std::index::or(part.strip_suffix("an "), || std::convert::AsRef::<str>::as_ref(part))); } else { out.push_str(part); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    out
+}
+
+pub(crate) fn said_for(part: &str, first: &Ty, first_text: &str, second: Option<&Ty>, second_text: &str) -> Option<String> {
+    let mut said: String = String::from("");
+    if part == first_text { said = spoken(first, second); } else if second.is_some() && part == second_text { said = spoken(nikaia_std::index::or(second, || &Ty::Unknown), Some(first)); } else { return None; }
+    if said == format!("`{}`", part) { return None; }
+    Some(said)
+}
+
+pub fn shown_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
+    let mut out = nikaia_std::block::Text::from(message.replace(&*format!("`{}`", text(first)), &*format!("`{}`", ty_shown(first))));
+    if second.is_some() {
+        let other = nikaia_std::index::or(second, || &Ty::Unknown);
+        out = nikaia_std::block::Text::from(out.replace(&*format!("`{}`", text(other)), &*format!("`{}`", ty_shown(other))));
+    }
     out
 }
 
@@ -678,13 +899,19 @@ impl Signature {
             None => None,
         }, || Ty::Tuple(vec![]))
     }
-    pub fn text(&self) -> String {
+    pub fn text(&self) -> String { self.written(false) }
+    pub fn shown(&self) -> String { self.written(true) }
+    pub(crate) fn written(&self, said: bool) -> String {
         let mut inside: String = String::from("");
         for (name, ty) in self.params.iter() {
             if !inside.is_empty() { inside.push_str(", "); }
-            if name == "self" { inside.push_str(&ty.text()); } else {
+            if name == "self" && said {
                 if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); }
-                inside.push_str(&format!("{}: {}", name, ty.text()));
+                inside.push_str("self");
+            } else if name == "self" { inside.push_str(&ty.text()); } else {
+                if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); }
+                let typed = if said { ty.shown() } else { ty.text() };
+                inside.push_str(&format!("{}: {}", name, typed));
             }
         }
         if !self.config.is_empty() {
@@ -693,7 +920,8 @@ impl Signature {
             for option in self.config.iter() {
                 if !first { inside.push_str(", "); }
                 first = false;
-                inside.push_str(&format!("{}: {} = {}", option.name, option.ty.text(), option.default));
+                let typed = if said { option.ty.shown() } else { option.ty.text() };
+                inside.push_str(&format!("{}: {} = {}", option.name, typed, option.default));
             }
         }
         let mut before: String = String::from("");
@@ -717,7 +945,8 @@ impl Signature {
             before.push(']');
         }
         if self.result.is_none() { return format!("{}({})", before, inside); }
-        format!("{}({}) -> {}", before, inside, self.result_or_unit().text())
+        let returned = if said { self.result_or_unit().shown() } else { self.result_or_unit().text() };
+        format!("{}({}) -> {}", before, inside, returned)
     }
 }
 

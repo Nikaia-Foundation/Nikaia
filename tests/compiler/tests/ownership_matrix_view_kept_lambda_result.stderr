@@ -1,4 +1,4 @@
-error[NK1104]: This lambda returns `ref String`, a view, but `fn() -> String` returns text of its own.
+error[NK1104]: This lambda returns a view of a `String`, but `fn() -> String` returns text of its own.
    --> tests/ownership_matrix_view_kept_lambda_result.nika:17:34
     |
  17 |     let f: fn() -> String = fn { s }

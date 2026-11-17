@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/an_iter_element_of_a_list_of_text_kept_is_a_view.nika:17:16
     |
  17 |         b.push(w.to_string())
@@ -8,7 +8,7 @@ error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passi
     = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `Vec::insert` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::insert` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/an_iter_element_of_a_list_of_text_kept_is_a_view.nika:18:21
     |
  18 |         b.insert(0, w)
@@ -18,7 +18,7 @@ error[NK1102]: `Vec::insert` expects `value` to be `String` here, but you're pas
     = note: `Vec::insert` keeps its `value` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `collections::BTreeSet::insert` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `collections::BTreeSet::insert` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/an_iter_element_of_a_list_of_text_kept_is_a_view.nika:19:21
     |
  19 |         seen.insert(w.to_string())
@@ -28,7 +28,7 @@ error[NK1102]: `collections::BTreeSet::insert` expects `value` to be `String` he
     = note: `collections::BTreeSet::insert` keeps its `value` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `collections::HashMap::insert` expects `key` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `collections::HashMap::insert` expects `key` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/an_iter_element_of_a_list_of_text_kept_is_a_view.nika:20:23
     |
  20 |         counts.insert(w.to_string(), 1)

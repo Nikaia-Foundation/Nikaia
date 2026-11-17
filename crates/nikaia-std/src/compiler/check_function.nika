@@ -721,7 +721,7 @@ fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref Chec
 /// **NK1104: a body that does not hand back what it declares** (#704): an
 /// empty body, and an `if` without `else` as the last statement.
 fn check_function_hands_nothing(mut state: CheckState, body: ref Block, expected: ref Ty, at: ref Span, is_extern: bool, ends: bool) sync {
-    let want = expected.text()
+    let want = expected.shown()
     if body.stmts.len() == 0 && !is_extern {
         state.findings.push(check_refusal("NK1104", at, f"This function returns `()`, but it's declared to return `{want}`.", ["Its body is empty, so it hands nothing back."], f"Write the `{want}` it returns as the body's last expression, or remove `-> {want}`."))
     }

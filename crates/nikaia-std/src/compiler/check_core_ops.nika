@@ -1137,7 +1137,7 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
     // number beside a type of the program's own is not made into one.
     if nullable && check_core_ops_own_type(inner) && !state.jumps(world, fallback) {
         if check_core_ops_a_number_written(fallback) {
-            let held = inner.text()
+            let held = inner.shown()
             state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is a number, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type."], f"Write a `{held}` as the fallback."))
         } else if !other.is_unknown() && !check_core_ops_nullable(other) {
             state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
@@ -1153,8 +1153,8 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
             given_kind = "number"
         }
         if held_kind != "" && given_kind != "" && held_kind != given_kind {
-            let held = inner.text()
-            let mut given: String = f"`{other.text()}`"
+            let held = inner.shown()
+            let mut given: String = f"`{other.shown()}`"
             if check_core_ops_a_number_written(fallback) {
                 given = "a number"
             }
@@ -1165,7 +1165,7 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
         // integer, and a number of another type goes in only where a `let`
         // would take it.
         if held_kind == "number" && given_kind == "number" {
-            let held = inner.text()
+            let held = inner.shown()
             let written = check_core_ops_number_written_kind(fallback)
             let held_float = a_float_type(inner)
             if (written == "integer" && held_float) || (written == "float" && !held_float) {
@@ -1251,7 +1251,7 @@ fn check_core_ops_a_pair_split(mut state: CheckState, world: ref CheckWorld, dec
         names.push(if name.starts_with("__nikaia_tuple") { "(…)" } else { name.clone() })
     }
     let joined = names.join(", ")
-    let notes: Vec[String] = [f"The place hands it one value, a `{handed[0].text()}`, and a lambda takes what it is handed.".clone()]
+    let notes: Vec[String] = [f"The place hands it one value, a `{handed[0].shown()}`, and a lambda takes what it is handed.".clone()]
     let help: String = f"Take the tuple apart in the parameter, with brackets around the names: `fn(({joined})) {{ … }}`."
     state.findings.push(check_refusal("NK1101", span, f"This lambda takes {names.len()} arguments, but it is handed one tuple.", notes, help))
 }

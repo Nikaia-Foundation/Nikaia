@@ -1,8 +1,8 @@
-error[NK1104]: This action builds `Vec[(ref String, ref String)]`, but its rule returns `Vec[(String, String)]`.
+error[NK1104]: This action builds a `Vec[(String, String)]` whose items are views, but its rule returns a `Vec[(String, String)]` whose items are their own.
   --> tests/grammar_a_tuple_result_kept_as_published_text_is_refused.nika:7:65
    |
  7 |     entry rule doc -> Vec[(String, String)] = ls:Line* eof -> { ls }
    |                                                                 ^^
    |
-   = help: Make it a `Vec[(String, String)]`, or change the declaration to `Vec[(ref String, ref String)]`.
+   = help: Make it a `Vec[(String, String)]` whose items are their own.
 1 type error

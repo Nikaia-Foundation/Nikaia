@@ -114,7 +114,7 @@ fn check_defaults_a_field_default[H: CheckHost](mut state: CheckState, world: re
     let kind = check_attributes_literal_misfit(default.value, want)
     if kind != null {
         let said = kind ?? return
-        let wanted = want.text()
+        let wanted = want.shown()
         state.findings.push(check_refusal("NK1166", default.span, f"`{name}` holds `{wanted}`, but its default is {said}.", [], f"Give `{name}` a default that is a `{wanted}`."))
         return
     }

@@ -1,4 +1,4 @@
-error[NK1103]: This value is `ref String`, but the `let` declares `i64`.
+error[NK1103]: This value is a view of a `String`, but the `let` declares `i64`.
    --> tests/a_default_computed_beside_a_type_error_is_not_refused_again.nika:13:15
     |
  13 | 	let x: i64 = "no"

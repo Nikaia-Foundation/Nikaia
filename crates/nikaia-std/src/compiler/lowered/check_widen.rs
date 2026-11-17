@@ -284,7 +284,7 @@ pub(crate) fn a_repeat_count_unknown_for_its_array(written: &str, wanted: i64, s
 pub(crate) fn a_repeated_value_that_does_not_copy(names: &winnow_grammar::InternerContext, value: &Expr, count: &Expr, ty: &Ty, span: &Span) -> CheckFinding {
     let v = written_expression(names, value);
     let n = written_expression(names, count);
-    let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.text());
+    let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.shown());
     let help = format!("Write each copy: `(0..<{}).map(fn(_i) {{ {}.clone() }}).collect()`.", n, v);
     let notes: Vec<String> = vec![String::from("`[v; n]` copies a number, a `bool`, a `scalar`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.")];
     check_refusal("NK1280", span, message, notes, Some(help))

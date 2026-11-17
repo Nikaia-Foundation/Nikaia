@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
   --> tests/a_view_into_an_element_changed_in_place_is_refused.nika:8:10
    |
  8 | 		m.push(w)

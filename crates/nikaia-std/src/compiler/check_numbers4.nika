@@ -648,7 +648,7 @@ impl CheckState {
         // The position's sentence, with the value's type written as words:
         // there is none to put between backticks yet.
         let hole: String = "\u{0}"
-        let wanted = want.text()
+        let wanted = want.shown()
         let said = message(hole, wanted)
         let text = said.replace(f"`{hole}`", "a number")
         let mut note: String = "A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number."

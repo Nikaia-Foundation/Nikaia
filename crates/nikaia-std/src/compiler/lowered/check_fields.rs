@@ -104,7 +104,7 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach));
         let note = format!("`?.` is for a value that may be missing: it reaches the {} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{}`.", what, plain);
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.text()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![], edit: None });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.shown()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -129,7 +129,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }))));
             return false;
         }
-        let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
+        let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.shown());
         self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1216"), message, notes: vec![note], help: Some(String::from("Remove `??` and what follows it.")), labels: vec![], edit: None });
         true
     }
@@ -150,9 +150,9 @@ impl CheckState {
         if names_a_copy { owned = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let a_name = matches!(owned, Ty::Named { .. });
         if !a_name || !moves(&owned) || !self.takes_away(world, &owned) { return; }
-        let message = format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text());
+        let message = spoken_in(&format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text()), viewed, Some(&owned));
         let notes: Vec<String> = vec![String::from("A view and the value it points into are different types, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back, so it can't make the two agree on its own.")];
-        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text()); #[allow(clippy::redundant_locals)] let notes = notes;
+        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.shown()); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
 }

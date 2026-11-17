@@ -194,7 +194,7 @@ impl CheckState {
             _ => return,
         };
         if result != a_string_type() { return; }
-        let wanted = code.text();
+        let wanted = code.shown();
         let own = lambda_own(world, params);
         let last = tail_value_of(body);
         if last.is_some() {
@@ -209,8 +209,7 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn a_lambda_result_of_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, wanted: &str, own: &collections::BTreeSet<String>, body: &Block, value: &Expr, ty: &Ty, at: &Span) {
         if lambda_a_text_view(ty) && self.text_literal(world, &a_string_type(), value, true).is_none() {
-            let was = ty.text();
-            self.findings.push(check_refusal("NK1104", at, format!("This lambda returns `{}`, a view, but `{}` returns text of its own.", was, wanted), vec![String::from("`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.")], Some(String::from("Hand back a copy with `.clone()`."))));
+            self.findings.push(check_refusal("NK1104", at, spoken_in(&format!("This lambda returns `{}`, but `{}` returns text of its own.", ty.text(), wanted), ty, None), vec![String::from("`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.")], Some(String::from("Hand back a copy with `.clone()`."))));
             return;
         }
         let name: String = match value {
@@ -233,7 +232,7 @@ impl CheckState {
             _ => return,
         };
         if !wholly_known(&result) || body.stmts.is_empty() || a_body_never_ends(body) { return; }
-        let wanted = code.text();
+        let wanted = code.shown();
         let last = tail_value_of(body);
         if last.is_some() {
             let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };
