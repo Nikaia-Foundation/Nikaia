@@ -11,7 +11,7 @@ the tuned Rust YAML libraries, at three levels:
 
 ## The table
 
-Nikaia at `9e585c4d4` (#1981), rustc 1.97.0, serde_yaml 0.9.34 over
+Nikaia at `a3c121c41` (0.0.1424), rustc 1.97.0, serde_yaml 0.9.34 over
 unsafe-libyaml 0.2.11, saphyr and saphyr-parser 0.0.6; an Intel Xeon at
 2.10 GHz; large input 10 MB. Millions of instructions and of mispredicted
 branches; the last column is the instructions with checks off over those of
@@ -31,8 +31,8 @@ the fastest Rust program of the row's input.
 | scalars | yaml::events | 231.1 | 1.3 | 221.3 | 1.2 | 1.42 |
 | scalars | unsafe-libyaml | 363.6 | 0.3 | 378.4 | 0.3 | 2.43 |
 | scalars | saphyr-parser | 162.8 | 0.3 | 155.6 | 0.3 | 1.00 |
-| suite | yaml::events | 15.5 | 0.2 | 14.6 | 0.2 | 2.76 |
-| suite | unsafe-libyaml | 6.6 | 0.1 | 6.6 | 0.1 | 1.24 |
+| suite | yaml::events | 15.5 | 0.2 | 14.6 | 0.2 | 2.78 |
+| suite | unsafe-libyaml | 6.5 | 0.1 | 6.6 | 0.1 | 1.25 |
 | suite | saphyr-parser | 5.4 | 0.1 | 5.3 | 0.1 | 1.00 |
 | small | yaml::load | 1.0 | 0.0 | 1.0 | 0.0 | 1.38 |
 | small | serde_yaml::Value | 0.8 | 0.0 | 0.8 | 0.0 | 1.20 |
@@ -54,10 +54,10 @@ the fastest Rust program of the row's input.
 
 | program | tokens |
 |---|---:|
-| yaml::events | 418 |
+| yaml::events | 416 |
 | unsafe-libyaml | 1012 |
 | saphyr-parser | 616 |
-| yaml::load | 388 |
+| yaml::load | 386 |
 | serde_yaml::Value | 544 |
 | saphyr::Yaml | 554 |
 | nikaia_yaml::from_str | 265 |

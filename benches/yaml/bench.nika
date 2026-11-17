@@ -266,7 +266,7 @@ fn nika(work: String, repo: String, name: String, label: String) -> Program {
 		name: label,
 		on: f"{work}/bin/{name}.on",
 		off: f"{work}/bin/{name}.off",
-		source: f"{repo}/benches/yaml/{name}.nika",
+		source: f"{repo}/benches/yaml/{name}/{name}.nika",
 	}
 }
 
