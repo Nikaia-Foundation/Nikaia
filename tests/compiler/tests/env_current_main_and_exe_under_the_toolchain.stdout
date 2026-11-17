@@ -1,0 +1,7 @@
+current_main: env_current_main_and_exe_under_the_toolchain.nika
+current_main is absolute: true
+current_exe is the toolchain: true
+env::var(NIKAIA_MAIN): null
+env::var(NIKAIA_EXE): null
+env::vars(NIKAIA_) lists them: false
+a child sees: unset unset

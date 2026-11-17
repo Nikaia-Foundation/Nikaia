@@ -140,6 +140,11 @@ fn started(
     if let Some(environment) = environment {
         command.env_clear().envs(environment);
     }
+    // The launcher's variables are this program's, not its child's
+    // (ADR-program-path-1 D3).
+    command
+        .env_remove(crate::env::EXE_VAR)
+        .env_remove(crate::env::MAIN_VAR);
     #[cfg(unix)]
     if within.is_some() {
         use std::os::unix::process::CommandExt;
@@ -500,6 +505,8 @@ pub fn spawn(
     let started = Instant::now();
     let mut child = Command::new(found)
         .args(args)
+        .env_remove(crate::env::EXE_VAR)
+        .env_remove(crate::env::MAIN_VAR)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

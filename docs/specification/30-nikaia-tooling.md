@@ -1555,12 +1555,17 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
 * **`std::cli`**: parsers for command-line arguments, environment variables and ANSI terminal colours. It reads the words into `main`'s parameters and checks `main`'s preconditions before the body runs (Part I 5.5); `cli::args()` returns every word as given. The words are untrusted, `main`'s parameters too, unless read with `cli::args(trusted: true)` ([ADR-399](adr/adr-399.md)).
 * **`std::env`**: the process's environment. `env::var(name: String) -> String?` is the
   variable's value, null where it is unset, empty or not Unicode; `env::temp_dir() -> fs::Path`
-  is the directory for temporary files; `env::current_exe() -> fs::Path?` is the path of the running
-  program, null where the platform cannot give it. `env::vars(prefix: String) -> [(String, String)]`
+  is the directory for temporary files; `env::current_exe() -> fs::Path?` is the program that was
+  started: under `nikaia run` and `nikaia test` the toolchain, a built program itself, null where the
+  platform cannot give it; `env::current_main() -> fs::Path?` is the file the program stands in as:
+  the `.nika` file `nikaia run` was given, the project's entry point, the test's file, a built program
+  itself ([ADR-program-path-1](adr/adr-program-path-1.md)). The toolchain hands both over in
+  `NIKAIA_EXE` and `NIKAIA_MAIN`; `env::var` calls them null, `env::vars` leaves them out and no child
+  inherits them. `env::vars(prefix: String) -> [(String, String)]`
   lists every variable whose name starts with `prefix`, as (name, value) pairs sorted by name. The
   prefix is required, so a program asks for the variables it uses and not for every secret beside them;
   `env::vars("")` lists all of them, and says so. It sees what `env::var` sees: a variable that is empty
-  or not Unicode is left out, never a panic, so the list holds no name `env::var` calls null. All four are
+  or not Unicode is left out, never a panic, so the list holds no name `env::var` calls null. All five are
   `sync`, and none has a `touches` line, so a read of the environment orders against every other effect
   (13.5). A variable's value is untrusted, as standard input is (17.1, [ADR-397](adr/adr-397.md)):
   `env::var(name; trusted: true)` and `env::vars(prefix; trusted: true)` say the operator chose it, and
