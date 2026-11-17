@@ -269,6 +269,17 @@ mod cexport_lowered {
 pub use cexport_lowered::*;
 
 #[allow(unsafe_code)]
+mod cexport_java_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/cexport_java.rs");
+}
+#[allow(unused_imports)]
+pub use cexport_java_lowered::*;
+
+#[allow(unsafe_code)]
 mod cexport_mirror_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3379,6 +3390,10 @@ pub mod cexport {
     #[allow(unused_imports)]
     pub use super::{CX_LEDGER_DIGEST, CxExported, CxCtx, CxBuild, cx_export};
 }
+pub mod cexport_java {
+    #[allow(unused_imports)]
+    pub use super::{CxJava, cx_java_file};
+}
 pub mod cexport_mirror {}
 pub mod cexport_model {
     #[allow(unused_imports)]
@@ -4234,4 +4249,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b33f7929809ef548e4aa23db63908befafea8db6492cda7e9d5f11c161aa8827";
+pub const LOWERED_DIGEST: &str = "9d0f4d4e6f3a6af05a1e6a1ced33df6f3a19d084e0e91a1b06f961ae6fc3d814";

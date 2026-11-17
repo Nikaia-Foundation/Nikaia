@@ -41,3 +41,34 @@ quotes a figure.
   callgrind_annotate. Quote the control's count beside the loss (#1614:
   fannkuch-redux 516 against a control of 499 a permutation, Rust #6 81.5).
 
+* **A JVM caller is counted as a difference, with its JIT flags named**
+  (#1337). A JVM's own start costs tens of millions of instructions, more
+  than any crossing, so one run means nothing: count the same program twice
+  under `valgrind --tool=callgrind --smc-check=all --trace-children=no`, once
+  with a loop of N calls and once with N = 0, and divide the difference by N.
+  The loop calls a no-op entry point (`pub extern fn nothing() sync {}`)
+  through the generated binding, so the figure is the crossing alone. The JIT
+  decides what is counted, so its flags are fixed and quoted with the figure:
+  `-Xbatch -XX:-TieredCompilation -XX:+UseSerialGC -XX:CICompilerCount=1`
+  (compiled before it runs, by C2 only, one thread), and a warm-up loop of
+  the same fixed length (20 000 calls) runs before the counted one in both
+  runs, so that both count the compiled crossing. The Python and Node
+  bindings are counted the same way, with their interpreter's version named.
+  The first figure (2026-11-17, OpenJDK 21.0.12 with `--enable-preview`, the
+  `java.lang.foreign` that Java 22 makes final; the compiler at
+  `--profile fast`): 822,513,063 Ir at N = 0 and 882,972,451 at N = 200,000,
+  so about 302 instructions per crossing, the library's own entry wrapper
+  included. A figure on Java 22 replaces it when it is counted.
+
+* **Against another solver, count what is solved, then instructions; memory
+  with its floor; time only beside** (#1338, ADR-270 D17).
+  `nikaia run scripts/solver.nika -- compare` runs ours, z3 and cvc5 under one
+  wall-clock limit per file and reports, per family, solved, wrong (against
+  the file's status, and disagreements between the solvers) and PAR-2 (a
+  file not solved counts twice the limit). PAR-2 there is in seconds, so it
+  is a ranking, never a figure to quote: the figure is `--instructions`, the
+  same run under callgrind, on the fixed sample `tests/solver/sample`. Peak
+  memory is the child's `maxrss`, which Linux never reports below the
+  runner's own high-water mark (ADR-368 D3): the header names that floor, and
+  a value at the floor reads "at most the floor", not the solver's size.
+  Memory under `--instructions` is valgrind's and is not quoted.

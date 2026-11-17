@@ -52,6 +52,8 @@ pub struct Exported {
     pub python: String,
     /// `node/<package>.c`, what `nikaia bind node` writes (D28).
     pub node: String,
+    /// `<package>/<Package>.java`, what `nikaia bind java` writes (D34).
+    pub java: String,
 }
 
 /// `node/binding.gyp`, which builds `nikaia bind node`'s module (D28).
@@ -116,6 +118,7 @@ pub fn export(
         header: made.header,
         python: made.python,
         node: made.node,
+        java: made.java,
     }))
 }
 

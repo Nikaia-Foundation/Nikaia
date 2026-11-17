@@ -24,6 +24,7 @@ pub struct ProjectDriveLowered {
     pub header: String?,
     pub python: String?,
     pub node: String?,
+    pub java: String?,
 }
 
 /// **What the build without Cargo made** (`run_fast::compile`): `rustc`'s
@@ -287,6 +288,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     let mut header: String? = null
     let mut python: String? = null
     let mut node: String? = null
+    let mut java: String? = null
     let mut link_flags: Vec[String] = []
     for at in order {
         let member = members[at].clone()
@@ -339,6 +341,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             header = lowered.header?.clone()
             python = lowered.python?.clone()
             node = lowered.node?.clone()
+            java = lowered.java?.clone()
         }
         rust[at] = lowered.rust.clone()
     }
@@ -514,7 +517,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     if code == 0 && subcommand != "check" {
         match header {
             null => {},
-            text => project_drive_c_library(host, text, python, node, messages),
+            text => project_drive_c_library(host, text, python, node, java, messages),
         }
     }
     let built = diagnostics_executable_in(messages)
@@ -846,8 +849,8 @@ pub fn project_drive_publishable(root: ref fs::Path, file: ref ManifestFile) thr
 
 /// **The library and its header, together where a C build looks**
 /// (ADR-284 D4, D12): `target/nikaia/c-library/`, the binding asked for over
-/// it (D26, D28), and the libraries Cargo made, copied beside them.
-fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String, python: String?, node: String?, messages: ref String) sync throws {
+/// it (D26, D28, D34), and the libraries Cargo made, copied beside them.
+fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String, python: String?, node: String?, java: String?, messages: ref String) sync throws {
     let made = host.own_dir().join("c-library")
     project_drive_make_dir(made)
     let package = host.package_name() ?? "program"
@@ -876,6 +879,20 @@ fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String,
                 host.write_if_changed(module.join(f"{package}.c"), text)
                 host.write_if_changed(module.join("binding.gyp"), cx_node_gyp(package))
                 println(f"binding: {module.join(f"{package}.c").display()}")
+            },
+        }
+    }
+    // **`java/<package>/<Package>.java`** (D34): the source `javac` compiles
+    // beside the library its class loads.
+    if bind == "java" {
+        match java {
+            null => {},
+            text => {
+                let module = made.join("java").join(package.replace("-", "_"))
+                project_drive_make_dir(module)
+                let file = cx_java_file(package)
+                host.write_if_changed(module.join(file), text)
+                println(f"binding: {module.join(file).display()}")
             },
         }
     }

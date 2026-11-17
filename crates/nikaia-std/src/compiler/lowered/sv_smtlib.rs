@@ -225,7 +225,8 @@ impl SvSmtReader {
             let n = match text::parse_i64(a) { Some(__nikaia_value) => __nikaia_value, None => return SvGot::Failed(SvReadWhy::Overflow(format!("the numeral {}", a))) };
             return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))));
         }
-        if a.contains('.') { return sv_decimal(a); }
+        let first = nikaia_std::index::or(a.chars().nth(0), || ' '.into());
+        if a.contains('.') && first >= '0' && first <= '9' { return sv_decimal(a); }
         match sv_ratio(a) {
             None => { },
             Some(ref got) => { return got.clone(); },

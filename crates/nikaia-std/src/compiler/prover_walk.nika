@@ -2537,10 +2537,10 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
     let first = prover_outside_name(walk, goal, index, scope, words, written_of)
     let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true, -1)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true, "", -1)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null, -1)
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null, "", -1)
     let mut notes: Vec[String] = [outside_note(first, source)]
     if goal != null {
         let found = model(walk.arena, scope.facts, goal ?? 0)
@@ -2568,7 +2568,7 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 /// is proved, by the guard `guard` where one proves it; an `operation` (a
 /// `/`, `%`, `+`, `-` or `*`, D7) likewise, and whether its goal was
 /// `stated` at all.
-fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, site: i64) {
+fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, within: String, site: i64) {
     let mut guard_at: i64 = -1
     let mut condition: String = ""
     match guard {
@@ -2579,7 +2579,7 @@ fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name
         },
     }
     let at = span.start as i64
-    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated, site: site })
+    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated, within: within.clone(), site: site })
 }
 
 /// **An operation that data from outside reaches, recorded for `--bounds`**
@@ -2591,10 +2591,14 @@ fn prover_outside_operation(mut walk: ProverWalk, expr: ref Expr, reached: ref E
     let first = prover_outside_name(walk, goal, reached, scope, words, written_of)
     let source = outside_source(reached, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true, site)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true, "", site)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null, site)
+    let mut within = String()
+    if goal != null {
+        within = prover_proof_window(walk.state.arithmetic[site]?.clone() ?? "").clone()
+    }
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null, within, site)
 }
 
 /// **A division's goal on data from outside** (ADR-396 D7): `d != 0`, and on
@@ -2628,8 +2632,8 @@ fn prover_division_goal(mut walk: ProverWalk, lhs: ref Expr, rhs: ref Expr, op_a
 }
 
 /// **An operation's goal**, `lo <= a + b <= hi` for the type the checker
-/// gave it (`prover_overflow_check`'s), null where the solver states no
-/// bound of it - an `i64`'s - or reads no whole number.
+/// gave it (`prover_overflow_check`'s; an `i64`'s and a `u64`'s within the
+/// window of `prover_stated_range`), null where it reads no whole number.
 fn prover_overflow_goal(mut walk: ProverWalk, expr: ref Expr, op_at: i64, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> i64? {
     let ty = walk.state.arithmetic[op_at]?.clone() ?? return null
     let (lo, hi) = prover_stated_range(ty) ?? return null
@@ -2683,13 +2687,17 @@ fn prover_outside_name(walk: ref ProverWalk, goal: i64?, index: ref Expr, scope:
 /// **An operation stays inside its type** (ADR-306 D15, D6): `lo <= a + b
 /// <= hi` for a `+`, `-` or `*` of the type the checker gave it, by the byte
 /// its operator starts at. A refutation is `NK1207`, as an index's is; the
-/// check stays in the machine code. Only a bound the solver can state: an
-/// `i64` none, a `u64` only its `0`. Not once the checker folded a
-/// number and refused it with `NK1116`: that refusal is the cause, and a number
-/// it folded reaches the walk through a `let`, where no span names it.
+/// check stays in the machine code. Asked of the type's true ends
+/// (`prover_type_range`), not of the window an `i64`'s and a `u64`'s proof
+/// is stated within (ADR-396 D8 step 2, #1810): leaving the window is no
+/// overflow. An `i64`'s refutation is `prover_i64_refuted_check`'s, and
+/// carried to no caller: its ends leave the solver no room to combine them.
+/// Not once the checker folded a number and refused it with `NK1116`: that
+/// refusal is the cause, and a number it folded reaches the walk through a
+/// `let`, where no span names it.
 fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
     let ty = walk.state.arithmetic[op_at]?.clone() ?? return
-    let (lo, hi) = prover_stated_range(ty) ?? return
+    let (lo, hi) = prover_type_range(ty) ?? return
     if walk.state.unfit_numbers.len() > 0 {
         return
     }
@@ -2707,23 +2715,90 @@ fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span:
         holds = f"{lo} <= {written_of(expr)} <= {hi ?? 0}"
     }
     let fails = f"goes past what {an_or_a(ty)} `{ty}` holds"
+    let help = "Use a wider type where the number needs more room, or check the operands before the operation."
+    if ty == "i64" {
+        if !walk.state.collecting {
+            prover_i64_refuted_check(walk, goal, term, written_of(expr), fails, help, span, scope, ask, model)
+        }
+        return
+    }
     if walk.state.collecting {
         let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds, index: false, within: "", site: span }
         walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
         return
     }
-    prover_refuted_check(walk, goal, written_of(expr), fails, f"Use a wider type where the number needs more room, or check the operands before the operation.", span, scope, ask, model)
+    prover_refuted_check(walk, goal, written_of(expr), fails, help, span, scope, ask, model)
+}
+
+/// **An `i64` operation refuted only past the type** (ADR-396 D8 step 2,
+/// ADR-270 D11, #1810): `goal`, of the type's true ends, refuted as
+/// `prover_refuted_check` does, and then only where the operation `term`
+/// on the values that break it overflows in checked `i64` arithmetic. The
+/// solver, which counts in `i64` and never wraps, may answer nothing near
+/// those ends; it is never the reason for an `NK1207` alone. `let x: i64 =
+/// 3000000000000000000` then `x + 1` is none; at `9223372036854775807` it
+/// is one.
+fn prover_i64_refuted_check(mut walk: ProverWalk, goal: i64, term: i64, written: String, fails: String, help: String, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(goal, read)
+    for name in read {
+        if scope.tainted.contains(name) {
+            return
+        }
+    }
+    let always = refuting_values(walk.arena, scope.facts, goal, ask, model)
+    let values = always?.clone() ?? breaking_values(walk.arena, scope, goal, model) ?? return
+    for name in read {
+        if !values.contains_key(name) {
+            return
+        }
+    }
+    if walk.arena.int_value(term, values) != null {
+        return
+    }
+    if always != null {
+        walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} every time it is reached.", notes: [f"What is known before it rules the check out: {shown(values)}."], help: help, warning: false, labels: [] })
+        return
+    }
+    walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} when {shown(values)}.", notes: ["That state reaches it: what is known here pins every name the check depends on."], help: help, warning: false, labels: [] })
+}
+
+/// **A whole-number type's true ends**, for a refutation (#1810): an
+/// `i64`'s both, a `u64`'s only its low end, which the solver, counting in
+/// `i64`, can state; every other type's as `prover_stated_range` has them.
+fn prover_type_range(ty: ref String) -> (i64, i64?)? sync {
+    return match ty {
+        "i64" => (-9223372036854775807 - 1, 9223372036854775807),
+        "u64" => (0, null),
+        else => prover_stated_range(ty),
+    }
 }
 
 /// The range of a whole-number type as the solver can state it, which counts
-/// in `i64`: an `i64` has none, a `u64` only its low end.
+/// in `i64`: an `i64`'s and a `u64`'s upper end it cannot, so those two get
+/// the window `±2^62` and `0..2^62`, the bounds walk's `solvable` (#444,
+/// ADR-396 D8 step 2, #1810) - a goal within it implies the type's, and
+/// its constants leave the solver room. `prover_proof_window` names which
+/// ranges are such a window.
 fn prover_stated_range(ty: ref String) -> (i64, i64?)? sync {
     return match ty {
         "i32" => (-2147483648, 2147483647),
         "u8" => (0, 255),
         "u32" => (0, 4294967295),
-        "u64" => (0, null),
+        "u64" => (0, solvable()),
+        "i64" => (0 - solvable(), solvable()),
         else => null,
+    }
+}
+
+/// **The window `prover_stated_range` gives `ty`, written**, where its range
+/// is one and not the type's true ends (#1810): `±2^62` for an `i64`,
+/// `0..2^62` for a `u64`, "" for every other type.
+fn prover_proof_window(ty: ref String) -> String sync {
+    return match ty {
+        "i64" => "±2^62",
+        "u64" => "0..2^62",
+        else => "",
     }
 }
 

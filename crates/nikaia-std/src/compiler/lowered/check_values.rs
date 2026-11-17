@@ -127,6 +127,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
+        let at = check_span_at(world, call, span);
+        for said in self.findings.iter() { if said.code == "NK1353" && said.span.start == at.start { return; } }
+        let mut warned = check_refusal("NK1353", &at, String::from("`chars()` is not one of the views text is read through."), vec![String::from("Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.")], Some(String::from("Write `.scalars` for `.chars()`.")));
+        warned.severity = CheckSeverity::Warning;
+        warned.edit = chars_renamed(world, call, receiver);
+        self.findings.push(warned);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) {
         if root == "self" && self.changing_self {
             self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but this method takes `mut self`: it changes `self` in place and doesn't own it.", path, to), vec![String::from("`self` belongs to the caller. A part handed to something that keeps it is taken out and given back by assigning it, but not inside a lambda, and not where its type has no empty value or stand-in."), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
@@ -145,5 +155,14 @@ pub(crate) fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: 
         if takes_self(entry_value) { out.push(nikaia_std::block::Text::from(entry_name.to_string())); }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn chars_renamed(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
+    let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if of.start != whole.start || of.end >= whole.end { return None; }
+    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(".scalars") })
 }
 

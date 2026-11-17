@@ -1,0 +1,1225 @@
+// crates/nikaia-std/src/compiler/cexport_java.nika
+//
+// **`nikaia bind java`** (ADR-284 D34): Java source over `java.lang.foreign`
+// (JEP 454, Java 22 or later), written from the same reading of the package as
+// the header and the Python module, so that the three cannot disagree. One file,
+// `<package>/<Package>.java`, holds the class that loads the library and makes
+// a `MethodHandle` per entry point once, and, nested in it, the exceptions, one
+// class per handle, one `record` per `extern` struct (a `sealed interface` of
+// records per `extern enum`), one Java `enum` per `enum` without payload and one
+// functional interface per callback. D27's table in Java's terms:
+//
+// * a status other than `OK` is an exception: `<Pkg>Exception`, a subclass per
+//   variant, `<Pkg>BoundaryException` subclasses for the negative codes, each
+//   with what `<prefix>_last_error` said;
+// * text in is a `String`, bytes a `byte[]`, a run of numbers an array, each
+//   copied into a confined `Arena` for the call; a buffer out does the size
+//   query here and comes back as a `String` or a `byte[]`;
+// * a handle is an `AutoCloseable` class with its methods and a getter per
+//   `pub` field, whose `close()` calls `_free`, and which a `Cleaner` frees
+//   when it was not closed;
+// * `T?` is `null` for a handle or text and an `Optional`, `OptionalInt`,
+//   `OptionalLong` or `OptionalDouble` for a value;
+// * a callback is an upcall stub that lives for the call; what it throws is
+//   thrown by the call once it has returned, since an exception cannot cross C;
+// * the binding locks only around `init` and `shutdown`.
+//
+// Not written yet: the `_async` form as a `CompletableFuture` and a stream as
+// an `Iterator`; a pausing function is called in its blocking form. Only the
+// entry points (D29). `size_t` is a `long`: the binding is for 64-bit hosts.
+
+use std::collections
+
+/// The Java of one library, gathered entry by entry.
+pub struct CxJava {
+    /// The package's own static methods.
+    pub functions: Vec[String],
+    /// Each handle's or record's members: its constructor, methods, getters.
+    pub classes: collections::BTreeMap[String, Vec[String]],
+    /// `static final MethodHandle` lines, one per entry point.
+    pub handles: Vec[String],
+    /// The callbacks' interfaces and their upcall adapters.
+    pub callbacks: Vec[String],
+}
+
+/// A name Java may bind: one of its words gets a `_` after it.
+fn cx_java_name(name: ref String) -> String {
+    let words: Array[ref String, 53] = ["abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false", "null"]
+    for word in words {
+        if word == name {
+            return f"{name}_"
+        }
+    }
+    return name.clone()
+}
+
+/// `each_word` as Java spells a method: `eachWord`.
+fn cx_java_camel(name: ref String) -> String {
+    let mut out: String = ""
+    let mut up = false
+    let mut first = true
+    for c in name.chars() {
+        if c == '_' {
+            up = !first
+            continue
+        }
+        if first {
+            out.push_str(f"{c}".to_lowercase())
+        } else if up {
+            out.push_str(f"{c}".to_uppercase())
+        } else {
+            out.push_str(f"{c}")
+        }
+        up = false
+        first = false
+    }
+    if out == "" {
+        return cx_java_name(name)
+    }
+    return cx_java_name(out)
+}
+
+/// `word-tally` or `each_word` as Java spells a type: `WordTally`, `EachWord`.
+fn cx_java_pascal(name: ref String) -> String {
+    let mut out: String = ""
+    let mut up = true
+    for c in name.chars() {
+        if c == '_' || c == '-' {
+            up = true
+            continue
+        }
+        if up {
+            out.push_str(f"{c}".to_uppercase())
+        } else {
+            out.push_str(f"{c}")
+        }
+        up = false
+    }
+    return out
+}
+
+/// The file `nikaia bind java` writes for `package`: `Wordtally.java`.
+pub fn cx_java_file(package: ref String) -> String {
+    return f"{cx_java_pascal(package.replace("-", "_"))}.java"
+}
+
+/// The Java type of a value that crosses by value; a `scalar` is its code
+/// point, an `int`.
+fn cx_java_scalar(shape: ref CxByValue) -> String {
+    if shape.rust == "i64" {
+        return "long"
+    }
+    if shape.rust == "u8" {
+        return "byte"
+    }
+    if shape.rust == "f64" {
+        return "double"
+    }
+    if shape.rust == "bool" {
+        return "boolean"
+    }
+    return "int"
+}
+
+/// Its boxed type, for an `Optional`.
+fn cx_java_boxed(shape: ref CxByValue) -> String {
+    if shape.rust == "i64" {
+        return "Long"
+    }
+    if shape.rust == "u8" {
+        return "Byte"
+    }
+    if shape.rust == "f64" {
+        return "Double"
+    }
+    if shape.rust == "bool" {
+        return "Boolean"
+    }
+    return "Integer"
+}
+
+/// Its `ValueLayout`.
+fn cx_java_layout(shape: ref CxByValue) -> String {
+    if shape.rust == "i64" {
+        return "JAVA_LONG"
+    }
+    if shape.rust == "u8" {
+        return "JAVA_BYTE"
+    }
+    if shape.rust == "f64" {
+        return "JAVA_DOUBLE"
+    }
+    if shape.rust == "bool" {
+        return "JAVA_BOOLEAN"
+    }
+    return "JAVA_INT"
+}
+
+/// Its size in bytes, which is also its alignment.
+fn cx_java_bytes(shape: ref CxByValue) -> i64 {
+    if shape.rust == "i64" || shape.rust == "f64" {
+        return 8
+    }
+    if shape.rust == "u8" || shape.rust == "bool" {
+        return 1
+    }
+    return 4
+}
+
+/// What a callback answers when the Java behind it threw.
+fn cx_java_default(shape: ref CxByValue) -> String {
+    if shape.rust == "bool" {
+        return "false"
+    }
+    if shape.rust == "f64" {
+        return "0.0"
+    }
+    if shape.rust == "i64" {
+        return "0L"
+    }
+    if shape.rust == "u8" {
+        return "(byte) 0"
+    }
+    return "0"
+}
+
+/// `at` rounded up to a multiple of `align`.
+fn cx_java_round(at: i64, align: i64) -> i64 {
+    if align <= 1 {
+        return at
+    }
+    let over = at % align
+    if over == 0 {
+        return at
+    }
+    return at + align - over
+}
+
+/// One field's layout, size and alignment, as C lays it out.
+fn cx_java_part(part: ref CxPart, ctx: ref CxCtx) -> (String, i64, i64) {
+    return match part {
+        CxPart::Value(shape) => (cx_java_layout(shape), cx_java_bytes(shape), cx_java_bytes(shape)),
+        CxPart::Choice(_) => (f"JAVA_INT", 4, 4),
+        CxPart::Record(at) => {
+            let (_, size, align) = cx_java_record_laid(ctx.records[at], ctx)
+            (f"{ctx.records[at].name}.LAYOUT", size, align)
+        },
+        CxPart::Array(element, count) => {
+            let (inner, size, align) = cx_java_part(element, ctx)
+            (f"MemoryLayout.sequenceLayout({count}, {inner})", size * count, align)
+        },
+    }
+}
+
+/// Fields laid out as a C struct: the members of its `structLayout` with
+/// the padding C puts between them, each field's offset, its size and its
+/// alignment.
+fn cx_java_fields_laid(fields: ref Vec[(String, CxPart)], ctx: ref CxCtx) -> (Vec[String], Vec[i64], i64, i64) {
+    let mut members: Vec[String] = []
+    let mut offsets: Vec[i64] = []
+    let mut at = 0
+    let mut align = 1
+    for (field, part) in fields {
+        let (layout, size, own) = cx_java_part(part, ctx)
+        let start = cx_java_round(at, own)
+        if start > at {
+            members.push(f"MemoryLayout.paddingLayout({start - at})")
+        }
+        members.push(f"{layout}.withName(\"{field}\")")
+        offsets.push(start)
+        at = start + size
+        if own > align {
+            align = own
+        }
+    }
+    let end = cx_java_round(at, align)
+    if end > at {
+        members.push(f"MemoryLayout.paddingLayout({end - at})")
+    }
+    return (members, offsets, end, align)
+}
+
+/// A record's layout expression, its size and its alignment: a struct, or for
+/// an `extern enum` the `int` tag and the union of its variants (D32).
+fn cx_java_record_laid(record: ref CxRecord, ctx: ref CxCtx) -> (String, i64, i64) {
+    if !record.is_enum() {
+        let (members, _, size, align) = cx_java_fields_laid(record.fields, ctx)
+        return (f"MemoryLayout.structLayout({members.join(", ")})", size, align)
+    }
+    let mut union_members: Vec[String] = []
+    let mut union_size = 0
+    let mut union_align = 1
+    for variant in record.variants {
+        if variant.fields.len() == 0 {
+            continue
+        }
+        let (members, _, size, align) = cx_java_fields_laid(variant.fields, ctx)
+        union_members.push(f"MemoryLayout.structLayout({members.join(", ")}).withName(\"{variant.member}\")")
+        if size > union_size {
+            union_size = size
+        }
+        if align > union_align {
+            union_align = align
+        }
+    }
+    if union_members.len() == 0 {
+        return (f"MemoryLayout.structLayout(JAVA_INT.withName(\"tag\"))", 4, 4)
+    }
+    let start = cx_java_round(4, union_align)
+    let mut align = 4
+    if union_align > align {
+        align = union_align
+    }
+    let end = cx_java_round(start + union_size, align)
+    let mut members: Vec[String] = ["JAVA_INT.withName(\"tag\")"]
+    if start > 4 {
+        members.push(f"MemoryLayout.paddingLayout({start - 4})")
+    }
+    members.push(f"MemoryLayout.unionLayout({union_members.join(", ")}).withName(\"u\")")
+    if end > start + union_size {
+        members.push(f"MemoryLayout.paddingLayout({end - start - union_size})")
+    }
+    return (f"MemoryLayout.structLayout({members.join(", ")})", end, align)
+}
+
+/// Where the union of an `extern enum` starts.
+fn cx_java_union_start(record: ref CxRecord, ctx: ref CxCtx) -> i64 {
+    let mut union_align = 1
+    for variant in record.variants {
+        let (_, _, _, align) = cx_java_fields_laid(variant.fields, ctx)
+        if align > union_align {
+            union_align = align
+        }
+    }
+    return cx_java_round(4, union_align)
+}
+
+/// The Java type of a field.
+fn cx_java_field_type(part: ref CxPart, ctx: ref CxCtx) -> String {
+    return match part {
+        CxPart::Value(shape) => cx_java_scalar(shape),
+        CxPart::Choice(at) => ctx.plains[at].name.clone(),
+        CxPart::Record(at) => ctx.records[at].name.clone(),
+        CxPart::Array(element, _) => {
+            match element {
+                CxPart::Array(_, _) => "MemorySegment",
+                else => f"{cx_java_field_type(element, ctx)}[]",
+            }
+        },
+    }
+}
+
+/// The read of a field at `offset` of the segment `s`.
+fn cx_java_get(part: ref CxPart, offset: i64, ctx: ref CxCtx) -> String {
+    return match part {
+        CxPart::Value(shape) => f"s.get({cx_java_layout(shape)}, {offset})",
+        CxPart::Choice(at) => f"{ctx.plains[at].name}.values()[s.get(JAVA_INT, {offset})]",
+        CxPart::Record(at) => f"{ctx.records[at].name}.read(s.asSlice({offset}, {ctx.records[at].name}.LAYOUT.byteSize()))",
+        CxPart::Array(element, count) => {
+            let (_, size, _) = cx_java_part(element, ctx)
+            match element {
+                CxPart::Value(shape) => {
+                    if shape.rust == "bool" {
+                        f"nkBools(s.asSlice({offset}, {size * count}), {count})"
+                    } else {
+                        f"s.asSlice({offset}, {size * count}).toArray({cx_java_layout(shape)})"
+                    }
+                },
+                CxPart::Choice(at) => f"nkReadAll(s.asSlice({offset}, {size * count}), {count}, {size}, m -> {ctx.plains[at].name}.values()[m.get(JAVA_INT, 0)], {ctx.plains[at].name}[]::new)",
+                CxPart::Record(at) => f"nkReadAll(s.asSlice({offset}, {size * count}), {count}, {size}, {ctx.records[at].name}::read, {ctx.records[at].name}[]::new)",
+                else => f"nkCopy(s.asSlice({offset}, {size * count}))",
+            }
+        },
+    }
+}
+
+/// The write of `value` into a field at `offset` of the segment `s`.
+fn cx_java_set(part: ref CxPart, offset: i64, value: ref String, ctx: ref CxCtx) -> String {
+    return match part {
+        CxPart::Value(shape) => f"s.set({cx_java_layout(shape)}, {offset}, {value});",
+        CxPart::Choice(_) => f"s.set(JAVA_INT, {offset}, {value}.ordinal());",
+        CxPart::Record(at) => f"{value}.write(s.asSlice({offset}, {ctx.records[at].name}.LAYOUT.byteSize()));",
+        CxPart::Array(element, count) => {
+            let (_, size, _) = cx_java_part(element, ctx)
+            match element {
+                CxPart::Value(shape) => {
+                    if shape.rust == "bool" {
+                        f"nkSetBools(s.asSlice({offset}, {size * count}), {value}, {count});"
+                    } else {
+                        f"MemorySegment.copy({value}, 0, s, {cx_java_layout(shape)}, {offset}, {count});"
+                    }
+                },
+                CxPart::Choice(_) => f"nkWriteAll(s.asSlice({offset}, {size * count}), {value}, {count}, {size}, (v, m) -> m.set(JAVA_INT, 0, v.ordinal()));",
+                CxPart::Record(at) => f"nkWriteAll(s.asSlice({offset}, {size * count}), {value}, {count}, {size}, {ctx.records[at].name}::write);",
+                else => f"MemorySegment.copy({value}, 0, s, {offset}, {size * count});",
+            }
+        },
+    }
+}
+
+/// `lines`, each indented by `by` and ended.
+fn cx_java_indent(lines: ref Vec[String], by: ref String) -> String {
+    let mut out: String = ""
+    for line in lines {
+        out.push_str(f"{by}{line}\n")
+    }
+    return out
+}
+
+/// The call of the method handle `symbol` with `args`, as an expression that
+/// answers the status.
+fn cx_java_invoke(symbol: ref String, args: ref Vec[String]) -> String {
+    return f"nkCall(() -> (int) {symbol}.invokeExact({args.join(", ")}))"
+}
+
+impl CxJava {
+    fn add_class(ref mut self, owner: ref String, text: String) {
+        let mut list: Vec[String] = []
+        let before = self.classes[owner]
+        if before != null {
+            let held = before ?? return
+            for one in held {
+                list.push(one.clone())
+            }
+        }
+        list.push(text)
+        self.classes.insert(owner.clone(), list)
+    }
+
+    pub fn empty() -> CxJava {
+        return CxJava { functions: [], classes: collections::BTreeMap(), handles: [], callbacks: [] }
+    }
+
+    /// One entry point: a static method, or a handle's constructor, method or
+    /// getter, or an `extern` struct's method.
+    pub fn entry(ref mut self, words: ref winnow_grammar::InternerContext, ctx: ref CxCtx, entry: ref CxEntry, symbol: ref String, text_out: bool) {
+        let mut params: Vec[String] = []
+        let mut layouts: Vec[String] = []
+        let mut before: Vec[String] = []
+        let mut args: Vec[String] = []
+        let mut raising: Vec[String] = []
+        let mut arena = false
+        let by_value = entry.of_a_record(ctx.records)
+        let owner_name = entry.owner?.clone()
+        let owner_text: String = entry.owner?.clone() ?? ""
+        // **A `ref mut self` of an `extern` struct** (D16) changes the struct
+        // C holds: a Java `record` cannot be changed, so such a method takes
+        // the `MemorySegment` the caller holds it in, laid out as `LAYOUT`.
+        let on_segment = by_value && entry.receiver != null && entry.exclusive
+        if entry.receiver != null {
+            layouts.push("ADDRESS")
+            if by_value && on_segment {
+                params.push("MemorySegment self")
+                args.push("self")
+            } else if by_value {
+                arena = true
+                before.push("MemorySegment self = segment(arena);")
+                args.push("self")
+            } else {
+                args.push("live()")
+            }
+        }
+        let mut position = 0
+        while position < entry.arg_names.len() {
+            let name = cx_java_camel(entry.arg_names[position])
+            let param = entry.arg_names[position].clone()
+            let ty = entry.arg_types[position].clone()
+            position += 1
+            let taken = cx_taken(words, ctx.plains, ctx.handles, ctx.records, ty)
+            if taken == null {
+                continue
+            }
+            let kind_taken = taken ?? continue
+            match kind_taken {
+                CxIn::Value(shape) => {
+                    params.push(f"{cx_java_scalar(shape)} {name}")
+                    layouts.push(cx_java_layout(shape))
+                    args.push(name.clone())
+                },
+                CxIn::Run { rust, as_text, .. } => {
+                    arena = true
+                    layouts.push("ADDRESS")
+                    layouts.push("JAVA_LONG")
+                    if as_text {
+                        params.push(f"String {name}")
+                        before.push(f"byte[] {name}_b = {name}.getBytes(UTF_8);")
+                        before.push(f"MemorySegment {name}_at = nkBytes(arena, {name}_b);")
+                        args.push(f"{name}_at")
+                        args.push(f"(long) {name}_b.length")
+                    } else {
+                        let mut element: String = "boolean"
+                        if rust == "i32" {
+                            element = "int"
+                        } else if rust == "i64" {
+                            element = "long"
+                        } else if rust == "u8" {
+                            element = "byte"
+                        } else if rust == "f64" {
+                            element = "double"
+                        }
+                        params.push(f"{element}[] {name}")
+                        before.push(f"MemorySegment {name}_at = nkRun(arena, {name});")
+                        args.push(f"{name}_at")
+                        args.push(f"(long) {name}.length")
+                    }
+                },
+                CxIn::Bytes => {
+                    arena = true
+                    layouts.push("ADDRESS")
+                    layouts.push("JAVA_LONG")
+                    params.push(f"byte[] {name}")
+                    before.push(f"MemorySegment {name}_at = nkBytes(arena, {name});")
+                    args.push(f"{name}_at")
+                    args.push(f"(long) {name}.length")
+                },
+                CxIn::Choice(at) => {
+                    params.push(f"{ctx.plains[at].name} {name}")
+                    layouts.push("JAVA_INT")
+                    args.push(f"{name}.ordinal()")
+                },
+                CxIn::Record(at) => {
+                    arena = true
+                    params.push(f"{ctx.records[at].name} {name}")
+                    layouts.push(f"{ctx.records[at].name}.LAYOUT")
+                    args.push(f"{name}.segment(arena)")
+                },
+                CxIn::Records { record, .. } => {
+                    arena = true
+                    let record_name = ctx.records[record].name.clone()
+                    params.push(f"List<{record_name}> {name}")
+                    layouts.push("ADDRESS")
+                    layouts.push("JAVA_LONG")
+                    before.push(f"MemorySegment {name}_at = {record_name}.run(arena, {name});")
+                    args.push(f"{name}_at")
+                    args.push(f"(long) {name}.size()")
+                },
+                CxIn::Handle(at) => {
+                    params.push(f"{ctx.handles[at].name} {name}")
+                    layouts.push("ADDRESS")
+                    args.push(f"{name}.live()")
+                },
+                CxIn::AbsentHandle(at) => {
+                    params.push(f"{ctx.handles[at].name} {name}")
+                    layouts.push("ADDRESS")
+                    // A local: `invokeExact` would type the `?:` as `Object`.
+                    before.push(f"MemorySegment {name}_at = {name} == null ? MemorySegment.NULL : {name}.live();")
+                    args.push(f"{name}_at")
+                },
+                CxIn::AbsentText => {
+                    arena = true
+                    params.push(f"String {name}")
+                    layouts.push("ADDRESS")
+                    layouts.push("JAVA_LONG")
+                    before.push(f"byte[] {name}_b = {name} == null ? null : {name}.getBytes(UTF_8);")
+                    before.push(f"MemorySegment {name}_at = {name}_b == null ? MemorySegment.NULL : nkBytes(arena, {name}_b);")
+                    args.push(f"{name}_at")
+                    args.push(f"{name}_b == null ? 0L : (long) {name}_b.length")
+                },
+                CxIn::Callback { lent, result } => {
+                    arena = true
+                    // **One functional interface per callback**, named after
+                    // its function and parameter, and an adapter the upcall
+                    // stub calls, which keeps what the Java threw.
+                    let mut stem = f"{cx_java_pascal(entry.name)}{cx_java_pascal(param)}"
+                    if owner_name != null {
+                        stem = f"{owner_text}{stem}"
+                    }
+                    let mut java_params: Vec[String] = []
+                    let mut c_params: Vec[String] = []
+                    let mut c_layouts: Vec[String] = []
+                    let mut handed: Vec[String] = []
+                    let mut at = 0
+                    for part in lent {
+                        match part {
+                            CxLent::Value(shape) => {
+                                java_params.push(f"{cx_java_scalar(shape)} a{at}")
+                                c_params.push(f"{cx_java_scalar(shape)} a{at}")
+                                c_layouts.push(cx_java_layout(shape))
+                                handed.push(f"a{at}")
+                            },
+                            CxLent::Choice(which) => {
+                                java_params.push(f"{ctx.plains[which].name} a{at}")
+                                c_params.push(f"int a{at}")
+                                c_layouts.push("JAVA_INT")
+                                handed.push(f"{ctx.plains[which].name}.values()[a{at}]")
+                            },
+                            CxLent::Text => {
+                                java_params.push(f"String a{at}")
+                                c_params.push(f"MemorySegment a{at}")
+                                c_params.push(f"long a{at}_len")
+                                c_layouts.push("ADDRESS")
+                                c_layouts.push("JAVA_LONG")
+                                handed.push(f"nkText(a{at}, a{at}_len)")
+                            },
+                        }
+                        at += 1
+                    }
+                    c_params.push("MemorySegment ctx")
+                    c_layouts.push("ADDRESS")
+                    let mut returns: String = "void"
+                    let mut descriptor = f"FunctionDescriptor.ofVoid({c_layouts.join(", ")})"
+                    let mut body = f"try {{\n                target.call({handed.join(", ")});\n            }} catch (Throwable t) {{\n                if (raised == null) {{\n                    raised = t;\n                }}\n            }}"
+                    if result != null {
+                        let shape = result ?? continue
+                        returns = cx_java_scalar(shape)
+                        descriptor = f"FunctionDescriptor.of({cx_java_layout(shape)}, {c_layouts.join(", ")})"
+                        body = f"try {{\n                return target.call({handed.join(", ")});\n            }} catch (Throwable t) {{\n                if (raised == null) {{\n                    raised = t;\n                }}\n                return {cx_java_default(shape)};\n            }}"
+                    }
+                    self.callbacks.push(f"    /** The callback `{param}` of `{entry.written()}` (ADR-284 D5). */\n    @FunctionalInterface\n    public interface {stem} {{\n        {returns} call({java_params.join(", ")});\n    }}\n\n    private static final FunctionDescriptor {stem}_C = {descriptor};\n    private static final MethodHandle {stem}_UP = nkVirtual({stem}Upcall.class, {stem}_C);\n\n    private static final class {stem}Upcall {{\n        final {stem} target;\n        Throwable raised;\n\n        {stem}Upcall({stem} target) {{\n            this.target = target;\n        }}\n\n        {returns} c({c_params.join(", ")}) {{\n            {body}\n        }}\n    }}\n")
+                    before.push(f"{stem}Upcall {name}_up = new {stem}Upcall({name});")
+                    before.push(f"MemorySegment {name}_c = LINKER.upcallStub({stem}_UP.bindTo({name}_up), {stem}_C, arena);")
+                    params.push(f"{stem} {name}")
+                    layouts.push("ADDRESS")
+                    layouts.push("ADDRESS")
+                    args.push(f"{name}_c")
+                    args.push("MemorySegment.NULL")
+                    raising.push(f"{name}_up.raised")
+                },
+            }
+        }
+        // What comes back, through the out-parameter.
+        let found = cx_result_of(entry, words, ctx.plains, ctx.handles, ctx.records)
+        let made_here = owner_name != null && !by_value && entry.receiver == null && !entry.getter && entry.name == "new"
+        let mut returns: String = "void"
+        let mut call = f"nkCheck({cx_java_invoke(symbol, args)});"
+        let mut after: Vec[String] = []
+        match found {
+            CxResult::Made(out) => {
+                match out {
+                    CxOut::Buffer => {
+                        arena = true
+                        layouts.push("ADDRESS")
+                        layouts.push("JAVA_LONG")
+                        layouts.push("ADDRESS")
+                        let mut asked = args.clone()
+                        asked.push("out")
+                        asked.push("cap")
+                        asked.push("written")
+                        call = f"byte[] got = nkBuffer(arena, (out, cap, written) -> (int) {symbol}.invokeExact({asked.join(", ")}));"
+                        if text_out {
+                            returns = "String"
+                            after.push("return new String(got, UTF_8);")
+                        } else {
+                            returns = "byte[]"
+                            after.push("return got;")
+                        }
+                    },
+                    CxOut::Records(at) => {
+                        arena = true
+                        let record = ctx.records[at].name.clone()
+                        layouts.push("ADDRESS")
+                        layouts.push("JAVA_LONG")
+                        layouts.push("ADDRESS")
+                        let mut asked = args.clone()
+                        asked.push("out")
+                        asked.push("cap")
+                        asked.push("written")
+                        returns = f"List<{record}>"
+                        call = f"List<{record}> got = nkRecords(arena, {record}.LAYOUT, {record}::read, (out, cap, written) -> (int) {symbol}.invokeExact({asked.join(", ")}));"
+                        after.push("return got;")
+                    },
+                    else => {
+                        arena = true
+                        layouts.push("ADDRESS")
+                        let mut asked = args.clone()
+                        asked.push("out")
+                        let (java, layout, back) = cx_java_back(out, ctx)
+                        returns = java
+                        before.push(f"MemorySegment out = arena.allocate({layout});")
+                        if out.flagged() {
+                            layouts.push("ADDRESS")
+                            before.push("MemorySegment present = arena.allocate(JAVA_BOOLEAN);")
+                            asked.push("present")
+                        }
+                        call = f"nkCheck({cx_java_invoke(symbol, asked)});"
+                        if made_here {
+                            returns = "MemorySegment"
+                            after.push("return out.get(ADDRESS, 0);")
+                        } else {
+                            after.push(f"return {back};")
+                        }
+                    },
+                }
+            },
+            else => {},
+        }
+        self.handles.push(f"    private static final MethodHandle {symbol} = nkHandle(\"{symbol}\", FunctionDescriptor.of(JAVA_INT{cx_java_after_comma(layouts)}));")
+        let mut lines: Vec[String] = before.clone()
+        if raising.len() == 0 {
+            lines.push(call)
+        } else {
+            // What a callback threw is thrown once the call has returned.
+            lines.push("try {")
+            lines.push(f"    {call}")
+            if after.len() > 0 {
+                lines.push(f"    {after[0]}")
+            }
+            lines.push("} finally {")
+            for held in raising {
+                lines.push(f"    nkRaise({held});")
+            }
+            lines.push("}")
+            after = []
+        }
+        lines.extend(after)
+        let mut body: Vec[String] = []
+        if arena {
+            body.push("try (Arena arena = Arena.ofConfined()) {")
+            for line in lines {
+                body.push(f"    {line}")
+            }
+            body.push("}")
+        } else {
+            body = lines
+        }
+        let java = cx_java_camel(entry.name)
+        let docs = f"    /** `{entry.written()}`, through `{symbol}`. */\n"
+        if owner_name == null {
+            self.functions.push(f"{docs}    public static {returns} {java}({params.join(", ")}) {{\n{cx_java_indent(body, "        ")}    }}\n")
+            return
+        }
+        let owner = owner_text.clone()
+        if made_here {
+            // The anonymous constructor is the class's own; it hands the
+            // pointer to the private one, which registers it with the cleaner.
+            let mut names: Vec[String] = []
+            for one in params {
+                names.push(one.split(" ").last()?.clone() ?? "")
+            }
+            self.add_class(owner, f"{docs}    public {owner}({params.join(", ")}) {{\n        this(new State(create({names.join(", ")})));\n    }}\n\n    private static MemorySegment create({params.join(", ")}) {{\n{cx_java_indent(body, "        ")}    }}\n")
+        } else if entry.receiver != null && !on_segment {
+            // A method of an `extern enum` is a `default` one of its interface.
+            let mut modifier: String = "public"
+            for record in ctx.records {
+                if record.name == owner && record.is_enum() {
+                    modifier = "default"
+                }
+            }
+            self.add_class(owner, f"{docs}    {modifier} {returns} {java}({params.join(", ")}) {{\n{cx_java_indent(body, "        ")}    }}\n")
+        } else {
+            self.add_class(owner, f"{docs}    public static {returns} {java}({params.join(", ")}) {{\n{cx_java_indent(body, "        ")}    }}\n")
+        }
+    }
+
+    /// The file `<package>/<Package>.java`.
+    pub fn module(ref self, package: ref String, prefix: ref String, ctx: ref CxCtx, held: ref Vec[bool]) -> String {
+        let library = package.replace("-", "_")
+        let class = cx_java_pascal(library)
+        let digest = CX_LEDGER_DIGEST
+        let mut out = cx_java_head().replace("@package@", package).replace("@library@", library).replace("@Class@", class).replace("@ledger@", digest).replace("@prefix@", prefix)
+        // **The exceptions** (D34): the boundary's seven, then a subclass per
+        // variant the library throws, each with its code.
+        let boundary_names: Array[ref String, 7] = ["Argument", "TooSmall", "NotRunning", "Panicked", "Reentrant", "Cleanup", "Cancelled"]
+        let mut errors: Vec[(String, i64)] = []
+        let mut taken: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut number = 0
+        for name in boundary_names {
+            number -= 1
+            out.push_str(cx_java_exception(f"{name}Exception", f"{class}BoundaryException", number, f"The boundary's status {number}."))
+            errors.push((f"{name}Exception", number))
+            taken.insert(f"{name}Exception")
+        }
+        for raising in ctx.codes {
+            let error = raising.error.clone()
+            let spelled = cx_java_pascal(error.replace("::", "_"))
+            for code in raising.codes {
+                let word: String = code.variant?.clone() ?? ""
+                let mut what = error.clone()
+                let mut name = f"{spelled}{word}Exception"
+                if code.variant != null {
+                    what = f"{error}::{word}"
+                    if !taken.contains(f"{word}Exception") {
+                        name = f"{word}Exception"
+                    }
+                }
+                taken.insert(name.clone())
+                let mut said = f"`{what}`."
+                let errno = code.errno?.clone()
+                if errno != null {
+                    said = f"`{what}`, `{errno ?? ""}`."
+                }
+                out.push_str(cx_java_exception(name, f"{class}Exception", code.number, said))
+                errors.push((name, code.number))
+            }
+        }
+        let mut cases: String = ""
+        for (name, code) in errors {
+            cases.push_str(f"            case {code} -> new {name}(said);\n")
+        }
+        out.push_str(cx_java_helpers().replace("@Class@", class).replace("@prefix@", prefix).replace("@cases@", cases))
+        for plain in ctx.plains {
+            out.push_str(f"    /** `{plain.name}`, numbered as the header numbers it. */\n    public enum {plain.name} {{\n        {plain.variants.join(", ")}\n    }}\n\n")
+        }
+        for place in cx_records_in_order(ctx.records) {
+            let record = ctx.records[place]
+            out.push_str(self.record(record, ctx))
+        }
+        let mut at = 0
+        while at < ctx.handles.len() {
+            if held[at] {
+                let ty = ctx.handles[at].name.clone()
+                out.push_str(cx_java_handle().replace("@T@", ty).replace("@prefix@", prefix))
+                let own = self.classes[ty]
+                if own != null {
+                    let members = own ?? return out
+                    for member in members {
+                        out.push_str("\n")
+                        out.push_str(cx_java_reindent(member))
+                    }
+                }
+                out.push_str("    }\n\n")
+                out.push_str(f"    private static final MethodHandle {prefix}_{ty}_free = nkHandle(\"{prefix}_{ty}_free\", FunctionDescriptor.of(JAVA_INT, ADDRESS));\n\n")
+            }
+            at += 1
+        }
+        for callback in self.callbacks {
+            out.push_str(callback)
+            out.push_str("\n")
+        }
+        for handle in self.handles {
+            out.push_str(handle)
+            out.push_str("\n")
+        }
+        out.push_str("\n")
+        for function in self.functions {
+            out.push_str(function)
+            out.push_str("\n")
+        }
+        out.push_str("}\n")
+        return out
+    }
+
+    /// An `extern` struct as a `record`, or an `extern enum` as a sealed
+    /// interface of records (D32, D34), copied through its `MemoryLayout`.
+    fn record(ref self, record: ref CxRecord, ctx: ref CxCtx) -> String {
+        let name = record.name.clone()
+        let (layout, _, _) = cx_java_record_laid(record, ctx)
+        let mut members: String = ""
+        let own = self.classes[name]
+        if own != null {
+            let held = own ?? return ""
+            for member in held {
+                members.push_str("\n")
+                members.push_str(cx_java_reindent(member))
+            }
+        }
+        if !record.is_enum() {
+            let (_, offsets, _, _) = cx_java_fields_laid(record.fields, ctx)
+            let mut components: Vec[String] = []
+            let mut reads: Vec[String] = []
+            let mut writes: String = ""
+            let mut at = 0
+            for (field, part) in record.fields {
+                let java = cx_java_name(field)
+                components.push(f"{cx_java_field_type(part, ctx)} {java}")
+                reads.push(cx_java_get(part, offsets[at], ctx))
+                writes.push_str(f"            {cx_java_set(part, offsets[at], java, ctx)}\n")
+                at += 1
+            }
+            return f"    /** The `extern` struct `{name}`, as C lays it out (ADR-284 D14). */\n    public record {name}({components.join(", ")}) {{\n        public static final MemoryLayout LAYOUT = {layout};\n\n        public static {name} read(MemorySegment s) {{\n            return new {name}({reads.join(", ")});\n        }}\n\n        public void write(MemorySegment s) {{\n{writes}        }}\n\n        public MemorySegment segment(Arena arena) {{\n            MemorySegment s = arena.allocate(LAYOUT);\n            write(s);\n            return s;\n        }}\n\n        static MemorySegment run(Arena arena, List<{name}> values) {{\n            return nkRunOf(arena, LAYOUT, values, {name}::write);\n        }}\n{members}    }}\n\n"
+        }
+        let start = cx_java_union_start(record, ctx)
+        let mut variants: String = ""
+        let mut reads: String = ""
+        let mut writes: String = ""
+        let mut tag = 0
+        for variant in record.variants {
+            let (_, offsets, _, _) = cx_java_fields_laid(variant.fields, ctx)
+            let mut components: Vec[String] = []
+            let mut got: Vec[String] = []
+            let mut put: String = ""
+            let mut at = 0
+            for (field, part) in variant.fields {
+                let java = cx_java_name(field)
+                components.push(f"{cx_java_field_type(part, ctx)} {java}")
+                got.push(cx_java_get(part, start + offsets[at], ctx))
+                put.push_str(f" {cx_java_set(part, start + offsets[at], f"v.{java}()", ctx)}")
+                at += 1
+            }
+            variants.push_str(f"        /** `{name}::{variant.name}`. */\n        record {variant.name}({components.join(", ")}) implements {name} {{}}\n\n")
+            reads.push_str(f"                case {tag} -> new {variant.name}({got.join(", ")});\n")
+            writes.push_str(f"                case {variant.name} v -> {{ s.set(JAVA_INT, 0, {tag});{put} }}\n")
+            tag += 1
+        }
+        return f"    /** The `extern enum` `{name}`: its tag and the union of its variants (ADR-284 D32). */\n    public sealed interface {name} {{\n{variants}        MemoryLayout LAYOUT = {layout};\n\n        static {name} read(MemorySegment s) {{\n            return switch (s.get(JAVA_INT, 0)) {{\n{reads}                default -> throw new ArgumentException(\"no variant of {name} has the tag \" + s.get(JAVA_INT, 0));\n            }};\n        }}\n\n        default void write(MemorySegment s) {{\n            switch (this) {{\n{writes}            }}\n        }}\n\n        default MemorySegment segment(Arena arena) {{\n            MemorySegment s = arena.allocate(LAYOUT);\n            write(s);\n            return s;\n        }}\n\n        static MemorySegment run(Arena arena, List<{name}> values) {{\n            return nkRunOf(arena, LAYOUT, values, {name}::write);\n        }}\n{members}    }}\n\n"
+    }
+}
+
+/// `, a, b` for a non-empty list, nothing for an empty one.
+fn cx_java_after_comma(items: ref Vec[String]) -> String {
+    if items.len() == 0 {
+        return ""
+    }
+    return f", {items.join(", ")}"
+}
+
+/// A member written at the class's level, indented one level deeper for a
+/// nested class.
+fn cx_java_reindent(member: ref String) -> String {
+    let mut out: String = ""
+    for line in member.lines() {
+        if line.len() == 0 {
+            out.push_str("\n")
+        } else {
+            out.push_str(f"    {line}\n")
+        }
+    }
+    return out
+}
+
+/// The Java type of what comes back through `out`, its layout, and what it is
+/// made.
+fn cx_java_back(out: ref CxOut, ctx: ref CxCtx) -> (String, String, String) {
+    return match out {
+        CxOut::Value(shape) => (cx_java_scalar(shape), cx_java_layout(shape), f"out.get({cx_java_layout(shape)}, 0)"),
+        // `null` is an empty `Optional` (D30, D34).
+        CxOut::AbsentValue(shape) => {
+            let java = cx_java_scalar(shape)
+            let layout = cx_java_layout(shape)
+            if java == "long" {
+                (f"OptionalLong", layout.clone(), f"present.get(JAVA_BOOLEAN, 0) ? OptionalLong.of(out.get({layout}, 0)) : OptionalLong.empty()")
+            } else if java == "double" {
+                (f"OptionalDouble", layout.clone(), f"present.get(JAVA_BOOLEAN, 0) ? OptionalDouble.of(out.get({layout}, 0)) : OptionalDouble.empty()")
+            } else if java == "int" {
+                (f"OptionalInt", layout.clone(), f"present.get(JAVA_BOOLEAN, 0) ? OptionalInt.of(out.get({layout}, 0)) : OptionalInt.empty()")
+            } else {
+                (f"Optional<{cx_java_boxed(shape)}>", layout.clone(), f"present.get(JAVA_BOOLEAN, 0) ? Optional.of(out.get({layout}, 0)) : Optional.empty()")
+            }
+        },
+        CxOut::AbsentRecord(at) => (f"Optional<{ctx.records[at].name}>", f"{ctx.records[at].name}.LAYOUT", f"present.get(JAVA_BOOLEAN, 0) ? Optional.of({ctx.records[at].name}.read(out)) : Optional.empty()"),
+        CxOut::Choice(at) => (ctx.plains[at].name.clone(), f"JAVA_INT", f"{ctx.plains[at].name}.values()[out.get(JAVA_INT, 0)]"),
+        CxOut::Record(at) => (ctx.records[at].name.clone(), f"{ctx.records[at].name}.LAYOUT", f"{ctx.records[at].name}.read(out)"),
+        CxOut::Handle(at) => (ctx.handles[at].name.clone(), f"ADDRESS", f"{ctx.handles[at].name}.adopt(out.get(ADDRESS, 0))"),
+        CxOut::AbsentHandle(at) => (ctx.handles[at].name.clone(), f"ADDRESS", f"{ctx.handles[at].name}.adoptOrNull(out.get(ADDRESS, 0))"),
+        else => (f"void", f"JAVA_INT", f""),
+    }
+}
+
+/// One exception class.
+fn cx_java_exception(name: ref String, parent: ref String, code: i64, said: ref String) -> String {
+    return f"    /** {said} */\n    public static final class {name} extends {parent} {{\n        private static final long serialVersionUID = 1L;\n\n        public {name}(String said) {{\n            super({code}, said);\n        }}\n    }}\n\n"
+}
+
+/// The file's head: the package, the imports, the library loaded once and the
+/// two base exceptions.
+fn cx_java_head() -> String {
+    return "// @package@ - GENERATED by `nikaia bind java` from @package@'s ledger. Do not edit.
+//
+// ledger: @ledger@
+//
+// Java 22 or later (java.lang.foreign, JEP 454; ADR-284 D34). The library is
+// looked up as `lib@library@.so` (or the platform's name) on the loader's path,
+// `LD_LIBRARY_PATH` on Linux, or at the path the system property
+// `@library@.library` names. Run with `--enable-native-access=ALL-UNNAMED`.
+package @library@;
+
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_BOOLEAN;
+import static java.lang.foreign.ValueLayout.JAVA_BYTE;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.ref.Cleaner;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.IntFunction;
+
+/** The library `@package@`: one static method per entry point, made once (ADR-284 D34). */
+@SuppressWarnings({\"restricted\", \"unused\"})
+public final class @Class@ {
+    private @Class@() {}
+
+    private static final Linker LINKER = Linker.nativeLinker();
+    private static final SymbolLookup LIBRARY = SymbolLookup.libraryLookup(
+            System.getProperty(\"@library@.library\", System.mapLibraryName(\"@library@\")), Arena.global());
+    private static final Cleaner CLEANER = Cleaner.create();
+
+    /** A status other than OK, with what `@prefix@_last_error` said. */
+    public static class @Class@Exception extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        /** The status the library answered. */
+        public final int code;
+
+        public @Class@Exception(int code, String said) {
+            super(said);
+            this.code = code;
+        }
+    }
+
+    /** One of the seven statuses the boundary owns. */
+    public static class @Class@BoundaryException extends @Class@Exception {
+        private static final long serialVersionUID = 1L;
+
+        public @Class@BoundaryException(int code, String said) {
+            super(code, said);
+        }
+    }
+
+"
+}
+
+/// What every entry point is written against: the handles' lookup, the
+/// status check, the copies in and out.
+fn cx_java_helpers() -> String {
+    return "    @FunctionalInterface
+    private interface NkCall {
+        int run() throws Throwable;
+    }
+
+    @FunctionalInterface
+    private interface NkBufferCall {
+        int run(MemorySegment out, long cap, MemorySegment written) throws Throwable;
+    }
+
+    private static MethodHandle nkHandle(String symbol, FunctionDescriptor descriptor) {
+        MemorySegment found = LIBRARY.find(symbol).orElseThrow(() -> new UnsatisfiedLinkError(symbol));
+        return LINKER.downcallHandle(found, descriptor);
+    }
+
+    private static MethodHandle nkVirtual(Class<?> adapter, FunctionDescriptor descriptor) {
+        try {
+            return MethodHandles.lookup().findVirtual(adapter, \"c\", descriptor.toMethodType());
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static int nkCall(NkCall call) {
+        try {
+            return call.run();
+        } catch (RuntimeException | Error e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new IllegalStateException(t);
+        }
+    }
+
+    private static void nkRaise(Throwable raised) {
+        if (raised == null) {
+            return;
+        }
+        if (raised instanceof RuntimeException r) {
+            throw r;
+        }
+        if (raised instanceof Error e) {
+            throw e;
+        }
+        throw new IllegalStateException(raised);
+    }
+
+    private static final MethodHandle @prefix@_last_error = nkHandle(\"@prefix@_last_error\", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, ADDRESS));
+    private static final MethodHandle @prefix@_init = nkHandle(\"@prefix@_init\", FunctionDescriptor.of(JAVA_INT));
+    private static final MethodHandle @prefix@_shutdown = nkHandle(\"@prefix@_shutdown\", FunctionDescriptor.of(JAVA_INT));
+
+    private static String nkSaid() {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment written = arena.allocate(JAVA_LONG);
+            nkCall(() -> (int) @prefix@_last_error.invokeExact(MemorySegment.NULL, 0L, written));
+            long size = written.get(JAVA_LONG, 0);
+            MemorySegment room = arena.allocate(Math.max(size, 1));
+            nkCall(() -> (int) @prefix@_last_error.invokeExact(room, size, written));
+            return new String(room.asSlice(0, Math.min(size, written.get(JAVA_LONG, 0))).toArray(JAVA_BYTE), UTF_8);
+        }
+    }
+
+    private static void nkCheck(int status) {
+        if (status == 0) {
+            return;
+        }
+        String said = nkSaid();
+        throw switch (status) {
+@cases@            default -> new @Class@Exception(status, said);
+        };
+    }
+
+    /** Asks the size, then hands a buffer of it (ADR-284 D6). */
+    private static byte[] nkBuffer(Arena arena, NkBufferCall call) {
+        MemorySegment written = arena.allocate(JAVA_LONG);
+        nkCheck(nkCall(() -> call.run(MemorySegment.NULL, 0L, written)));
+        long size = written.get(JAVA_LONG, 0);
+        MemorySegment room = arena.allocate(Math.max(size, 1));
+        nkCheck(nkCall(() -> call.run(room, size, written)));
+        return room.asSlice(0, written.get(JAVA_LONG, 0)).toArray(JAVA_BYTE);
+    }
+
+    /** Asks the count, then hands room for it, counted in structs (ADR-284 D16). */
+    private static <T> List<T> nkRecords(Arena arena, MemoryLayout layout, Function<MemorySegment, T> read, NkBufferCall call) {
+        MemorySegment written = arena.allocate(JAVA_LONG);
+        nkCheck(nkCall(() -> call.run(MemorySegment.NULL, 0L, written)));
+        long count = written.get(JAVA_LONG, 0);
+        MemorySegment room = arena.allocate(layout.byteSize() * Math.max(count, 1), layout.byteAlignment());
+        nkCheck(nkCall(() -> call.run(room, count, written)));
+        List<T> got = new ArrayList<>();
+        long made = written.get(JAVA_LONG, 0);
+        for (long at = 0; at < made; at++) {
+            got.add(read.apply(room.asSlice(at * layout.byteSize(), layout.byteSize())));
+        }
+        return got;
+    }
+
+    private static String nkText(MemorySegment at, long size) {
+        return new String(at.reinterpret(size).toArray(JAVA_BYTE), UTF_8);
+    }
+
+    private static MemorySegment nkBytes(Arena arena, byte[] data) {
+        MemorySegment room = arena.allocate(Math.max(data.length, 1));
+        MemorySegment.copy(data, 0, room, JAVA_BYTE, 0, data.length);
+        return room;
+    }
+
+    private static MemorySegment nkRun(Arena arena, byte[] values) {
+        return nkBytes(arena, values);
+    }
+
+    private static MemorySegment nkRun(Arena arena, int[] values) {
+        MemorySegment room = arena.allocate(4L * Math.max(values.length, 1), 4);
+        MemorySegment.copy(values, 0, room, JAVA_INT, 0, values.length);
+        return room;
+    }
+
+    private static MemorySegment nkRun(Arena arena, long[] values) {
+        MemorySegment room = arena.allocate(8L * Math.max(values.length, 1), 8);
+        MemorySegment.copy(values, 0, room, JAVA_LONG, 0, values.length);
+        return room;
+    }
+
+    private static MemorySegment nkRun(Arena arena, double[] values) {
+        MemorySegment room = arena.allocate(8L * Math.max(values.length, 1), 8);
+        MemorySegment.copy(values, 0, room, JAVA_DOUBLE, 0, values.length);
+        return room;
+    }
+
+    private static MemorySegment nkRun(Arena arena, boolean[] values) {
+        MemorySegment room = arena.allocate(Math.max(values.length, 1));
+        nkSetBools(room, values, values.length);
+        return room;
+    }
+
+    private static <T> MemorySegment nkRunOf(Arena arena, MemoryLayout layout, List<T> values, BiConsumer<T, MemorySegment> write) {
+        long size = layout.byteSize();
+        MemorySegment room = arena.allocate(size * Math.max(values.size(), 1), layout.byteAlignment());
+        for (int at = 0; at < values.size(); at++) {
+            write.accept(values.get(at), room.asSlice(at * size, size));
+        }
+        return room;
+    }
+
+    private static boolean[] nkBools(MemorySegment s, int count) {
+        boolean[] got = new boolean[count];
+        for (int at = 0; at < count; at++) {
+            got[at] = s.get(JAVA_BOOLEAN, at);
+        }
+        return got;
+    }
+
+    private static void nkSetBools(MemorySegment s, boolean[] values, int count) {
+        for (int at = 0; at < count; at++) {
+            s.set(JAVA_BOOLEAN, at, values[at]);
+        }
+    }
+
+    private static <T> T[] nkReadAll(MemorySegment s, int count, long size, Function<MemorySegment, T> read, IntFunction<T[]> make) {
+        T[] got = make.apply(count);
+        for (int at = 0; at < count; at++) {
+            got[at] = read.apply(s.asSlice(at * size, size));
+        }
+        return got;
+    }
+
+    private static <T> void nkWriteAll(MemorySegment s, T[] values, int count, long size, BiConsumer<T, MemorySegment> write) {
+        for (int at = 0; at < count; at++) {
+            write.accept(values[at], s.asSlice(at * size, size));
+        }
+    }
+
+    private static MemorySegment nkCopy(MemorySegment s) {
+        return Arena.ofAuto().allocate(s.byteSize()).copyFrom(s);
+    }
+
+    /** Starts the library, and starts it again after `shutdown` (ADR-284 D10). */
+    public static synchronized void init() {
+        nkCheck(nkCall(() -> (int) @prefix@_init.invokeExact()));
+    }
+
+    /** Stops the library; every call after it throws `NotRunningException` until `init`. */
+    public static synchronized void shutdown() {
+        nkCheck(nkCall(() -> (int) @prefix@_shutdown.invokeExact()));
+    }
+
+"
+}
+
+/// A handle's class (D5, D34): `close()` frees it, as leaving a
+/// `try`-with-resources does, and a `Cleaner` frees one nobody closed.
+fn cx_java_handle() -> String {
+    return "    /** A handle (ADR-284 D5): `close()` frees it; one never closed is freed by a `Cleaner`, a convenience, not a guarantee. */
+    public static final class @T@ implements AutoCloseable {
+        private static final class State implements Runnable {
+            MemorySegment ptr;
+            int status;
+
+            State(MemorySegment ptr) {
+                this.ptr = ptr;
+            }
+
+            @Override
+            public void run() {
+                MemorySegment held = ptr;
+                if (held != null) {
+                    ptr = null;
+                    status = nkCall(() -> (int) @prefix@_@T@_free.invokeExact(held));
+                }
+            }
+        }
+
+        private final State state;
+        private final Cleaner.Cleanable cleanable;
+
+        private @T@(State state) {
+            this.state = state;
+            this.cleanable = CLEANER.register(this, state);
+        }
+
+        static @T@ adopt(MemorySegment ptr) {
+            return new @T@(new State(ptr));
+        }
+
+        static @T@ adoptOrNull(MemorySegment ptr) {
+            return ptr.address() == 0 ? null : adopt(ptr);
+        }
+
+        MemorySegment live() {
+            MemorySegment held = state.ptr;
+            if (held == null) {
+                throw new ArgumentException(\"the handle is closed\");
+            }
+            return held;
+        }
+
+        /** Frees the handle; a second `close()` does nothing. */
+        @Override
+        public void close() {
+            cleanable.clean();
+            int status = state.status;
+            state.status = 0;
+            nkCheck(status);
+        }
+"
+}

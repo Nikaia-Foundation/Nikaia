@@ -1,0 +1,140 @@
+// `nikaia bind java` against the C library's own example (ADR-284 D34, #1337).
+//
+//     nikaia run scripts/java_binding.nika -- [--exe PATH]
+//
+// Copies `examples/c-library` to a fresh directory, writes its Java binding
+// there with `nikaia bind java` (the compiler at PATH, default
+// `target/release/nikaia`, else `target/fast/nikaia`), runs `use.c` against
+// the library, compiles the binding and `java/Use.java` with
+// `javac --release 22 -Xlint:all -Werror`, runs `Use` and checks that it
+// prints what `use.c` prints. The binding is written against Java 22's
+// `java.lang.foreign` (JEP 454): without a `javac` of 22 or later the script
+// says `skipped:` and why, and exits 0; it never runs the binding on an older
+// Java. CI runs it with JDK 22 (`.github/workflows/suite.yml`, shard `ledgers`).
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn java_binding_fail(what: String, out: process::Output) throws {
+	println(f"java binding: {what} failed ({out.code})")
+	println(out.stdout)
+	println(out.stderr)
+	process::exit(1)
+}
+
+// What a tool wrote on stderr, without the JVM's `Picked up
+// JAVA_TOOL_OPTIONS` notice, which is not a warning of the compile.
+fn java_binding_said(text: String) -> String {
+	let mut kept = ""
+	for line in text.lines() {
+		if !line.starts_with("Picked up ") {
+			kept = f"{kept}{line}\n"
+		}
+	}
+	return kept.trim().clone()
+}
+
+// The major version `javac -version` names (`javac 22.0.2`), or 0.
+fn java_binding_major(said: String) -> i64 {
+	for word in said.split(" ") {
+		let digits = word.trim().split(".").next() ?? continue
+		let major = text::parse_i64(digits) ?? continue
+		return major
+	}
+	return 0
+}
+
+fn main() throws {
+	let mut exe: String = "target/release/nikaia"
+	if !fs::exists(exe, fs::Root::Anywhere) {
+		exe = "target/fast/nikaia"
+	}
+	let mut named = false
+	for arg in cli::args() {
+		if named {
+			exe = arg
+			named = false
+		} else if arg == "--exe" {
+			named = true
+		}
+	}
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if !exe.starts_with("/") {
+		exe = f"{here}/{exe}"
+	}
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let copy = f"{tmp}/c-library"
+	process::run("cp", ["-r", "examples/c-library", copy.clone()])
+	process::run("rm", ["-rf", f"{copy}/target"])
+	let bound = process::run(exe, ["bind", "java"]; dir: copy.clone())
+	if bound.code != 0 {
+		java_binding_fail("nikaia bind java", bound)
+	}
+	let made = f"{copy}/target/nikaia/c-library"
+	let cc = process::run(
+		"cc",
+		[
+			"-I",
+			made.clone(),
+			"use.c",
+			"-L",
+			made.clone(),
+			"-lwordtally",
+			"-o",
+			"use",
+		]; dir: copy.clone(),
+	)
+	if cc.code != 0 {
+		java_binding_fail("cc use.c", cc)
+	}
+	let c_ran = process::run(
+		f"{copy}/use",
+		[]; dir: copy.clone(),
+		env: [("LD_LIBRARY_PATH", made.clone())],
+	)
+	if c_ran.code != 0 {
+		java_binding_fail("use.c", c_ran)
+	}
+	let version = process::run("javac", ["-version"])
+	let major = java_binding_major(f"{version.stdout} {version.stderr}")
+	if version.code != 0 || major < 22 {
+		println(f"skipped: the Java binding needs javac 22 or later (java.lang.foreign, JEP 454); this host has `{java_binding_said(f"{version.stdout}\n{version.stderr}")}`")
+		process::run("rm", ["-rf", tmp])
+		return
+	}
+	let binding = f"{made}/java/wordtally/Wordtally.java"
+	let compiled = process::run(
+		"javac",
+		[
+			"--release",
+			"22",
+			"-Xlint:all",
+			"-Werror",
+			"-d",
+			f"{copy}/classes",
+			binding,
+			f"{copy}/java/Use.java",
+		],
+	)
+	if compiled.code != 0 || java_binding_said(compiled.stderr) != "" {
+		java_binding_fail("javac --release 22 -Xlint:all -Werror", compiled)
+	}
+	let java_ran = process::run(
+		"java",
+		["--enable-native-access=ALL-UNNAMED", "-cp", f"{copy}/classes", "Use"]; dir: copy,
+		env: [("LD_LIBRARY_PATH", made)],
+	)
+	if java_ran.code != 0 {
+		java_binding_fail("java Use", java_ran)
+	}
+	if java_ran.stdout != c_ran.stdout {
+		println("java binding: Use.java does not print what use.c prints")
+		println(f"use.c:\n{c_ran.stdout}")
+		println(f"Use.java:\n{java_ran.stdout}")
+		process::exit(1)
+	}
+	process::run("rm", ["-rf", tmp])
+	println(f"Use.java prints what use.c prints (javac {major})")
+}

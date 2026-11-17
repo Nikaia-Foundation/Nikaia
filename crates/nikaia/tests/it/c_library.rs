@@ -1176,7 +1176,7 @@ fn python_calls_the_library_through_its_binding() {
     let refused = nikaia_with(&root, &["bind", "cobol"]);
     assert!(!refused.status.success());
     assert!(
-        said(&refused).contains("`python` and `node` are"),
+        said(&refused).contains("`python`, `node` and `java` are"),
         "{}",
         said(&refused)
     );

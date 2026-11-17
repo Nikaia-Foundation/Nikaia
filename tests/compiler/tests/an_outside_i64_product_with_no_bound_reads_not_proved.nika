@@ -1,0 +1,13 @@
+// An `i64` `*` that data from outside reaches with nothing bounding it:
+// `--bounds` names the goal it was asked within, `±2^62`, not "no bound",
+// and nothing refuses it (ADR-396 D8 step 2, ADR-270 D11, #1810). A `u64`'s
+// window is `0..2^62`.
+use std::io
+use std::text
+
+fn main() throws {
+    let n = text::parse_i64(io::read_to_string().trim()) ?? 4
+    println(n * 1000)
+    let w = (text::parse_i64(io::read_to_string().trim()) ?? 4) as u64
+    println(w * 1000)
+}

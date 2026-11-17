@@ -922,7 +922,7 @@ impl ProverState {
             written = f"`{check.written}` in `{check.within}`, reached through `{callee}`"
         }
         let at = span.start as i64
-        let mut record = OutsideIndex { at: at, written: written.clone(), name: first.clone(), source: source?.clone() ?? "", proved: true, guard_at: -1, guard: "", operation: !check.index, stated: true, site: -1 }
+        let mut record = OutsideIndex { at: at, written: written.clone(), name: first.clone(), source: source?.clone() ?? "", proved: true, guard_at: -1, guard: "", operation: !check.index, stated: true, within: "", site: -1 }
         if is_proved(ask(arena, scope.facts, goal)) || (scope.history_reads(arena, goal) && is_proved(ask(arena, scope.with_history(), goal))) {
             match scope.guard_of(arena, goal) {
                 null => {},

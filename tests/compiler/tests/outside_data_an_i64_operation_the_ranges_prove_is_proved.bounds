@@ -2,6 +2,6 @@ bounds in tests/outside_data_an_i64_operation_the_ranges_prove_is_proved.nika: 0
     12  n + 1      proved
     13  n * 2 - 3  proved
     13  n * 2      proved
-  outside  12  `n + 1`, `n` from `io::read_to_string`: proved by the bounds walk's ranges
-  outside  13  `n * 2 - 3`, `n * 2` from `io::read_to_string`: proved by the bounds walk's ranges
-  outside  13  `n * 2`, `n` from `io::read_to_string`: proved by the bounds walk's ranges
+  outside  12  `n + 1`, `n` from `io::read_to_string`: proved by the guard on line 9 (`n < 0 || n > 1000`)
+  outside  13  `n * 2 - 3`, `n` from `io::read_to_string`: proved by the guard on line 9 (`n < 0 || n > 1000`)
+  outside  13  `n * 2`, `n` from `io::read_to_string`: proved by the guard on line 9 (`n < 0 || n > 1000`)

@@ -917,6 +917,9 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
             // where an entry is known to take its receiver: a field's type is
             // not asked here, so no answer is not read as a move.
             let root = keeps_field_root(receiver, interner, context) ?? return
+            if keeps_text_view(receiver, interner, context) {
+                return
+            }
             let ours = receiver_taken_in(own, context.own_methods, method, null)
             let theirs = receiver_taken_in(library, context.library_methods, method, null)
             if ours.hit || theirs.hit {
@@ -940,6 +943,32 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let fails_closed = method != "clone" && (context.unresolved || (!ours.any && !theirs.any))
     if fails_closed || ours.hit || theirs.hit {
         walk.uses.kept.extend(names.clone())
+    }
+}
+
+/// **A view of a text is borrowed from it** (ADR-320 D3, D11): a method that
+/// takes `s.scalars` or `s.graphemes` whole takes the view, not the text, as
+/// `s.chars()` did (#1974). `bytes` is a field name of other types too, so
+/// only of a parameter declared `String` or `str`.
+fn keeps_text_view(receiver: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> bool {
+    match receiver {
+        Expr::Field { base, name, .. } => {
+            let field = interner.resolve(name)
+            if field == "scalars" || field == "graphemes" {
+                return true
+            }
+            if field != "bytes" {
+                return false
+            }
+            match base {
+                Expr::Variable(ident, _) => {
+                    let ty = context.types[interner.resolve(ident)] ?? return false
+                    return ty == "String" || ty == "str"
+                }
+                else => return false,
+            }
+        }
+        else => return false,
     }
 }
 
