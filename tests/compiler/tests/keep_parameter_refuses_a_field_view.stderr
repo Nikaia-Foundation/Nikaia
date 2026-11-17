@@ -1,0 +1,10 @@
+error[NK2106]: `w.name` is passed to `f`, which keeps it, but `w` is only borrowed here.
+   --> tests/keep_parameter_refuses_a_field_view.nika:22:9
+    |
+ 22 |         f(w.name, all)
+    |         ^^^^^^^^^^^^^^
+    |
+    = note: `w` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+    = note: Nikaia never makes a copy behind your back.
+    = help: Hand over a copy: `w.name.clone()`.
+

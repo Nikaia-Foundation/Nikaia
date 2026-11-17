@@ -151,10 +151,6 @@ fn om_open() -> Vec[Open] {
             })
         }
     }
-    let elements = "the list literal lends `s` (ADR-views-3 D5, #1490), and the text tiers (ADR-282) lower the `keep a: String` parameter its element is handed to to a view, so the cell runs, where D5 makes an element handed to a `keep` parameter own and names `.clone()`"
-    for cell in ["owned_given_index", "owned_given_for", "view_kept_index", "view_kept_for", "view_given_index", "view_given_for"] {
-        open.push(Open { cell: cell.clone(), why: elements.clone() })
-    }
     return open
 }
 

@@ -1,0 +1,16 @@
+// A `keep` parameter holds a value of its own (ADR-views-3 D5, #1532): an
+// element of a list, which the list keeps, handed to it is refused with a
+// `.clone()` help, not lowered to a view of the list.
+fn f(keep a: String) -> String { return a }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("x")
+    return g
+}
+
+fn main() throws {
+    let s = make()
+    let l = [s]
+    println(f(l[0]))
+}

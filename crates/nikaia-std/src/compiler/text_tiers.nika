@@ -570,6 +570,23 @@ fn position_published(owner: ref TextOwner, declared: ref TextDeclared) -> bool 
     }
 }
 
+/// Whether a position is a parameter written `keep`, or a place of one
+/// (ADR-views-3 D5, #1532).
+fn a_keep_position(owner: ref TextOwner, declared: ref TextDeclared) -> bool {
+    return match owner {
+        TextOwner::Param(key, at) => {
+            let function = declared.fns[key] ?? return false
+            at < function.keeps.len() && function.keeps[at]
+        },
+        else => false,
+    }
+}
+
+fn demoted_for_keeping(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
+    let position = flows.known[word] ?? return false
+    return a_keep_position(position.owner, declared)
+}
+
 fn field_published(of: ref String, field: ref String, declared: ref TextDeclared) -> bool {
     let key = (of.clone(), field.clone())
     let found = declared.fields[key] ?? return false
@@ -7205,6 +7222,14 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
 fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: collections::BTreeSet[String], mut unlent: collections::BTreeSet[String]) -> collections::BTreeMap[String, Tier] {
     let mut positions = flows.positions.clone()
     demoted.extend(flows.demoted.clone())
+    // **A `keep` parameter holds a value of its own** (ADR-views-3 D5,
+    // #1532): its text and what it holds are never a view, so a view handed
+    // to it is refused at the call with a `.clone()` help.
+    for (word, position) in flows.known {
+        if a_keep_position(position.owner, declared) {
+            demoted.insert(word.clone())
+        }
+    }
     for word in demoted {
         let before = positions[word]?.clone() ?? no_kinds()
         positions.insert(word.clone(), kinds_joined(before, owned_kinds()))
@@ -7222,7 +7247,7 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     // Every position the walk saw, also one only linked to another (a list
     // handed back whole from a call): a published one stays text of its own.
     for (word, _) in flows.known {
-        if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) {
+        if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) || demoted_for_keeping(word, flows, declared) {
             fixed.insert(word.clone())
         }
     }

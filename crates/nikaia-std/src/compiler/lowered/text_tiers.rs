@@ -384,6 +384,22 @@ pub(crate) fn position_published(owner: &TextOwner, declared: &TextDeclared) -> 
     }
 }
 
+pub(crate) fn a_keep_position(owner: &TextOwner, declared: &TextDeclared) -> bool {
+    match owner {
+        TextOwner::Param(key, at) => {
+            let at = *at;
+            let function = match *nikaia_std::index::get(&declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at))
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn demoted_for_keeping(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
+    let position = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    a_keep_position(&position.owner, declared)
+}
+
 pub(crate) fn field_published(of: &str, field: &str, declared: &TextDeclared) -> bool {
     let key = (nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(field.to_string()));
     let found = match *nikaia_std::index::get(&declared.fields, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -5150,6 +5166,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
 pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collections::BTreeSet<String>, unlent: &mut collections::BTreeSet<String>) -> collections::BTreeMap<String, Tier> {
     let mut positions = flows.positions.copy_owned();
     demoted.extend(flows.demoted.iter().cloned());
+    for (word, position) in flows.known.iter() { if a_keep_position(&position.owner, declared) { demoted.insert(nikaia_std::block::Text::from(word.to_string())); } }
     for word in demoted.iter() {
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -5161,7 +5178,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
     let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut never: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut unmixed = flows.unlinked.copy_owned();
-    for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) { fixed.insert(nikaia_std::block::Text::from(word.to_string())); } }
+    for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) || demoted_for_keeping(word, flows, declared) { fixed.insert(nikaia_std::block::Text::from(word.to_string())); } }
     let mut changed = true;
     while changed {
         changed = false;
