@@ -1054,7 +1054,11 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             declared = self.facts.collected_into.contains(&node_key(on));
         }
-        if name == "collect" && args.is_empty() && !declared && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        let own = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "Seq::collect".into()) != "Seq::collect";
+        if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
             if summed != "" { out.push(&format!("::<{}>", summed)); }
@@ -1317,8 +1321,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97587| {
-        let (i, word) = __nikaia_tuple97587;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97774| {
+        let (i, word) = __nikaia_tuple97774;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

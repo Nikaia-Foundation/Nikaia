@@ -1562,7 +1562,9 @@ impl EmitState {
             let on = receiver ?? return
             declared = self.facts.collected_into.contains(node_key(on))
         }
-        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
+        // **Nor a type's own `collect`** (#1975): it builds what it declares.
+        let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
+        if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
         // **And a sequence's `sum` names what it hands back** (#1007): Rust

@@ -37,7 +37,7 @@ impl CheckState {
         #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
         if !path.is_empty() {
             let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for step in path.split(" > ").collect::<Vec<_>>() { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(nikaia_std::block::Text::from(step.to_string())); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
+            for step in path.split(" > ") { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(nikaia_std::block::Text::from(step.to_string())); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
             notes.push(format!("It was in {}.", nikaia_std::block::Text::from(shown.join(" > "))));
         }
         notes.push(note);

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1424] — 2026-11-17
+
+**Builders' changes (#1975)**
+- A list built from a std sequence only to be counted (`.collect().len()`) or walked once by a `for` is warned (NK1354), and `nikaia fix` writes `.count()` or deletes the `.collect()`.
+
 ## [0.0.1423] — 2026-11-17
 
 **Builders' changes (#1338, #1848, #1904, #1957, #1959, #1961, #1987, #1988)**

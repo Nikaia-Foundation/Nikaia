@@ -11,16 +11,9 @@
 /// (`x86-64-v3`, `native`), empty or absent for the baseline.
 pub const LEVEL_VAR: &str = "NIKAIA_COMPTIME_CPU";
 
-/// An instruction a CPU level may have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Instruction {
-    /// CRC-32C of a word: SSE 4.2 on x86-64, `crc` on AArch64.
-    Crc32c,
-    /// x86-64's BMI2 (`pext`, `pdep`, shifts without flags).
-    Bmi2,
-    /// x86-64's 256-bit integer vectors.
-    Avx2,
-}
+/// An instruction a CPU level may have: its Nikaia half,
+/// `runtime/target.nika`, with the table of what each named level has.
+pub use crate::runtime::Instruction;
 
 /// **Whether the CPU level the program is built for has `i`**.
 #[inline]
@@ -44,13 +37,12 @@ fn compiled_with(i: Instruction) -> bool {
     }
 }
 
-/// What the named level has; `native` is this machine's.
+/// What the named level has; `native` is this machine's, every other name
+/// is `runtime/target.nika`'s table.
 fn at_level(level: &str, i: Instruction) -> bool {
     match level {
         "native" => on_this_machine(i),
-        "x86-64-v2" => i == Instruction::Crc32c,
-        "x86-64-v3" | "x86-64-v4" => true,
-        _ => false,
+        _ => crate::runtime::level_has(level, &i),
     }
 }
 

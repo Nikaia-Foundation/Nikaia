@@ -2097,7 +2097,18 @@ fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
 /// **`for`** (Part I 3.3).
 fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
+    // **The methods a `.collect()` walked reach a frame of their own**
+    // (`NK1354`, #1975): its steps are asked whether they are pure.
+    let collected = a_collect_of_a_chain(world, iter) != null
+    if collected {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
     let over = check_core_expr(state, world, host, iter, span)
+    let mut steps: Vec[String] = []
+    if collected {
+        let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+        steps = state.not_pure_in(world, host, frame, iter)
+    }
     state.a_loop_over_a_nullable(world, over, iter, span)
     state.a_loop_over_what_holds_no_elements(world, over, iter, span)
     // **A `for` walks what it counts, one turn per element or entry**
@@ -2419,6 +2430,10 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **A `for` over a clone it only walks** (`NK1350`, #1318).
     let items = state.scope[frame_at].clone()
     state.a_loop_over_a_needless_clone(world, iter, over, body, items, handed_before, mutable, span)
+    // **A `for` over a list collected only to be walked** (`NK1354`, #1975).
+    if collected && steps.len() == 0 {
+        state.a_loop_over_a_needless_collect(world, iter, body, mutable, span)
+    }
     // **A turn's element is whole again where the turn ends** (ADR-views-1 D2,
     // ADR-views-2).
     if mut_view && body.stmts.len() > 0 {
