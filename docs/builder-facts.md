@@ -107,12 +107,16 @@ together with the specification section and an example test.
   silently undoes the other (issue-1711).
 * **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
   inside `tests/compiler/tests/` reads the sibling files (prover lane).
-* **Never commit a `nikaia.lock` you did not mean to change**: it changes with each build. Most are
-  git-ignored, but `packages/*/nikaia.lock` and `nikaia.proofs` are tracked; a
-  change to them in the tree that is not yours comes from the driver's
-  `drive_ledgers` or another run's `ledgers.nika --refresh`, which commits it.
-  Leave it unstaged; `nikaia run scripts/ledgers.nika -- --check` says whether
-  your change made them stale (issue-1691). A stale one is often stale on
+* **A tracked `nikaia.lock` is a ledger, stable across builds** (#1945): it
+  holds the toolchain, the units' source hashes and the resolved dependencies,
+  not the compiler's identity (ADR-021 D2, D3: that is in the cache key under
+  `target/`), so a rebuild of the compiler leaves it as it is. Most locks are
+  git-ignored; `packages/*/nikaia.lock` and `nikaia.proofs` are tracked.
+  Commit the lock with a change to its package's sources; one you did not
+  touch that changed in the tree comes from the driver's `drive_ledgers` or
+  another run's `ledgers.nika --refresh`, which commits it: leave it
+  unstaged. `nikaia run scripts/ledgers.nika -- --check` says whether your
+  change made a ledger or a lock stale (issue-1691, #1945). A stale one is often stale on
   `develop` already: one run of `ledgers.nika -- --check --tree HEAD --exe
   $S/old/nikaia` (HEAD's ledgers, the before binary) settles it; stale there
   too, it is not yours, say so under `Tests:` and do not refresh it (#1712).
