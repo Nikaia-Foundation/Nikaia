@@ -3,6 +3,8 @@
 An issue is the work order: a builder plans its steps from it, so it holds
 what an agent cannot find out quickly. A run judges its issue by these rules
 (last section); a rule found wrong or missing is changed here, citing the run.
+Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
+`-- N`): the driver queues no issue it refuses (I4, I8, I9; #2003).
 
 ## Every issue
 * **I1. Title names the symptom or the goal** in words a reader knows: "a
