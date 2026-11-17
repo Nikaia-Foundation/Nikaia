@@ -458,6 +458,8 @@ fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
         foreign: manifest.foreign_crates().into_iter().collect(),
         has_build: manifest.has_build_section(),
         uses_in: None,
+        within_std: manifest.within_std(),
+        described: manifest.described(),
     }
 }
 
@@ -1420,6 +1422,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // ledger the emitter's, no module and no contract that moved
         // (#727).
         let facts_reusable = foreign.packages(&modules).is_empty()
+            && foreign.over_std.functions.is_empty()
+            && foreign.over_std.types.is_empty()
             && newly.throws.is_empty()
             && newly.keeps.is_empty()
             && promised == program.contracts;
@@ -1683,7 +1687,7 @@ impl ProjectMembersForeignHost for ForeignHost {
 /// The day one does, that is a refusal to write and not a silence to keep —
 /// issue #100 carries it.
 pub fn foreign_library(foreign: &Foreign) -> Result<Ledger> {
-    let mut library = crate::contracts::std_library();
+    let mut library = base_library(foreign);
     for (name, contract) in &foreign.descriptions.functions {
         library
             .functions
@@ -1697,6 +1701,17 @@ pub fn foreign_library(foreign: &Foreign) -> Result<Ledger> {
             .or_insert_with(|| contract.clone());
     }
     Ok(library)
+}
+
+/// **`std`'s ledger with what `[package] described` names over it** (#1976,
+/// owner 2026-11-17): a described name wins a collision with `std`'s, as
+/// `lower-std` checks the toolchain's packages. `std`'s alone where the
+/// manifest names no ledger.
+pub fn base_library(foreign: &Foreign) -> Ledger {
+    let mut library = crate::contracts::std_library();
+    library.types.extend(foreign.over_std.types.clone());
+    library.functions.extend(foreign.over_std.functions.clone());
+    library
 }
 
 /// `user_parallelism` reaches this and reaches **nothing inside the analyses**.
@@ -1824,6 +1839,13 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
             self.newly,
             self.reads,
         );
+        // **A package within `std` is checked as `std` is** (#1976): `assume`
+        // refused, `std`'s helpers reached.
+        let mut checked = checked;
+        if self.foreign.within_std {
+            check::refuse_assumes_in_std(&mut checked);
+            check::allow_std_helpers_in_std(&mut checked);
+        }
         *self.facts.borrow_mut() = Some(checked.facts);
         checked.findings
     }

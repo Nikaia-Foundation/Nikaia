@@ -114,6 +114,11 @@ impl Manifest {
             .with_context(|| format!("in {}", path.display()))
             .map_err(|e| refused!("{e:#}"))?;
         manifest.file.root = path.parent().map(Path::to_path_buf);
+        // The ledger `[package] described` names is there (#1976).
+        decide::manifest_described_at(&manifest.file)
+            .map_err(refusal)
+            .with_context(|| format!("in {}", path.display()))
+            .map_err(|e| refused!("{e:#}"))?;
         Ok(manifest)
     }
 
@@ -156,6 +161,18 @@ impl Manifest {
     /// `[package] version`, `0.0.0` where the project does not say.
     pub fn package_version(&self) -> &str {
         &self.file.version
+    }
+
+    /// **`[package] within = "std"`** (#1976): the package is checked as part
+    /// of `std`.
+    pub fn within_std(&self) -> bool {
+        self.file.within.is_some()
+    }
+
+    /// **`[package] described`** (#1976): the ledger the package is also
+    /// checked against, resolved against the manifest's directory.
+    pub fn described(&self) -> Option<PathBuf> {
+        decide::manifest_described_at(&self.file).ok().flatten()
     }
 
     /// What `tools/manifest.nika` read, for a reader in Nikaia.

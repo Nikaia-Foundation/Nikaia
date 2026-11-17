@@ -229,7 +229,7 @@ pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<St
             paths.push((name, project_members_canonical(root)));
         },
     }
-    ProjectMembersManifest { name: Some(String::from("program_test")), keys, paths, versions: vec![], foreign: vec![], has_build: false, uses_in: Some(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")))) }
+    ProjectMembersManifest { name: Some(String::from("program_test")), keys, paths, versions: vec![], foreign: vec![], has_build: false, uses_in: Some(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")))), within_std: false, described: None }
 }
 
 pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, __NikaiaThrows_ProjectTestsRefusal__io_IoError> {

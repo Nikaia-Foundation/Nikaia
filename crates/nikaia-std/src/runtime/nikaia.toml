@@ -1,0 +1,8 @@
+# The runtime every program runs (#1976): what it is, read by `lower-std`
+# and by every `nikaia check` of its files.
+[package]
+name = "runtime"
+within = "std"
+
+[directories]
+"lowered" = "ignore"

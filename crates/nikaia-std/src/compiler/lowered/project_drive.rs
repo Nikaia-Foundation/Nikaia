@@ -287,7 +287,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if library && header.is_none() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(cx_nothing_exported()), &"project_drive_drive_to")); }
     if subcommand == "run" || subcommand == "check" { build_args.push(String::from("--quiet")); }
     let verb = if subcommand == "check" { "check" } else { "build" }; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
-    let record = nikaia_std::index::or(match nikaia_std::fs::path::parent(&(manifest)) {
+    let record = nikaia_std::index::or(match nikaia_std::fs::path::parent(&(manifest)).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::join(&(__nikaia_it), std::path::Path::new(&("cargo-fresh")))),
         None => None,
     }, || nikaia_std::fs::path::join(&(host.gen_dir()), std::path::Path::new(&("cargo-fresh"))).into());

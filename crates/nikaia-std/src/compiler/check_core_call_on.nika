@@ -1580,6 +1580,35 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     return check_core_call_on_described(state, world, host, on, receiver, method, args, entry, resolved.key, resolved.contract, span)
 }
 
+/// **Whether `key` is an entry of the type `inner` names** (#1976): its key
+/// is the type's name, `::`, then the method's.
+fn check_core_safe_call_of_type(inner: ref Ty, key: ref String) -> bool sync {
+    return match inner {
+        Ty::Named { name, .. } => key.starts_with(f"{name}::"),
+        else => false,
+    }
+}
+
+/// **Whether the receiver's own type has an entry for `name`** (#1976), so
+/// the entries of other types by that name do not decide how it is reached.
+fn check_core_safe_call_type_keys(
+    world: ref CheckWorld,
+    inner: ref Ty,
+    name: ref String,
+) -> bool sync {
+    for key in ledger_candidates(world.own, world.own_methods, name) {
+        if check_core_safe_call_of_type(inner, key) {
+            return true
+        }
+    }
+    for key in ledger_candidates(world.library, world.library_methods, name) {
+        if check_core_safe_call_of_type(inner, key) {
+            return true
+        }
+    }
+    return false
+}
+
 /// **`x?.m(…)` over a `T?`** (Part I 3.5): the same call, on the value
 /// inside, and the result flattened (ADR-278). A witness of `join` is its
 /// `within`, of a door's `set` its `after`.
@@ -1613,10 +1642,17 @@ fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     // **The receiver is lent to the call where the call changes nothing**
-    // (ADR-278 D2, D16, D3): asked of every candidate for the name.
+    // (ADR-278 D2, D16, D3): asked of every candidate for the name, and of
+    // the receiver's own type's alone where it has one by that name (#1976:
+    // `root?.join(p)` on an `fs::Path?` was not lent for `TaskHandle`'s
+    // `join(within)`, and moved the field out of a borrow).
+    let own_type = check_core_safe_call_type_keys(world, inner, name)
     let mut candidates = 0
     let mut all_read = true
     for key in ledger_candidates(world.own, world.own_methods, name) {
+        if own_type && !check_core_safe_call_of_type(inner, key) {
+            continue
+        }
         candidates += 1
         let contract = world.own.functions[key] ?? continue
         if contract.mutates {
@@ -1624,6 +1660,9 @@ fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     for key in ledger_candidates(world.library, world.library_methods, name) {
+        if own_type && !check_core_safe_call_of_type(inner, key) {
+            continue
+        }
         candidates += 1
         let contract = world.library.functions[key] ?? continue
         if contract.mutates {

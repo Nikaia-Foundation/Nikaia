@@ -519,7 +519,7 @@ impl Program {
     /// 13.5 makes the ledger a pure function of the source tree, which is a
     /// promise about the tree and not about each file in it.
     pub fn read(entry: &Path) -> Result<Program> {
-        Self::of(collect(entry)?, &[], &crate::contracts::Ledger::blank())
+        Self::of(collect(entry)?, &[], &no_foreign())
     }
 
     /// The same, with the packages this program depends on
@@ -538,7 +538,7 @@ impl Program {
         Self::of(
             collect_with(entry, dependencies, open)?,
             dependencies,
-            &described_beside(entry),
+            &foreign_beside(entry),
         )
     }
 
@@ -550,11 +550,7 @@ impl Program {
 
     /// [`Program::read_one`] over [`Open`].
     pub fn read_one_open(entry: &Path, open: &Open) -> Result<Program> {
-        Self::of(
-            collect_one(entry, open)?,
-            &[],
-            &crate::contracts::Ledger::blank(),
-        )
+        Self::of(collect_one(entry, open)?, &[], &no_foreign())
     }
 
     /// **A test program as `nikaia test` builds it**
@@ -574,7 +570,7 @@ impl Program {
         Self::of(
             collect_program_test(entry, dependencies, open)?,
             dependencies,
-            &crate::contracts::Ledger::blank(),
+            &no_foreign(),
         )
     }
 
@@ -601,15 +597,15 @@ impl Program {
         in_project: bool,
         open: &Open,
     ) -> Result<Program> {
-        let (units, described) = match in_project {
+        let (units, foreign) = match in_project {
             true => (
                 collect_with(entry, dependencies, open)?,
-                described_beside(entry),
+                foreign_beside(entry),
             ),
-            false => (collect_one(entry, open)?, crate::contracts::Ledger::blank()),
+            false => (collect_one(entry, open)?, no_foreign()),
         };
         let (units, tests) = with_tests_as_functions(units)?;
-        let mut program = Self::of(units, dependencies, &described)?;
+        let mut program = Self::of(units, dependencies, &foreign)?;
         program.tests = tests;
         Ok(program)
     }
@@ -617,8 +613,13 @@ impl Program {
     fn of(
         mut units: Vec<Unit>,
         dependencies: &[Dependency],
-        described: &crate::contracts::Ledger,
+        foreign: &crate::project::Foreign,
     ) -> Result<Program> {
+        let described = &foreign.descriptions;
+        // **`std`'s ledger, with what `[package] described` names over it**
+        // (#1976): the library the program's own files are inferred against.
+        let library = crate::project::base_library(foreign);
+        let over_std = !foreign.over_std.functions.is_empty() || !foreign.over_std.types.is_empty();
         // **A `test` block is compiled only by `nikaia test`** (ADR-269 D1),
         // which has turned every one it runs into a function by now: what is
         // left is left out.
@@ -648,6 +649,7 @@ impl Program {
         let host = ProgramHost {
             units: &units,
             dependencies,
+            library,
             checked: RefCell::new(None),
             paused_by_code: RefCell::new(BTreeMap::new()),
             pauses: RefCell::new(BTreeMap::new()),
@@ -662,8 +664,9 @@ impl Program {
             &reaches,
             &their_renames,
         );
+        // The checked units are the join's pass only against `std` alone.
         let own_checked = match (parts.own_checked_from, host.checked.into_inner()) {
-            (Some(from), Some((at, checked))) if at == from => Some(checked),
+            (Some(from), Some((at, checked))) if at == from && !over_std => Some(checked),
             _ => None,
         };
         let paused_by_code = host.paused_by_code.into_inner();
@@ -864,6 +867,8 @@ impl Program {
 struct ProgramHost<'a> {
     units: &'a [Unit],
     dependencies: &'a [Dependency],
+    /// `std`'s ledger, with what `[package] described` names over it (#1976).
+    library: crate::contracts::Ledger,
     /// The checked units of the last own group, by the place of its first unit.
     checked: RefCell<Option<(i64, Vec<crate::check::Checked>)>>,
     paused_by_code: RefCell<BTreeMap<String, Vec<String>>>,
@@ -878,7 +883,7 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
     }
 
     fn std_library(&self) -> crate::contracts::Ledger {
-        crate::contracts::std_library()
+        self.library.clone()
     }
 
     fn package_ledger(&self, from: i64, to: i64) -> crate::contracts::Ledger {
@@ -888,7 +893,7 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
             self.dependencies
                 .iter()
                 .find(|d| Some(&d.name) == group[0].package.as_ref()),
-            &crate::contracts::std_library(),
+            &self.library,
         )
     }
 
@@ -1185,11 +1190,17 @@ fn names_in(files: &[&crate::parser::Parsed]) -> BTreeSet<String> {
     names
 }
 
-/// The descriptions of the crates the project around `entry` declares
-/// (`contracts/<crate>.contracts`), or none outside a project
+/// What the project around `entry` is at its boundary: the descriptions of
+/// the crates it declares (`contracts/<crate>.contracts`) and what its
+/// manifest says of `std` (#1976), or none outside a project
 /// (`modules_project_root`).
-fn described_beside(entry: &Path) -> crate::contracts::Ledger {
+fn foreign_beside(entry: &Path) -> crate::project::Foreign {
     collecting::modules_project_root(entry)
-        .map(|root| crate::project::foreign_of(&root).descriptions)
-        .unwrap_or_else(crate::contracts::Ledger::blank)
+        .map(|root| crate::project::foreign_of(&root))
+        .unwrap_or_else(no_foreign)
+}
+
+/// A program with no project around it.
+fn no_foreign() -> crate::project::Foreign {
+    nikaia_std::compiler::project_members::project_members_no_foreign()
 }

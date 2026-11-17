@@ -38,6 +38,12 @@ pub struct ProjectMembersManifest {
     /// package ([ADR-338](../../../docs/specification/adr/adr-338.md) D3);
     /// null for the package's `src/`.
     pub uses_in: fs::Path?,
+    /// **`[package] within = "std"`** (#1976): the package is checked as
+    /// part of `std`.
+    pub within_std: bool,
+    /// **`[package] described`** (#1976), resolved against the manifest's
+    /// directory; null where it names none.
+    pub described: fs::Path?,
 }
 
 /// What the walk asks of the compiler.
@@ -662,11 +668,27 @@ pub struct ProjectMembersForeign {
     /// own manifest does not. Only a head: what the crate's items are is the
     /// dependency's description, and nothing here reads it.
     pub beneath: collections::BTreeSet[String],
+    /// **`[package] within = "std"`** (#1976, owner 2026-11-17): the
+    /// package is checked as part of `std`: it reaches `std`'s helpers, and
+    /// `assume` is refused in it.
+    pub within_std: bool,
+    /// **The ledger `[package] described` names** (#1976): described names
+    /// the package is also checked against, which win a collision with
+    /// `std`'s; blank where the manifest names none.
+    pub over_std: Ledger,
 }
 
 /// A build with no project around it: nothing declared, nothing described.
 pub fn project_members_no_foreign() -> ProjectMembersForeign {
-    return ProjectMembersForeign { declared: collections::BTreeSet(), described: collections::BTreeSet(), moved: collections::BTreeMap(), descriptions: Ledger::blank(), beneath: collections::BTreeSet() }
+    return ProjectMembersForeign {
+        declared: collections::BTreeSet(),
+        described: collections::BTreeSet(),
+        moved: collections::BTreeMap(),
+        descriptions: Ledger::blank(),
+        beneath: collections::BTreeSet(),
+        within_std: false,
+        over_std: Ledger::blank(),
+    }
 }
 
 /// The Rust crates every path dependency of `root` declares, and theirs in
@@ -726,7 +748,22 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
     let mut beneath: collections::BTreeSet[String] = collections::BTreeSet()
     let mut seen: collections::HashSet[fs::Path] = collections::HashSet()
     project_members_crates_beneath(root, seen, beneath, manifests)
-    return ProjectMembersForeign { declared: declared, described: described, descriptions: descriptions, moved: moved, beneath: beneath }
+    // **What the manifest says of `std`** (#1976): the ledger is read where
+    // the manifest reader found it; one that does not read is none.
+    let over_std = match manifest?.described {
+        null => host.empty_ledger(),
+        path => host.read_beside(path) ?? host.empty_ledger(),
+    }
+    let within_std = manifest?.within_std ?? false
+    return ProjectMembersForeign {
+        declared: declared,
+        described: described,
+        descriptions: descriptions,
+        moved: moved,
+        beneath: beneath,
+        within_std: within_std,
+        over_std: over_std,
+    }
 }
 
 impl ProjectMembersForeign {

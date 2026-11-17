@@ -1,0 +1,12 @@
+# The compiler's package (#1976): what it is, read by `lower-std` and by
+# every `nikaia check` of its files.
+[package]
+name = "compiler"
+within = "std"
+described = "described.contracts"
+
+[dependencies]
+json = { path = "../../../../packages/json" }
+
+[directories]
+"lowered" = "ignore"
