@@ -261,6 +261,45 @@ jobs:
           key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: test-times-${{ inputs.arch }}-${{ matrix.shard }}-
 
+      # **The program `std` is built once per std, not once per shard and run**
+      # (#1956). The rlib tree a test program links (`$NIKAIA_CACHE_DIR/rlib`,
+      # `Sysroot::rlib_cache`: about 70 crates, rustls, ring, regex_automata)
+      # is named by the toolchain, target and codegen, not by the compiler,
+      # so a tree of an earlier commit serves this one. The key hashes what a
+      # program's `std` compiles: its sources and those of its path crates,
+      # without `src/compiler` (the `compiler` feature, off in a program's
+      # `std`, #723), so a push that changes only the compiler hits exactly.
+      # A near tree (another std) is restored too: Cargo rebuilds only the
+      # path crates, never the registry ones.
+      - name: Name the program std
+        id: rlib-key
+        if: startsWith(matrix.shard, 'compiler-')
+        run: |
+          echo "rustc=$(rustc --version | tr -c 'A-Za-z0-9.\n' '-')" >>"$GITHUB_OUTPUT"
+          # Every source is older than this; every unit Cargo builds in this
+          # run is newer (the save below keeps only those of the path crates).
+          touch "$RUNNER_TEMP/checked-out"
+
+      - name: Restore the program std
+        id: rlib
+        if: startsWith(matrix.shard, 'compiler-')
+        uses: actions/cache/restore@v4
+        with:
+          path: target/nikaia-project-tests/rlib
+          key: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ hashFiles('crates/nikaia-std/**', '!crates/nikaia-std/src/compiler/**', 'crates/unsafe/**', 'Cargo.lock') }}
+          restore-keys: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-
+
+      # Cargo judges a path crate by mtimes, and the checkout made every
+      # source newer than the restored tree. On an exact hit the sources are
+      # the bytes the tree was built from (the key), so they are dated back
+      # and Cargo builds no `std` crate. A near tree keeps the new dates and
+      # its path crates are rebuilt.
+      - name: Date the std sources before the restored tree
+        if: steps.rlib.outputs.cache-hit == 'true'
+        run: |
+          git ls-files -z -- crates/nikaia-std crates/unsafe ':!crates/nikaia-std/src/compiler' |
+            xargs -0 touch -d '2000-01-01 00:00:00 UTC'
+
       # Each one-file program a checker test accepts is written to the dump
       # this shard sweeps (#705).
       - name: Test
@@ -334,6 +373,45 @@ jobs:
         with:
           path: target/nikaia-project-tests/test-times
           key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # **Saved once per key, by one shard**: compiler-0 builds the same std
+      # as the others, and a key is written once (an exact hit saves
+      # nothing). Before the save, what must not travel: the programs'
+      # artifacts (tens of MB each, by their project tag, as
+      # `cache::sweep_programs` removes them), and each unit of a path crate
+      # this run did not build. Such a unit was built from other sources;
+      # once the sources are dated back on an exact hit, Cargo would take it
+      # as fresh. Without its fingerprint Cargo rebuilds it. Older keys are
+      # evicted by GitHub's own rule (least recently used past the
+      # repository's 10 GB, or unused for 7 days); the size of a saved tree
+      # is printed here.
+      - name: Keep only the std of this run
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        run: |
+          names=$(for m in crates/nikaia-std/Cargo.toml crates/unsafe/*/Cargo.toml; do
+            sed -n 's/^name = "\(.*\)"$/\1/p;T;q' "$m"; done)
+          for tree in target/nikaia-project-tests/rlib/*/; do
+            for record in "$tree".nikaia-projects/*; do
+              [ -f "$record" ] || continue
+              tag=$(basename "$record")
+              find "$tree" -mindepth 2 -maxdepth 4 \( -name "*_$tag*" -o -name "*-$tag*" \) -prune -exec rm -rf {} +
+            done
+            rm -rf "$tree.nikaia-projects"
+            find "$tree" -mindepth 4 -maxdepth 5 -path '*/.fingerprint/*/invoked.timestamp' ! -newer "$RUNNER_TEMP/checked-out" |
+              while read -r stamp; do
+                unit=$(dirname "$stamp")
+                name=$(basename "$unit")
+                case " $(echo $names) " in *" ${name%-*} "*) rm -rf "$unit" && echo "not saved, built from other sources: $unit" ;; esac
+              done
+          done
+          du -sh target/nikaia-project-tests/rlib/* || true
+
+      - name: Save the program std
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: target/nikaia-project-tests/rlib
+          key: ${{ steps.rlib.outputs.cache-primary-key }}
 
       - name: Name the failing tests
         if: failure()
