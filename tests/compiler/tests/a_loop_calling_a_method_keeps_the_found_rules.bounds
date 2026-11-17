@@ -1,0 +1,11 @@
+bounds in tests/a_loop_calling_a_method_keeps_the_found_rules.nika: 8 indexes, 3 proved; 1 operations, 1 proved
+    24  self.rows[at]  proved
+    25  i += 1         proved
+    34  self.rows[at]  proved
+    40  self.rows[at]  proved
+    68  self.rows[at]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    77  t.rows[0]      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    77  t.rows[2]      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    77  t.rows[7]      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    81  l.rows[1]      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  derived  fill: 0 <= n, proved at the calls on lines 74

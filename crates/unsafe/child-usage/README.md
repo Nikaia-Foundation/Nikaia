@@ -36,6 +36,14 @@ child is waited for with the standard library, both times are zero and
 | `wait` (Unix) | `core::mem::zeroed::<libc::rusage>()` | `struct rusage` is integers and `timeval`s of integers; all-zero is a valid value of each |
 | `wait` (Unix) | `libc::wait4(pid, &mut status, 0, &mut usage)` | both pointers are to locals that live across the call and have the types `wait4` writes; `pid` is the id of a child this process spawned and has not waited for, since the `Child` is owned here and the standard library waits only through it |
 | `kill_group` (Unix) | `libc::kill(-pid, libc::SIGKILL)` | two integers, no pointer; a negative pid names the group the child leads, and a stale pid at worst fails with `ESRCH` |
+| `cap::Cap::apply` (Unix) | `CommandExt::pre_exec` running `open`, `write`, `close`, `setrlimit` | the hook runs between `fork` and `exec`, where only async-signal-safe calls are allowed: it makes only those four, on a path built before the fork and a local `rlimit`, and allocates nothing |
+| `cap::wait_unreaped` (Unix) | `libc::waitid(P_PID, pid, &mut info, WEXITED \| WNOWAIT)` | `info` is a zeroed local `siginfo_t` (plain data); `pid` is a child the `Child` owns and nobody has reaped; `WNOWAIT` leaves it to be reaped, so its id stays taken while its group is ended |
+| `cap::guard_group` (Unix) | `pipe2`, `fork`, and in the forked guard `signal`, `setpgid`, `dup2`, `close_range`, `read`, `open`, `kill`, `usleep`, `rmdir`, `_exit`; `waitpid` of the guard | the guard is forked from a process with threads, so it calls only async-signal-safe functions, on integers, locals and a path built before the fork, allocates nothing and leaves only by `_exit`; both pipe ends are close-on-exec, and the guard closes every other descriptor at once; `waitpid` reaps the guard this process forked |
+
+The cap (#1919): `cap::Cap` puts a child into a `pids` cgroup of its own
+with `pids.max` set, or for a starter that is not root lowers its
+`RLIMIT_NPROC`; `cap::guard_group` forks a guard that ends the child's group
+when the starter ends, killed included.
 
 ## How it is checked
 

@@ -2,7 +2,7 @@ drop deviation	Deviation: item 2 built as a flag, not a file
 comment #1700	Issue: broke I3: the title named no function
 comment #1700	Issue: I4b not followed: no expected output
 file	Issue: rules-gap: no rule says which binary a probe ran on
-drop settled	Issue: wrong I5: the probe passed, closed as noise in Body
+comment #1700	Issue: wrong I5: the probe passed, closed as noise in Body
 drop built docs/issues.md	Issue: rules-gap: issues.md I9 says nothing of a Rust test file
 dup #1800	Friction: pre-push turns red on the self-hosted badge that was not mine, every run
 drop settled	Comment (no issue number): the plan lacks a step, nothing to build
@@ -11,6 +11,7 @@ The report of the run of `issue-1700` (#1700) judged this issue against `docs/is
 
 - Issue: broke I3: the title named no function
 - Issue: I4b not followed: no expected output
+- Issue: wrong I5: the probe passed, closed as noise in Body
 
 
 ---

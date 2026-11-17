@@ -100,6 +100,7 @@ pub struct ProgramTest {
     pub stops: Option<Bytes>,
     pub bounds: Option<Bytes>,
     pub asserts: Option<Bytes>,
+    pub sharing: Option<Bytes>,
     pub stdin: Bytes,
 }
 
@@ -240,9 +241,10 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, _
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
         let bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.bounds", name))))).await?;
         let asserts = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.asserts", name))))).await?;
+        let sharing = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.sharing", name))))).await?;
         let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
         let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
-        tests.push(ProgramTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, asserts, stdin });
+        tests.push(ProgramTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, asserts, sharing, stdin });
     }
     Ok(tests)
 }
@@ -252,6 +254,7 @@ pub fn project_tests_stray_bounds(root: &std::path::Path) -> Vec<String> {
     let mut stray: Vec<String> = vec![];
     for stem in project_tests_stems(&dir, ".bounds", false) { if !stem.ends_with(".loops") && !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.bounds", stem)); } }
     for stem in project_tests_stems(&dir, ".asserts", false) { if !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.asserts", stem)); } }
+    for stem in project_tests_stems(&dir, ".sharing", false) { if !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.sharing", stem)); } }
     stray
 }
 
@@ -294,7 +297,25 @@ pub(crate) fn project_tests_asserts_report(printed: &str, written: &str) -> Byte
     report.as_bytes().copy_of()
 }
 
-pub(crate) fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, report: &str, asserts: &str) -> ProjectTestsOutcome {
+pub(crate) fn project_tests_sharing_report(printed: &str, written: &str) -> Bytes {
+    let head = format!("--- {}", written);
+    let units = printed.lines().any(|line| { line.starts_with("--- ") });
+    let mut report: String = String::from("");
+    let mut inside = !units;
+    for line in printed.lines() {
+        if line.starts_with("--- ") {
+            inside = AsRef::<str>::as_ref(&(line)) == AsRef::<str>::as_ref(&(head));
+            continue;
+        }
+        if inside && !line.starts_with("Checked ") {
+            report.push_str(line);
+            report.push_str("\n");
+        }
+    }
+    report.as_bytes().copy_of()
+}
+
+pub(crate) fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, report: &str, asserts: &str, sharing: &str) -> ProjectTestsOutcome {
     let written = format!("tests/{}.nika", program.name);
     let mut bounds: Vec<(String, Bytes, Bytes)> = vec![];
     match &program.bounds {
@@ -304,6 +325,10 @@ pub(crate) fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &Proj
     match &program.asserts {
         None => { },
         Some(want) => { bounds.push((format!("{}.asserts", program.name), want.copy_of(), project_tests_asserts_report(asserts, &written))); },
+    }
+    match &program.sharing {
+        None => { },
+        Some(want) => { bounds.push((format!("{}.sharing", program.name), want.copy_of(), project_tests_sharing_report(sharing, &written))); },
     }
     let right = bounds.iter().all(|entry| { entry.1 == entry.2 });
     ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: nikaia_std::block::Text::from(outcome.stderr.to_string()), files: outcome.files.copy_owned(), bounds }
@@ -480,6 +505,7 @@ pub struct ProjectTestsRan {
     pub stdout: Bytes,
     pub stderr: Bytes,
     pub timed_out: bool,
+    pub capped: i64,
 }
 
 pub(crate) fn project_tests_time_limit() -> i64 {
@@ -488,6 +514,19 @@ pub(crate) fn project_tests_time_limit() -> i64 {
         true => given,
         false => 300,
     }
+}
+
+pub(crate) fn project_tests_process_limit() -> i64 {
+    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_PROCESS_LIMIT"), || "".into()).trim()), || 0);
+    match given > 0 {
+        true => given,
+        false => 4096,
+    }
+}
+
+pub(crate) fn project_tests_capped_outcome(cap: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
+    let shown = format!("ran into its cap of {} processes and threads (NIKAIA_TEST_PROCESS_LIMIT): a fork or a thread past it was refused, and every process it started was ended\n{}", cap, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub(crate) fn project_tests_build_time_limit() -> i64 {
@@ -514,11 +553,11 @@ pub(crate) fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> P
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
     fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -727,15 +766,17 @@ pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H,
 pub struct ProjectTestsReports {
     pub bounds: String,
     pub asserts: String,
+    pub sharing: String,
 }
 
 pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, std::boxed::Box<dyn std::error::Error>> {
-    let mut found = ProjectTestsReports { bounds: String::from(""), asserts: String::from("") };
-    if program.bounds.is_none() && program.asserts.is_none() { return Ok(found); }
+    let mut found = ProjectTestsReports { bounds: String::from(""), asserts: String::from(""), sharing: String::from("") };
+    if program.bounds.is_none() && program.asserts.is_none() && program.sharing.is_none() { return Ok(found); }
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
     if program.bounds.is_some() { found.bounds = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own)?, &entry, &written, root); }
     if program.asserts.is_some() { found.asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
+    if program.sharing.is_some() { found.sharing = project_tests_relocated(&host.explained(&vec![String::from("--sharing")], &entry, own)?, &entry, &written, root); }
     Ok(found)
 }
 
@@ -744,29 +785,32 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
     let limit = project_tests_time_limit();
+    let processes = project_tests_process_limit();
     match batched {
         None => { },
         Some(batch) => {
-            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit)?;
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit, processes)?;
+            if out.capped > 0 { return Ok(project_tests_capped_outcome(out.capped, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
-            let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()));
+            let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()), &nikaia_std::block::Text::from(reports.sharing.to_string()));
             if outcome.passed && out.stderr.is_empty() { return Ok(outcome); }
             project_tests_empty_but(own, "project")?;
         },
     }
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
+    let sharing = nikaia_std::block::Text::from(reports.sharing.to_string());
     let building = project_tests_build_time_limit();
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building)?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building, 0)?;
     if built.timed_out { return Ok(project_tests_build_timed_out_outcome(building, &project_tests_relocated(&built.stderr, &entry, &written, root))); }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
-        return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));
+        return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts, &sharing));
     }
-    let ran = match host.built(&project, root, own, &program.stdin, limit)? {
+    let ran = match host.built(&project, root, own, &program.stdin, limit, processes)? {
         None => {
-            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit, processes)?;
             let said = out.stderr.copy_of();
             (out, said)
         },
@@ -776,9 +820,10 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
+    if out.capped > 0 { return Ok(project_tests_capped_outcome(out.capped, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
-    Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts))
+    Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts, &sharing))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

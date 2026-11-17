@@ -147,7 +147,7 @@ pub(crate) fn fix_line_of(source: &str, at: i64) -> i64 {
 // this was written - see `contracts::sync`.
 pub(crate) fn fix_cut(source: &str, a: i64, b: i64) -> Option<String> {
     if a < 0 || b < a || b > source.as_bytes().len() as i64 { return None; }
-    let cut = match unsafe { nikaia_std::proven::cut(&source.as_bytes(), (a) as usize, (b) as usize) }.text() {
+    let cut = match nikaia_std::bytes::text_of_a_cut(&*source, unsafe { nikaia_std::proven::cut(&source.as_bytes(), (a) as usize, (b) as usize) }) {
         Ok(value) => value,
         Err(_error) => { return None; },
     };

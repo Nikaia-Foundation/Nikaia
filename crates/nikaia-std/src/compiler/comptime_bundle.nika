@@ -114,11 +114,19 @@ pub trait ComptimeBundleHost {
     fn run_child(ref self, binary: ref fs::Path, level: ref String, libraries: ref Vec[fs::Path], name: ref String) -> ComptimeBundleRan sync throws
 }
 
-/// The run bundle's one file: the crates, named, and nothing else.
+/// **The run bundle's one file**: the crates, named, and the program's
+/// counting allocator (ADR-327 D9, D10; #1844). A dynamic library allocates
+/// with its own allocator, so a `std` call whose code is the library's (a
+/// set's `insert`) was counted by no task while the program declared the
+/// allocator; declared here, every allocation of the program and the library
+/// is counted, and the program declares none (`run_fast.rs`).
 comptime COMPTIME_BUNDLE_RUN_SOURCE: ref String = "// GENERATED: the library `nikaia run` links a program against.
 pub extern crate nikaia_std;
 pub extern crate winnow;
 pub extern crate winnow_grammar;
+
+#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;
 "
 
 /// The crates the bundle names: `std`, and what a `grammar` lowers to.

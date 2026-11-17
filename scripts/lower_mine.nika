@@ -12,9 +12,14 @@
 // binary). It prints the refusals (at most 30 lines), then one line per
 // lowered file your change moves: `differs PATH` where the tree's copy is
 // not it, `same PATH` where it is. With `--write`, each differing lowered
-// file is copied into the tree, except `lowered.rs`, which holds every
-// agent's `include!` lines: stage your hunks of it under `Partial:`
-// (`commit.nika` writes the digest itself). Exits 1 on a refusal.
+// file of a FILE given (`DIR/X.nika` -> `DIR/lowered/X.rs`) is copied into
+// the tree. A differing lowered file of a source you did not give is not
+// written (#1918: #1894's run got three `bounds_*.rs` of another agent's
+// area written, and put HEAD's copies back by hand): it says `not written`,
+// and you copy it from `target/lower-mine` yourself where your change really
+// moves it. Nor is `lowered.rs`, which holds every agent's `include!`
+// lines: stage your hunks of it under `Partial:` (`commit.nika` writes the
+// digest itself). Exits 1 on a refusal.
 //
 // The copy's file names stay the same from run to run, so the `lower-std`
 // cache serves the files you did not change.
@@ -39,6 +44,14 @@ fn mine_lowered(line: String, copy: String) -> String {
 	let path = rest.trim()
 	let prefix = copy + "/"
 	return (path.strip_prefix(prefix) ?? "").to_string()
+}
+
+// `DIR/X.nika` -> `DIR/lowered/X.rs`, or "" for a FILE that is no `.nika`.
+fn mine_lowered_of(file: String) -> String {
+	let stem = file.strip_suffix(".nika") ?? ""
+	if stem == "" { return "" }
+	let (dir, name) = stem.rsplit_once("/") ?? return f"lowered/{stem}.rs"
+	return f"{dir}/lowered/{name}.rs"
 }
 
 fn main() throws {
@@ -90,6 +103,8 @@ fn main() throws {
 		println(f"lower-std refused HEAD plus your files: exit {out.code}")
 		process::exit(1)
 	}
+	let mut own: Vec[String] = []
+	for file in files { own.push(mine_lowered_of(file.clone())) }
 	let mut moved = 0
 	for l in out.stdout.split("\n") {
 		let path = mine_lowered(l, copy)
@@ -104,6 +119,10 @@ fn main() throws {
 		if !write { continue }
 		if path.ends_with("/lowered.rs") {
 			println(f"  not written: {path} holds every agent's include! lines; stage your hunks under Partial:")
+			continue
+		}
+		if !own.contains(path.clone()) {
+			println(f"  not written: no FILE given lowers to {path}; copy it from {copy}/{path} only if your change moves it")
 			continue
 		}
 		mine_sh(f"mkdir -p \"$(dirname '{path}')\" && cp '{copy}/{path}' '{path}'")

@@ -1,0 +1,26 @@
+// `nikaia check --sharing` names where a handle on a shared value is
+// duplicated or moved by a `let`, a tuple and a variant (ADR-312 D5,
+// #1651), and the test pins that report with `NAME.sharing` (ADR-269 D22,
+// #1907).
+struct Settings { name: String, retries: int }
+
+enum Boxed { One(Shared[Settings]), Empty }
+
+fn name_of(b: Boxed) -> String {
+	return match b {
+		Boxed::One(s) => s.name.clone(),
+		Boxed::Empty => "empty",
+	}
+}
+
+fn main() throws {
+	let settings = Shared(Settings { name: "prod", retries: 3 })
+	let again = settings
+	println(f"{again.name} {settings.retries}")
+	let pair = (settings, 2)
+	println(f"{pair.0.retries} {pair.1}")
+	let other = Shared(Settings { name: "test", retries: 1 })
+	let boxed = Boxed::One(other)
+	println(name_of(boxed))
+	println(name_of(Boxed::Empty))
+}

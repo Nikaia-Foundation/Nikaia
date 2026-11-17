@@ -76,7 +76,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   decision. One defect per `Found:` line, with its probe (the snippet and the
   output it gives today, the output it should give and what says so, the ADR
   decision, the Part I-III section or the compiler's own message, #1732:
-  #1720's builder read its expected result out of NK1261's help; and the
+  #1720's builder read its expected result out of NK1261's help; an exact
+  figure only from a reference run that is right, shown with its output,
+  else the property that must hold, `docs/issues.md` I5, #1928; and the
   command as run: the package built and its
   setting, the consumer where the library alone builds, #1716; the
   snippet copied whole from the file that ran, its `use` lines and
@@ -102,7 +104,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   on a binary built from HEAD (your run's own build, not `$S/old/nikaia`,
   which may predate a fix: #1788 was filed from a probe a fix under #1754
   had already made pass, #1822); a shape that works is left out, and the line names the suspected file and
-  function, or says the cause is unknown (#1695: #1654's Found named the
+  function with the word `traced`, `suspected` (and the check that would
+  settle it) or says the cause is unknown; an unmarked cause is filed as a
+  hypothesis (owner, 2026-11-16) (#1695: #1654's Found named the
   `while` forms, already proved, and no cause: `bounding_for` lacked the pair
   bounds `bounding_while` asks). A traced cause is run in its other
   forms too (a closure, a `std` method taking one, the `Array` twin), and
@@ -134,6 +138,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **At about 120 turns, or when your context passes about 200k tokens**,
   stop starting new work: commit what is verified, and report what
   is left, so a fresh agent can take it from the repository.
+* **A suspected cause is checked first** (owner, 2026-11-16). A cause the
+  issue marks `suspected`, or does not mark (`docs/issues.md` I7), is a
+  hypothesis: run its settling check (`scripts/where.nika`, the probe with a
+  trace, callgrind for a cost) before building on it. Shown false: `Issue:
+  wrong I7: <what the check showed>`, which the driver comments on the issue.
 * **Time box on a search** (owner, 2026-10-31). No cause found after about
   40 turns, or going in circles (the same probe, file or hypothesis again):
   stop. Commit nothing half-made, report `Result: partial` with what you
@@ -248,7 +257,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Fixes: #N[, #M]` or `Part: #N` (never `Fixes: none`: the script writes
   it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
   write `Part: #N`); then run `target/fast/nikaia run
-  scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
+  scripts/commit.nika -- --dry-run REPORT` and read the hunks it lists for
+  each listed source: one you did not write is another agent's, so that file
+  goes under `Partial:` (below); `git status` shows no sign of an edit that
+  arrived mid-cycle (#1888's commit swept another agent's hunks in, #1918).
+  The dry run writes `Reviewed:` into the report; then run `target/fast/nikaia
+  run scripts/commit.nika -- REPORT`, which refuses when a listed file
+  changed since that review (dry-run again and re-read). It refuses an
   unchanged listed file, commits through a private index (a file another
   agent staged stays staged and is named, never committed, #1792), adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the trailer

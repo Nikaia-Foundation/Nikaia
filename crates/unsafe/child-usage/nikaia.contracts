@@ -4,7 +4,9 @@
 # Drafted by `nikaia describe child_usage` and reviewed against `src/lib.rs`.
 # The scope is #788's: the safe free functions that take no type parameter.
 # An `unsafe fn` is left out, so a call to one stays NK1171. Methods and
-# generic results are left out until #789. `nikaia.derived` beside this
+# generic results are left out until #789. `cap` (#1919) is the test runner's
+# own plumbing: its free functions take a `Child` or a `Path` and hand back
+# `io::Result<GroupGuard>`, so they stay unlisted and a program's call is NK1171. `nikaia.derived` beside this
 # file records the sources it was reviewed against: a change to them
 # makes `nikaia describe` refuse this file until it is reviewed again.
 #

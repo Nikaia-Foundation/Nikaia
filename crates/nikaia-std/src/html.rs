@@ -11,6 +11,10 @@
 use std::borrow::Cow;
 use std::fmt;
 
+/// `html::is_plain(part)`: its Nikaia half, `runtime/raw_sinks.nika`, the
+/// precondition of `html::Raw` (ADR-raw-sinks-1 D2, #1253).
+pub use crate::runtime::is_plain;
+
 /// Text that is already markup, and may be placed in a template without being
 /// escaped.
 ///

@@ -44,6 +44,14 @@ pub(crate) fn check_number_by_form(side: &Expr) -> bool {
 
 pub(crate) fn check_number_literal(side: &Expr) -> bool { matches!(side, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
 
+pub(crate) fn check_reads_a_cut_beside_bytes(side: &Expr, other: &Ty) -> bool {
+    let cut = match side {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
+        _ => false,
+    };
+    cut && check_core_method_bytes(&other.unseen())
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -207,8 +215,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
-        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right);
-        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left);
+        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right) && !check_reads_a_cut_beside_bytes(lhs, right);
+        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left) && !check_reads_a_cut_beside_bytes(rhs, left);
         let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right);
         let number_right = right.is_unknown() && self.a_lent_name(world, rhs) && self.a_number_beside(world, lhs, left);
         let here = at.start as i64;

@@ -239,6 +239,24 @@ impl ByteReads for [u8] {
     }
 }
 
+/// **A cut of a text's own bytes read back as text** (Part I 2.6, #1870):
+/// `s.bytes[a..<b].text()`. The text is UTF-8 already, so only the cut's two
+/// ends can split a scalar: two boundary checks (`str::get`), not a
+/// `from_utf8` over the whole cut. The emitter writes it where the cut's base
+/// is a place it may read twice; a cut that is not of `text` is read the long
+/// way, and a refusal is worded as [`ByteReads::text`] words it.
+#[inline]
+pub fn text_of_a_cut<'a>(text: &'a str, cut: &'a [u8]) -> Result<&'a str, crate::io::IoError> {
+    let from = (cut.as_ptr() as usize).wrapping_sub(text.as_ptr() as usize);
+    if from <= text.len()
+        && cut.len() <= text.len() - from
+        && let Some(part) = text.get(from..from + cut.len())
+    {
+        return Ok(part);
+    }
+    cut.text()
+}
+
 /// **The `N` bytes from `at`, read as the cut `b[at..<at + N]` is**
 /// (ADR-320 D12): a position outside stops the program with the cut's own
 /// message, at the caller's line.

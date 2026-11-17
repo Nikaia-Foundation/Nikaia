@@ -1,0 +1,16 @@
+// A non-Copy field handed out of a door's block is given away from what the
+// block is only lent: the checker refuses it with the `.clone()` help
+// (ADR-282 D10, #1905), not rustc.
+struct N { t: String }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let m = SharedMut(N { t: make() })
+    let got = m.access fn(open) { open.t }
+    println(got)
+}

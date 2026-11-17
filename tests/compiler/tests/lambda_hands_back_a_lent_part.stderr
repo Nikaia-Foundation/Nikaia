@@ -1,0 +1,49 @@
+error[NK1131]: You can't give away `row.0` here: `row` is only borrowed.
+   --> tests/lambda_hands_back_a_lent_part.nika:25:34
+    |
+ 25 |     pairs.sort_by_key fn (row) { row.0 }
+    |                                  ^^^^^
+    |
+    = note: `row` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `row.0` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `row.0.clone()` for a copy: a lambda hands back a value of its own.
+error[NK1131]: You can't give away `row.name` here: `row` is only borrowed.
+   --> tests/lambda_hands_back_a_lent_part.nika:28:33
+    |
+ 28 |     rows.sort_by_key fn (row) { row.name }
+    |                                 ^^^^^^^^
+    |
+    = note: `row` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `row.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `row.name.clone()` for a copy: a lambda hands back a value of its own.
+error[NK1104]: This lambda returns `ref String`, a view, but `sort_by_key` wants a key of its own.
+   --> tests/lambda_hands_back_a_lent_part.nika:31:34
+    |
+ 31 |     texts.sort_by_key fn (row) { row }
+    |                                  ^^^
+    |
+    = note: `sort_by_key` moves the items while it compares their keys, so a key may not point into an item.
+    = help: Hand back a copy with `.clone()`.
+error[NK1104]: This lambda returns `ref String`, a view, but `sort_by_key` wants a key of its own.
+   --> tests/lambda_hands_back_a_lent_part.nika:32:33
+    |
+ 32 |     rows.sort_by_key fn (row) { row.name.trim() }
+    |                                 ^^^^^^^^^^^^^^^
+    |
+    = note: `sort_by_key` moves the items while it compares their keys, so a key may not point into an item.
+    = help: Hand back a copy with `.clone()`.
+error[NK1131]: You can't give away `row.name` here: `row` is only borrowed.
+   --> tests/lambda_hands_back_a_lent_part.nika:33:39
+    |
+ 33 |     println(apply(rows[0], fn (row) { row.name }))
+    |                                       ^^^^^^^^
+    |
+    = note: `row` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `row.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `row.name.clone()` for a copy: a lambda hands back a value of its own.
+error[NK1131]: You can't give away `row.name` here: `row` is only borrowed.
+   --> tests/lambda_hands_back_a_lent_part.nika:34:53
+    |
+ 34 |     let v: Vec[String] = rows.iter().map(fn (row) { return row.name }).collect()
+    |                                                     ^^^^^^^^^^^^^^^
+    |
+    = note: `row` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `row.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `row.name.clone()` for a copy: a lambda hands back a value of its own.
+6 type errors

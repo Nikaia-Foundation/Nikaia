@@ -293,20 +293,34 @@ impl EmitState {
         match at {
             Expr::MethodCall { receiver, method, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let views = viewed || views_what_it_is_called_on(&emit_text(world, method));
+                let name = emit_text(world, method);
+                if viewed && node_key(at) != whole && (name == "to_text" || name == "display") && self.facts.path_methods.contains_key(&node_key(receiver)) {
+                    self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)?;
+                    return Ok(());
+                }
+                let views = viewed || views_what_it_is_called_on(&name);
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)?;
             },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope)?; },
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope)?; },
             _ => {
                 if !viewed || node_key(at) == whole || !(emit_read_a_call(at) || self.emit_core_a_concatenation(at)) { return Ok(()); }
-                let key = node_key(at);
-                walk.held.remove(&key);
-                let name = format!("__nikaia_held_{}", walk.held.len() as i64);
-                out.push(&format!("let {} = ", name));
-                self.emit_expr(world, walk, out, host, at, depth, flow, scope)?;
-                out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
-                walk.held.insert(key, name);
+                self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)?;
             },
         }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_hold_base<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let key = node_key(at);
+        walk.held.remove(&key);
+        let name = format!("__nikaia_held_{}", walk.held.len() as i64);
+        out.push(&format!("let {} = ", name));
+        self.emit_expr(world, walk, out, host, at, depth, flow, scope)?;
+        out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
+        walk.held.insert(key, name);
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

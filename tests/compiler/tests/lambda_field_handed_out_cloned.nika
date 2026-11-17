@@ -1,0 +1,23 @@
+// A field handed out of a door's block or a lambda as a copy written with
+// `.clone()` builds, and a field that copies hands out as it is (ADR-282
+// D10, #1905, #1906).
+struct N { t: String, k: i64 }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let m = SharedMut(N { t: make(), k: 4 })
+    let got = m.access fn(open) { open.t.clone() }
+    println(got)
+    let k = m.access fn(open) { open.k }
+    println(k)
+    let xs = [N { t: make(), k: 3 }]
+    let v: Vec[String] = xs.iter().map(fn(x) { x.t.clone() }).collect()
+    println(v[0])
+    let ks: Vec[i64] = xs.iter().map(fn(x) { x.k }).collect()
+    println(ks[0])
+}

@@ -139,9 +139,15 @@ pub mod text {
 /// writes by hand for its provenance (#1601).
 ///
 /// `unnecessary_cast`, as in `tools` below: a proved index at a literal is
-/// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27).
+/// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27). `too_many_arguments`
+/// and `useless_conversion`, as there too: `process::shell` takes `run`'s
+/// options, and a `?? default` is lowered `index::or(x, || d.into())` (#1253).
 #[doc(hidden)]
-#[allow(clippy::unnecessary_cast)]
+#[allow(
+    clippy::unnecessary_cast,
+    clippy::too_many_arguments,
+    clippy::useless_conversion
+)]
 pub mod runtime {
     include!("runtime/lowered.rs");
 

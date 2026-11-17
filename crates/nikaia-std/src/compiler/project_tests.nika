@@ -35,7 +35,8 @@ pub struct ProjectTestsOutcome {
     /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D2).
     pub files: Vec[(String, Bytes?)],
     /// A test program's `--bounds` reports, each beside what it expects
-    /// (#1069): the file's name (`NAME.bounds`, `NAME.asserts`), what
+    /// (#1069): the file's name (`NAME.bounds`, `NAME.asserts`,
+    /// `NAME.sharing`), what
     /// the file holds and what was reported - one entry per file there is.
     pub bounds: Vec[(String, Bytes, Bytes)],
 }
@@ -80,6 +81,9 @@ pub struct ProgramTest {
     /// `NAME.asserts`: its `check --asserts` report (ADR-269 D7), where
     /// there is one.
     pub asserts: Bytes?,
+    /// `NAME.sharing`: its `check --sharing` report (ADR-269 D22, #1907),
+    /// where there is one.
+    pub sharing: Bytes?,
     /// `NAME.stdin`, what the program reads on standard input; nothing where
     /// there is none (#1347).
     pub stdin: Bytes,
@@ -248,14 +252,15 @@ pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
         let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
         let asserts = project_tests_optional(dir.join(f"{name}.asserts"))
+        let sharing = project_tests_optional(dir.join(f"{name}.sharing"))
         let stops = project_tests_optional(dir.join(f"{name}.stops"))
         let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
-        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, asserts: asserts, stdin: stdin })
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, asserts: asserts, sharing: sharing, stdin: stdin })
     }
     return tests
 }
 
-/// The `.bounds` and `.asserts` files in the package's `tests/` with no test
+/// The `.bounds`, `.asserts` and `.sharing` files in the package's `tests/` with no test
 /// program beside them (#1069), by file name: each is an error, not an
 /// expectation nothing checks. A `.loops.bounds` is left to
 /// [`program_tests`], which refuses every one (ADR-361 D14).
@@ -270,6 +275,11 @@ pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
     for stem in project_tests_stems(dir, ".asserts", false) {
         if !project_tests_is_file(dir.join(f"{stem}.nika")) {
             stray.push(f"{stem}.asserts")
+        }
+    }
+    for stem in project_tests_stems(dir, ".sharing", false) {
+        if !project_tests_is_file(dir.join(f"{stem}.nika")) {
+            stray.push(f"{stem}.sharing")
         }
     }
     return stray
@@ -328,12 +338,37 @@ fn project_tests_asserts_report(printed: String, written: String) -> Bytes {
     return report.bytes.clone()
 }
 
-/// **A test program's outcome with its `--bounds` and `--asserts` reports
-/// compared** (#1069): `report` is what `check --bounds` printed for it,
-/// `asserts` what `check --asserts` printed, its path written
-/// `tests/NAME.nika`. Each report its `.bounds` or `.asserts` expects must be
-/// that file, byte for byte, or the test fails.
-fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, report: String, asserts: String) -> ProjectTestsOutcome {
+/// **The part of `check --sharing`'s output about the test program**
+/// (ADR-269 D22, #1907): the report under the line `--- {written}`, up to
+/// the next unit's `--- ` line. The check reads the package the program
+/// uses as well, one report per file of it under its own `--- ` line; where
+/// there is no such line, the program is the only unit, and the report is
+/// all that was printed but the closing `Checked` line.
+fn project_tests_sharing_report(printed: String, written: String) -> Bytes {
+    let head = f"--- {written}"
+    let units = printed.lines().any(fn(line) { line.starts_with("--- ") })
+    let mut report: String = ""
+    let mut inside = !units
+    for line in printed.lines() {
+        if line.starts_with("--- ") {
+            inside = line == head
+            continue
+        }
+        if inside && !line.starts_with("Checked ") {
+            report.push_str(line)
+            report.push_str("\n")
+        }
+    }
+    return report.bytes.clone()
+}
+
+/// **A test program's outcome with its `--bounds`, `--asserts` and
+/// `--sharing` reports compared** (#1069, #1907): `report` is what `check
+/// --bounds` printed for it, `asserts` what `check --asserts` printed,
+/// `sharing` what `check --sharing` printed, its path written
+/// `tests/NAME.nika`. Each report its `.bounds`, `.asserts` or `.sharing`
+/// expects must be that file, byte for byte, or the test fails.
+fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, report: String, asserts: String, sharing: String) -> ProjectTestsOutcome {
     let written = f"tests/{program.name}.nika"
     let mut bounds: Vec[(String, Bytes, Bytes)] = []
     match program.bounds {
@@ -343,6 +378,10 @@ fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTe
     match program.asserts {
         null => {},
         want => bounds.push((f"{program.name}.asserts", want.clone(), project_tests_asserts_report(asserts, written))),
+    }
+    match program.sharing {
+        null => {},
+        want => bounds.push((f"{program.name}.sharing", want.clone(), project_tests_sharing_report(sharing, written))),
     }
     let right = bounds.iter().all(fn(entry) { entry.1 == entry.2 })
     return ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.clone(), stderr: outcome.stderr.clone(), files: outcome.files.clone(), bounds: bounds }
@@ -563,6 +602,10 @@ pub struct ProjectTestsRan {
     /// Whether it ran past the time limit it was given, and it and every
     /// process it started were ended (#1672).
     pub timed_out: bool,
+    /// The cap on processes and threads it ran into, where a fork or a
+    /// thread was refused because of it (#1919); 0 where it ran into none,
+    /// or where that cannot be told (a cap that is no cgroup).
+    pub capped: i64,
 }
 
 /// **How long a test program may run** (#1672): `NIKAIA_TEST_TIME_LIMIT`
@@ -578,6 +621,30 @@ fn project_tests_time_limit() -> i64 {
         true => given,
         false => 300,
     }
+}
+
+/// **How many processes and threads a test program may hold** (#1919):
+/// `NIKAIA_TEST_PROCESS_LIMIT`, 4096 where it is not set, counted over the
+/// program and every process it starts. A program that forks without end
+/// fails on that cap and names it, so it cannot fill the machine's PID
+/// space and take every other session on it down. Like the time limit, it
+/// is the machine's, not the package's; zero or less, or a value that is no
+/// number, gives the default. Only the program's run is capped, not its
+/// build: a build's tasks grow with the machine's cores.
+fn project_tests_process_limit() -> i64 {
+    let given = text::parse_i64((env::var("NIKAIA_TEST_PROCESS_LIMIT") ?? "").trim()) ?? 0
+    return match given > 0 {
+        true => given,
+        false => 4096,
+    }
+}
+
+/// **A test program that ran into its cap on processes** (#1919): it
+/// failed, whatever it printed, and says so first on standard error, with
+/// the switch that sets the cap.
+fn project_tests_capped_outcome(cap: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+    let shown = f"ran into its cap of {cap} processes and threads (NIKAIA_TEST_PROCESS_LIMIT): a fork or a thread past it was refused, and every process it started was ended\n{said}"
+    return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: stdout, stderr: shown, files: [], bounds: [] }
 }
 
 /// **How long a test program's build may take** (#1774, #1775):
@@ -632,9 +699,12 @@ pub trait ProjectTestsProgramHost {
     /// makes its directories) and `stdin` on its standard input (none where it
     /// is empty); a `build` keeps Cargo quiet. Where `within` is more than
     /// zero, it and every process it started are ended after that many
-    /// seconds, and the run says it `timed_out` (#1672); so for the methods
-    /// below that take it.
-    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan sync throws
+    /// seconds, and the run says it `timed_out` (#1672); where `processes`
+    /// is more than zero, it and every process it started may hold that many
+    /// processes and threads, are ended when it ends or this compiler does,
+    /// and the run says where it was `capped` (#1919); so for the methods
+    /// below that take them.
+    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan sync throws
     /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
     /// `--asserts`): what it printed.
     fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
@@ -642,7 +712,7 @@ pub trait ProjectTestsProgramHost {
     /// puts it (`project_settings_own_copy`'s place, with no variant), in
     /// `dir`, with `own` as the test's directory; nothing where it is not
     /// there. `stdin` goes to its standard input, none where it is empty.
-    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan? sync throws
+    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan? sync throws
     /// **The batch build** (`project_batch.nika`): this compiler's `build
     /// --user-parallelism SETTING --project PROJECT` in `own`, with
     /// `project_batch_var()` naming `list`, ended after `within` seconds; the
@@ -650,7 +720,7 @@ pub trait ProjectTestsProgramHost {
     fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path, within: i64) -> ProjectTestsBatchBuilt sync throws
     /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
     /// directory and `stdin` on its standard input (none where it is empty).
-    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan sync throws
+    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64) -> ProjectTestsRan sync throws
 }
 
 /// **How a batch build ended** (`ProjectTestsProgramHost::batched`): the
@@ -896,23 +966,25 @@ fn project_tests_prepared[H: ProjectTestsProgramHost](host: ref H, program: ref 
     return entry
 }
 
-/// **A test program's `--bounds` and `--asserts` reports**, each empty where
-/// the test expects none.
+/// **A test program's `--bounds`, `--asserts` and `--sharing` reports**,
+/// each empty where the test expects none.
 pub struct ProjectTestsReports {
     pub bounds: String,
     pub asserts: String,
+    pub sharing: String,
 }
 
-/// **The reports a test program's `.bounds` and `.asserts` expect** (#1069,
-/// ADR-269 D7), as `check --bounds` and `check --asserts` compute them for
+/// **The reports a test program's `.bounds`, `.asserts` and `.sharing`
+/// expect** (#1069, ADR-269 D7 and D22), as `check --bounds`, `check
+/// --asserts` and `check --sharing` compute them for
 /// the program in a package prepared in `own`. **Once per program, not once
 /// per setting**: what is proved does not depend on the build's settings
 /// (ADR-306 D14, ADR-361 D14), and a check of a program that stresses the
 /// prover is the longest part of its test. Nothing is checked for a program
 /// that expects neither.
 pub fn project_tests_reports[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, own: ref fs::Path) -> ProjectTestsReports throws {
-    let mut found = ProjectTestsReports { bounds: "", asserts: "" }
-    if program.bounds == null && program.asserts == null {
+    let mut found = ProjectTestsReports { bounds: "", asserts: "", sharing: "" }
+    if program.bounds == null && program.asserts == null && program.sharing == null {
         return found
     }
     let entry = project_tests_prepared(host, program, root, own)
@@ -922,6 +994,9 @@ pub fn project_tests_reports[H: ProjectTestsProgramHost](host: ref H, program: r
     }
     if program.asserts != null {
         found.asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
+    }
+    if program.sharing != null {
+        found.sharing = project_tests_relocated(host.explained(["--sharing"], entry, own), entry, written, root)
     }
     return found
 }
@@ -952,6 +1027,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     let entry = project_tests_prepared(host, program, root, own)
     let written = f"tests/{program.name}.nika"
     let limit = project_tests_time_limit()
+    let processes = project_tests_process_limit()
     // **Run from the batch, where it is in one** (`project_tests_batches`):
     // a pass that wrote nothing on standard error is the verdict; anything
     // else is built and run alone. What a run writes there - a panic's place,
@@ -960,14 +1036,17 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     match batched {
         null => {},
         batch => {
-            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin, limit)
-            // One that ran out of time is not run alone again, to run out
-            // of it twice.
+            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin, limit, processes)
+            // One that ran out of time, or into its cap, is not run alone
+            // again, to run out of it twice.
+            if out.capped > 0 {
+                return project_tests_capped_outcome(out.capped, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            }
             if out.timed_out {
                 return project_tests_timed_out_outcome(limit, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
             }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
-            let outcome = project_tests_bounds_outcome(program, ran, reports.bounds.clone(), reports.asserts.clone())
+            let outcome = project_tests_bounds_outcome(program, ran, reports.bounds.clone(), reports.asserts.clone(), reports.sharing.clone())
             if outcome.passed && out.stderr.len() == 0 {
                 return outcome
             }
@@ -976,22 +1055,23 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     let report = reports.bounds.clone()
     let asserts = reports.asserts.clone()
+    let sharing = reports.sharing.clone()
     let building = project_tests_build_time_limit()
-    let built = host.compiler("build", setting, project, own, own, Bytes([]), building)
+    let built = host.compiler("build", setting, project, own, own, Bytes([]), building, 0)
     if built.timed_out {
         return project_tests_build_timed_out_outcome(building, project_tests_relocated(built.stderr, entry, written, root))
     }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
-        return project_tests_bounds_outcome(program, refused, report, asserts)
+        return project_tests_bounds_outcome(program, refused, report, asserts, sharing)
     }
     // **The program runs in the package's directory** (ADR-269 D22, #1398),
     // as a `test` block does, so it reads the package's files by relative
     // name; what it writes goes under `fs::scratch()`, inside `own`. Where
     // the program is not where it is expected, `nikaia run` finds it.
-    let ran = match host.built(project, root, own, program.stdin, limit) {
+    let ran = match host.built(project, root, own, program.stdin, limit, processes) {
         null => {
-            let out = host.compiler("run", setting, project, root, own, program.stdin, limit)
+            let out = host.compiler("run", setting, project, root, own, program.stdin, limit, processes)
             let said = out.stderr.clone()
             (out, said)
         }
@@ -1001,11 +1081,14 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         }
     }
     let (out, said) = ran
+    if out.capped > 0 {
+        return project_tests_capped_outcome(out.capped, out.stdout, project_tests_relocated(said, entry, written, root))
+    }
     if out.timed_out {
         return project_tests_timed_out_outcome(limit, out.stdout, project_tests_relocated(said, entry, written, root))
     }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written, root))
-    return project_tests_bounds_outcome(program, outcome, report, asserts)
+    return project_tests_bounds_outcome(program, outcome, report, asserts, sharing)
 }
 
 /// What `--bless` did with one test.
@@ -1034,8 +1117,9 @@ fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlessed) -
 /// from what happened, a refusal into `NAME.stderr` only, where it has one or
 /// `stderr` says so, else it fails (#1236), `NAME.stdout` made where the
 /// test has none and printed something (#1238), `NAME.stderr` made likewise
-/// where `stderr` (`--bless-stderr`) says so, and the `--bounds`
-/// report into the `NAME.bounds` there is (#1069). A program that
+/// where `stderr` (`--bless-stderr`) says so, and the `--bounds`,
+/// `--asserts` and `--sharing` reports into the `NAME.bounds`,
+/// `NAME.asserts` and `NAME.sharing` there are (#1069, #1907). A program that
 /// built and ended unsuccessfully, or whose settings disagree, is not blessed;
 /// one that stopped is, into its `NAME.stops`, where it has one, never a new
 /// one: a stop nobody declared stays a failure (#1260).

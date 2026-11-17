@@ -795,7 +795,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let entered: Option<String> = state.grammar_entry(world, receiver, method);
     if entered.is_some() {
         let entry: String = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         let mut owner: String = nikaia_std::block::Text::from(entry.to_string());
         let mut rule: String = String::from("");
         let cut = nikaia_std::search::find(&entry, &"::", 0);
@@ -834,7 +834,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         }
         if unknown {
             for a in args.iter() { check_core_expr(state, world, host, a, span); }
-            if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+            if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
             return Ty::Unknown;
         }
         if plain { state.reaches_through_a_plain_value(world, &on, receiver, &name, true, expr, span); }
@@ -873,7 +873,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         if name != "is" || args.len() != 1 {
             state.a_reflected_variant_has_two_members(&format!("{}(…)", name), span);
             return Ty::Unknown;
@@ -886,7 +886,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         if name != "of" {
             state.a_reflected_field_has_two_members(&format!("{}(…)", name), span);
             return Ty::Unknown;
@@ -903,14 +903,14 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         state.reaches_into_a_nullable(&on, "method", &name, span);
         check_narrow_a_proof_taken_back(state, receiver, receiver, before);
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         return Ty::Unknown;
     }
     let read_within = witness >= 0 && check_core_method_connection(&on) && name == "read";
     let within = witness >= 0 && check_core_method_task_handle(&on) && name == "join" || read_within;
     let door = witness >= 0 && locked_content_of(&on).is_some() && name == "set";
-    if witness >= 0 && !within && !door { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
-    if on_timeout >= 0 && !within { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value, span); }
+    if witness >= 0 && !within && !door { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
+    if on_timeout >= 0 && !within { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (on_timeout) as usize) }.value, span); }
     if door {
         state.the_witness_takes_no_reference(&nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span);
         state.facts.witnessed_sets.insert(span.start as i64);
@@ -923,7 +923,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
         if read_within { return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "read(within)", span); }
         if on_timeout >= 0 {
-            given.push(nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value.clone());
+            given.push(unsafe { nikaia_std::proven::read(&config, (on_timeout) as usize) }.value.clone());
             return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within, on_timeout)", span);
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);

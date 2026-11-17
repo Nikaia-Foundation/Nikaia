@@ -1,0 +1,34 @@
+// ADR-306 D22 (#1755): in a library, the `pub` fields of a `pub` type may be
+// written by a package the compiler does not see, so no rule over them is
+// found and `Open`'s read stays checked; the `pub` fields of a type private
+// to the package get a found rule (`Inner`); one written in another file of
+// the package, whose bodies the search does not walk, gets none (`Spoiled`).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"tally\"\nversion = \"0.1.0\"\n")
+    let body = "pub struct Open {\n    pub cols: Vec[i64],\n    pub n: i64,\n}\n\nimpl Open {\n    pub fn add(ref mut self, c: i64) {\n        self.cols.push(c)\n        self.n += 1\n    }\n\n    pub fn last(self) -> i64 {\n        if self.n > 0 {\n            return self.cols[self.n - 1]\n        }\n        return 0\n    }\n}\n\n"
+    let mut lib = body.clone()
+    lib += body.replace("pub struct Open", "struct Inner").replace("impl Open", "impl Inner").replace("cols", "cols_in").replace(" n", " m").replace(".n", ".m")
+    lib += body.replace("pub struct Open", "struct Spoiled").replace("impl Open", "impl Spoiled").replace("cols", "cols_out").replace(" n", " k").replace(".n", ".k")
+    lib += "pub fn made() -> i64 {\n    let mut a = Inner { cols_in: [], m: 0 }\n    a.add(1)\n    let mut b = Spoiled { cols_out: [], k: 0 }\n    b.add(2)\n    return a.last() + b.last()\n}\n"
+    fs::write(f"{tmp}/src/lib.nika", fs::Root::Anywhere, lib)
+    fs::write(f"{tmp}/src/beside.nika", fs::Root::Anywhere, "fn spoil(mut c: Spoiled) {\n    c.cols_out.push(7)\n}\n")
+    let out = process::run(nikaia, ["check", "--bounds", "src/lib.nika"]; dir: tmp.clone())
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("self.cols") && line.contains("[") {
+            println(line.trim())
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

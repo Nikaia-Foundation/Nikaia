@@ -70,6 +70,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **CI has no `target/fast`**: a test that runs the toolchain takes the
   `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`).
   A red test that passes locally: check what CI lacks first.
+* **Each `crates/unsafe/*` crate is its own workspace**: it has no `fast`
+  profile (`cargo test --profile fast` there fails, *profile `fast` is not
+  defined*), and a plain `cargo test` inside it builds a cold `target/` of
+  its own. Run its checks from the root against one shared target dir, kept
+  between runs under the git-ignored `target/`: `cargo test --manifest-path
+  crates/unsafe/NAME/Cargo.toml --target-dir target/unsafe` (`clippy` the
+  same); nothing to delete afterwards. (#1917)
 
 ### Probes
 
@@ -442,3 +449,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   keep an `anyhow` refusal in a `RefCell` of the host to hand it back. A
   body-less trait method's text parameter is written `ref String`. Host state
   is a `RefCell` field; the Nikaia side names units by `i64` index (M3b).
+* **`Vec` in the Rust host is Nikaia's `List`**: most of `crates/nikaia/src`
+  (`project.rs`, `emit/`, `sysroot.rs`, ...) imports `nikaia_std::block::names::{Vec, vec, ...}`,
+  and `block.rs` has `pub use super::List as Vec`. A plain Rust buffer there
+  (bytes read from a pipe, `Command` args, a value handed to `std` or libc
+  code) is written `std::vec::Vec` / `std::vec::Vec::new()`, as `project.rs`
+  already does; `cargo check --release -p nikaia --message-format short`
+  catches the slip before a build. (issue-1919, #1923)

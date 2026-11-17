@@ -63,6 +63,13 @@ fn emit_place_already_lent(world: ref EmitWorld, node: ref Expr) -> bool {
             }
             name == "get" || name == "first" || name == "last"
         },
+        // **The same read behind a `?.`** (#1756): `m?.get(k)` answers the
+        // option of a reference as `m.get(k)` does, and lending it again
+        // binds a `&&T`, whose clone is the `&T` and keeps `m` borrowed.
+        Expr::SafeMethod { method, .. } => {
+            let name = emit_text(world, method)
+            name == "get" || name == "first" || name == "last"
+        },
         else => false,
     }
 }

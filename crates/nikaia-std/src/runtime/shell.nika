@@ -1,0 +1,26 @@
+// crates/nikaia-std/src/runtime/shell.nika
+//
+// **`process::shell(command)`, written in Nikaia** (ADR-raw-sinks-1 §4,
+// #1253): the one raw sink of `std::process`. It runs `/bin/sh -c command`
+// and hands back what `process::run` hands back; the options are `run`'s,
+// a list or a stream given as `T?` and decided here (NK1127, NK1167).
+//
+// A shell reads its text as code, so a part of `command` from outside the
+// program must be proved to meet `process::is_word` or allowed with
+// `[allow] untrusted-shell` (D2-D4). The way that cannot be steered is
+// `process::run(program, args)`, which starts no shell (ADR-243, D1).
+//
+// `src/process.rs` re-exports it as `nikaia_std::process::shell`, and
+// `std.contracts` writes its entry by hand: the provenance of what it reads
+// back, untrusted unless the call says `trusted: true`, is said to the
+// compiler and never reaches this function (ADR-365 D2). Only Unix's
+// `/bin/sh` is built; the shell on Windows is open (§4).
+
+use std::process
+use std::time
+
+/// Run `command` with `/bin/sh -c`, wait for it to finish, and hand back what
+/// it said, as `process::run` does with the same options.
+pub fn shell(command: String; dir: String = ".", env: Vec[(String, String)]? = null, env_remove: Vec[String]? = null, env_clear: bool = false, within: time::Duration? = null, stdin: process::Input? = null, stdout: process::Stream? = null, stderr: process::Stream? = null) -> process::Output throws {
+    return process::run("/bin/sh", ["-c", command]; dir: dir, env: env ?? [], env_remove: env_remove ?? [], env_clear: env_clear, within: within, stdin: stdin ?? process::Input::Closed, stdout: stdout ?? process::Stream::Captured, stderr: stderr ?? process::Stream::Captured)
+}

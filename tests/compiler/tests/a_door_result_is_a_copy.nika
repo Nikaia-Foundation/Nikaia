@@ -1,0 +1,18 @@
+// What a door's block hands out is a copy: a later change through the
+// handle does not reach it (ADR-327 D9, #1651).
+struct N { t: String }
+
+fn make(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+fn main() throws {
+    let m = SharedMut(N { t: make("hi") })
+    let got: String = m.access fn(open) { open.t.clone() }
+    m.update fn(mut open) { open.t = make("changed") }
+    println(got)
+    let now: String = m.access fn(open) { open.t.clone() }
+    println(now)
+}

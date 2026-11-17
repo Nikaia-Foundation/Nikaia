@@ -1,0 +1,36 @@
+// A lambda's result is its own: a part of a lent item handed back is taken
+// out of a value the lambda does not own (ADR-293 D32, #1872), and
+// `sort_by_key`'s key may not point into its item (ADR-282 D8). Each was an
+// internal compiler error.
+
+struct P {
+    name: String,
+    n: i64,
+}
+
+fn name(i: i64) -> String {
+    let mut s = String()
+    s.push_str("x")
+    s.push_str(f"{i}")
+    return s
+}
+
+fn apply(p: ref P, f: fn(ref P) -> String) -> String {
+    return f(p)
+}
+
+fn main() throws {
+    let mut pairs: Vec[(String, i64)] = []
+    pairs.push((name(2), 1))
+    pairs.sort_by_key fn (row) { row.0 }
+    let mut rows: Vec[P] = []
+    rows.push(P { name: name(2), n: 1 })
+    rows.sort_by_key fn (row) { row.name }
+    let mut texts: Vec[String] = []
+    texts.push(name(1))
+    texts.sort_by_key fn (row) { row }
+    rows.sort_by_key fn (row) { row.name.trim() }
+    println(apply(rows[0], fn (row) { row.name }))
+    let v: Vec[String] = rows.iter().map(fn (row) { return row.name }).collect()
+    println(f"{v.len()}")
+}

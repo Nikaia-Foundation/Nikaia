@@ -3728,7 +3728,10 @@ pub mod emit_out {
     pub use super::{EmitMapEntry, emit_out_locate, emit_out_placed, EmitOut};
 }
 pub mod emit_pattern {}
-pub mod emit_program {}
+pub mod emit_program {
+    #[allow(unused_imports)]
+    pub use super::{EMIT_PROGRAM_COUNTING_HEAP};
+}
 pub mod emit_reach {
     #[allow(unused_imports)]
     pub use super::{ReachIndex};
@@ -3879,7 +3882,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3972,7 +3975,7 @@ pub mod project_members {
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
@@ -4231,4 +4234,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "2b0b738874acce3449f699efe0d9f16b5994f4bdee84620c9876ffc9ba06de32";
+pub const LOWERED_DIGEST: &str = "f3afa69ac836b48ada9abfed6690a7d0d286333dcabcc5269beac7f5993ca0e4";

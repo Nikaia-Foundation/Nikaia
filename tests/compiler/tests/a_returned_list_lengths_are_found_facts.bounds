@@ -1,0 +1,8 @@
+bounds in tests/a_returned_list_lengths_are_found_facts.nika: 2 indexes, 2 proved; 4 operations, 4 proved
+    12  k + 1   proved
+    26  k + 1   proved
+    35  p.b[i]  proved
+    36  i + 1   proved
+    42  o[j]    proved
+    43  j + 1   proved
+  derived  ones: 0 <= n, proved at the calls on lines 39

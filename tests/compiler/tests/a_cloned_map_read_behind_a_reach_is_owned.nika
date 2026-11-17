@@ -1,0 +1,16 @@
+/// `m?.get(k)?.clone()` copies the value read, not the reference to it
+/// (#1756): the copy outlives the map it was read from.
+use std::collections
+
+struct W { m: collections::BTreeMap[String, collections::BTreeSet[i64]]? }
+
+fn main() throws {
+	let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
+	s.insert(3)
+	let mut m: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+	m.insert("a", s)
+	let mut w = W { m: m }
+	let before = w.m?.get("a")?.clone()
+	w.m = null
+	println(before?.contains(3) ?? false)
+}

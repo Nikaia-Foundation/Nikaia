@@ -82,7 +82,7 @@ pub(crate) fn a_high_byte(literal: &str) -> Option<i64> {
     if c.len() != 4 || *unsafe { nikaia_std::proven::read(&c, (0) as usize) } != '\\' || *unsafe { nikaia_std::proven::read(&c, (1) as usize) } != 'x' { return None; }
     let high = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let low = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (3) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let value = high * 16 + low;
+    let value = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(high, 16), low) };
     if value < 128 { return None; }
     Some(value)
 }
@@ -98,7 +98,7 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
     let high = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (from) as usize) }), || 128);
     let low = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) }), || 128);
     let why = "`\\x` takes two hexadecimal digits naming a byte below `\\x80`";
-    let value = high * 16 + low;
+    let value = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(high, 16), low) };
     if value >= 128 { return not_an_escape(&written, why); }
     let byte = match char_of(value) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, why) };
     EscapeRead::Means { value: byte, next: end }

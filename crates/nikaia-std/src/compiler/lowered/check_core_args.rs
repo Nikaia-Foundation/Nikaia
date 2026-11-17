@@ -289,7 +289,7 @@ pub(crate) fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, w
             out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span));
             state.flow.lambda_expected = None;
         }
-        if declared_here && at < expected.len() as i64 { bind(unsafe { nikaia_std::proven::read(&expected, (at) as usize) }, nikaia_std::index::get(&out, nikaia_std::index::at(at)), &mut bound); }
+        if declared_here && at < expected.len() as i64 { bind(unsafe { nikaia_std::proven::read(&expected, (at) as usize) }, unsafe { nikaia_std::proven::read(&out, (at) as usize) }, &mut bound); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
@@ -321,7 +321,7 @@ pub(crate) fn check_core_arguments_bound<H: CheckHost>(state: &mut CheckState, w
         }
         if at < patterns.len() as i64 {
             let before = bound.len() as i64;
-            bind(unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }, nikaia_std::index::get(&out, nikaia_std::index::at(at)), bound);
+            bind(unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }, unsafe { nikaia_std::proven::read(&out, (at) as usize) }, bound);
             if (bound.len() as i64) > before {
                 let mut later: i64 = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 while later < expected.len() as i64 && later < patterns.len() as i64 {

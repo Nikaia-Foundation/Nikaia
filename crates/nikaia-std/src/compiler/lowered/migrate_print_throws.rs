@@ -241,7 +241,7 @@ pub fn migrate_print_throws_exports(source: &str, outside: &[String]) -> Vec<Str
     let fns = print_throws_fns(&tokens);
     let failing = print_throws_failing(&tokens, &fns, &outside);
     let mut out: Vec<String> = vec![];
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.public { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.method { out.push(format!(".{}", unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name)); } else { out.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name.to_string())); } } }
+    for i in 0..fns.len() as i64 { if *unsafe { nikaia_std::proven::read(&failing, (i) as usize) } && unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.public { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.method { out.push(format!(".{}", unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name)); } else { out.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name.to_string())); } } }
     out
 }
 
@@ -253,7 +253,7 @@ pub fn migrate_print_throws_nika(source: &str, outside: &[String]) -> String {
     let failing = print_throws_failing(&tokens, &fns, &outside);
     let mut before: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let mut after: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && !unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.says_throws { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open >= 0 { before.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open); } else { after.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.close); } } }
+    for i in 0..fns.len() as i64 { if *unsafe { nikaia_std::proven::read(&failing, (i) as usize) } && !unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.says_throws { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open >= 0 { before.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open); } else { after.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.close); } } }
     let mut out: String = String::from("");
     for k in 0..tokens.len() as i64 {
         if before.contains(&k) { out.push_str(" throws"); }

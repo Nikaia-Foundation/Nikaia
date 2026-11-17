@@ -1,0 +1,8 @@
+HashSet[i64]: refused: the task crashed: a value of 0 bytes handed over does not fit the receiver's memory budget
+held 0
+BTreeSet[i64]: refused: the task crashed: a value of 0 bytes handed over does not fit the receiver's memory budget
+held 0
+HashMap[i64, i64]: refused: the task crashed: a value of 0 bytes handed over does not fit the receiver's memory budget
+held 0
+BTreeMap[i64, i64]: refused: the task crashed: a value of 0 bytes handed over does not fit the receiver's memory budget
+held 0

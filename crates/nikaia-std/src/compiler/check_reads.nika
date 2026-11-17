@@ -72,6 +72,18 @@ fn check_number_literal(side: ref Expr) -> bool {
     }
 }
 
+/// Whether `side` is a cut (`v[0..<3]`) and `other`, beside it, `Bytes`.
+fn check_reads_a_cut_beside_bytes(side: ref Expr, other: ref Ty) -> bool {
+    let cut = match side {
+        Expr::Index { index, .. } => match index {
+            Expr::Range { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
+    return cut && check_core_method_bytes(other.unseen())
+}
+
 impl CheckState {
     /// **A count the language below takes in `usize`** (ADR-293 D20), recorded
     /// for the emitter by the entry the call resolved to - so a method of the
@@ -300,8 +312,11 @@ impl CheckState {
     /// `PartialEq::eq(&*op, …)` below and moves nothing, where `op ==
     /// UnaryOp::Neg` compared a `&UnaryOp` with a `UnaryOp`.
     fn a_view_compared_with_a_value(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
-        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right)
-        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left)
+        // **A cut beside `Bytes` is compared as the slice it is** (#1871):
+        // `Bytes` is `&[u8]` below as often as the struct, and `[u8] ==
+        // &[u8]` has no `PartialEq`, where `&[u8]` compares with both.
+        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right) && !check_reads_a_cut_beside_bytes(lhs, right)
+        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left) && !check_reads_a_cut_beside_bytes(rhs, left)
         // **A lent name whose type is not known here, beside a number** (#531):
         // whether it arrived as one or as a view of one is not this checker's
         // to know - so it is read as the number either is. A literal has no

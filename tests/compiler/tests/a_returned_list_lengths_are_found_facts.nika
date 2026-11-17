@@ -1,0 +1,45 @@
+/// The lengths a function hands back are found facts (ADR-306 D23, #1756):
+/// `mk` returns a struct whose two list fields are each as long as `n`, so
+/// the caller's `p.b[i]` below `p.a.len()` is proved; `ones` returns a list
+/// as long as its argument, so `o[j]` below `n` is proved.
+struct P { a: Vec[i64], b: Vec[i64] }
+
+fn vec_of(n: i64) -> Vec[i64] sync {
+	let mut v: Vec[i64] = []
+	let mut k = 0
+	while k < n {
+		v.push(k)
+		k = k + 1
+	}
+	return v
+}
+
+fn mk(n: i64) -> P sync {
+	return P { a: vec_of(n), b: vec_of(n) }
+}
+
+fn ones(n: i64) -> Vec[i64] sync {
+	let mut v: Vec[i64] = []
+	let mut k = 0
+	while k < n {
+		v.push(1)
+		k = k + 1
+	}
+	return v
+}
+
+fn main() throws {
+	let p = mk(3)
+	let mut i = 0
+	while i < p.a.len() {
+		println(p.b[i])
+		i = i + 1
+	}
+	let n = 4
+	let o = ones(n)
+	let mut j = 0
+	while j < n {
+		println(o[j])
+		j = j + 1
+	}
+}

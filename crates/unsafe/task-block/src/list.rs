@@ -54,6 +54,16 @@ pub(crate) trait Grow<T> {
         T: Copy;
 }
 
+/// `push_or_end`'s growth, out of line: room for one more, or the task ends.
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn grow_one<T>(items: &mut PlacedVec<T, Place>) {
+    if items.try_reserve(1).is_err() {
+        full()
+    }
+}
+
 impl<T> Grow<T> for PlacedVec<T, Place> {
     #[inline]
     #[track_caller]
@@ -71,13 +81,23 @@ impl<T> Grow<T> for PlacedVec<T, Place> {
         }
     }
 
+    /// **Only the store is inlined** (#1878), as `std`'s `Vec::push` keeps
+    /// its `grow_one` out of line: with `try_reserve` and `allocator-api2`'s
+    /// own `push` (which checks the room a second time) inlined, a byte loop
+    /// spilled the byte and the slice to the stack, 14 instructions a byte.
     #[inline]
     #[track_caller]
     fn push_or_end(&mut self, item: T) {
-        if self.len() == self.capacity() && self.try_reserve(1).is_err() {
-            full()
+        let len = self.len();
+        if len == self.capacity() {
+            grow_one(self);
         }
-        self.push(item);
+        // SAFETY: `grow_one` left room for one more, or ended the task, so
+        // the slot at `len` is allocated and unused.
+        unsafe {
+            self.as_mut_ptr().add(len).write(item);
+            self.set_len(len + 1);
+        }
     }
 
     #[inline]

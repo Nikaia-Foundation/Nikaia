@@ -1,8 +1,10 @@
 // #1330 (ADR-369 D4): the walk reads rules between a struct's private list
 // fields off the source as candidates. `Good` pushes `cols` and `ks`
 // together and builds them empty, so `cols.len() == ks.len()` is one and
-// holds, and `self.ks[i]` is proved. None of the others is a candidate, and
-// each one's `self.ks[i]` stays checked: `Open`'s `ks` is public, `Odd` is
+// holds, and `self.ks[i]` is proved. `Open`'s `ks` is public, but in a
+// program every write to it is in the build, so its rule holds too (ADR-306
+// D22, #1755). None of the others is a candidate, and each one's
+// `self.ks[i]` stays checked: `Odd` is
 // built with lists of two lengths, `Taker` has a method that takes a
 // parameter `mut`, and `Grown`'s `ks` is pushed to by a free function,
 // which drops `Grown`'s rule and not `Good`'s. `Spoilt`'s positions are

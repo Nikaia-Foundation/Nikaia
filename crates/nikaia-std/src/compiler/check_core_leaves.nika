@@ -332,6 +332,11 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     // a view handed back on every way out needs no mark, and a parameter
     // that only reads is lent without `keep`; none of them writes `ref`.
     let mut help: String = f"Write `{path}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark."
+    // **A lambda's result is no view of its parameters** (#1872): only the
+    // copy is offered.
+    if handed_back && state.flow.lambda_returns.len() > 0 {
+        help = f"Write `{path}.clone()` for a copy: a lambda hands back a value of its own."
+    }
     if !handed_back {
         help = f"Write `{path}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it."
     }
@@ -575,6 +580,7 @@ fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
     state.a_map_read_handed_back(world, walked, body)
+    check_core_lambda_parts_handed_back(state, world, host, body, span)
     let tail = check_core_lambda_leave(state, outer, walked, body)
     let seen: CheckHanded? = state.handed_over?.clone()
     state.handed_over = outer_handed
@@ -589,6 +595,40 @@ fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
         state.a_handler_that_does_more_than_the_type_allows(promised, handed, span)
     }
     return (tail, paused)
+}
+
+/// **`NK1131`: a lambda's last value hands back as its `return` does**
+/// ([ADR-293](../../docs/specification/adr/adr-293.md) D32, #1872): it is
+/// the lambda's own result, so `fn(row) { row.name }` over a lent `row` takes
+/// the field out of a value the lambda does not own, as `return row.name`
+/// there does; the language below said *cannot move out of `row.name` which
+/// is behind a shared reference*. Read while the lambda's scope still stands.
+/// Text chosen in arms is the choice's own (ADR-282 D13), not given away.
+fn check_core_lambda_parts_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block, span: ref Span) sync {
+    if a_body_never_ends(body) {
+        return
+    }
+    for value in block_tail(body) {
+        let chosen = is_a_choice(value) || check_arm_leaves_a_block(value)
+        for leaf in state.value_leaves(world, value) {
+            let at = check_span_at(world, leaf, span)
+            // An arm's other values may name what its pattern bound, which
+            // is out of scope here: only a place read through a lent
+            // parameter or a borrowed `self` is asked, as a named
+            // function's arms are (#1425).
+            if chosen {
+                if !state.a_place_of_a_lent_parameter(world, leaf) {
+                    continue
+                }
+                let ty = check_core_expr(state, world, host, leaf, at)
+                if is_text_type(ty) {
+                    continue
+                }
+            }
+            check_core_a_field_of_a_borrowed_subject(state, world, host, leaf, at, "handed back")
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, leaf, at)
+        }
+    }
 }
 
 /// **Into a lambda's body** (#758): a `return` there is the lambda's, not

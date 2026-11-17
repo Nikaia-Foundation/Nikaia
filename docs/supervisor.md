@@ -486,6 +486,13 @@ probe is filed by the supervisor when it reads the report: a GitHub issue in bri
 `docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
 holds the defect gets the new probe as a comment instead.
 
+Before a bug issue gets `ready`, the supervisor runs
+`nikaia run scripts/drive.nika -- --cause-check N` (or a draft `FILE.md`;
+owner, 2026-11-16): it refuses a cause that does not say traced, suspected
+or unknown, and a suspected one that names no check that settles it
+(`docs/issues.md` I7). The driver marks the same in the issues it files
+from a `Found:` (`## Cause not marked`, `## Check missing`).
+
 ## Driver, suite and QA (owner, 2026-10-31)
 
 Builders commit locally and push nothing. After each
@@ -746,8 +753,10 @@ new points of `Issue:` (each answer that is not `complete`), `Needs:` and
 `Friction:` as one issue labelled `improve` for the improvement lane (*Lanes*).
 Only new points (#1818, `drive_improve_sorted`, `--improve-plan` shows it): a
 `Deviation:` stays in the report (`IMPROVE-DROP`), read when the cut is
-accepted; a `broke I<n>` answer is a comment on the run's issue
-(`IMPROVE-BROKE #N`); a point the report says it closed or built, or that
+accepted; a `broke I<n>` answer, and a `wrong I<n>` answer or any other
+that the issue's suspected cause or diagnosis was wrong, is a comment on the
+run's issue (`IMPROVE-BROKE #N`; owner, 2026-11-16: a wrong guess is not an
+improvement issue of its own, the count above shows when it recurs); a point the report says it closed or built, or that
 names a rules file under `docs/`, `scripts/` or `.claude/` the run's commit
 changed, is dropped; one an open or recently closed improvement issue already
 has (its title or a `## Reported` line, by word overlap) is a comment there

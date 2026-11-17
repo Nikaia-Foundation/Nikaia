@@ -85,6 +85,14 @@ it, like the checks in `docs/supervisor.md`.
   The expected output is written out (the text it prints, or the NK code and
   the gist of its message), never pointed at: "the specified result" or "what
   the spec says" leaves the builder to find it (#1737: #1550's issue).
+  An exact figure in it (a count, a size, a budget) comes from a source
+  the issue names, never a guess: a reference run of the same program that
+  is right (the Cargo build of what fails under `nikaia run`, the setting
+  that works) with its output, or the ADR or section that fixes the
+  number. Without one, the expected output is the property that must hold
+  ("never negative", "the same figure as the Cargo build"), not a number
+  (#1928: #1844 expected `304 at 304`; both builds print a constant 160
+  more, so its run measured the reference itself).
   A proof that differs between two runs (`check` and `lower-std`, one file
   and a package) is reduced to a probe of at most two files, and says whether
   the function is called from more than one file (ADR-391 D1) (#1465).
@@ -215,6 +223,10 @@ it, like the checks in `docs/supervisor.md`.
   is the one `where.nika` reports for that function, copied from its
   output, never recalled (#1779: #1628 named `prover_walk.nika` for
   `outside_source`, which lives in `prover_calls.nika`).
+  `nikaia run scripts/drive.nika -- --cause-check N|FILE` checks the marking
+  before `ready` (owner, 2026-11-16; #1917, #1926-#1928 were filed with an
+  unmeasured guess as their cause). A run checks a suspected or unmarked
+  cause first, before it builds on it; one shown false is its `wrong I7`.
   A traced cause is followed outward before filing: the other forms that
   reach the same function (a closure, a `std` method that takes one, the
   same call on a fixed-size `Array`) are run on the binary of the day,
@@ -383,6 +395,18 @@ it, like the checks in `docs/supervisor.md`.
   builder (#1910: #1307's item 1 asked `lower-std` to record each package
   entry a file reads, and every check and emit pass walks `beside`, `own`,
   the call graphs and `provenance` directly).
+  A new refusal (an NK code, a fail-closed check) that our own code
+  (`std`, the compiler's `.nika`, `packages/`, `examples/`) must first be
+  moved to pass is staged in items a run can each commit: the check
+  lands first where it cannot turn our build red (behind a `warn`
+  setting such as `raw-sinks = "warn"`, or as a warning code), the
+  moves follow, one item per area, and a last item turns it into the
+  refusal. The issue names the setting or warning that carries the
+  middle stage; where none exists or the choice is open, it says `no
+  decision yet` (a `decision`, I6). Never "not merged until our own
+  code builds under it", which makes the check, every move and the
+  switch one commit (#1942: #1253's step 10 tied steps 4, 5 and 10
+  together).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite

@@ -8,6 +8,46 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1415] — 2026-11-16
+
+**Builders' changes (#1943)**
+- Bounds: a field another file writes through a list item, a clone() or a for binding of another type no longer takes a found rule away (sv_simplex `self.values[s]` proved).
+
+## [0.0.1414] — 2026-11-16
+
+**Builders' changes (#1930)**
+- Bounds: a field another file writes on a local of another type (bound to a call, a literal or a declared type) no longer drops a struct rule over a field of that name (ADR-369 D4).
+
+## [0.0.1413] — 2026-11-16
+
+**Builders' changes (#1916, #1918)**
+- Drivers sharing a checkout merge origin/develop one at a time (a merge lock, waits for git's index.lock and MERGE_HEAD) and re-lower the merge from the committed tree with a compiler built from it, so another agent's uncommitted `.nika` or freshly built binary no longer breaks the merge (#1916).
+- commit.nika --dry-run lists the hunks of each listed source and writes Reviewed: into the report, and the commit refuses when a listed file changed since; lower_mine.nika --write writes only the lowered files of the .nika files given
+
+## [0.0.1412] — 2026-11-16
+
+**Builders' changes (#1755, #1756, #1757, #1758, #1870, #1871, #1872, #1878, #1888, #1894, #1925)**
+- Bounds: a function that returns a list or a struct with list fields gives its caller found facts: `let p = mk(n)` with `P { a: vec_of(n), b: vec_of(n) }` proves `p.b[i]` for `i < p.a.len()`; `m?.get(k)?.clone()` copies the value instead of keeping `m` borrowed (ADR-306 D23, #1756).
+- Bounds: a function found to return -1 or a position below a list's length gives its caller `r < xs.len()`, so `if r >= 0 { xs[r] }` is proved (ADR-306 D23, D31, #1757).
+- Bounds: what a function returning `i64?` is found to hand back holds of the value a caller unwraps with `?? return`, `?? d`, a `match` arm or a `let` narrowed by `!= null` (ADR-306 D23, #1758).
+- Bounds: a found rule over pub fields holds when every writer is in the build; a found rule no longer holds over a private field another file of the package clears, pushes to, sorts or hands on (that read was lowered without its check); an `if` or `match` whose branches all grow a list keeps the facts over its length (ADR-306 D22, ADR-369 D4, #1755).
+- Bounds: a found struct rule survives a loop whose body calls a method of the type that grows its lists, so `self.row_of[s]` after `let s = self.new_var(-1)` is proved (part of #1925; the rest is #1930).
+- Bounds: a struct literal that gives both lists of a length rule by clones or field paths of another value's lists keeps the rule (#1888).
+- A lambda that hands back a part of its borrowed item (`rows.sort_by_key fn (row) { row.name }`) is refused with NK1131 and a `.clone()` hint, a view as `sort_by_key`'s key with NK1104, instead of an internal error (#1872).
+- A view of a field or element of a call's result (`f().out.split(" ")`) or of a file name's text, kept in a `let`, no longer fails as an internal compiler error (#1894).
+- A cut of a `Vec[u8]` compared with `Bytes` compiles and compares the bytes instead of an internal error (#1871); a cut of a text's own bytes read back as text checks only its two ends (#1870).
+- Faster list building: a block's `List::push` inlines only the store, its growth runs out of line as Rust's `Vec::push` does (reverse-complement: 10 instructions a byte instead of 14, #1878).
+
+## [0.0.1411] — 2026-11-16
+
+**Builders' changes (#1812, #1844, #1905, #1907)**
+- Seen[T] can be written at a field or a parameter; a mismatch's help never suggests `Seen[ref T]`; `--sharing` names where a `let`, a tuple or a variant duplicates or moves a handle
+- examples/report refuses a stock file whose counts add up past an i64, with a message naming the file, instead of stopping with an overflow (#1812).
+- nikaia run counts what std builds inside a task — a set, map or other std collection a task builds under `nikaia run` now counts against its memory budget (ADR-327 D9) as under Cargo builds; before, the dynamically linked std allocated it uncounted and a sent set left a debt in the count (#1844).
+- Result summaries reach further (ADR-359 D14): a callee's precondition at a call is asked with the summaries of the calls it reads, a summary carries a list parameter's length, keeps the exits it can read, and exists for a method that is not a trait's.
+- A field that does not copy, handed out as a lambda's or a door block's last value (`m.access fn(open) { open.t }`, `map(fn(x) { x.t })`), is refused by the checker (NK1131, help `open.t.clone()`) instead of an internal compiler error.
+- A test program can pin its `nikaia check --sharing` report in `NAME.sharing`, compared and blessed like `NAME.bounds`
+
 ## [0.0.1410] — 2026-11-16
 
 **Builders' changes (#1550, #1920)**
