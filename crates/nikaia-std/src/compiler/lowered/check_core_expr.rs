@@ -188,6 +188,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         Expr::LitNull(_) => Ty::Nullable(std::boxed::Box::new(Ty::Unknown)),
         Expr::Variable(name, _) => {
             let name = *name;
+            if state.run_code.contains(world.words.resolve(name)) { state.a_code_parameter_named(world.words.resolve(name)); }
             let read = check_core_expr_variable(state, world, host, expr, name, span);
             check_core_expr_kept_copy(state, world, expr, &read);
             let bound = state.binding(&nikaia_std::block::Text::from(world.words.resolve(name).to_string()));

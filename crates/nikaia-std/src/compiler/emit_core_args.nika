@@ -640,8 +640,17 @@ impl EmitState {
         if lent_path && !emit_arg_names_a_place(arg) {
             lend = false
         }
-        // **And `&mut` for a parameter the callee declared `mut`** (D3).
-        let change = self.facts.mut_args.contains(node)
+        // **And `&mut` for a parameter the callee declared `mut`** (D3), and
+        // for code handed to a parameter that changes what it captures
+        // (ADR-views-3 D17): a lambda or other code lent `&mut`, a parameter of
+        // the same kind lent on, one lowered shared lent as code that is.
+        let changing_code = self.facts.changing_code_args.get(node) ?? 0
+        if changing_code == 3 {
+            out.push("&mut &*")
+        } else if changing_code == 4 {
+            out.push("&mut ")
+        }
+        let change = self.facts.mut_args.contains(node) || changing_code == 1 || changing_code == 2 || changing_code == 3
         // A handle put into a variant (`stored_handles`, #1212) likewise.
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
@@ -746,7 +755,9 @@ impl EmitState {
         let mut kept_here = false
         let mut lent_whole = false
         if pointer == 0 {
-            if change && self.facts.reborrowed_args.contains(node) {
+            if changing_code == 3 {
+                // `&mut &*` is written above.
+            } else if changing_code == 2 || (change && self.facts.reborrowed_args.contains(node)) {
                 out.push("&mut *")
             } else if change {
                 out.push("&mut ")

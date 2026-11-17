@@ -192,6 +192,50 @@ pub(crate) fn check_core_call_mut_args(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: Option<&FnContract>, seen: &str, args: &[Expr], span: &Span) {
+    if seen.is_empty() { return; }
+    let caller: String = match match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let contract: &FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut i: i64 = -1;
+    if signature.takes_a_receiver() { i = -2; }
+    for (param, ty) in signature.params.iter() {
+        i += 1;
+        if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
+        match ty {
+            Ty::Fn { .. } => { },
+            _ => { continue; },
+        }
+        let arg = unsafe { nikaia_std::proven::read(&args, (i) as usize) };
+        let node = id_of(arg) as i64;
+        let mut handed: String = String::from("");
+        let mut lambda = false;
+        match arg {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let named = world.words.resolve(name);
+                if state.run_code.contains(named) {
+                    handed = nikaia_std::block::Text::from(named.to_string());
+                    state.a_code_parameter_named(named);
+                }
+            },
+            Expr::Closure { .. } => { lambda = true; },
+            _ => { },
+        }
+        let changes: String = nikaia_std::block::Text::from(nikaia_std::index::or(state.facts.changing_lambdas.get(&node), || "").to_string());
+        let runs: Vec<String> = nikaia_std::index::or(match state.facts.lambda_runs.get(&node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        state.code_args.push(CheckCodeArg { caller: nikaia_std::block::Text::from(caller.to_string()), callee: nikaia_std::block::Text::from(seen.to_string()), param: nikaia_std::block::Text::from(param.to_string()), node, lambda, changes, runs, handed, span: check_span_at(world, arg, span) });
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_mut_place(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, place: &str) {
     match arg {
         Expr::Variable(bound, _) => {
@@ -399,6 +443,7 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
         guarded.unanswered = true;
         state.flow.guarded = Some(guarded);
     }
+    if is_variable && state.run_code.contains(name) { state.a_code_parameter_named(name); }
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = nikaia_std::index::or(state.lookup(name), || Ty::Unknown);
         match looked {
@@ -672,6 +717,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = nikaia_std::block::Text::from(key.to_string()); }
     check_core_call_mut_args(state, world, (callee).as_ref(), &seen_key, args);
+    check_core_call_code_args(state, world, (callee).as_ref(), &seen_key, args, span);
     if feeds {
         let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
         let contract: FnContract = nikaia_std::index::or(match callee.as_ref() {

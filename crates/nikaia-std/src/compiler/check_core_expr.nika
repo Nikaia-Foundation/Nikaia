@@ -241,6 +241,9 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // **A nullable of it-does-not-say** (Part III, C.4).
         Expr::LitNull(_) => Ty::Nullable(Ty::Unknown),
         Expr::Variable(name, _) => {
+            if state.run_code.contains(world.words.resolve(name)) {
+                state.a_code_parameter_named(world.words.resolve(name))
+            }
             let read = check_core_expr_variable(state, world, host, expr, name, span)
             check_core_expr_kept_copy(state, world, expr, read)
             let bound = state.binding(world.words.resolve(name).clone())

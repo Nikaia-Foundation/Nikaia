@@ -2295,7 +2295,10 @@ less fits a type that allows more. A pausing lambda handed to a `fn() sync` is
 refused.
 
 The context of such a parameter is **inferred**, not written. A parameter the
-body only calls is immediate and borrows. A parameter the body keeps (stores,
+body only calls is immediate and borrows. Where the body calls it one call at
+a time, the lambda may change what it captures, with nothing written for it; a
+body that calls it from tasks that run at once refuses such a lambda with
+`NK2104`, naming the binding ([ADR-views-3](adr/adr-views-3.md) D17). A parameter the body keeps (stores,
 hands back, gives to a task) says `keep`, as every kept parameter does (6.5),
 and is detached and moves; there is no `@detached` to write. For an immediate
 parameter the lambda's `touches` count for the callee, while

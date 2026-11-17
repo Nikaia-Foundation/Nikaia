@@ -90,6 +90,7 @@ pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world:
             _ => { },
         }
     }
+    state.code_parameters_that_change();
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

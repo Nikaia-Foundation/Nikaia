@@ -1,0 +1,9 @@
+// A list pushed to through a `fn(i64) sync` parameter (ADR-views-3 D17,
+// #1553).
+fn each(xs: Vec[i64], f: fn(i64) sync) { for x in xs { f(x) } }
+
+fn main() throws {
+    let mut seen: Vec[i64] = []
+    each([1, 2], fn(v) { seen.push(v) })
+    println(seen.len())
+}

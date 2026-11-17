@@ -455,3 +455,65 @@ pub(crate) fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_,
     if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { check_walks_reads(world, host, inner, inside, read); } } }
 }
 
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_code_parameter_named(&mut self, name: &str) {
+        self.run_calls.push(nikaia_std::block::Text::from(name.to_string()));
+        if self.in_parallel.is_some() || self.flow.async_depth > 0 {
+            let current: String = match match self.current.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.code_at_once.insert(format!("{}::{}", current, name));
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn code_parameters_that_change(&mut self) {
+        let mut changing: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut at_once: collections::BTreeSet<String> = self.code_at_once.copy_owned();
+        let mut grew = true;
+        while grew {
+            grew = false;
+            for arg in self.code_args.iter() {
+                let target = format!("{}::{}", arg.callee, arg.param);
+                let from = format!("{}::{}", arg.caller, arg.handed);
+                let mut changes = arg.changes != "";
+                for ran in arg.runs.iter() { if changing.contains(&format!("{}::{}", arg.caller, ran)) { changes = true; } }
+                if arg.handed != "" && changing.contains(&from) { changes = true; }
+                if changes && !changing.contains(&target) {
+                    changing.insert(nikaia_std::block::Text::from(target.to_string()));
+                    grew = true;
+                }
+                if arg.handed != "" && changing.contains(&target) && !changing.contains(&from) {
+                    changing.insert(nikaia_std::block::Text::from(from.to_string()));
+                    grew = true;
+                }
+                if arg.handed != "" && at_once.contains(&target) && !at_once.contains(&from) {
+                    at_once.insert(nikaia_std::block::Text::from(from.to_string()));
+                    grew = true;
+                }
+            }
+        }
+        let args: Vec<CheckCodeArg> = self.code_args.copy_owned();
+        for arg in args.iter() {
+            let target = format!("{}::{}", arg.callee, arg.param);
+            if !changing.contains(&target) { continue; }
+            if at_once.contains(&target) {
+                if arg.changes != "" {
+                    let name = nikaia_std::block::Text::from(arg.changes.to_string());
+                    let callee = nikaia_std::block::Text::from(arg.callee.to_string());
+                    let param = nikaia_std::block::Text::from(arg.param.to_string());
+                    self.findings.push(check_refusal("NK2104", &arg.span, format!("This lambda changes `{}`, but `{}` runs `{}` from tasks that run at once.", name, callee, param), vec![format!("Each of those tasks would change `{}` at the same time.", name), String::from("Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2).")], Some(format!("Return a value from the lambda and combine the results afterwards, or keep `{}` in a `SharedMut` and change it through `update`.", name))));
+                }
+                continue;
+            }
+            let from = format!("{}::{}", arg.caller, arg.handed);
+            let kind: i64 = if arg.lambda { 1 } else if arg.handed != "" && changing.contains(&from) && !at_once.contains(&from) { 2 } else if arg.handed != "" { 3 } else { 4 };
+            self.facts.changing_code_args.insert(arg.node, kind);
+        }
+        for one in changing.iter() { if !at_once.contains(one) { self.facts.changing_code.insert(nikaia_std::block::Text::from(one.to_string())); } }
+    }
+}
+

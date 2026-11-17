@@ -114,6 +114,28 @@ pub(crate) fn check_core_args_lambda_says_mut(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_args_what_a_lambda_changes(state: &mut CheckState, id: i64, changed_from: i64, runs_from: i64) {
+    let mut at = changed_from;
+    while at < state.changed.len() as i64 {
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string());
+        if state.binding(&name).is_some() {
+            state.facts.changing_lambdas.insert(id, name);
+            break;
+        }
+        at += 1;
+    }
+    let mut ran: Vec<String> = vec![];
+    at = runs_from;
+    while at < state.run_calls.len() as i64 {
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&state.run_calls, nikaia_std::index::at(at))).to_string());
+        if !nikaia_std::list::contains(&ran, &name) { ran.push(name); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    if !ran.is_empty() { state.facts.lambda_runs.insert(id, ran); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, keeps: bool, span: &Span) -> Ty {
     let id = id_of(arg) as i64;
@@ -145,7 +167,10 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         state.a_kept_lambda_takes_these(world, arg, pauses, &who, span);
                     }
                     state.a_lambdas_text_is_its_own(world, &code, arg);
+                    let changed_from = state.changed.len() as i64;
+                    let runs_from = state.run_calls.len() as i64;
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);
+                    if runs { check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from); }
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);

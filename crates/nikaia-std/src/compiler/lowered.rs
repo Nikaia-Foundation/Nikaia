@@ -3585,7 +3585,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -4251,4 +4251,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "08cf50e8d2433195a8ab9fc82acb234efe40f6c9cc4c3eb22848a7ecc5def62f";
+pub const LOWERED_DIGEST: &str = "6ee09f8a43800114899cbc2d502cdcbecb4debf087ee99a2c4a3d4396a3052b5";

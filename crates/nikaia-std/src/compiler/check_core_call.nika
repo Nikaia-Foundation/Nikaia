@@ -280,6 +280,52 @@ fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee
     }
 }
 
+// **The arguments handed to parameters of code of this file's own
+// function** (ADR-views-3 D17), kept until the whole file is walked: whether
+// one lowers to code that changes what it captures depends on every call.
+fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, seen: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    if seen.len() == 0 {
+        return
+    }
+    let caller: String = state.current?.clone() ?? return
+    let contract: ref FnContract = callee ?? return
+    let signature: ref Signature = contract.signature ?? return
+    let mut i = -1
+    if signature.takes_a_receiver() {
+        i = -2
+    }
+    for (param, ty) in signature.params {
+        i += 1
+        if i < 0 || i >= args.len() as i64 || contract.keeps.contains(param) || signature.mutable.contains(param) {
+            continue
+        }
+        match ty {
+            Ty::Fn { .. } => {},
+            else => continue,
+        }
+        let arg = args[i]
+        let node = id_of(arg) as i64
+        let mut handed: String = ""
+        let mut lambda = false
+        match arg {
+            Expr::Variable(name, _) => {
+                let named = world.words.resolve(name)
+                if state.run_code.contains(named) {
+                    handed = named.clone()
+                    state.a_code_parameter_named(named)
+                }
+            },
+            Expr::Closure { .. } => {
+                lambda = true
+            },
+            else => {},
+        }
+        let changes: String = (state.facts.changing_lambdas.get(node) ?? "").clone()
+        let runs: Vec[String] = state.facts.lambda_runs.get(node)?.clone() ?? []
+        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: seen.clone(), param: param.clone(), node: node, lambda: lambda, changes: changes, runs: runs, handed: handed, span: check_span_at(world, arg, span) })
+    }
+}
+
 // A `let mut` name of code handed to a `mut` parameter of this package's own
 // function: it holds afterwards what the parameter's place holds.
 fn check_core_call_mut_place(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, place: ref String) sync {
@@ -541,6 +587,11 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         let mut guarded = held ?? CheckGuarded::nothing()
         guarded.unanswered = true
         state.flow.guarded = guarded
+    }
+    // **A parameter of code run one call at a time, or from tasks at once**
+    // (ADR-views-3 D17).
+    if is_variable && state.run_code.contains(name) {
+        state.a_code_parameter_named(name)
     }
     // **A parameter of code, run in place, hands back what its type says.**
     if is_variable && state.run_code.contains(name) {
@@ -881,6 +932,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         seen_key = key.clone()
     }
     check_core_call_mut_args(state, world, callee, seen_key, args)
+    check_core_call_code_args(state, world, callee, seen_key, args, span)
     if feeds {
         let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
         let contract: FnContract = callee?.clone() ?? FnContract::empty()

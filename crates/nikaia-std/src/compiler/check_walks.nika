@@ -631,3 +631,80 @@ fn check_walks_reads[H: CheckHost](world: ref CheckWorld, host: ref H, expr: ref
         }
     }
 }
+
+impl CheckState {
+    /// **A parameter of code named in this body** (ADR-views-3 D17): a lambda
+    /// that names it runs it, and a `par_iter()` lambda or an `async` task that
+    /// does runs it from tasks at once.
+    fn a_code_parameter_named(ref mut self, name: ref String) sync {
+        self.run_calls.push(name.clone())
+        if self.in_parallel != null || self.flow.async_depth > 0 {
+            let current: String = self.current?.clone() ?? return
+            self.code_at_once.insert(f"{current}::{name}")
+        }
+    }
+
+    /// **Which parameters of code lower to code that changes what it
+    /// captures** (ADR-views-3 D17, Part I 5.4 C), once the whole file is
+    /// walked: one handed a lambda that changes a binding it captures, or a
+    /// parameter that is one, and the parameters handed on to it in turn. One
+    /// the body runs from tasks at once stays shared, and a lambda that changes
+    /// what it captures handed there is `NK2104`, naming the binding.
+    fn code_parameters_that_change(ref mut self) sync {
+        let mut changing: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut at_once: collections::BTreeSet[String] = self.code_at_once.clone()
+        let mut grew = true
+        while grew {
+            grew = false
+            for arg in self.code_args {
+                let target = f"{arg.callee}::{arg.param}"
+                let from = f"{arg.caller}::{arg.handed}"
+                let mut changes = arg.changes != ""
+                for ran in arg.runs {
+                    if changing.contains(f"{arg.caller}::{ran}") {
+                        changes = true
+                    }
+                }
+                if arg.handed != "" && changing.contains(from) {
+                    changes = true
+                }
+                if changes && !changing.contains(target) {
+                    changing.insert(target.clone())
+                    grew = true
+                }
+                if arg.handed != "" && changing.contains(target) && !changing.contains(from) {
+                    changing.insert(from.clone())
+                    grew = true
+                }
+                if arg.handed != "" && at_once.contains(target) && !at_once.contains(from) {
+                    at_once.insert(from.clone())
+                    grew = true
+                }
+            }
+        }
+        let args: Vec[CheckCodeArg] = self.code_args.clone()
+        for arg in args {
+            let target = f"{arg.callee}::{arg.param}"
+            if !changing.contains(target) {
+                continue
+            }
+            if at_once.contains(target) {
+                if arg.changes != "" {
+                    let name = arg.changes.clone()
+                    let callee = arg.callee.clone()
+                    let param = arg.param.clone()
+                    self.findings.push(check_refusal("NK2104", arg.span, f"This lambda changes `{name}`, but `{callee}` runs `{param}` from tasks that run at once.", [f"Each of those tasks would change `{name}` at the same time.", "Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2)."], f"Return a value from the lambda and combine the results afterwards, or keep `{name}` in a `SharedMut` and change it through `update`."))
+                }
+                continue
+            }
+            let from = f"{arg.caller}::{arg.handed}"
+            let kind = if arg.lambda { 1 } else if arg.handed != "" && changing.contains(from) && !at_once.contains(from) { 2 } else if arg.handed != "" { 3 } else { 4 }
+            self.facts.changing_code_args.insert(arg.node, kind)
+        }
+        for one in changing {
+            if !at_once.contains(one) {
+                self.facts.changing_code.insert(one.clone())
+            }
+        }
+    }
+}
