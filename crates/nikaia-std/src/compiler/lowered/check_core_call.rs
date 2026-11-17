@@ -100,6 +100,7 @@ pub(crate) fn check_core_call_declared(contract: &FnContract) -> Option<Ty> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
+    if (args.len() as i64) != params.len() as i64 { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", name, counted(params.len() as i64, "argument"), args.len() as i64), vec![format!("Its type takes {} (Part I 5.4).", counted(params.len() as i64, "parameter"))], Some(format!("Pass {}.", counted(params.len() as i64, "argument"))))); }
     let mut i: i64 = -1;
     for given in args.iter() {
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
@@ -143,7 +144,7 @@ pub(crate) fn check_core_call_kept_by_code(state: &mut CheckState, world: &Check
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: &Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
     state.read_at.push((nikaia_std::block::Text::from(name.to_string()), span.start as i64));
-    let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), span);
+    let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), name, span);
     check_core_call_lent(state, world, args, params, &found, name, span);
     state.kept_arguments_are_its_own(world, args, params);
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails));
@@ -451,8 +452,8 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let origin = match check_handed_carries(world, &world.here, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let written = match check_handed_written(world, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let origin = match check_handed_carries(world, &world.here, &current, arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let written = match check_handed_written(world, &current, arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.split('.').next(), || "").to_string());
         let what = if owner == "Vec" { "list" } else { "text" };
         let mut whence = format!("`{}` holds what `{}` was handed, so it was built by a caller the compiler does not see.", root, origin);
@@ -471,7 +472,7 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
             if parameter { whence = format!("`{}` is a parameter of `pub fn {}`, so it was built by a caller the compiler does not see.", root, current); }
         }
         let notes: Vec<String> = vec![format!("`{}` takes its `{}` as Rust's `{}`, and a {} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", name, param, owner, what), whence];
-        state.findings.push(check_refusal("NK2506", &check_span_at(world, &arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
+        state.findings.push(check_refusal("NK2506", &check_span_at(world, arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
     }
 }
 
@@ -667,7 +668,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let slot = check_core_slot_index(world, name);
     if slot >= 0 && slot < args.len() as i64 { check_core_type_argument(state, world, unsafe { nikaia_std::proven::read(&args, (slot) as usize) }, name, span); }
     let mut found: Vec<Ty> = vec![];
-    if !have && is_variable && state.run_code.contains(name) { found = check_core_arguments_to_code(state, world, host, args, &expected, span); } else { found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span); }
+    if !have && is_variable && state.run_code.contains(name) { found = check_core_arguments_to_code(state, world, host, args, &expected, name, span); } else { found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span); }
     let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = nikaia_std::block::Text::from(key.to_string()); }
     check_core_call_mut_args(state, world, (callee).as_ref(), &seen_key, args);
@@ -812,7 +813,7 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             _ => { },
         }
         match looked {
-            Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+            Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
                 let pauses_not: bool = is_sync;
                 let fails: bool = can_throw;

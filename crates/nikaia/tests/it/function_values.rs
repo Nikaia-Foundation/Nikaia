@@ -30,7 +30,7 @@ const DECLARED: &str = "struct P { x: i64 }\n\
 #[test]
 fn a_function_named_as_a_value_is_typed() {
     for (value, ty) in [
-        ("double", "fn(i64) -> i64 sync"),
+        ("double", "fn(n: i64) -> i64 sync"),
         ("P", "fn() -> P sync"),
         ("P::merge", "fn(P, keep P) sync"),
     ] {

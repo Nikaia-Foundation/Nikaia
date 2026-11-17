@@ -226,14 +226,14 @@ pub(crate) fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
 
 pub(crate) fn code_as_written(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for part in params.iter() { listed.push(code_param_as_written(part)); }
             let bare = Ty::Fn { params: vec![], result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw };
+            }), is_sync, can_throw, spelled: CodeNames::none() };
             let whole = bare.text();
             let rest = nikaia_std::index::or(whole.strip_prefix("fn()"), || "");
             let joined = nikaia_std::block::Text::from(listed.join(", "));

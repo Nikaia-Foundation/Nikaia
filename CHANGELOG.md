@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1425] — 2026-11-17
+
+**Builders' changes (#1996, #1997, #1999, #2007)**
+- Calls through function values check their arguments: a call through a `let`, a parameter or a field holding code now refuses an argument of the wrong type (NK1102) or a wrong count (NK1101), as a named call does, and wraps a plain value handed to a `T?` parameter.
+- A let over a field or an element of a local is a view whatever its type: handing it to a keeper, or returning it, is refused with a .clone() help (NK1102, NK1104) instead of an internal error (NK1343)
+- A `??` with a variant fallback over a part a `match` arm binds out of a box, handed to something that keeps it, takes the part instead of lending it, which rustc refused (NK1343).
+- The "It's declared as" note writes `keep` where the callee keeps a parameter, and a function type taken from a declaration (a written type with names, a named function, a lambda) prints with its parameter names, so a view result reads `fn(s: String) -> String from s` instead of "whose result is a view of its argument" (#1528 decision 2). A tools file can now write `impl Hash`.
+- The "It's declared as" note of NK1101, NK1102 and NK1115 writes `keep` before a parameter the callee keeps, as a views-3 signature marks it (ADR-views-3 D2).
+- A `tools/*.nika` or std package file can write `impl Hash`: the lowered package's index brings the prelude's `Hasher` into scope, where rustc found none before.
+
 ## [0.0.1424] — 2026-11-17
 
 **Builders' changes (#1975)**

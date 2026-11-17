@@ -469,7 +469,7 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
             state.a_handle_handed_on(world, v, &given, span);
         }
     }
-    state.field_is_reachable(name, &found_field, span);
+    state.field_is_reachable(name, found_field, span);
     let mut found: Ty = given.clone();
     if value.is_some() {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -691,7 +691,7 @@ pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckStat
         return;
     }
     let held = nikaia_std::index::get(&declared, nikaia_std::index::at(at));
-    state.field_is_reachable(name, &held, span);
+    state.field_is_reachable(name, held, span);
     let want: Ty = held.ty.clone();
     let mut said: Span = span.clone();
     if init.value.is_some() {

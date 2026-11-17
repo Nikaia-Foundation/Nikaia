@@ -448,7 +448,9 @@ impl CheckState {
         let contract = ledger_function(world, key) ?? return null
         let signature = contract.signature ?? return null
         let mut params: Vec[Ty] = []
+        let mut spelled = CodeNames::none()
         for param in signature.params {
+            spelled.params.push(param.0.clone())
             // **A `mut` parameter is lent `mut`** (#1134): the value is a
             // `fn(mut S)`, which a `fn(S)` is not.
             if signature.mutable.contains(param.0) {
@@ -457,7 +459,14 @@ impl CheckState {
                 params.push(param.1.clone())
             }
         }
-        return Ty::Fn { params: params, result: signature.result?.clone(), is_sync: contract.sync_claim.is_sync(), can_throw: contract.fails_with.len() > 0 }
+        // **The names it was declared with, for messages** (#2007): the
+        // parameters its result borrows are its `from`.
+        spelled.from = contract.borrows.clone()
+        // A method's receiver has no name a function type can write.
+        if signature.takes_a_receiver() {
+            spelled = CodeNames::none()
+        }
+        return Ty::Fn { params: params, result: signature.result?.clone(), is_sync: contract.sync_claim.is_sync(), can_throw: contract.fails_with.len() > 0, spelled: spelled }
     }
 }
 

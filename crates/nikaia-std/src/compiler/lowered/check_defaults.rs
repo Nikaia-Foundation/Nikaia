@@ -249,7 +249,7 @@ pub(crate) fn check_defaults_fold_part<H: CheckHost>(state: &mut CheckState, wor
     match part {
         Expr::Closure { params, mutable, body, .. } => {
             let (tail, paused) = check_core_lambda(state, world, host, params, mutable, body, &given, &promised, span);
-            found = Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(Some(tail)), is_sync: true, can_throw: false };
+            found = Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(Some(tail)), is_sync: true, can_throw: false, spelled: CodeNames::none() };
         },
         _ => {
             state.a_named_fold_part_that_may_pause(world, part, span);

@@ -1,0 +1,39 @@
+// Following the `.clone()` help for a `let` over a field or an element of a
+// local (#1997) gives a program that runs; reading the view in place needs
+// no copy.
+struct P { name: String }
+enum K { A(String), B }
+struct H { p: P, k: K, items: Vec[i64] }
+
+fn eat(keep a: P) -> i64 {
+    let mut v: Vec[P] = []
+    v.push(a)
+    return v.len() as i64
+}
+
+fn eat_k(keep k: K) -> i64 {
+    let mut v: Vec[K] = []
+    v.push(k)
+    return v.len() as i64
+}
+
+fn made() -> P {
+    let h = H { p: P { name: "abc" }, k: K::B, items: [1] }
+    let q = h.p
+    return q.clone()
+}
+
+fn main() throws {
+    let h = H { p: P { name: "abc" }, k: K::A("z"), items: [1, 2] }
+    let q = h.p
+    println(q.name.len())
+    println(eat(q.clone()))
+    let k = h.k
+    println(eat_k(k.clone()))
+    let items = h.items
+    println(items.len())
+    let w: Vec[P] = [P { name: "de" }]
+    let e = w[0]
+    println(eat(e.clone()))
+    println(made().name)
+}

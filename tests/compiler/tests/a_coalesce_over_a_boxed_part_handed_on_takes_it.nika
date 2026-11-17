@@ -1,0 +1,53 @@
+// A `??` with a variant fallback over a part bound out of a box, handed to a
+// parameter that keeps it, takes the part: the arm binds it by value, not
+// `ref` (#1999).
+
+enum T { A, F { result: T? } }
+
+fn deep(t: T) -> bool {
+    return match t {
+        T::A => false,
+        T::F { result } => deep(result ?? T::A),
+    }
+}
+
+fn own(t: T) -> i64 {
+    let mut all: Vec[T] = []
+    all.push(t)
+    return all.len()
+}
+
+fn kept(t: T) -> i64 {
+    return match t {
+        T::A => 0,
+        T::F { result } => own(result ?? T::A),
+    }
+}
+
+fn back(t: T) -> T {
+    return match t {
+        T::A => T::A,
+        T::F { result } => result ?? T::A,
+    }
+}
+
+fn size(t: T) -> i64 {
+    return match t {
+        T::A => 0,
+        T::F { result } => 1,
+    }
+}
+
+fn read(t: T) -> i64 {
+    return match t {
+        T::A => 0,
+        T::F { result } => size(result ?? T::A),
+    }
+}
+
+fn main() throws {
+    println(f"{deep(T::F { result: T::A })}")
+    println(f"{kept(T::F { result: T::F { result: null } })}")
+    println(f"{size(back(T::F { result: T::F { result: null } }))}")
+    println(f"{read(T::F { result: null })}")
+}

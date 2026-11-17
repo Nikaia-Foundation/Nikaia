@@ -1708,7 +1708,7 @@ impl EmitState {
         let ending = if fails { ")" } else { "" };
         if args.len() == 1 {
             let given = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
-            let key = node_key(&given);
+            let key = node_key(given);
             if self.facts.path_holes.contains_key(&key) {
                 let names = match self.facts.path_holes.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 let to_err = text.starts_with('e');
@@ -1716,7 +1716,7 @@ impl EmitState {
                 out.push("nikaia_std::fs::path::print(&(");
                 match given {
                     Expr::LitInterpolated { parts, .. } => { self.emit_core_joined_name(world, walk, out, host, parts, &names, depth, flow, scope)?; },
-                    _ => { self.emit_expr(world, walk, out, host, &given, depth, flow, scope)?; },
+                    _ => { self.emit_expr(world, walk, out, host, given, depth, flow, scope)?; },
                 }
                 out.push(&format!("), {}, {})", to_err, newline));
                 if !fails { out.push(".unwrap_or(())"); }
