@@ -1026,6 +1026,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     }
     if declared_option && names.len() == 1 && shape.is_empty() { state.flow.declared_options.insert(local.id); }
     state.a_let_made_here(world, id, value, &local.ty);
+    if !mutable && ty.is_none() && names.len() == 1 && shape.is_empty() { state.a_let_of_a_place_clone(world, id, &local.name, value, &local.ty, span); }
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
     if mutable && state.flow.text_slot_views.contains(&(id_of(check_core_stmt_slot_read(value)) as i64)) { state.flow.text_slot_bindings.insert(id); }
@@ -1592,7 +1593,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
                 None => {
                     mut_view = true;
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, String::from(""));
-                    state.changed.push(format!("{}", *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }));
+                    state.a_change_noted(&format!("{}", *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }));
                 },
                 Some(ref kept) => { state.a_for_mut_over_a_list_not_mut(&written, &head, kept.kind == CheckKind::Parameter, span); },
             }
@@ -1724,6 +1725,7 @@ pub(crate) fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world
     if value.is_some() {
         let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         state.narrowed_reads_given_back(returned);
+        state.place_clones_handed_back(world, returned);
     }
     state.a_way_out("return", "", span);
     Ty::Unknown

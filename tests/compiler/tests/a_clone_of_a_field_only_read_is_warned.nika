@@ -1,0 +1,21 @@
+// **`NK1350` on a field or an element copied into a `let` that is only
+// read** (#1988): `fixed` copies `self.lower[v]` only to read two of its
+// fields. `width` changes `self.rows` while `row` lives, so its copy is
+// needed and is not warned.
+struct Side { set: bool, value: i64, src: String }
+struct T { lower: Vec[Side], rows: Vec[Vec[i64]] }
+impl T {
+	fn fixed(ref self, v: i64) -> bool {
+		let lo = self.lower[v].clone()
+		return lo.set && lo.value == 0
+	}
+	fn width(ref mut self, r: i64) -> i64 {
+		let row = self.rows[r].clone()
+		self.rows.push([])
+		return row.len()
+	}
+}
+fn main() throws {
+	let mut t = T { lower: [Side { set: true, value: 0, src: f"a{1}" }], rows: [[1, 2]] }
+	println(f"{t.fixed(0)} {t.width(0)}")
+}

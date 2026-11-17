@@ -448,6 +448,34 @@ pub struct CheckFlow {
     /// **The `let`s bound to a value made there**, by binding: a call's, a
     /// literal's; only their clone can be the last use (`NK1350`).
     pub clone_owners: collections::BTreeSet[i64],
+    /// **The `let`s bound to a clone of a field or an element** (`NK1350`,
+    /// #1988), asked where the body ends.
+    pub place_clones: Vec[CheckPlaceClone],
+    /// **Each name a change reached**, with how many reads the walk had
+    /// recorded when it did: a change of a place clone's root between the
+    /// `let` and its last read keeps the clone needed.
+    pub changes_seen: Vec[(String, i64)],
+}
+
+/// **A `let` bound to a clone of a field or an element** (`NK1350`, #1988):
+/// `let lo = self.lower[v].clone()`. The copy is needless where the name is
+/// only read and nothing changes the place's root while it is in use.
+pub struct CheckPlaceClone {
+    pub name: String,
+    pub binding: i64?,
+    /// The name the place starts from: `self` in `self.lower[v]`.
+    pub root: String,
+    /// The walk's read order and its count of reads where the `let` stands.
+    pub seq: i64,
+    pub reads: i64,
+    /// How many loops and lambdas stood around the `let`: a read inside
+    /// another reads the name again on each turn.
+    pub repeats: i64,
+    /// Handed back, or read inside a loop or a lambda the `let` stands
+    /// outside of.
+    pub escaped: bool,
+    pub span: Span,
+    pub edit: CheckEdit?,
 }
 
 /// **A `.clone()` of a `let`, held to the body's end** (`NK1350`, #1318): the
@@ -588,6 +616,8 @@ impl CheckFlow {
             clones: [],
             clone_loans: [],
             clone_owners: collections::BTreeSet(),
+            place_clones: [],
+            changes_seen: [],
         }
     }
 }

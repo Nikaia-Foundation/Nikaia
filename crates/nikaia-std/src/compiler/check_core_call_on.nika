@@ -1139,7 +1139,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let changed: String = state.flow.receiver_name?.clone() ?? ""
         let takes = check_core_call_on_takes(state, world, contract)
         if contract.mutates || takes {
-            state.changed.push(changed)
+            state.a_change_noted(changed)
         }
     }
     // **A method that walks a produced sequence consumes it** (ADR-105 D2).

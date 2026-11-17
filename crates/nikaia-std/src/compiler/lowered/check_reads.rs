@@ -294,6 +294,7 @@ impl CheckState {
         self.flow.read_index.insert(key, self.reads_on_paths.len() as i64);
         let binding = self.binding(path).as_ref().map(|__nikaia_it| __nikaia_it.id);
         self.reads_on_paths.push(CheckRead { path: nikaia_std::block::Text::from(path.to_string()), at: span.start as i64, choices: self.branch.copy_owned(), seq: self.read_seq, binding });
+        if binding.is_some() && !self.flow.place_clones.is_empty() { self.a_place_clone_read(std::convert::identity(binding)); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -903,6 +903,87 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_let_of_a_place_clone(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, id: i64, name: &str, value: &Expr, bound: &Ty, span: &Span) {
+        if self.reading_only || !self.task_bindings.is_empty() { return; }
+        let receiver = match value {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if !args.is_empty() || world.words.resolve(method) != "clone" { return; }
+                receiver.clone()
+            },
+            _ => return,
+        };
+        if !check_core_stmt_a_place(self, &receiver) { return; }
+        let root: String = match place_clone_root(world, &receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if bound.is_a_view() || clone_holds_a_view(bound) || clone_of_the_unknown(bound) || !self.takes_away(world, bound) { return; }
+        let binding: Option<i64> = Some(id);
+        self.flow.place_clones.push(CheckPlaceClone { name: nikaia_std::block::Text::from(name.to_string()), binding, root, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, &receiver) });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_place_clone_read(&mut self, binding: Option<i64>) {
+        let mut at: i64 = 0;
+        while at < self.flow.place_clones.len() as i64 {
+            if unsafe { nikaia_std::proven::read(&self.flow.place_clones, (at) as usize) }.binding == binding && (self.repeats.len() as i64) > unsafe { nikaia_std::proven::read(&self.flow.place_clones, (at) as usize) }.repeats { (*unsafe { nikaia_std::proven::slot(&mut self.flow.place_clones, (at) as usize) }).escaped = true; }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn place_clones_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, returned: &Expr) {
+        if self.flow.place_clones.is_empty() { return; }
+        let result = match self.expected.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !clone_of_the_unknown(result) && !self.takes_away(world, result) { return; }
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in(returned, world.words, &mut named);
+        let mut at: i64 = 0;
+        while at < self.flow.place_clones.len() as i64 {
+            let name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&self.flow.place_clones, (at) as usize) }.name.to_string());
+            if named.contains(&name) && self.binding(&name).as_ref().map(|__nikaia_it| __nikaia_it.id) == nikaia_std::index::get(&self.flow.place_clones, (at) as usize).binding { self.flow.place_clones[nikaia_std::index::at(at)].escaped = true; }
+            at += 1;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_change_noted(&mut self, name: &str) {
+        self.changed.push(nikaia_std::block::Text::from(name.to_string()));
+        self.flow.changes_seen.push((nikaia_std::block::Text::from(name.to_string()), self.reads_on_paths.len() as i64));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn needless_place_clones_said(&mut self) {
+        let places = self.flow.place_clones.copy_owned();
+        let changes = self.flow.changes_seen.copy_owned();
+        self.flow.place_clones = vec![];
+        self.flow.changes_seen = vec![];
+        for one in places.iter() {
+            if one.escaped { continue; }
+            let mut last: i64 = -1;
+            let mut at: i64 = 0;
+            while at < self.reads_on_paths.len() as i64 {
+                if unsafe { nikaia_std::proven::read(&self.reads_on_paths, (at) as usize) }.binding == one.binding && at >= one.reads { last = at; }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            }
+            if last < 0 { continue; }
+            let last_seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(last)).seq;
+            let mut needed = false;
+            for change in changes.iter() {
+                if change.0 == one.name && change.1 >= one.reads { needed = true; }
+                if change.0 == one.root && change.1 >= one.reads && change.1 <= last { needed = true; }
+            }
+            for taken in self.handed.iter() {
+                if taken.binding == one.binding { needed = true; }
+                if a_root_segment(&taken.path) == one.root && taken.seq > one.seq && taken.seq <= last_seq { needed = true; }
+            }
+            if needed { continue; }
+            self.a_needless_clone(&one.span, format!("`{}` is a copy of a part of `{}` that is only read: nothing changes `{}` while `{}` is in use.", one.name, one.root, one.root, one.name), vec![String::from("A `let` over a field or an element is a view of it (ADR-094 D4), so it can read the place itself.")], String::from("Delete `.clone()`; the copy is only read."), match one.edit.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            });
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn needless_clones_said(&mut self) {
         let clones = self.flow.clones.copy_owned();
         let loans = self.flow.clone_loans.copy_owned();
@@ -946,6 +1027,17 @@ pub(crate) fn clone_deleted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if of.start != whole.start || of.end >= whole.end { return None; }
     Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn place_clone_root(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
+    match place {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; Some(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string())) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); place_clone_root(world, base) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); place_clone_root(world, base) },
+        _ => None,
+    }
 }
 
 pub(crate) fn clone_of_a_let(local: &CheckLocal) -> bool {

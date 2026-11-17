@@ -1434,6 +1434,10 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         state.flow.declared_options.insert(local.id)
     }
     state.a_let_made_here(world, id, value, local.ty)
+    // **A `let` over a clone of a field or an element** (`NK1350`, #1988).
+    if !mutable && ty == null && names.len() == 1 && shape.len() == 0 {
+        state.a_let_of_a_place_clone(world, id, local.name, value, local.ty, span)
+    }
     state.bind_local(local)
     // **A mutable view is the `&mut` already** (#975): handed to a `mut`
     // parameter, it is lent on again.
@@ -2239,7 +2243,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
                     // **The list is changed through its elements**: an arm's
                     // part walked so is opened `mut` (#734).
-                    state.changed.push(f"{parts[0]}")
+                    state.a_change_noted(f"{parts[0]}")
                 },
                 kept => {
                     state.a_for_mut_over_a_list_not_mut(written, head, kept.kind == CheckKind::Parameter, span)
@@ -2438,6 +2442,7 @@ fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckW
     if value != null {
         let returned = value ?? return Ty::Unknown
         state.narrowed_reads_given_back(returned)
+        state.place_clones_handed_back(world, returned)
     }
     state.a_way_out("return", "", span)
     return Ty::Unknown

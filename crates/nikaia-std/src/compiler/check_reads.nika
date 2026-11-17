@@ -462,6 +462,9 @@ impl CheckState {
         self.flow.read_index.insert(key, self.reads_on_paths.len())
         let binding = self.binding(path)?.id
         self.reads_on_paths.push(CheckRead { path: path.clone(), at: span.start as i64, choices: self.branch.clone(), seq: self.read_seq, binding: binding })
+        if binding != null && self.flow.place_clones.len() > 0 {
+            self.a_place_clone_read(binding)
+        }
     }
 
     /// **The parts of a `mut` parameter an arm took out** (`NK2108`, ADR-094 D7):

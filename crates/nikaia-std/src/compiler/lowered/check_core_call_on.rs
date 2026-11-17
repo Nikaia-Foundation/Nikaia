@@ -886,7 +886,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             None => None,
         }, || "".into());
         let takes = check_core_call_on_takes(&state, world, contract);
-        if contract.mutates || takes { state.changed.push(changed); }
+        if contract.mutates || takes { state.a_change_noted(&changed); }
     }
     let walks = walks_by_value(contract);
     let once = match on {
