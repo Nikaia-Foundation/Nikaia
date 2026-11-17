@@ -13,7 +13,8 @@ version = 4
 sync = "inferred"
 panics = false
 touches = []
-signature = "(ref self) -> String"
+views = ["<result>: borrowed"]
+signature = "(ref self) -> ref(self) String"
 
 [fn."Error::message"]
 sync = "inferred"
@@ -65,8 +66,8 @@ keeps = ["root"]
 panics = true
 places = true
 touches = []
-views = ["root: borrowed"]
-signature = "(ref mut self, root: ref Node) -> String"
+views = ["root: borrowed", "<result>: borrowed"]
+signature = "(ref mut self, root: ref Node) -> ref(self) String"
 
 [fn."Writer::double"]
 sync = true
@@ -80,7 +81,8 @@ pub = true
 sync = true
 panics = true
 touches = []
-signature = "(ref mut self) -> String"
+views = ["<result>: borrowed"]
+signature = "(ref mut self) -> ref(self) String"
 
 [fn."Writer::increase"]
 sync = true
@@ -841,10 +843,12 @@ signature = "(k: TagKind) -> bool"
 
 [fn."scalar_text"]
 sync = true
+returns = "ref(n)"
+keeps = ["n"]
 panics = true
 places = true
 touches = []
-views = ["n: borrowed"]
+views = ["n: borrowed", "<result>: borrowed"]
 signature = "(n: ref Node) -> String"
 
 [fn."simple_key"]

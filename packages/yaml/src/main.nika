@@ -2828,7 +2828,7 @@ pub struct ConvertError {
 
 impl Error for ConvertError {
 	fn message(ref self) -> String {
-		return self.message.clone()
+		return self.message
 	}
 }
 
@@ -2841,7 +2841,7 @@ impl Error for ConvertError {
 // that shape.
 pub fn as_i64(v: ref Value) -> i64 sync throws {
 	let t = match v {
-		Value::Int(t) => t.clone()
+		Value::Int(t) => t
 		else => throw ConvertError { message: "not an integer" }
 	}
 	let n = if t.starts_with("0x") {
@@ -2849,7 +2849,7 @@ pub fn as_i64(v: ref Value) -> i64 sync throws {
 	} else if t.starts_with("0o") {
 		radix_value(t, 8)
 	} else {
-		text::parse_i64(t.clone())
+		text::parse_i64(t)
 	}
 	if n == null {
 		throw ConvertError { message: f"`{t}` does not fit in an i64" }
@@ -2899,8 +2899,8 @@ fn hex_value(x: scalar) -> i64 sync {
 // D35: no `.5`, no `1.`); `0x…` and `0o…` as `as_i64` reads them.
 pub fn as_f64(v: ref Value) -> f64 sync throws {
 	let t = match v {
-		Value::Int(t) => t.clone()
-		Value::Float(t) => t.clone()
+		Value::Int(t) => t
+		Value::Float(t) => t
 		else => throw ConvertError { message: "not a number" }
 	}
 	if t.starts_with("0x") || t.starts_with("0o") {
@@ -3074,7 +3074,7 @@ impl Writer {
 		if self.open_ended == 0 {
 			self.open_ended = 1
 		}
-		return self.out.clone()
+		return self.out
 	}
 
 	// The text that ends the stream: `...` after a document that ended in
@@ -3086,7 +3086,7 @@ impl Writer {
 			self.open_ended = 0
 			self.line()
 		}
-		return self.out.clone()
+		return self.out
 	}
 
 	fn put(ref mut self, c: scalar) sync {
@@ -3380,8 +3380,8 @@ impl Writer {
 fn scalar_text(n: ref Node) -> String sync {
 	return match n.value {
 		Value::Bool(b) => if b { "true" } else { "false" }
-		Value::Int(t) => t.clone()
-		Value::Float(t) => t.clone()
+		Value::Int(t) => t
+		Value::Float(t) => t
 		Value::Str(s) => text(s)
 		else => "null"
 	}
