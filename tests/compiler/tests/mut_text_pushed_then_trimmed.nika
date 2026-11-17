@@ -5,7 +5,7 @@ fn main() throws {
     let head = "f(test: &T)"
     let mut ty: String = ""
     for _ in ["(test: ", ", test: "] {
-        let hc: Vec[scalar] = head.chars().collect()
+        let hc: Vec[scalar] = head.scalars.collect()
         if ty == "" {
             let mut t0: String = ""
             let mut k = 0

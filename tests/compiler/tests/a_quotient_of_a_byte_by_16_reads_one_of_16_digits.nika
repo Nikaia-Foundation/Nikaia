@@ -6,7 +6,7 @@
 /// its check.
 fn escaped(path: String) -> String {
 	let mut out: String = ""
-	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+	let digits: Vec[scalar] = "0123456789ABCDEF".scalars.collect()
 	for b in path.bytes() {
 		let d = b as i64
 		out.push('%')
