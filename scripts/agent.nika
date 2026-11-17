@@ -19,8 +19,9 @@
 // DIR/RED (empty again after a green one); a second red in a row escalates. After
 // the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
 // run's transcript under ~/.claude/projects) to the Runs table of
-// docs/tokenspeed.md, once per agent id; it does not commit the file, the
-// supervisor's commit takes it. Before any escalation it resumes the run's
+// docs/tokenspeed.md, once per agent id; it does not commit the file: the
+// release after the driver's push does, or under `--no-bump` the driver's
+// `release.nika --rows`. Before any escalation it resumes the run's
 // session once and writes its answer to what held it up to BRIEF.debrief.md
 // (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
 // These files are untracked working files (#1252); scripts/drive.nika, which
@@ -631,7 +632,8 @@ fn main() throws {
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
     // id. This only writes the file; the release commit after the driver's push
-    // takes it (`release_bump` in scripts/release.nika, #1886).
+    // takes it (`release_bump` in scripts/release.nika, #1886), under
+    // `--no-bump` a commit of the rows alone (`release.nika --rows`).
     if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
         let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript]).stdout.trim().clone()
         if row.starts_with("| ") {

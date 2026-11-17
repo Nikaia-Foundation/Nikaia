@@ -1,0 +1,12 @@
+nothing added: ROWS none
+  committed: base  docs/tokenspeed.md other.txt
+  still staged: 
+  uncommitted: 
+a row added: ROWS committed
+  committed: tokenspeed.md: the agents' Runs rows  docs/tokenspeed.md
+  still staged: other.txt
+  uncommitted: 
+a row changed: ROWS NOT COMMITTED: docs/tokenspeed.md has changes besides added Runs rows
+  committed: tokenspeed.md: the agents' Runs rows  docs/tokenspeed.md
+  still staged: other.txt
+  uncommitted: docs/tokenspeed.md

@@ -883,9 +883,17 @@ fn drive_push(dir: String, sha: String) -> String throws {
 // lane's driver releases), nor where HEAD has moved past the pushed commit:
 // release.nika commits on HEAD and pushes it, and those commits have not been
 // through the suite (the next push releases them). Its lines go to the log as
-// `RELEASE <line>`; the note it returns ends the PUSHED line.
+// `RELEASE <line>`; the note it returns ends the PUSHED line. Under
+// `--no-bump` it commits only the agents' rows in docs/tokenspeed.md
+// (`release.nika --rows`), unpushed, for the next push: nothing else commits
+// them there, and left in the working file they blocked the merge of a
+// release that changed the file.
 fn drive_release(dir: String, pushed: String) -> String throws {
-	if drive_no_bump() { return "release left to the main lane (--no-bump)" }
+	if drive_no_bump() {
+		let rows = process::run(drive_exe(), ["run", "scripts/release.nika", "--", "--rows"]).stdout.trim().clone()
+		println(f"RELEASE {rows}")
+		return f"release left to the main lane (--no-bump), {rows}"
+	}
 	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if head != pushed { return "release at the next push (HEAD holds commits the suite has not tested)" }
 	let rel = process::run(drive_exe(), ["run", "scripts/release.nika", "--", dir.clone()])
