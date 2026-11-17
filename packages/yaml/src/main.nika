@@ -1,4 +1,3 @@
-use std::bytes
 use std::text
 use std::collections
 
@@ -2761,13 +2760,9 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 // break is a space, each further (empty) line a line break; in a
 // single-quoted one `''` is `'`. Every byte it decides on is ASCII, so it
 // walks the bytes in place (ADR-320 D6) and copies the runs between them as
-// slices; a scalar with nothing to fold is its raw text.
+// slices; a scalar with nothing to fold is its raw text, copied in one.
 fn fold(raw: String, single: bool) -> String sync {
 	let bs = raw.bytes
-	let stops = if single { bytes::ByteSet([10, 13, 39]) } else { bytes::ByteSet([10, 13]) }
-	if bs.find(stops) == null {
-		return raw.clone()
-	}
 	let n = bs.len() as i64
 	let mut out = String()
 	let mut i = 0

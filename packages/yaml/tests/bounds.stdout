@@ -1,27 +1,27 @@
 bounds in src/main.nika: 67 indexes, 67 proved; 106 operations, 80 proved
-  1424  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  1430  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  1430  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  2022  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
-  2022  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
-  2034  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
-  2036  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
-  2036  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
-  2072  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2086  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2114  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2123  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2124  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2662  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
-  2686  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
-  2728  row - prev - 1                        justified: a count over the input, which its length bounds: a count of a block scalar's lines
-  2737  row += 1                              justified: a count over the input, which its length bounds: a count of a block scalar's lines
-  2755  rows - prev                           justified: a count over the input, which its length bounds: a count of a block scalar's lines
-  2877  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  2877  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  3088  self.column += 1                      justified: a column of the text the library writes, which its length bounds
-  3147  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
-  3434  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
-  3454  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
-  3515  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
-  3588  at + utf8_length(c)                   justified: a count over the input, which its length bounds: a byte offset into the scalar's text
+  1423  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  1429  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  1429  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
+  2021  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
+  2021  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
+  2033  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
+  2035  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
+  2035  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
+  2071  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2085  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2113  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2122  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2123  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2661  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
+  2685  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
+  2727  row - prev - 1                        justified: a count over the input, which its length bounds: a count of a block scalar's lines
+  2736  row += 1                              justified: a count over the input, which its length bounds: a count of a block scalar's lines
+  2754  rows - prev                           justified: a count over the input, which its length bounds: a count of a block scalar's lines
+  2872  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  2872  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  3083  self.column += 1                      justified: a column of the text the library writes, which its length bounds
+  3142  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
+  3429  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
+  3449  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
+  3510  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
+  3583  at + utf8_length(c)                   justified: a count over the input, which its length bounds: a byte offset into the scalar's text
