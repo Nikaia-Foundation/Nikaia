@@ -296,7 +296,7 @@ struct BoundsWalk {
 	/// result** (ADR-306 D23, D31, #1785): `bounding_name_calls` binds
 	/// them for the one claim, as a `let` binds a call.
 	call_names: collections::BTreeMap[i64, String],
-	/// The binding of a `for d in x.chars()` over a text binding, with the
+	/// The binding of a `for d in x.scalars` over a text binding, with the
 	/// code of `x`'s characters (ADR-314 D1).
 	loop_classes: collections::BTreeMap[String, Range],
 	/// What the body is, read once before any pass.
@@ -3428,16 +3428,10 @@ fn bounding_class_of(walk: ref BoundsWalk, name: ref String, context: ref Bounds
 	return context.classes[name]
 }
 
-/// `x` where `iter` is `x.chars()`, or the scalars `x.scalars` of a text `x`
-/// (ADR-320 D3, #1974).
+/// `x` where `iter` is the scalars `x.scalars` of a text `x` (ADR-320 D3,
+/// #1974).
 fn bounding_chars_of(iter: ref Expr, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> String? {
 	return match iter {
-		Expr::MethodCall { receiver, method, args, .. } => {
-			if !args.is_empty() || words.resolve(method) != "chars" {
-				return null
-			}
-			bounding_variable(receiver, words)
-		},
 		Expr::Field { base, .. } => {
 			if !context.text_scalars.contains(node_key(iter)) {
 				return null
@@ -8354,7 +8348,7 @@ fn bounding_for(
 					all_turns = length
 				}
 			}
-			// **`for c in s.chars()` turns at most `s.len()` times** (ADR-361
+			// **`for c in s.scalars` turns at most `s.len()` times** (ADR-361
 			// D13, #1516): each character takes one byte or more.
 			let text = bounding_chars_of(iter, context, words) ?? ""
 			if limit == null && text != "" && !text.contains(".") && !changed.values.contains(text) && !changed.lengths.contains(text) {
@@ -8429,7 +8423,7 @@ fn bounding_for(
 	for fact in scaled {
 		bounding_push(walk, inner, fact)
 	}
-	// `for d in x.chars()` over a text binding: `d` is in its class
+	// `for d in x.scalars` over a text binding: `d` is in its class
 	// (ADR-314 D1).
 	let mut classed: String? = null
 	if bindings.len() == 1 && !counted {
@@ -8958,16 +8952,9 @@ fn bounding_assign(
 	bounding_relations_push(walk, facts, name, relations)
 }
 
-/// How many characters `"text".chars()` or `"text".scalars` hands, for
-/// ASCII text.
+/// How many scalars `"text".scalars` hands, for ASCII text.
 fn bounding_literal_chars(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
 	return match expr {
-		Expr::MethodCall { receiver, method, args, .. } => {
-			if !args.is_empty() || words.resolve(method) != "chars" {
-				return null
-			}
-			bounding_ascii_length(receiver)
-		},
 		// A literal is text, so its `scalars` is the view (ADR-320 D3).
 		Expr::Field { base, name, .. } => {
 			if words.resolve(name) != "scalars" {

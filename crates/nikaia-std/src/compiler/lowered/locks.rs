@@ -220,7 +220,7 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
     for (name, holds) in touches.iter() {
         let holds = *holds;
         if name.starts_with("field:") {
-            let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+            let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
             let field = slice(&c, 6, c.len() as i64);
             let settled = if published(own, &field) { holds.clone().or(&Lock::Undecided) } else { holds.clone() };
             answer.fields.insert(field, settled);
@@ -254,7 +254,7 @@ pub(crate) fn is_a_variant(declared: &collections::BTreeSet<String>, callee: &st
 }
 
 pub(crate) fn published(own: &Ledger, field: &str) -> bool {
-    let c: Vec<scalar> = nikaia_std::list::chars(field.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(field.chars());
     let dot = find_text(&c, 0, ".");
     if dot < 0 { return false; }
     let owner = slice(&c, 0, dot);

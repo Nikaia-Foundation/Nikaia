@@ -61,7 +61,7 @@ test "an arm of a statement match ends in a statement" {
     assert(size == 1)
 }
 
-// **A text's characters are listed at their count**: `nikaia_std::list::chars`
+// **A text's scalars are listed at their count**: `nikaia_std::list::scalars`
 // asks for the room once, where `collect` over `Chars` grew the list step by
 // step - the largest single cost of reading a ledger in Nikaia.
 test "the characters of a text are listed at their size" {

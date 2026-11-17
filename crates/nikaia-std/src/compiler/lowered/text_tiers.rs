@@ -226,7 +226,7 @@ pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str)
     let mut bare = nikaia_std::block::Text::from(name.to_string());
     if name.starts_with('&') {
         amp = "&";
-        let chars: Vec<scalar> = nikaia_std::list::chars(name.chars());
+        let chars: Vec<scalar> = nikaia_std::list::scalars(name.chars());
         bare = String::from("");
         for k in 1..chars.len() as i64 { bare.push(*unsafe { nikaia_std::proven::read(&chars, (k) as usize) }); }
     }

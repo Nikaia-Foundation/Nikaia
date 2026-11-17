@@ -229,7 +229,7 @@ pub(crate) fn print_throws_failing(tokens: &[MigrateToken], fns: &[PrintThrowsFn
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn print_throws_tokens(source: &str) -> Vec<MigrateToken> {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(source.chars()), at: 0, tokens: vec![] };
+    let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(source.chars()), at: 0, tokens: vec![] };
     lexer.run();
     lexer.tokens
 }

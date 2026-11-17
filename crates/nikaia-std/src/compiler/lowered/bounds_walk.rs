@@ -1184,7 +1184,7 @@ pub(crate) fn bounding_decided(walk: &BoundsWalk, cond: &Expr, context: &BoundsC
 }
 
 pub(crate) fn bounding_dropped(text: &str, count: i64) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut out: String = String::from("");
     for k in count..c.len() as i64 { out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(k))); }
     out
@@ -1955,11 +1955,6 @@ pub(crate) fn bounding_class_of(walk: &BoundsWalk, name: &str, context: &BoundsC
 
 pub(crate) fn bounding_chars_of(iter: &Expr, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Option<String> {
     match iter {
-        Expr::MethodCall { receiver, method, args, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if !args.is_empty() || words.resolve(method) != "chars" { return None; }
-            bounding_variable(receiver, words)
-        },
         Expr::Field { base, .. } => {
             let base = nikaia_std::boxed::open(base);
             if !context.text_scalars.contains(&node_key(iter)) { return None; }
@@ -5155,11 +5150,6 @@ pub(crate) fn bounding_assign(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
 
 pub(crate) fn bounding_literal_chars(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<i64> {
     match expr {
-        Expr::MethodCall { receiver, method, args, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if !args.is_empty() || words.resolve(method) != "chars" { return None; }
-            bounding_ascii_length(receiver)
-        },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             if words.resolve(name) != "scalars" { return None; }

@@ -432,7 +432,7 @@ pub fn split_args(written: &str) -> Vec<String> {
 
 pub(crate) fn a_view_of(written: &str) -> Option<String> {
     if written.starts_with("ref(") {
-        let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
         let close = closing(&c, 4, ')');
         if close >= 0 {
             let rest = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
@@ -463,7 +463,7 @@ pub(crate) fn between(c: &[scalar], from: i64, to: i64) -> String {
 }
 
 pub(crate) fn cut(written: &str, front: i64, back: i64) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     between(&c, front, c.len() as i64 - back)
 }
 
@@ -484,8 +484,8 @@ pub(crate) fn closing(c: &[scalar], from: i64, closer: scalar) -> i64 {
 
 pub(crate) fn word_off(tail: &str, word: &str) -> Option<String> {
     if !tail.ends_with(AsRef::<str>::as_ref(word)) { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(tail.chars());
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(tail.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     let shorter = between(&c, 0, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64) });
     if shorter.is_empty() { return Some(shorter); }
     if (*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64), 1) }))).is_whitespace() { return Some(nikaia_std::block::Text::from(shorter.trim_end().to_string())); }
@@ -528,7 +528,7 @@ pub(crate) fn pointed_at(viewed: &str) -> Option<Ty> {
 }
 
 pub(crate) fn a_function(written: &str) -> Option<Ty> {
-    let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     let close = closing(&c, 3, ')');
     if close < 0 { return None; }
     let after = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
@@ -564,11 +564,11 @@ pub(crate) fn a_function(written: &str) -> Option<Ty> {
 
 pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty> {
     if !written.starts_with(AsRef::<str>::as_ref(word)) { return None; }
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     let after_word = cut(written, w.len() as i64, 0);
     let rest: String = nikaia_std::block::Text::from(after_word.trim_start().to_string());
     if !rest.starts_with('[') { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(rest.chars());
     let close = closing(&c, 1, ']');
     if close < 0 { return None; }
     let after = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
@@ -630,7 +630,7 @@ pub(crate) fn a_name(rest: &str, view: bool) -> Ty {
     if view && rest == TEXT { return Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }; }
     if rest == "char" { return Ty::Named { name: String::from("scalar"), args: vec![], view }; }
     if !rest.ends_with(']') { return Ty::Named { name: nikaia_std::block::Text::from(rest.to_string()), args: vec![], view }; }
-    let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(rest.chars());
     let mut open: i64 = -1;
     for at in 0..c.len() as i64 { if open < 0 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { open = at; } }
     if open >= 0 {
@@ -1503,7 +1503,7 @@ pub(crate) fn renamed_name(name: &str, renames: &collections::BTreeMap<String, S
 }
 
 pub(crate) fn renamed_path(name: &str, renames: &collections::BTreeMap<String, String>) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     for at in 0..c.len() as i64 {
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' {
             let package = between(&c, 0, at);

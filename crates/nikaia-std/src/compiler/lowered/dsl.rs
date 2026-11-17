@@ -4,7 +4,7 @@
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn parameters(body: &str) -> Vec<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(body.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(body.chars());
     #[allow(unused_mut)] let mut found: Vec<String> = Vec::new();
     let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while i < c.len() as i64 {

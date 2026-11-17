@@ -36,12 +36,12 @@ pub fn contains<T: AsRef<str>>(items: &[T], value: &str) -> bool {
     items.iter().any(|item| item.as_ref() == value)
 }
 
-/// `text.chars().collect()` into a `Vec[char]`, with the room for every
-/// character asked for once: a text's length in bytes is at least its count of
-/// characters. `collect` over `Chars` asks for a quarter of that and grows,
+/// `text.scalars.collect()` into a `Vec[scalar]`, with the room for every
+/// scalar asked for once: a text's length in bytes is at least its count of
+/// scalars. `collect` over `Chars` asks for a quarter of that and grows,
 /// which was the largest single cost of reading a ledger in Nikaia (ADR-294
 /// step (c)).
-pub fn chars(text: std::str::Chars<'_>) -> crate::block::List<char> {
+pub fn scalars(text: std::str::Chars<'_>) -> crate::block::List<char> {
     let mut all = crate::block::List::with_capacity(text.as_str().len());
     all.extend(text);
     all

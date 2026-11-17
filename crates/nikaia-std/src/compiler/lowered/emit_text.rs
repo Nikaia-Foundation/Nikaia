@@ -10,7 +10,7 @@ pub(crate) fn rust_string(text: &str) -> String {
 
 pub(crate) fn rust_format_escape(text: &str) -> String {
     let mut out: String = String::from("");
-    let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
         let c = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };

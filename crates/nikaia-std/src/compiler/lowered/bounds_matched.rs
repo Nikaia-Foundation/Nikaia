@@ -25,7 +25,7 @@ pub(crate) fn bm_class(words: &winnow_grammar::InternerContext, rules: &collecti
             None
         },
         Pattern::Literal(text) => {
-            let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
+            let chars: Vec<scalar> = nikaia_std::list::scalars(text.chars());
             if chars.len() != 1 { return None; }
             let code = *unsafe { nikaia_std::proven::read(&chars, (0) as usize) } as i64;
             Some(bm_range(code, code))

@@ -10,7 +10,7 @@ use yaml
 
 fn escaped(t: String) -> String {
 	let mut out = String()
-	for c in t.chars() {
+	for c in t.scalars {
 		if c == '\\' {
 			out.push_str("\\\\")
 		} else if c == '\n' {

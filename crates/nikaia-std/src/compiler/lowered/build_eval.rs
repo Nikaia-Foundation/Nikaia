@@ -323,7 +323,7 @@ pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, state: &mut 
     let mut out: String = String::from("");
     let mut chunk: String = String::from("");
     let mut taken: i64 = 0;
-    let chars: Vec<scalar> = nikaia_std::list::chars(format.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(format.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
         let c = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };

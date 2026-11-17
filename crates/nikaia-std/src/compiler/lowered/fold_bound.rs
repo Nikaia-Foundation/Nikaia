@@ -16,7 +16,7 @@ pub(crate) fn fb_utf8_len(code: i64) -> u64 {
 }
 
 pub(crate) fn fb_literal_bytes(written: &str) -> u64 {
-    let chars: Vec<scalar> = nikaia_std::list::chars(written.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     let mut bytes: u64 = 0u64;
     let mut i: i64 = 0;
     while ((i) as usize) < chars.len() {

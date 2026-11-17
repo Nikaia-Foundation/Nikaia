@@ -36,7 +36,7 @@ pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &dyn Fn
 
 pub(crate) fn rust_of_name(name: &str, escape: &impl Fn(&str) -> String) -> String {
     if name.ends_with(".len()") {
-        let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
         let mut base: String = String::from("");
         for k in 0..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 6) } { base.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
         return format!("({}.len() as i128)", escape(&base));
@@ -129,7 +129,7 @@ pub fn shown(values: &collections::BTreeMap<String, i64>) -> String {
 }
 
 pub(crate) fn lowered_first(text: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     if c.is_empty() { return String::from(""); }
     let mut head: String = String::from("");
     head.push(*nikaia_std::index::get(&c, 0));

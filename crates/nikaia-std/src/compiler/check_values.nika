@@ -256,7 +256,8 @@ impl CheckState {
 
     /// **`NK1353`: `chars()` on text** (ADR-320, #1974): text is read
     /// through a view that names its unit, and `chars()` names none. It walks
-    /// the scalars, so the edit writes `.scalars`, which walks the same.
+    /// the scalars, so the edit writes `.scalars`, which walks the same. An
+    /// error since the repository was swept (#1974): `std` has no `chars`.
     fn a_chars_call(ref mut self, world: ref CheckWorld, call: ref Expr, receiver: ref Expr, span: ref Span) sync {
         let at = check_span_at(world, call, span)
         for said in self.findings {
@@ -264,10 +265,9 @@ impl CheckState {
                 return
             }
         }
-        let mut warned = check_refusal("NK1353", at, "`chars()` is not one of the views text is read through.", ["Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so."], "Write `.scalars` for `.chars()`.")
-        warned.severity = CheckSeverity::Warning
-        warned.edit = chars_renamed(world, call, receiver)
-        self.findings.push(warned)
+        let mut refused = check_refusal("NK1353", at, "`chars()` is not one of the views text is read through.", ["Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so."], "Write `.scalars` for `.chars()`; `nikaia fix` writes it.")
+        refused.edit = chars_renamed(world, call, receiver)
+        self.findings.push(refused)
     }
 
     /// **`NK2106`: a part of something lent, handed to what keeps it**

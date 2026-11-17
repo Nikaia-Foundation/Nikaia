@@ -201,7 +201,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_escape_nothing_names(&mut self, text: &str, written: &str, why: &str, all: &str, span: &Span) {
-        let letters: Vec<scalar> = nikaia_std::list::chars(written.chars());
+        let letters: Vec<scalar> = nikaia_std::list::scalars(written.chars());
         let mut help: String = String::from("");
         if letters.len() > 1 && (*unsafe { nikaia_std::proven::read(&letters, (1) as usize) } == 'x' || *unsafe { nikaia_std::proven::read(&letters, (1) as usize) } == 'u') { help = String::from("Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."); } else {
             let doubled = nikaia_std::block::Text::from(text.replace("\\", "\\\\"));

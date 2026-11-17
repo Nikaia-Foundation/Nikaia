@@ -1,3 +1,4 @@
+refused before: true, NK1353 4 times
 dry run: TMP/main.nika:11: NK1353: replaced `.chars()` with `.scalars`
 TMP/main.nika:22: NK1353: replaced `.chars()` with `.scalars`
 TMP/main.nika:23: NK1353: replaced `.chars()` with `.scalars`
@@ -49,7 +50,6 @@ fn main() throws {
     println(w.chars())
 }
 check: Checked TMP/main.nika
-same output: true
 2
 3
 3

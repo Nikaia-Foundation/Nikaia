@@ -500,7 +500,7 @@ fn viewed_parts(ty: ref Ty) -> String? {
 
 /// `a` or `an`, by the sound the written type starts with.
 fn article_of(written: ref String) -> String {
-    let first = written.chars().next() ?? 'x'
+    let first = written.scalars.next() ?? 'x'
     if first == 'A' || first == 'E' || first == 'I' || first == 'O' || first == 'U' || first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u' {
         return "an"
     }
