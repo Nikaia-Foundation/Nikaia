@@ -1,0 +1,16 @@
+// #1377: a non-throwing `sync` debug dump (as `proofs_dump` in
+// `proofs_answers.nika`) reports a failed write on standard error and
+// handles that `eprintln` with its own `catch {}` (ADR-392 D2); without it
+// the dump is refused with NK2605.
+use std::fs
+
+fn dump(dir: String) sync {
+    let mut file = fs::open(f"{dir}/x.txt", fs::Root::Anywhere; write: true, create: true, truncate: true) catch { return }
+    file.write("text") catch { eprintln(f"dump: {dir}/x.txt: {error}") catch {} }
+    file.close() catch { eprintln(f"dump: {dir}/x.txt: {error}") catch {} }
+}
+
+fn main() throws {
+    dump("/nonexistent-dir-for-test")
+    println("dumped or skipped")
+}

@@ -1,31 +1,20 @@
 // crates/nikaia-std/src/text_normal.rs
 //
-// `text::Form` and `s.normalized(form)`
+// `s.normalized(form)` over `text::Form`
 // ([ADR-320](../../../docs/specification/adr/adr-320.md) D8, D10), written in
 // Rust: Unicode's normalisation forms (UAX #15) as `unicode-normalization`
 // 0.1.25 implements them, which is **Unicode 17.0.0**
-// ([`NORMALIZATION_UNICODE_VERSION`]). The compiler reads a `'…'` of several
+// ([`NORMALIZATION_UNICODE_VERSION`]); `Form` itself is declared in Nikaia
+// (`runtime/text_normal.nika`). The compiler reads a `'…'` of several
 // scalars through [`normalized`] too, so a program and its compiler agree on
 // what NFC makes of a text.
 
 /// The Unicode version the normalisation follows, `(major, minor, update)`.
 pub use unicode_normalization::UNICODE_VERSION as NORMALIZATION_UNICODE_VERSION;
 
-/// One of Unicode's four normalisation forms (UAX #15).
-///
-/// `Nfc` composes and `Nfd` decomposes, by canonical equivalence; `Nfkc` and
-/// `Nfkd` do the same by compatibility as well, so `ﬁ` becomes `fi`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Form {
-    /// Canonical decomposition, then canonical composition.
-    Nfc,
-    /// Canonical decomposition.
-    Nfd,
-    /// Compatibility decomposition, then canonical composition.
-    Nfkc,
-    /// Compatibility decomposition.
-    Nfkd,
-}
+/// One of Unicode's four normalisation forms (UAX #15), declared in Nikaia
+/// (`runtime/text_normal.nika`).
+pub use crate::runtime::Form;
 
 /// `text` in the normalisation form `form`, as new text.
 pub fn normalized(text: &str, form: Form) -> crate::block::Text {
