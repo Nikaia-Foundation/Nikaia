@@ -47,12 +47,16 @@ fn justified() -> Vec[(String, String)] {
 		("self.expanded", f"{memory}: the nodes alias expansion made, at most `limit`"),
 		("n + d", f"{input}: an indentation and an indicator digit"),
 		("from + (", f"{input}: an offset into the scalar's text"),
+		("at + utf8_length(", f"{input}: a byte offset into the scalar's text"),
 		("self.column", "a column of the text the library writes, which its length bounds"),
 		("self.indent", "an indentation of the text the library writes, at most twice the depth"),
 		("tag_length(", f"{input}: a tag's length"),
 		("length +=", f"{input}: the length of a node's text"),
 		("width - 1", "a width the callers write as a literal, 2 to 8 digits"),
-		("value * radix", "at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`"),
+		(
+			"value * radix",
+			"at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`",
+		),
 	]
 }
 

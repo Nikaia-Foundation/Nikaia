@@ -1,3 +1,4 @@
+use std::bytes
 use std::text
 use std::collections
 
@@ -2763,59 +2764,61 @@ fn more_indented(line: String) -> bool sync {
 }
 
 // Folds the lines of a flow scalar: the spaces around a line break go, one
-// break is a space, each further (empty) line a line break.
+// break is a space, each further (empty) line a line break; in a
+// single-quoted one `''` is `'`. Every byte it decides on is ASCII, so it
+// walks the bytes in place (ADR-320 D6) and copies the runs between them as
+// slices; a scalar with nothing to fold is its raw text.
 fn fold(raw: String, single: bool) -> String sync {
-	let cs: Vec[scalar] = raw.chars().collect()
-	let n = cs.len() as i64
+	let bs = raw.bytes
+	let stops = if single { bytes::ByteSet([10, 13, 39]) } else { bytes::ByteSet([10, 13]) }
+	if bs.find(stops) == null {
+		return raw.clone()
+	}
+	let n = bs.len() as i64
 	let mut out = String()
-	// Spaces and tabs not yet known to stand inside a line.
-	let mut pending = String()
 	let mut i = 0
 	while i < n {
-		let c = cs[i]
-		if c == ' ' || c == '\t' {
-			pending.push(c)
-			i += 1
-			continue
+		// The run up to the next line break, or quote in a single-quoted one.
+		let start = i
+		let mut j = start
+		while j < n && bs[j] != 10 && bs[j] != 13 && !(single && bs[j] == 39) {
+			j += 1
 		}
-		if c == '\n' || c == '\r' {
-			pending = String()
-			i = skip_blanks(cs, i + 1)
-			let mut breaks = 0
-			while i < n && cs[i] == '\n' {
-				breaks += 1
-				i = skip_blanks(cs, i + 1)
-			}
-			if breaks == 0 {
-				out.push(' ')
-			}
-			while breaks > 0 {
-				out.push('\n')
-				breaks -= 1
-			}
-			continue
+		if j >= n {
+			out.push_str(bs[start..<j].text() catch { "" })
+			break
 		}
-		out.push_str(pending)
-		pending = String()
-		if single && c == '\'' {
+		if bs[j] == 39 {
+			// `''` is `'`.
+			out.push_str(bs[start..<j].text() catch { "" })
 			out.push('\'')
-			i += 2
+			i = j + 2
 			continue
 		}
-		out.push(c)
-		i += 1
+		// The spaces and tabs around a break go.
+		let mut e = j
+		while e > start && (bs[e - 1] == 32 || bs[e - 1] == 9) {
+			e -= 1
+		}
+		out.push_str(bs[start..<e].text() catch { "" })
+		// One break is a space, each further one (an empty line) a break.
+		i = j + 1
+		let mut breaks = 0
+		while i < n && (bs[i] == 32 || bs[i] == 9 || bs[i] == 10) {
+			if bs[i] == 10 {
+				breaks += 1
+			}
+			i += 1
+		}
+		if breaks == 0 {
+			out.push(' ')
+		}
+		while breaks > 0 {
+			out.push('\n')
+			breaks -= 1
+		}
 	}
-	out.push_str(pending)
 	return out
-}
-
-// The position after the spaces and tabs from `i` (a line's indentation).
-fn skip_blanks(cs: ref Vec[scalar], from: i64) -> i64 sync {
-	let mut i = from
-	while i < cs.len() as i64 && (cs[i] == ' ' || cs[i] == '\t') {
-		i += 1
-	}
-	return i
 }
 
 // A value asked for as a number it is not, or does not fit.
@@ -2903,27 +2906,33 @@ pub fn as_f64(v: ref Value) -> f64 sync throws {
 	if t.starts_with("0x") || t.starts_with("0o") {
 		return as_i64(v) as f64
 	}
+	// Every byte the spelling decides on is ASCII; one that is not makes
+	// `text::parse_f64` refuse the text either way.
+	let bs = t.bytes
+	let n = bs.len() as i64
+	let digits = if n > 0 && (bs[0] == 45 || bs[0] == 43) { 1 } else { 0 }
+	let mut point = 0
+	while point < n && bs[point] != 46 {
+		point += 1
+	}
 	let mut spelled = String()
-	let cs: Vec[scalar] = t.chars().collect()
-	let mut i = 0
-	if cs.len() > 0 && (cs[0] == '-' || cs[0] == '+') {
-		spelled.push(cs[0])
-		i = 1
-	}
-	if i < cs.len() as i64 && cs[i] == '.' {
-		let word: String = (t.strip_prefix(spelled) ?? "").to_lowercase()
-		if word == ".inf" || word == ".nan" {
-			spelled.push_str(word.strip_prefix(".") ?? "")
-			return text::parse_f64(spelled) ?? 0.0
-		}
-		spelled.push('0')
-	}
-	while i < cs.len() as i64 {
-		spelled.push(cs[i])
-		if cs[i] == '.' && (i + 1 >= cs.len() as i64 || cs[i + 1] < '0' || cs[i + 1] > '9') {
+	spelled.push_str(bs[0..<point].text() catch { "" })
+	if point < n {
+		if point == digits {
+			let word: String = (t.strip_prefix(spelled) ?? "").to_lowercase()
+			if word == ".inf" || word == ".nan" {
+				spelled.push_str(word.strip_prefix(".") ?? "")
+				return text::parse_f64(spelled) ?? 0.0
+			}
 			spelled.push('0')
 		}
-		i += 1
+		// A `0` after a point no digit follows (a second point makes
+		// `text::parse_f64` refuse the text either way).
+		spelled.push('.')
+		if point + 1 >= n || bs[point + 1] < 48 || bs[point + 1] > 57 {
+			spelled.push('0')
+		}
+		spelled.push_str(bs[point + 1..<n].text() catch { "" })
 	}
 	let x = text::parse_f64(spelled)
 	if x == null {
@@ -3319,15 +3328,29 @@ impl Writer {
 	// `+` with more than one), then the lines.
 	fn literal(ref mut self, t: String) sync {
 		self.indicator("|", true, false, false)
-		let cs: Vec[scalar] = t.chars().collect()
-		let n = cs.len() as i64
-		if n > 0 && (cs[0] == ' ' || is_break(cs[0])) {
+		// The first, the last and the last but one character, and how many
+		// there are, as far as two.
+		let mut n = 0
+		let mut first = ' '
+		let mut before = ' '
+		let mut last = ' '
+		for c in t.scalars {
+			if n == 0 {
+				first = c
+			}
+			before = last
+			last = c
+			if n < 2 {
+				n += 1
+			}
+		}
+		if n > 0 && (first == ' ' || is_break(first)) {
 			self.indicator("2", false, false, false)
 		}
 		self.open_ended = 0
-		if n == 0 || !is_break(cs[n - 1]) {
+		if n == 0 || !is_break(last) {
 			self.indicator("-", false, false, false)
-		} else if n == 1 || is_break(cs[n - 2]) {
+		} else if n == 1 || is_break(before) {
 			self.indicator("+", false, false, false)
 			self.open_ended = 2
 		}
@@ -3335,7 +3358,7 @@ impl Writer {
 		self.indention = true
 		self.whitespace = true
 		let mut breaks = true
-		for c in cs.iter() {
+		for c in t.scalars {
 			if is_break(c) {
 				self.put_text_break(c)
 				self.indention = true
@@ -3550,9 +3573,7 @@ fn escape(c: scalar) -> String sync {
 // meets a space or a special character is; a block scalar not with trailing
 // spaces, a space before a line break or a special character.
 fn allowed(t: String) -> Allowed sync {
-	let cs: Vec[scalar] = t.chars().collect()
-	let n = cs.len() as i64
-	if n == 0 {
+	if t.is_empty() {
 		return Allowed { multiline: false, plain: true, single: true, block: false }
 	}
 	let mut indicators = t.starts_with("---") || t.starts_with("...")
@@ -3565,12 +3586,17 @@ fn allowed(t: String) -> Allowed sync {
 	let mut previous_space = false
 	let mut previous_break = false
 	let mut preceded = true
-	let mut i = 0
-	while i < n {
-		let c = cs[i]
-		let followed = i + 1 >= n || blank(cs[i + 1])
-		if i == 0 {
-			if "#,[]{}&*!|>'\"%@`".contains(f"{c}")
+	// The character read and the byte offsets of it and of the next.
+	let bs = t.bytes
+	let n = bs.len() as i64
+	let mut at = 0
+	for c in t.scalars {
+		let next = at + utf8_length(c)
+		let first = at == 0
+		let last = next >= n
+		let followed = blank_at(bs, next)
+		if first {
+			if "#,[]{}&*!|>'\"%@`".contains(c)
 				|| ((c == '?' || c == ':' || c == '-') && followed) {
 					indicators = true
 				}
@@ -3581,10 +3607,10 @@ fn allowed(t: String) -> Allowed sync {
 			special = true
 		}
 		if c == ' ' {
-			if i == 0 || i == n - 1 {
+			if first || last {
 				edge_space = true
 			}
-			if i == n - 1 {
+			if last {
 				trailing_space = true
 			}
 			if previous_break {
@@ -3594,7 +3620,7 @@ fn allowed(t: String) -> Allowed sync {
 			previous_break = false
 		} else if is_break(c) {
 			line_breaks = true
-			if i == 0 || i == n - 1 {
+			if first || last {
 				edge_space = true
 			}
 			if previous_space {
@@ -3607,7 +3633,7 @@ fn allowed(t: String) -> Allowed sync {
 			previous_break = false
 		}
 		preceded = blank(c)
-		i += 1
+		at = next
 	}
 	let mixed = space_break || special
 	return Allowed {
@@ -3621,4 +3647,28 @@ fn allowed(t: String) -> Allowed sync {
 // libyaml's `IS_BLANKZ` short of the end: a space, a tab or a line break.
 fn blank(c: scalar) -> bool sync {
 	return c == ' ' || c == '\t' || is_break(c)
+}
+
+// `blank` of the character at byte `i` of `bs`, or the end there (libyaml's
+// `IS_BLANKZ`): LF, CR, a space or a tab, NEL (`C2 85`), LS and PS (`E2 80
+// A8`, `E2 80 A9`).
+fn blank_at(bs: ref Bytes, i: i64) -> bool sync {
+	let n = bs.len() as i64
+	if i < 0 || i >= n {
+		return true
+	}
+	let b = bs[i]
+	if b == 32 || b == 9 || b == 10 || b == 13 {
+		return true
+	}
+	if b == 194 {
+		return i + 1 < n && bs[i + 1] == 133
+	}
+	return b == 226 && i + 2 < n && bs[i + 1] == 128 && (bs[i + 2] == 168 || bs[i + 2] == 169)
+}
+
+// The bytes a character takes in UTF-8.
+fn utf8_length(c: scalar) -> i64 sync {
+	let v = c as i64
+	return if v < 128 { 1 } else if v < 2048 { 2 } else if v < 65536 { 3 } else { 4 }
 }

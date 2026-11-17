@@ -182,7 +182,7 @@ signature = "(input: ?, lim: Limits) -> Vec[Document]"
 
 [fn."allowed"]
 sync = true
-panics = false
+panics = true
 touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> Allowed"
@@ -218,6 +218,13 @@ sync = true
 panics = false
 touches = []
 signature = "(c: scalar) -> bool"
+
+[fn."blank_at"]
+sync = true
+panics = false
+touches = []
+views = ["bs: borrowed"]
+signature = "(bs: ref Bytes, i: i64) -> bool"
 
 [fn."block"]
 sync = true
@@ -361,7 +368,7 @@ signature = "(e: ref Event) -> String"
 pub = true
 sync = true
 returns = "ref(docs)"
-panics = false
+panics = true
 places = true
 touches = []
 views = ["docs: borrowed", "<result>: borrowed"]
@@ -397,7 +404,7 @@ signature = "(k: TagKind, v: ref Node) -> bool"
 
 [fn."fold"]
 sync = true
-panics = false
+panics = true
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool) -> String"
@@ -834,7 +841,7 @@ signature = "(k: TagKind) -> bool"
 
 [fn."scalar_text"]
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["n: borrowed"]
@@ -847,13 +854,6 @@ places = true
 touches = []
 views = ["n: borrowed"]
 signature = "(n: ref Node) -> bool"
-
-[fn."skip_blanks"]
-sync = true
-panics = false
-touches = []
-views = ["cs: borrowed"]
-signature = "(cs: ref Vec[scalar], from: i64) -> i64"
 
 [fn."starts_a_token"]
 sync = true
@@ -934,7 +934,7 @@ signature = "(input: ref Bytes, ds: ref Vec[Dir], n: ref Node)"
 [fn."text"]
 pub = true
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["s: borrowed"]
@@ -954,10 +954,16 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> String"
 
+[fn."utf8_length"]
+sync = true
+panics = false
+touches = []
+signature = "(c: scalar) -> i64"
+
 [fn."walk"]
 sync = true
 keeps = ["n"]
-panics = false
+panics = true
 places = true
 touches = []
 views = ["n: borrowed", "ds: borrowed", "out: borrowed"]
