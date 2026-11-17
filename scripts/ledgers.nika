@@ -30,7 +30,7 @@
 // records the toolchain, the units' source hashes and the resolved
 // dependencies, never the compiler's identity (ADR-021 D2, D3, #1945), so it
 // changes only when those do. `--check` compares the lock the build wrote
-// with the one copied in (stale when they differ), and `--refresh` copies it
+// with the one copied in (stale when they differ, the toolchain line apart), and `--refresh` copies it
 // back; a git-ignored lock is never copied in, so it is neither checked nor
 // refreshed.
 // `--list` prints each directory and the command it is built with. NIKAIA is
@@ -55,11 +55,14 @@ fn ledgers_keep_lock(tmp: String, dir: String) throws {
 }
 
 // Whether the build left the kept `nikaia.lock` of TMP/DIR as it was: true
-// for a directory that kept none. The difference, when there is one.
+// for a directory that kept none. The difference, when there is one. The
+// `toolchain` line is left out of the comparison: `rust-toolchain.toml` names
+// the floating `stable` (ADR-001 D1), so the runner's rustc moves without any
+// change of ours; the line is rewritten with the next real change.
 fn ledgers_lock_current(tmp: String, dir: String) -> (bool, String) throws {
 	let kept = f"{tmp}/committed/{dir}/nikaia.lock"
 	if !fs::exists(kept.clone(), fs::Root::Anywhere) { return (true, "") }
-	let diff = process::run("diff", ["-u", kept, f"{tmp}/{dir}/nikaia.lock"])
+	let diff = process::run("diff", ["-u", "-I", "^toolchain = ", kept, f"{tmp}/{dir}/nikaia.lock"])
 	return (diff.ok, diff.stdout)
 }
 
