@@ -82,6 +82,17 @@ mod shell_lowered {
 #[allow(unused_imports)]
 pub use shell_lowered::*;
 
+#[allow(unsafe_code)]
+mod target_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/target.rs");
+}
+#[allow(unused_imports)]
+pub use target_lowered::*;
+
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
@@ -98,8 +109,12 @@ pub mod shell {
     #[allow(unused_imports)]
     pub use super::{shell};
 }
+pub mod target {
+    #[allow(unused_imports)]
+    pub use super::{Instruction, level_has};
+}
 
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "07b1e1262c423ca9c4cb7059233db0cfac57287f84fa531faac32ff38877c1b1";
+pub const LOWERED_DIGEST: &str = "e4fc8e8b1e6e4ebc3c3b226d4ace664f246847334d0b84186529b2ad39add241";
