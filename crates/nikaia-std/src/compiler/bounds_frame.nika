@@ -164,6 +164,7 @@ fn frame_context(
 		decided: collections::BTreeMap(),
 		list_indices: collections::BTreeSet(),
 		text_bytes: collections::BTreeSet(),
+		text_scalars: collections::BTreeSet(),
 		returns: collections::BTreeMap(),
 	}
 }

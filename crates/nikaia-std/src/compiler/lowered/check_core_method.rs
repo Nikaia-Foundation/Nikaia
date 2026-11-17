@@ -431,6 +431,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "String" || name == "str"),
         _ => false,
     };
+    if text && name == "chars" && args.is_empty() { state.a_chars_call(world, expr, receiver, span); }
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") { state.facts.text_finds.insert(id_of(receiver) as i64); }
     if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {

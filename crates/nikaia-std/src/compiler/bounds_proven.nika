@@ -112,6 +112,7 @@ pub fn bounds_proven(
 		decided: bp_decided(program, words, facts.comptime_values),
 		list_indices: facts.list_indices.clone(),
 		text_bytes: facts.text_bytes.clone(),
+		text_scalars: facts.text_scalars.clone(),
 		returns: collections::BTreeMap(),
 	}
 	// **The list fields' bounds, found program-wide** (ADR-306 D21):

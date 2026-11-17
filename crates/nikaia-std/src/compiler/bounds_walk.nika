@@ -105,6 +105,9 @@ pub struct BoundsContext {
 	/// **The reads `s.bytes` of a text `s`** (ADR-320 D11), by node:
 	/// `s.bytes.len()` is the length `s.len()` names (#1556).
 	pub text_bytes: collections::BTreeSet[i64],
+	/// **The reads `s.scalars` of a text `s`** (ADR-320 D3), by node: a walk
+	/// over them hands at most `s.len()` scalars, as `s.chars()` did (#1974).
+	pub text_scalars: collections::BTreeSet[i64],
 	/// **What each function of the file is found to return** (ADR-306 D23),
 	/// by name: never published, like a frame (ADR-391 D4).
 	pub returns: collections::BTreeMap[String, BoundsReturns],
@@ -3413,14 +3416,21 @@ fn bounding_class_of(walk: ref BoundsWalk, name: ref String, context: ref Bounds
 	return context.classes[name]
 }
 
-/// `x` where `iter` is `x.chars()`.
-fn bounding_chars_of(iter: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+/// `x` where `iter` is `x.chars()`, or the scalars `x.scalars` of a text `x`
+/// (ADR-320 D3, #1974).
+fn bounding_chars_of(iter: ref Expr, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> String? {
 	return match iter {
 		Expr::MethodCall { receiver, method, args, .. } => {
 			if !args.is_empty() || words.resolve(method) != "chars" {
 				return null
 			}
 			bounding_variable(receiver, words)
+		},
+		Expr::Field { base, .. } => {
+			if !context.text_scalars.contains(node_key(iter)) {
+				return null
+			}
+			bounding_variable(base, words)
 		},
 		else => null,
 	}
@@ -8305,7 +8315,7 @@ fn bounding_for(
 			}
 			// **`for c in s.chars()` turns at most `s.len()` times** (ADR-361
 			// D13, #1516): each character takes one byte or more.
-			let text = bounding_chars_of(iter, words) ?? ""
+			let text = bounding_chars_of(iter, context, words) ?? ""
 			if limit == null && text != "" && !text.contains(".") && !changed.values.contains(text) && !changed.lengths.contains(text) {
 				let length = bounding_length_named(walk, text, false)
 				limit = walk.arena.lt(t, length)
@@ -8382,7 +8392,7 @@ fn bounding_for(
 	// (ADR-314 D1).
 	let mut classed: String? = null
 	if bindings.len() == 1 && !counted {
-		let over = bounding_chars_of(iter, words)
+		let over = bounding_chars_of(iter, context, words)
 		if over != null {
 			let text = over ?? ""
 			let class = context.text_classes[text]
@@ -8907,22 +8917,35 @@ fn bounding_assign(
 	bounding_relations_push(walk, facts, name, relations)
 }
 
-/// How many characters `"text".chars()` hands, for ASCII text.
+/// How many characters `"text".chars()` or `"text".scalars` hands, for
+/// ASCII text.
 fn bounding_literal_chars(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
 	return match expr {
 		Expr::MethodCall { receiver, method, args, .. } => {
 			if !args.is_empty() || words.resolve(method) != "chars" {
 				return null
 			}
-			match receiver {
-				Expr::LitStr { text, .. } => {
-					if text.chars().count() != text.len() {
-						return null
-					}
-					text.len() as i64
-				},
-				else => null,
+			bounding_ascii_length(receiver)
+		},
+		// A literal is text, so its `scalars` is the view (ADR-320 D3).
+		Expr::Field { base, name, .. } => {
+			if words.resolve(name) != "scalars" {
+				return null
 			}
+			bounding_ascii_length(base)
+		},
+		else => null,
+	}
+}
+
+/// The length of a literal of ASCII text: its characters, one byte each.
+fn bounding_ascii_length(expr: ref Expr) -> i64? {
+	return match expr {
+		Expr::LitStr { text, .. } => {
+			if text.chars().count() != text.len() {
+				return null
+			}
+			text.len() as i64
 		},
 		else => null,
 	}

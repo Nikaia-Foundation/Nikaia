@@ -254,6 +254,22 @@ impl CheckState {
         self.findings.push(check_refusal("NK1301", span, f"`.{written}()` on a text literal adds nothing.", ["A text literal is already the text wherever text is wanted."], f"Drop `.{written}()`."))
     }
 
+    /// **`NK1353`: `chars()` on text** (ADR-320, #1974): text is read
+    /// through a view that names its unit, and `chars()` names none. It walks
+    /// the scalars, so the edit writes `.scalars`, which walks the same.
+    fn a_chars_call(ref mut self, world: ref CheckWorld, call: ref Expr, receiver: ref Expr, span: ref Span) sync {
+        let at = check_span_at(world, call, span)
+        for said in self.findings {
+            if said.code == "NK1353" && said.span.start == at.start {
+                return
+            }
+        }
+        let mut warned = check_refusal("NK1353", at, "`chars()` is not one of the views text is read through.", ["Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so."], "Write `.scalars` for `.chars()`.")
+        warned.severity = CheckSeverity::Warning
+        warned.edit = chars_renamed(world, call, receiver)
+        self.findings.push(warned)
+    }
+
     /// **`NK2106`: a part of something lent, handed to what keeps it**
     /// ([ADR-293](../../docs/specification/adr/adr-293.md) D32).
     ///
@@ -285,4 +301,16 @@ fn ledger_candidates(ledger: ref Ledger, methods: ref MethodIndex, method: ref S
         }
     }
     return out
+}
+
+// **The edit `NK1353` suggests** (#1974): `.chars()` after its receiver,
+// from the receiver's end to the call's, replaced by `.scalars`. Only where
+// both spans are known and the receiver starts the call.
+fn chars_renamed(world: ref CheckWorld, call: ref Expr, receiver: ref Expr) -> CheckEdit? sync {
+    let whole = world.here.spans.get(id_of(call)) ?? return null
+    let of = world.here.spans.get(id_of(receiver)) ?? return null
+    if of.start != whole.start || of.end >= whole.end {
+        return null
+    }
+    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: ".scalars" }
 }

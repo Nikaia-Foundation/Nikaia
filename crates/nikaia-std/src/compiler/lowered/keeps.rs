@@ -551,6 +551,7 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
         },
         Expr::Field { .. } => {
             let root = match keeps_field_root(receiver, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if keeps_text_view(receiver, interner, context) { return; }
             let ours = receiver_taken_in(own, context.own_methods, method, None);
             let theirs = receiver_taken_in(library, context.library_methods, method, None);
             if ours.hit || theirs.hit { walk.uses.kept.insert(root); }
@@ -564,6 +565,26 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
     let theirs = receiver_taken_in(library, context.library_methods, method, (owner).as_deref());
     let fails_closed = method != "clone" && (context.unresolved || !ours.any && !theirs.any);
     if fails_closed || ours.hit || theirs.hit { walk.uses.kept.extend(names.iter().cloned()); }
+}
+
+pub(crate) fn keeps_text_view(receiver: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> bool {
+    match receiver {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let field = interner.resolve(name);
+            if field == "scalars" || field == "graphemes" { return true; }
+            if field != "bytes" { return false; }
+            match base {
+                Expr::Variable(ident, _) => {
+                    let ident = *ident;
+                    let ty = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return ty == "String" || ty == "str";
+                },
+                _ => return false,
+            }
+        },
+        _ => return false,
+    }
 }
 
 pub(crate) fn keeps_field_root(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {

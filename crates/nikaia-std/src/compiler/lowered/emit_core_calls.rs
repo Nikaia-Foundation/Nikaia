@@ -1136,6 +1136,14 @@ impl EmitState {
                 out.push(".chars())");
                 return Ok(true);
             },
+            Expr::Field { base: text, .. } => {
+                let text = nikaia_std::boxed::open(text);
+                if !self.facts.text_scalars.contains(&node_key(on)) || self.facts.collected_into.contains(&node_key(on)) { return Ok(false); }
+                out.push("nikaia_std::list::chars(");
+                self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
+                out.push(".chars())");
+                return Ok(true);
+            },
             _ => return Ok(false),
         })
     }
@@ -1317,8 +1325,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97604| {
-        let (i, word) = __nikaia_tuple97604;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple98162| {
+        let (i, word) = __nikaia_tuple98162;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -1686,7 +1686,7 @@ impl EmitState {
         }
     }
 
-    /// `text.chars().collect()`, asked for at its size. `true` where it has been
+    /// `text.chars().collect()` or `text.scalars.collect()`, asked for at its size. `true` where it has been
     /// written.
     fn emit_call_chars[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, name: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if receiver == null || name != "collect" || args.len() != 0 {
@@ -1696,6 +1696,16 @@ impl EmitState {
         match on {
             Expr::MethodCall { receiver: text, method: chars, args: none, .. } => {
                 if none.len() != 0 || emit_text(world, chars) != "chars" || self.facts.collected_into.contains(node_key(on)) {
+                    return false
+                }
+                out.push("nikaia_std::list::chars(")
+                self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                out.push(".chars())")
+                return true
+            },
+            // **`text.scalars.collect()`** is the same walk (ADR-320 D3, #1974).
+            Expr::Field { base: text, .. } => {
+                if !self.facts.text_scalars.contains(node_key(on)) || self.facts.collected_into.contains(node_key(on)) {
                     return false
                 }
                 out.push("nikaia_std::list::chars(")
