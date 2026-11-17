@@ -47,34 +47,8 @@ pub fn sysroot_package_render(table: ref collections::BTreeMap[String, String]) 
     return lines.join("")
 }
 
-/// **The source with every body taken out** (#667): what another file of the
-/// package can see of this one - its names, signatures, types and constants.
-/// The ranges are the statements' extent, so a comment between two statements
-/// goes with them and a comment outside a body stays.
-pub fn sysroot_package_without_bodies(source: ref String, items: ref Vec[Spanned[Item]]) -> String sync {
-    let mut cut: Vec[(i64, i64)] = []
-    for item in items {
-        sysroot_package_bodies(item, cut)
-    }
-    cut.sort()
-    let mut kept: String = ""
-    let mut at = 0
-    let n = source.bytes.len()
-    for (start, end) in cut {
-        if start < at || end > n {
-            // Not a range this can trust: the whole text is the interface.
-            return source.clone()
-        }
-        kept.push_str(source.bytes[at..<start].text() catch { return source.clone() })
-        at = end
-    }
-    kept.push_str(source.bytes[at..<n].text() catch { return source.clone() })
-    // A line that is only a comment says nothing to another file (a `///`
-    // line is a doc and stays).
-    let lines: Vec[String] = kept.lines().filter(fn(line) { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(fn(line) { f"{line}\n" }).collect()
-    return lines.join("")
-}
-
+/// The ranges of `item`'s bodies (#667): the statements' extent, so a comment
+/// between two statements goes with them and a comment outside a body stays.
 fn sysroot_package_bodies(item: ref Spanned[Item], mut cut: Vec[(i64, i64)]) sync {
     let block = match item.node {
         Item::Fn { body, .. } => body,

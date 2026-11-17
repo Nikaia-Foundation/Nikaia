@@ -1,0 +1,7 @@
+cold: 0 of 3 files from the cache
+a_three added: 2 of 3 files from the cache
+c calls a_three: 1 of 3 files from the cache
+a_one signature: 1 of 3 files from the cache
+a_one ledger: 1 of 3 files from the cache
+fresh salt: 0 of 3 files from the cache
+cached lowering is the cold one: true

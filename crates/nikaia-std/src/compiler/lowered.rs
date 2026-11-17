@@ -3593,7 +3593,7 @@ pub mod check_task_pauses {}
 pub mod check_texts {}
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{moves_away};
+    pub use super::{type_last_segment, moves_away};
 }
 pub mod check_values {}
 pub mod check_visit {}
@@ -3865,7 +3865,7 @@ pub mod libraries {
 }
 pub mod locks {
     #[allow(unused_imports)]
-    pub use super::{BodyCalls, Reaches, stored_reaches, unit_reaches, free_calls, declared_types, locking_of, Locking, locking};
+    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
 }
 pub mod logic_alethe {
     #[allow(unused_imports)]
@@ -4173,11 +4173,11 @@ pub mod sync {
 }
 pub mod sysroot_cache {
     #[allow(unused_imports)]
-    pub use super::{SysrootHost, sysroot_std_dir, sysroot_tools_dir, sysroot_runtime_dir, sysroot_std_modules, sysroot_tool_modules, sysroot_nika_in, sysroot_cpu_levels, sysroot_native_cpu, sysroot_interface, sysroot_file_key, sysroot_committed, sysroot_inlined, sysroot_contains, sysroot_drift, sysroot_stale, sysroot_pack, sysroot_unpack, sysroot_lowered_key, sysroot_lowered_get, sysroot_lowered_put};
+    pub use super::{SysrootHost, sysroot_std_dir, sysroot_tools_dir, sysroot_runtime_dir, sysroot_std_modules, sysroot_tool_modules, sysroot_nika_in, sysroot_cpu_levels, sysroot_native_cpu, SysrootDeclared, SysrootNames, sysroot_words, sysroot_declared, sysroot_names, sysroot_named_key, sysroot_committed, sysroot_inlined, sysroot_contains, sysroot_drift, sysroot_stale, sysroot_pack, sysroot_unpack, sysroot_lowered_key, sysroot_lowered_get, sysroot_lowered_put};
 }
 pub mod sysroot_package {
     #[allow(unused_imports)]
-    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_assemble, sysroot_package_with_dependencies};
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_assemble, sysroot_package_with_dependencies};
 }
 pub mod template {
     #[allow(unused_imports)]
@@ -4218,7 +4218,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -4249,4 +4249,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "83e11f50e3ccac9beed05b31b3bdf3a7eb7fccfe90044af0cd7faa1da3c3f15c";
+pub const LOWERED_DIGEST: &str = "d249220ce072427d0e640eccdcf155199dfb7211d4a573dda0403e26a669eee4";

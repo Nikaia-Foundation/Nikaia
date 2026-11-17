@@ -1,0 +1,53 @@
+// A file of the tools package is keyed on what its text names of the others
+// (#1909, C): their declarations, ledger rows, call graph rows and text tier
+// facts, each reached by name. So a function added to `a` that no other file
+// names re-lowers `a` alone, a file that starts calling it re-lowers with
+// the file it calls, and a signature or ledger change of `a_one` re-lowers
+// `a` and `b`, which names it, and not `c`. The cached lowering is the one a
+// cold run gives.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+// Lowers the sysroot in `tmp` with `salt` and prints how many files came
+// from the cache.
+fn lower(nikaia: String, tmp: String, salt: String, what: String) throws {
+    let out = process::run(nikaia, ["lower-std", "--sysroot", f"{tmp}/crates"]; dir: tmp.clone(), env: [("NIKAIA_CACHE_DIR", f"{tmp}/cache"), ("NIKAIA_LOWER_CACHE_SALT", salt)])
+    for line in out.stderr.lines() {
+        if line.contains(" files from the cache") || line.contains(": unchanged") {
+            let parts: Vec[String] = line.split(": ").collect()
+            println(f"{what}: {parts.last() ?? ""}")
+            return
+        }
+    }
+    println(f"{what}: exit {out.code}")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let dir = f"{tmp}/crates/nikaia-std/src/compiler"
+    process::run("mkdir", ["-p", dir.clone()])
+    fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "pub fn a_one() -> i64 sync {\n    return 1\n}\n")
+    fs::write(f"{dir}/b.nika", fs::Root::Anywhere, "pub fn b_two() -> i64 sync {\n    return a_one() + 1\n}\n")
+    fs::write(f"{dir}/c.nika", fs::Root::Anywhere, "pub fn c_ten() -> i64 sync {\n    return 10\n}\n")
+    lower(nikaia, tmp, "named", "cold")
+    fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "pub fn a_one() -> i64 sync {\n    return 1\n}\n\npub fn a_three() -> i64 sync {\n    return 3\n}\n")
+    lower(nikaia, tmp, "named", "a_three added")
+    fs::write(f"{dir}/c.nika", fs::Root::Anywhere, "pub fn c_ten() -> i64 sync {\n    return a_three() + 7\n}\n")
+    lower(nikaia, tmp, "named", "c calls a_three")
+    fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "pub fn a_one() -> i32 sync {\n    return 1\n}\n\npub fn a_three() -> i64 sync {\n    return 3\n}\n")
+    lower(nikaia, tmp, "named", "a_one signature")
+    fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "pub fn a_one() -> i32 sync {\n    let x = 1\n    return x\n}\n\npub fn a_three() -> i64 sync {\n    return 3\n}\n")
+    lower(nikaia, tmp, "named", "a_one ledger")
+    let cached = process::run("sh", ["-c", f"cat {dir}/lowered.rs {dir}/lowered/*.rs"]).stdout.clone()
+    lower(nikaia, tmp, "cold-again", "fresh salt")
+    let cold = process::run("sh", ["-c", f"cat {dir}/lowered.rs {dir}/lowered/*.rs"]).stdout.clone()
+    println(f"cached lowering is the cold one: {cached == cold}")
+    process::run("rm", ["-rf", tmp])
+}

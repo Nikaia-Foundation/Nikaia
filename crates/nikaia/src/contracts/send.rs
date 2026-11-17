@@ -229,8 +229,9 @@ mod tests {
                 let answer = crossing(&Ty::named(name.clone()), &own, &library, into);
                 assert!(
                     answer.refused().is_none()
-                        || ["Locked", "SharedMut", "Shared"]
-                            .contains(&crate::contracts::ty::base(name)),
+                        || ["Locked", "SharedMut", "Shared"].contains(
+                            &nikaia_std::compiler::check_types::type_last_segment(name).as_str()
+                        ),
                     "`{name}` into {into:?}: {answer:?}"
                 );
             }

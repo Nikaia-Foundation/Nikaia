@@ -32,32 +32,6 @@ pub fn sysroot_package_render(table: &collections::BTreeMap<String, String>) -> 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_package_without_bodies(source: &str, items: &[Spanned<Item>]) -> String {
-    let mut cut: Vec<(i64, i64)> = vec![];
-    for item in items.iter() { sysroot_package_bodies(item, &mut cut); }
-    cut.sort();
-    let mut kept: String = String::from("");
-    let mut at: i64 = 0;
-    let n = source.as_bytes().len() as i64;
-    for (start, end) in cut.iter() {
-        let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
-        if start < at || end > n { return nikaia_std::block::Text::from(source.to_string()); }
-        kept.push_str(match nikaia_std::bytes::text_of_a_cut(&*source, nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start))) {
-            Ok(value) => value,
-            Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
-        });
-        at = end;
-    }
-    kept.push_str(match nikaia_std::bytes::text_of_a_cut(&*source, nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..n))) {
-        Ok(value) => value,
-        Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
-    });
-    let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
-    nikaia_std::block::Text::from(lines.join(""))
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i64)>) {
     let block = match &item.node {
         Item::Fn { body, .. } => body,
