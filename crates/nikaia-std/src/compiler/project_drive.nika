@@ -1365,6 +1365,17 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
             },
         }
     }
+    // **The program's lints capped, and only the program's**
+    // (`NIKAIA_CAP_LINTS`, e.g. `allow`): a build that lowers a program it
+    // knows to warn (the solver's, `scripts/solver.nika`, about 140 functions
+    // it never calls) is spared the second lowering a backend warning costs
+    // (`report`, ADR-300). `RUSTFLAGS` would cap them too, but it is part of
+    // every dependency's fingerprint: Cargo built all of them again, `std`
+    // included, outside the cached tree (#1956).
+    match env::var("NIKAIA_CAP_LINTS") {
+        null => {},
+        level => host.push_arg(f"--cap-lints={level}"),
+    }
     let code = host.run()
     // Cargo believes the dependency file `rustc` wrote, and `rustc` saw only
     // the generated Rust: without the sources an edit to a `.nika` file leaves
