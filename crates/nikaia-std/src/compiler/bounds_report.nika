@@ -222,8 +222,15 @@ fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Ve
 			// **Not refused yet** (ADR-396 D7, D8 step 3): the site
 			// `NK1303` will refuse, and whether the walk stated its goal.
 			verdict = "checked: not proved, an NK1303 site (ADR-396 D8)"
-			if !found.stated {
-				verdict = "checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)"
+			if found.within != "" {
+				// **The goal an `i64` or `u64` was asked within** (D8 step
+				// 2, #1810): the window, not the type's ends.
+				verdict = f"checked: not proved within {found.within}, an NK1303 site (ADR-396 D8)"
+			} else if !found.stated {
+				// Every whole-number type has its goal now (#1810): only an
+				// operand the prover reads no whole number of, `line.len()`,
+				// leaves it unstated.
+				verdict = "checked: the prover reads no whole number of an operand, an NK1303 site (ADR-396 D8)"
 			}
 		} else if found.proved {
 			verdict = "proved"

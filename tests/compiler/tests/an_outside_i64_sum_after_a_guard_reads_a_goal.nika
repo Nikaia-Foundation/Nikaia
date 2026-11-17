@@ -1,0 +1,13 @@
+// An `i64` `+` that data from outside reaches, after a guard that bounds
+// it: proved, by the bounds walk's ranges or the prover's goal within
+// `±2^62` (ADR-396 D8 step 2, #1810).
+use std::io
+use std::text
+
+fn main() throws {
+    let n = text::parse_i64(io::read_to_string().trim()) ?? 0
+    if n > 1000 || n < 0 {
+        return
+    }
+    println(n + 5)
+}

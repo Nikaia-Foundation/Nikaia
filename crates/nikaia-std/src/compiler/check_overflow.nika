@@ -524,13 +524,12 @@ fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Expr, f
 /// same tuple written directly** (#1088): `match x { null => (1, null), s =>
 /// (2, s.clone()) }` for `(i32, String?)` holds `Some(s.clone())`. Each end is
 /// compared with the type it came to itself (`arm_types`, #596), not with the
-/// join of the ends, where its part already looks like a `T?`. Only where
-/// every end is a tuple literal or `null`, as `tuple_literal` asks
-/// (`check_texts.nika`). True where a part was wrapped.
+/// join of the ends, where its part already looks like a `T?`. An end that
+/// is no tuple literal, `else => other(t)`, already has the wanted type and
+/// leaves the literal ends to be wrapped all the same (#1810: `(-1, 2)` beside
+/// `else => prover_stated_range(ty)` for `(i64, i64?)?` was `(.., 2)` to
+/// rustc). True where a part was wrapped.
 fn check_overflow_ends_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
-    if !ends_in_tuple(given) {
-        return false
-    }
     let mut any = false
     for end in tuple_ends(given) {
         let own: Ty = state.arm_types.get(id_of(end) as i64)?.clone() ?? found.clone()

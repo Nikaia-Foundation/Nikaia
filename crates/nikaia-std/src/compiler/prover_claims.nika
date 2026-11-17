@@ -58,9 +58,14 @@ pub struct OutsideIndex {
     /// **A `/`, `%`, `+`, `-` or `*`, not an index** (ADR-396 D7, #1660):
     /// a divisor not zero, a result inside its type. Not refused yet (D8).
     pub operation: bool,
-    /// Whether the walk could state the bound as a goal: an `i64`'s `+`,
-    /// `-` and `*` it cannot, nor an operand it reads no whole number of.
+    /// Whether the walk could state the bound as a goal: not of an operand
+    /// it reads no whole number of.
     pub stated: bool,
+    /// **The window the goal was stated within** (ADR-396 D8 step 2,
+    /// ADR-270 D11, #1810): `±2^62` for an `i64`'s `+`, `-` and `*`, `0..2^62`
+    /// for a `u64`'s, whose true ends the solver, counting in `i64`, cannot
+    /// state; "" where the goal is the type's own range.
+    pub within: String,
     /// The byte of the operator, where the operation stands in this
     /// function: the bounds walk may prove what the prover leaves open (an
     /// `i64`'s by ranges, ADR-395 D2). -1 for an index or a call.

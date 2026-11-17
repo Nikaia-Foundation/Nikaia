@@ -23,6 +23,7 @@ pub struct OutsideIndex {
     pub guard: String,
     pub operation: bool,
     pub stated: bool,
+    pub within: String,
     pub site: i64,
 }
 

@@ -379,7 +379,6 @@ pub(crate) fn check_overflow_tuple_into_nullables(state: &mut CheckState, given:
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_overflow_ends_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
-    if !ends_in_tuple(given) { return false; }
     let mut any = false;
     for end in tuple_ends(given) {
         let own: Ty = nikaia_std::index::or(match state.arm_types.get(&(id_of(end) as i64)) {

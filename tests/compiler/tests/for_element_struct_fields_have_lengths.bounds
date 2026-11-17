@@ -2,4 +2,4 @@ bounds in tests/for_element_struct_fields_have_lengths.nika: 1 indexes, 1 proved
     22  f.lines[i]       proved
     23  n += line.len()  checked: a counter the loop on line 21 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
   outside  22  `f.lines[i]`, `i` from `i`: proved
-  outside  23  `n + line.len()`, `line.len()` from `i`: checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)
+  outside  23  `n + line.len()`, `line.len()` from `i`: checked: the prover reads no whole number of an operand, an NK1303 site (ADR-396 D8)
