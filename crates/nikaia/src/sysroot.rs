@@ -1491,8 +1491,8 @@ mod tests {
             run(
                 "fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s.clone() + \"3\") }\nfn ifa_new() -> i64 sync { 0 }\n"
             ),
-            0,
-            "a signature change lowers both"
+            1,
+            "a function B does not name lowers A only (#1909)"
         );
         assert_eq!(
             run(
