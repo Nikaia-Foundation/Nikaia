@@ -81,10 +81,11 @@ impl CheckState {
         for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
         let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        let mut cleaned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         loop {
             let mut joining: Vec<String> = vec![];
             for name in package.iter() {
-                if copies.contains(name) || dropped.contains(name) { continue; }
+                if copies.contains(name) || dropped.contains(name) || cleaned.contains(name) { continue; }
                 let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 if nikaia_std::list::contains(&declared, &name) {
                     if self.enum_payloads.contains_key(name) {
@@ -98,11 +99,20 @@ impl CheckState {
                     let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     parts = held.copy_owned();
                 }
-                let named = Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false };
-                if self.cleanup_of(world, &named).is_some() { continue; }
                 let mut all = true;
-                for ty in parts.iter() { if !a_copied_part(ty, &copies) { all = false; } }
-                if all { joining.push(nikaia_std::block::Text::from(name.to_string())); }
+                for ty in parts.iter() {
+                    if !a_copied_part(ty, &copies) {
+                        all = false;
+                        break;
+                    }
+                }
+                if !all { continue; }
+                let named = Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false };
+                if self.cleanup_of(world, &named).is_some() {
+                    cleaned.insert(nikaia_std::block::Text::from(name.to_string()));
+                    continue;
+                }
+                joining.push(nikaia_std::block::Text::from(name.to_string()));
             }
             if joining.is_empty() { break; }
             copies.extend(joining.iter().cloned());
