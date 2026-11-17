@@ -222,7 +222,7 @@ fn sv_is_numeral(a: String) -> bool {
 	if a.len() == 0 {
 		return false
 	}
-	for c in a.chars() {
+	for c in a.scalars {
 		if c < '0' || c > '9' {
 			return false
 		}
@@ -417,7 +417,7 @@ impl SvSmtReader {
 		}
 		// A decimal starts with a digit; a symbol never does, and may hold a
 		// `.` (`main_~i.4`, SMT-LIB 2.6 §3.1).
-		let first = a.chars().nth(0) ?? ' '
+		let first = a.scalars.nth(0) ?? ' '
 		if a.contains(".") && first >= '0' && first <= '9' {
 			return sv_decimal(a)
 		}

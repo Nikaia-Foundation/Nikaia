@@ -68,7 +68,7 @@ fn emit_renamed_lifetime(text: ref String, from: ref String, to: ref String) -> 
             out.push_str(part)
             first = false
         } else {
-            let c = part.chars().next() ?? ' '
+            let c = part.scalars.next() ?? ' '
             if c.is_alphanumeric() || c == '_' {
                 out.push_str(from)
             } else {

@@ -787,7 +787,7 @@ fn rsrc_unknown_named(unit: ref Unit, asked: ref Asked, ty: ref Type) -> bool {
     if segments.len() > 1 {
         name = segments[segments.len() - 1].clone()
     }
-    let first: Vec[scalar] = name.chars().collect()
+    let first: Vec[scalar] = name.scalars.collect()
     let a_word = first.len() > 0 && first[0].is_alphabetic()
     if a_word && !rsrc_plain_name(name) && name != "Self" && !unit.fields.contains_key(name) {
         if asked.own.types.contains_key(name) {

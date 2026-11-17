@@ -20,6 +20,7 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> R
     #[allow(unused_mut)] let mut files: Vec<String> = vec![];
     for path in named.iter() { fix_files_under(path, &mut files).await; }
     let open: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
+    let mut said_of: collections::BTreeMap<String, Vec<Shown>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
     let mut code: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
     for file in files.iter() {
         let source = match fs::read_to_string(std::path::Path::new(&(file)), &fs::Root::Anywhere).await {
@@ -30,8 +31,12 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> R
                 continue;
             },
         };
-        let mut here: Vec<Shown> = vec![];
-        for (path, shown) in host.diagnose(file, &open, false) { if fix_same_file(&path, file) { here.push(shown.clone()); } }
+        let key = fix_key(file);
+        if !said_of.contains_key(&key) { fix_diagnosed(host, file, &key, &open, &mut said_of); }
+        let here = nikaia_std::index::or(match *nikaia_std::index::get(&said_of, &key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
         let plan = fix_planned(file, &source, &here);
         if plan.left { code = 1; }
         for line in plan.said.iter() { nikaia_std::io::println(format_args!("{}", line))?; }
@@ -49,6 +54,15 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> R
         };
     }
     Ok(code)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn fix_diagnosed<H: LspHost>(host: &H, file: &str, key: &str, open: &collections::BTreeMap<String, String>, said_of: &mut collections::BTreeMap<String, Vec<Shown>>) {
+    let mut fresh: collections::BTreeMap<String, Vec<Shown>> = collections::BTreeMap::new();
+    fresh.insert(nikaia_std::block::Text::from(key.to_string()), vec![]);
+    for (path, shown) in host.diagnose(file, open, false, true) { fresh.entry(String::from(fix_key(&path))).or_insert(vec![]).push(shown.clone()); }
+    for (path, found) in fresh.iter() { if !said_of.contains_key(path) { said_of.insert(nikaia_std::block::Text::from(path.to_string()), found.copy_owned()); } }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -156,17 +170,12 @@ pub(crate) fn fix_cut(source: &str, a: i64, b: i64) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fix_same_file(a: &str, b: &str) -> bool {
-    if a == b { return true; }
-    let one = match fs::canonical(std::path::Path::new(&(a)), &fs::Root::Anywhere) {
+pub(crate) fn fix_key(path: &str) -> String {
+    let one = match fs::canonical(std::path::Path::new(&(path)), &fs::Root::Anywhere) {
         Ok(value) => value,
-        Err(_error) => { return false; },
+        Err(_error) => { return nikaia_std::block::Text::from(path.to_string()); },
     };
-    let other = match fs::canonical(std::path::Path::new(&(b)), &fs::Root::Anywhere) {
-        Ok(value) => value,
-        Err(_error) => { return false; },
-    };
-    nikaia_std::fs::path::display(&(one)) == nikaia_std::fs::path::display(&(other))
+    nikaia_std::fs::path::display(&(one))
 }
 
 pub(crate) async fn fix_files_under(path: &str, files: &mut Vec<String>) {

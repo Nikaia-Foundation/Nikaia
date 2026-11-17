@@ -56,6 +56,6 @@ fn last_of_run(cs: ref Vec[i64], go: bool) -> i64 sync {
 }
 
 fn main() throws {
-	let cs: Vec[scalar] = "ab c".chars().collect()
+	let cs: Vec[scalar] = "ab c".scalars.collect()
 	println(f"{before_space([1, 2, 32, 4], 0)} {before_space([5, 6], 1)} {before_blank(cs)} {last_of_run([7, 8, 32], true)}")
 }

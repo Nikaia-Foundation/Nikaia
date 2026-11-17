@@ -3,7 +3,7 @@
 // made in a loop stays an owned `String`.
 fn view(given: String) -> String {
     let mut s: String = given.replace("x", "y")
-    let c: Vec[scalar] = s.chars().collect()
+    let c: Vec[scalar] = s.scalars.collect()
     let mut out: String = ""
     let mut at = 0
     while at < c.len() {

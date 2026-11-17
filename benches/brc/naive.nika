@@ -33,7 +33,7 @@ fn main() throws {
         let (name, _) = line.split_at(at)
         let (_, reading) = line.split_at(at + 1)
         let mut temp = 0
-        for c in reading.chars() {
+        for c in reading.scalars {
             if c != '-' && c != '.' { temp = temp * 10 + text::digit_value(c) }
         }
         if reading.starts_with("-") { temp = -temp }

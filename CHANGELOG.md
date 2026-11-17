@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1421] — 2026-11-17
+
+**Merge origin/develop into develop (y10 sweep for #1974; lowered digest written by lower-std)**
+- `nikaia fix` checks each program once (minutes per compiler file before, about three minutes for the whole compiler now) and its test blocks too, and the repository reads text through `.scalars` instead of `chars()`.
+
 ## [0.0.1420] — 2026-11-17
 
 **Builders' changes (#1992, #1992`, #1528, #1532, #1537, #1990)**

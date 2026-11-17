@@ -24,7 +24,7 @@ use std::collections
 /// wrong program: the parameter it invents has to be passed, and the message
 /// names it.
 pub fn parameters(body: ref String) -> Vec[String] sync {
-    let c: Vec[scalar] = body.chars().collect()
+    let c: Vec[scalar] = body.scalars.collect()
     let mut found: Vec[String] = Vec()
     let mut i = 0
     while i < c.len() {

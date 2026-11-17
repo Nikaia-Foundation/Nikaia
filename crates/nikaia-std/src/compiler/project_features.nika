@@ -97,7 +97,7 @@ fn features_plain(c: scalar) -> bool {
 /// and `-`, `+`, `.`.
 fn features_name_ok(name: ref String) -> bool {
     let mut first = true
-    for c in name.chars() {
+    for c in name.scalars {
         let plain = features_plain(c) || c == '_'
         if first {
             if !plain { return false }
@@ -172,7 +172,7 @@ fn features_hashes_follow(c: ref Vec[scalar], at: i64, hashes: i64) -> bool {
 
 /// **One line of the lowered Rust lexed**, its state carried on in `lexer`.
 fn features_scan_line(line: ref String, mut lexer: FeatureLexer) -> FeatureLine {
-    let c: Vec[scalar] = line.chars().collect()
+    let c: Vec[scalar] = line.scalars.collect()
     let n = c.len()
     let mut words: Vec[String] = []
     let mut last = ' '

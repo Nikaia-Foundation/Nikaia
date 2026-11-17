@@ -4,7 +4,7 @@ fn tail(head: String) -> String {
     let mut st: String = (head.trim().strip_prefix("impl") ?? "").clone()
     if st.starts_with("<") {
         let mut after: String = ""
-        for ch in st.chars() {
+        for ch in st.scalars {
             after.push(ch)
         }
         st = after
@@ -14,7 +14,7 @@ fn tail(head: String) -> String {
         st = st[f + " for ".len()..].clone()
     }
     let mut name: String = ""
-    for ch in st.trim().chars() {
+    for ch in st.trim().scalars {
         if ch == ' ' {
             return name
         }

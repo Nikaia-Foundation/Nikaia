@@ -150,7 +150,7 @@ fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn: re
     // Where each line of the lowered program starts, by byte.
     let mut starts: Vec[i64] = [0]
     let mut byte = 0
-    for c in rust.chars() {
+    for c in rust.scalars {
         let code = c as i64
         if code < 128 {
             byte += 1
@@ -208,7 +208,7 @@ fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn: re
 
 fn cr_lines(text: ref String) -> i64 {
     let mut count = 0
-    for c in text.chars() {
+    for c in text.scalars {
         if c == '\n' {
             count += 1
         }

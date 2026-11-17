@@ -119,8 +119,8 @@ test "a slice is a run a function can take" {
 // walked from the back, and counted.
 test "the characters of a view are a sequence" {
     let t = "héllo"
-    let back: Vec[scalar] = t.chars().rev().collect()
-    let count = t.chars().count()
+    let back: Vec[scalar] = t.scalars.rev().collect()
+    let count = t.scalars.count()
     let last = back[0]
     assert(count == 5)
     assert(last == 'o')

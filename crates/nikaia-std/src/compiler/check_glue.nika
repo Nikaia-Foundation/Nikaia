@@ -14,11 +14,11 @@ use std::text
 /// `char_of` is the host's reading of a code point (`build_time::char_of`).
 pub fn check_char_literal(written: String, char_of: fn(i64) -> scalar? sync) -> String {
     let value = decoded(written, char_of) ?? return f"'{written}'"
-    if value.chars().count() <= 1 {
+    if value.scalars.count() <= 1 {
         return f"'{written}'"
     }
     let composed = value.normalized(text::Form::Nfc)
-    return match composed.chars().next() {
+    return match composed.scalars.next() {
         null => f"'{written}'",
         one => f"'\\u{{{one as u32:x}}}'",
     }

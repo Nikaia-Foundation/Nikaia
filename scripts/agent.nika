@@ -398,7 +398,7 @@ fn agent_issue_numbers(body: String) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut digits: String = ""
     let mut after_hash = listed != ""
-    for c in (source + " ").chars() {
+    for c in (source + " ").scalars {
         if c.is_ascii_digit() && after_hash {
             digits = digits + c.to_string()
         } else {
@@ -568,7 +568,7 @@ fn main() throws {
         fs::write(record.clone(), fs::Root::Anywhere, f"{wanted} {sum}\n")
         out = process::run(claude.clone(), claude_args; within: 150.minutes())
     }
-    let json = out.stdout.clone()
+    let json = out.stdout
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
     let session = agent_json(json.clone(), "session_id")
@@ -584,7 +584,7 @@ fn main() throws {
         let t = agent_int(json.clone(), "input_tokens") + agent_int(json.clone(), "output_tokens") + agent_int(json.clone(), "cache_creation_input_tokens") + agent_int(json.clone(), "cache_read_input_tokens")
         usage = [f"{t}", f"{agent_int(json.clone(), "num_turns")}", f"{agent_int(json.clone(), "cache_read_input_tokens")}", f"{agent_int(json.clone(), "cache_creation_input_tokens")}", f"{agent_int(json.clone(), "output_tokens")}"]
     }
-    let turns = usage[1].clone()
+    let turns = usage[1]
     let reason = agent_json(json.clone(), "terminal_reason")
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let report = agent_report(abs.clone())

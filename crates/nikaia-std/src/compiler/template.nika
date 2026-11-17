@@ -129,7 +129,7 @@ pub fn literal_length(segments: ref Array[Segment]) -> i64 sync {
 /// therefore cannot open a tag, close a string, or start a comment.
 pub fn split(body: ref String) -> Vec[Segment] throws {
     let mut splitter = Splitter {
-        c: body.chars().collect(),
+        c: body.scalars.collect(),
         at: 0,
         scan: Scan { state: ScanState::Text, tail: [], attribute: "" },
     }
@@ -257,7 +257,7 @@ impl Splitter {
     // Whether the body goes on with these characters from here.
     fn here(ref self, word: ref String) -> bool sync {
         let mut k = self.at
-        for w in word.chars() {
+        for w in word.scalars {
             if k >= self.c.len() || self.c[k] != w {
                 return false
             }
@@ -295,7 +295,7 @@ impl Splitter {
         }
         let mut collection: String = ""
         let mut first = true
-        for ch in written.chars() {
+        for ch in written.scalars {
             if !first {
                 collection.push(ch)
             }

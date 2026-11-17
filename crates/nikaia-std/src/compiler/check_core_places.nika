@@ -68,7 +68,7 @@ fn check_core_places_position(field: ref String) -> i64 {
     if field.len() == 0 {
         return -1
     }
-    for c in field.chars() {
+    for c in field.scalars {
         if c < '0' || c > '9' {
             return -1
         }

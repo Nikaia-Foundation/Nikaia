@@ -184,7 +184,7 @@ fn diagnostics_in_a_grammar(starts: ref Vec[i64], source: String, at: i64) -> bo
     let lines: Vec[String] = source.split("\n").collect()
     let mut line = diagnostics_line_of(starts, at)
     while line >= 0 && line < lines.len() {
-        let first = lines[line].chars().next() ?? ' '
+        let first = lines[line].scalars.next() ?? ' '
         if first.is_alphabetic() {
             return lines[line].starts_with("grammar ") || lines[line].starts_with("pub grammar ")
         }

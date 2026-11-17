@@ -442,7 +442,7 @@ fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, mut state: BtS
     let mut out: String = ""
     let mut chunk: String = ""
     let mut taken = 0
-    let chars: Vec[scalar] = format.chars().collect()
+    let chars: Vec[scalar] = format.scalars.collect()
     let mut at = 0
     while at < chars.len() {
         let c = chars[at]

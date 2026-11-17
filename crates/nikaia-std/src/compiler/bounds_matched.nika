@@ -45,7 +45,7 @@ fn bm_class(words: ref winnow_grammar::InternerContext, rules: ref collections::
             null
         },
         Pattern::Literal(text) => {
-            let chars: Vec[scalar] = text.chars().collect()
+            let chars: Vec[scalar] = text.scalars.collect()
             if chars.len() != 1 {
                 return null
             }

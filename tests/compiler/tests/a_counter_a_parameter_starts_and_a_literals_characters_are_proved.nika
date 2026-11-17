@@ -10,7 +10,7 @@ fn skip_blanks(cs: ref Vec[scalar], from: i64) -> i64 sync {
 }
 
 fn hex(v: i64) -> String sync {
-	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+	let digits: Vec[scalar] = "0123456789ABCDEF".scalars.collect()
 	let mut out = String()
 	let mut k = 12
 	while k >= 0 {
@@ -21,6 +21,6 @@ fn hex(v: i64) -> String sync {
 }
 
 fn main() throws {
-	let cs: Vec[scalar] = "a   b".chars().collect()
+	let cs: Vec[scalar] = "a   b".scalars.collect()
 	println(f"{skip_blanks(cs, 1)} {skip_blanks(cs, 0)} {hex(48879)}")
 }

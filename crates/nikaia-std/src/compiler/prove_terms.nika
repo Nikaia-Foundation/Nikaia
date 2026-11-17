@@ -166,7 +166,7 @@ fn text_literal_length(expr: ref Expr) -> i64? {
     }
     let mut escapes = 0
     let mut escaped = false
-    for c in text.chars() {
+    for c in text.scalars {
         if escaped {
             if c == 'x' || c == 'u' {
                 return null

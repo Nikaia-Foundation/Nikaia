@@ -159,7 +159,7 @@ fn unescape(raw: String) -> String {
     let mut out = String()
     let mut escaped = false
 
-    for c in raw.chars() {
+    for c in raw.scalars {
         if escaped {
             match c {
                 'n' => { out.push('\n') }
@@ -183,7 +183,7 @@ fn unescape(raw: String) -> String {
 // the tree, so `main` can still print it afterwards.
 fn longest(value: Json) -> i64 {
     match value {
-        Json::Text(raw) => return unescape(raw).chars().count() as i64
+        Json::Text(raw) => return unescape(raw).scalars.count() as i64
 
         Json::Array(items) => {
             let mut best = 0

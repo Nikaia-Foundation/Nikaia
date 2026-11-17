@@ -27,7 +27,7 @@ fn at(s: ref Scan, k: i64) -> scalar {
 
 fn starts(s: ref Scan, word: String) -> bool {
     let mut k = s.i
-    for w in word.chars() {
+    for w in word.scalars {
         if at(s, k) != w {
             return false
         }
@@ -141,7 +141,7 @@ fn copy_block(mut s: Scan) {
 
 // Whether what was written last, blanks aside, is `->`.
 fn after_arrow(s: ref Scan) -> bool {
-    let written: Vec[scalar] = s.out.chars().collect()
+    let written: Vec[scalar] = s.out.scalars.collect()
     let mut k = written.len() as i64 - 1
     while k >= 0 && (written[k] == ' ' || written[k] == '\n' || written[k] == '\t') {
         k -= 1
@@ -227,7 +227,7 @@ fn rewrite(text: String, rust: bool, markdown: bool) -> (String, i64) {
     if rust {
         return rewrite_rust(text)
     }
-    let mut s = Scan { cs: text.chars().collect(), i: 0, out: "", escaped: false, added: 0 }
+    let mut s = Scan { cs: text.scalars.collect(), i: 0, out: "", escaped: false, added: 0 }
     let mut fenced = false
     while s.i < s.cs.len() as i64 {
         if markdown && (s.i == 0 || at(s, s.i - 1) == '\n') && starts(s, "```") {
@@ -250,7 +250,7 @@ fn rewrite(text: String, rust: bool, markdown: bool) -> (String, i64) {
 // strings and comments included, is copied as it stands.
 fn rewrite_literal(literal: String, escaped: bool) -> (String, i64) {
     // a format string doubles its braces: written by hand
-    let chars: Vec[scalar] = literal.chars().collect()
+    let chars: Vec[scalar] = literal.scalars.collect()
     let mut doubled = false
     for k in 1..<chars.len() {
         if chars[k] == '{' && chars[k - 1] == '{' {
@@ -260,7 +260,7 @@ fn rewrite_literal(literal: String, escaped: bool) -> (String, i64) {
     if doubled {
         return (literal.clone(), 0)
     }
-    let mut s = Scan { cs: literal.chars().collect(), i: 0, out: "", escaped: escaped, added: 0 }
+    let mut s = Scan { cs: literal.scalars.collect(), i: 0, out: "", escaped: escaped, added: 0 }
     while s.i < s.cs.len() as i64 {
         let n = grammar_header(s)
         if n > 0 {
@@ -275,7 +275,7 @@ fn rewrite_literal(literal: String, escaped: bool) -> (String, i64) {
 
 // Rust source: each string literal on its own.
 fn rewrite_rust(text: String) -> (String, i64) {
-    let cs: Vec[scalar] = text.chars().collect()
+    let cs: Vec[scalar] = text.scalars.collect()
     let n = cs.len() as i64
     let mut out: String = ""
     let mut added = 0

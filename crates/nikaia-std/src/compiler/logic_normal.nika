@@ -311,7 +311,7 @@ impl LgNormal {
         if name.starts_with("v") {
             let digits = (name.strip_prefix("v") ?? "").clone()
             let mut plain = digits.len() > 0
-            for c in digits.chars() {
+            for c in digits.scalars {
                 if c < '0' || c > '9' {
                     plain = false
                 }
@@ -460,7 +460,7 @@ pub fn lg_model_of(text: ref String) -> LgModel? {
             if name.len() == 0 {
                 return null
             }
-            for c in name.chars() {
+            for c in name.scalars {
                 if c.is_whitespace() {
                     return null
                 }

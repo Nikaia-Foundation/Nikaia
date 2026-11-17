@@ -11,7 +11,7 @@
 /// characters escaped.
 fn rust_string(text: ref String) -> String {
     let mut out: String = "\""
-    for c in text.chars() {
+    for c in text.scalars {
         if c == '"' {
             out.push_str("\\\"")
         } else if c == '\\' {
@@ -35,7 +35,7 @@ fn rust_string(text: ref String) -> String {
 /// doubled.
 fn rust_format_escape(text: ref String) -> String {
     let mut out: String = ""
-    let chars: Vec[scalar] = text.chars().collect()
+    let chars: Vec[scalar] = text.scalars.collect()
     let mut at = 0
     while at < chars.len() {
         let c = chars[at]
@@ -77,7 +77,7 @@ fn top_level_parts(inside: ref String) -> Vec[String] {
     let mut depth = 0
     let mut in_text = false
     let mut escaped_next = false
-    for c in inside.chars() {
+    for c in inside.scalars {
         if in_text {
             current.push(c)
             if escaped_next {

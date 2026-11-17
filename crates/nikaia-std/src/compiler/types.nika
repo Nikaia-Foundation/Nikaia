@@ -90,7 +90,7 @@ fn known_traits(names: ref winnow_grammar::InternerContext, items: ref Vec[Spann
 // `key`, and what stands after its last `::`.
 fn with_its_last_segment(key: ref String, mut known: collections::BTreeSet[String]) {
     known.insert(key.clone())
-    let c: Vec[scalar] = key.chars().collect()
+    let c: Vec[scalar] = key.scalars.collect()
     let mut last = -1
     for at in 0..<c.len() {
         if at + 1 < c.len() && c[at] == ':' && c[at + 1] == ':' {
@@ -665,7 +665,7 @@ fn nobody_knows(name: ref String, own: ref Ledger, library: ref Ledger) -> bool 
     if BUILT_IN.contains(name) || own.types.contains_key(name) || library.types.contains_key(name) {
         return false
     }
-    let c: Vec[scalar] = name.chars().collect()
+    let c: Vec[scalar] = name.scalars.collect()
     let mut last = -1
     for at in 0..<c.len() {
         if at + 1 < c.len() && c[at] == ':' && c[at + 1] == ':' {
@@ -695,7 +695,7 @@ fn std_module_of(name: ref String, known: ref collections::BTreeSet[String]) -> 
     let ending = f"::{name}"
     for key in known {
         if key.ends_with(ref ending) {
-            let c: Vec[scalar] = key.chars().collect()
+            let c: Vec[scalar] = key.scalars.collect()
             let at = find_text(c, 0, "::")
             let module = slice(c, 0, at)
             for one in STD_MODULES {

@@ -278,13 +278,13 @@ fn print_throws_handed_to_method(tokens: ref Vec[MigrateToken], k: i64) -> bool 
 fn print_throws_line(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
     let mut line = 1
     for i in 0..<(k + 1) {
-        for c in tokens[i].gap.chars() {
+        for c in tokens[i].gap.scalars {
             if c == '\n' {
                 line += 1
             }
         }
         if i < k {
-            for c in tokens[i].text.chars() {
+            for c in tokens[i].text.scalars {
                 if c == '\n' {
                     line += 1
                 }
@@ -340,7 +340,7 @@ fn print_throws_failing(tokens: ref Vec[MigrateToken], fns: ref Vec[PrintThrowsF
 }
 
 fn print_throws_tokens(source: ref String) -> Vec[MigrateToken] sync {
-    let mut lexer = MigrateLexer { c: source.chars().collect(), at: 0, tokens: [] }
+    let mut lexer = MigrateLexer { c: source.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
     return lexer.tokens
 }

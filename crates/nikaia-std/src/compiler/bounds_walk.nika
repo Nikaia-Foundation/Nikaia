@@ -2215,7 +2215,7 @@ fn bounding_decided(
 
 /// `text` without its first `count` characters.
 fn bounding_dropped(text: ref String, count: i64) -> String {
-	let c: Vec[scalar] = text.chars().collect()
+	let c: Vec[scalar] = text.scalars.collect()
 	let mut out: String = ""
 	for k in count..<c.len() {
 		out.push(c[k])
@@ -8983,7 +8983,7 @@ fn bounding_literal_chars(expr: ref Expr, words: ref winnow_grammar::InternerCon
 fn bounding_ascii_length(expr: ref Expr) -> i64? {
 	return match expr {
 		Expr::LitStr { text, .. } => {
-			if text.chars().count() != text.len() {
+			if text.scalars.count() != text.len() {
 				return null
 			}
 			text.len() as i64

@@ -95,7 +95,7 @@ fn tr_is_self(e: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
 /// small (`piece`), which is what a failure shows.
 pub fn tr_binding_of(type_name: ref String, fields: ref collections::BTreeSet[String]) -> String {
     let mut small: String = ""
-    for c in type_name.chars() {
+    for c in type_name.scalars {
         if small == "" {
             small = f"{c}".to_lowercase()
         } else {

@@ -39,7 +39,7 @@ fn place(text: String, needle: String, skip: i64) -> (i64, i64) {
         let at = written.find(needle)
         if at != null {
             let mut units = 0
-            for c in written[0..<(at ?? 0)].chars() {
+            for c in written[0..<(at ?? 0)].scalars {
                 units += if (c as i64) < 65536 { 1 } else { 2 }
             }
             return (line, units + skip)

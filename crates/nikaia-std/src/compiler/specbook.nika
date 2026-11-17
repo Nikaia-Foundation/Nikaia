@@ -76,7 +76,7 @@ pub fn discusses_a_refusal(code: ref String) -> bool {
 /// dots against a name are the typed spread of ADR-296 D5, which a driver
 /// writes as code.
 pub fn is_a_sketch(code: ref String) -> bool {
-    let c: Vec[scalar] = code.chars().collect()
+    let c: Vec[scalar] = code.scalars.collect()
     let mut at = 0
     while at < c.len() {
         if c[at] == '…' {
@@ -199,7 +199,7 @@ fn an_item(line: ref String) -> bool {
 // How many braces a line opens, less how many it closes.
 fn braces(line: ref String) -> i64 {
     let mut depth = 0
-    for c in line.chars() {
+    for c in line.scalars {
         if c == '{' {
             depth += 1
         } else if c == '}' {
@@ -217,7 +217,7 @@ pub fn opening(code: ref String) -> String {
         if trimmed.len() == 0 {
             continue
         }
-        let c: Vec[scalar] = trimmed.chars().collect()
+        let c: Vec[scalar] = trimmed.scalars.collect()
         if c.len() <= 56 {
             return trimmed.clone()
         }
