@@ -883,18 +883,22 @@ pub fn lower_reading(
 /// refusal that has no finding of its own (a manifest, a file that cannot be
 /// read) is one on `input`, with no code, at its first byte. `alone` reads
 /// `input` as a file of no project, whatever directory it names: an editor's
-/// document with no `file://` path (#1365).
+/// document with no `file://` path (#1365). `tests` reads the program as
+/// `nikaia test` builds it, so its `test` blocks are checked too (ADR-269 D1;
+/// `nikaia fix`, #1974).
 pub fn diagnose(
     input: &Path,
     open: &modules::Open,
     alone: bool,
+    tests: bool,
 ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
     let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
         let (manifest, packages) = match alone {
             true => (Manifest::default(), Vec::new()),
             false => (Manifest::find(input)?, packages_of_file(input)?),
         };
-        let settings = Settings::resolve(&manifest, None, None)?;
+        let mut settings = Settings::resolve(&manifest, None, None)?;
+        settings.words.tests = tests;
         with_lower_host(
             input,
             &settings,
@@ -988,8 +992,9 @@ impl nikaia_std::compiler::lsp::LspHost for Lsp {
         entry: &str,
         open: &BTreeMap<String, String>,
         alone: bool,
+        tests: bool,
     ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
-        diagnose(Path::new(entry), open, alone)
+        diagnose(Path::new(entry), open, alone, tests)
     }
 
     fn definition(

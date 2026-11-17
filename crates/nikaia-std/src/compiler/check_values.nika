@@ -305,12 +305,18 @@ fn ledger_candidates(ledger: ref Ledger, methods: ref MethodIndex, method: ref S
 
 // **The edit `NK1353` suggests** (#1974): `.chars()` after its receiver,
 // from the receiver's end to the call's, replaced by `.scalars`. Only where
-// both spans are known and the receiver starts the call.
+// both spans are known and the receiver starts the call, or stands in
+// parentheses inside it (`(a + b).chars()`): its span then ends before the
+// `)`, and the call's last bytes are the `.chars()` the formatter writes.
 fn chars_renamed(world: ref CheckWorld, call: ref Expr, receiver: ref Expr) -> CheckEdit? sync {
     let whole = world.here.spans.get(id_of(call)) ?? return null
     let of = world.here.spans.get(id_of(receiver)) ?? return null
-    if of.start != whole.start || of.end >= whole.end {
-        return null
+    if of.start == whole.start && of.end < whole.end {
+        return CheckEdit { span: Span { start: of.end, end: whole.end }, text: ".scalars" }
     }
-    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: ".scalars" }
+    let written = ".chars()".bytes.len() as u32
+    if of.start > whole.start && of.end + written < whole.end {
+        return CheckEdit { span: Span { start: whole.end - written, end: whole.end }, text: ".scalars" }
+    }
+    return null
 }

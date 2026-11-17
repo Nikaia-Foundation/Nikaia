@@ -1,0 +1,17 @@
+fix: TMP/src/main.nika:2: NK1353: replaced `.chars()` with `.scalars`
+TMP/src/main.nika:6: NK1353: replaced `.chars()` with `.scalars`
+fn shout(word: ref str) -> i64 {
+    return (word + "!").scalars.count()
+}
+
+test "a count of scalars" {
+    let n = "tea".scalars.count()
+    assert(n == 3)
+    assert(shout("hi") == 3)
+}
+
+fn main() throws {
+    println(shout("tea"))
+}
+check: Checked TMP/src/main.nika
+test passes: true

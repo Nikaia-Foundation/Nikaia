@@ -69,7 +69,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
 
 
 pub trait LspHost {
-    fn diagnose(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool) -> Vec<(String, Shown)>;
+    fn diagnose(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, tests: bool) -> Vec<(String, Shown)>;
     fn definition(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, offset: i64) -> Option<(String, Span, String)>;
 }
 
@@ -291,7 +291,7 @@ pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collect
         None => nikaia_std::block::Text::from(path.to_string()),
         Some(ref dir) => if alone { nikaia_std::block::Text::from(path.to_string()) } else { nikaia_std::block::Text::from(nikaia_std::fs::path::text_of(&(dir)).to_string()) },
     };
-    let found = host.diagnose(path, open, alone);
+    let found = host.diagnose(path, open, alone, false);
     let mut by_file: collections::BTreeMap<String, Vec<json::Value>> = collections::BTreeMap::new();
     by_file.insert(nikaia_std::block::Text::from(path.to_string()), vec![]);
     let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();

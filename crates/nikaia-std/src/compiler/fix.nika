@@ -12,8 +12,9 @@
 // (`migrate_print_throws.nika`): every token, blank and comment stays as
 // written, and only the edits are made. Each file named, and each `.nika` file
 // under a directory named (but `target/`), is checked as `nikaia check` checks
-// it (`LspHost::diagnose`, the language server's question); a file whose check
-// has an error is left alone. The edits are made in order and do not move one
+// it (`LspHost::diagnose`, the language server's question), its `test` blocks
+// with it, and each program once; a file whose check has an error is left
+// alone. The edits are made in order and do not move one
 // another; two that overlap are both left, and the run names them.
 
 use std::collections
@@ -47,6 +48,11 @@ pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -
         fix_files_under(path, files)
     }
     let open: collections::BTreeMap[String, String] = collections::BTreeMap()
+    // **Each program is checked once** (#1974): the check of a file is the
+    // check of its whole package, and speaks of every file of it; a file an
+    // earlier check spoke of takes its findings from there. Checked file by
+    // file, the compiler's own package took minutes a file.
+    let mut said_of: collections::BTreeMap[String, Vec[Shown]] = collections::BTreeMap()
     let mut code = 0
     for file in files {
         let source = fs::read_to_string(file, fs::Root::Anywhere) catch {
@@ -54,12 +60,11 @@ pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -
             code = 1
             continue
         }
-        let mut here: Vec[Shown] = []
-        for (path, shown) in host.diagnose(file, open, false) {
-            if fix_same_file(path, file) {
-                here.push(shown.clone())
-            }
+        let key = fix_key(file)
+        if !said_of.contains_key(key) {
+            fix_diagnosed(host, file, key, open, said_of)
         }
+        let here = said_of[key]?.clone() ?? []
         let plan = fix_planned(file, source, here)
         if plan.left {
             code = 1
@@ -80,6 +85,23 @@ pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -
         }
     }
     return code
+}
+
+/// **The findings of the program `file` belongs to, by file** (keyed by
+/// `fix_key`), added to `said_of` where a check before did not speak of the
+/// file: `file` itself is there afterwards, with no findings where it has
+/// none. Its `test` blocks are checked too, as `nikaia test` builds it.
+fn fix_diagnosed[H: LspHost](host: ref H, file: ref String, key: ref String, open: ref collections::BTreeMap[String, String], mut said_of: collections::BTreeMap[String, Vec[Shown]]) sync {
+    let mut fresh: collections::BTreeMap[String, Vec[Shown]] = collections::BTreeMap()
+    fresh.insert(key.clone(), [])
+    for (path, shown) in host.diagnose(file, open, false, true) {
+        fresh.entry(fix_key(path)).or_insert([]).push(shown.clone())
+    }
+    for (path, found) in fresh {
+        if !said_of.contains_key(path) {
+            said_of.insert(path.clone(), found.clone())
+        }
+    }
 }
 
 /// **The edits of `found` made in `source`** (the findings of the file at
@@ -213,14 +235,11 @@ fn fix_cut(source: ref String, a: i64, b: i64) -> String? sync {
     return cut.clone()
 }
 
-// Whether two paths name one file.
-fn fix_same_file(a: ref String, b: ref String) -> bool sync {
-    if a == b {
-        return true
-    }
-    let one = fs::canonical(a, fs::Root::Anywhere) catch { return false }
-    let other = fs::canonical(b, fs::Root::Anywhere) catch { return false }
-    return one.display() == other.display()
+// The file `path` names, as one key for every path to it: its canonical
+// path, or `path` itself where it has none.
+fn fix_key(path: ref String) -> String sync {
+    let one = fs::canonical(path, fs::Root::Anywhere) catch { return path.clone() }
+    return one.display()
 }
 
 // The file `path`, or each `.nika` file under the directory `path` but those
