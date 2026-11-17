@@ -4,7 +4,7 @@
 // `crates/nikaia/tests/tether_keep.rs`.
 
 fn tether_keep_cut(written: String, front: i64) -> String {
-    let c: Vec[scalar] = written.chars().collect()
+    let c: Vec[scalar] = written.scalars.collect()
     let mut out: String = ""
     for k in front..<c.len() {
         out.push(c[k])
@@ -37,7 +37,7 @@ test "a buffer assigned whole is moved" {
 fn tether_keep_pieces(text: String) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut current: String = ""
-    for c in text.chars() {
+    for c in text.scalars {
         if c == ',' {
             out.push(current.trim().clone())
             current = ""
@@ -57,7 +57,7 @@ fn tether_keep_pieces(text: String) -> Vec[String] {
 test "a copy of an untyped view keeps nothing" {
     let p = tether_keep_pieces("a, b,c")
     let n = p.len()
-    let third = p[2].clone()
+    let third = p[2]
     assert(n == 3)
     assert(third == "c")
 }

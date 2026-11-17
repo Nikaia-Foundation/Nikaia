@@ -91,7 +91,7 @@ fn unescaped(html: String) -> String {
 /// Whether an elision stands where code would: `…`, or three dots that are
 /// not the typed spread `...name`.
 fn is_a_sketch(code: String) -> bool {
-    let c: Vec[scalar] = code.chars().collect()
+    let c: Vec[scalar] = code.scalars.collect()
     let mut at = 0
     while at < c.len() {
         if c[at] == '…' {
@@ -241,7 +241,7 @@ fn opening(code: String) -> String {
         if trimmed.len() == 0 {
             continue
         }
-        let c: Vec[scalar] = trimmed.chars().collect()
+        let c: Vec[scalar] = trimmed.scalars.collect()
         if c.len() <= 56 {
             return trimmed.clone()
         }

@@ -143,8 +143,8 @@ test "a table is written in place and a lent element compares" {
     }
     d[1][2] = 7
     d[2][0] = d[1][2] + 1
-    let a: Vec[scalar] = "abxa".chars().collect()
-    let b: Vec[scalar] = "a".chars().collect()
+    let a: Vec[scalar] = "abxa".scalars.collect()
+    let b: Vec[scalar] = "a".scalars.collect()
     let counted = self_hosting_count(a, b)
     assert(d[1][2] == 7)
     assert(d[2][0] == 8)
