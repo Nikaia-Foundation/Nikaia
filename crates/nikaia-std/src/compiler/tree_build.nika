@@ -145,11 +145,13 @@ pub fn grouped(e: Expr) -> Expr {
 
 /// Every postfix step put onto what it follows, in the order written. The
 /// nodes it makes are numbered by the numbering pass
-/// ([ADR-383](../../docs/specification/adr/adr-383.md) D1).
-pub fn fold_postfix(base: Expr, tail: Vec[Postfix]) -> Expr {
+/// ([ADR-383](../../docs/specification/adr/adr-383.md) D1). **Each node spans
+/// from the chain's `start` to the end of its step** (#1977), so its receiver
+/// ends where the step begins and a warning on an inner step stands there.
+pub fn fold_postfix(base: Expr, start: u32, tail: Vec[(Postfix, u32)]) -> Expr {
     let mut recv = base
-    for step in tail.drain() {
-        let id = node_id::NodeId::parsed()
+    for (step, end) in tail.drain() {
+        let id = node_id::NodeId::parsed().at(start, end)
         recv = match step {
             Postfix::Field(name) => Expr::Field { base: recv, name: name, id: id },
             Postfix::SafeField(name) => Expr::SafeField { base: recv, name: name, id: id },
