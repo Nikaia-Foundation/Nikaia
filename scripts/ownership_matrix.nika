@@ -96,10 +96,10 @@ fn om_positions() -> Vec[Position] {
     })
     all.push(Position {
         name: "fn_field",
-        kept_helpers: "",
         lent_helpers: "struct Act {\n    f: fn(String) -> i64,\n}\n\n" + om_measure(),
+        kept_helpers: "struct Act {\n    f: fn(keep a: String) -> i64,\n}\n\nfn eat(keep a: String) -> i64 {\n    let v: Vec[String] = [a]\n    return v[0].len()\n}\n",
         lent: "    let a = Act { f: measure }\n    println(a.f(s))\n",
-        kept: "",
+        kept: "    let a = Act { f: eat }\n    println(a.f(s))\n",
     })
     all.push(Position {
         name: "capture",
@@ -140,18 +140,11 @@ fn om_positions() -> Vec[Position] {
 }
 
 // The cells with no program: a form the language does not have yet, or an
-// outcome that disagrees with the specification (#1404's findings).
+// outcome that disagrees with the specification (#1404's findings). None is
+// open today: the `fn_field` cells waited for `keep` in a function type,
+// which Part I 5.4 C gives (#1990).
 fn om_open() -> Vec[Open] {
-    let mut open: Vec[Open] = []
-    for form in ["owned", "view"] {
-        for mode in ["kept", "given"] {
-            open.push(Open {
-                cell: f"{form}_{mode}_fn_field",
-                why: "a function type cannot mark a parameter `keep` (`fn(keep a: String)` is a parse error); ADR-views-3 D14 does not decide it",
-            })
-        }
-    }
-    return open
+    return []
 }
 
 fn om_is_open(open: ref Vec[Open], cell: String) -> bool {

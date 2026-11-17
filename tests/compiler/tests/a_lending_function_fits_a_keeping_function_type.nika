@@ -1,0 +1,19 @@
+// A function type marks a parameter `keep` as a signature does (Part I 5.4 C,
+// #1990): a function that keeps it fits, and so does one that only lends it.
+fn apply(f: fn(keep a: String) -> i64, keep s: String) -> i64 {
+    return f(s)
+}
+
+fn eat(keep a: String) -> i64 {
+    let v: Vec[String] = [a]
+    return v.len()
+}
+
+fn look(a: String) -> i64 {
+    return a.len()
+}
+
+fn main() throws {
+    println(apply(eat, "x".repeat(2)))
+    println(apply(look, "x".repeat(2)))
+}
