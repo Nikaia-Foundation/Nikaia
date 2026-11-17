@@ -1202,6 +1202,23 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_safe_call_of_type(inner: &Ty, key: &str) -> bool {
+    match inner {
+        Ty::Named { name, .. } => key.starts_with(&*format!("{}::", name)),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_safe_call_type_keys(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Ty, name: &str) -> bool {
+    for key in ledger_candidates(world.own, world.own_methods, name) { if check_core_safe_call_of_type(inner, &key) { return true; } }
+    for key in ledger_candidates(world.library, world.library_methods, name) { if check_core_safe_call_of_type(inner, &key) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
@@ -1226,14 +1243,17 @@ pub(crate) fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world
             written = String::from("join(within, on_timeout)");
         }
     }
+    let own_type = check_core_safe_call_type_keys(world, &inner, &name);
     let mut candidates = 0;
     let mut all_read = true;
     for key in ledger_candidates(world.own, world.own_methods, &name) {
+        if own_type && !check_core_safe_call_of_type(&inner, &key) { continue; }
         candidates += 1;
         let contract = match *nikaia_std::index::get(&world.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if contract.mutates { all_read = false; }
     }
     for key in ledger_candidates(world.library, world.library_methods, &name) {
+        if own_type && !check_core_safe_call_of_type(&inner, &key) { continue; }
         candidates += 1;
         let contract = match *nikaia_std::index::get(&world.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if contract.mutates { all_read = false; }

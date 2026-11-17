@@ -3897,7 +3897,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_described_at, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -4249,4 +4249,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "d98b8fb11c5b9c4f3a6d7ac4f75846ae408363330731881a01db4e40e68c00d1";
+pub const LOWERED_DIGEST: &str = "cb228bdba8dbb60c922baa8aa8d803e8b815062ef6d4401546978075a8c2fcce";

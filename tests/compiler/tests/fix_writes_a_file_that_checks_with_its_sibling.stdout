@@ -1,0 +1,5 @@
+fix: TMP/count.nika:2: NK1353: replaced `.chars()` with `.scalars`
+pub fn count_letters(shape: ref Shape) -> i64 {
+    return shape.name.scalars.count()
+}
+check: Checked TMP/count.nika

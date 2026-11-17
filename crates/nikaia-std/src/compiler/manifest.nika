@@ -264,6 +264,16 @@ pub struct ManifestFile {
     /// gets `0.0.0` - a version nobody typed, rather than a guess at one they
     /// meant.
     pub version: String,
+    /// **`[package] within`** (#1976, owner 2026-11-17): `std` where the
+    /// package is checked as part of `std`, the toolchain's own packages; it
+    /// reaches `std`'s helpers and unpublished modules, and `assume` is
+    /// refused. The one value it takes; null where the manifest does not say.
+    pub within: String?,
+    /// **`[package] described`** (#1976): the ledger of described names the
+    /// package is also checked against, as written, relative to the
+    /// manifest's directory; its names win a collision with `std`'s. Null
+    /// where the manifest does not say.
+    pub described: String?,
     pub dependencies: collections::BTreeMap[String, ManifestDependency],
     /// `[build.<target>]` - `opt-level` and `lto`, per machine (Part III 13.3).
     pub codegen: collections::BTreeMap[String, collections::BTreeMap[String, String]],
@@ -294,7 +304,22 @@ pub struct ManifestFile {
 
 /// The manifest of no project: every section empty.
 pub fn manifest_empty() -> ManifestFile {
-    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], rust_library: null, notes: [], allow: [], root: null }
+    return ManifestFile {
+        build: collections::BTreeMap(),
+        package: collections::BTreeMap(),
+        name: null,
+        version: "0.0.0",
+        within: null,
+        described: null,
+        dependencies: collections::BTreeMap(),
+        codegen: collections::BTreeMap(),
+        libraries: collections::BTreeMap(),
+        features: [],
+        rust_library: null,
+        notes: [],
+        allow: [],
+        root: null,
+    }
 }
 
 /// **One entry of `[features]`** (ADR-393 D2, Part III 13.3): a feature and
@@ -375,6 +400,14 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     }
     manifest.name = manifest_word_at(items, "package", "name", "")
     manifest.version = manifest_word_at(items, "package", "version", "") ?? "0.0.0"
+    manifest.within = manifest_within(
+        manifest.package,
+        manifest_word_at(items, "package", "within", ""),
+    )
+    manifest.described = manifest_described(
+        manifest.package,
+        manifest_word_at(items, "package", "described", ""),
+    )
     manifest.dependencies = manifest_dependencies(items)
     manifest.libraries = manifest_libraries(items)
     manifest.features = manifest_features(items)
@@ -405,6 +438,55 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
         }
     }
     return manifest
+}
+
+/// **`[package] within`** (#1976): `std`, or nothing; any other value, or
+/// one that is no text, is refused.
+fn manifest_within(
+    package: ref collections::BTreeMap[String, String],
+    word: String?,
+) -> String? throws {
+    if !package.contains_key("within") {
+        return null
+    }
+    let said = word ?? ""
+    if said != "std" {
+        throw Refused::Because(f"`within` in `[package]` is `{package.get("within") ?? ""}`, and the one package a package can be within is `std`: write `within = \"std\"`, or leave the key out.")
+    }
+    return said
+}
+
+/// **`[package] described`** (#1976): the path as written; a value that is
+/// no text, or an empty one, is refused. Whether the file is there is
+/// `manifest_described_at`'s, which knows the manifest's directory.
+fn manifest_described(
+    package: ref collections::BTreeMap[String, String],
+    word: String?,
+) -> String? throws {
+    if !package.contains_key("described") {
+        return null
+    }
+    let said = word ?? ""
+    if said.len() == 0 {
+        throw Refused::Because(f"`described` in `[package]` is `{package.get("described") ?? ""}`, and it takes the path of a ledger of described names, relative to the manifest: `described = \"described.contracts\"`.")
+    }
+    return said
+}
+
+/// **The ledger `[package] described` names**, resolved against the
+/// manifest's directory (#1976); null where the manifest names none. A file
+/// that is not there is refused, by its path.
+pub fn manifest_described_at(manifest: ref ManifestFile) -> fs::Path? throws {
+    let written = manifest.described ?? return null
+    let bare: fs::Path = written.clone()
+    let path = manifest.root?.join(written) ?? bare
+    let found = fs::metadata(path, fs::Root::Anywhere) catch {
+        throw Refused::Because(f"`described` in `[package]` names {path.display()}, which can't be read: {error}.")
+    }
+    if !found.is_file() {
+        throw Refused::Because(f"`described` in `[package]` names {path.display()}, which is not a file.")
+    }
+    return path
 }
 
 /// **`[allow]` and `[allow.packages.NAME]`** (ADR-raw-sinks-1 D4, D5): the
