@@ -1,0 +1,15 @@
+// #2007 (decision 2 on #1528, point 3): a function type whose result is a
+// view prints its `from` in the names of the declaration it came from.
+
+fn joined(a: String, b: String) -> String {
+    return f"{a}{b}"
+}
+
+fn apply(f: fn(a: String, b: String) -> String from a, s: String) -> i64 {
+    return f(s, s).len()
+}
+
+fn main() throws {
+    let s = " ab "
+    print(f"{apply(joined, s)}\n")
+}

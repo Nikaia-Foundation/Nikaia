@@ -543,11 +543,11 @@ impl CheckState {
         };
         if self.binding(&name).is_some() { return false; }
         let contract = match world.own.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let (params, result, is_sync, can_throw) = match found {
-            Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; (params.copy_owned(), match result {
+        let (params, result, is_sync, can_throw, spelled) = match found {
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; (params.copy_owned(), match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }, is_sync, can_throw) },
+            }, is_sync, can_throw, spelled.clone()) },
             _ => return false,
         };
         let wanted = match want {
@@ -563,7 +563,7 @@ impl CheckState {
                 any = true;
             } else { eased.push((*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone()); }
         }
-        any && Ty::Fn { params: eased, result: std::boxed::Box::new(result), is_sync, can_throw }.fits(want)
+        any && Ty::Fn { params: eased, result: std::boxed::Box::new(result), is_sync, can_throw, spelled }.fits(want)
     }
 }
 

@@ -166,7 +166,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
             match code {
-                Ty::Fn { params: given, result, is_sync, can_throw } => {
+                Ty::Fn { params: given, result, is_sync, can_throw, .. } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
                     // `fn(T)` hands back nothing, in `std`'s signatures as in
@@ -234,7 +234,12 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     } else if !written.is_unknown() {
                         out = written
                     }
-                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails }
+                    // **A lambda's own names, for messages** (#2007).
+                    let mut spelled = CodeNames::none()
+                    for p in params {
+                        spelled.params.push(world.words.resolve(p).clone())
+                    }
+                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails, spelled: spelled }
                 }
                 else => {}
             }
@@ -998,7 +1003,7 @@ fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses:
 fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], outer_inside: bool, span: ref Span) -> Ty? sync {
     let code: Ty = state.a_field_that_is_code(world, on, method) ?? return null
     match code {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
             // **What it takes as a view or `mut` is lent to it** (ADR-views-3

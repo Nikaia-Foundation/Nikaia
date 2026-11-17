@@ -4220,7 +4220,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -4251,4 +4251,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "10d55f194745087f27acb3fdaf0db4a03fd6b3796afb4cea620b0e7ee1da043f";
+pub const LOWERED_DIGEST: &str = "cd90a748241e45e3a73280da3dc8ffae75c7a6966955c95889c8079639ba7dcf";

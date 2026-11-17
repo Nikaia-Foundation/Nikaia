@@ -812,7 +812,7 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             _ => { },
         }
         match looked {
-            Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+            Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
                 let pauses_not: bool = is_sync;
                 let fails: bool = can_throw;

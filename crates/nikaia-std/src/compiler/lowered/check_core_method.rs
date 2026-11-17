@@ -604,7 +604,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
@@ -618,7 +618,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
                         _ => { },

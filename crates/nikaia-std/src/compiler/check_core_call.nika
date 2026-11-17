@@ -1050,7 +1050,7 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
             else => {},
         }
         match looked {
-            Ty::Fn { params, result, is_sync, can_throw } => {
+            Ty::Fn { params, result, is_sync, can_throw, .. } => {
                 let pauses_not: bool = is_sync
                 let fails: bool = can_throw
                 let gives: Ty = result?.clone() ?? Ty::Named { name: "()", args: [], view: false }

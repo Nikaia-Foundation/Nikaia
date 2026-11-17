@@ -126,7 +126,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
             match code {
-                Ty::Fn { params: ref given, ref result, is_sync, can_throw } => {
+                Ty::Fn { params: ref given, ref result, is_sync, can_throw, .. } => {
                     let result = nikaia_std::boxed::open(result);
                     let pauses: bool = !is_sync;
                     let fails: bool = can_throw;
@@ -164,7 +164,12 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let mut out: Option<Ty> = None;
                     let walked = check_core_args_walked(&written, &came_to);
                     if walked.is_some() { out = std::convert::identity(walked); } else if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
-                    return Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(out), is_sync: !pauses, can_throw: fails };
+                    let mut spelled = CodeNames::none();
+                    for p in params.iter() {
+                        let p = *p;
+                        spelled.params.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string()));
+                    }
+                    return Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(out), is_sync: !pauses, can_throw: fails, spelled };
                 },
                 _ => { },
             }
@@ -731,7 +736,7 @@ pub(crate) fn check_core_args_code_said(state: &mut CheckState, current: &str, p
 pub(crate) fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], outer_inside: bool, span: &Span) -> Option<Ty> {
     let code: Ty = match state.a_field_that_is_code(world, on, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
     match code {
-        Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+        Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
             let result = nikaia_std::boxed::open(result);
             let pauses: bool = !is_sync;
             let fails: bool = can_throw;

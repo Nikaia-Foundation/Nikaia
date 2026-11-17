@@ -256,7 +256,7 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                 }
             }
         },
-        Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+        Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
             let result = nikaia_std::boxed::open(result);
             match value {
                 Expr::Closure { .. } => {

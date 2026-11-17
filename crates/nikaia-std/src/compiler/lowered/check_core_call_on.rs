@@ -473,7 +473,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     if parts.len() != 2 { return expected; }
     if entry == "or_insert_with" {
         let wrapped: Ty = match *unsafe { nikaia_std::proven::read(&expected, (0) as usize) } {
-            Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
+            Ty::Fn { ref params, ref result, is_sync, can_throw, ref spelled } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw, spelled: spelled.clone() } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
             _ => (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone(),
         };
         return vec![wrapped];
@@ -1297,13 +1297,13 @@ pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<T
     };
     if !one { return None; }
     match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             if params.len() == 1 && (*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).is_a_view() && copies_plainly(&unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })) {
                 Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })], result: std::boxed::Box::new(match result {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
-                }), is_sync, can_throw })
+                }), is_sync, can_throw, spelled: spelled.clone() })
             } else { None }
         },
         _ => None,
@@ -1365,14 +1365,14 @@ pub(crate) fn check_core_call_on_holds_a_view(ty: &Ty) -> bool {
 
 pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
     match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut plain: Vec<Ty> = vec![];
             for p in params.iter() { plain.push(unviewed_type(p)); }
             Ty::Fn { params: plain, result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw }
+            }), is_sync, can_throw, spelled: spelled.clone() }
         },
         _ => want.clone(),
     }
