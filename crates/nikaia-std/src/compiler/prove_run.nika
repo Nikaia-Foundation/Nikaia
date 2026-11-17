@@ -82,6 +82,9 @@ pub struct ProveComptimes {
 pub struct ProveWalked {
     pub walk: ProverWalk,
     pub answers: ProverAnswers,
+    /// **Each function's result summary, as the bounds walk asks it**
+    /// (ADR-359 D14, #1904), by the ledger's key: `prove_summaries`.
+    pub summaries: collections::BTreeMap[String, Ensured],
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -154,6 +157,7 @@ pub fn prove_rounds(program: ref Program, words: ref winnow_grammar::InternerCon
         round += 1
         let wanted: Vec[String] = walked.walk.state.wanted.iter().filter(fn(call) { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(fn(call) { call.clone() }).collect()
         if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run == null {
+            walked.summaries = prove_summaries(walked.walk, program, words)
             return walked
         }
         for call in wanted {
@@ -205,7 +209,35 @@ fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref Pr
 fn prove_walked(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], state: ProverState, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProveWalked sync {
     let mut walk = ProverWalk { state: state, arena: TermArena::empty(), held: collections::BTreeMap(), reaches: collections::BTreeMap(), findings: [], claims: claims.clone(), std_claims: collections::BTreeMap(), outside: collections::BTreeMap() }
     let answers = prover_passes(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    return ProveWalked { walk: walk, answers: answers }
+    return ProveWalked { walk: walk, answers: answers, summaries: collections::BTreeMap() }
+}
+
+/// **The result summaries, as a callee's ledger entry is read** (ADR-359
+/// D14, #1904): each exit of a function's summary is the condition `guard
+/// -> result == value` over its parameters, their lengths and `result`,
+/// which the bounds walk assumes of a call as it assumes what a ledger
+/// entry ensures. One place sums, so the walk and the prover never disagree
+/// about what a function hands back; a function without a summary (a trait's
+/// method, one whose every exit is unreadable) and one with options add
+/// nothing.
+fn prove_summaries(walk: ref ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, Ensured] {
+    let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
+    for (key, exits) in walk.state.summaries {
+        let function = prover_summed_function(program, words, key) ?? continue
+        if !function.options.is_empty() || exits.is_empty() {
+            continue
+        }
+        let mut chars: Vec[bool] = []
+        for _ in function.params {
+            chars.push(false)
+        }
+        let mut conditions: Vec[Vec[SolverTerm]] = []
+        for exit in exits {
+            conditions.push(walk.arena.nodes_of(exit.term))
+        }
+        out.insert(key.clone(), Ensured { params: function.params.clone(), chars: chars, options: [], conditions: conditions })
+    }
+    return out
 }
 
 /// What the book says to a question, as `prover_solver` reads it.

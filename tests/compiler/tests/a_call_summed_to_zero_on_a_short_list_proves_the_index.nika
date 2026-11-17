@@ -1,0 +1,31 @@
+/// The bounds walk reads a callee's result summary (ADR-359 D14, #1904):
+/// `kind` returns 0 when `t.len() != 1`, so past `k == 0` and past
+/// `kind(t) == 0` the list has one element, and `t[0]` is proved in both.
+/// The callers are `pub` so no precondition derived from their callers
+/// proves it instead (ADR-391 D4).
+fn kind(t: ref Vec[i64]) -> i64 sync {
+	if t.len() != 1 {
+		return 0
+	}
+	return 7
+}
+
+pub fn vo(t: ref Vec[i64]) -> i64 sync {
+	let k = kind(t)
+	if k == 0 {
+		return 0
+	}
+	return t[0]
+}
+
+pub fn vp(t: ref Vec[i64]) -> i64 sync {
+	if kind(t) == 0 {
+		return 0
+	}
+	return t[0]
+}
+
+fn main() throws {
+	let one: Vec[i64] = [4]
+	println(f"{vo(one)} {vp(one)}")
+}

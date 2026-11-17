@@ -231,6 +231,7 @@ pub struct CheckWalkedProved {
     pub published: collections::BTreeMap<String, Published>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
     pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
+    pub summaries: collections::BTreeMap<String, Ensured>,
 }
 
 pub trait CheckWalkedPasses {
@@ -266,6 +267,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
         let proved = passes.proved(&state.facts);
         state.findings.extend(proved.findings);
         check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
+        state.facts.summaries = proved.summaries;
         state.findings.extend(passes.view_findings());
         let coalesced = vc_coalesced(&state.facts);
         let mut_viewed = vc_mut_viewed(&state.facts);

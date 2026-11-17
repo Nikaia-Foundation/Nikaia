@@ -166,6 +166,7 @@ fn frame_context(
 		text_bytes: collections::BTreeSet(),
 		text_scalars: collections::BTreeSet(),
 		returns: collections::BTreeMap(),
+		owner: "",
 	}
 }
 

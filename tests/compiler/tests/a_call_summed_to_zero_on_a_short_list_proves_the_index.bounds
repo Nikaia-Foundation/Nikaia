@@ -1,0 +1,3 @@
+bounds in tests/a_call_summed_to_zero_on_a_short_list_proves_the_index.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+    18  t[0]  proved
+    25  t[0]  proved

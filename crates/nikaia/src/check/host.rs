@@ -460,6 +460,7 @@ impl CheckWalkedPasses for Host<'_> {
             published: proved.published,
             std_claims: proved.std_claims,
             outside: proved.outside,
+            summaries: proved.summaries,
         }
     }
 

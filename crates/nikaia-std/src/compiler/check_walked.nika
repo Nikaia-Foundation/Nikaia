@@ -361,6 +361,9 @@ pub struct CheckWalkedProved {
     /// Each index data from outside reaches, and what became of it
     /// (ADR-396 D5).
     pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
+    /// Each function's result summary, as the bounds walk asks it (ADR-359
+    /// D14, #1904).
+    pub summaries: collections::BTreeMap[String, Ensured],
 }
 
 /// **The passes of the compiler the walk runs once it is over** (ADR-294,
@@ -436,6 +439,7 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
         let proved = passes.proved(state.facts)
         state.findings.extend(proved.findings)
         check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
+        state.facts.summaries = proved.summaries
         // Where a value goes, not what a type is (`NK2302`).
         state.findings.extend(passes.view_findings())
         // Where a view points and when it is used (`NK2305`).

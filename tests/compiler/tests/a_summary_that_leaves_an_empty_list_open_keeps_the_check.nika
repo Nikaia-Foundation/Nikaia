@@ -1,0 +1,21 @@
+/// A summary is read for what it says and no more (ADR-359 D14, #1904):
+/// `kind` returns 0 only on a long list, so past `kind(t) == 0` an empty
+/// list is still possible and `t[0]` keeps its check.
+fn kind(t: ref Vec[i64]) -> i64 sync {
+	if t.len() > 5 {
+		return 0
+	}
+	return 7
+}
+
+pub fn vc(t: ref Vec[i64]) -> i64 sync {
+	if kind(t) == 0 {
+		return 0
+	}
+	return t[0]
+}
+
+fn main() throws {
+	let one: Vec[i64] = [4]
+	println(f"{vc(one)}")
+}

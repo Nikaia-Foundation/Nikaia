@@ -205,7 +205,7 @@ impl EmitState {
         }
         let kind = self.named_error_of(world, thrown);
         if kind == 0 { return String::from("std::boxed::Box<dyn std::error::Error>"); }
-        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&thrown, 0)).to_string());
+        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&thrown, (0) as usize) }).to_string());
         if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", library_error_path(&name, self.is_std)); }
         let mut shown: String = String::from("");
         if self.borrows_named(world, &name) { shown = self.channel_params(elided, params, static_params, borrows); }

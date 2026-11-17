@@ -63,6 +63,9 @@ pub struct Proved {
     /// **Each index data from outside reaches, and what became of it**
     /// (ADR-396 D5), for `--bounds`.
     pub outside: BTreeMap<(i64, String), nikaia_std::compiler::prover_claims::OutsideIndex>,
+    /// **Each function's result summary, as the bounds walk asks it**
+    /// (ADR-359 D14, #1904), by the ledger's key.
+    pub summaries: BTreeMap<String, nikaia_std::compiler::bounds_walk::Ensured>,
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -254,7 +257,11 @@ pub fn prove(
 }
 
 fn finished(walked: prove_run::ProveWalked) -> Proved {
-    let prove_run::ProveWalked { walk, answers } = walked;
+    let prove_run::ProveWalked {
+        walk,
+        answers,
+        summaries,
+    } = walked;
     Proved {
         findings: walk
             .findings
@@ -267,6 +274,7 @@ fn finished(walked: prove_run::ProveWalked) -> Proved {
         published: answers.published,
         std_claims: walk.std_claims,
         outside: walk.outside,
+        summaries,
     }
 }
 

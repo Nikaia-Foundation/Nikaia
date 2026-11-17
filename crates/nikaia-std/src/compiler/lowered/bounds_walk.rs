@@ -34,6 +34,7 @@ pub struct BoundsContext {
     pub text_bytes: collections::BTreeSet<i64>,
     pub text_scalars: collections::BTreeSet<i64>,
     pub returns: collections::BTreeMap<String, BoundsReturns>,
+    pub owner: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1804,6 +1805,10 @@ pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFac
                 walk.axioms.insert(name, held);
                 return Some(result);
             }
+            if !context.owner.is_empty() && bounding_on_self(receiver, words) {
+                let summed = *nikaia_std::index::get(&context.ensured, &(format!("{}::{}", context.owner, words.resolve(method))));
+                if summed.is_some() { return bounding_ensured(walk, match summed { Some(__nikaia_value) => __nikaia_value, None => return None }, args, facts, context, program, words); }
+            }
             let ty = match *nikaia_std::index::get(&context.std_receivers, &(node_key(expr))) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let ensured = match *nikaia_std::index::get(&context.ensured, &(format!("{}::{}", ty, words.resolve(method)))) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return bounding_ensured(walk, ensured, args, facts, context, program, words);
@@ -1993,14 +1998,34 @@ pub(crate) fn bounding_ensured(walk: &mut BoundsWalk, ensured: &Ensured, args: &
     walk.codes += 1;
     let result = walk.arena.var(&name);
     given.insert(String::from("result"), result);
-    let mut holds: Vec<i64> = vec![];
+    let mut read: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for nodes in ensured.conditions.iter() {
-        let read = walk.arena.adopt(nodes);
-        holds.push(walk.arena.substitute(read, &given));
+        let condition = walk.arena.adopt(nodes);
+        walk.arena.variables(condition, &mut names);
+        read.push(condition);
+    }
+    for name in names.iter() {
+        if given.contains_key(name) { continue; }
+        let mut length: Option<i64> = None;
+        for k in 0..args.len() as i64 {
+            if length_of(unsafe { nikaia_std::proven::read(&ensured.params, (k) as usize) }) == *name {
+                let path = path_of(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, words);
+                if path.is_some() && !walk.pinned.contains(&path_root(nikaia_std::index::or(path.as_deref(), || ""))) { length = Some(bounding_length_named(walk, nikaia_std::index::or(path.as_deref(), || ""), true)); }
+            }
+        }
+        given.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(length, || bounding_fresh(walk).into()));
+    }
+    let mut holds: Vec<i64> = vec![];
+    for condition in read.iter() {
+        let condition = nikaia_std::num::value(condition);
+        holds.push(walk.arena.substitute(condition, &given));
     }
     walk.axioms.insert(name, holds);
     Some(result)
 }
+
+pub(crate) fn bounding_on_self(receiver: &Expr, words: &winnow_grammar::InternerContext) -> bool { nikaia_std::index::or(path_of(receiver, words), || "".into()) == "self" }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &Expr, method: &str, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {

@@ -111,6 +111,10 @@ pub struct BoundsContext {
 	/// **What each function of the file is found to return** (ADR-306 D23),
 	/// by name: never published, like a frame (ADR-391 D4).
 	pub returns: collections::BTreeMap[String, BoundsReturns],
+	/// **The type whose own `impl` holds the body walked**, `""` outside
+	/// one: a call `self.m(…)` there is `T::m`, whose result summary the
+	/// walk assumes (ADR-359 D14, #1904).
+	pub owner: String,
 }
 
 /// **A callee's found postcondition** (ADR-306 D23): the list parameters, by
@@ -3196,6 +3200,14 @@ fn bounding_lin(
 				walk.axioms.insert(name, held)
 				return result
 			}
+			// **A call `self.m(…)` to the type's own method has its result
+			// summary** (ADR-359 D14, #1904), as the prover reads it.
+			if !context.owner.is_empty() && bounding_on_self(receiver, words) {
+				let summed = context.ensured[f"{context.owner}::{words.resolve(method)}"]
+				if summed != null {
+					return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+				}
+			}
 			// **What `std`'s ledger ensures of a method's result** (ADR-314
 			// D3): `x.trailing_zeros()` of a `u64` is in `0..=64`.
 			let ty = context.std_receivers[node_key(expr)] ?? return null
@@ -3487,13 +3499,42 @@ fn bounding_ensured(
 	walk.codes += 1
 	let result = walk.arena.var(name)
 	given.insert("result", result)
-	let mut holds: Vec[i64] = []
+	let mut read: Vec[i64] = []
+	let mut names: collections::BTreeSet[String] = collections::BTreeSet()
 	for nodes in ensured.conditions {
-		let read = walk.arena.adopt(nodes)
-		holds.push(walk.arena.substitute(read, given))
+		let condition = walk.arena.adopt(nodes)
+		walk.arena.variables(condition, names)
+		read.push(condition)
+	}
+	// **A parameter's length is the argument's** (ADR-359 D14): a result
+	// summary reads `t.len()`. Any other name it reads is a number of its own
+	// at each call, never one two calls share.
+	for name in names {
+		if given.contains_key(name) {
+			continue
+		}
+		let mut length: i64? = null
+		for k in 0..<args.len() {
+			if length_of(ensured.params[k]) == name {
+				let path = path_of(args[k], words)
+				if path != null && !walk.pinned.contains(path_root(path ?? "")) {
+					length = bounding_length_named(walk, path ?? "", true)
+				}
+			}
+		}
+		given.insert(name.clone(), length ?? bounding_fresh(walk))
+	}
+	let mut holds: Vec[i64] = []
+	for condition in read {
+		holds.push(walk.arena.substitute(condition, given))
 	}
 	walk.axioms.insert(name, holds)
 	return result
+}
+
+/// Whether a call's receiver is `self` itself.
+fn bounding_on_self(receiver: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+	return (path_of(receiver, words) ?? "") == "self"
 }
 
 /// **A method call's precondition, proved where the call stands** (ADR-269

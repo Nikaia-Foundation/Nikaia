@@ -297,6 +297,90 @@ impl TermArena {
         }
         unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
+    pub fn nodes_of(&self, id: i64) -> Vec<SolverTerm> {
+        let mut out: Vec<SolverTerm> = vec![];
+        self.copied_into(id, &mut out);
+        out
+    }
+    pub(crate) fn copied_into(&self, id: i64, out: &mut Vec<SolverTerm>) -> i64 {
+        match self.at(id) {
+            SolverTerm::Add(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Add(x, y));
+            },
+            SolverTerm::Sub(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Sub(x, y));
+            },
+            SolverTerm::Mul(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Mul(x, y));
+            },
+            SolverTerm::Le(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Le(x, y));
+            },
+            SolverTerm::Lt(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Lt(x, y));
+            },
+            SolverTerm::Ge(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Ge(x, y));
+            },
+            SolverTerm::Gt(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Gt(x, y));
+            },
+            SolverTerm::Eq(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Eq(x, y));
+            },
+            SolverTerm::Ne(a, b) => {
+                let x = self.copied_into(a, out);
+                let y = self.copied_into(b, out);
+                out.push(SolverTerm::Ne(x, y));
+            },
+            SolverTerm::Neg(a) => {
+                let x = self.copied_into(a, out);
+                out.push(SolverTerm::Neg(x));
+            },
+            SolverTerm::Not(a) => {
+                let x = self.copied_into(a, out);
+                out.push(SolverTerm::Not(x));
+            },
+            SolverTerm::Quot(a, k) => {
+                let x = self.copied_into(a, out);
+                out.push(SolverTerm::Quot(x, k));
+            },
+            SolverTerm::And(ref parts) => {
+                let mut moved: Vec<i64> = vec![];
+                for part in parts.iter() {
+                    let part = nikaia_std::num::value(part);
+                    moved.push(self.copied_into(part, out));
+                }
+                out.push(SolverTerm::And(moved));
+            },
+            SolverTerm::Or(ref parts) => {
+                let mut moved: Vec<i64> = vec![];
+                for part in parts.iter() {
+                    let part = nikaia_std::num::value(part);
+                    moved.push(self.copied_into(part, out));
+                }
+                out.push(SolverTerm::Or(moved));
+            },
+            _ => { out.push(self.at(id)); },
+        }
+        unsafe { nikaia_std::proven::sub::<i64>(out.len() as i64, 1) }
+    }
     pub(crate) fn is_the_variable(&self, id: i64, name: &str) -> bool {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Var(n) => n == name,
