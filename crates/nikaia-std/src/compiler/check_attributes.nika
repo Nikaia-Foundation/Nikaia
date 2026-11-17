@@ -62,11 +62,11 @@ fn check_attributes_place_or_field(place: ref String) -> String {
 /// ASCII case-insensitive equality of two words.
 fn check_attributes_same_word(left: ref String, right: ref String) -> bool {
     let mut a: String = ""
-    for c in left.chars() {
+    for c in left.scalars {
         a.push(c.to_ascii_lowercase())
     }
     let mut b: String = ""
-    for c in right.chars() {
+    for c in right.scalars {
         b.push(c.to_ascii_lowercase())
     }
     return a == b
@@ -111,7 +111,7 @@ fn check_attributes_mark_read(text: ref String) -> CheckAttributesMark {
     let mut word: String = ""
     let mut rest: String = ""
     let mut after = false
-    for c in text.chars() {
+    for c in text.scalars {
         if after {
             rest.push(c)
             continue

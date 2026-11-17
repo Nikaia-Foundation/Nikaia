@@ -294,7 +294,7 @@ fn hands_back_what_it_removes(method: ref String) -> bool {
 fn capitalised(text: ref String) -> String {
     let mut out: String = ""
     let mut first = true
-    for c in text.chars() {
+    for c in text.scalars {
         if first {
             let mut letter: String = ""
             letter.push(c)

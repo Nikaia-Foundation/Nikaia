@@ -51,7 +51,7 @@ fn fb_utf8_len(code: i64) -> u64 {
 /// The bytes a literal written in the source matches: an escape is one byte,
 /// a `\u{…}` at least one, which only ever counts fewer than it matches.
 fn fb_literal_bytes(written: ref String) -> u64 {
-    let chars: Vec[scalar] = written.chars().collect()
+    let chars: Vec[scalar] = written.scalars.collect()
     let mut bytes: u64 = 0
     let mut i = 0
     while i < chars.len() {

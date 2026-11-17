@@ -463,7 +463,7 @@ impl CxPython {
                 } else {
                     // The first scalar in capitals, the rest as spelled.
                     let mut capital: String = ""
-                    for c in spelled.chars() {
+                    for c in spelled.scalars {
                         if capital == "" {
                             capital = f"{c}".to_uppercase()
                         } else {

@@ -652,7 +652,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && pattern_at >= 0 && pattern_at < args.len() {
         match args[pattern_at] {
             Expr::LitStr { text: written, .. } => {
-                let scalars: Vec[scalar] = written.chars().collect()
+                let scalars: Vec[scalar] = written.scalars.collect()
                 if scalars.len() == 1 {
                     let literal = check_core_method_char_literal(scalars[0])
                     if literal != "" {

@@ -1502,7 +1502,7 @@ fn returned_before(before_return: ref collections::BTreeMap[i64, String], at: i6
 
 /// `text` without the full stops it ends in.
 fn without_full_stops(text: ref String) -> String {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut end = c.len()
     while end > 0 && c[end - 1] == '.' {
         end -= 1

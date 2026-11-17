@@ -361,8 +361,8 @@ fn directly_under(path: ref String, under: ref String) -> String? {
     if !path.starts_with(under) {
         return null
     }
-    let c: Vec[scalar] = path.chars().collect()
-    let u: Vec[scalar] = under.chars().collect()
+    let c: Vec[scalar] = path.scalars.collect()
+    let u: Vec[scalar] = under.scalars.collect()
     let rest = between(c, u.len(), c.len())
     if rest.contains("::") {
         return null
@@ -372,7 +372,7 @@ fn directly_under(path: ref String, under: ref String) -> String? {
 
 // The text before the first `:`, trimmed.
 fn before_colon(written: ref String) -> String {
-    let c: Vec[scalar] = written.chars().collect()
+    let c: Vec[scalar] = written.scalars.collect()
     let mut end = c.len()
     for at in 0..<c.len() {
         if c[at] == ':' && end == c.len() {
@@ -388,7 +388,7 @@ fn before_colon(written: ref String) -> String {
 // `Handle`.
 fn before_generics(written: ref String) -> String {
     let mut out: String = ""
-    for c in written.chars() {
+    for c in written.scalars {
         if c == '<' {
             break
         }

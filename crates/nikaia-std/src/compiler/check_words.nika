@@ -58,7 +58,7 @@ fn with_article(what: ref String) -> String sync {
 pub fn article(what: ref String) -> String sync {
     let mut first = ' '
     let mut alone = true
-    for c in what.chars() {
+    for c in what.scalars {
         if first == ' ' {
             if !c.is_alphanumeric() {
                 continue
@@ -125,7 +125,7 @@ pub fn indented_text(text: ref String) -> String {
 /// Every `{…}` group in a string, by the text between the braces - a
 /// `\u{…}` escape is not one, and an empty group is left out.
 fn brace_groups(text: ref String) -> Vec[String] {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut found: Vec[String] = []
     let mut at = 0
     while at < c.len() {
@@ -166,7 +166,7 @@ fn brace_groups(text: ref String) -> Vec[String] {
 /// single `{` before it is still open, so the closing braces of nested JSON,
 /// `{"a":{}}`, are not. A `\u{…}` escape is passed over.
 fn collapsed_doubled_braces(text: ref String) -> String? {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut out: String = ""
     let mut doubled = false
     let mut open = 0
@@ -257,7 +257,7 @@ fn boxed_member(owner: ref String, at: i64, field: ref String) -> String {
 /// and a word that starts with a sign keeps what was written. The backticked
 /// word itself, closing tick included, is copied as it is.
 pub fn articles(text: ref String) -> String {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut out: String = ""
     let mut before: Vec[scalar] = []
     let mut at = 0

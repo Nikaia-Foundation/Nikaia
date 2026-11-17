@@ -247,7 +247,7 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
     let mut line = 0
     let mut column = 0
     let mut byte = 0
-    for c in source.chars() {
+    for c in source.scalars {
         if byte >= at {
             break
         }
@@ -294,7 +294,7 @@ fn lsp_offset(source: ref String, line: i64, character: i64) -> i64 {
     let mut at_line = 0
     let mut column = 0
     let mut byte = 0
-    for c in source.chars() {
+    for c in source.scalars {
         if at_line == line && (column >= character || c == '\n') {
             break
         }
@@ -396,7 +396,7 @@ fn lsp_uri_of(path: ref String, uris: ref collections::BTreeMap[String, String])
 /// `.`, `_`, `~` and `/` written as `%XX` (RFC 3986 2.3).
 fn lsp_path_uri(path: ref String) -> String {
     let mut out: String = "file://"
-    let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+    let digits: Vec[scalar] = "0123456789ABCDEF".scalars.collect()
     for b in path.bytes() {
         let d = b as i64
         let kept = (d >= 48 && d <= 57) || (d >= 65 && d <= 90) || (d >= 97 && d <= 122) || d == 45 || d == 46 || d == 95 || d == 126 || d == 47
@@ -470,7 +470,7 @@ fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Valu
     let mut covered = 0
     let mut pending = 0
     let mut bytes = start
-    for c in text.chars() {
+    for c in text.scalars {
         if bytes < at {
             column += 1
         } else if bytes < end {
@@ -494,7 +494,7 @@ fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Valu
 fn lsp_units(line: ref String, count: i64) -> i64 {
     let mut units = 0
     let mut seen = 0
-    for c in line.chars() {
+    for c in line.scalars {
         if seen >= count {
             break
         }

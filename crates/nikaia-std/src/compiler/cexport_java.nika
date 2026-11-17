@@ -58,7 +58,7 @@ fn cx_java_camel(name: ref String) -> String {
     let mut out: String = ""
     let mut up = false
     let mut first = true
-    for c in name.chars() {
+    for c in name.scalars {
         if c == '_' {
             up = !first
             continue
@@ -83,7 +83,7 @@ fn cx_java_camel(name: ref String) -> String {
 fn cx_java_pascal(name: ref String) -> String {
     let mut out: String = ""
     let mut up = true
-    for c in name.chars() {
+    for c in name.scalars {
         if c == '_' || c == '-' {
             up = true
             continue

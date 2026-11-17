@@ -99,7 +99,7 @@ fn project_members_used(dir: ref fs::Path) -> collections::BTreeSet[String] {
         let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { continue }
         for line in text.lines() {
             let rest = line.strip_prefix("use ") ?? continue
-            let word: String = rest.trim_start().chars().take_while(fn(c) { c.is_alphanumeric() || c == '_' }).collect()
+            let word: String = rest.trim_start().scalars.take_while(fn(c) { c.is_alphanumeric() || c == '_' }).collect()
             out.insert(word)
         }
     }

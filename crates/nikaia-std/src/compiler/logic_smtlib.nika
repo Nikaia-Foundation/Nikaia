@@ -38,7 +38,7 @@ pub fn lg_smtlib_write(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> 
 fn lg_symbol(name: ref String) -> String {
     let mut simple = name.len() > 0
     let mut first = true
-    for c in name.chars() {
+    for c in name.scalars {
         if first && c >= '0' && c <= '9' {
             simple = false
         }
@@ -169,7 +169,7 @@ enum LgParsedSexps {
 }
 
 fn lg_parse(source: ref String) -> LgParsedSexps {
-    let chars: Vec[scalar] = source.chars().collect()
+    let chars: Vec[scalar] = source.scalars.collect()
     let mut stack: Vec[Vec[LgSexp]] = [[]]
     let mut at = 0
     while at < chars.len() {
@@ -285,7 +285,7 @@ impl LgReader {
             return LgTermRead::Term(self.arena.boolean(false))
         }
         let mut digits = a.len() > 0
-        for c in a.chars() {
+        for c in a.scalars {
             if c < '0' || c > '9' {
                 digits = false
             }

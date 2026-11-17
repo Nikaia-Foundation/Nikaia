@@ -49,12 +49,12 @@ fn check_core_expr_escapes[H: CheckHost](mut state: CheckState, host: ref H, tex
 /// a surrogate is one of those (`NK1184`).
 fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H, text: ref String, span: ref Span) sync {
     let value = host.decoded(text) ?? return
-    let count = value.chars().count()
+    let count = value.scalars.count()
     if count <= 1 {
         return
     }
     let composed = host.composed(value)
-    let scalars: Vec[scalar] = composed.chars().collect()
+    let scalars: Vec[scalar] = composed.scalars.collect()
     if scalars.len() == 1 {
         let one = scalars[0]
         let hex = hex_of(one as i64)
@@ -64,7 +64,7 @@ fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H
     }
     let mut quoted: String = ""
     let mut escaped = false
-    for c in text.chars() {
+    for c in text.scalars {
         if c == '"' && !escaped {
             quoted.push('\\')
         }
@@ -232,7 +232,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             check_core_expr_escapes(state, host, text, span)
             check_core_expr_char_scalars(state, host, text, span)
             let value = host.decoded(text) ?? ""
-            if value.chars().count() == 1 && value.len() > 1 {
+            if value.scalars.count() == 1 && value.len() > 1 {
                 state.flow.wide_chars.insert(id_of(expr) as i64, (value.len(), span.clone()))
             }
             check_core_expr_named("scalar")

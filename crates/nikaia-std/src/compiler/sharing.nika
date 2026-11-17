@@ -396,7 +396,7 @@ fn declared_field_type(ty: ref String, field: ref String, asked: ref Asked) -> T
 fn without_a_view(ty: ref String) -> String {
     let mut out: String = ""
     let mut leading = true
-    for c in ty.chars() {
+    for c in ty.scalars {
         if leading && c == '&' {
             continue
         }
