@@ -180,18 +180,33 @@ signature = "(text: String) -> String?"
 [type."ConvertError"]
 pub = true
 fields = ["pub message: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Error"]
 pub = true
 fields = ["pub message: String", "pub line: i64", "pub column: i64", "pub path: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Member"]
 pub = true
 fields = ["pub key: String", "pub value: Value"]
+compares = true
+equates = true
+hashes = true
 
 [type."Reader"]
 fields = ["cs: Vec[scalar]", "pos: i64"]
+compares = true
+equates = true
+hashes = true
 
 [type."Value"]
 pub = true
 variants = ["Null", "Bool(bool)", "Number(String)", "Str(String)", "Array(Vec[Value])", "Object(Vec[Member])"]
+compares = true
+equates = true
+hashes = true

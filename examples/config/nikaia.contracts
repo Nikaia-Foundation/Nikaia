@@ -25,9 +25,15 @@ signature = "()"
 [type."Section"]
 pub = true
 fields = ["name: ref String", "settings: Vec[Setting]"]
+compares = true
+equates = true
+hashes = true
 tethered = ["name", "settings"]
 
 [type."Setting"]
 pub = true
 fields = ["key: ref String", "value: ref String"]
+compares = true
+equates = true
+hashes = true
 tethered = ["key", "value"]

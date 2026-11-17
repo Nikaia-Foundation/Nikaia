@@ -816,6 +816,26 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
             .collect()
     }
 
+    fn derives(&self) -> nikaia_std::compiler::ledger_items::LedgerDerives {
+        let mut derives = nikaia_std::compiler::ledger_items::LedgerDerives {
+            compares: BTreeSet::new(),
+            equates: BTreeSet::new(),
+            hashes: BTreeSet::new(),
+            copies: BTreeSet::new(),
+        };
+        for checked in self.checked.borrow().iter() {
+            derives
+                .compares
+                .extend(checked.facts.compares.iter().cloned());
+            derives
+                .equates
+                .extend(checked.facts.compares_totally.iter().cloned());
+            derives.hashes.extend(checked.facts.hashes.iter().cloned());
+            derives.copies.extend(checked.facts.copies.iter().cloned());
+        }
+        derives
+    }
+
     fn infer_sync(&self, ledger: &mut Ledger) {
         let noted = self.timed("sync", || {
             sync::infer(ledger, self.units, self.library, &self.resolved.borrow())

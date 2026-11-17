@@ -378,9 +378,29 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
     all
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LedgerDerives {
+    pub compares: collections::BTreeSet<String>,
+    pub equates: collections::BTreeSet<String>,
+    pub hashes: collections::BTreeSet<String>,
+    pub copies: collections::BTreeSet<String>,
+}
+
+pub(crate) fn ledger_derives(ledger: &mut Ledger, derives: &LedgerDerives) {
+    let names: Vec<String> = ledger.types.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+    for name in names.iter() {
+        let contract = match ledger.types.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if derives.compares.contains(name) { contract.compares = true; }
+        if derives.equates.contains(name) { contract.equates = true; }
+        if derives.hashes.contains(name) { contract.hashes = true; }
+        if derives.copies.contains(name) { contract.copies = true; }
+    }
+}
+
 pub trait LedgerInferHost {
     fn check_units(&self, ledger: &Ledger);
     fn outside_results(&self) -> collections::BTreeSet<String>;
+    fn derives(&self) -> LedgerDerives;
     fn infer_sync(&self, ledger: &mut Ledger);
     fn reads_back(&self, condition: &str, readable: &collections::BTreeSet<String>) -> bool;
     fn infer_throws(&self, ledger: &mut Ledger);
@@ -402,6 +422,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     let defaults = declare_items(units, borrowing, ledger);
     host.check_units(&ledger);
     ledger_untrusted_results(ledger, &host.outside_results());
+    ledger_derives(ledger, &host.derives());
     host.infer_sync(ledger);
     ledger_expression_ensures(ledger, units, host);
     host.infer_panics(ledger);
