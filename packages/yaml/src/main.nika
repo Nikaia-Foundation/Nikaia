@@ -1663,12 +1663,12 @@ fn is_float(s: String) -> bool sync {
 // more digits than that can only mean is broken, never a stop.
 fn leading_number(t: String) -> i64 sync {
 	let mut n = 0
-	for c in t.chars() {
-		if c < '0' || c > '9' {
+	for b in t.bytes {
+		if b < 48 || b > 57 {
 			break
 		}
 		let tens = n.checked_mul(10) ?? return 0
-		n = tens.checked_add(text::digit_value(c) as i64) ?? return 0
+		n = tens.checked_add((b - 48) as i64) ?? return 0
 	}
 	return n
 }
@@ -1718,24 +1718,23 @@ fn error_at(input: ref Bytes, offset: i64, kind: ErrorKind, message: String) -> 
 // (Part II 10.8): the message, then `at line L, column C` and the line it
 // stopped in.
 fn error_of(input: ref Bytes, rendered: String) -> Error sync {
-	let parts: Vec[String] = rendered.split(" at line ").collect()
-	if parts.len() < 2 {
-		return Error {
-			kind: ErrorKind::Syntax,
-			message: rendered.clone(),
-			line: 1,
-			column: 1,
-			offset: 0,
-			tag: "",
-			text: "",
-		}
+	let (message, place) = rendered.split_once(" at line ") ?? return Error {
+		kind: ErrorKind::Syntax,
+		message: rendered.clone(),
+		line: 1,
+		column: 1,
+		offset: 0,
+		tag: "",
+		text: "",
 	}
-	let place: Vec[String] = parts[1].split(", column ").collect()
-	let line = leading_number(place[0].clone())
-	let column = if place.len() > 1 { leading_number(place[1].clone()) } else { 1 }
+	let line = leading_number(place)
+	let column = match place.split_once(", column ") {
+		null => 1
+		(_, after) => leading_number(after)
+	}
 	return Error {
 		kind: ErrorKind::Syntax,
-		message: parts[0].clone(),
+		message: message.clone(),
 		line: line,
 		column: column,
 		offset: offset_of(input, line, column),
@@ -2479,11 +2478,12 @@ fn uri_decoded(s: String) -> String sync {
 	if !s.contains('%') {
 		return s.clone()
 	}
-	let bs: Vec[u8] = s.bytes().collect()
+	let bs = s.bytes
+	let n = bs.len() as i64
 	let mut out: Vec[u8] = []
 	let mut i = 0
-	while i < bs.len() {
-		if bs[i] == 37 && i + 2 < bs.len() {
+	while i < n {
+		if bs[i] == 37 && i + 2 < n {
 			out.push((hex_value(bs[i + 1] as scalar) * 16 + hex_value(bs[i + 2] as scalar)) as u8)
 			i += 3
 		} else {
@@ -2675,7 +2675,7 @@ fn most(xs: ref Vec[i64]) -> i64 sync {
 // A block scalar's end: after its last character that is no space and no
 // line break, or after its header where it has no text.
 fn block_end(header: u32, from: u32, s: String) -> u32 sync {
-	let bs: Vec[u8] = s.bytes().collect()
+	let bs = s.bytes
 	let mut n = bs.len() as i64
 	while n > 0 && (bs[n - 1] == 32 || bs[n - 1] == 10) {
 		n -= 1
@@ -3502,10 +3502,10 @@ pub fn written_tag(tag: String) -> String sync {
 // A tag's text with each byte outside a URI's characters as `%XX`.
 fn uri_escaped(t: String) -> String sync {
 	let mut out = String()
-	for b in t.bytes() {
+	for b in t.bytes {
 		let c = b as scalar
 		let alpha = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-		if b < 128 && (alpha || "-_;/?:@&=+$,.~*'()[]".contains(f"{c}")) {
+		if b < 128 && (alpha || "-_;/?:@&=+$,.~*'()[]".contains(c)) {
 			out.push(c)
 		} else {
 			out.push('%')

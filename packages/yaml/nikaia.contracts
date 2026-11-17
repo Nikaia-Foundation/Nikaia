@@ -568,7 +568,7 @@ sync = true
 panics = false
 touches = []
 views = ["t: borrowed"]
-signature = "(t: String) -> i64"
+signature = "(t: ref String) -> i64"
 
 [fn."leading_zero_digits"]
 sync = true

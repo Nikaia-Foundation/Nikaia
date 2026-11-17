@@ -1,17 +1,17 @@
-bounds in src/main.nika: 72 indexes, 72 proved; 104 operations, 81 proved
+bounds in src/main.nika: 68 indexes, 68 proved; 105 operations, 82 proved
   1424  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1430  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1430  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  2023  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
-  2023  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
-  2035  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
-  2037  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
-  2037  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
-  2073  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2087  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2115  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2124  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2125  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2022  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
+  2022  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
+  2034  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds
+  2036  1 + entries.iter().map(…).sum()       justified: a count of nodes, which the memory holding them bounds
+  2036  nodes_in(e.key) + nodes_in(e.value)   justified: a count of nodes, which the memory holding them bounds
+  2072  self.made += 1                        justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2086  self.made - before                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2114  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2123  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
+  2124  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
   2662  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
   2686  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
   2883  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
