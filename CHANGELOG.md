@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1420] — 2026-11-17
+
+**Builders' changes (#1992, #1992`, #1528, #1532, #1537, #1990)**
+- Messages print types as the source writes them: no `ref T`; a view is said in words ("a view of a `String`", "a `Vec[String]` whose items are views", "a `String` of its own"), a declared view result as `Vec[String] from self`, a function type with `keep`/`mut` on its parameters (ADR-views-3 D4, D10; #1528)
+- A `keep` parameter holds text of its own: the text tiers no longer lower it to a view, so a list element or `for` binding that only views its text is refused at the call with a `.clone()` help (ADR-views-3 D5).
+- D9 follows a view a std method hands back. A text moved into a literal while a view `trim`, `split`, `lines` and the like made of it is still read is lent, or refused with NK2305 where the field is changed, instead of failing in rustc as NK1343; read off the methods' ledger entries.
+- The ownership matrix has no open cell: the four `fn_field` cells keep through a `fn(keep a: String)` field (Part I 5.4 C), and tests pin #1990's probe and the D2-for-options-and-function-types probe of #1346.
+- A call through a function value, a function-typed parameter or field whose type marks a parameter `keep` now hands the argument over as a named function does: a later use is NK2105 and a view is NK1102 with a `.clone()` help, where both reached rustc as NK1343 (Part I 5.4 C, ADR-293 D29, ADR-views-3 D5).
+
 ## [0.0.1419] — 2026-11-17
 
 **Builders' changes (#1848, #1904, #1949, #1957, #1987, #1988)**
