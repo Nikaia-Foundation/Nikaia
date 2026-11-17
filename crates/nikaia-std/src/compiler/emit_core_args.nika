@@ -921,7 +921,16 @@ impl EmitState {
                 }
                 let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
                 changed.extend(mutable.clone())
-                let inner = EmitScope::plain() with { changed: changed }
+                // **A parameter of code that may pause is awaited in the
+                // lambda too** (#1553): `g(v)` in `fn(v) { g(v) }` is
+                // `g(v).await`, unless a parameter of the lambda hides it.
+                let mut awaited: Vec[winnow_grammar::Symbol] = []
+                for name in scope.awaited {
+                    if !params.contains(name) {
+                        awaited.push(name.clone())
+                    }
+                }
+                let inner = EmitScope::plain() with { changed: changed, awaited: awaited }
                 // **Code whose type says `throws` hands back a `Result`**
                 // (#1360), as a kept lambda does: a failing call in the body
                 // leaves through its `?`, and the value goes inside the `Ok`.

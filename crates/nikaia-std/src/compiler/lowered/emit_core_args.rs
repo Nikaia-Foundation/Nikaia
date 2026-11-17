@@ -569,7 +569,12 @@ impl EmitState {
                 if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| std::boxed::Box::pin(async move ", joined)); }
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.copy_owned();
                 changed.extend(mutable.iter().cloned());
-                let inner = EmitScope { changed: changed, ..EmitScope::plain() };
+                let mut awaited: Vec<winnow_grammar::Symbol> = vec![];
+                for name in scope.awaited.iter() {
+                    let name = *name;
+                    if !params.contains(&name) { awaited.push(name.copy_owned()); }
+                }
+                let inner = EmitScope { changed: changed, awaited: awaited, ..EmitScope::plain() };
                 let valueless = self.facts.valueless_lambdas.contains(&node_key(arg));
                 let leaves = emit_a_body_that_leaves(world, body);
                 if self.facts.failing_lambdas.contains(&node_key(arg)) {
