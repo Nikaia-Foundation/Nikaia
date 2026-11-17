@@ -545,6 +545,11 @@ own driver run:
   rules and diagnostics. It does not make the prover stronger: where a rule
   waits for a proof the prover cannot give, the lane files that for the solver
   lane and the rule's issue is `blocked` on it.
+* **Views lane, `docs/briefs/views/`** (owner, 2026-11-17): the issues
+  labelled `views`: ownership as ADR-views-3 states it (`keep`, lent
+  parameters, `from`, the views of text and lists, the ownership matrix), and
+  every program of that kind that the checker accepts and `rustc` refuses
+  (NK1343). Its decisions follow *Language decisions*.
 * **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
