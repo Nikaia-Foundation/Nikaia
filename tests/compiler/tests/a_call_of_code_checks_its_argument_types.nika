@@ -1,0 +1,18 @@
+// A call through a function value checks its arguments as a named call
+// does (Part I 5.4 C, #1996): a function type's parameters are typed as a
+// signature's, through a `let`, a parameter that only runs its code and a
+// field that holds code, and the count too.
+struct Act { f: fn(keep a: String) -> i64 }
+
+fn eat(a: String) -> i64 { return a.len() }
+
+fn via(f: fn(String) -> i64) -> i64 { return f(5) }
+
+fn main() throws {
+    let g: fn(String) -> i64 = eat
+    println(g(5))
+    println(via(eat))
+    let a = Act { f: eat }
+    println(a.f(5))
+    println(g("a", "b"))
+}

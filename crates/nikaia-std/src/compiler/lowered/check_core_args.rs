@@ -302,14 +302,55 @@ pub(crate) fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_arguments_to_code<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], expected: &[Ty], span: &Span) -> Vec<Ty> {
+pub(crate) fn check_core_arguments_to_code<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], expected: &[Ty], name: &str, span: &Span) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), false, None, at, true, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, false, None, at, true, span)); }
+        if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), false, None, at, true, span)); } else {
+            let found = check_core_args_other(state, world, host, arg, expected, false, None, at, true, span);
+            if at < expected.len() as i64 { check_core_argument_to_code_fits(state, world, host, arg, &found, unsafe { nikaia_std::proven::read(&expected, (at) as usize) }, name, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, span); }
+            out.push(found);
+        }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_argument_to_code_fits<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, given_type: &Ty, want: &Ty, name: &str, nth: i64, span: &Span) {
+    state.constant_fits(world, arg, Some(want), span);
+    if want.is_unknown() || state.an_open_number_where_none_fits(world, given_type, want, arg, span, "argument", &|found_text, want_text| { format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want_text, found_text) }) { return; }
+    let mut found = given_type.clone();
+    if found.is_unknown() && an_integer_literal(arg) && state.no_integer_is(world, want) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
+    if check_arguments_nullable(want) && !check_arguments_nullable(&found) && !ends_in_null(arg) {
+        let how = check_widened_slot(state, world, host, &found, want, Some(arg), span);
+        if how.is_some() {
+            let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
+            state.facts.nullable_args.insert(id_of(arg) as i64, wrap);
+            return;
+        }
+    }
+    if found.is_unknown() || found.fits(want) || unviewed_type(&found).fits(&unviewed_type(want)) { return; }
+    let both_code = match found {
+        Ty::Fn { .. } => matches!(want, Ty::Fn { .. }),
+        _ => false,
+    };
+    if both_code { return; }
+    let how = check_widened_slot(state, world, host, &found, want, Some(arg), span);
+    if how.is_some() {
+        let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.facts.nullable_args.insert(id_of(arg) as i64, wrap);
+        return;
+    }
+    if state.fits_through_deref(world, &found, want) { return; }
+    let mut handed = found.clone();
+    if is_a_view_of_a_string(&handed) { handed = Ty::Named { name: String::from("str"), args: vec![], view: true }; }
+    let mut wanted = want.clone();
+    let plain = unviewed_type(want);
+    if want.is_a_view() && plain == string_ty() { wanted = plain; }
+    state.findings.push(check_refusal("NK1102", &check_span_at(world, arg, span), spoken_in(&format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, wanted.text(), handed.text()), &wanted, Some(&handed)), vec![format!("Its type takes a `{}` there: a function type's parameters are typed as a signature's (Part I 5.4).", wanted.shown())], Some(shown_in(&way_out_of_a_mismatch(&handed, &wanted), &wanted, Some(&handed)))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -740,7 +781,7 @@ pub(crate) fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, wo
             let result = nikaia_std::boxed::open(result);
             let pauses: bool = !is_sync;
             let fails: bool = can_throw;
-            let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), span);
+            let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), world.words.resolve(method), span);
             check_core_call_lent(state, world, args, params, &found, world.words.resolve(method), span);
             state.kept_arguments_are_its_own(world, args, params);
             match on {

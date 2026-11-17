@@ -157,6 +157,11 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
 /// What a `ref` parameter of code takes is lent to it (D20), unless it is a
 /// view already: a map's read past a jump is.
 fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
+    // **Code takes as many arguments as its type says** (Part I 5.4 C,
+    // #1996), as a named function does.
+    if args.len() != params.len() {
+        state.findings.push(check_refusal("NK1101", span, f"`{name}` takes {counted(params.len() as i64, "argument")}, but you passed {args.len()}.", [f"Its type takes {counted(params.len() as i64, "parameter")} (Part I 5.4)."], f"Pass {counted(params.len() as i64, "argument")}."))
+    }
     let mut i = -1
     for given in args {
         i += 1
@@ -216,7 +221,7 @@ fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, gi
 /// function keeps. What its type says is what the call does.
 fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
     state.read_at.push((name.clone(), span.start as i64))
-    let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+    let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), name, span)
     check_core_call_lent(state, world, args, params, found, name, span)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
@@ -865,7 +870,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // its own function parameters.
     let mut found: Vec[Ty] = []
     if !have && is_variable && state.run_code.contains(name) {
-        found = check_core_arguments_to_code(state, world, host, args, expected, span)
+        found = check_core_arguments_to_code(state, world, host, args, expected, name, span)
     } else {
         found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
     }

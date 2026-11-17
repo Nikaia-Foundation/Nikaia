@@ -450,7 +450,10 @@ impl EmitState {
                     at += 1;
                     let change = self.facts.mut_args.contains(&node_key(arg));
                     if change && self.facts.reborrowed_args.contains(&node_key(arg)) { out.push("&mut *"); } else if change { out.push("&mut "); } else if self.facts.lent_args.contains(&node_key(arg)) && !self.facts.views_handed_on.contains(&node_key(arg)) { out.push("&"); }
+                    let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(arg))?;
+                    out.push(&before);
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+                    out.push(&after);
                 }
                 out.push(")");
                 if pauses { out.push(&emit_async_pause(&walk)); }
@@ -1317,8 +1320,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97587| {
-        let (i, word) = __nikaia_tuple97587;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple97893| {
+        let (i, word) = __nikaia_tuple97893;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
