@@ -1,0 +1,70 @@
+// scripts/drive.nika --push-merges SHA LOWER BUILD BADGES CHECK (#2008): the
+// merge rounds of a green batch whose push was rejected, in a temp repository
+// whose bare remote rejects the first pushes (a `pre-receive` hook counting
+// them, as another lane pushing in between would). Each round merges
+// `origin/develop` (here a commit another clone pushed), runs the short checks
+// (CHECK) and pushes the merge: rejected twice more, the third round pushes it
+// without a new full suite; rejected in all three, nothing is pushed and the
+// next suite does; a red short check stops at the first round, nothing pushed.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// A repository `work` and a clone `other` of the bare `origin`; `other`
+// pushes a commit, `work` commits its own (the tested batch), then the hook
+// rejects the next REJECTS pushes. Returns `work`.
+fn setup(tmp: String, name: String, rejects: i64) -> String throws {
+    let base = f"{tmp}/{name}"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
+    let work = f"{base}/work"
+    sh(work.clone(), f"{id}; echo base > a.txt; git add -A; git commit -q -m base; git remote add origin ../origin.git; git push -q origin develop; echo target/ >> .git/info/exclude")
+    sh(base.clone(), "git clone -q -b develop origin.git other")
+    sh(f"{base}/other", f"{id}; echo theirs > b.txt; git add -A; git commit -q -m theirs; git push -q origin develop")
+    sh(work.clone(), "echo ours > c.txt; git add -A; git commit -q -m ours")
+    let hook = f"#!/bin/sh\nn=$(cat count 2>/dev/null || echo 0)\nn=$((n+1))\necho $n > count\ntest $n -gt {rejects}\n"
+    fs::write(f"{base}/origin.git/hooks/pre-receive", fs::Root::Anywhere, hook)
+    sh(base, "chmod +x origin.git/hooks/pre-receive")
+    return work
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, rejects: i64, check: String) throws {
+    let work = setup(tmp.clone(), name.replace(" ", "-").replace(",", ""), rejects)
+    let ours = sh(work.clone(), "git rev-parse HEAD")
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--push-merges", ours.clone(), "true", "true", "true", check]; dir: work.clone())
+    let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
+    println(f"== {name}")
+    println(out.stdout.trim().replace(head, "SHA").replace(ours.bytes[0..<8].text(), "OURS"))
+    println(f"exit ok: {out.ok}")
+    println(sh(work, "git log --format=%s -1; git ls-remote -q origin develop | cut -c1-40 | grep -qx $(git rev-parse HEAD) && echo origin has the merge || echo origin has not the merge"))
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "pushed in round one", 0, "true")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "rejected twice, pushed in round three", 2, "true")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "rejected in every round", 3, "true")
+    case(nikaia, repo, tmp.clone(), "short checks red", 0, "echo the short checks failed; false")
+    process::run("rm", ["-rf", tmp])
+}

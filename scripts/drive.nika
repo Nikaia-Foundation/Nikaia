@@ -831,16 +831,12 @@ fn drive_say(dry: bool, line: String) throws {
 	if dry { println(f"would run: {line}") }
 }
 
-// Pushes the tested commit; rejected, merges `origin/develop` once,
-// regenerates the lowered files and badges in the merge (drive_merge_fetched,
-// #1333: they depend on both sides), runs the
-// short checks on the merge (drive_merge_check: two lanes each green alone can
-// be red together, and develop went red for hours that way on 2026-11-08) and
-// pushes exactly the merge commit only when they pass (a merge, not a rebase: a
-// rebase replays the tested commits and, on 2026-11-05, deleted every brief a
-// replayed commit had untracked). Red, or rejected again: nothing is pushed,
-// the merge stays in HEAD and the next suite tests it on CI ("none"). Prints
-// `PUSHED <sha8>`. "head" when the merge was pushed, "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
+// Pushes the tested commit; rejected, merges `origin/develop` and pushes the
+// merge, up to drive_push_rounds rounds (drive_push_merges, #2008: with five
+// sessions pushing, a second rejection is the normal case, and a batch the
+// full suite passed is not tested in full again only because develop moved,
+// owner 2026-11-17). Prints `PUSHED <sha8>`. "head" when the merge was
+// pushed, "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
 // went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
@@ -854,31 +850,9 @@ fn drive_push(dir: String, sha: String) -> String throws {
 			println(f"SUITE {drive_short(sha)} green, push rejected and HEAD moved on: the next suite pushes")
 			return "none"
 		}
-		// The shared checkout holds other agents' unfinished files and build locks:
-		// they are stashed around the merge, not a reason to stop (2026-10-28).
-		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
-		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
-		let base = process::run(
-			"git",
-			["merge-base", sha.clone(), "FETCH_HEAD"],
-		).stdout.trim().clone()
-		// The merge is regenerated before the checks (#1333): lowered files and
-		// badges depend on both sides, and on 2026-11-07 a merge pushed without
-		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
 		drive_merge_lock("push rejected")
-		drive_merge_fetched("push rejected", drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py")
-		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-		let failed = drive_merge_check(base, merge.clone())
-		if failed != "" {
-			println(f"SUITE {drive_short(sha)} green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge")
-			println(drive_tail(failed, 40))
-			return "none"
-		}
-		let second = process::run("git", ["push", "origin", f"{merge}:develop"])
-		if !second.ok {
-			println(f"SUITE {drive_short(sha)} green, push rejected again after the merge: the next suite pushes")
-			return "none"
-		}
+		let merge = drive_push_merges(sha.clone(), drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py", "")
+		if merge == "" { return "none" }
 		pushed = merge.clone()
 		// Builders went on during the checks: their commits stay in unpushed.txt.
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
@@ -889,6 +863,73 @@ fn drive_push(dir: String, sha: String) -> String throws {
 	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
 	drive_proved_start(dir, pushed)
 	return head
+}
+
+// The merge rounds of a rejected push of SHA (#2008): at most this many.
+fn drive_push_rounds() -> i64 {
+	return 3
+}
+
+// The merge rounds of drive_push, after the push of SHA was rejected: each
+// round (`MERGE <sha8> round <k>`, the sha merged into) fetches
+// `origin/develop`, merges it into HEAD and regenerates the lowered files and
+// badges in the merge (drive_merge_fetched with LOWER, BUILD and BADGES,
+// #1333: they depend on both sides), runs the short checks on the merge
+// (drive_merge_check, or the shell command CHECK when not "": two lanes each
+// green alone can be red together, and develop went red for hours that way on
+// 2026-11-08) and pushes exactly the merge commit when they pass (a merge,
+// not a rebase: a rebase replays the tested commits and, on 2026-11-05,
+// deleted every brief a replayed commit had untracked). Rejected again, the
+// next round merges the newer `origin/develop`. Short checks red, or still
+// rejected after the last round: nothing is pushed, the merge stays in HEAD,
+// the next suite tests it on CI, and "" is returned (also when HEAD moved on
+// past the last merge between rounds); a merge that conflicts
+// outside the generated lowered files escalates (drive_merge_fetched).
+// Pushed: the merge's sha.
+fn drive_push_merges(sha: String, lower: String, build: String, badges: String, check: String) -> String throws {
+	let rounds = drive_push_rounds()
+	let mut expect = sha.clone()
+	let mut k: i64 = 1
+	while k <= rounds {
+		// Builders committed on the last merge during its checks: a merge now
+		// would push their untested commits; the next suite pushes them all.
+		let before = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		if before != expect {
+			println(f"SUITE {drive_short(sha.clone())} green, push rejected and HEAD moved on: the next suite pushes")
+			return ""
+		}
+		// The shared checkout holds other agents' unfinished files and build locks:
+		// they are stashed around the merge, not a reason to stop (2026-10-28).
+		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
+		let base = process::run(
+			"git",
+			["merge-base", before, "FETCH_HEAD"],
+		).stdout.trim().clone()
+		// The merge is regenerated before the checks (#1333): lowered files and
+		// badges depend on both sides, and on 2026-11-07 a merge pushed without
+		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
+		drive_merge_fetched("push rejected", lower.clone(), build.clone(), badges.clone())
+		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		println(f"MERGE {drive_short(merge.clone())} round {k}")
+		let mut failed: String = ""
+		if check == "" {
+			failed = drive_merge_check(base, merge.clone())
+		} else {
+			let run = process::run("sh", ["-c", check.clone()])
+			if !run.ok { failed = check.clone() + "\n" + run.stdout + run.stderr }
+		}
+		if failed != "" {
+			println(f"SUITE {drive_short(sha.clone())} green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge")
+			println(drive_tail(failed, 40))
+			return ""
+		}
+		if process::run("git", ["push", "origin", f"{merge}:develop"]).ok { return merge }
+		expect = merge
+		k += 1
+	}
+	println(f"SUITE {drive_short(sha)} green, push rejected after {rounds} merge rounds: the next suite pushes")
+	return ""
 }
 
 // After a push (#1821): the release (`scripts/release.nika DIR`) runs at
@@ -4944,6 +4985,14 @@ fn main() throws {
 	if args.len() == 5 && args[1] == "--pull" {
 		let scripts = drive_pull("merging origin/develop", args[2], args[3], args[4])
 		if scripts != "" { println(f"scripts brought: {scripts}") }
+		return
+	}
+	// The merge rounds of a rejected push (#2008), without the release: run in
+	// a repository with an `origin` and SHA at HEAD; CHECK the short checks'
+	// command. Prints the merge pushed, or `none`.
+	if args.len() == 7 && args[1] == "--push-merges" {
+		let merge = drive_push_merges(args[2], args[3], args[4], args[5], args[6])
+		if merge == "" { println("none") } else { println(f"pushed {drive_short(merge)}") }
 		return
 	}
 	if args.len() == 5 && args[1] == "--merge-fetched" {
