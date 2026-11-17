@@ -1,0 +1,8 @@
+tests/greets.nika is not the entry point of the project at TMP.
+`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `src/main.nika`. Run `nikaia run --project TMP`, or `nikaia lower tests/greets.nika` to lower the file to Rust.
+It is a test program: run it with `nikaia test --project TMP --filter greets`, and add `--bless` to record its expected output.
+exit 1
+--
+tools/other.nika is not the entry point of the project at TMP.
+`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `src/main.nika`. Run `nikaia run --project TMP`, or `nikaia lower tools/other.nika` to lower the file to Rust.
+exit 1
