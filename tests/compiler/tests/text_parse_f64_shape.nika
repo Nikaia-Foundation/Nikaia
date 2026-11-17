@@ -1,0 +1,14 @@
+// `text::parse_f64` reads only ADR-285 D35's shape (#2024): an optional sign,
+// digits, an optional `.digits`, an optional exponent, or `inf` / `nan` in any
+// case. The shape check is `runtime/text_float.nika`.
+use std::text
+
+fn main() throws {
+    for t in ["1", "-1.5", "+2e10", "1E-3", "NaN", "-Inf", ".5", "1.", "1e", " 1", "1_0", "infinity", ""] {
+        let said = match text::parse_f64(t) {
+            null => "none",
+            else => "a number",
+        }
+        println(f"[{t}]: {said}")
+    }
+}
