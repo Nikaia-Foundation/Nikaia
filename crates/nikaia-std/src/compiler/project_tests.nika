@@ -915,6 +915,51 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
     return found
 }
 
+/// **Whether a test program can start a compiler of its own** (#1955): it
+/// names `process::`, the only way a program starts one.
+fn project_tests_starts_processes(program: ref ProgramTest) -> bool {
+    let source = program.dir.join(f"{program.name}.nika")
+    let text = fs::read_to_string(source, fs::Root::Anywhere) catch { return false }
+    return text.contains("process::")
+}
+
+/// **The program `std`, built before the first test program runs** (#1955):
+/// a test program that runs `nikaia run` (`solver_run`, `solver_fuzz`) makes
+/// that child compile `std` and its crates, about 70 of them, into the rlib
+/// tree of the user cache (`Sysroot::rlib_cache`), and the first such program
+/// paid that whole build inside its own time limit
+/// (`project_tests_time_limit`). So where any of `programs` names
+/// `process::`, this compiler runs a program of nothing first, at `setting`,
+/// as a package in `own` with no settings of its own, in the environment the
+/// programs get: the rlib tree of a program with no settings is the one the
+/// child builds in, and is warm when the programs start. Its time is the
+/// run's, within a build's limit (`project_tests_build_time_limit`); a
+/// warm-up that fails or runs out of time fails the run, with what it said.
+pub fn project_tests_warm_up[H: ProjectTestsProgramHost](host: ref H, programs: ref Vec[ProgramTest], setting: String, own: ref fs::Path) throws {
+    let mut starts = false
+    for program in programs {
+        if project_tests_starts_processes(program) {
+            starts = true
+            break
+        }
+    }
+    if !starts {
+        return
+    }
+    let project = own.join("project")
+    fs::create_dir(project.join("src"), fs::Root::Anywhere; recursive: true)
+    fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, "[package]\nname = \"warm_up\"\nversion = \"0.1.0\"\n")
+    fs::write(project.join("src").join("main.nika"), fs::Root::Anywhere, "fn main() {\n}\n")
+    let limit = project_tests_build_time_limit()
+    let out = host.compiler("run", setting, project, own, own, Bytes([]), limit, 0)
+    if out.timed_out {
+        throw ProjectTestsRefusal::Refused(f"the warm-up of the program std (#1955) timed out after {limit} s\n{out.stderr.text_lossy()}")
+    }
+    if out.code != 0 {
+        throw ProjectTestsRefusal::Refused(f"the warm-up of the program std (#1955) failed, exit {out.code}:\n{out.stderr.text_lossy()}")
+    }
+}
+
 /// Remove everything in `dir` but the entry named `keep`; a `dir` that cannot
 /// be read holds nothing to remove.
 fn project_tests_empty_but(dir: ref fs::Path, keep: String) throws {

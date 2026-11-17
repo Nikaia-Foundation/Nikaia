@@ -713,6 +713,35 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
     Ok(found)
 }
 
+pub(crate) async fn project_tests_starts_processes(program: &ProgramTest) -> bool {
+    let source = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
+    let text = match fs::read_to_string(&source, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return false; },
+    };
+    text.contains("process::")
+}
+
+pub async fn project_tests_warm_up<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], setting: &str, own: &std::path::Path) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut starts = false;
+    for program in programs.iter() {
+        if project_tests_starts_processes(program).await {
+            starts = true;
+            break;
+        }
+    }
+    if !starts { return Ok(()); }
+    let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
+    fs::create_dir(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
+    fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, "[package]\nname = \"warm_up\"\nversion = \"0.1.0\"\n", false, true).await?;
+    fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &fs::Root::Anywhere, "fn main() {\n}\n", false, true).await?;
+    let limit = project_tests_build_time_limit();
+    let out = host.compiler("run", setting, &project, own, own, &Bytes(vec![]), limit, 0)?;
+    if out.timed_out { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("the warm-up of the program std (#1955) timed out after {} s\n{}", limit, out.stderr.text_lossy())), &"project_tests_warm_up")); }
+    if out.code != 0 { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("the warm-up of the program std (#1955) failed, exit {}:\n{}", out.code, out.stderr.text_lossy())), &"project_tests_warm_up")); }
+    Ok(())
+}
+
 pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Result<(), nikaia_std::error::Thrown<ProjectTestsRefusal>> {
     let names = match fs::read_dir(dir, &fs::Root::Anywhere) {
         Ok(value) => value,

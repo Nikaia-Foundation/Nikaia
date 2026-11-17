@@ -1,0 +1,94 @@
+// #1955: `nikaia test` builds the program std before the first test program
+// runs, where a test program names `process::` (it can start `nikaia run`,
+// whose child builds that std in the user cache's rlib tree): the warm-up is
+// a program of nothing run in the project's kept place `warm-up`, so the
+// build is the run's, not inside a program's time limit. `starts` names
+// `process::` and finds, when it starts, the warm-up done and the rlib tree
+// there; `stays` names it nowhere and finds no warm-up.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+// The user cache `nikaia` uses (`Layout::user_cache_dir`).
+fn cache() -> String throws {
+	let given = env::var("NIKAIA_CACHE_DIR") ?? ""
+	if given.len() > 0 { return given }
+	let xdg = env::var("XDG_CACHE_HOME") ?? ""
+	if xdg.len() > 0 { return f"{xdg}/nikaia" }
+	let home = env::var("HOME") ?? ""
+	return f"{home}/.cache/nikaia"
+}
+
+// Where the warm-up of the project at `dir` writes its program
+// (`project_tests_places`, then `warm-up`).
+fn warm_at(cache: String, dir: String) -> String throws {
+	let tag = process::run(
+		"sh",
+		["-c", "printf %s \"$(realpath \"$1\")\" | sha256sum | cut -c1-16", "sh", dir],
+	).stdout.trim().clone()
+	return f"{cache}/test-places/{tag}/warm-up/project/src/main.nika"
+}
+
+fn project(tmp: String, name: String, program: String, expected: String) throws {
+	let dir = f"{tmp}/{name}"
+	process::run("mkdir", ["-p", f"{dir}/src", f"{dir}/tests"])
+	fs::write(
+		f"{dir}/nikaia.toml",
+		fs::Root::Anywhere,
+		f"[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{dir}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
+	fs::write(f"{dir}/tests/{name}.nika", fs::Root::Anywhere, program)
+	fs::write(f"{dir}/tests/{name}.stdout", fs::Root::Anywhere, expected)
+}
+
+fn tested(tmp: String, name: String) throws {
+	let at = cache()
+	let dir = f"{tmp}/{name}"
+	let out = process::run(
+		toolchain(),
+		["test"]; dir: dir.clone(),
+		env: [("NIKAIA_CACHE_DIR", at.clone()), ("WARM_AT", warm_at(at, dir))],
+	)
+	println(f"{name}: exit {out.code}")
+	for line in f"{out.stdout}{out.stderr}".lines() {
+		if line.starts_with("program ")
+			|| line.starts_with("test result")
+			|| line.starts_with("rlib tree")
+			|| line.starts_with("warmed up")
+			|| line.contains("warm-up") {
+				println(line)
+			}
+	}
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	project(
+		tmp,
+		"starts",
+		"use std::env\nuse std::fs\nuse std::process\n\nfn main() throws {\n    let cache = env::var(\"NIKAIA_CACHE_DIR\") ?? \"\"\n    let trees = process::run(\"ls\", [f\"{cache}/rlib\"]).stdout.trim().len() > 0\n    println(f\"rlib tree: {trees}\")\n    let warm = env::var(\"WARM_AT\") ?? \"\"\n    let found = fs::exists(warm, fs::Root::Anywhere)\n    println(f\"warmed up: {found}\")\n}\n",
+		"rlib tree: true\nwarmed up: true\n",
+	)
+	project(
+		tmp,
+		"stays",
+		"use std::env\nuse std::fs\n\nfn main() throws {\n    let warm = env::var(\"WARM_AT\") ?? \"\"\n    let found = fs::exists(warm, fs::Root::Anywhere)\n    println(f\"warmed up: {found}\")\n}\n",
+		"warmed up: false\n",
+	)
+	tested(tmp, "starts")
+	tested(tmp, "stays")
+	process::run("rm", ["-rf", tmp])
+}

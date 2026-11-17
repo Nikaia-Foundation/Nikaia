@@ -8,6 +8,28 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1416] — 2026-11-17
+
+**Builders' changes (#1582, #1584, #1591, #1600, #1610, #1657, #1672, #1694, #1705, #1750, #1915, #1919, #1956)**
+- A failed test batch leaves out the programs rustc names instead of splitting in halves (#1582).
+- Test batches lower as modules on every core: the emitter writes a program as a module of the batch crate instead of the batch editing its text, and a dependency is checked once per batch (#1582).
+- nikaia run: a program starts when the run bundle's record was written under a toolchain that is gone since (#1584)
+- Stale ledgers caught: the driver rebuilds every committed ledger of examples/ and packages/ on a clean target before each push and on merges (scripts/ledgers.nika), CI fails a stale one under --locked.
+- Internal: the compiler written in Nikaia moved from crates/nikaia-std/src/tools/ to crates/nikaia-std/src/compiler/ (generated Rust in compiler/lowered/); the Rust module is still nikaia_std::tools.
+- Compiler identity follows the compiled lowered code: lower-std writes LOWERED_DIGEST into lowered.rs, and the cache identity takes it instead of build.rs re-reading lowered/ (which another lower-std could rewrite mid-build); the orchestrator's sources join the fingerprint.
+- `nikaia check --rustc` of a source without `fn main` is refused with NK1351 like `run`, and a package built as a rust-library is checked as its lib crate, where rustc used to refuse both as the internal NK1343.
+- The compiler's Rust module is nikaia_std::compiler: renamed from nikaia_std::tools to match its directory (with lower_compiler, SYSROOT_COMPILER); use std::compiler now gets NK1186's toolchain note; no .pyc files tracked.
+- Driver: a test shows that the ledger refresh before a suite answers for the committed tree, even with another lane's uncommitted compiler sources in the checkout (#1665); new `drive.nika --ledgers BUILD`.
+- nikaia test: a test program that runs past its time limit (NIKAIA_TEST_TIME_LIMIT, 300 s by default) is killed with every process it started and fails with "timed out after N s"; the run goes on with the next test.
+- The driver accepts a done or partial report itself when the builder needs nothing (green gate, `Needs: none`, `Owner: none`), releases it with a version raise and lists partials in `DIR/review.txt` for the supervisor.
+- Faster cold builds of programs with build-time blocks: `nikaia-std` now compiles once (it was twice), because the bundles and grammar parsers are built in the program's own target tree before its Cargo build.
+- A build with nothing changed no longer starts Cargo: `nikaia build`/`nikaia test` keep a record of Cargo's inputs and skip the call when nothing changed, and test programs are built in places kept from one run to the next (#1750). Known limit: an edited ~/.cargo/config.toml is not detected.
+- lower-std re-lowers only the files that name what changed: a `pub fn` added to check_members.nika re-lowers 1 file instead of 296, in 120.6 s of lower-std CPU instead of 343.5 s (0.35x); a body change still re-lowers 1 file (103.7 s before, 120.1 s now); a ledger change that spreads to the callers (`panic` in mem_member_under) still re-lowers all 296 (346.0 s before, 375.6 s now); a cold run takes 380 s instead of 340 s, about 10 % for the keys; the cached output is byte-identical to a cold lowering in each case
+- solver_run test: the measuring rod is built once per key, so concurrent runs of it wait for that build instead of each building it again (#1915)
+- nikaia test caps a test program's processes and threads (NIKAIA_TEST_PROCESS_LIMIT, default 4096; the test fails and names the cap) and ends the program's whole process group when the runner ends, kill -9 included, so a fork storm can no longer fill the machine's PID space.
+- nikaia test builds the program std once before the first test program runs, where a test program can start `nikaia`, so no program's time limit includes that build (#1955)
+- CI keeps the program `std` rlib tree between runs in the compiler shards: a push that leaves std's sources alone builds no std crate there (#1956).
+
 ## [0.0.1415] — 2026-11-16
 
 **Builders' changes (#1943)**

@@ -3054,6 +3054,10 @@ fn run_program_tests<'a>(
     let times = project_tests::project_tests_times_file(&Layout::user_cache_dir(), root);
     let order = block_on(project_tests::project_tests_order(programs, &times));
     let order = &order;
+    // **The program `std` before the first timer** (`project_tests_warm_up`,
+    // #1955): a program that starts `nikaia run` finds it built.
+    let first = settings.first().map_or("no", String::as_str);
+    warm_program_std(programs, first, &Sandbox::kept(kept, "warm-up")?.0)?;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
     let mut ran = Vec::new();
@@ -3139,6 +3143,22 @@ fn run_program_tests<'a>(
     });
     block_on(project_tests::project_tests_remember(&times, &ran));
     run
+}
+
+/// The warm-up of the program `std` in OWN (`project_tests_warm_up`).
+fn warm_program_std(programs: &[ProgramTest], setting: &str, own: &Path) -> Result<()> {
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
+    };
+    block_on(project_tests::project_tests_warm_up(
+        &host, programs, setting, own,
+    ))
+    .map_err(|error| {
+        host.failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))
+    })
 }
 
 /// The one build per SETTING of the PROGRAMS (`project_tests_batches`).
