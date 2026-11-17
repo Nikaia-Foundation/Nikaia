@@ -3973,7 +3973,7 @@ fn drive_focus_blocking(dir: String) -> String throws {
 // The lines of a text, a trailing newline not counted.
 fn drive_line_count(body: String) -> i64 {
 	if body.trim() == "" { return 0 }
-	return body.trim_end().split("\n").collect().len()
+	return body.trim_end().split("\n").count()
 }
 
 // The focus line of a block of AREA (DIR) that ran `briefs`: their

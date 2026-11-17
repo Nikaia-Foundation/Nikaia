@@ -1020,6 +1020,62 @@ impl CheckState {
     }
 }
 
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_collect_only_counted(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, span: &Span) {
+        if self.reading_only || !self.task_bindings.is_empty() { return; }
+        let chain = match a_collect_of_a_chain(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !self.flow.listed_collects.contains(&(id_of(receiver) as i64)) { return; }
+        let edit = collect_replaced(world, expr, chain, ".count()");
+        self.a_needless_collect(&check_span_at(world, expr, span), String::from("This list is built only to be counted: `.collect().len()` copies every item to count them."), vec![String::from("`count()` walks the sequence and counts its items, running every step in the same order as `collect()`, without building a list.")], String::from("Write `.count()` for `.collect().len()`."), edit);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_loop_over_a_needless_collect(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, body: &Block, mutable: bool, span: &Span) {
+        if mutable || self.reading_only || !self.task_bindings.is_empty() { return; }
+        let chain = match a_collect_of_a_chain(world, iter) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !self.flow.listed_collects.contains(&(id_of(iter) as i64)) { return; }
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in(chain, world.words, &mut read);
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in_block(body, world.words, &mut named);
+        for name in read.iter() { if named.contains(name) && self.binding(name).is_some() { return; } }
+        self.a_needless_collect(&check_span_at(world, iter, span), String::from("This list is built only to be walked once: the `for` can walk the sequence itself."), vec![String::from("A `for` walks a sequence one item at a time (Part I 3.3); every step of this one is pure and the loop names nothing it reads, so it runs the same without the list.")], String::from("Delete `.collect()`."), clone_deleted(world, iter, chain));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_needless_collect(&mut self, at: &Span, message: String, notes: Vec<String>, help: String, edit: Option<CheckEdit>) {
+        for said in self.findings.iter() { if said.code == "NK1354" && said.span.start == at.start { return; } }
+        let mut warned = check_refusal("NK1354", &at, message, notes, Some(help));
+        warned.severity = CheckSeverity::Warning;
+        warned.edit = edit;
+        self.findings.push(warned);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn a_collect_of_a_chain<'r>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &'r Expr) -> Option<&'r Expr> {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if args.is_empty() && world.words.resolve(method) == "collect" { return Some(receiver); }
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn collect_replaced(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, chain: &Expr, text: &str) -> Option<CheckEdit> {
+    let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let of = match world.here.spans.get(&id_of(chain)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if of.start != whole.start || of.end >= whole.end { return None; }
+    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: nikaia_std::block::Text::from(text.to_string()) })
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn clone_deleted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {

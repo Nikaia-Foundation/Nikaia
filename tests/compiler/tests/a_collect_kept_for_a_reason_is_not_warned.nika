@@ -1,0 +1,38 @@
+// **`NK1354` keeps the lists it must** (#1975): a collect into a set drops
+// duplicates; a body that changes the chain's root needs its copy; a lambda
+// that pushes into an outer list or prints runs before the body only with the
+// list; and a type's own `collect` is its own.
+use std::collections
+
+struct Bag { items: Vec[i64] }
+
+impl Bag {
+    fn collect(ref self) -> Vec[i64] {
+        return self.items.clone()
+    }
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 2]
+    let set: collections::BTreeSet[i64] = xs.iter().collect()
+    println(set.len())
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("a", 1)
+    m.insert("b", 2)
+    for k in m.keys().cloned().collect() {
+        m.remove(k)
+    }
+    println(m.len())
+    let mut seen: Vec[i64] = []
+    for d in xs.iter().map(fn(x) { seen.push(x); x }).collect() {
+        println(d + seen.len() as i64)
+    }
+    for d in xs.iter().map(fn(x) { print(f"<{x}>") catch { }; x }).collect() {
+        println(d)
+    }
+    let bag = Bag { items: [4, 5] }
+    println(bag.collect().len())
+    for b in bag.collect() {
+        println(b)
+    }
+}

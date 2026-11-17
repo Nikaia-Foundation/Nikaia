@@ -1572,6 +1572,93 @@ impl CheckState {
     }
 }
 
+// ---------------------------------------------------------------------------
+// **`NK1354`: a list collected only to be counted or walked once** (#1975).
+// A warning with an edit, as `NK1350`'s: `IT.collect().len()` is
+// `IT.count()`, and `for p in IT.collect()` is `for p in IT` where the body
+// names nothing the chain reads and every step of it is pure (ADR-269 D3,
+// the test of an `assert` condition). Only a `std` sequence collected into a
+// list (`listed_collects`): a set drops duplicates, and a type's own
+// `collect` is its own.
+// ---------------------------------------------------------------------------
+
+impl CheckState {
+    /// **`IT.collect().len()`**: `count()` runs every step, in the same
+    /// order, and builds no list.
+    fn a_collect_only_counted(ref mut self, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, span: ref Span) sync {
+        if self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let chain = a_collect_of_a_chain(world, receiver) ?? return
+        if !self.flow.listed_collects.contains(id_of(receiver) as i64) {
+            return
+        }
+        let edit = collect_replaced(world, expr, chain, ".count()")
+        self.a_needless_collect(check_span_at(world, expr, span), "This list is built only to be counted: `.collect().len()` copies every item to count them.", ["`count()` walks the sequence and counts its items, running every step in the same order as `collect()`, without building a list."], "Write `.count()` for `.collect().len()`.", edit)
+    }
+
+    /// **`for p in IT.collect()`**: a `for` walks a sequence itself (Part
+    /// I 3.3). Only where its steps are pure (asked by the caller), the body
+    /// names no binding the chain reads, and the loop is not `for mut`.
+    fn a_loop_over_a_needless_collect(ref mut self, world: ref CheckWorld, iter: ref Expr, body: ref Block, mutable: bool, span: ref Span) sync {
+        if mutable || self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let chain = a_collect_of_a_chain(world, iter) ?? return
+        if !self.flow.listed_collects.contains(id_of(iter) as i64) {
+            return
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(chain, world.words, read)
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_block(body, world.words, named)
+        for name in read {
+            if named.contains(name) && self.binding(name) != null {
+                return
+            }
+        }
+        self.a_needless_collect(check_span_at(world, iter, span), "This list is built only to be walked once: the `for` can walk the sequence itself.", ["A `for` walks a sequence one item at a time (Part I 3.3); every step of this one is pure and the loop names nothing it reads, so it runs the same without the list."], "Delete `.collect()`.", clone_deleted(world, iter, chain))
+    }
+
+    // `NK1354`, said once per site.
+    fn a_needless_collect(ref mut self, at: Span, message: String, notes: Vec[String], help: String, edit: CheckEdit?) sync {
+        for said in self.findings {
+            if said.code == "NK1354" && said.span.start == at.start {
+                return
+            }
+        }
+        let mut warned = check_refusal("NK1354", at, message, notes, help)
+        warned.severity = CheckSeverity::Warning
+        warned.edit = edit
+        self.findings.push(warned)
+    }
+}
+
+// The receiver of a `.collect()` with no arguments, or `null`.
+fn a_collect_of_a_chain(world: ref CheckWorld, expr: ref Expr) -> ref Expr? sync {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() == 0 && world.words.resolve(method) == "collect" {
+                return receiver
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+// **The edit `NK1354` suggests for `.collect().len()`**: from the chain's
+// end to the call's, `text`. Only where both spans are known and the chain
+// starts the call, as `clone_deleted`.
+fn collect_replaced(world: ref CheckWorld, call: ref Expr, chain: ref Expr, text: ref String) -> CheckEdit? sync {
+    let whole = world.here.spans.get(id_of(call)) ?? return null
+    let of = world.here.spans.get(id_of(chain)) ?? return null
+    if of.start != whole.start || of.end >= whole.end {
+        return null
+    }
+    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: text.clone() }
+}
+
 // **The edit `NK1350` suggests** (#1714): the `.clone()` after its receiver,
 // deleted, from the receiver's end to the call's. Only where both spans are
 // known and the receiver starts the call: a receiver whose span leaves out

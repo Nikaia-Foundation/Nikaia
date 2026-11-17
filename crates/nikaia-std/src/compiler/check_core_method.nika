@@ -492,6 +492,19 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
     }
 }
 
+/// Whether a `collect` walks a `std` sequence that neither pauses, throws,
+/// runs in parallel nor ends at a deadline, into a list (`NK1354`, #1975).
+fn check_core_method_collects_a_list(on: ref Ty, value: ref Ty) -> bool {
+    let plain = match on {
+        Ty::Seq { pauses, can_throw, parallel, shape, .. } => !pauses && !can_throw && !parallel && !shape.timed,
+        else => false,
+    }
+    return plain && match value {
+        Ty::Named { name, args, view } => !view && args.len() == 1 && (type_last_segment(name) == "Vec" || type_last_segment(name) == "List"),
+        else => false,
+    }
+}
+
 /// The half after the receiver is typed and the witness has joined the
 /// arguments (`args`), with the door's flags set around the call.
 /// The number type a sequence's `sum` hands back, or `""` where the call is
@@ -725,6 +738,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.text_walk = false
     if name == "collect" && args.len() == 0 && check_core_method_text_views(value) && state.check_core_method_from_text_slots(receiver) {
         state.facts.text_slot_collects.insert(id_of(receiver) as i64)
+    }
+    // **A `std` sequence collected into a list** (`NK1354`, #1975): a type's
+    // own `collect`, and one into a set or a map, is not.
+    if name == "collect" && args.len() == 0 && check_core_method_collects_a_list(on, value) {
+        state.flow.listed_collects.insert(id_of(expr) as i64)
     }
     // **What a sequence's `sum` hands back is named** (#1007): the
     // language below infers no type for it where nothing annotates it.

@@ -352,6 +352,17 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
 }
 
+pub(crate) fn check_core_method_collects_a_list(on: &Ty, value: &Ty) -> bool {
+    let plain = match on {
+        Ty::Seq { pauses, can_throw, parallel, shape, .. } => { let can_throw = *can_throw; let parallel = *parallel; let pauses = *pauses; !pauses && !can_throw && !parallel && !shape.timed },
+        _ => false,
+    };
+    plain && match value {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.len() == 1 && (type_last_segment(name) == "Vec" || type_last_segment(name) == "List") },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> String {
     if name != "sum" { return String::from(""); }
     match on {
@@ -512,6 +523,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.text_slot = false;
     state.flow.text_walk = false;
     if name == "collect" && args.is_empty() && check_core_method_text_views(&value) && state.check_core_method_from_text_slots(receiver) { state.facts.text_slot_collects.insert(id_of(receiver) as i64); }
+    if name == "collect" && args.is_empty() && check_core_method_collects_a_list(&on, &value) { state.flow.listed_collects.insert(id_of(expr) as i64); }
     let summed = check_core_method_summed(&name, &on, &value);
     if summed != "" { state.facts.summed.insert(id_of(receiver) as i64, summed); }
     let walk_open: Option<i64> = state.flow.walk_open;

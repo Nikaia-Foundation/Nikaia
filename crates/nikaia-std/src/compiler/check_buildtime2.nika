@@ -48,7 +48,7 @@ impl CheckState {
         let mut notes: Vec[String] = []
         if path.len() > 0 {
             let mut shown: Vec[String] = []
-            for step in path.split(" > ").collect() {
+            for step in path.split(" > ") {
                 if step == "…" {
                     shown.push(step.clone())
                 } else if step == value_fn {
