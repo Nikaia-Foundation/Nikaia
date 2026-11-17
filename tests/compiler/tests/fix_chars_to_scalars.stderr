@@ -1,0 +1,32 @@
+warning[NK1353]: `chars()` is not one of the views text is read through.
+   --> tests/fix_chars_to_scalars.nika:16:14
+    |
+ 16 |     for c in s.chars() {
+    |              ^^^^^^^^^
+    |
+    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
+    = help: Write `.scalars` for `.chars()`.
+warning[NK1353]: `chars()` is not one of the views text is read through.
+   --> tests/fix_chars_to_scalars.nika:27:5
+    |
+ 27 |     println(s.chars().count())
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
+    = help: Write `.scalars` for `.chars()`.
+warning[NK1353]: `chars()` is not one of the views text is read through.
+   --> tests/fix_chars_to_scalars.nika:28:5
+    |
+ 28 |     let v: Vec[scalar] = "abc".chars().collect()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
+    = help: Write `.scalars` for `.chars()`.
+warning[NK1353]: `chars()` is not one of the views text is read through.
+   --> tests/fix_chars_to_scalars.nika:30:5
+    |
+ 30 |     println("  hi ".trim().chars().all(fn(c) { c.is_alphabetic() }))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.
+    = help: Write `.scalars` for `.chars()`.

@@ -32,6 +32,7 @@ pub struct BoundsContext {
     pub decided: collections::BTreeMap<String, bool>,
     pub list_indices: collections::BTreeSet<i64>,
     pub text_bytes: collections::BTreeSet<i64>,
+    pub text_scalars: collections::BTreeSet<i64>,
     pub returns: collections::BTreeMap<String, BoundsReturns>,
 }
 
@@ -1947,12 +1948,17 @@ pub(crate) fn bounding_class_of(walk: &BoundsWalk, name: &str, context: &BoundsC
     (*nikaia_std::index::get(&context.classes, name)).copied()
 }
 
-pub(crate) fn bounding_chars_of(iter: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+pub(crate) fn bounding_chars_of(iter: &Expr, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Option<String> {
     match iter {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !args.is_empty() || words.resolve(method) != "chars" { return None; }
             bounding_variable(receiver, words)
+        },
+        Expr::Field { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            if !context.text_scalars.contains(&node_key(iter)) { return None; }
+            bounding_variable(base, words)
         },
         _ => None,
     }
@@ -4696,7 +4702,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
                     all_turns = std::convert::identity(length);
                 }
             }
-            let text = nikaia_std::index::or(bounding_chars_of(iter, words), || "".into());
+            let text = nikaia_std::index::or(bounding_chars_of(iter, context, words), || "".into());
             if limit.is_none() && text != "" && !text.contains('.') && !changed.values.contains(&text) && !changed.lengths.contains(&text) {
                 let length = bounding_length_named(walk, &text, false);
                 limit = Some(walk.arena.lt(t, length));
@@ -4756,7 +4762,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     }
     let mut classed: Option<String> = None;
     if bindings.len() == 1 && !counted {
-        let over = bounding_chars_of(iter, words);
+        let over = bounding_chars_of(iter, context, words);
         if over.is_some() {
             let text = nikaia_std::index::or(over, || "".into());
             let class = *nikaia_std::index::get(&context.text_classes, &text);
@@ -5093,13 +5099,22 @@ pub(crate) fn bounding_literal_chars(expr: &Expr, words: &winnow_grammar::Intern
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !args.is_empty() || words.resolve(method) != "chars" { return None; }
-            match receiver {
-                Expr::LitStr { text, .. } => {
-                    if (text.chars().count() as i64) != text.len() as i64 { return None; }
-                    Some(text.len() as i64)
-                },
-                _ => None,
-            }
+            bounding_ascii_length(receiver)
+        },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            if words.resolve(name) != "scalars" { return None; }
+            bounding_ascii_length(base)
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn bounding_ascii_length(expr: &Expr) -> Option<i64> {
+    match expr {
+        Expr::LitStr { text, .. } => {
+            if (text.chars().count() as i64) != text.len() as i64 { return None; }
+            Some(text.len() as i64)
         },
         _ => None,
     }
