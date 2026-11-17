@@ -10,7 +10,8 @@ the prover asks)
 **What ran:** `benches/solver-workload/` (the stress families, the analysis,
 the fragment count and the run of z3 and cvc5), an instrumented copy of
 `crates/nikaia-logic` at 0.0.368 (§1), and a query-dumping hook in
-`crates/nikaia/src/prove.rs` that was never committed (§1)
+`crates/nikaia/src/prove.rs` that was never committed (§1); for §9,
+`scripts/solver.nika fetch` and `compare` (2026-11-17)
 
 **The conclusion, first:** the compiler asks tiny queries, almost all of them
 bounds on single variables, and spends a few microseconds on each; what it
@@ -444,10 +445,91 @@ No claim in these files needs a run, so this is the walk's own share: each
 `let` and open claim looks for calls with known arguments. The largest single
 file, `examples/n-body`, is +1.2 %.
 
-## 9. What this does not measure
+## 9. Against z3 and cvc5 on SMT-LIB (#1338)
 
-* **SMT-LIB.** The QF_LIA and QF_LRA benchmark sets are on Zenodo, which the
-  container this ran in could not reach; every statement about them in
+**Ran on 2026-11-17**, on the set `scripts/solver.nika fetch` builds from
+GitHub at fixed commits (`tests/solver/SOURCES.md`): 578 QF_LIA and 519 QF_LRA
+files, each one query with a status and at most 1 MiB. Ours is the rod
+(`sv_rod`, the CDCL(T) engine, `new`) at ce7825c7, z3 5.3.3, cvc5 1.4.2 (its
+static Linux release). `compare --files target/smtlib/qflia` (and `qflra`),
+one wall-clock limit of 10 s per file for all three, four cores, other agents'
+builds running beside it part of the time: a file near the limit can fall on
+either side of it, which is why time is ranked here and not quoted.
+
+No wrong answer and no disagreement, from any of the three, on 1097 files.
+One file drew a proof log our own checker rejected (so no answer was
+given: counted as wrong in the row, it is none in fact).
+
+**Per family** (solved of the files; PAR-2 in seconds, an unsolved file 20 s;
+*why* is ours' reason for the files it did not solve):
+
+| family | files | ours | z3 | cvc5 | ours is | why |
+| :--- | ---: | ---: | ---: | ---: | :--- | :--- |
+| QF_LIA 20180326-Bromberger | 1 | 1 | 1 | 1 | level | |
+| QF_LIA 20220307-SMPT | 371 | 293 (4.3 s) | 367 (0.2 s) | 367 (0.3 s) | behind | 75 timeouts, 1 rejected log, 2 over the limit |
+| QF_LIA 20231117-c_inference | 31 | 0 | 29 (2.4 s) | 10 (15.0 s) | behind | 31 timeouts |
+| QF_LIA CAV_2009_benchmarks | 1 | 1 | 1 | 1 | level | |
+| QF_LIA bofill-scheduling | 2 | 0 | 2 | 2 | behind | 2 timeouts |
+| QF_LIA cut_lemmas | 1 | 0 | 1 | 0 | behind | overflow |
+| QF_LIA nec-smt | 3 | 0 | 1 | 0 | behind | 1 stack overflow (nesting 963 deep), 2 timeouts nobody solves |
+| QF_LIA rings | 1 | 1 | 1 | 1 | level | |
+| QF_LIA rings_preprocessed | 2 | 1 (10.0 s) | 2 (0.0 s) | 2 (3.4 s) | behind | 1 timeout |
+| QF_LIA seeds | 164 | 113 (6.2 s) | 163 (0.2 s) | 157 (1.2 s) | behind | 48 overflow, 3 case budget |
+| QF_LIA tightrhombus | 1 | 0 | 1 | 1 | behind | overflow |
+| QF_LRA 2017-Heizmann | 4 | 0 | 1 | 1 | behind | overflow (the one the others solve), 3 nobody solves |
+| QF_LRA LassoRanker | 1 | 0 | 1 | 1 | behind | case budget |
+| QF_LRA clock_synchro | 4 | 1 | 3 | 3 | behind | 3 overflow |
+| QF_LRA keymaera | 2 | 2 | 2 | 2 | level | |
+| QF_LRA sal | 3 | 3 (2.4 s) | 3 (0.0 s) | 3 (0.0 s) | behind on time | `carpark-Carpark2-ausgabe-6` 6.1 s against 32 ms |
+| QF_LRA seeds | 499 | 499 | 499 | 499 | level | |
+| QF_LRA spider_benchmarks | 2 | 2 (4.3 s) | 2 (0.0 s) | 2 (0.0 s) | behind on time | `current_frame.base` 8.5 s against 21 ms |
+| QF_LRA tta_startup | 2 | 0 | 2 | 2 | behind | 2 timeouts |
+| QF_LRA uart | 2 | 0 | 1 | 1 | behind | 2 timeouts (one nobody solves) |
+| **QF_LIA** | 578 | 410 (5.9 s) | 569 (0.4 s) | 542 (1.5 s) | behind | |
+| **QF_LRA** | 519 | 507 (0.4 s) | 514 (0.2 s) | 514 (0.2 s) | behind | |
+
+Nowhere ahead on what is solved; level on the small families and on the
+499 QF_LRA seeds. The overflow rows are the files that leave `i64` (ADR-270
+D11): counted as overflow, not as a defect. Every other row where ours is
+behind is an issue of its own (the solver lane).
+
+**Memory.** The median peak is ours 17 MiB, z3 34 MiB (QF_LIA) and 31 MiB
+(QF_LRA), cvc5 18 and 17 MiB; the runner itself already holds 17 MiB, the
+floor below which no child reads (§ *Against another solver* in
+`docs/measuring.md`), so ours and cvc5 are at most that on most files. The
+largest peaks: ours 170 MiB (the nec-smt file that overflows the stack), z3
+259 MiB, cvc5 1179 MiB (both on SMPT).
+
+**Instructions** (`compare --instructions --files tests/solver/sample`, the
+50-file CI sample, callgrind; the same answers as above, with the limit and
+the CLIs' own limits a hundred times wider). Over the 47 files all three
+solve:
+
+| sample family | files | ours, median | z3, median | cvc5, median | ours, total | z3, total | cvc5, total |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| QF_LIA 20180326-Bromberger | 1 | 417.8 M | 38.7 M | 370.0 M | 418 M | 39 M | 370 M |
+| QF_LIA 20220307-SMPT | 16 | 80.8 M | 20.5 M | 33.5 M | 14 201 M | 376 M | 761 M |
+| QF_LIA seeds | 6 | 62.6 M | 24.5 M | 55.4 M | 665 M | 1 278 M | 768 M |
+| QF_LRA seeds | 24 | 4.1 M | 8.7 M | 17.6 M | 776 M | 217 M | 467 M |
+| all | 47 | 12.5 M | 14.0 M | 18.9 M | 16 060 M | 1 909 M | 2 366 M |
+
+A small query costs ours fewer instructions than either (the QF_LRA seeds:
+a half of z3's median, a quarter of cvc5's): no start-up to pay. A hard one
+costs many times more: SMPT's total is 38 times z3's, one file
+(`Diffusion2D-PT-D05N100-RC-00`, 247 M against 26 M) nearly ten. The three
+files of the sample ours does not solve all overflow; z3 solves them in
+44-351 M.
+
+**Wall time, beside** (the sum over the set, a run cut at the 10 s limit):
+QF_LIA ours 1 266 s, z3 190 s, cvc5 518 s; QF_LRA ours 89 s, z3 68 s, cvc5
+79 s (the QF_LRA row before the Heizmann files were read: three of them ran
+to the limit afterwards). It ranks as the solved count does.
+
+## 10. What this does not measure
+
+* **The whole of SMT-LIB.** Its release is on Zenodo, which the container
+  this ran in could not reach; §9 runs the 1097 files of the GitHub
+  submissions and mirrors it could, and every other statement about SMT-LIB in
   ADR-270 is from the literature and marked so.
 * **Threads.** Everything ran on one thread.
 * **The frontend's own cost** beyond the `prove()` total of §5.

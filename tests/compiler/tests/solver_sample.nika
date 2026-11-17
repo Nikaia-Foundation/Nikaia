@@ -1,0 +1,54 @@
+// The fixed sample of the SMT-LIB set (#1338, ADR-270 D17): 25 QF_LIA and
+// 25 QF_LRA files `scripts/solver.nika sample` took from the set `fetch`
+// builds (`tests/solver/SOURCES.md`), run by the default engine. The counts
+// are work units, not time, so the summary is the same on every machine; an
+// answer that changes, or a wrong one, shows in the diff.
+use std::fs
+use std::process
+
+// The running `nikaia`: the nearest ancestor whose executable has that name.
+// `nikaia run` replaces itself with its program, so the compiler is not
+// always the parent (#1305). No path is guessed: without one the test stops
+// and says why.
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain()
+	for args in [["run", "--summary", "tests/solver/sample"]] {
+		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
+		for a in args { all.push(a.clone()) }
+		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
+		println(out.stdout.trim())
+		// A failed inner run names its cause in the diff (#1305).
+		if !out.ok || out.stderr.trim().len() > 0 {
+			println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")
+			if out.stderr.trim().len()
+				== 0 { println("(empty)") } else { println(out.stderr.trim()) }
+		}
+	}
+}

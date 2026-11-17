@@ -7,6 +7,26 @@
 //   nikaia run scripts/solver.nika -- fuzz N SEED
 //   nikaia run scripts/solver.nika -- fuzz --self-test
 //   nikaia run scripts/solver.nika -- tune [--timeout S] [DIR]
+//   nikaia run scripts/solver.nika -- fetch [DIR]
+//   nikaia run scripts/solver.nika -- sample DIR OUT [N]
+//   nikaia run scripts/solver.nika -- compare [--timeout S] [--instructions] --files DIR|FILE...
+//
+// `fetch` (#1338 item 2) builds the SMT-LIB set: it clones each source of
+// `solver_sources` at its fixed commit into `DIR/.sources/` (default DIR
+// `target/smtlib`) and copies its single-query QF_LIA and QF_LRA files with a
+// status, at most 1 MiB each, into `DIR/qflia/FAMILY/` and `DIR/qflra/FAMILY/`
+// (`tests/solver/SOURCES.md`). `sample` takes N files per logic (default 25)
+// of at most 64 KiB, at even steps of the sorted list, into OUT: the CI
+// sample `tests/solver/sample`.
+//
+// `compare` (#1338 items 3-4) answers each file with ours (the rod), z3 and
+// cvc5 (`$Z3`, `$CVC5` or `PATH`), all under the same wall-clock limit
+// (default 10 s): one line per file (a disagreement marked `DISAGREE`), then
+// per directory and solver: solved, wrong (against the status), PAR-2 in
+// seconds (an unsolved file counts twice the limit), peak and median memory
+// (never below the runner's own, which the header names). `--instructions`
+// runs each solver under callgrind and adds the mean instructions per solved
+// file; time is then not the figure, and the limit is a hundred times wider.
 //
 // `tune` (ADR-270 D14, #1284 item 5) splits the `.smt2` files of DIR
 // (default `tests/solver/qflia`), sorted by name, into two fixed halves: the
@@ -34,6 +54,7 @@
 // `lg_verify` rejects, a *refuted* whose model `lg_verify_model` rejects, and
 // any answer against the file's status count as wrong.
 use std::cli
+use std::env
 use std::fs
 use std::process
 use std::text
@@ -853,6 +874,509 @@ fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
 	))
 }
 
+// --- fetch: the SMT-LIB set of #1338, by commit ---
+
+// One Git repository the set is taken from: its URL, the commit it is read
+// at, and the paths (sparse-checkout patterns) read there.
+struct SolverSource {
+	name: String,
+	url: String,
+	commit: String,
+	paths: Vec[String],
+}
+
+// The sources of the set (#1338 item 2; origin and licence of each family in
+// `tests/solver/SOURCES.md`). Only GitHub reaches this environment, so the
+// SMT-LIB library comes from SMT-LIB's own staging repositories (the files of
+// each release's new families), the semantic-fusion seeds (SMT-LIB files
+// sorted by status) and z3test's unchanged SMT-LIB 2025 sample.
+fn solver_sources() -> Vec[SolverSource] {
+	return [
+		SolverSource {
+			name: "seeds",
+			url: "https://github.com/testsmt/semantic-fusion-seeds",
+			commit: "93029d5e832fbba80dcda7e6032e60fbc861ed39",
+			paths: ["QF_LIA/*", "QF_LRA/*"],
+		},
+		SolverSource {
+			name: "smtlib-2022",
+			url: "https://github.com/SMT-LIB/benchmark-submission-2022",
+			commit: "81a39628827f61fbd74c6f3e67feb5c1b740d2f0",
+			paths: [
+				"non-incremental/QF_LIA/20220307-SMPT/*/RC-00.smt2",
+				"non-incremental/QF_LIA/20220307-SMPT/*/RF-00.smt2",
+			],
+		},
+		SolverSource {
+			name: "smtlib-2023",
+			url: "https://github.com/SMT-LIB/benchmark-submission-2023",
+			commit: "7f993a017850ba547c6ea19a1bf3b54adf54a449",
+			paths: ["non-incremental/QF_LIA/*", "non-incremental/QF_LRA/*"],
+		},
+		SolverSource {
+			name: "smtlib-2024",
+			url: "https://github.com/SMT-LIB/benchmark-submission-2024",
+			commit: "02e00a1ad661405c438059820d82a5cf5ef11569",
+			paths: ["non-incremental/QF_LIA/*", "non-incremental/QF_LRA/*"],
+		},
+		SolverSource {
+			name: "z3test",
+			url: "https://github.com/Z3Prover/z3test",
+			commit: "b09a2011aabe656b4a4f22c3bf13c883563fa8e1",
+			paths: ["regressions/smtlib-sample/QF_LIA/*", "regressions/smtlib-sample/QF_LRA/*"],
+		},
+	]
+}
+
+// The largest file taken: 1 MiB.
+fn solver_fetch_limit() -> i64 {
+	return 1048576
+}
+
+// Runs `git ARGS` in `dir`, and stops the script where it fails.
+fn solver_git(dir: String, args: Vec[String]) -> String throws {
+	let out = process::run("git", args.clone(); dir: dir)
+	if !out.ok {
+		println(f"git {args.join(" ")} failed: {out.stderr.trim()}")
+		process::exit(1)
+	}
+	return out.stdout.trim().clone()
+}
+
+// The source's files checked out at its commit in `clone`: a clone that is
+// already there at that commit is read again, anything else made anew, with
+// only the source's paths' blobs fetched.
+fn solver_checkout(s: SolverSource, clone: String) throws {
+	if fs::exists(f"{clone}/.git", fs::Root::Anywhere) {
+		let head = process::run(
+			"git",
+			["rev-parse", "HEAD"]; dir: clone.clone(),
+		).stdout.trim().clone()
+		if head == s.commit { return }
+		fs::remove(clone.clone(), fs::Root::Anywhere; recursive: true)
+	}
+	fs::create_dir(clone.clone(), fs::Root::Anywhere; recursive: true)
+	solver_git(clone.clone(), ["init", "-q"])
+	solver_git(clone.clone(), ["remote", "add", "origin", s.url.clone()])
+	solver_git(
+		clone.clone(),
+		["fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", s.commit.clone()],
+	)
+	let mut sparse: Vec[String] = ["sparse-checkout", "set", "--no-cone"]
+	for p in s.paths { sparse.push(p.clone()) }
+	solver_git(clone.clone(), sparse)
+	solver_git(clone.clone(), ["checkout", "-q", s.commit.clone()])
+}
+
+// Why a file is not taken, or `""` where it is: its logic must be QF_LIA or
+// QF_LRA, it must ask one `check-sat` and nothing incremental, state its
+// status (the size is judged before the file is read).
+fn solver_refusal(source: String) -> String {
+	if source.contains("(push")
+		|| source.contains("(pop")
+		|| source.contains("check-sat-assuming") { return "incremental" }
+	if source.split("(check-sat)").count() != 2 { return "not one check-sat" }
+	if solver_status(source) == "" { return "no status" }
+	return ""
+}
+
+// The set's directory a file goes into: `qflia` or `qflra`, `""` for any other
+// logic.
+fn solver_logic_dir(source: String) -> String {
+	if source.contains("(set-logic QF_LIA)") { return "qflia" }
+	if source.contains("(set-logic QF_LRA)") { return "qflra" }
+	return ""
+}
+
+// The family and the file name a path of `source` is filed under: below
+// `non-incremental/LOGIC/` the family is SMT-LIB's own and the name the rest
+// of the path; elsewhere the family is the source and the name the path
+// below its first directory, each `/` written `-`.
+fn solver_family(source: String, path: String) -> (String, String) {
+	let at = path.find("non-incremental/") ?? {
+		let slash = path.find("/") ?? return (f"{source}", f"{path}")
+		return (f"{source}", f"{path[slash + "/".len()..].replace("/", "-")}")
+	}
+	let below = path[at + "non-incremental/".len()..]
+	let logic = below.find("/") ?? return (f"{source}", f"{below}")
+	let family = below[logic + "/".len()..]
+	let end = family.find("/") ?? return (f"{source}", f"{family}")
+	return (f"{family[0..<end]}", f"{family[end + "/".len()..].replace("/", "-")}")
+}
+
+fn solver_fetch(args: Vec[String]) throws {
+	let dir = if args.len()
+		> 0 { args[0].trim_end_matches("/").to_string() } else { "target/smtlib" }
+	for logic in ["qflia", "qflra"] {
+		if fs::exists(f"{dir}/{logic}", fs::Root::Anywhere) {
+			fs::remove(f"{dir}/{logic}", fs::Root::Anywhere; recursive: true)
+		}
+	}
+	let mut seen: Vec[String] = []
+	let mut lia = 0
+	let mut lra = 0
+	for s in solver_sources() {
+		let clone = f"{dir}/.sources/{s.name}"
+		solver_checkout(s.clone(), clone.clone())
+		let mut taken = 0
+		let mut reasons: Vec[String] = []
+		let listed = solver_git(clone.clone(), ["ls-files", "-s"])
+		let mut entries: Vec[String] = []
+		for line in listed.lines() { entries.push(line.to_string()) }
+		entries.sort()
+		for line in entries {
+			let tab = line.find("\t") ?? continue
+			let path = f"{line[tab + "\t".len()..]}"
+			let blob = f"{line.split(" ").nth(1) ?? ""}"
+			if !path.ends_with(".smt2") { continue }
+			let full = f"{clone}/{path}"
+			if !fs::exists(full.clone(), fs::Root::Anywhere) { continue }
+			let size = fs::metadata(full.clone(), fs::Root::Anywhere).len() as i64
+			let text = if size
+				> solver_fetch_limit() { "" } else {
+					fs::read_to_string(full.clone(), fs::Root::Anywhere)
+				}
+			let logic = solver_logic_dir(text.clone())
+			let why = if size
+				> solver_fetch_limit() { "over 1 MiB" } else if logic
+				== "" {
+					"another logic"
+				} else if seen.contains(blob.clone()) { "taken from an earlier source" } else {
+					solver_refusal(text.clone())
+				}
+			if why != "" {
+				reasons.push(why)
+				continue
+			}
+			seen.push(blob)
+			let (family, name) = solver_family(s.name.clone(), path)
+			fs::create_dir(f"{dir}/{logic}/{family}", fs::Root::Anywhere; recursive: true)
+			fs::copy(full, f"{dir}/{logic}/{family}/{name}", fs::Root::Anywhere)
+			taken += 1
+			if logic == "qflia" { lia += 1 } else { lra += 1 }
+		}
+		let mut kinds: Vec[String] = []
+		for r in reasons {
+			if !kinds.contains(r.clone()) { kinds.push(r.clone()) }
+		}
+		let mut skipped: Vec[String] = []
+		for k in kinds {
+			let mut n = 0
+			for r in reasons {
+				if r == k { n += 1 }
+			}
+			skipped.push(f"{n} {k}")
+		}
+		let note = if skipped.len() > 0 { f", left out: {skipped.join(", ")}" } else { "" }
+		println(f"{s.name} at {s.commit}: {taken} taken{note}")
+	}
+	println(f"{dir}: qflia {lia} files, qflra {lra} files")
+}
+
+// The fixed sample CI runs (#1338): `n` files of each logic of the fetched
+// set `dir`, at most 64 KiB each, taken at even steps through the sorted
+// list, copied into `out` with their family directories.
+fn solver_sample(args: Vec[String]) throws {
+	if args.len() < 2 {
+		println("usage: solver.nika sample DIR OUT [N]")
+		process::exit(2)
+	}
+	let dir = args[0].trim_end_matches("/").to_string()
+	let out = args[1].trim_end_matches("/").to_string()
+	let n = if args.len() > 2 { text::parse_i64(args[2].clone()) ?? 25 } else { 25 }
+	for logic in ["qflia", "qflra"] {
+		let mut small: Vec[(String, String)] = []
+		for (group, path) in solver_files(f"{dir}/{logic}") {
+			if fs::metadata(path.clone(), fs::Root::Anywhere).len() as i64
+				<= 65536 { small.push((group, path)) }
+		}
+		if fs::exists(f"{out}/{logic}", fs::Root::Anywhere) {
+			fs::remove(f"{out}/{logic}", fs::Root::Anywhere; recursive: true)
+		}
+		let mut taken = 0
+		for i in 0..<n {
+			if small.len() == 0 { break }
+			let (group, path) = small[i * small.len() / n].clone()
+			let file = f"{path.split("/").last() ?? ""}"
+			fs::create_dir(f"{out}/{group}", fs::Root::Anywhere; recursive: true)
+			fs::copy(path.clone(), f"{out}/{group}/{file}", fs::Root::Anywhere)
+			taken += 1
+		}
+		println(f"{out}/{logic}: {taken} of {small.len()} files")
+	}
+}
+
+// --- compare: ours, z3 and cvc5 on the same files (#1338 item 3, 4) ---
+
+// One solver's run on one file: its answer (`sat`, `unsat`, `unknown`,
+// `malformed`, `error` or `rejected`, an answer of ours its checker refused),
+// the wall time in milliseconds, the peak resident memory in KiB (-1 where
+// the platform gives none) and, under `--instructions`, the instructions
+// callgrind counted (-1 without).
+struct SolverRun {
+	answer: String,
+	millis: i64,
+	kib: i64,
+	instructions: i64,
+}
+
+// The command of a solver and its arguments for `path`: ours is the rod's
+// binary, z3 and cvc5 their CLIs, each told the same time limit.
+fn solver_command(
+	solver: String,
+	bin: String,
+	exe: String,
+	path: String,
+	timeout: i64,
+) -> (String, Vec[String]) {
+	if solver == "ours" { return (f"{bin}", ["new", path]) }
+	if solver == "z3" { return (f"{exe}", ["-smt2", f"-T:{timeout}", path]) }
+	return (f"{exe}", [f"--tlimit={timeout * 1000}", path])
+}
+
+// The first `sat`, `unsat` or `unknown` line of a CLI's output; `error` where
+// it wrote an `(error ...)` before any.
+fn solver_cli_answer(stdout: String) -> String {
+	for raw in stdout.lines() {
+		let line = raw.trim()
+		if line == "sat" || line == "unsat" || line == "unknown" { return f"{line}" }
+		if line.starts_with("(error") { return "error" }
+	}
+	return "unknown"
+}
+
+// The rod's answer as an SMT-LIB answer: *proved* is `unsat`, *refuted*
+// `sat`; an answer against the status is still the answer given, one whose
+// certificate, model or lemma the checker rejected is `rejected`.
+fn solver_rod_answer(answer: String) -> String {
+	if answer == "proved" || answer == "wrong (proved, status sat)" { return "unsat" }
+	if answer == "refuted" || answer == "wrong (refuted, status unsat)" { return "sat" }
+	if answer.starts_with("wrong") { return "rejected" }
+	if answer.starts_with("malformed") { return "malformed" }
+	return "unknown"
+}
+
+// callgrind's `Collected : N` from a run's standard error, -1 without one.
+fn solver_collected(stderr: String) -> i64 {
+	for line in stderr.lines() {
+		let at = line.find("Collected : ") ?? continue
+		return text::parse_i64(line[at + "Collected : ".len()..].trim().to_string()) ?? -1
+	}
+	return -1
+}
+
+// One solver on one file. A run past its limit is `unknown`; under
+// `instructions` the run goes through callgrind, with a hundred times the
+// limit, the CLIs' own included, for valgrind's slowdown.
+fn solver_one(
+	solver: String,
+	bin: String,
+	exe: String,
+	path: String,
+	timeout: i64,
+	instructions: bool,
+) -> SolverRun throws {
+	// The CLIs' own limit is widened with the runner's: under callgrind they
+	// would give up after a tenth of their work.
+	let own = if instructions { timeout * 100 } else { timeout }
+	let (cmd, args) = solver_command(solver.clone(), bin, exe, path, own)
+	let mut run_cmd = cmd.clone()
+	let mut run_args: Vec[String] = []
+	let mut limit = timeout + 5
+	if instructions {
+		run_cmd = "valgrind"
+		run_args = ["--tool=callgrind", "--callgrind-out-file=/dev/null", cmd.clone()]
+		limit = own + 5
+	}
+	for a in args { run_args.push(a.clone()) }
+	let out = process::run(run_cmd, run_args; within: limit.seconds())
+	let millis = out.elapsed.in_millis() as i64
+	let kib = out.max_rss_kib ?? -1
+	let counted = if instructions { solver_collected(out.stderr.to_string()) } else { -1 }
+	if out.timed_out || (!instructions && millis > timeout * 1000) {
+		return SolverRun { answer: "unknown", millis: millis, kib: kib, instructions: counted }
+	}
+	let mut answer: String = "unknown"
+	if solver == "ours" {
+		if out.ok {
+			let line = out.stdout.trim().lines().nth(0) ?? ""
+			let at = line.rfind(" ") ?? line.len()
+			answer = solver_rod_answer(f"{line[0..<at]}")
+		}
+	} else {
+		answer = solver_cli_answer(out.stdout.to_string())
+	}
+	return SolverRun { answer: answer, millis: millis, kib: kib, instructions: counted }
+}
+
+// Where a solver's CLI is: `$VAR` where it is set, else `name` on the path;
+// `""` where neither runs.
+fn solver_exe(var: String, name: String) -> String throws {
+	let exe = env::var(var) ?? name
+	return if process::run("sh", ["-c", f"command -v '{exe}'"]).ok { exe } else { "" }
+}
+
+// The middle of `xs` (the lower one of two), 0 for none.
+fn solver_median(xs: Vec[i64]) -> i64 {
+	if xs.len() == 0 { return 0 }
+	let mut s = xs.clone()
+	s.sort()
+	return s[(s.len() - 1) / 2]
+}
+
+// One solver's row over the files `at` of `runs`: solved, wrong against the
+// status, PAR-2 in seconds (the wall time of a solved file, twice the limit
+// otherwise), peak memory (the most and the median) and, where counted, the
+// instructions of the solved files.
+fn solver_compare_row(
+	solver: String,
+	runs: Vec[Vec[SolverRun]],
+	statuses: Vec[String],
+	at: Vec[i64],
+	k: i64,
+	timeout: i64,
+) -> String {
+	let mut solved = 0
+	let mut wrong = 0
+	let mut par2 = 0
+	let mut kibs: Vec[i64] = []
+	let mut instructions = 0
+	let mut counted = 0
+	for i in at {
+		let r = runs[i][k].clone()
+		let status = statuses[i].clone()
+		let answered = r.answer == "sat" || r.answer == "unsat"
+		if answered && status != "" && r.answer != status { wrong += 1 }
+		if r.answer == "rejected" { wrong += 1 }
+		if answered && (status == "" || r.answer == status) {
+			solved += 1
+			par2 += r.millis
+			if r.instructions >= 0 {
+				instructions += r.instructions
+				counted += 1
+			}
+		} else {
+			par2 += 2 * timeout * 1000
+		}
+		if r.kib >= 0 { kibs.push(r.kib) }
+	}
+	let mut most = 0
+	for x in kibs {
+		if x > most { most = x }
+	}
+	let n = at.len()
+	let mean = if n > 0 { par2 / n / 100 } else { 0 }
+	let shown = if counted > 0 { f", {instructions / counted} instructions per solved" } else { "" }
+	return f"{solver} solved {solved} wrong {wrong} PAR-2 {solver_tenths(mean)} s, peak {most / 1024} MiB (median {solver_median(kibs) / 1024}){shown}"
+}
+
+fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
+	let mut timeout = 10
+	let mut instructions = false
+	let mut per_file = false
+	let mut targets: Vec[String] = []
+	let mut i = 0
+	while i < args.len() {
+		let a = args[i].clone()
+		if a == "--timeout" && i + 1 < args.len() {
+			timeout = text::parse_i64(args[i + 1].clone()) ?? 10
+			i += 2
+			continue
+		}
+		if a == "--instructions" {
+			instructions = true
+		} else if a == "--files" {
+			per_file = true
+		} else {
+			targets.push(a)
+		}
+		i += 1
+	}
+	let mut files: Vec[(String, String)] = []
+	for t in targets { files.extend(solver_files(t)) }
+	if files.len() == 0 {
+		println("no .smt2 files")
+		return
+	}
+	let bin = solver_build(repo, nikaia)
+	if bin == "" { process::exit(1) }
+	let mut solvers: Vec[String] = ["ours"]
+	let mut exes: Vec[String] = [""]
+	for (name, var) in [("z3", "Z3"), ("cvc5", "CVC5")] {
+		let exe = solver_exe(var.to_string(), name.to_string())
+		if exe == "" {
+			println(f"{name} is not on the path (nor ${var}): left out")
+		} else {
+			solvers.push(name.to_string())
+			exes.push(exe)
+		}
+	}
+	// The runner's own high-water mark, below which no child's peak is
+	// reported on Linux (ADR-368 D3): a peak at it means at most it.
+	let floor = process::run("true", []).max_rss_kib ?? -1
+	println(f"limit {timeout} s per file and solver, memory floor {floor / 1024} MiB (the runner's own)")
+	let mut statuses: Vec[String] = []
+	let mut groups: Vec[String] = []
+	let mut runs: Vec[Vec[SolverRun]] = []
+	let mut disagree: Vec[bool] = []
+	for (group, path) in files {
+		let status = solver_status(fs::read_to_string(path.clone(), fs::Root::Anywhere))
+		let mut row: Vec[SolverRun] = []
+		for k in 0..<solvers.len() {
+			row.push(solver_one(
+				solvers[k].clone(),
+				bin.clone(),
+				exes[k].clone(),
+				path.clone(),
+				timeout,
+				instructions,
+			))
+		}
+		let mut sats = false
+		let mut unsats = false
+		for r in row {
+			if r.answer == "sat" { sats = true }
+			if r.answer == "unsat" { unsats = true }
+		}
+		if per_file {
+			let file = path.split("/").last() ?? path
+			let mut shown: Vec[String] = []
+			for k in 0..<solvers.len() {
+				let r = row[k].clone()
+				let counted = if r.instructions >= 0 { f" {r.instructions}i" } else { "" }
+				shown.push(f"{solvers[k]} {r.answer} {r.millis}ms {r.kib}KiB{counted}")
+			}
+			let mark = if sats && unsats { " DISAGREE" } else { "" }
+			println(f"{group}/{file} [{status}] {shown.join(" | ")}{mark}")
+		}
+		statuses.push(status)
+		groups.push(group.clone())
+		runs.push(row)
+		disagree.push(sats && unsats)
+	}
+	let mut names: Vec[String] = []
+	for g in groups {
+		if !names.contains(g.clone()) { names.push(g.clone()) }
+	}
+	let mut every: Vec[i64] = []
+	for j in 0..<groups.len() { every.push(j) }
+	if names.len() > 1 { names.push("all") }
+	for g in names {
+		let mut at: Vec[i64] = []
+		for j in 0..<groups.len() {
+			if g == "all" || groups[j] == g { at.push(j) }
+		}
+		let mut split = 0
+		for j in at {
+			if disagree[j] { split += 1 }
+		}
+		println(f"{g}: {at.len()} files, disagree {split}")
+		for k in 0..<solvers.len() {
+			println(f"  {solver_compare_row(solvers[k].clone(), runs.clone(), statuses.clone(), at.clone(), k, timeout)}")
+		}
+	}
+}
+
 fn main() throws {
 	// The program's name, the command, and what the command reads.
 	let mut command: String = ""
@@ -874,8 +1398,14 @@ fn main() throws {
 		solver_fuzz(repo, nikaia, rest)
 	} else if command == "tune" {
 		solver_tune(repo, nikaia, rest)
+	} else if command == "fetch" {
+		solver_fetch(rest)
+	} else if command == "sample" {
+		solver_sample(rest)
+	} else if command == "compare" {
+		solver_compare(repo, nikaia, rest)
 	} else {
-		println("usage: solver.nika run|gen|oracle|fuzz|tune ... (see the head of scripts/solver.nika)")
+		println("usage: solver.nika run|gen|oracle|fuzz|tune|fetch|sample|compare ... (see the head of scripts/solver.nika)")
 		process::exit(2)
 	}
 }
