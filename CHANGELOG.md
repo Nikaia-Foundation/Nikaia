@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1424] — 2026-11-17
+
+**Builders' changes (#1975)**
+- A list built from a std sequence only to be counted (`.collect().len()`) or walked once by a `for` is warned (NK1354), and `nikaia fix` writes `.count()` or deletes the `.collect()`.
+
+## [0.0.1423] — 2026-11-17
+
+**Builders' changes (#1338, #1848, #1904, #1957, #1959, #1961, #1987, #1988)**
+- `scripts/solver.nika` fetches a 1097-file SMT-LIB set (QF_LIA, QF_LRA) from GitHub at fixed commits, runs a 50-file sample of it in CI, and compares ours with z3 and cvc5 (solved, wrong, PAR-2, memory, instructions); the result is in docs/solver-workload.md.
+- The solver's SMT-LIB reader takes symbols that hold a `.` (`main_~i.4`), which it refused as unreadable.
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type.
+- Bounds: an index past a loop that grew a list or raised a flag under a length guard (`if at.len() == 0 { return }` then `args[0]`) is proved, also when the guard has a part that is a call (`i < args.len() && f(i)`) (ADR-361 D15, #1848)
+- The bounds walk reads the prover's result summaries (ADR-359 D14): past `if kind(t) == 0 { return }` where `kind` returns 0 on `t.len() != 1`, `t[0]` is proved, for a free function and a type's own method; an exit that reads a field or an element no longer drops a function's summary.
+- The solver's program builds in about half the time when cold: it is built as a package of its files, and rustc's lints on it are capped.
+- solver: the exact equality elimination no longer compares every pair of bounds each round, so the SMPT family's equality-heavy queries finish (RwMutex-PT-r0010w0020-RF-00 10.4 s -> 2.1 s; 309 of 371 solved, was 293)
+- solver: the preprocessing's refutation no longer repeats a hint for a unit literal given twice, which got the proof log rejected (SMPT ERK-PT-000100-RF-00)
+- The solver's SMT-LIB reader answers or refuses a script nested deeper than its stack, instead of crashing: nec-smt/large-int_from_list-prp-53-48 is proved.
+- The solver's regression set tests/solver/regress pins QF_LIA bofill-scheduling SMT_real_LIA-ex2360_2400_100, proved in about 2 s since the faster equality elimination (was about 25 s).
+- The solver no longer copies the rows, forms and clauses it only reads; pivot eliminates in place (0.3 % fewer instructions on the CI sample).
+- NK1350 now also warns on a field or list element copied into a `let` that is only read while nothing writes the place's root (`let lo = self.lower[v].clone()`); the help deletes `.clone()`.
+
 ## [0.0.1422] — 2026-11-17
 
 **chars() on text is an error, std has no chars (#1974 steps 5-6)**

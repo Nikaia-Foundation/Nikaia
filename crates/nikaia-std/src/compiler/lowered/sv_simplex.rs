@@ -38,6 +38,17 @@ pub struct SvImplied {
     pub d: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SvLitView {
+    pub known: bool,
+    pub usable: bool,
+    pub var: i64,
+    pub upper: bool,
+    pub value: SvDelta,
+}
+
+pub(crate) fn sv_sx_view_unknown() -> SvLitView { SvLitView { known: false, usable: false, var: -1, upper: false, value: sv_sx_zero() } }
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SvReading {
     pub form: SvRow,
@@ -83,6 +94,8 @@ pub struct SvSimplex {
     pub(crate) levels: Vec<i64>,
     pub(crate) marks: Vec<i64>,
     pub(crate) implied: Vec<SvImplied>,
+    pub(crate) held: Vec<i64>,
+    pub(crate) views: Vec<SvLitView>,
     pub found: collections::BTreeMap<String, i64>,
     pub found_real: collections::BTreeMap<String, SvRat>,
     pub reals: Vec<u32>,
@@ -100,7 +113,7 @@ pub struct SvSimplex {
     pub gcd_conflicts: i64,
 }
 
-pub(crate) fn sv_simplex(names: Vec<String>) -> SvSimplex { SvSimplex { names, col_var: collections::BTreeMap::new(), var_col: vec![], var_form: vec![], slack_of: collections::BTreeMap::new(), rows: vec![], basic: vec![], row_of: vec![], values: vec![], lower: vec![], upper: vec![], undo: vec![], trail: vec![], levels: vec![], marks: vec![], implied: vec![], found: collections::BTreeMap::new(), found_real: collections::BTreeMap::new(), reals: vec![], branching: true, bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, cut_depth: 0, pivots: 0, splits: 0, overflows: 0, cuts: 0, gcd_conflicts: 0 } }
+pub(crate) fn sv_simplex(names: Vec<String>) -> SvSimplex { SvSimplex { names, col_var: collections::BTreeMap::new(), var_col: vec![], var_form: vec![], slack_of: collections::BTreeMap::new(), rows: vec![], basic: vec![], row_of: vec![], values: vec![], lower: vec![], upper: vec![], undo: vec![], trail: vec![], levels: vec![], marks: vec![], implied: vec![], held: vec![], views: vec![], found: collections::BTreeMap::new(), found_real: collections::BTreeMap::new(), reals: vec![], branching: true, bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, cut_depth: 0, pivots: 0, splits: 0, overflows: 0, cuts: 0, gcd_conflicts: 0 } }
 
 pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClause> {
     let mult = match sv_sx_multipliers(parts) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -509,9 +522,37 @@ impl SvSimplex {
         }
         out
     }
-    pub(crate) fn is_implied(&self, l: u32) -> bool {
-        for i in self.implied.iter() { if i.lit == l { return true; } }
-        false
+    pub(crate) fn is_held(&self, l: u32) -> bool {
+        let at = l as i64;
+        at < self.held.len() as i64 && *unsafe { nikaia_std::proven::read(&self.held, (at) as usize) } > 0
+    }
+    pub(crate) fn hold(&mut self, l: u32, by: i64) {
+        let at = l as i64;
+        while (self.held.len() as i64) <= at { self.held.push(0); }
+        { let __nikaia_stored = by; let __nikaia_at = (at) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.held, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.held, __nikaia_at, __nikaia_stored) }; }
+    }
+    pub(crate) fn view(&mut self, l: u32, book: &SvBook) -> SvLitView {
+        let at = l as i64;
+        while (self.views.len() as i64) <= at { self.views.push(sv_sx_view_unknown()); }
+        if unsafe { nikaia_std::proven::read(&self.views, (at) as usize) }.known { return (*unsafe { nikaia_std::proven::read(&self.views, (at) as usize) }).clone(); }
+        let mut seen = sv_sx_view_unknown();
+        seen.known = true;
+        let got = self.view_of(l, book);
+        if got.is_some() { seen = nikaia_std::index::or(got, || seen.into()); }
+        { let __nikaia_stored = seen.clone(); unsafe { nikaia_std::proven::write(&mut self.views, (at) as usize, __nikaia_stored) }; }
+        seen
+    }
+    pub(crate) fn view_of(&mut self, l: u32, book: &SvBook) -> Option<SvLitView> {
+        let mine = match book.lit_bound(l) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if mine.row.cols.is_empty() { return None; }
+        match mine.rel {
+            SvRel::Eq => { return None; },
+            _ => { },
+        }
+        if book.lit_bound(sv_sx_not(l)).is_none() { return None; }
+        let reading = match sv_reading(&mine.row, &mine.rel) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let v = match self.form_var(&reading.form) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(SvLitView { known: true, usable: true, var: v, upper: reading.upper, value: reading.value })
     }
 }
 
@@ -523,6 +564,7 @@ impl SvTh for SvSimplex {
     fn level(&self) -> i64 { self.levels.len() as i64 }
     fn assert(&mut self, lit: u32, book: &mut SvBook) -> SvChecked {
         self.trail.push(lit);
+        self.hold(lit, 1);
         let a = match book.asserted(lit) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::OutsideTheTheory) };
         self.bound(&a.bound.row, &a.bound.rel, a.src, book)
     }
@@ -604,22 +646,17 @@ impl SvTh for SvSimplex {
         let mut a: u32 = 0u32;
         while a < count {
             for l in [sv_lit(a, false), sv_lit(a, true)] {
-                if self.trail.contains(&l) || self.is_implied(l) { continue; }
-                let mine = match book.lit_bound(l) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if mine.row.cols.is_empty() { continue; }
-                match mine.rel {
-                    SvRel::Eq => { continue; },
-                    _ => { },
-                }
-                if book.lit_bound(sv_sx_not(l)).is_none() { continue; }
-                let reading = match sv_reading(&mine.row, &mine.rel) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let v = match self.form_var(&reading.form) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let up = reading.upper;
+                if self.is_held(l) { continue; }
+                let seen = self.view(l, book);
+                if !seen.usable { continue; }
+                let v = seen.var;
+                let up = seen.upper;
                 let side = if up { *nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)) } else { *nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)) };
                 if side.set {
-                    let order = sv_delta_cmp(&side.value, &reading.value);
+                    let order = sv_delta_cmp(&side.value, &seen.value);
                     if up && order <= 0 || !up && order >= 0 {
                         self.implied.push(SvImplied { lit: l, level: self.level(), parts: vec![sv_side_part(&side, up, 1)], d: 1 });
+                        self.hold(l, 1);
                         out.push(l);
                         continue;
                     }
@@ -627,11 +664,12 @@ impl SvTh for SvSimplex {
                 let r = *nikaia_std::index::get(&self.row_of, nikaia_std::index::at(v));
                 if r < 0 { continue; }
                 let got = match self.row_bound(r, up) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let order = sv_delta_cmp(&got, &reading.value);
+                let order = sv_delta_cmp(&got, &seen.value);
                 if up && order <= 0 || !up && order >= 0 {
                     let parts = match self.row_parts(r, up) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let d = match sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), match u32::try_from(v).ok() { Some(__nikaia_value) => __nikaia_value, None => continue }).checked_neg() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     self.implied.push(SvImplied { lit: l, level: self.level(), parts, d });
+                    self.hold(l, 1);
                     out.push(l);
                 }
             }
@@ -658,10 +696,16 @@ impl SvTh for SvSimplex {
             let u = match self.undo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
             if u.upper { { let __nikaia_stored = u.old; nikaia_std::index::set(&mut self.upper, nikaia_std::index::at(u.var), __nikaia_stored); } } else { { let __nikaia_stored = u.old; nikaia_std::index::set(&mut self.lower, nikaia_std::index::at(u.var), __nikaia_stored); } }
         }
-        self.trail.truncate(nikaia_std::count::of(*unsafe { nikaia_std::proven::read(&self.marks, (level) as usize) }));
+        while (self.trail.len() as i64) > *unsafe { nikaia_std::proven::read(&self.marks, (level) as usize) } {
+            let l = match self.trail.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+            self.hold(l, -1);
+        }
         self.levels.truncate(nikaia_std::count::of(level));
         self.marks.truncate(nikaia_std::count::of(level));
-        self.implied.retain(|i| { i.level <= level });
+        while !self.implied.is_empty() && unsafe { nikaia_std::proven::read(&self.implied, (nikaia_std::proven::sub::<i64>(self.implied.len() as i64, 1)) as usize) }.level > level {
+            let i = match self.implied.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+            self.hold(i.lit, -1);
+        }
     }
     fn model(&self) -> collections::BTreeMap<String, i64> { self.found.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { self.found_real.copy_owned() }

@@ -4145,7 +4145,7 @@ pub mod sv_sat {
 }
 pub mod sv_simplex {
     #[allow(unused_imports)]
-    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvViolation};
+    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvViolation};
 }
 pub mod sv_smt {
     #[allow(unused_imports)]
@@ -4249,4 +4249,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "206724636b967df461266c9e6ba79901f3ada9f712913df4fe15817c003580b1";
+pub const LOWERED_DIGEST: &str = "f0b7028096ace86c7744e4b5cae9537735b219ea07f222228ddcb8e77e551a1c";

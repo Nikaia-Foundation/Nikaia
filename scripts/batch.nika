@@ -55,7 +55,7 @@ fn batch_info(abs: String) -> String throws {
         if fs::exists(exe, fs::Root::Anywhere) {
             let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", abs.clone()])
             let line = out.stdout.trim().clone()
-            if out.ok && line.split(" ").collect().len() == 5 { return line }
+            if out.ok && line.split(" ").count() == 5 { return line }
             return "builder sonnet 120 20 medium"
         }
     }

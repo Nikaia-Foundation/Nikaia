@@ -774,20 +774,7 @@ pub(crate) fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: 
         message = index;
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
-    let mut not_pure: Vec<String> = vec![];
-    if frame.unresolved { not_pure.push(String::from("It calls a method the compiler knows nothing about, so it might change something.")); }
-    for key in frame.resolved.iter() {
-        let resolved = resolve_method(world, key);
-        if resolved.is_some() {
-            let method = match resolved { Some(__nikaia_value) => __nikaia_value, None => return unit };
-            let why = check_not_pure_because(method.contract);
-            if why.is_some() {
-                let because = nikaia_std::index::or(why, || "".into());
-                not_pure.push(format!("`{}` {}", key, because));
-            }
-        }
-    }
-    state.a_claim_reaches(world, host, &condition, &mut not_pure);
+    let mut not_pure = state.not_pure_in(world, host, &frame, &condition);
     if !not_pure.is_empty() {
         not_pure.push(String::from("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value."));
         state.findings.push(check_refusal("NK1194", span, String::from("An `assert` condition can't change anything."), not_pure, Some(String::from("Compute the value first with `let`, then `assert` something about it."))));

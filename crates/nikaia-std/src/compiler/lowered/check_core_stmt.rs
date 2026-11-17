@@ -1506,7 +1506,14 @@ pub(crate) fn check_core_stmt_a_list_type(ty: &Ty) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, iter: &Expr, body: &Block, span: &Span) -> Ty {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
+    let collected = a_collect_of_a_chain(world, iter).is_some();
+    if collected { state.stored_frames.push(CheckStoredCode::empty()); }
     let over = check_core_expr(state, world, host, iter, span);
+    let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    if collected {
+        let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
+        steps = state.not_pure_in(world, host, &frame, iter);
+    }
     state.a_loop_over_a_nullable(world, &over, iter, span);
     state.a_loop_over_what_holds_no_elements(world, &over, iter, span);
     if check_core_method_counted(&over) {
@@ -1704,6 +1711,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     state.flow.loops -= 1;
     let items = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame_at))).copy_owned();
     state.a_loop_over_a_needless_clone(world, iter, &over, body, &items, handed_before, mutable, span);
+    if collected && steps.is_empty() { state.a_loop_over_a_needless_collect(world, iter, body, mutable, span); }
     if mut_view && !body.stmts.is_empty() { state.views_end(frame_at, unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.span.end as i64); }
     if mut_view {
         for b in bindings.iter() {

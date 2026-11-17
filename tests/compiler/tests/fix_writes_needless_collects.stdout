@@ -1,0 +1,51 @@
+dry run: TMP/main.nika:4: NK1354: replaced `.collect().len()` with `.count()`
+TMP/main.nika:5: NK1354: replaced `
+        .collect()
+        .len()` with `.count()`
+TMP/main.nika:9: NK1354: deleted `.collect()`
+TMP/main.nika:12: NK1354: deleted `.collect()`
+--- TMP/main.nika
++++ TMP/main.nika
+@@ -4,4 +4,2 @@
+-    println(xs.iter().collect().len())
+-    let w = s.split(" ")
+-        .collect()
+-        .len()
++    println(xs.iter().count())
++    let w = s.split(" ").count()
+@@ -9,1 +7,1 @@
+-    for p in s.split(" ").collect() {
++    for p in s.split(" ") {
+@@ -12,1 +10,1 @@
+-    for x in xs.iter().rev().collect() {
++    for x in xs.iter().rev() {
+unchanged after the dry run: true
+fix: TMP/main.nika:4: NK1354: replaced `.collect().len()` with `.count()`
+TMP/main.nika:5: NK1354: replaced `
+        .collect()
+        .len()` with `.count()`
+TMP/main.nika:9: NK1354: deleted `.collect()`
+TMP/main.nika:12: NK1354: deleted `.collect()`
+fn main() throws {
+    let xs = [3, 1, 2]
+    let s = "a b c"
+    println(xs.iter().count())
+    let w = s.split(" ").count()
+    println(w)
+    for p in s.split(" ") {
+        println(p)
+    }
+    for x in xs.iter().rev() {
+        println(x)
+    }
+}
+check: Checked TMP/main.nika
+same output: true
+3
+3
+a
+b
+c
+2
+1
+3

@@ -206,7 +206,7 @@ pub(crate) fn buffer_named(plan: &BufferPlan, wanted: i64) -> Option<String> {
 
 pub(crate) fn padded(word: &str, width: i64) -> String {
     let mut out = nikaia_std::block::Text::from(word.to_string());
-    let mut n = nikaia_std::list::scalars(word.chars()).len() as i64;
+    let mut n = word.chars().count() as i64;
     while n < width {
         out.push(' ');
         n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };

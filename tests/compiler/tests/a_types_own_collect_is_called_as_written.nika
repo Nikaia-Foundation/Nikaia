@@ -1,0 +1,18 @@
+// **A type's own `collect` is called as it is written** (#1975): the
+// `::<Vec<_>>` a sequence's `collect` is lowered with is not added to a method
+// the program declares, which takes no type arguments.
+struct Bag { items: Vec[i64] }
+
+impl Bag {
+    fn collect(ref self) -> Vec[i64] {
+        return self.items.clone()
+    }
+}
+
+fn main() throws {
+    let bag = Bag { items: [4, 5] }
+    println(bag.collect().len())
+    for b in bag.collect() {
+        println(b)
+    }
+}

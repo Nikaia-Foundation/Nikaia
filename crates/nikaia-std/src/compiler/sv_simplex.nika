@@ -88,6 +88,22 @@ pub struct SvImplied {
 	pub d: i64,
 }
 
+/// What `propagate` reads of a literal's bound, worked out once (#1960):
+/// `usable` where the literal has a bound with columns, not an equality,
+/// whose negation has one too and whose reading stays in `i64`; then the
+/// variable of its form and the reading's side and value.
+pub struct SvLitView {
+	pub known: bool,
+	pub usable: bool,
+	pub var: i64,
+	pub upper: bool,
+	pub value: SvDelta,
+}
+
+fn sv_sx_view_unknown() -> SvLitView {
+	return SvLitView { known: false, usable: false, var: -1, upper: false, value: sv_sx_zero() }
+}
+
 /// A bound as the simplex reads it: `form REL value` on the form divided by
 /// its gcd, first coefficient positive; `scale` the factor that gives the
 /// atom's row back, `row = scale·(form - value)`.
@@ -160,6 +176,12 @@ pub struct SvSimplex {
 	levels: Vec[i64],
 	marks: Vec[i64],
 	implied: Vec[SvImplied],
+	/// Per literal: how often it stands on the trail or among `implied`,
+	/// so `propagate` skips it without scanning either (#1960).
+	held: Vec[i64],
+	/// Per literal: its bound as `propagate` reads it (`SvLitView`); the
+	/// book's atoms only grow, so a view never changes once known.
+	views: Vec[SvLitView],
 	pub found: collections::BTreeMap[String, i64],
 	/// The values of the last consistent final check as rationals, a real
 	/// column's with `δ` replaced (ADR-270 D27); empty where a step left
@@ -210,6 +232,8 @@ fn sv_simplex(names: Vec[String]) -> SvSimplex {
 		levels: [],
 		marks: [],
 		implied: [],
+		held: [],
+		views: [],
 		found: collections::BTreeMap(),
 		found_real: collections::BTreeMap(),
 		reals: [],
@@ -805,13 +829,62 @@ impl SvSimplex {
 		return out
 	}
 
-	fn is_implied(ref self, l: u32) -> bool {
-		for i in self.implied {
-			if i.lit == l {
-				return true
-			}
+	/// Whether literal `l` stands on the trail or among `implied`.
+	fn is_held(ref self, l: u32) -> bool {
+		let at = l as i64
+		return at < self.held.len() && self.held[at] > 0
+	}
+
+	/// Counts literal `l` once more (`by` 1) or once less (`by` -1) on the
+	/// trail or among `implied`.
+	fn hold(ref mut self, l: u32, by: i64) {
+		let at = l as i64
+		while self.held.len() <= at {
+			self.held.push(0)
 		}
-		return false
+		self.held[at] += by
+	}
+
+	/// Literal `l`'s bound as `propagate` reads it, worked out on its first
+	/// call; giving the form its variable is the first call's side effect.
+	fn view(ref mut self, l: u32, book: ref SvBook) -> SvLitView {
+		let at = l as i64
+		while self.views.len() <= at {
+			self.views.push(sv_sx_view_unknown())
+		}
+		if self.views[at].known {
+			return self.views[at].clone()
+		}
+		let mut seen = sv_sx_view_unknown()
+		seen.known = true
+		let got = self.view_of(l, book)
+		if got != null {
+			seen = got ?? seen
+		}
+		self.views[at] = seen.clone()
+		return seen
+	}
+
+	/// The view of literal `l` where it is usable, else `null`.
+	fn view_of(ref mut self, l: u32, book: ref SvBook) -> SvLitView? {
+		let mine = book.lit_bound(l) ?? return null
+		if mine.row.cols.len() == 0 {
+			return null
+		}
+		match mine.rel {
+			SvRel::Eq => return null,
+			else => {},
+		}
+		// The explanation needs the negation's bound.
+		if book.lit_bound(sv_sx_not(l)) == null {
+			return null
+		}
+		let reading = sv_reading(mine.row, mine.rel) ?? return null
+		// Every atom's form gets its variable here, as the theory
+		// registers the atoms up front in Dutertre and de Moura: a
+		// new slack is basic, so its row bound can imply the atom.
+		let v = self.form_var(reading.form) ?? return null
+		return SvLitView { known: true, usable: true, var: v, upper: reading.upper, value: reading.value }
 	}
 }
 
@@ -829,6 +902,7 @@ impl SvTh for SvSimplex {
 	/// crosses the other side of its variable is a conflict at once.
 	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
 		self.trail.push(lit)
+		self.hold(lit, 1)
 		let a = book.asserted(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
 		return self.bound(a.bound.row, a.bound.rel, a.src, book)
 	}
@@ -950,30 +1024,18 @@ impl SvTh for SvSimplex {
 		let mut a: u32 = 0
 		while a < count {
 			for l in [sv_lit(a, false), sv_lit(a, true)] {
-				if self.trail.contains(l) || self.is_implied(l) {
+				if self.is_held(l) {
 					continue
 				}
-				let mine = book.lit_bound(l) ?? continue
-				if mine.row.cols.len() == 0 {
+				let seen = self.view(l, book)
+				if !seen.usable {
 					continue
 				}
-				match mine.rel {
-					SvRel::Eq => continue,
-					else => {},
-				}
-				// The explanation needs the negation's bound.
-				if book.lit_bound(sv_sx_not(l)) == null {
-					continue
-				}
-				let reading = sv_reading(mine.row, mine.rel) ?? continue
-				// Every atom's form gets its variable here, as the theory
-				// registers the atoms up front in Dutertre and de Moura: a
-				// new slack is basic, so its row bound can imply the atom.
-				let v = self.form_var(reading.form) ?? continue
-				let up = reading.upper
+				let v = seen.var
+				let up = seen.upper
 				let side = if up { self.upper[v] } else { self.lower[v] }
 				if side.set {
-					let order = sv_delta_cmp(side.value, reading.value)
+					let order = sv_delta_cmp(side.value, seen.value)
 					if (up && order <= 0) || (!up && order >= 0) {
 						self.implied.push(SvImplied {
 							lit: l,
@@ -981,6 +1043,7 @@ impl SvTh for SvSimplex {
 							parts: [sv_side_part(side, up, 1)],
 							d: 1,
 						})
+						self.hold(l, 1)
 						out.push(l)
 						continue
 					}
@@ -990,12 +1053,13 @@ impl SvTh for SvSimplex {
 					continue
 				}
 				let got = self.row_bound(r, up) ?? continue
-				let order = sv_delta_cmp(got, reading.value)
+				let order = sv_delta_cmp(got, seen.value)
 				if (up && order <= 0) || (!up && order >= 0) {
 					let parts = self.row_parts(r, up) ?? continue
 					let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg()
 						?? continue
 					self.implied.push(SvImplied { lit: l, level: self.level(), parts: parts, d: d })
+					self.hold(l, 1)
 					out.push(l)
 				}
 			}
@@ -1041,10 +1105,16 @@ impl SvTh for SvSimplex {
 				self.lower[u.var] = u.old
 			}
 		}
-		self.trail.truncate(self.marks[level])
+		while self.trail.len() > self.marks[level] {
+			let l = self.trail.pop() ?? break
+			self.hold(l, -1)
+		}
 		self.levels.truncate(level)
 		self.marks.truncate(level)
-		self.implied.retain(fn(i) { i.level <= level })
+		while self.implied.len() > 0 && self.implied[self.implied.len() - 1].level > level {
+			let i = self.implied.pop() ?? break
+			self.hold(i.lit, -1)
+		}
 	}
 
 	/// `model()`: the integer values of the last final `check`, by name.
