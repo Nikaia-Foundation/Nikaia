@@ -59,7 +59,7 @@ fn main() throws {
     git(tmp.clone(), ["commit", "-q", "-m", "merge"])
     println("== merged")
     println(run_commit(nikaia, repo, tmp.clone()).replace(git(tmp.clone(), ["rev-parse", "--short=8", "HEAD"]), "SHA8"))
-    println(f"parents: {git(tmp.clone(), ["log", "-1", "--format=%p"]).split(" ").collect().len()}")
+    println(f"parents: {git(tmp.clone(), ["log", "-1", "--format=%p"]).split(" ").count()}")
     println(f"b.txt: {git(tmp.clone(), ["show", "HEAD:b.txt"])}")
     println(f"a.txt: {git(tmp.clone(), ["show", "HEAD:a.txt"])}")
     process::run("rm", ["-rf", tmp])

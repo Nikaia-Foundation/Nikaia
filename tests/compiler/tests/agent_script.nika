@@ -51,7 +51,7 @@ fn main() throws {
     let line = ran.stdout.trim().split(" ").collect()
     println(f"run: ok={ran.ok} {line[0]} cost {line[5]} turns {line[7]}")
     println(fs::read_to_string(f"{tmp}/tokens.txt", fs::Root::Anywhere).trim().split(" ").collect()[1])
-    println(f"debrief: {fs::read_to_string(f"{tmp}/b.debrief.md", fs::Root::Anywhere).trim()} {fs::read_to_string(f"{tmp}/cost.txt", fs::Root::Anywhere).trim().split("\n").collect().len()}")
+    println(f"debrief: {fs::read_to_string(f"{tmp}/b.debrief.md", fs::Root::Anywhere).trim()} {fs::read_to_string(f"{tmp}/cost.txt", fs::Root::Anywhere).trim().split("\n").count()}")
     fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
     let silent = f"{tmp}/silent"
     fs::write(silent.clone(), fs::Root::Anywhere, script.replace("touch", "true"))
