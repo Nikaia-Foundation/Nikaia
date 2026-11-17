@@ -362,7 +362,7 @@ fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
 
 // The value `text` holds, or the `Error` where it is not JSON. Anything but
 // blanks after the value is an error.
-pub fn parse(text: String) -> Value throws {
+pub fn parse(text: String) -> Value sync throws {
     let mut r = Reader { cs: text.chars().collect(), pos: 0 }
     let v = value(r, "$", 0)
     blanks(r)
@@ -416,7 +416,7 @@ fn zero_fraction(text: String) -> String? {
 
 // The number as an `i64`: `12`, `12.0` and `1e3` are 12 and 1000, `12.5` and a
 // number beyond `i64` are not.
-pub fn as_i64(v: Value) -> i64 throws {
+pub fn as_i64(v: Value) -> i64 sync throws {
     let t = number_text(v, "an i64")
     let direct = text::parse_i64(t.clone())
     if direct != null {
@@ -438,7 +438,7 @@ pub fn as_i64(v: Value) -> i64 throws {
 }
 
 // As `as_i64`, for a `u64`.
-pub fn as_u64(v: Value) -> u64 throws {
+pub fn as_u64(v: Value) -> u64 sync throws {
     let t = number_text(v, "a u64")
     let direct = text::parse_u64(t.clone())
     if direct != null {
@@ -460,7 +460,7 @@ pub fn as_u64(v: Value) -> u64 throws {
 }
 
 // The number as an `f64`; one beyond the range of an `f64` (`1e999`) is not.
-pub fn as_f64(v: Value) -> f64 throws {
+pub fn as_f64(v: Value) -> f64 sync throws {
     let t = number_text(v, "an f64")
     let x = text::parse_f64(t.clone()) ?? 0.0
     if x - x != 0.0 {
@@ -474,7 +474,7 @@ pub fn as_f64(v: Value) -> f64 throws {
 // number is written as the text it holds, and a string carries the escapes
 // RFC 8259 requires (`"`, `\` and the control characters below U+0020) and no
 // others. No blanks are written between tokens.
-pub fn to_string(v: ref Value) -> String {
+pub fn to_string(v: ref Value) -> String sync {
     let mut out = String()
     write_value(v, out)
     return out

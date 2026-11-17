@@ -128,6 +128,8 @@ pub struct ManifestFile {
     pub package: collections::BTreeMap<String, String>,
     pub name: Option<String>,
     pub version: String,
+    pub within: Option<String>,
+    pub described: Option<String>,
     pub dependencies: collections::BTreeMap<String, ManifestDependency>,
     pub codegen: collections::BTreeMap<String, collections::BTreeMap<String, String>>,
     pub libraries: collections::BTreeMap<String, String>,
@@ -138,7 +140,7 @@ pub struct ManifestFile {
     pub root: Option<fs::Path>,
 }
 
-pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], allow: vec![], root: None } }
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), within: None, described: None, dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], allow: vec![], root: None } }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ManifestFeature {
@@ -193,6 +195,8 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
     }
     manifest.name = manifest_word_at(items, "package", "name", "");
     manifest.version = nikaia_std::index::or(manifest_word_at(items, "package", "version", ""), || "0.0.0".into());
+    manifest.within = manifest_within(&manifest.package, manifest_word_at(items, "package", "within", ""))?;
+    manifest.described = manifest_described(&manifest.package, manifest_word_at(items, "package", "described", ""))?;
     manifest.dependencies = manifest_dependencies(items)?;
     manifest.libraries = manifest_libraries(items)?;
     manifest.features = manifest_features(items);
@@ -214,6 +218,35 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
         }
     }
     Ok(manifest)
+}
+
+pub(crate) fn manifest_within(package: &collections::BTreeMap<String, String>, word: Option<String>) -> Result<Option<String>, nikaia_std::error::Thrown<Refused>> {
+    if !package.contains_key("within") { return Ok(None); }
+    let said = nikaia_std::index::or(word, || "".into());
+    if said != "std" { return Err(nikaia_std::error::throwing(Refused::Because(format!("`within` in `[package]` is `{}`, and the one package a package can be within is `std`: write `within = \"std\"`, or leave the key out.", nikaia_std::index::or(package.get("within"), || ""))), &"manifest_within")); }
+    Ok(Some(said))
+}
+
+pub(crate) fn manifest_described(package: &collections::BTreeMap<String, String>, word: Option<String>) -> Result<Option<String>, nikaia_std::error::Thrown<Refused>> {
+    if !package.contains_key("described") { return Ok(None); }
+    let said = nikaia_std::index::or(word, || "".into());
+    if said.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` is `{}`, and it takes the path of a ledger of described names, relative to the manifest: `described = \"described.contracts\"`.", nikaia_std::index::or(package.get("described"), || ""))), &"manifest_described")); }
+    Ok(Some(said))
+}
+
+pub fn manifest_described_at(manifest: &ManifestFile) -> Result<Option<fs::Path>, nikaia_std::error::Thrown<Refused>> {
+    let written = match manifest.described.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(None) };
+    let bare: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(written.to_string()));
+    let path = nikaia_std::index::or(match manifest.root.as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::join(&(__nikaia_it), std::path::Path::new(&(written)))),
+        None => None,
+    }, || bare.into());
+    let found = match fs::metadata(&path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` names {}, which can't be read: {}.", nikaia_std::fs::path::display(&(path)), error)), &"manifest_described_at")) },
+    };
+    if !found.is_file() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` names {}, which is not a file.", nikaia_std::fs::path::display(&(path)))), &"manifest_described_at")); }
+    Ok(Some(path))
 }
 
 pub(crate) fn manifest_allow(items: &[ManifestItem]) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {

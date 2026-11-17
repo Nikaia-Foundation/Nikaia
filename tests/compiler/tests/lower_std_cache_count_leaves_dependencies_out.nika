@@ -31,7 +31,7 @@ fn main() throws {
     process::run("mkdir", ["-p", dir.clone(), f"{tmp}/dep/src"])
     fs::write(f"{tmp}/dep/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
     fs::write(f"{tmp}/dep/src/main.nika", fs::Root::Anywhere, "pub fn dep_one() -> i64 sync {\n    return 1\n}\n")
-    fs::write(f"{dir}/dependencies.toml", fs::Root::Anywhere, "[dependencies]\ndep = { path = \"../../../../dep\" }\n")
+    fs::write(f"{dir}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"compiler\"\nwithin = \"std\"\n\n[dependencies]\ndep = { path = \"../../../../dep\" }\n")
     fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "use dep\n\npub fn a_one() -> i64 sync {\n    return dep::dep_one()\n}\n")
     lower(nikaia, tmp, "cold")
     fs::write(f"{dir}/a.nika", fs::Root::Anywhere, "use dep\n\npub fn a_one() -> i64 sync {\n    let x = dep::dep_one()\n    return x\n}\n")

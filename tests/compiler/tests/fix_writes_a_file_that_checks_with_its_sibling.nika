@@ -1,0 +1,48 @@
+// #1976: `nikaia fix` on a file of a package whose files stand beside its
+// `nikaia.toml` (as the toolchain's own packages do) checks it with its
+// siblings, so the file that uses a sibling's type checks and its `.chars()`
+// is written as `.scalars` (`NK1353`); the directory the manifest marks
+// `ignore` is no part of the package, so what it holds does not stop that.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/lowered"])
+    fs::write(
+        f"{tmp}/nikaia.toml",
+        fs::Root::Anywhere,
+        "[package]\nname = \"shapes\"\n\n[directories]\n\"lowered\" = \"ignore\"\n",
+    )
+    fs::write(
+        f"{tmp}/shape.nika",
+        fs::Root::Anywhere,
+        "pub struct Shape {\n    pub name: String,\n}\n",
+    )
+    fs::write(f"{tmp}/lowered/stale.nika", fs::Root::Anywhere, "this is not a program\n")
+    let file = f"{tmp}/count.nika"
+    fs::write(
+        file,
+        fs::Root::Anywhere,
+        "pub fn count_letters(shape: ref Shape) -> i64 {\n    return shape.name.chars().count()\n}\n",
+    )
+    let fixed = process::run(nikaia, ["fix", file.clone()])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(file, fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", file])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
