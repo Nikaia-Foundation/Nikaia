@@ -120,13 +120,13 @@ pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
+pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, keeps: &[String], wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
     let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if !names.is_empty() { takes = names_listed(&names); }
     let message = format!("`{}` takes {} by position, but you passed {} and {} by position.", key, takes, counted(passed.len() as i64, "named argument"), given.len() as i64);
-    let declared = format!("It's declared as `{}{}`.", key, signature.shown());
+    let declared = format!("It's declared as `{}{}`.", key, signature.shown(keeps));
     if (unsafe { nikaia_std::proven::add::<i64>(given.len() as i64, passed.len() as i64) }) != wanted.len() as i64 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
     #[allow(unused_mut)] let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
@@ -162,10 +162,10 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
         if !passed.is_empty() {
-            state.findings.push(check_arguments_named_for_positional(&state, world, key, signature, &wanted, given, passed, help, span));
+            state.findings.push(check_arguments_named_for_positional(&state, world, key, signature, &contract.keeps, &wanted, given, passed, help, span));
             return signature.result_or_unit();
         }
-        state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.shown())], Some(help)));
+        state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.shown(&contract.keeps))], Some(help)));
         return signature.result_or_unit();
     }
     state.a_length_that_fits_its_buffer(world, written, &wanted, given, found, span);
@@ -456,7 +456,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
                 message = format!("`{}` takes a shared value, but `{}` isn't one.", key, shown);
                 if !hull.is_empty() { help = format!("Wrap it: `{}({})`.", hull, shown); }
             } else if !hull.is_empty() { help = format!("Wrap it: `{}(…)`.", hull); }
-            state.findings.push(check_refusal("NK1115", span, message, vec![format!("It's declared as `{}{}`.", key, signature.shown())], Some(help)));
+            state.findings.push(check_refusal("NK1115", span, message, vec![format!("It's declared as `{}{}`.", key, signature.shown(&contract.keeps))], Some(help)));
             continue;
         }
         if state.a_name_in_text(world, &want, given_here, span) { continue; }
@@ -469,7 +469,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.shown())];
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.shown(&contract.keeps))];
         let mut help: String = way_out_of_a_mismatch(&found_here, &want); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {

@@ -228,6 +228,14 @@ pub(crate) fn shown_param(part: &Ty) -> String {
     written
 }
 
+pub(crate) fn marked_keep(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && !(args.is_empty() && (a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")) },
+        Ty::Unknown => false,
+        _ => true,
+    }
+}
+
 pub(crate) fn a_whole_view(ty: &Ty) -> bool {
     match ty {
         Ty::Named { view, .. } => { let view = *view; view },
@@ -899,17 +907,20 @@ impl Signature {
             None => None,
         }, || Ty::Tuple(vec![]))
     }
-    pub fn text(&self) -> String { self.written(false) }
-    pub fn shown(&self) -> String { self.written(true) }
-    pub(crate) fn written(&self, said: bool) -> String {
+    pub fn text(&self) -> String {
+        let keeps: Vec<String> = vec![];
+        self.written(false, &keeps)
+    }
+    pub fn shown(&self, keeps: &[String]) -> String { self.written(true, keeps) }
+    pub(crate) fn written(&self, said: bool, keeps: &[String]) -> String {
         let mut inside: String = String::from("");
         for (name, ty) in self.params.iter() {
             if !inside.is_empty() { inside.push_str(", "); }
             if name == "self" && said {
-                if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); }
+                if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); } else if nikaia_std::list::contains(&keeps, &name) { inside.push_str("keep "); }
                 inside.push_str("self");
             } else if name == "self" { inside.push_str(&ty.text()); } else {
-                if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); }
+                if nikaia_std::list::contains(&self.mutable, &name) { inside.push_str("mut "); } else if said && nikaia_std::list::contains(&keeps, &name) && marked_keep(ty) { inside.push_str("keep "); }
                 let typed = if said { ty.shown() } else { ty.text() };
                 inside.push_str(&format!("{}: {}", name, typed));
             }

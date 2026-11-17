@@ -416,6 +416,17 @@ fn shown_param(part: ref Ty) -> String {
     return written
 }
 
+/// **Whether a kept parameter of this type is written `keep`** (ADR-views-3
+/// D2): a number, a `bool`, a `char` and a `scalar` copy, and the source
+/// marks no copy it keeps.
+fn marked_keep(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && !(args.is_empty() && (a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")),
+        Ty::Unknown => false,
+        else => true,
+    }
+}
+
 /// Whether a type is a view as a whole: `ref T` in the compiler's own words.
 fn a_whole_view(ty: ref Ty) -> bool {
     return match ty {
@@ -1430,18 +1441,21 @@ impl Signature {
 
     /// The ledger's spelling of it.
     pub fn text(ref self) -> String {
-        return self.written(false)
+        let keeps: Vec[String] = []
+        return self.written(false, keeps)
     }
 
-    /// **As a message prints it** (ADR-views-3 D4, D10, #1528): the
-    /// declaration's spelling, `self` for the receiver and each type as
-    /// [`Ty::shown`] writes it, with no `ref`.
-    pub fn shown(ref self) -> String {
-        return self.written(true)
+    /// **As a message prints it** (ADR-views-3 D4, D10, #1528, #2007): the
+    /// declaration's spelling, `self` for the receiver, each type as
+    /// [`Ty::shown`] writes it, with no `ref`, and `mut` and `keep` where the
+    /// declaration writes them. `keeps` is the contract's: the parameters the
+    /// body keeps, which a views-3 signature marks `keep` (ADR-views-3 D2).
+    pub fn shown(ref self, keeps: ref Vec[String]) -> String {
+        return self.written(true, keeps)
     }
 
-    /// [`Signature::text`], or [`Signature::shown`] where `said`.
-    fn written(ref self, said: bool) -> String {
+    /// [`Signature::text`], or [`Signature::shown`] where `keeps` is given.
+    fn written(ref self, said: bool, keeps: ref Vec[String]) -> String {
         let mut inside: String = ""
         for (name, ty) in self.params {
             if !inside.is_empty() {
@@ -1450,6 +1464,8 @@ impl Signature {
             if name == "self" && said {
                 if self.mutable.contains(name) {
                     inside.push_str("mut ")
+                } else if keeps.contains(name) {
+                    inside.push_str("keep ")
                 }
                 inside.push_str("self")
             } else if name == "self" {
@@ -1457,6 +1473,8 @@ impl Signature {
             } else {
                 if self.mutable.contains(name) {
                     inside.push_str("mut ")
+                } else if said && keeps.contains(name) && marked_keep(ty) {
+                    inside.push_str("keep ")
                 }
                 let typed = if said { ty.shown() } else { ty.text() }
                 inside.push_str(ref f"{name}: {typed}")
