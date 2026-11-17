@@ -725,7 +725,8 @@ fn lower_package(
     let mut ledgers: Vec<(String, crate::contracts::Ledger)> = Vec::new();
     for (name, root) in dependencies {
         let sources = tools_sources(&root.join("src"))?;
-        let (package, ledger) = lower_package(&sources, &[], build, threads, cache, reused)
+        // Its files are not the package's: `reused` counts the package's own.
+        let (package, ledger) = lower_package(&sources, &[], build, threads, cache, &mut 0)
             .with_context(|| format!("lowering the dependency `{name}` ({})", root.display()))?;
         theirs.push((name.clone(), package.files));
         ledgers.push((name.clone(), ledger));
