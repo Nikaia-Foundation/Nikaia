@@ -883,9 +883,17 @@ fn drive_push(dir: String, sha: String) -> String throws {
 // lane's driver releases), nor where HEAD has moved past the pushed commit:
 // release.nika commits on HEAD and pushes it, and those commits have not been
 // through the suite (the next push releases them). Its lines go to the log as
-// `RELEASE <line>`; the note it returns ends the PUSHED line.
+// `RELEASE <line>`; the note it returns ends the PUSHED line. Under
+// `--no-bump` it commits only the agents' rows in docs/tokenspeed.md
+// (`release.nika --rows`), unpushed, for the next push: nothing else commits
+// them there, and left in the working file they blocked the merge of a
+// release that changed the file.
 fn drive_release(dir: String, pushed: String) -> String throws {
-	if drive_no_bump() { return "release left to the main lane (--no-bump)" }
+	if drive_no_bump() {
+		let rows = process::run(drive_exe(), ["run", "scripts/release.nika", "--", "--rows"]).stdout.trim().clone()
+		println(f"RELEASE {rows}")
+		return f"release left to the main lane (--no-bump), {rows}"
+	}
 	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if head != pushed { return "release at the next push (HEAD holds commits the suite has not tested)" }
 	let rel = process::run(drive_exe(), ["run", "scripts/release.nika", "--", dir.clone()])
@@ -2792,13 +2800,15 @@ fn drive_sweep() -> i64 throws {
 // clippy, #1800), the sandboxes of dead `nikaia test` runs, and `nikaia cache
 // prune` on target/nikaia-project-tests at the driver's limit, 2G (the tests'
 // cache is pruned, never removed whole); still under 6 GB after that and with
-// no cargo or rustc building into them, cargo's incremental caches (target/fast and
-// target/release, often 9 GB; the next build only takes longer). Prints `CLEANUP freed <N> MB, <M> MB
+// no cargo or rustc building into them, cargo's incremental caches (target/fast,
+// target/release and the ledger tree's target/ledger-target/fast, often 9 GB
+// together; the last held 5 GB on 2026-11-17 while the cleanup missed it and
+// the driver stopped for disk; the next build only takes longer). Prints `CLEANUP freed <N> MB, <M> MB
 // free: ...`.
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
@@ -2834,7 +2844,7 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		"sh",
 		["-c", "ps -eo comm=,args= | awk '$1 == \"cargo\" || $1 == \"rustc\"' | grep -E 'target/(fast|release)|--profile fast|--release'"],
 	).stdout.trim() == "" {
-		process::run("rm", ["-rf", "target/fast/incremental", "target/release/incremental"])
+		process::run("rm", ["-rf", "target/fast/incremental", "target/release/incremental", f"{drive_tree_target()}/fast/incremental"])
 		incremental = ", target/*/incremental"
 	}
 	let after = drive_free()
