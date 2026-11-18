@@ -1,0 +1,47 @@
+// `hash::crc32c` (ADR-371 D1, D5) against CRC-32C's definition, a bit at a
+// time, on 10000 pseudo-random states and words, and CRC-32C's check value:
+// "123456789" is 0xE3069283. Moved from the `nikaia-std` unit test
+// `hash::tests::crc32c_is_the_castagnoli_crc` (#2082); the build's own path
+// (the table, or SSE 4.2's instruction) is the one checked.
+use std::hash
+
+fn slow_byte(crc: u32, byte: u32) -> u32 {
+    // The reflected Castagnoli polynomial, 0x82F63B78.
+    let castagnoli: u32 = 2197175160
+    let mut c = crc ^ byte
+    for i in 0..<8 {
+        c = if (c & 1) == 1 { (c >> 1) ^ castagnoli } else { c >> 1 }
+    }
+    return c
+}
+
+fn slow(crc: u32, word: u64) -> u32 {
+    let mut c = crc
+    for k in 0..<8 {
+        c = slow_byte(c, ((word >> (8 * k)) & 255).truncating_u32())
+    }
+    return c
+}
+
+fn main() throws {
+    let mut seed: u64 = 11400714819323198485
+    let mut wrong = 0
+    for i in 0..<10000 {
+        seed = seed ^ (seed << 13)
+        seed = seed ^ (seed >> 7)
+        seed = seed ^ (seed << 17)
+        let crc = seed.truncating_u32()
+        let word = (seed << 29) | (seed >> 35)
+        if hash::crc32c(crc, word) != slow(crc, word) {
+            wrong += 1
+        }
+    }
+    println(f"{wrong} of 10000 differ from the definition")
+    // "12345678" read lowest byte first, then "9", inverted before and after.
+    let mut word: u64 = 0
+    for b in "87654321".bytes {
+        word = (word << 8) | (b as u64)
+    }
+    let crc = slow_byte(hash::crc32c(4294967295, word), 57)
+    println(f"check value: {crc ^ 4294967295} (0xE3069283 is 3808858755)")
+}
