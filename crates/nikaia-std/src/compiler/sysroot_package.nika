@@ -411,11 +411,61 @@ pub fn sysroot_package_with_dependencies(package: Vec[(String, String)], depende
     }
     // **Sorted by path** after the index, as `sysroot_committed` reads them.
     files.sort()
+    index.push_str(sysroot_package_tests(package, dependencies))
     let digest = sysroot_package_digest(index, files)
     index.push_str(f"\n/// **The digest of this lowered set** (#1610): every file `lower-std` wrote\n/// beside this index, and the index above this line. Compiled into the same\n/// crate as the code it names, it is the compiler's identity for its caches.\npub const LOWERED_DIGEST: &str = \"{digest}\";\n")
     let mut all: Vec[(String, String)] = [(package[0].0.clone(), index)]
     all.extend(files)
     return all
+}
+
+/// **The `test` blocks of a package and of its dependencies** (#2082), for the
+/// package's index: `nikaia_tests()` lists them, each file's own list
+/// (`modules_test_wrappers`) and each dependency's under `<name>::`, and
+/// `nikaia_run_tests` runs those whose name holds one of `filters` (all, with
+/// none), one line each and a summary, as `nikaia test --std` prints them; it
+/// answers whether every one passed. `package` is as
+/// `sysroot_package_assemble` gives it, each dependency as
+/// `sysroot_package_with_dependencies` takes it. A package without tests, and
+/// without a dependency that has some, gets neither.
+fn sysroot_package_tests(package: ref Vec[(String, String)], dependencies: ref Vec[(String, Vec[(String, String)])]) -> String {
+    let mut calls: String = ""
+    for at in 1..<package.len() {
+        let path = package[at].0.clone()
+        let stem = path.strip_prefix(f"{SYSROOT_COMPILER_FILES}/") ?? continue
+        let stem = stem.strip_suffix(".rs") ?? continue
+        if package[at].1.contains(f"fn {stem}_nikaia_tests()") {
+            calls.push_str(f"    all.extend({stem}_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));\n")
+        }
+    }
+    for (name, theirs) in dependencies {
+        if theirs.len() > 0 && theirs[0].1.contains("pub fn nikaia_tests()") {
+            calls.push_str(f"    all.extend({name}::nikaia_tests().into_iter().map(|(test, run)| (format!(\"{name}::{{test}}\"), run)));\n")
+        }
+    }
+    if calls.is_empty() {
+        return ""
+    }
+    let run = "fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>"
+    let mut text: String = "\n/// **The `test` blocks of this package and of its dependencies** (#2082), by\n/// name, as `nikaia test --std` runs them.\n"
+    text.push_str(f"pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, {run})> {{\n    let mut all: std::vec::Vec<(std::string::String, {run})> = std::vec::Vec::new();\n")
+    text.push_str(calls)
+    text.push_str("    all\n}\n")
+    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names. Whether every test run passed and one was run at all.\n")
+    text.push_str("pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {\n")
+    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n")
+    text.push_str("    if list {\n        for (name, _) in &wanted {\n            println!(\"{name}\");\n        }\n        return !wanted.is_empty();\n    }\n")
+    text.push_str("    let (mut passed, mut failed) = (0usize, 0usize);\n")
+    text.push_str("    for (name, run) in &wanted {\n")
+    text.push_str("        match std::panic::catch_unwind(*run) {\n")
+    text.push_str("            Ok(Ok(())) => {\n                passed += 1;\n                println!(\"test {name} ... ok\");\n            }\n")
+    text.push_str("            Ok(Err(e)) => {\n                failed += 1;\n                println!(\"test {name} ... FAILED: {e}\");\n            }\n")
+    text.push_str("            Err(_) => {\n                failed += 1;\n                println!(\"test {name} ... FAILED: it panicked\");\n            }\n")
+    text.push_str("        }\n    }\n")
+    text.push_str("    let outcome = if failed == 0 { \"ok\" } else { \"FAILED\" };\n")
+    text.push_str("    println!(\"test result: {outcome}. {passed} passed; {failed} failed\");\n")
+    text.push_str("    failed == 0 && !wanted.is_empty()\n}\n")
+    return text
 }
 
 /// **The digest of a lowered set** (#1610): SHA-256 over the index and each

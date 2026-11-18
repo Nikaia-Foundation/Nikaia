@@ -3862,7 +3862,53 @@ pub mod logic {
     include!("lowered/logic/lowered.rs");
 }
 
+/// **The `test` blocks of this package and of its dependencies** (#2082), by
+/// name, as `nikaia test --std` runs them.
+pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(logic::nikaia_tests().into_iter().map(|(test, run)| (format!("logic::{test}"), run)));
+    all
+}
+
+/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of
+/// them with none, and prints one line each and a summary; `list` prints
+/// only the names. Whether every test run passed and one was run at all.
+pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
+    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();
+    if list {
+        for (name, _) in &wanted {
+            println!("{name}");
+        }
+        return !wanted.is_empty();
+    }
+    let (mut passed, mut failed) = (0usize, 0usize);
+    for (name, run) in &wanted {
+        match std::panic::catch_unwind(*run) {
+            Ok(Ok(())) => {
+                passed += 1;
+                println!("test {name} ... ok");
+            }
+            Ok(Err(e)) => {
+                failed += 1;
+                println!("test {name} ... FAILED: {e}");
+            }
+            Err(_) => {
+                failed += 1;
+                println!("test {name} ... FAILED: it panicked");
+            }
+        }
+    }
+    let outcome = if failed == 0 { "ok" } else { "FAILED" };
+    println!("test result: {outcome}. {passed} passed; {failed} failed");
+    failed == 0 && !wanted.is_empty()
+}
+
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "d28e5413e49e63d4fe4e38e16fb4c959be96dc24f07e18fa09832be52d9182cd";
+pub const LOWERED_DIGEST: &str = "00f5e8184e83b4e1cf82d7c408412f511b61bd2c08b24e59808bbd594589cca7";

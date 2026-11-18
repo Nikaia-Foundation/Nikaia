@@ -379,6 +379,12 @@ jobs:
                 (cd "$dir" && "$bin") 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
                 echo "::endgroup::"
               done <target/release/test-binaries.tsv
+              # The `test` blocks of the compiler's `.nika` files, compiled
+              # into `nikaia` rather than into a `cfg(test)` copy of
+              # `nikaia-std` (#2082).
+              echo "::group::nikaia test --std"
+              ./target/release/nikaia test --std 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
+              echo "::endgroup::"
             fi
             exit $status
             ;;

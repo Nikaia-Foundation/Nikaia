@@ -67,7 +67,6 @@ pub(crate) fn sv_engine_settings(engine: &str) -> &str {
     nikaia_std::index::get(&engine, nikaia_std::index::at(at + ":".len() as i64..))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_line(source: &str, engine: &str) -> String { sv_line_stats(source, engine, false) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

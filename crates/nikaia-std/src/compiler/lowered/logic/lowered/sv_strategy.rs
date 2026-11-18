@@ -118,7 +118,6 @@ pub(crate) fn sv_features(cnf: &SvCnf) -> SvFeatures {
     f
 }
 
-#[cfg(test)]
 pub(crate) fn sv_features_shown(f: &SvFeatures) -> String { format!("columns {} reals {} atoms {} clauses {} disjunctions {} nonzeros {} interval {}‰ difference {}‰ coefficient {} constant {} boolean {}", f.columns, f.reals, f.atoms, f.clauses, f.disjunctions, f.nonzeros, f.interval, f.difference, f.max_coefficient, f.max_constant, f.boolean) }
 
 pub(crate) fn sv_strategy_pick(f: &SvFeatures, base: &SvParams) -> SvParams {
@@ -134,7 +133,6 @@ pub(crate) fn sv_strategy_pick(f: &SvFeatures, base: &SvParams) -> SvParams {
     p
 }
 
-#[cfg(test)]
 pub(crate) fn sv_params_shown(p: &SvParams) -> String {
     let first = if p.pipeline == "walk-first" { "walk-first, " } else { "" };
     let after = if p.walk_after { "+walk" } else { "" };
@@ -213,7 +211,6 @@ pub(crate) fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budge
     SvEngineRun { driven: SvDriven::Answer(answer), work: run.work + sv_walk_units(walk.moves, &p.walk), path: sv_strategy_path(&run.path, "walk"), carried: vec![], stats: run.stats.clone() }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_strategy_test_each(name: &str, source: &str) -> String {
     let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
     let script = match sv_smtlib_script(&nikaia_std::block::Text::from(source.to_string())) {
@@ -235,7 +232,6 @@ pub(crate) fn sv_strategy_test_each(name: &str, source: &str) -> String {
     format!("{}: {}\n  picks {}; {}\n", name, sv_features_shown(&features), sv_params_shown(&picked), line)
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("choice", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (or (< x 0) (> x 10)))\n(assert (<= (- x y) 2))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x", "y"], "(assert (< 0 x 1))\n(assert (= (+ x y) 2))\n"))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
@@ -248,7 +244,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     let mut p = sv_params();
@@ -263,14 +258,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn each_query_s_features_pick_its_pipeline() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_parameter_set_takes_a_setting_by_name_and_refuses_one_out_of_range_or_unknown() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_strategy_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_strategy::each_query_s_features_pick_its_pipeline", __nikaia_test_0),
+        ("sv_strategy::a_parameter_set_takes_a_setting_by_name_and_refuses_one_out_of_range_or_unknown", __nikaia_test_1),
+    ]
 }

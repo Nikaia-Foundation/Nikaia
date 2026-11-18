@@ -1026,7 +1026,6 @@ pub struct SvViolation {
     pub below: bool,
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
@@ -1038,16 +1037,12 @@ pub(crate) fn sv_simplex_test_row1(ks: &[i64], c: i64) -> SvRow {
     nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_le(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_simplex_test_row1(&ks, c), rel: SvRel::Le } }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_lt(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_simplex_test_row1(&ks, c), rel: SvRel::Lt } }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_eq(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_simplex_test_row1(&ks, c), rel: SvRel::Eq } }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_lits_text(ls: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for l in ls.iter() {
@@ -1057,7 +1052,6 @@ pub(crate) fn sv_simplex_test_lits_text(ls: &[u32]) -> String {
     nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus("[", nikaia_std::block::Text::from(parts.join(", ")))), "]"))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_said_by(checked: &SvChecked) -> String {
     match checked {
         SvChecked::Consistent => String::from("consistent"),
@@ -1067,7 +1061,6 @@ pub(crate) fn sv_simplex_test_said_by(checked: &SvChecked) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_model_text(m: &collections::BTreeMap<String, i64>) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, v) in m.iter() {
@@ -1077,7 +1070,6 @@ pub(crate) fn sv_simplex_test_model_text(m: &collections::BTreeMap<String, i64>)
     nikaia_std::block::Text::from(parts.join(", "))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_scenario(title: &str, names: Vec<String>, atoms: Vec<SvAtom>, bland_after: i64) -> String {
     let mut out: String = String::from("");
     let n = atoms.len() as i64;
@@ -1133,7 +1125,6 @@ pub(crate) fn sv_simplex_test_scenario(title: &str, names: Vec<String>, atoms: V
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_calls() -> String {
     let mut out: String = String::from("");
     let atoms = vec![sv_simplex_test_le(&vec![1], -2), sv_simplex_test_le(&vec![1], -5), sv_simplex_test_le(&vec![-1], 3)];
@@ -1167,7 +1158,6 @@ pub(crate) fn sv_simplex_test_calls() -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_through_a_row() -> String {
     let mut out: String = String::from("");
     let atoms = vec![sv_simplex_test_le(&vec![1], -1), sv_simplex_test_le(&vec![0, 1], -1), sv_simplex_test_le(&vec![1, 1], -4)];
@@ -1191,7 +1181,6 @@ pub(crate) fn sv_simplex_test_through_a_row() -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_simplex_test_calls();
     let expected = vec!["assert x <= 2: consistent", "propagate: [2, 5]", "explain x <= 5: [1, 2]", "check: consistent, model x = 0", "assert x >= 3 at level 2: conflict [1, 5]", "backtrack to 1, check: consistent, shared []", "log of 5 steps: checked"];
@@ -1199,7 +1188,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_simplex_test_scenario("x + y >= 5, x <= 2, y <= 2", vec![String::from("x"), String::from("y")], vec![sv_simplex_test_le(&vec![-1, -1], 5), sv_simplex_test_le(&vec![1], -2), sv_simplex_test_le(&vec![0, 1], -2)], 64))); __nikaia_value };
@@ -1213,7 +1201,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_simplex_test_through_a_row();
     let expected = vec!["x <= 1, y <= 1, propagate: [4]", "explain x + y <= 4: [1, 3, 4]", "log of 5 steps: checked"];
@@ -1221,7 +1208,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_simplex_test_scenario("the same, Bland's rule from the start", vec![String::from("x"), String::from("y")], vec![sv_simplex_test_le(&vec![-3, 3], 1), sv_simplex_test_le(&vec![3, -3], -2), sv_simplex_test_le(&vec![-1], 0), sv_simplex_test_le(&vec![1], -3), sv_simplex_test_le(&vec![0, -1], 0), sv_simplex_test_le(&vec![0, 1], -3)], 0))); __nikaia_value };
@@ -1232,7 +1218,6 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_answer(source: &str) -> String {
     let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
     let script = match sv_smtlib_script(source) {
@@ -1266,7 +1251,6 @@ pub(crate) fn sv_real_test_answer(source: &str) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_each(name: &str, source: &str) -> String {
     let mut out: String = format!("{}: {}\n", name, sv_real_test_answer(source));
     let simplex = sv_line(source, "new-simplex");
@@ -1277,7 +1261,6 @@ pub(crate) fn sv_real_test_each(name: &str, source: &str) -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_row(ks: &[i64], c: i64) -> SvRow {
     let mut cols: Vec<u32> = vec![];
     let mut out: Vec<i64> = vec![];
@@ -1293,7 +1276,6 @@ pub(crate) fn sv_real_test_row(ks: &[i64], c: i64) -> SvRow {
     SvRow { cols, ks: out, constant: c }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_units(atoms: Vec<SvAtom>, columns: u32, reals: Vec<u32>) -> SvQuery {
     let mut clauses: Vec<Vec<u32>> = vec![];
     let mut a: u32 = 0u32;
@@ -1304,10 +1286,8 @@ pub(crate) fn sv_real_test_units(atoms: Vec<SvAtom>, columns: u32, reals: Vec<u3
     SvQuery { atoms, clauses, columns, reals }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_half(reals: Vec<u32>) -> SvQuery { sv_real_test_units(vec![SvAtom { row: sv_real_test_row(&vec![2], -1), rel: SvRel::Le }, SvAtom { row: sv_real_test_row(&vec![-2], 1), rel: SvRel::Le }], 1u32, reals) }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_split_log(query: &SvQuery) -> SvLog {
     let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
     let a = log.input(0u32);
@@ -1319,7 +1299,6 @@ pub(crate) fn sv_real_test_split_log(query: &SvQuery) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_round_log(query: &SvQuery) -> SvLog {
     let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
     let a = log.input(0u32);
@@ -1333,10 +1312,8 @@ pub(crate) fn sv_real_test_round_log(query: &SvQuery) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_empty() -> SvQuery { sv_real_test_units(vec![SvAtom { row: sv_real_test_row(&vec![1], 0), rel: SvRel::Lt }, SvAtom { row: sv_real_test_row(&vec![-1], 0), rel: SvRel::Lt }], 1u32, vec![0u32]) }
 
-#[cfg(test)]
 pub(crate) fn sv_real_test_empty_log(query: &SvQuery) -> SvLog {
     let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
     let a = log.input(0u32);
@@ -1346,7 +1323,6 @@ pub(crate) fn sv_real_test_empty_log(query: &SvQuery) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let real = "(set-logic QF_LRA)\n(declare-const x Real)\n";
     let files = nikaia_std::block::List::from_array_in([("half", format!("{}(set-info :status sat)\n(assert (= (* 2 x) 1))\n(check-sat)\n", real)), ("half-int", String::from("(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(assert (= (* 2 x) 1))\n(check-sat)\n")), ("inside", format!("{}(set-info :status sat)\n(assert (< x 1))\n(assert (> x 0))\n(check-sat)\n", real)), ("empty", format!("{}(set-info :status unsat)\n(assert (< x 0))\n(assert (> x 0))\n(check-sat)\n", real)), ("mixed", String::from("(set-logic QF_LIRA)\n(set-info :status sat)\n(declare-const x Real)\n(declare-const n Int)\n(assert (= (* 3 x) n))\n(assert (< 0 x 1))\n(check-sat)\n"))], nikaia_std::block::Place::Block);
@@ -1360,7 +1336,6 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("2x = 1, x integer: split", &sv_real_test_half(vec![]), &sv_real_test_split_log(&sv_real_test_half(vec![]))))); __nikaia_value };
@@ -1373,7 +1348,6 @@ pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
@@ -1385,13 +1359,10 @@ pub(crate) fn sv_cuts_test_row1(ks: &[i64], c: i64) -> SvRow {
     nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_le(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_cuts_test_row1(&ks, c), rel: SvRel::Le } }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_eq(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_cuts_test_row1(&ks, c), rel: SvRel::Eq } }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_kinds(steps: &[SvStep]) -> String {
     let mut f = 0;
     let mut c = 0;
@@ -1411,7 +1382,6 @@ pub(crate) fn sv_cuts_test_kinds(steps: &[SvStep]) -> String {
     format!("{} farkas, {} combine, {} round, {} split, {} learn", f, c, r, s, l)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     let mut out: Vec<SvStep> = vec![];
     let mut rounds = 0;
@@ -1439,7 +1409,6 @@ pub(crate) fn sv_cuts_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_run(title: &str, names: Vec<String>, atoms: Vec<SvAtom>, kind: &str, how: &str) -> String {
     let mut out: String = String::from("");
     let n = atoms.len() as i64;
@@ -1503,7 +1472,6 @@ pub(crate) fn sv_cuts_test_run(title: &str, names: Vec<String>, atoms: Vec<SvAto
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cuts_test_every(title: &str, names: &[String], atoms: &[SvAtom]) -> String {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, title)), "\n"));
@@ -1511,7 +1479,6 @@ pub(crate) fn sv_cuts_test_every(title: &str, names: &[String], atoms: &[SvAtom]
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_cuts_test_every("x = y, x + y - 2z = 1", &vec![String::from("x"), String::from("y"), String::from("z")], &vec![sv_cuts_test_eq(&vec![1, -1], 0), sv_cuts_test_eq(&vec![1, 1, -2], -1)]);
     let expected = vec!["x = y, x + y - 2z = 1", "  gcd: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked", "  cg: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked", "  gmi: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked", "  branch: unknown (cases), 1024 splits, 0 cuts, 0 gcd"];
@@ -1519,7 +1486,6 @@ pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_cuts_test_every("1 <= 3x - 3y <= 2, 0 <= x, y <= 3", &vec![String::from("x"), String::from("y")], &vec![sv_cuts_test_le(&vec![-3, 3], 1), sv_cuts_test_le(&vec![3, -3], -2), sv_cuts_test_le(&vec![-1], 0), sv_cuts_test_le(&vec![1], -3), sv_cuts_test_le(&vec![0, -1], 0), sv_cuts_test_le(&vec![0, 1], -3)]);
     let expected = vec!["1 <= 3x - 3y <= 2, 0 <= x, y <= 3", "  gcd: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked", "  cg: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked", "  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked", "  branch: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked"];
@@ -1527,7 +1493,6 @@ pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_cuts_test_every("1 <= 3x + 5y <= 2, 0 <= x, y <= 1", &vec![String::from("x"), String::from("y")], &vec![sv_cuts_test_le(&vec![-3, -5], 1), sv_cuts_test_le(&vec![3, 5], -2), sv_cuts_test_le(&vec![-1], 0), sv_cuts_test_le(&vec![1], -1), sv_cuts_test_le(&vec![0, -1], 0), sv_cuts_test_le(&vec![0, 1], -1)]);
     let expected = vec!["1 <= 3x + 5y <= 2, 0 <= x, y <= 1", "  gcd: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked", "  cg: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; checked", "  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked", "  branch: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked"];
@@ -1535,7 +1500,6 @@ pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_cuts_test_every("2x + 3y = 7, x >= 0, y >= 0", &vec![String::from("x"), String::from("y")], &vec![sv_cuts_test_eq(&vec![2, 3], -7), sv_cuts_test_le(&vec![-1], 0), sv_cuts_test_le(&vec![0, -1], 0)]);
     let expected = vec!["2x + 3y = 7, x >= 0, y >= 0", "  gcd: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd", "  cg: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd", "  gmi: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd", "  branch: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd"];
@@ -1543,7 +1507,6 @@ pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("broken: the first rounding by 1 (none), the mixed-integer cut one too strong\n");
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cuts_test_run("", vec![String::from("x"), String::from("y"), String::from("z")], vec![sv_cuts_test_eq(&vec![1, -1], 0), sv_cuts_test_eq(&vec![1, 1, -2], -1)], "gcd", "round"))); __nikaia_value };
@@ -1554,7 +1517,6 @@ pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::E
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_simplex_test_split_at_min(low_first: bool) -> String {
     let big = sv_simplex_test_lt(&vec![1, 1], 9223372036854775807i64);
     let low = sv_simplex_test_le(&vec![0, -1], 1);
@@ -1571,7 +1533,6 @@ pub(crate) fn sv_simplex_test_split_at_min(low_first: bool) -> String {
     format!("{}, {}, {}, {} splits, {} overflows\n", sv_simplex_test_said_by(&a), sv_simplex_test_said_by(&b), sv_simplex_test_said_by(&got), theory.splits, theory.overflows)
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_11() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = nikaia_std::block::Text::from(nikaia_std::concat::plus(sv_simplex_test_split_at_min(true), sv_simplex_test_split_at_min(false)));
     let expected = vec!["consistent, consistent, unknown (overflow), 1 splits, 1 overflows", "consistent, consistent, unknown (overflow), 1 splits, 1 overflows"];
@@ -1580,54 +1541,20 @@ pub(crate) fn __nikaia_test_11() -> Result<(), std::boxed::Box<dyn std::error::E
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn the_simplex_s_interface_calls_one_by_one_leave_a_log_sv_check_replays() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn problems_asserted_whole_are_answered_with_a_model_or_a_checked_conflict() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn a_literal_implied_through_a_row_is_explained_by_a_farkas_lemma() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn both_pivot_rules_answer_alike_and_coefficients_near_2_40_answer_unknown() {
-        super::__nikaia_test_3().unwrap()
-    }
-    #[test]
-    fn real_scripts_are_answered_with_rational_models_and_checked_proofs() {
-        super::__nikaia_test_4().unwrap()
-    }
-    #[test]
-    fn a_split_and_a_rounding_are_accepted_on_an_integer_row_and_refused_on_a_real_one() {
-        super::__nikaia_test_5().unwrap()
-    }
-    #[test]
-    fn x_y_x_y_2z_1_is_refuted_by_the_gcd_test_branching_alone_runs_out_of_cases() {
-        super::__nikaia_test_6().unwrap()
-    }
-    #[test]
-    fn the_band_1_3x_3y_2_is_refuted_by_one_mixed_integer_cut_where_branching_takes_six_splits() {
-        super::__nikaia_test_7().unwrap()
-    }
-    #[test]
-    fn the_band_1_3x_5y_2_is_refuted_by_one_fractional_or_one_mixed_integer_cut() {
-        super::__nikaia_test_8().unwrap()
-    }
-    #[test]
-    fn the_equation_2x_3y_7_is_consistent_under_every_kind_of_cut() {
-        super::__nikaia_test_9().unwrap()
-    }
-    #[test]
-    fn a_cut_s_log_with_a_rounding_left_out_or_the_cut_made_too_strong_is_rejected() {
-        super::__nikaia_test_10().unwrap()
-    }
-    #[test]
-    fn a_split_below_i64_min_answers_unknown_overflow() {
-        super::__nikaia_test_11().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_simplex_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_simplex::the_simplex_s_interface_calls_one_by_one_leave_a_log_sv_check_replays", __nikaia_test_0),
+        ("sv_simplex::problems_asserted_whole_are_answered_with_a_model_or_a_checked_conflict", __nikaia_test_1),
+        ("sv_simplex::a_literal_implied_through_a_row_is_explained_by_a_farkas_lemma", __nikaia_test_2),
+        ("sv_simplex::both_pivot_rules_answer_alike_and_coefficients_near_2_40_answer_unknown", __nikaia_test_3),
+        ("sv_simplex::real_scripts_are_answered_with_rational_models_and_checked_proofs", __nikaia_test_4),
+        ("sv_simplex::a_split_and_a_rounding_are_accepted_on_an_integer_row_and_refused_on_a_real_one", __nikaia_test_5),
+        ("sv_simplex::x_y_x_y_2z_1_is_refuted_by_the_gcd_test_branching_alone_runs_out_of_cases", __nikaia_test_6),
+        ("sv_simplex::the_band_1_3x_3y_2_is_refuted_by_one_mixed_integer_cut_where_branching_takes_six_splits", __nikaia_test_7),
+        ("sv_simplex::the_band_1_3x_5y_2_is_refuted_by_one_fractional_or_one_mixed_integer_cut", __nikaia_test_8),
+        ("sv_simplex::the_equation_2x_3y_7_is_consistent_under_every_kind_of_cut", __nikaia_test_9),
+        ("sv_simplex::a_cut_s_log_with_a_rounding_left_out_or_the_cut_made_too_strong_is_rejected", __nikaia_test_10),
+        ("sv_simplex::a_split_below_i64_min_answers_unknown_overflow", __nikaia_test_11),
+    ]
 }

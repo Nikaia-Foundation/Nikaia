@@ -317,7 +317,6 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
     SvChecked::Consistent
 }
 
-#[cfg(test)]
 pub(crate) fn sv_elim_test_answer_kind(answer: &LgAnswer) -> String {
     match answer {
         LgAnswer::Proved { .. } => String::from("proved"),
@@ -326,7 +325,6 @@ pub(crate) fn sv_elim_test_answer_kind(answer: &LgAnswer) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_elim_test_engine(arena: &TermArena, facts: &[i64], goal: i64, theory: String) -> String {
     let run = sv_smt_engine(arena, facts, goal, &lg_budget(), theory);
     match run.driven {
@@ -339,7 +337,6 @@ pub(crate) fn sv_elim_test_engine(arena: &TermArena, facts: &[i64], goal: i64, t
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_elim_test_both(name: &str, source: &str) -> String {
     let script = match lg_smtlib_read(source) {
         LgRead::Script(ref s) => s.clone(),
@@ -353,7 +350,6 @@ pub(crate) fn sv_elim_test_both(name: &str, source: &str) -> String {
     format!("{}: simplex {}; fm {}; both {}\n", name, simplex, fm, both)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_elim_test_sum(n: i64) -> String {
     let mut text: String = String::from("(set-logic QF_LIA)\n");
     let mut terms: String = String::from("");
@@ -365,7 +361,6 @@ pub(crate) fn sv_elim_test_sum(n: i64) -> String {
     nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(assert (= (+{}) 1))\n(check-sat)\n", terms)))
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let decl = "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const n Int)\n(declare-const m Int)\n";
     let files: Vec<(String, String)> = nikaia_std::block::List::from_array_in([(String::from("even-odd"), nikaia_std::block::Text::from(nikaia_std::concat::plus(decl, "(assert (= x (* 2 n)))\n(assert (= x (+ (* 2 m) 1)))\n(check-sat)\n"))), (String::from("gcd"), nikaia_std::block::Text::from(nikaia_std::concat::plus(decl, "(assert (= (+ (* 6 x) (* 9 n)) (+ (* 3 m) 2)))\n(check-sat)\n"))), (String::from("even-even"), nikaia_std::block::Text::from(nikaia_std::concat::plus(decl, "(assert (= x (* 2 n)))\n(assert (= x (+ (* 4 m) 2)))\n(check-sat)\n")))], nikaia_std::block::Place::Block);
@@ -376,7 +371,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     for n in 2..13 { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_elim_test_both(&format!("sum-{}.smt2", n), &sv_elim_test_sum(n)))); }
@@ -385,7 +379,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
@@ -397,10 +390,8 @@ pub(crate) fn sv_omega_test_row1(ks: &[i64], c: i64) -> SvRow {
     nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_le(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_omega_test_row1(&ks, c), rel: SvRel::Le } }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_eq(atoms: &mut Vec<SvAtom>, ks: &[i64], c: i64) {
     let mut neg: Vec<i64> = vec![];
     for k in ks.iter() {
@@ -411,7 +402,6 @@ pub(crate) fn sv_omega_test_eq(atoms: &mut Vec<SvAtom>, ks: &[i64], c: i64) {
     atoms.push(sv_omega_test_le(&neg, -c));
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_boxed(atoms: &mut Vec<SvAtom>, n: i64, i: i64, lo: i64, hi: i64) {
     let mut down: Vec<i64> = vec![];
     let mut up: Vec<i64> = vec![];
@@ -425,7 +415,6 @@ pub(crate) fn sv_omega_test_boxed(atoms: &mut Vec<SvAtom>, n: i64, i: i64, lo: i
     atoms.push(sv_omega_test_le(&up, -hi));
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_kinds(steps: &[SvStep]) -> String {
     let mut e = 0;
     let mut c = 0;
@@ -445,7 +434,6 @@ pub(crate) fn sv_omega_test_kinds(steps: &[SvStep]) -> String {
     format!("{} extend, {} combine, {} round, {} farkas, {} learn", e, c, r, f, l)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     let mut out: Vec<SvStep> = vec![];
     let mut extends = 0;
@@ -470,7 +458,6 @@ pub(crate) fn sv_omega_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_holds(atoms: &[SvAtom], names: &[String], values: &collections::BTreeMap<String, i64>) -> bool {
     for a in atoms.iter() {
         let mut sum = a.row.constant;
@@ -486,7 +473,6 @@ pub(crate) fn sv_omega_test_holds(atoms: &[SvAtom], names: &[String], values: &c
     true
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_run(title: &str, names: &[String], atoms: &[SvAtom], how: &str) -> String {
     let mut out: String = String::from("");
     let n = atoms.len() as i64;
@@ -552,7 +538,6 @@ pub(crate) fn sv_omega_test_run(title: &str, names: &[String], atoms: &[SvAtom],
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_omega_test_big() -> Vec<SvAtom> {
     let mut big: Vec<SvAtom> = vec![];
     sv_omega_test_eq(&mut big, &vec![70241, 76389, 66512, 11267, 9158], -82);
@@ -565,7 +550,6 @@ pub(crate) fn sv_omega_test_big() -> Vec<SvAtom> {
     big
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let names: Vec<String> = vec![String::from("a"), String::from("b"), String::from("c"), String::from("d"), String::from("e")];
     let mut out: String = String::from("70241a + 76389b + 66512c + 11267d + 9158e = 82, 55644a + 74117b - 29262c - 76416d - 75644e = -175, -5 <= a..e <= 5\n"); #[allow(clippy::redundant_locals)] let names = names;
@@ -575,7 +559,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("7x + 12y + 31z = 17, 3x + 5y + 14z = 7, 1 <= x <= 40, -50 <= y <= 50\n");
     let mut omega: Vec<SvAtom> = vec![];
@@ -589,7 +572,6 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("4x + 6y = 5\n");
     let mut gcd: Vec<SvAtom> = vec![];
@@ -600,7 +582,6 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let names: Vec<String> = vec![String::from("a"), String::from("b"), String::from("c"), String::from("d"), String::from("e")];
     let mut out: String = String::from("broken: the first extension's divisor one too large, the first rounding by 1 (none)\n"); #[allow(clippy::redundant_locals)] let names = names;
@@ -612,30 +593,14 @@ pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn an_even_and_odd_value_and_a_gcd_that_does_not_divide_are_proved_with_a_checked_log() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn sums_of_n_values_in_1_1_are_refuted_for_odd_n_and_proved_with_a_linear_log_for_even_n() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn two_equalities_with_five_digit_coefficients_are_refuted_without_overflow() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn the_omega_test_s_example_is_consistent_and_its_model_holds() {
-        super::__nikaia_test_3().unwrap()
-    }
-    #[test]
-    fn an_equality_whose_gcd_does_not_divide_is_refuted_by_the_gcd_test_alone() {
-        super::__nikaia_test_4().unwrap()
-    }
-    #[test]
-    fn the_elimination_s_log_broken_twice_is_rejected_each_time() {
-        super::__nikaia_test_5().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_elim_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_elim::an_even_and_odd_value_and_a_gcd_that_does_not_divide_are_proved_with_a_checked_log", __nikaia_test_0),
+        ("sv_elim::sums_of_n_values_in_1_1_are_refuted_for_odd_n_and_proved_with_a_linear_log_for_even_n", __nikaia_test_1),
+        ("sv_elim::two_equalities_with_five_digit_coefficients_are_refuted_without_overflow", __nikaia_test_2),
+        ("sv_elim::the_omega_test_s_example_is_consistent_and_its_model_holds", __nikaia_test_3),
+        ("sv_elim::an_equality_whose_gcd_does_not_divide_is_refuted_by_the_gcd_test_alone", __nikaia_test_4),
+        ("sv_elim::the_elimination_s_log_broken_twice_is_rejected_each_time", __nikaia_test_5),
+    ]
 }

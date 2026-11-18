@@ -204,6 +204,17 @@ fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
 			process::run("cp", [built, path.clone()])
 			println(f"refreshed {path}")
 		}
+		// The long certificates go with `nikaia.proofs`, a removed one too:
+		// one no entry points at fails a `--locked` build.
+		let path = f"{dir}/nikaia.proofs.d"
+		let built = f"{tmp}/{path}"
+		let has_built = fs::exists(built.clone(), fs::Root::Anywhere)
+		let has_path = fs::exists(path.clone(), fs::Root::Anywhere)
+		if !has_built && !has_path { continue }
+		if has_built && has_path && process::run("diff", ["-rq", built.clone(), path.clone()]).ok { continue }
+		process::run("rm", ["-rf", path.clone()])
+		if has_built { process::run("cp", ["-r", built, path.clone()]) }
+		println(f"refreshed {path}")
 	}
 	return green
 }
