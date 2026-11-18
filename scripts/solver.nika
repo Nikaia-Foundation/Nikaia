@@ -10,6 +10,12 @@
 //   nikaia run scripts/solver.nika -- fetch [DIR]
 //   nikaia run scripts/solver.nika -- sample DIR OUT [N]
 //   nikaia run scripts/solver.nika -- compare [--timeout S] [--instructions] --files DIR|FILE...
+//   nikaia run scripts/solver.nika -- build
+//
+// `build` builds the program `run` answers with (see `solver_build`) and
+// prints the kept binary's path: CI runs it before the tests (#2023), so the
+// tests that run this script find the binary built and spend their time
+// limit on the answers, not on a cold build of the program.
 //
 // `fetch` (#1338 item 2) builds the SMT-LIB set: it clones each source of
 // `solver_sources` at its fixed commit into `DIR/.sources/` (default DIR
@@ -1729,8 +1735,12 @@ fn main() throws {
 		solver_sample(rest)
 	} else if command == "compare" {
 		solver_compare(repo, nikaia, rest)
+	} else if command == "build" {
+		let bin = solver_build(repo, nikaia)
+		if bin == "" { process::exit(1) }
+		println(bin)
 	} else {
-		println("usage: solver.nika run|gen|oracle|fuzz|tune|fetch|sample|compare ... (see the head of scripts/solver.nika)")
+		println("usage: solver.nika run|gen|oracle|fuzz|tune|fetch|sample|compare|build ... (see the head of scripts/solver.nika)")
 		process::exit(2)
 	}
 }
