@@ -1,0 +1,32 @@
+// A span of time is named by a count (`seconds`, `millis`, `micros`,
+// `minutes`, `hours`) of either integer type, a count below zero is no time
+// at all, a count too large is the largest span rather than a wrapped one, a
+// span reads back in whole units down to nanoseconds (the largest count where
+// it does not fit), and `since` an earlier reading is zero (`std::time`).
+// Moved from the `nikaia-std` unit tests `time::tests::*` (#2082).
+use std::time
+
+fn main() throws {
+    println(f"{1.seconds() == 1000.millis()} {250.millis() == 250000.micros()} {500.micros().in_micros()}")
+    println(f"{2.minutes() == 120.seconds()} {3.hours() == 10800.seconds()}")
+
+    let wide: i64 = 90
+    let narrow: i32 = 90
+    println(f"{wide.minutes() == 5400.seconds()} {narrow.minutes() == wide.minutes()}")
+
+    println(f"{(-1).seconds() == 0.seconds()} {(-90).hours().in_nanos()}")
+
+    println(f"{i64::MAX.hours() >= i64::MAX.seconds()}")
+
+    let span = 90.seconds()
+    println(f"{span.in_seconds()} {span.in_minutes()} {span.in_hours()} {span.in_millis()} {span.in_micros()} {1500.micros().in_millis()}")
+
+    let ever = i64::MAX.hours()
+    println(f"{ever.in_micros() == i64::MAX} {ever.in_millis() == i64::MAX} {i64::MAX.seconds().in_seconds() == i64::MAX}")
+
+    println(f"{1500.micros().in_nanos()} {ever.in_nanos() == i64::MAX}")
+
+    let first = time::now()
+    let later = first + 5.millis()
+    println(f"{later.since(first) == 5.millis()} {first.since(later) == 0.seconds()} {first.elapsed() >= 0.seconds()}")
+}
