@@ -256,7 +256,7 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                 }
             }
         },
-        Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+        Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
             let result = nikaia_std::boxed::open(result);
             match value {
                 Expr::Closure { .. } => {
@@ -266,6 +266,8 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                     state.a_lambdas_text_is_its_own(world, &inner, value);
                     state.a_kept_lambdas_hulls(world, value);
                     state.a_kept_lambda_takes_these(world, value, !is_sync, "a function kept for later", span);
+                    let changed: Option<String> = state.flow.lambda_outer_changes.remove(&(id_of(value) as i64));
+                    if changed.is_some() { state.a_kept_lambda_changes_a_capture(nikaia_std::index::or(changed.as_deref(), || ""), &check_span_at(world, value, span)); }
                 },
                 Expr::Variable(name, _) => {
                     let name = *name;
@@ -744,11 +746,11 @@ pub(crate) fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: 
     }
     let condition = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
     state.stored_frames.push(CheckStoredCode::empty());
-    let found = check_core_expr(state, world, host, &condition, span);
+    let found = check_core_expr(state, world, host, condition, span);
     let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
-    let at = check_span_at(world, &condition, span);
+    let at = check_span_at(world, condition, span);
     state.expect_bool(&found, &at, "An `assert` checks a `bool`.");
-    if is_a_literal_other_than(&condition, "bool") { state.an_assert_of_another_shape(String::from("An `assert` checks a `bool`, but this is a literal of another type."), span); }
+    if is_a_literal_other_than(condition, "bool") { state.an_assert_of_another_shape(String::from("An `assert` checks a `bool`, but this is a literal of another type."), span); }
     let owned = Ty::Named { name: String::from("String"), args: vec![], view: false };
     let viewed = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut message: i64 = -1;
@@ -774,7 +776,7 @@ pub(crate) fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: 
         message = index;
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
-    let mut not_pure = state.not_pure_in(world, host, &frame, &condition);
+    let mut not_pure = state.not_pure_in(world, host, &frame, condition);
     if !not_pure.is_empty() {
         not_pure.push(String::from("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value."));
         state.findings.push(check_refusal("NK1194", span, String::from("An `assert` condition can't change anything."), not_pure, Some(String::from("Compute the value first with `let`, then `assert` something about it."))));
@@ -793,10 +795,10 @@ pub(crate) fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: 
     }
     let mut word: &'static str = "assert";
     if assumed { word = "assume"; }
-    let mut claimed: String = format!("{}({}", word, written_expression(world.words, &condition));
+    let mut claimed: String = format!("{}({}", word, written_expression(world.words, condition));
     if message >= 0 { claimed = format!("{}; message: {}", claimed, written_expression(world.words, &nikaia_std::index::get(&config, nikaia_std::index::at(message)).value)); }
     claimed = format!("{})", claimed);
-    state.facts.claims.insert((span.start as i64, id_of(&condition) as i64), FactClaim { held: None, written: claimed, left, right, assumed });
+    state.facts.claims.insert((span.start as i64, id_of(condition) as i64), FactClaim { held: None, written: claimed, left, right, assumed });
     unit
 }
 

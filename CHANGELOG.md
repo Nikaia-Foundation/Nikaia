@@ -8,6 +8,54 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1430] — 2026-11-18
+
+**Builders' changes (#2011, #2048)**
+- The solver counts only theory checks that did work toward its case budget: a partial check that pivots or ends in a conflict, and every final check. QF_LIA c_inference 30_30_86_7 is now refuted; the prover's figure is unchanged.
+- The solver's search budget counts theory checks: each check costs one case and two more for each simplex pivot, so the c_inference files end unknown (cases) within 30 s instead of timing out (#2048).
+
+## [0.0.1429] — 2026-11-18
+
+**Builders' changes (#2033, #2034)**
+- A `match` pattern `name(…)` whose one-word name nothing declares (`some(_)` over a `T?`) is refused with NK1117 instead of failing in rustc (NK1343).
+- Self-hosting: which launcher variables (NIKAIA_EXE, NIKAIA_MAIN) a program does not see is decided in runtime/env.nika; `env::pairs()` is now the bare OS list.
+
+## [0.0.1428] — 2026-11-18
+
+**Builders' changes (#1553, #2008, #2022, #2045, #2047)**
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding. A lambda that runs a pausing code parameter now waits for that call.
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding.
+- Driver: a green batch whose push is rejected because develop moved is merged with origin/develop, short-checked and pushed in up to three rounds (`MERGE <sha8> round <k>`) instead of running the full suite again after the second rejection.
+- Driver: a lane with a long queue pushes after each block of builders; a builder that fits the time left starts after long merges - In single-lane mode the driver starts the suite after every block of builders (focus.txt's `block`, else 2), not only at BATCH DONE, which a refilled queue never reached, and builders go on while it runs. The time check before a builder counts the median of the lane's last nine runs, not the longest, and is made again after the merge.
+- A trait method's code parameter, called one call at a time, now takes a lambda that changes a binding it captures (`s.each(fn(v) { total = total + v })`): the trait and every impl of it in the file lower the parameter alike, so a call on the type or through a bound compiles.
+- A lambda kept in a field, a `let`, a result, an element or a `keep` parameter that changes a binding it captures from the function around it is now refused with NK2101, naming the binding; it changed only its own copy, and `struct H { f: fn(i64) }` with `fn(v) { total = total + v }` printed 0.
+
+## [0.0.1427] — 2026-11-18
+
+**Builders' changes (#2005, #2015, #2031)**
+- The compiler checks its own package faster: deciding which types derive Copy now asks for a type's cleanup only once its parts copy (61 G instructions less per lowering of the tools package).
+- Added: a nightly z3 workflow checks every stated solver status and fuzzes the solver with mutated queries against a pinned z3 (`scripts/solver.nika oracle`, `fuzz N SEED --size S --rlimit R`)
+- Fixed: a list literal of tuples with a text part no longer draws NK1343 when tuples of another tier are pushed into it
+- A program build reuses rustc's output when its emitted Rust did not change: a crate whose Rust, rustc arguments, --extern files and rustc version match an earlier build is not compiled again (ADR-021 D14).
+- Tools build in a fixed slot: pre-push, gate, the solver, java_binding and the yaml facade test build their private copy in a locked, numbered slot (target/<tool>/<n>, the solver in the user cache) instead of a fresh temp dir, so their builds hit ADR-021 D14's rustc store; new scripts/slot.nika.
+- A package's types compare, hash and copy in the program that uses it: `==` on a `lib::Point` or an enum holding one, a `HashSet[lib::Point]`, a copy of a `lib::Point` and a dependency type with its own `impl Eq` are no longer refused (NK1188, NK1260, NK2105); a package's `nikaia.contracts` now records `compares`, `equates`, `hashes` and `copies` for its own types.
+
+## [0.0.1426] — 2026-11-17
+
+**Builders' changes (#2024, #2025)**
+- `text::parse_f64`'s shape check (ADR-285 D35) is now written in Nikaia, in std's runtime package; Rust keeps only the correctly rounding conversion.
+- Self-hosting: `text::Form` is declared in Nikaia (`runtime/text_normal.nika`); Rust keeps only `normalized`.
+
+## [0.0.1425] — 2026-11-17
+
+**Builders' changes (#1996, #1997, #1999, #2007)**
+- Calls through function values check their arguments: a call through a `let`, a parameter or a field holding code now refuses an argument of the wrong type (NK1102) or a wrong count (NK1101), as a named call does, and wraps a plain value handed to a `T?` parameter.
+- A let over a field or an element of a local is a view whatever its type: handing it to a keeper, or returning it, is refused with a .clone() help (NK1102, NK1104) instead of an internal error (NK1343)
+- A `??` with a variant fallback over a part a `match` arm binds out of a box, handed to something that keeps it, takes the part instead of lending it, which rustc refused (NK1343).
+- The "It's declared as" note writes `keep` where the callee keeps a parameter, and a function type taken from a declaration (a written type with names, a named function, a lambda) prints with its parameter names, so a view result reads `fn(s: String) -> String from s` instead of "whose result is a view of its argument" (#1528 decision 2). A tools file can now write `impl Hash`.
+- The "It's declared as" note of NK1101, NK1102 and NK1115 writes `keep` before a parameter the callee keeps, as a views-3 signature marks it (ADR-views-3 D2).
+- A `tools/*.nika` or std package file can write `impl Hash`: the lowered package's index brings the prelude's `Hasher` into scope, where rustc found none before.
+
 ## [0.0.1424] — 2026-11-17
 
 **Builders' changes (#1975)**

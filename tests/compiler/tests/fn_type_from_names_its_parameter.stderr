@@ -1,0 +1,9 @@
+error[NK1102]: `apply` expects `f` to be `fn(a: String, b: String) -> String from a`, but you're passing `fn(a: String, b: String) -> String sync`.
+   --> tests/fn_type_from_names_its_parameter.nika:14:20
+    |
+ 14 |     print(f"{apply(joined, s)}\n")
+    |                    ^^^^^^
+    |
+    = note: It's declared as `apply(f: fn(a: String, b: String) -> String from a, s: String) -> i64`.
+    = help: Make it a `fn(a: String, b: String) -> String from a`, or change the declaration to `fn(a: String, b: String) -> String sync`.
+1 type error

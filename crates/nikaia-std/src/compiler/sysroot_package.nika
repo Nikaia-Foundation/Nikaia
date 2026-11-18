@@ -344,6 +344,9 @@ pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String]
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n")
     // A text in a normalisation form, `s.normalized(form)` (ADR-320 D10), as the prelude has it.
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::text::TextNormalized as _;\n")
+    // **What an `impl Hash`'s `hash` feeds** (ADR-010 D12), as the prelude
+    // has it: a tools file's `mut into: Hasher` names it bare (#2007).
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::prelude::Hasher;\n")
     imports.sort()
     for import in imports {
         rust.push_str("#[allow(unused_imports)]\n")

@@ -1,0 +1,45 @@
+// A plain `let` over a field or an element of a local is a view of it
+// (ADR-views-3 D5, #1997), for a struct, an enum and a list as for text
+// (#1404): the emitter lends it, so a keeper handed it, or a `return` of
+// it, is refused with a `.clone()` help, not by rustc (NK1343).
+struct P { name: String }
+enum K { A(String), B }
+struct H { p: P, k: K, items: Vec[i64] }
+
+fn eat(keep a: P) -> i64 {
+    let mut v: Vec[P] = []
+    v.push(a)
+    return v.len() as i64
+}
+
+fn eat_k(keep k: K) -> i64 {
+    let mut v: Vec[K] = []
+    v.push(k)
+    return v.len() as i64
+}
+
+fn eat_items(keep a: Vec[i64]) -> i64 {
+    let mut v: Vec[Vec[i64]] = []
+    v.push(a)
+    return v.len() as i64
+}
+
+fn made() -> P {
+    let h = H { p: P { name: "abc" }, k: K::B, items: [1] }
+    let q = h.p
+    return q
+}
+
+fn main() throws {
+    let h = H { p: P { name: "abc" }, k: K::A("z"), items: [1, 2] }
+    let q = h.p
+    println(eat(q))
+    let k = h.k
+    println(eat_k(k))
+    let items = h.items
+    println(eat_items(items))
+    let w: Vec[P] = [P { name: "de" }]
+    let e = w[0]
+    println(eat(e))
+    println(made().name)
+}

@@ -19,6 +19,8 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::prelude::Hasher;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -32,6 +34,8 @@ use nikaia_std::io;
 use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::process;
+#[allow(unused_imports)]
+use nikaia_std::runtime;
 #[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
@@ -3355,7 +3359,7 @@ pub mod bounds_proven {
 pub mod bounds_reasons {}
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_unproved, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
@@ -3583,7 +3587,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3788,7 +3792,7 @@ pub mod fix {
 }
 pub mod fixed {
     #[allow(unused_imports)]
-    pub use super::{HASHED_FROM, Table, fnv, displace, build};
+    pub use super::{HASHED_FROM, Table, build};
 }
 pub mod fmt {
     #[allow(unused_imports)]
@@ -3845,7 +3849,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, impl_parameters, a_literal, literal_of, PublishedEnsures, ComputedAt, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
+    pub use super::{types_this_file_declares, impl_parameters, a_literal, literal_of, PublishedEnsures, ComputedAt, attribute_values, ledger_items_stored, LedgerDerives, LedgerInferHost, ledger_infer_package};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]
@@ -3990,7 +3994,7 @@ pub mod project_members {
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, unproved_checks, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_unproved_checks, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
@@ -4218,7 +4222,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -4249,4 +4253,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "d92cb4b07b47817347c2c298d011654fee2719d5df370a160af54545ee0d6223";
+pub const LOWERED_DIGEST: &str = "fbdbb62324820a4f675e62ba0dddc15a9640ebe7ec75efc020e3b7b7a05109d9";

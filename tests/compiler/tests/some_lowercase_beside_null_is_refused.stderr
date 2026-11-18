@@ -1,0 +1,9 @@
+error[NK1117]: Nothing declares `some`, so `some(…)` is no pattern of `text::parse_f64("1")`.
+  --> tests/some_lowercase_beside_null_is_refused.nika:6:5
+   |
+ 6 |     let said = match text::parse_f64("1") {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there.
+   = help: Over a `T?`, a name alone binds the `T`: write `x => …`, with `null => …` beside it.
+1 type error

@@ -803,6 +803,30 @@ impl CheckState {
             }
         }
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn pending_coalesce_keys(&self) -> collections::BTreeSet<i64> { self.flow.pending_coalesces.iter().map(|one| { one.key }).collect() }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn pending_coalesces_of_an_arm_are_taken(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, before: &collections::BTreeSet<i64>) {
+        let pending = self.flow.pending_coalesces.copy_owned();
+        self.flow.pending_coalesces = vec![];
+        let mut waiting: Vec<CheckPendingCoalesce> = vec![];
+        for one in pending.iter() {
+            if before.contains(&one.key) {
+                waiting.push(one.clone());
+                continue;
+            }
+            let key = (one.left, one.span.start as i64);
+            let found = *nikaia_std::index::get(&self.flow.read_index, &key);
+            if found.is_some() {
+                let at: i64 = match found { Some(__nikaia_value) => __nikaia_value, None => continue }.clone();
+                let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at))).clone();
+                self.hands_over_path(world, &nikaia_std::block::Text::from(read.path.to_string()), &one.ty, read.seq, "given to `??`", &one.span);
+            }
+        }
+        self.flow.pending_coalesces = waiting;
+    }
 }
 
 impl CheckState {
@@ -948,6 +972,8 @@ impl CheckState {
     pub(crate) fn a_change_noted(&mut self, name: &str) {
         self.changed.push(nikaia_std::block::Text::from(name.to_string()));
         self.flow.changes_seen.push((nikaia_std::block::Text::from(name.to_string()), self.reads_on_paths.len() as i64));
+        let bound = nikaia_std::index::or(self.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1);
+        self.flow.changes_bound.push((nikaia_std::block::Text::from(name.to_string()), bound));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

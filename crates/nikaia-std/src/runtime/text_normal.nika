@@ -1,0 +1,24 @@
+// crates/nikaia-std/src/runtime/text_normal.nika
+//
+// **Unicode's normalisation forms** (ADR-320 D8), written in Nikaia: the
+// enum `s.normalized(form)` takes.
+//
+// `src/text_normal.rs` re-exports `Form` as `nikaia_std::text::Form` and
+// keeps `normalized`, whose tables are the `unicode-normalization` crate's
+// and follow Unicode's versions. `std.contracts` writes the type's entry by
+// hand.
+
+/// One of Unicode's four normalisation forms (UAX #15).
+///
+/// `Nfc` composes and `Nfd` decomposes, by canonical equivalence; `Nfkc` and
+/// `Nfkd` do the same by compatibility as well, so `ﬁ` becomes `fi`.
+pub enum Form {
+    /// Canonical decomposition, then canonical composition.
+    Nfc,
+    /// Canonical decomposition.
+    Nfd,
+    /// Compatibility decomposition, then canonical composition.
+    Nfkc,
+    /// Compatibility decomposition.
+    Nfkd,
+}

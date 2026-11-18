@@ -607,7 +607,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 if (list == "Vec" || list == "List") && items.len() == 1 {
                     let item = unsafe { nikaia_std::proven::read(&items, (0) as usize) };
                     match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(&item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
+                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
                         _ => { },
                     }
                 }
@@ -622,7 +622,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
@@ -636,7 +636,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
                         _ => { },

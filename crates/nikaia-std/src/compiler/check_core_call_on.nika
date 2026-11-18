@@ -620,7 +620,7 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
     // text its body ends in is built as `or_insert`'s value is.
     if entry == "or_insert_with" {
         let wrapped: Ty = match expected[0] {
-            Ty::Fn { params, result, is_sync, can_throw } => if result == null && !parts[1].is_unknown() { Ty::Fn { params: params.clone(), result: parts[1].clone(), is_sync: is_sync, can_throw: can_throw } } else { expected[0].clone() },
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => if result == null && !parts[1].is_unknown() { Ty::Fn { params: params.clone(), result: parts[1].clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() } } else { expected[0].clone() },
             else => expected[0].clone(),
         }
         return [wrapped]
@@ -1342,6 +1342,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
     state.call_keepers.clear()
+    if world.own.functions.contains_key(key) {
+        check_core_call_code_args(state, world, callee, key, args, span)
+    }
     if keyed && args.len() == 1 && found.len() == 1 {
         check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)
     }
@@ -1731,9 +1734,9 @@ fn check_core_call_on_copied_entry(want: ref Ty, arg: ref Expr) -> Ty? {
         return null
     }
     return match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             if params.len() == 1 && params[0].is_a_view() && copies_plainly(unviewed_type(params[0])) {
-                Ty::Fn { params: [unviewed_type(params[0])], result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+                Ty::Fn { params: [unviewed_type(params[0])], result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() }
             } else {
                 null
             }
@@ -1822,12 +1825,12 @@ fn check_core_call_on_holds_a_view(ty: ref Ty) -> bool {
 
 fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
     return match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let mut plain: Vec[Ty] = []
             for p in params {
                 plain.push(unviewed_type(p))
             }
-            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() }
         },
         else => want.clone(),
     }

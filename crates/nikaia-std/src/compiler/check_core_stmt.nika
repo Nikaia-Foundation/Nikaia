@@ -952,6 +952,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // it, so it is copied there.
     let bytes_view = !mutable && names.len() == 1 && shape.len() == 0 && state.a_text_bytes_view(world, value)
     let mut moved_out = false
+    let mut handing_refused = false
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
     } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && state.a_lent_text_place(world, value, found)) {
@@ -966,6 +967,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // owned parameter does (#665).
         let owned_root = check_core_stmt_a_part_of_an_owned_parameter(state, world, value) || (mutable && check_core_stmt_a_part_of_an_unchanged_let(state, world, value))
         moved_out = a_name_or_a_field(value) && owned_root && state.findings.len() == before
+        handing_refused = state.findings.len() > before
         check_core_places_give_handle(state, world, value, found, span)
     }
     // **And a `let` gives the name a value again**, as an assignment does.
@@ -1072,6 +1074,21 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             }
         } else {
             bound = found.clone()
+            // **And so is one over a place of any type that moves** (#1997): a
+            // struct, an enum or a list read off a local is lent as the text
+            // is, so it is typed the view the emitter writes.
+            // Where handing it over was refused already (`NK2106`), that one
+            // refusal stands.
+            if !mutable && !moved_out && !handing_refused && names.len() == 1 && shape.len() == 0 && check_core_stmt_a_place(state, value) && state.facts.lent_lets.contains(span.start as i64) && state.takes_away(world, found) {
+                match found {
+                    Ty::Named { name: n, args: a, view: v } => {
+                        if !v {
+                            bound = Ty::Named { name: n.clone(), args: a.clone(), view: true }
+                        }
+                    },
+                    else => {},
+                }
+            }
         }
         // **A `let` of a map's read of views binds the view itself** (#996):
         // the read is a view of what the map holds, copied out.
@@ -1253,6 +1270,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         match value {
             Expr::Closure { .. } => state.facts.let_lambdas.insert(id, value.clone()),
             else => {},
+        }
+        // **A `let` keeps its lambda** (Part I 5.4 C, #2047), so a change it
+        // makes to a binding from outside reaches only its own copy.
+        let changed: String? = state.flow.lambda_outer_changes.remove(id_of(value) as i64)
+        if changed != null {
+            state.a_kept_lambda_changes_a_capture(changed ?? "", check_span_at(world, value, span))
         }
     }
     if bytes_view {

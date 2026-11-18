@@ -1159,13 +1159,13 @@ pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[C
     let described = parameters_of((called.callee).as_deref(), asked, &mut walk.own_keys, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let handle = named_handle(&arg, asked.names, &walk.scope);
+        let handle = named_handle(arg, asked.names, &walk.scope);
         if handle.is_none() {
-            an_argument_that_is_not_a_handle(called, (described).as_ref(), at, &arg, asked, walk);
-            a_lambda_handed_on((described).as_ref(), at, &arg, asked, &holes_of, &ty_of, walk);
+            an_argument_that_is_not_a_handle(called, (described).as_ref(), at, arg, asked, walk);
+            a_lambda_handed_on((described).as_ref(), at, arg, asked, &holes_of, &ty_of, walk);
             continue;
         }
-        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(&arg)), walk);
+        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(arg)), walk);
     }
     for setting in config.iter() {
         let why = format!("it is handed to `{}` as the option `{}`, and no contract says what happens to a `Shared` in an option", nikaia_std::index::or(match called.callee.as_ref() {

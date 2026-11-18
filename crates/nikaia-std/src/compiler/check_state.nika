@@ -649,6 +649,22 @@ impl CheckMethodCalls {
     }
 }
 
+/// **An argument handed to a parameter of code** (ADR-views-3 D17): the
+/// function it stands in, the callee and its parameter, the binding a lambda
+/// changes (empty where it changes none), the parameters of code it runs, and
+/// the parameter of code of `caller` it names (empty where it names none).
+pub struct CheckCodeArg {
+    pub caller: String,
+    pub callee: String,
+    pub param: String,
+    pub node: i64,
+    pub lambda: bool,
+    pub changes: String,
+    pub runs: Vec[String],
+    pub handed: String,
+    pub span: Span,
+}
+
 /// Code stored in a function field, as a node of its own (ADR-230 D1).
 pub struct CheckStoredCode {
     pub resolved: collections::BTreeSet[String],
@@ -985,6 +1001,16 @@ pub struct CheckState {
     pub task_bindings: Vec[Vec[(String, Ty, i64)]],
     /// The names a body changed, in order.
     pub changed: Vec[String],
+    /// **The parameters of code a body ran, in order** (ADR-views-3 D17): a
+    /// lambda that runs one that changes what it captures changes it too.
+    pub run_calls: Vec[String],
+    /// **Each argument handed to a parameter of code of this file's own
+    /// function** (ADR-views-3 D17), read once the whole file is walked.
+    pub code_args: Vec[CheckCodeArg],
+    /// **The parameters of code a body runs from tasks that run at once**
+    /// (ADR-views-3 D17), `function::parameter`: a `par_iter()` lambda or an
+    /// `async` task names them.
+    pub code_at_once: collections::BTreeSet[String],
     /// The changes among them that are a `drain` taking the whole binding
     /// away, by their index in `changed` (#905): lowered to `into_iter()`,
     /// such a change asks no `mut` of the binding.

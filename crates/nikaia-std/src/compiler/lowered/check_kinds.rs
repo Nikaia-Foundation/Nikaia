@@ -223,10 +223,10 @@ impl CheckState {
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
         let buffer = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
         let count = unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
-        if kind_the_buffers_own_length(world, &count, &buffer) { return; }
-        let folded = self.constant_of(world, &count);
+        if kind_the_buffers_own_length(world, count, buffer) { return; }
+        let folded = self.constant_of(world, count);
         if kind_a_count_fits((folded).as_ref(), kind_array_room(found, at)) { return; }
-        self.a_length_that_may_not_fit(world, written, &buffer, span);
+        self.a_length_that_may_not_fit(world, written, buffer, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -357,6 +357,55 @@ impl CheckState {
             }
         }
         some_seen || none_seen
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_pattern_naming_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+        let nullable = matches!(on, Ty::Nullable(_));
+        let certain = nullable || match on {
+            Ty::Tuple(_) => true,
+            _ => self.kind_of_the_matched(on).is_some(),
+        };
+        if !certain { return false; }
+        for arm in arms.iter() {
+            let name = match self.kind_an_undeclared_call(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let written = written_expression(world.words, value);
+            let mut help: String = format!("Write the variant with its enum, `Type::{}(…)`, or a name alone to bind the value.", name);
+            if nullable { help = String::from("Over a `T?`, a name alone binds the `T`: write `x => …`, with `null => …` beside it."); }
+            self.findings.push(check_refusal("NK1117", span, format!("Nothing declares `{}`, so `{}(…)` is no pattern of `{}`.", name, name, written), vec![String::from("A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there.")], Some(help)));
+            return true;
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn kind_an_undeclared_call(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if path.len() == 1 {
+                    let name = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
+                    if !self.enums.contains_key(&name) && !self.structs.contains_key(&name) { return Some(name); }
+                }
+                for part in parts.iter() {
+                    let found = self.kind_an_undeclared_call(world, part);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            MatchPattern::Named { fields, .. } => {
+                for field in fields.iter() {
+                    let found = self.kind_an_undeclared_call(world, &field.pat);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives.iter() {
+                    let found = self.kind_an_undeclared_call(world, alternative);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            _ => { },
+        }
+        None
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

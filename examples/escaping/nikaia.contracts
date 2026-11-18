@@ -24,3 +24,6 @@ signature = "(rows: Vec[Row]) -> String"
 [type."Row"]
 pub = true
 fields = ["name: ref String", "note: ref String", "shade: ref String"]
+compares = true
+equates = true
+hashes = true

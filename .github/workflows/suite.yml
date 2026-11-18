@@ -289,6 +289,22 @@ jobs:
           key: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ hashFiles('crates/nikaia-std/**', '!crates/nikaia-std/src/compiler/**', 'crates/unsafe/**', 'Cargo.lock') }}
           restore-keys: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-
 
+      # **What `rustc` wrote for a crate is kept by the crate's emitted Rust**
+      # (#2005, ADR-021 D14): `$NIKAIA_CACHE_DIR/rustc/<key>`, the key the
+      # Rust, the arguments, the `--extern` files and `rustc -vV`. A push that
+      # changes the compiler but not the Rust of a test program reuses its
+      # rlib and binary instead of running `rustc` again. Kept per shard (each
+      # builds its own programs), the newest store of an earlier run restored;
+      # the builds prune it with the rest of the cache, used longest ago
+      # first (D12.5), and "Keep only the std" touches only `rlib`.
+      - name: Restore the rustc store
+        if: startsWith(matrix.shard, 'compiler-')
+        uses: actions/cache/restore@v4
+        with:
+          path: target/nikaia-project-tests/rustc
+          key: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ matrix.shard }}-
+
       # Cargo judges a path crate by mtimes, and the checkout made every
       # source newer than the restored tree. On an exact hit the sources are
       # the bytes the tree was built from (the key), so they are dated back
@@ -369,6 +385,13 @@ jobs:
         with:
           path: target/nikaia-project-tests/test-times
           key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save the rustc store
+        if: ${{ !cancelled() && startsWith(matrix.shard, 'compiler-') }}
+        uses: actions/cache/save@v4
+        with:
+          path: target/nikaia-project-tests/rustc
+          key: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # **Saved once per key, by one shard**: compiler-0 builds the same std
       # as the others, and a key is written once (an exact hit saves

@@ -458,6 +458,13 @@ pub struct CheckFlow {
     /// recorded when it did: a change of a place clone's root between the
     /// `let` and its last read keeps the clone needed.
     pub changes_seen: Vec[(String, i64)],
+    /// **Each change with the binding it reached** (`-1` for none), in
+    /// order: a kept lambda that changes a binding older than itself changes
+    /// only its own copy (`NK2101`, Part I 5.4 C, #2047).
+    pub changes_bound: Vec[(String, i64)],
+    /// **The first binding from outside a lambda that its body changed**,
+    /// by the lambda's node, until a use keeps the lambda (#2047).
+    pub lambda_outer_changes: collections::BTreeMap[i64, String],
 }
 
 /// **A `let` bound to a clone of a field or an element** (`NK1350`, #1988):
@@ -622,6 +629,8 @@ impl CheckFlow {
             clone_owners: collections::BTreeSet(),
             place_clones: [],
             changes_seen: [],
+            changes_bound: [],
+            lambda_outer_changes: collections::BTreeMap(),
         }
     }
 }

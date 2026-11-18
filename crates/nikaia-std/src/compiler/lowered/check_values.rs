@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_package_copy(world, ty) }
+    pub(crate) fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_dependency_copy(world, ty) && !self.a_package_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
@@ -23,7 +23,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) }
+    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) || self.a_dependency_copy(world, ty) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_dependency_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+        match ty {
+            Ty::Named { name, .. } => !self.structs.contains_key(name) && !self.enums.contains_key(name) && !world.parts_beside.contains_key(name) && a_ledger_copies(ty, &vec![world.own]),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_dependency_copy(world, inner) },
+            _ => false,
+        }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
@@ -100,7 +109,7 @@ impl CheckState {
             Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw: true }.shown() },
+            }), is_sync, can_throw: true, spelled: CodeNames::none() }.shown() },
             _ => format!("{} throws", shown),
         };
         self.findings.push(check_refusal("NK1102", span, format!("This lambda can fail, but `{}` says the code it names never fails.", shown), vec![String::from("A function type without `throws` cannot fail, so a lambda that can is not of that type.")], Some(format!("Write `{}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`.", wanted))));

@@ -1,0 +1,13 @@
+[1]: a number
+[-1.5]: a number
+[+2e10]: a number
+[1E-3]: a number
+[NaN]: a number
+[-Inf]: a number
+[.5]: none
+[1.]: none
+[1e]: none
+[ 1]: none
+[1_0]: none
+[infinity]: none
+[]: none

@@ -1,15 +1,79 @@
+$ solver.nika fuzz --self-test
+fuzz: 8 queries, seed 7, size 1 to 8, z3 rlimit 50000000
 fuzz-7-0.smt2: engine refuted, z3 unsat
+-- fuzz-7-0.smt2
 (set-logic QF_LIA)
 (declare-const x0 Int)
-(declare-const x1 Int)
-(declare-const x2 Int)
-(declare-const x3 Int)
-(declare-const x4 Int)
-(assert (= (+ (* (- 2) x0) (* 2 x3) (* 3 x4)) 10))
-(assert (< (+ (* (- 3) x0) (* (- 2) x3) (* 3 x4)) (- 2)))
-(assert (or (> (+ x0 (* 3 x3)) (- 3)) (< (+ (* (- 1) x1) x4) 0)))
+(assert (<= (* (- 1) x0) (- 4)))
 (check-sat)
 (exit)
+fuzz-7-0-shuffle.smt2: engine refuted, the original's status unsat
+-- fuzz-7-0-shuffle.smt2
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(assert (<= (* (- 1) x0) (- 4)))
+(check-sat)
+(exit)
+fuzz-7-0-rename.smt2: engine refuted, the original's status unsat
+-- fuzz-7-0-rename.smt2
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(assert (<= (* (- 1) x0) (- 4)))
+(check-sat)
+(exit)
+fuzz-7-0-scale.smt2: engine refuted, the original's status unsat
+-- fuzz-7-0-scale.smt2
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(assert (<= (* (- 3) x0) (- 12)))
+(check-sat)
+(exit)
+fuzz-7-0-redundant.smt2: engine refuted, the original's status unsat
+-- fuzz-7-0-redundant.smt2
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(assert (<= (* (- 1) x0) (- 4)))
+(assert (or (<= (* (- 1) x0) (- 4)) (distinct x0 11)))
+(check-sat)
+(exit)
+-- fuzz-7-0-negate.smt2
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(assert (> (* (- 1) x0) (- 4)))
+(check-sat)
+(exit)
+fuzz-7-1-negate.smt2: engine refuted, z3 unsat
 fuzz-7-3.smt2: engine refuted, z3 unsat
+fuzz-7-3-shuffle.smt2: engine refuted, the original's status unsat
+fuzz-7-3-rename.smt2: engine refuted, the original's status unsat
+fuzz-7-3-scale.smt2: engine refuted, the original's status unsat
+fuzz-7-3-redundant.smt2: engine refuted, the original's status unsat
+fuzz-7-3-negate.smt2: engine proved, z3 sat
+fuzz-7-4-negate.smt2: engine refuted, z3 unsat
 fuzz-7-6.smt2: engine refuted, z3 unsat
-8 queries (seed 7): proved 0, refuted 8, unknown 0, disagreements 3
+fuzz-7-6-shuffle.smt2: engine refuted, the original's status unsat
+fuzz-7-6-rename.smt2: engine refuted, the original's status unsat
+fuzz-7-6-scale.smt2: engine refuted, the original's status unsat
+fuzz-7-6-redundant.smt2: engine refuted, the original's status unsat
+fuzz-7-7-negate.smt2: engine refuted, z3 unsat
+8 queries and 40 mutants (seed 7): proved 1, refuted 47, unknown 0, disagreements 19
+size 1: z3 decided 2, undecided 0
+size 2: z3 decided 2, undecided 0
+size 3: z3 decided 2, undecided 0
+size 4: z3 decided 2, undecided 0
+size 5: z3 decided 2, undecided 0
+size 6: z3 decided 2, undecided 0
+size 7: z3 decided 2, undecided 0
+size 8: z3 decided 2, undecided 0
+reproduce: nikaia run scripts/solver.nika -- fuzz 8 7 --size 8 --rlimit 50000000
+exit 1
+$ solver.nika oracle --rlimit 123 tests/solver/smoke tests/solver/pre
+tests/solver/smoke/unsat-bounds.smt2 status unsat, z3 sat
+tests/solver/pre/unsat-fixed.smt2 z3 error
+tests/solver/pre/unsat-repeated-unit.smt2 status unsat, z3 sat
+tests/solver/pre/unsat-tighten.smt2 status unsat, z3 sat
+9 files with a status, 3 disagree with z3, 1 unknown to z3 (rlimit 123), 1 z3 errors
+exit 1
+$ solver.nika oracle --rlimit 123 tests/solver/smoke/sat-interval.smt2
+1 files with a status, 0 disagree with z3, 0 unknown to z3 (rlimit 123), 0 z3 errors
+exit 0

@@ -137,6 +137,7 @@ pub trait SvTh {
     fn model(&self) -> collections::BTreeMap<String, i64>;
     fn real_values(&self) -> collections::BTreeMap<String, SvRat>;
     fn shared(&self) -> Vec<u32>;
+    fn pivots(&self) -> i64;
 }
 
 impl SvTh for SvTheory {
@@ -249,6 +250,7 @@ impl SvTh for SvTheory {
     fn model(&self) -> collections::BTreeMap<String, i64> { self.values.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { sv_rat_values(&self.values) }
     fn shared(&self) -> Vec<u32> { vec![] }
+    fn pivots(&self) -> i64 { 0 }
 }
 
 pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, solved: &[SvSolved], names: &[String]) -> Option<collections::BTreeMap<String, i64>> {

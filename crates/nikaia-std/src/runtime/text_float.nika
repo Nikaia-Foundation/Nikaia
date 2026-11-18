@@ -1,0 +1,69 @@
+// crates/nikaia-std/src/runtime/text_float.nika
+//
+// **Whether a text writes a float** (ADR-285 D35), written in Nikaia: the
+// shape check of `text::parse_f64`. `src/text_float.rs` asks it and keeps
+// only what Nikaia has no word for: the conversion that rounds correctly
+// (Rust's `str::parse`, the nearest `f64`, ties to even), a library of its
+// own and already in every program's core.
+
+/// Where the decimal digits from `at` on stop: `at` itself where none is.
+fn float_digits_stop(b: Bytes, at: i64) -> i64 sync {
+    let mut stop = at
+    while stop < b.len() && b[stop] >= '0' && b[stop] <= '9' {
+        stop += 1
+    }
+    return stop
+}
+
+/// Whether the bytes from `at` on are `word`, a word of lower-case ASCII
+/// letters, in any case.
+fn is_float_word(b: Bytes, at: i64, word: String) -> bool sync {
+    let w = word.bytes
+    if b.len() - at != w.len() {
+        return false
+    }
+    for i in 0..<w.len() {
+        if (b[at + i] | 32) != w[i] {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether `text` writes a number `text::parse_f64` reads: an optional `-` or
+/// `+`, decimal digits, an optional `.` followed by digits, and an optional
+/// exponent (`e` or `E`, an optional sign, digits); or one of `inf` and `nan`
+/// after the optional sign, in any case. Nothing else: no space, no `_`, no
+/// `.5`, no `1.`, no `infinity`.
+pub fn writes_float(text: String) -> bool sync {
+    let b = text.bytes
+    let mut at = 0
+    if b.len() > 0 && (b[0] == '-' || b[0] == '+') {
+        at = 1
+    }
+    if is_float_word(b, at, "inf") || is_float_word(b, at, "nan") {
+        return true
+    }
+    let mut stop = float_digits_stop(b, at)
+    if stop == at {
+        return false
+    }
+    if stop < b.len() && b[stop] == '.' {
+        let after = float_digits_stop(b, stop + 1)
+        if after == stop + 1 {
+            return false
+        }
+        stop = after
+    }
+    if stop < b.len() && (b[stop] == 'e' || b[stop] == 'E') {
+        let mut from = stop + 1
+        if from < b.len() && (b[from] == '-' || b[from] == '+') {
+            from += 1
+        }
+        stop = float_digits_stop(b, from)
+        if stop == from {
+            return false
+        }
+    }
+    return stop == b.len()
+}

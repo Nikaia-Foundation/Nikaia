@@ -726,12 +726,14 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     }
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
     let mut moved_out = false;
+    let mut handing_refused = false;
     if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && state.a_lent_text_place(world, value, &found)) {
         let to = format!("bound to `{}` by a `let`", nikaia_std::block::Text::from(bound_names.join("`, `")));
         let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);
         let owned_root = check_core_stmt_a_part_of_an_owned_parameter(&state, world, value) || mutable && check_core_stmt_a_part_of_an_unchanged_let(&state, world, value);
         moved_out = a_name_or_a_field(value) && owned_root && (state.findings.len() as i64) == before;
+        handing_refused = (state.findings.len() as i64) > before;
         check_core_places_give_handle(state, world, value, &found, span);
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((nikaia_std::block::Text::from(n.to_string()), span.start as i64)); } }
@@ -784,7 +786,15 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             let none_lent = lent.is_none();
             bound = nikaia_std::index::or(lent, || found.clone().into());
             if none_lent && !mutable && !moved_out && names.len() == 1 && shape.is_empty() && check_core_stmt_a_place(&state, value) && state.facts.lent_lets.contains(&(span.start as i64)) { bound = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }; }
-        } else { bound = found.clone(); }
+        } else {
+            bound = found.clone();
+            if !mutable && !moved_out && !handing_refused && names.len() == 1 && shape.is_empty() && check_core_stmt_a_place(&state, value) && state.facts.lent_lets.contains(&(span.start as i64)) && state.takes_away(world, &found) {
+                match found {
+                    Ty::Named { name: ref n, args: ref a, view: v } => { if !v { bound = Ty::Named { name: nikaia_std::block::Text::from(n.to_string()), args: a.copy_owned(), view: true }; } },
+                    _ => { },
+                }
+            }
+        }
         if state.flow.view_reads.contains(&(id_of(value) as i64)) { let viewed = state.facts.copied_reads.insert(id_of(value) as i64); }
     }
     if element_view == 0 && !seen_through && !bytes_view && check_core_stmt_owns_whole(&bound) { state.narrowed_reads_given_back(value); }
@@ -918,6 +928,8 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             Expr::Closure { .. } => { state.facts.let_lambdas.insert(id, value.clone()); },
             _ => { },
         }
+        let changed: Option<String> = state.flow.lambda_outer_changes.remove(&(id_of(value) as i64));
+        if changed.is_some() { state.a_kept_lambda_changes_a_capture(nikaia_std::index::or(changed.as_deref(), || ""), &check_span_at(world, value, span)); }
     }
     if bytes_view {
         state.text_bytes_lets.insert(id);

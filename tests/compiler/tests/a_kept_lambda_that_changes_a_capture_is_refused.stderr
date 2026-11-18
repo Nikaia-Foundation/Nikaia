@@ -1,0 +1,9 @@
+error[NK2101]: This lambda is kept for later, so it takes its own copy of `total`; a change it makes never reaches `total` here.
+   --> tests/a_kept_lambda_that_changes_a_capture_is_refused.nika:13:20
+    |
+ 13 |     let h = H { f: fn(v) { total = total + v } }
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17).
+    = help: Hand the value back instead: take `total` as a parameter and return what it becomes (`fn(v, total) { total + v }`), or keep `total` in a `Shared` value both sides reach.
+1 value a task took with it

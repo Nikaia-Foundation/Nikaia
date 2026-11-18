@@ -153,6 +153,33 @@ fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld,
     }
 }
 
+/// **What a run lambda changes that it captures** (ADR-views-3 D17): the
+/// first binding bound outside it that its body changed, and the parameters
+/// of code it ran, which may change what they capture in turn.
+fn check_core_args_what_a_lambda_changes(mut state: CheckState, id: i64, changed_from: i64, runs_from: i64) sync {
+    let mut at = changed_from
+    while at < state.changed.len() {
+        let name = state.changed[at].clone()
+        if state.binding(name) != null {
+            state.facts.changing_lambdas.insert(id, name)
+            break
+        }
+        at += 1
+    }
+    let mut ran: Vec[String] = []
+    at = runs_from
+    while at < state.run_calls.len() {
+        let name = state.run_calls[at].clone()
+        if !ran.contains(name) {
+            ran.push(name)
+        }
+        at += 1
+    }
+    if !ran.is_empty() {
+        state.facts.lambda_runs.insert(id, ran)
+    }
+}
+
 fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, keeps: bool, span: ref Span) -> Ty sync {
     let id = id_of(arg) as i64
     // **Optional code keeps the lambda** (#1117): the option holds it, as a
@@ -166,7 +193,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
             match code {
-                Ty::Fn { params: given, result, is_sync, can_throw } => {
+                Ty::Fn { params: given, result, is_sync, can_throw, .. } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
                     // `fn(T)` hands back nothing, in `std`'s signatures as in
@@ -192,7 +219,20 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                         state.a_kept_lambda_takes_these(world, arg, pauses, who, span)
                     }
                     state.a_lambdas_text_is_its_own(world, code, arg)
+                    let changed_from = state.changed.len()
+                    let runs_from = state.run_calls.len()
+                    let bound_from = state.flow.changes_bound.len()
+                    let floor = state.next_binding
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
+                    if runs {
+                        check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from)
+                    } else {
+                        // **A kept lambda changes only its own copy** (#2047).
+                        let outer: String? = state.an_outer_binding_changed(bound_from, floor)
+                        if outer != null {
+                            state.a_kept_lambda_changes_a_capture(outer ?? "", check_span_at(world, arg, span))
+                        }
+                    }
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)
                     }
@@ -234,7 +274,12 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     } else if !written.is_unknown() {
                         out = written
                     }
-                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails }
+                    // **A lambda's own names, for messages** (#2007).
+                    let mut spelled = CodeNames::none()
+                    for p in params {
+                        spelled.params.push(world.words.resolve(p).clone())
+                    }
+                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails, spelled: spelled }
                 }
                 else => {}
             }
@@ -445,19 +490,87 @@ fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: ref Ch
 /// **Arguments of a call of code**, a function value or a field that holds
 /// one (#1120): a function handed to it is kept, as the code's own type
 /// keeps its function parameters (`fn(fn() -> R) -> R` takes a
-/// `Kept<dyn Fn() -> R>`), never a closure lent for the call.
-fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], span: ref Span) -> Vec[Ty] sync {
+/// `Kept<dyn Fn() -> R>`), never a closure lent for the call. Each argument
+/// is of its parameter's type, as a named function's is (Part I 5.4 C,
+/// #1996).
+fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], name: ref String, span: ref Span) -> Vec[Ty] sync {
     let mut out: Vec[Ty] = []
     let mut at = 0
     for arg in args {
         if check_core_args_is_lambda(arg, expected, at) {
             out.push(check_core_args_lambda(state, world, host, arg, expected[at], false, null, at, true, span))
         } else {
-            out.push(check_core_args_other(state, world, host, arg, expected, false, null, at, true, span))
+            let found = check_core_args_other(state, world, host, arg, expected, false, null, at, true, span)
+            if at < expected.len() {
+                check_core_argument_to_code_fits(state, world, host, arg, found, expected[at], name, at + 1, span)
+            }
+            out.push(found)
         }
         at += 1
     }
     return out
+}
+
+/// **An argument of code is of the parameter's type** (Part I 5.4 C, #1996):
+/// a function type's parameters are typed as a signature's, so what does not
+/// fit is `NK1102`, as at a named call, and a plain value where the type asks
+/// for its `T?` is wrapped (Part I 2.3). Whether it is lent or kept is
+/// `check_core_call_lent`'s; a function handed to code is the lambda walk's.
+fn check_core_argument_to_code_fits[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, given_type: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
+    state.constant_fits(world, arg, want, span)
+    if want.is_unknown() || state.an_open_number_where_none_fits(world, given_type, want, arg, span, "argument", fn(found_text, want_text) { f"`{name}` expects argument {nth} to be `{want_text}`, but you're passing `{found_text}`." }) {
+        return
+    }
+    // **An integer literal handed where no integer goes** (#471, #703) is
+    // the `i64` it would be, and the mismatch says so.
+    let mut found = given_type.clone()
+    if found.is_unknown() && an_integer_literal(arg) && state.no_integer_is(world, want) {
+        found = Ty::Named { name: "i64", args: [], view: false }
+    }
+    // **A plain value where the type asks for its `T?` is wrapped**, a number
+    // nothing typed as well (Part I 2.3, 2.4).
+    if check_arguments_nullable(want) && !check_arguments_nullable(found) && !ends_in_null(arg) {
+        let how = check_widened_slot(state, world, host, found, want, arg, span)
+        if how != null {
+            let wrap = how ?? return
+            state.facts.nullable_args.insert(id_of(arg) as i64, wrap)
+            return
+        }
+    }
+    if found.is_unknown() || found.fits(want) || unviewed_type(found).fits(unviewed_type(want)) {
+        return
+    }
+    let both_code = match found {
+        Ty::Fn { .. } => match want {
+            Ty::Fn { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
+    if both_code {
+        return
+    }
+    let how = check_widened_slot(state, world, host, found, want, arg, span)
+    if how != null {
+        let wrap = how ?? return
+        state.facts.nullable_args.insert(id_of(arg) as i64, wrap)
+        return
+    }
+    if state.fits_through_deref(world, found, want) {
+        return
+    }
+    let mut handed = found.clone()
+    if is_a_view_of_a_string(handed) {
+        handed = Ty::Named { name: "str", args: [], view: true }
+    }
+    // Text a function type lends is written `String` (ADR-282 D2), and so
+    // is it shown.
+    let mut wanted = want.clone()
+    let plain = unviewed_type(want)
+    if want.is_a_view() && plain == string_ty() {
+        wanted = plain
+    }
+    state.findings.push(check_refusal("NK1102", check_span_at(world, arg, span), spoken_in(f"`{name}` expects argument {nth} to be `{wanted.text()}`, but you're passing `{handed.text()}`.", wanted, handed), [f"Its type takes a `{wanted.shown()}` there: a function type's parameters are typed as a signature's (Part I 5.4)."], shown_in(way_out_of_a_mismatch(handed, wanted), wanted, handed)))
 }
 
 /// **Arguments walked in order, each binding what the next ones are handed**
@@ -998,13 +1111,13 @@ fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses:
 fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], outer_inside: bool, span: ref Span) -> Ty? sync {
     let code: Ty = state.a_field_that_is_code(world, on, method) ?? return null
     match code {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
             // **What it takes as a view or `mut` is lent to it** (ADR-views-3
             // D2, D14), as through a function value called by name: an owned
             // `String` field handed to `fn(String)` went below by value.
-            let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+            let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), world.words.resolve(method), span)
             check_core_call_lent(state, world, args, params, found, world.words.resolve(method), span)
             state.kept_arguments_are_its_own(world, args, params)
             // **A call through a function field reaches what was stored

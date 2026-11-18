@@ -1,0 +1,32 @@
+== pushed in round one
+MERGE SHA round 1
+pushed SHA
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+origin has the merge
+== rejected twice, pushed in round three
+MERGE SHA round 1
+MERGE SHA round 2
+MERGE SHA round 3
+pushed SHA
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+origin has the merge
+== rejected in every round
+MERGE SHA round 1
+MERGE SHA round 2
+MERGE SHA round 3
+SUITE OURS green, push rejected after 3 merge rounds: the next suite pushes
+none
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+origin has not the merge
+== short checks red
+MERGE SHA round 1
+SUITE OURS green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge
+echo the short checks failed; false
+the short checks failed
+none
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+origin has not the merge

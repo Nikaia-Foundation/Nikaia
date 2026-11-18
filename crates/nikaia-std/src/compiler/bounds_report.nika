@@ -48,6 +48,12 @@ struct BoundsReportSite {
 	proved: bool,
 	/// Why it was not, where it was not.
 	blocked: String?,
+	/// Where it stands: an operation's own span, else its statement's.
+	span: Span,
+	/// What it is not proved to keep (`in bounds`), for `NK1313`.
+	keeps: String,
+	/// The guard that proves it where the value arrives, for `NK1313`'s help.
+	guard: String,
 }
 
 struct BoundsReportWalk {
@@ -58,6 +64,8 @@ struct BoundsReportWalk {
 	/// (`derived_gates`, #1863): `""` where its callers bound it (ADR-391
 	/// D1).
 	gate: String,
+	/// The statement walked, where a site has no span of its own.
+	at: Span,
 }
 
 /// The gate `gates` names for the function `name`; a function it does not
@@ -84,7 +92,75 @@ pub fn bounds_report_checked(
 	overflow: OverflowChecks,
 	holes_of: fn(ref Expr) -> Vec[Expr] sync,
 ) -> String {
-	let mut walk = BoundsReportWalk { seen: collections::BTreeSet(), sites: [], gate: bounds_report_no_function() }
+	let sites = bounds_report_sites(program, words, source, facts, holes_of)
+	let indexes = sites.iter().filter(fn(s) { s.index }).count()
+	let operations = sites.len() - indexes
+	let proved_indexes = sites.iter().filter(fn(s) { s.index && s.proved }).count()
+	let proved_operations = sites.iter().filter(fn(s) { !s.index && s.proved }).count()
+	let mut out = f"bounds in {path}: {indexes} indexes, {proved_indexes} proved; {operations} operations, {proved_operations} proved - written without their check: indexes {bounds.name()}, operations {overflow.name()}\n"
+	let widest = sites.iter().map(fn(s) { s.text.len() }).max() ?? 0
+	let width = widest.min(40)
+	for site in sites {
+		let how = match site.proved {
+			true => "proved",
+			false => match site.blocked {
+				null => "checked",
+				why => f"checked: {why}",
+			},
+		}
+		let line = site.line.to_string()
+		out.push_str(f"  {bounds_report_spaces(line, 4)}{line}  {site.text}{bounds_report_spaces(site.text, width)}  {how}\n")
+	}
+	// **Each index data from outside reaches** (ADR-396 D5): its source,
+	// and whether it is proved, with the guard that proves it, refused
+	// (`NK1302`), or checked because the build lets it through.
+	for row in bounds_report_outside(facts, source) {
+		out.push_str(f"  outside  {row}\n")
+	}
+	// **What callers proved** (ADR-391 D4): each derived precondition, with
+	// the lines of the calls that prove it.
+	for row in bounds_report_derived(facts.derived, source) {
+		out.push_str(f"  derived  {row}\n")
+	}
+	return out
+}
+
+/// **`unproved-checks = "error"`: each check the walk does not prove is
+/// refused** ([ADR-306](../../docs/specification/adr/adr-306.md) D29,
+/// `NK1313`): the sites `--bounds` reports as checked, each with the walk's
+/// reason as a note and the guard where the value arrives as the help.
+pub fn bounds_report_unproved(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	source: String,
+	facts: ref BoundsReportFacts,
+	holes_of: fn(ref Expr) -> Vec[Expr] sync,
+) -> Vec[CheckFinding] {
+	let mut refused: Vec[CheckFinding] = []
+	for site in bounds_report_sites(program, words, source, facts, holes_of) {
+		if site.proved {
+			continue
+		}
+		let mut notes: Vec[String] = []
+		match site.blocked {
+			null => {},
+			why => notes.push(f"The walk does not prove it: {why}."),
+		}
+		notes.push("`unproved-checks = \"error\"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason.")
+		refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: site.span.start, end: site.span.end }, code: "NK1313", message: f"`{site.text}` is not proved {site.keeps}, and this package refuses a check the compiler does not prove.", notes: notes, help: site.guard.clone(), labels: [], edit: null })
+	}
+	return refused
+}
+
+/// Every site of the file in source order, proved or not, with why not.
+fn bounds_report_sites(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	source: ref String,
+	facts: ref BoundsReportFacts,
+	holes_of: fn(ref Expr) -> Vec[Expr] sync,
+) -> Vec[BoundsReportSite] {
+	let mut walk = BoundsReportWalk { seen: collections::BTreeSet(), sites: [], gate: bounds_report_no_function(), at: Span { start: 0, end: 0 } }
 	let none: Vec[FnArg] = []
 	for item in program.items {
 		match item.node {
@@ -165,36 +241,7 @@ pub fn bounds_report_checked(
 		}
 	}
 	walk.sites.sort_by_key(fn(s) { s.line })
-	let indexes = walk.sites.iter().filter(fn(s) { s.index }).count()
-	let operations = walk.sites.len() - indexes
-	let proved_indexes = walk.sites.iter().filter(fn(s) { s.index && s.proved }).count()
-	let proved_operations = walk.sites.iter().filter(fn(s) { !s.index && s.proved }).count()
-	let mut out = f"bounds in {path}: {indexes} indexes, {proved_indexes} proved; {operations} operations, {proved_operations} proved - written without their check: indexes {bounds.name()}, operations {overflow.name()}\n"
-	let widest = walk.sites.iter().map(fn(s) { s.text.len() }).max() ?? 0
-	let width = widest.min(40)
-	for site in walk.sites {
-		let how = match site.proved {
-			true => "proved",
-			false => match site.blocked {
-				null => "checked",
-				why => f"checked: {why}",
-			},
-		}
-		let line = site.line.to_string()
-		out.push_str(f"  {bounds_report_spaces(line, 4)}{line}  {site.text}{bounds_report_spaces(site.text, width)}  {how}\n")
-	}
-	// **Each index data from outside reaches** (ADR-396 D5): its source,
-	// and whether it is proved, with the guard that proves it, refused
-	// (`NK1302`), or checked because the build lets it through.
-	for row in bounds_report_outside(facts, source) {
-		out.push_str(f"  outside  {row}\n")
-	}
-	// **What callers proved** (ADR-391 D4): each derived precondition, with
-	// the lines of the calls that prove it.
-	for row in bounds_report_derived(facts.derived, source) {
-		out.push_str(f"  derived  {row}\n")
-	}
-	return out
+	return walk.sites
 }
 
 /// **Each index and operation data from outside reaches, as `--bounds`
@@ -428,6 +475,7 @@ fn bounds_report_stmt(
 ) {
 	let at = span.start as i64
 	let line = bounds_report_line(source, at)
+	walk.at = Span { start: span.start, end: span.end }
 	// **A compound assignment is its operation** (ADR-306 D5a): keyed by the
 	// statement's first byte, where no operator of an expression stands.
 	match stmt {
@@ -454,6 +502,9 @@ fn bounds_report_stmt(
 					index: false,
 					proved: proved,
 					blocked: blocked,
+					span: Span { start: span.start, end: span.end },
+					keeps: bounds_report_keeps(which),
+					guard: bounds_report_operation_guard(which, words, target, value),
 				})
 			}
 		},
@@ -539,6 +590,9 @@ fn bounds_report_site(
 					index: true,
 					proved: proved,
 					blocked: blocked,
+					span: Span { start: walk.at.start, end: walk.at.end },
+					keeps: "in bounds",
+					guard: bounds_report_index_guard(words, base, index),
 				})
 			}
 		},
@@ -559,6 +613,9 @@ fn bounds_report_site(
 					index: true,
 					proved: proved,
 					blocked: blocked,
+					span: Span { start: walk.at.start, end: walk.at.end },
+					keeps: "in bounds",
+					guard: bounds_report_index_guard(words, receiver, given[0]),
 				})
 			}
 		},
@@ -576,12 +633,15 @@ fn bounds_report_site(
 					index: false,
 					proved: proved,
 					blocked: blocked,
+					span: Span { start: span.start, end: span.end },
+					keeps: bounds_report_keeps(op),
+					guard: bounds_report_operation_guard(op, words, lhs, rhs),
 				})
 			}
 		},
 		// **A negation** (ADR-314 D5): it leaves its type only from the type's
 		// least value.
-		Expr::Unary { op, .. } => {
+		Expr::Unary { op, expr: operand, .. } => {
 			let key = node_key(expr)
 			if op == UnaryOp::Neg && facts.negations.contains_key(key) {
 				let proved = facts.proven_negations.contains(key)
@@ -589,15 +649,69 @@ fn bounds_report_site(
 				if !proved {
 					blocked = "no fact keeps it above its type's least value"
 				}
+				let negated = written_expression(words, operand)
 				walk.sites.push(BoundsReportSite {
 					line: line,
 					text: written_expression(words, expr),
 					index: false,
 					proved: proved,
 					blocked: blocked,
+					span: Span { start: walk.at.start, end: walk.at.end },
+					keeps: "above its type's least value",
+					guard: f"Keep `{negated}` above its type's least value where it arrives, with a guard the program handles (`return if {negated} < -LIMIT`, or a `throw` there). After that line, the negation is proved.",
 				})
 			}
 		},
 		else => {},
 	}
+}
+
+/// What an operation is not proved to keep, for `NK1313`.
+fn bounds_report_keeps(op: BinaryOp) -> String {
+	return match op {
+		BinaryOp::Div => "to divide by a value other than zero",
+		BinaryOp::Rem => "to divide by a value other than zero",
+		else => "inside its type",
+	}
+}
+
+/// **The guard that proves an index** where the value arrives (ADR-306
+/// D29): `return if i < 0 || i >= xs.len()`, a cut's bounds likewise.
+fn bounds_report_index_guard(words: ref winnow_grammar::InternerContext, base: ref Expr, index: ref Expr) -> String {
+	let list = written_expression(words, base)
+	let guard = match index {
+		Expr::Range { start, end, inclusive, .. } => {
+			let from = written_expression(words, start)
+			let to = written_expression(words, end)
+			let past = if inclusive { ">=" } else { ">" }
+			f"return if {from} < 0 || {from} > {to} || {to} {past} {list}.len()"
+		},
+		else => {
+			let at = written_expression(words, index)
+			f"return if {at} < 0 || {at} >= {list}.len()"
+		},
+	}
+	return f"Check it where the value arrives, with a guard the program handles: `{guard}`, or a `throw` there. After that line, the read is proved and costs nothing."
+}
+
+/// **The guard that proves an operation** where its operands arrive
+/// (ADR-306 D29): a divisor that is not zero, or the operands bounded.
+fn bounds_report_operation_guard(op: BinaryOp, words: ref winnow_grammar::InternerContext, lhs: ref Expr, rhs: ref Expr) -> String {
+	let left = written_expression(words, lhs)
+	let right = written_expression(words, rhs)
+	return match op {
+		BinaryOp::Div => f"Check the divisor where it arrives, with a guard the program handles: `return if {right} == 0`, or a `throw` there. After that line, the division is proved.",
+		BinaryOp::Rem => f"Check the divisor where it arrives, with a guard the program handles: `return if {right} == 0`, or a `throw` there. After that line, the division is proved.",
+		else => {
+			let named = [left.clone(), right.clone()].iter().filter(fn(t) { !bounds_report_number(t) }).map(fn(t) { t.clone() }).collect()
+			let first = named.first()?.clone() ?? left
+			let others = if named.len() > 1 { f", and the same for `{named[1]}`" } else { "" }
+			f"Bound the operands where they arrive, with a guard the program handles: `return if {first} > LIMIT || {first} < -LIMIT`{others}, or a `throw` there. After that, the operation is proved."
+		},
+	}
+}
+
+/// Whether a written operand is a number, which needs no guard.
+fn bounds_report_number(written: ref String) -> bool {
+	return written.bytes.len() > 0 && written.bytes[0] >= 48 && written.bytes[0] <= 57
 }

@@ -179,6 +179,10 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
             return self.all_of(&parts, &how, seen);
         }
         if nobody_knows(name, self.own, self.library) { return true; }
+        if *how == CompareStrength::Hashes {
+            if self.implements("Hash", name) { return true; }
+            if self.implements("Eq", name) { return false; }
+        } else if *how == CompareStrength::Orders { if self.implements("Ord", name) { return true; } } else if self.implements("Eq", name) { return true; }
         for ledger in [self.own, self.library] {
             let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let claimed = match how {

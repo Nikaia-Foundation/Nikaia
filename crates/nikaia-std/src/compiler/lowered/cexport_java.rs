@@ -563,7 +563,7 @@ impl CxJava {
         for plain in ctx.plains.iter() { out.push_str(&format!("    /** `{}`, numbered as the header numbers it. */\n    public enum {} {{\n        {}\n    }}\n\n", plain.name, plain.name, nikaia_std::block::Text::from(plain.variants.join(", ")))); }
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
-            out.push_str(&self.record(&record, ctx));
+            out.push_str(&self.record(record, ctx));
         }
         let mut at: i64 = 0;
         while ((at) as usize) < ctx.handles.len() {

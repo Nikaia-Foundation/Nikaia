@@ -77,6 +77,9 @@ pub enum Ty {
         /// `throws`, which is a word this language reserves and so cannot name
         /// a field. `ast::Code` spells it the same way.
         can_throw: bool,
+        /// The parameter names of the declaration it was taken from, for
+        /// messages only (#2007); no part of the type.
+        spelled: CodeNames,
     },
     /// `T?`, Part I 2.3's nullable type. A wrapper rather than a flag, because
     /// every reader of a type already recurses.
@@ -95,6 +98,37 @@ pub enum Ty {
         parallel: bool,
         shape: Shape,
     },
+}
+
+/// **The names a function type's parameters were declared with** (#2007,
+/// decision 2 on #1528, point 3): `fn(s: String) -> String from s`, from a
+/// written function type with names, a named function or a lambda. Two
+/// function types that differ only in them are the same type (ADR-views-3
+/// D14), so they compare equal and hash to nothing; [`Ty::text`], which keys
+/// tables, does not write them, and a ledger does not keep them.
+pub struct CodeNames {
+    /// One per parameter, in order; empty where no names are known.
+    pub params: Vec[String],
+    /// The parameters the result's views point into, as `from a | b` names
+    /// them; empty where the declaration does not say.
+    pub from: Vec[String],
+}
+
+impl CodeNames {
+    /// No names known: a message says a view result in words.
+    pub fn none() -> CodeNames {
+        return CodeNames { params: [], from: [] }
+    }
+}
+
+impl Eq for CodeNames {
+    fn eq(ref self, _other: ref Self) -> bool sync {
+        return true
+    }
+}
+
+impl Hash for CodeNames {
+    fn hash(ref self, mut _into: Hasher) sync {}
 }
 
 /// **What a sequence is as a whole**
@@ -184,7 +218,7 @@ pub fn text(ty: ref Ty) -> String {
         Ty::Count(n) => f"{n}",
         Ty::Pointed { item, slice, mutable } => pointed(item, slice, mutable),
         Ty::Tuple(parts) => f"({listed(parts)})",
-        Ty::Fn { params, result, is_sync, can_throw } => code(params, result, is_sync, can_throw),
+        Ty::Fn { params, result, is_sync, can_throw, .. } => code(params, result, is_sync, can_throw),
         Ty::Var { name, view } => if view { f"ref ${name}" } else { f"${name}" },
         // `T?` and never `Option[T]`: the program cannot write the second.
         Ty::Nullable(inner) => f"{text(inner)}?",
@@ -341,7 +375,7 @@ pub fn ty_shown(ty: ref Ty) -> String {
         Ty::Named { name, args, .. } => shown_named(name, args),
         Ty::Tuple(parts) => f"({shown_listed(parts)})",
         Ty::Nullable(inner) => f"{ty_shown(inner)}?",
-        Ty::Fn { params, result, is_sync, can_throw } => shown_code(params, result, is_sync, can_throw),
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => shown_code(params, result, is_sync, can_throw, spelled),
         Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(ty_shown(item), is_sync, pauses, can_throw, parallel, shape),
         else => text(ty),
     }
@@ -369,19 +403,33 @@ fn shown_named(name: ref String, args: ref Array[Ty]) -> String {
     return out
 }
 
-/// `fn(mut S, String) -> String sync throws`, as a signature writes it.
-fn shown_code(params: ref Array[Ty], result: ref Ty?, is_sync: bool, can_throw: bool) -> String {
+/// `fn(mut S, String) -> String sync throws`, as a signature writes it, and
+/// with the declaration's names where `spelled` has them (#2007):
+/// `fn(s: String) -> String from s`.
+fn shown_code(params: ref Array[Ty], result: ref Ty?, is_sync: bool, can_throw: bool, spelled: ref CodeNames) -> String {
+    let named = spelled.params.len() == params.len()
     let mut listed: String = ""
+    let mut at = 0
     for part in params {
         if !listed.is_empty() {
             listed.push_str(", ")
         }
-        listed.push_str(ref shown_param(part))
+        let (mark, written) = shown_param(part)
+        listed.push_str(ref mark)
+        if named {
+            listed.push_str(ref f"{spelled.params[at]}: ")
+        }
+        listed.push_str(ref written)
+        at += 1
     }
     let mut out = f"fn({listed})"
     if result != null {
         let returned = result?.shown() ?? ""
         out.push_str(ref f" -> {returned}")
+        let from = code_from_said(params, result, spelled)
+        if from != null {
+            out.push_str(ref f" from {from ?? ""}")
+        }
     }
     if is_sync {
         out.push_str(" sync")
@@ -396,14 +444,16 @@ fn shown_code(params: ref Array[Ty], result: ref Ty?, is_sync: bool, can_throw: 
 /// #1528, point 3; #1504): one it lends plain, one it changes `mut`, one it
 /// keeps `keep`. A value that copies, an option, a tuple, code and text,
 /// which reads `String` lent or kept (ADR-184 D2), are written plain.
-fn shown_param(part: ref Ty) -> String {
+/// The mark in front (`mut `, `keep ` or nothing) and the type, apart, so a
+/// name can stand between them (#2007).
+fn shown_param(part: ref Ty) -> (String, String) {
     let changed = lent_mut(part)
     if changed != null {
-        return f"mut {changed?.shown() ?? ""}"
+        return ("mut ", changed?.shown() ?? "")
     }
     let written = ty_shown(part)
     if a_whole_view(part) {
-        return written
+        return ("", written)
     }
     let kept = match part {
         Ty::Named { name, args, .. } => !(args.is_empty() && (a_number_name(written) || name == "int" || name == "bool" || name == "char" || name == "scalar" || name == TEXT || name == TEXT_VIEW)),
@@ -411,9 +461,47 @@ fn shown_param(part: ref Ty) -> String {
         else => false,
     }
     if kept {
-        return f"keep {written}"
+        return ("keep ", written)
     }
-    return written
+    return ("", written)
+}
+
+/// **The `from` of a function type's view result, in the declaration's
+/// names** (#2007, ADR-views-3 D8, D14): `a | b` as `spelled` names them, or
+/// the one parameter a result with one can point into. `null` where the
+/// result holds no view or the names are not known, and a message says it
+/// in words.
+fn code_from_said(params: ref Array[Ty], result: ref Ty?, spelled: ref CodeNames) -> String? {
+    if !(result?.holds_views() ?? false) || spelled.params.len() != params.len() {
+        return null
+    }
+    if !spelled.from.is_empty() {
+        return spelled.from.join(" | ")
+    }
+    if spelled.params.len() == 1 {
+        return spelled.params[0].clone()
+    }
+    return null
+}
+
+/// Whether a type is code whose view result [`ty_shown`] writes with its
+/// `from` (#2007), which then says it instead of words.
+fn code_names_its_from(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Fn { params, result, spelled, .. } => code_from_said(params, result, spelled) != null,
+        else => false,
+    }
+}
+
+/// **Whether a kept parameter of this type is written `keep`** (ADR-views-3
+/// D2): a number, a `bool`, a `char` and a `scalar` copy, and the source
+/// marks no copy it keeps.
+fn marked_keep(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && !(args.is_empty() && (a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")),
+        Ty::Unknown => false,
+        else => true,
+    }
 }
 
 /// Whether a type is a view as a whole: `ref T` in the compiler's own words.
@@ -545,6 +633,10 @@ fn parts_said_as_own(parts: ref String) -> String {
 /// value says so: ``a `String` of its own``.
 pub fn spoken(ty: ref Ty, other: ref Ty?) -> String {
     let written = ty_shown(ty)
+    // **Code that writes its `from` says the view itself** (#2007).
+    if code_names_its_from(ty) {
+        return f"`{written}`"
+    }
     if holds_a_view(ty) {
         let mut out = if a_whole_view(ty) { f"a view of {article_of(written)} `{written}`" } else { f"{article_of(written)} `{written}`" }
         let parts = viewed_parts(ty)
@@ -915,9 +1007,9 @@ fn a_function(written: ref String) -> Ty? {
     }
     if tail.starts_with("->") {
         let result = parse(cut(tail, 2, 0))
-        return Ty::Fn { params: params, result: result, is_sync: is_sync, can_throw: can_throw }
+        return Ty::Fn { params: params, result: result, is_sync: is_sync, can_throw: can_throw, spelled: CodeNames::none() }
     }
-    return Ty::Fn { params: params, result: null, is_sync: is_sync, can_throw: can_throw }
+    return Ty::Fn { params: params, result: null, is_sync: is_sync, can_throw: can_throw, spelled: CodeNames::none() }
 }
 
 /// `Seq[T] sync throws ends`, read the way a function type's tail is: the
@@ -1430,18 +1522,21 @@ impl Signature {
 
     /// The ledger's spelling of it.
     pub fn text(ref self) -> String {
-        return self.written(false)
+        let keeps: Vec[String] = []
+        return self.written(false, keeps)
     }
 
-    /// **As a message prints it** (ADR-views-3 D4, D10, #1528): the
-    /// declaration's spelling, `self` for the receiver and each type as
-    /// [`Ty::shown`] writes it, with no `ref`.
-    pub fn shown(ref self) -> String {
-        return self.written(true)
+    /// **As a message prints it** (ADR-views-3 D4, D10, #1528, #2007): the
+    /// declaration's spelling, `self` for the receiver, each type as
+    /// [`Ty::shown`] writes it, with no `ref`, and `mut` and `keep` where the
+    /// declaration writes them. `keeps` is the contract's: the parameters the
+    /// body keeps, which a views-3 signature marks `keep` (ADR-views-3 D2).
+    pub fn shown(ref self, keeps: ref Vec[String]) -> String {
+        return self.written(true, keeps)
     }
 
-    /// [`Signature::text`], or [`Signature::shown`] where `said`.
-    fn written(ref self, said: bool) -> String {
+    /// [`Signature::text`], or [`Signature::shown`] where `keeps` is given.
+    fn written(ref self, said: bool, keeps: ref Vec[String]) -> String {
         let mut inside: String = ""
         for (name, ty) in self.params {
             if !inside.is_empty() {
@@ -1450,6 +1545,8 @@ impl Signature {
             if name == "self" && said {
                 if self.mutable.contains(name) {
                     inside.push_str("mut ")
+                } else if keeps.contains(name) {
+                    inside.push_str("keep ")
                 }
                 inside.push_str("self")
             } else if name == "self" {
@@ -1457,6 +1554,8 @@ impl Signature {
             } else {
                 if self.mutable.contains(name) {
                     inside.push_str("mut ")
+                } else if said && keeps.contains(name) && marked_keep(ty) {
+                    inside.push_str("keep ")
                 }
                 let typed = if said { ty.shown() } else { ty.text() }
                 inside.push_str(ref f"{name}: {typed}")
@@ -1982,7 +2081,7 @@ impl Ty {
             else => {}
         }
         match self {
-            Ty::Fn { params, result, is_sync, can_throw } => {
+            Ty::Fn { params, result, is_sync, can_throw, .. } => {
                 if a_function_type(expected) {
                     return function_fits(params, result, is_sync, can_throw, expected)
                 }
@@ -2021,7 +2120,7 @@ impl Ty {
         return match self {
             Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: item.erase(parameters), slice: slice, mutable: mutable },
             Ty::Tuple(parts) => Ty::Tuple(erased_each(parts, parameters)),
-            Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: erased_each(params, parameters), result: result?.erase(parameters), is_sync: is_sync, can_throw: can_throw },
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: erased_each(params, parameters), result: result?.erase(parameters), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
             Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.erase(parameters), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
             Ty::Nullable(inner) => Ty::Nullable(inner.erase(parameters)),
             Ty::Named { name, args, view } => erased_name(name, args, view, parameters),
@@ -2037,7 +2136,7 @@ impl Ty {
         return match self {
             Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: item.parameterise(parameters), slice: slice, mutable: mutable },
             Ty::Tuple(parts) => Ty::Tuple(parameterised_each(parts, parameters)),
-            Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: parameterised_each(params, parameters), result: result?.parameterise(parameters), is_sync: is_sync, can_throw: can_throw },
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: parameterised_each(params, parameters), result: result?.parameterise(parameters), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
             Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.parameterise(parameters), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
             Ty::Nullable(inner) => Ty::Nullable(inner.parameterise(parameters)),
             Ty::Named { name, args, view } => parameterised_name(name, args, view, parameters),
@@ -2199,7 +2298,7 @@ fn a_run_named(name: ref String, args: ref Array[Ty], item: ref Ty) -> bool {
 // failing is. A result nobody wrote is the absence of a claim.
 fn function_fits(found: ref Array[Ty], found_result: ref Ty?, never_pauses: bool, fails: bool, expected: ref Ty) -> bool {
     return match expected {
-        Ty::Fn { params, result, is_sync, can_throw } => all_fit(found, params) && results_fit(found_result, result) && (never_pauses || !is_sync) && (!fails || can_throw),
+        Ty::Fn { params, result, is_sync, can_throw, .. } => all_fit(found, params) && results_fit(found_result, result) && (never_pauses || !is_sync) && (!fails || can_throw),
         else => false,
     }
 }
@@ -2366,7 +2465,7 @@ pub fn substitute(ty: ref Ty, bound: ref collections::BTreeMap[String, Ty]) -> T
         Ty::Named { name, args, view } => Ty::Named { name: name.clone(), args: substituted_each(args, bound), view: view },
         Ty::Tuple(parts) => Ty::Tuple(substituted_each(parts, bound)),
         Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: substitute(item, bound), slice: slice, mutable: mutable },
-        Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: substituted_each(params, bound), result: substituted_result(result, bound), is_sync: is_sync, can_throw: can_throw },
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: substituted_each(params, bound), result: substituted_result(result, bound), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
         Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: substitute(item, bound), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
         Ty::Nullable(inner) => Ty::Nullable(substitute(inner, bound)),
         else => ty.clone(),
@@ -2434,7 +2533,7 @@ pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeS
     return match ty {
         Ty::Named { name, args, view } => Ty::Named { name: qualified_name(name, module, declared), args: qualified_each(args, module, declared), view: view },
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
-        Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: qualified_each(params, module, declared), result: qualified_result(result, module, declared), is_sync: is_sync, can_throw: can_throw },
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: qualified_each(params, module, declared), result: qualified_result(result, module, declared), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
         // **Inside an option, a pointer and a sequence too** (#1505, #1417): a
         // package's `-> Item?` or `@stream` entry's `Seq[Item]` names its type
         // as the package does, and a caller's walk reads `a::Item`.
@@ -2471,7 +2570,7 @@ pub fn renamed(ty: ref Ty, renames: ref collections::BTreeMap[String, String]) -
     return match ty {
         Ty::Named { name, args, view } => Ty::Named { name: renamed_name(name, renames), args: renamed_each(args, renames), view: view },
         Ty::Tuple(parts) => Ty::Tuple(renamed_each(parts, renames)),
-        Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: renamed_each(params, renames), result: renamed_result(result, renames), is_sync: is_sync, can_throw: can_throw },
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: renamed_each(params, renames), result: renamed_result(result, renames), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
         Ty::Nullable(inner) => Ty::Nullable(renamed(inner, renames)),
         Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: renamed(item, renames), slice: slice, mutable: mutable },
         Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: renamed(item, renames), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },

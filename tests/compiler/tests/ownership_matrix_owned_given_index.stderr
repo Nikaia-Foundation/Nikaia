@@ -4,7 +4,7 @@ error[NK1102]: `store` expects `a` to be a `String` of its own, but you're passi
  18 |     store(xs[0], all)
     |           ^^^^^
     |
-    = note: It's declared as `store(a: String, mut into: Vec[String])`.
+    = note: It's declared as `store(keep a: String, mut into: Vec[String])`.
     = note: This is a view: it points into text that something else owns.
     = note: `store` keeps its `a` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
