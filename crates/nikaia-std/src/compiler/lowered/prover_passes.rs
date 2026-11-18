@@ -53,7 +53,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     }
     let answers = ProverAnswers { entries: checked_entries(&walk, escape), published: published_contracts(&walk) };
     count_checked_calls(walk);
-    hold_unreached(walk, program);
+    hold_unreached(walk, program, words);
     answers
 }
 
@@ -202,12 +202,16 @@ pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carr
     total
 }
 
-pub(crate) fn hold_unreached(walk: &mut ProverWalk, program: &Program) {
+pub(crate) fn hold_unreached(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext) {
     let mut tests: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in program.items.iter() {
         match &item.node {
             Item::Test { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
             Item::Bench { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
+            Item::Fn { name, .. } => {
+                let name = *name;
+                if prover_a_test_function((prover_symbol_text((name).as_ref(), words)).as_deref()) { tests.push((item.span.start as i64, item.span.end as i64)); }
+            },
             _ => { },
         }
     }

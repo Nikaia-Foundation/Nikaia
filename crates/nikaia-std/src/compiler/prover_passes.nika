@@ -75,7 +75,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     }
     let answers = ProverAnswers { entries: checked_entries(walk, escape), published: published_contracts(walk) }
     count_checked_calls(walk)
-    hold_unreached(walk, program)
+    hold_unreached(walk, program, words)
     return answers
 }
 
@@ -294,13 +294,20 @@ fn checked_through(checked: ref collections::BTreeMap[String, i64], carried: ref
 }
 
 /// **An `assert` this walk did not reach is checked where it stands** - in
-/// a test or a bench, by the test.
-fn hold_unreached(mut walk: ProverWalk, program: ref Program) {
+/// a test or a bench, by the test; a `test` block `nikaia test` has already
+/// turned into a function `__nikaia_test_N` is still a test (D11), as the
+/// walk itself takes it.
+fn hold_unreached(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext) {
     let mut tests: Vec[(i64, i64)] = []
     for item in program.items {
         match item.node {
             Item::Test { .. } => tests.push((item.span.start as i64, item.span.end as i64)),
             Item::Bench { .. } => tests.push((item.span.start as i64, item.span.end as i64)),
+            Item::Fn { name, .. } => {
+                if prover_a_test_function(prover_symbol_text(name, words)) {
+                    tests.push((item.span.start as i64, item.span.end as i64))
+                }
+            }
             else => {},
         }
     }
