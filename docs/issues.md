@@ -132,6 +132,8 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
     one pass and read in another names how it reaches each reader's caller;
     recording what a pass reads names the function all reads go through (I4a),
     or counts the read sites; else `no decision yet`.
+  * Each speed-up measured on its own is its own issue, so a run commits it and
+    the driver pushes it within one run's time (#2012 held three).
   * A new refusal our own code must first pass is staged: the check behind a
     `warn` setting or warning code, the moves one item per area, the switch
     last; the issue names the setting or says `no decision yet`.
