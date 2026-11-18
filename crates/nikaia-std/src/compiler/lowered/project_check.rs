@@ -99,6 +99,7 @@ pub(crate) fn project_check_locked_ledger_changed(path: &str, changed: &str) -> 
 pub trait ProjectCheckHost {
     fn check_against(&self) -> Vec<CheckFinding>;
     fn foreign_check(&self) -> Vec<CheckFinding>;
+    fn unproved_checks(&self, source: &str) -> Vec<CheckFinding>;
     fn sync_violations(&self) -> i64;
     fn render_sync_violation(&self, at: i64, path: &str, source: &str) -> String;
     fn render_finding_in(&self, finding: &CheckFinding, path: &str, lines: &[String]) -> String;
@@ -112,10 +113,12 @@ pub struct ProjectCheckSaid {
     pub refused: Option<String>,
 }
 
-pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, building_a_library: bool) -> ProjectCheckSaid {
+#[allow(clippy::too_many_arguments)]
+pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, unproved_checks: &str, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against();
     if building_a_library { all = { let __nikaia_value = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); __nikaia_value }; }
     all.extend(host.foreign_check());
+    if unproved_checks == "error" { all.extend(host.unproved_checks(source)); }
     all.sort_by_key(|finding| { finding.span.start });
     project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
     project_check_let_refuted_claims_through(&mut all, refuted_claims);
@@ -161,14 +164,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple24026| {
-            let (param, _) = __nikaia_tuple24026;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple24085| {
-                let (p, _) = __nikaia_tuple24085;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple24619| {
+            let (param, _) = __nikaia_tuple24619;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple24678| {
+                let (p, _) = __nikaia_tuple24678;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple24126| {
-            let (param, ty) = __nikaia_tuple24126;
+        }).filter_map(|__nikaia_tuple24719| {
+            let (param, ty) = __nikaia_tuple24719;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -196,11 +199,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26704| {
-        let (_, asked) = __nikaia_tuple26704; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple27297| {
+        let (_, asked) = __nikaia_tuple27297; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple26734| {
-        let (kind, _) = __nikaia_tuple26734;
+    }).map(|__nikaia_tuple27327| {
+        let (kind, _) = __nikaia_tuple27327;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }

@@ -23,6 +23,9 @@ pub(crate) struct BoundsReportSite {
     pub(crate) index: bool,
     pub(crate) proved: bool,
     pub(crate) blocked: Option<String>,
+    pub(crate) span: Span,
+    pub(crate) keeps: &'static str,
+    pub(crate) guard: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,6 +33,7 @@ pub(crate) struct BoundsReportWalk {
     pub(crate) seen: collections::BTreeSet<i64>,
     pub(crate) sites: Vec<BoundsReportSite>,
     pub(crate) gate: String,
+    pub(crate) at: Span,
 }
 
 pub(crate) fn bounds_report_gate(gates: &collections::BTreeMap<String, String>, name: &str) -> String {
@@ -43,7 +47,47 @@ pub(crate) fn bounds_report_no_function() -> String { String::from("a grammar's 
 
 #[allow(clippy::too_many_arguments)]
 pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: &BoundsChecks, overflow: &OverflowChecks, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> String {
-    let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![], gate: bounds_report_no_function() };
+    let sites = bounds_report_sites(program, words, source, facts, holes_of);
+    let indexes = sites.iter().filter(|&s| { s.index }).count() as i64;
+    let operations = sites.len() as i64 - indexes;
+    let proved_indexes = sites.iter().filter(|&s| { s.index && s.proved }).count() as i64;
+    let proved_operations = sites.iter().filter(|&s| { !s.index && s.proved }).count() as i64;
+    let mut out = format!("bounds in {}: {} indexes, {} proved; {} operations, {} proved - written without their check: indexes {}, operations {}\n", path, indexes, proved_indexes, operations, proved_operations, bounds.name(), overflow.name());
+    let widest = nikaia_std::index::or(sites.iter().map(|s| { s.text.len() as i64 }).max(), || 0);
+    let width = widest.min(40);
+    for site in sites.iter() {
+        let how = match site.proved {
+            true => String::from("proved"),
+            false => match &site.blocked {
+                None => String::from("checked"),
+                Some(why) => format!("checked: {}", why),
+            },
+        };
+        let line = nikaia_std::block::Text::from(site.line.to_string());
+        out.push_str(&format!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how));
+    }
+    for row in bounds_report_outside(facts, source) { out.push_str(&format!("  outside  {}\n", row)); }
+    for row in bounds_report_derived(&facts.derived, source) { out.push_str(&format!("  derived  {}\n", row)); }
+    out
+}
+
+pub fn bounds_report_unproved(program: &Program, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<CheckFinding> {
+    let mut refused: Vec<CheckFinding> = vec![];
+    for site in bounds_report_sites(program, words, source, facts, holes_of) {
+        if site.proved { continue; }
+        let mut notes: Vec<String> = vec![];
+        match site.blocked {
+            None => { },
+            Some(ref why) => { notes.push(format!("The walk does not prove it: {}.", why)); },
+        }
+        notes.push(String::from("`unproved-checks = \"error\"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason."));
+        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK1313"), message: format!("`{}` is not proved {}, and this package refuses a check the compiler does not prove.", site.text, site.keeps), notes, help: Some(nikaia_std::block::Text::from(site.guard.to_string())), labels: vec![], edit: None });
+    }
+    refused
+}
+
+pub(crate) fn bounds_report_sites(program: &Program, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<BoundsReportSite> {
+    let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![], gate: bounds_report_no_function(), at: Span { start: 0, end: 0 } };
     let none: Vec<FnArg> = vec![];
     for item in program.items.iter() {
         match &item.node {
@@ -89,27 +133,7 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
         }
     }
     walk.sites.sort_by_key(|s| { s.line });
-    let indexes = walk.sites.iter().filter(|&s| { s.index }).count() as i64;
-    let operations = walk.sites.len() as i64 - indexes;
-    let proved_indexes = walk.sites.iter().filter(|&s| { s.index && s.proved }).count() as i64;
-    let proved_operations = walk.sites.iter().filter(|&s| { !s.index && s.proved }).count() as i64;
-    let mut out = format!("bounds in {}: {} indexes, {} proved; {} operations, {} proved - written without their check: indexes {}, operations {}\n", path, indexes, proved_indexes, operations, proved_operations, bounds.name(), overflow.name());
-    let widest = nikaia_std::index::or(walk.sites.iter().map(|s| { s.text.len() as i64 }).max(), || 0);
-    let width = widest.min(40);
-    for site in walk.sites.iter() {
-        let how = match site.proved {
-            true => String::from("proved"),
-            false => match &site.blocked {
-                None => String::from("checked"),
-                Some(why) => format!("checked: {}", why),
-            },
-        };
-        let line = nikaia_std::block::Text::from(site.line.to_string());
-        out.push_str(&format!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how));
-    }
-    for row in bounds_report_outside(facts, source) { out.push_str(&format!("  outside  {}\n", row)); }
-    for row in bounds_report_derived(&facts.derived, source) { out.push_str(&format!("  derived  {}\n", row)); }
-    out
+    walk.sites
 }
 
 pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> Vec<String> {
@@ -219,6 +243,7 @@ pub(crate) fn bounds_report_symbol(op: &BinaryOp) -> &'static str {
 pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
     let at = span.start as i64;
     let line = bounds_report_line(source, at);
+    walk.at = Span { start: span.start, end: span.end };
     match stmt {
         Stmt::Assign { target, op, value } => {
             let which = nikaia_std::index::or(op, || BinaryOp::BitAnd);
@@ -226,7 +251,7 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, source, &walk.gate)); }
-                walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(&which), written_expression(words, value)), index: false, proved, blocked });
+                walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(&which), written_expression(words, value)), index: false, proved, blocked, span: Span { start: span.start, end: span.end }, keeps: bounds_report_keeps(&which), guard: bounds_report_operation_guard(&which, words, target, value) });
             }
         },
         _ => { },
@@ -276,7 +301,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_index(base, index, args, body, words, source, &walk.gate)); }
-                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
+                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked, span: Span { start: walk.at.start, end: walk.at.end }, keeps: "in bounds", guard: bounds_report_index_guard(words, base, index) });
             }
         },
         Expr::MethodCall { receiver, args: given, .. } => {
@@ -287,7 +312,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, source, &walk.gate)); }
-                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
+                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked, span: Span { start: walk.at.start, end: walk.at.end }, keeps: "in bounds", guard: bounds_report_index_guard(words, receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }) });
             }
         },
         Expr::Binary { op, lhs, rhs, span, .. } => {
@@ -297,19 +322,67 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, source, &walk.gate)); }
-                walk.sites.push(BoundsReportSite { line: bounds_report_line(source, at), text: written_expression(words, expr), index: false, proved, blocked });
+                walk.sites.push(BoundsReportSite { line: bounds_report_line(source, at), text: written_expression(words, expr), index: false, proved, blocked, span: Span { start: span.start, end: span.end }, keeps: bounds_report_keeps(op), guard: bounds_report_operation_guard(op, words, lhs, rhs) });
             }
         },
-        Expr::Unary { op, .. } => {
+        Expr::Unary { op, expr: operand, .. } => {
+            let operand = nikaia_std::boxed::open(operand);
             let key = node_key(expr);
             if *op == UnaryOp::Neg && facts.negations.contains_key(&key) {
                 let proved = facts.proven_negations.contains(&key);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(String::from("no fact keeps it above its type's least value")); }
-                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: false, proved, blocked });
+                let negated = written_expression(words, operand);
+                walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: false, proved, blocked, span: Span { start: walk.at.start, end: walk.at.end }, keeps: "above its type's least value", guard: format!("Keep `{}` above its type's least value where it arrives, with a guard the program handles (`return if {} < -LIMIT`, or a `throw` there). After that line, the negation is proved.", negated, negated) });
             }
         },
         _ => { },
     }
 }
+
+pub(crate) fn bounds_report_keeps(op: &BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Div => "to divide by a value other than zero",
+        BinaryOp::Rem => "to divide by a value other than zero",
+        _ => "inside its type",
+    }
+}
+
+pub(crate) fn bounds_report_index_guard(words: &winnow_grammar::InternerContext, base: &Expr, index: &Expr) -> String {
+    let list = written_expression(words, base);
+    let guard = match index {
+        Expr::Range { start, end, inclusive, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+            let from = written_expression(words, start);
+            let to = written_expression(words, end);
+            let past = if inclusive { ">=" } else { ">" };
+            format!("return if {} < 0 || {} > {} || {} {} {}.len()", from, from, to, to, past, list)
+        },
+        _ => {
+            let at = written_expression(words, index);
+            format!("return if {} < 0 || {} >= {}.len()", at, at, list)
+        },
+    };
+    format!("Check it where the value arrives, with a guard the program handles: `{}`, or a `throw` there. After that line, the read is proved and costs nothing.", guard)
+}
+
+pub(crate) fn bounds_report_operation_guard(op: &BinaryOp, words: &winnow_grammar::InternerContext, lhs: &Expr, rhs: &Expr) -> String {
+    let left = written_expression(words, lhs);
+    let right = written_expression(words, rhs);
+    match op {
+        BinaryOp::Div => format!("Check the divisor where it arrives, with a guard the program handles: `return if {} == 0`, or a `throw` there. After that line, the division is proved.", right),
+        BinaryOp::Rem => format!("Check the divisor where it arrives, with a guard the program handles: `return if {} == 0`, or a `throw` there. After that line, the division is proved.", right),
+        _ => {
+            let named = vec![nikaia_std::block::Text::from(left.to_string()), nikaia_std::block::Text::from(right.to_string())].iter().filter(|&t| { !bounds_report_number(t) }).map(|t| { nikaia_std::block::Text::from(t.to_string()) }).collect::<Vec<_>>();
+            let first = nikaia_std::index::or(match named.first() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || left.into());
+            let others = if named.len() > 1 { format!(", and the same for `{}`", *unsafe { nikaia_std::proven::read(&named, (1) as usize) }) } else { String::from("") };
+            format!("Bound the operands where they arrive, with a guard the program handles: `return if {} > LIMIT || {} < -LIMIT`{}, or a `throw` there. After that, the operation is proved.", first, first, others)
+        },
+    }
+}
+
+pub(crate) fn bounds_report_number(written: &str) -> bool { !written.as_bytes().is_empty() && *unsafe { nikaia_std::proven::read(&written.as_bytes(), (0) as usize) } >= 48 && *unsafe { nikaia_std::proven::read(&written.as_bytes(), (0) as usize) } <= 57 }
 

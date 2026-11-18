@@ -100,6 +100,15 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "error|warn")]
     pub unproved_claims: Option<String>,
 
+    /// What an index, an overflow or a division the compiler does not prove
+    /// is ([ADR-306](../../../docs/specification/adr/adr-306.md) D29):
+    /// `allow`, the default, builds it with its check; `error` refuses the
+    /// program (`NK1313`).
+    ///
+    /// Overrides `nikaia.toml`'s `[build] unproved-checks`.
+    #[arg(long, global = true, value_name = "allow|error")]
+    pub unproved_checks: Option<String>,
+
     /// What data from outside the program at a raw sink is, unproved and not
     /// allowed (ADR-raw-sinks-1 D3): `error`, the default, refuses the
     /// program; `warn` builds it and checks the data where the call is
@@ -823,6 +832,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    project.settings.checks(args.unproved_checks.as_deref())?;
     project
         .settings
         .sinks(args.raw_sinks.as_deref(), &args.allow)?;
@@ -839,6 +849,7 @@ fn command_line_settings(args: &Cli, settings: &mut Settings) -> Result<()> {
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    settings.checks(args.unproved_checks.as_deref())?;
     settings.sinks(args.raw_sinks.as_deref(), &args.allow)
 }
 
@@ -889,6 +900,7 @@ fn test_command(
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    project.settings.checks(args.unproved_checks.as_deref())?;
     project
         .settings
         .sinks(args.raw_sinks.as_deref(), &args.allow)?;
@@ -987,6 +999,7 @@ impl TestHost<'_> {
             args.refuted_claims.as_deref(),
             args.unproved_claims.as_deref(),
         )?;
+        built.settings.checks(args.unproved_checks.as_deref())?;
         built
             .settings
             .sinks(args.raw_sinks.as_deref(), &args.allow)?;
@@ -1074,6 +1087,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    settings.checks(args.unproved_checks.as_deref())?;
     settings.sinks(args.raw_sinks.as_deref(), &args.allow)?;
     if let Some(missing) = settings.build.target.unbuildable() {
         refuse!(
