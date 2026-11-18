@@ -21,6 +21,12 @@ use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
 use nikaia_std::prelude::Hasher;
 #[allow(unused_imports)]
+use nikaia_std::abort::{ShownByDebug as _, ShownByNothing as _};
+#[allow(unused_imports)]
+use nikaia_std::seq::Join as _;
+#[allow(unused_imports)]
+use nikaia_std::text::TextQuoted as _;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -2253,72 +2259,6 @@ mod locks_lowered {
 pub use locks_lowered::*;
 
 #[allow(unsafe_code)]
-mod logic_alethe_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_alethe.rs");
-}
-#[allow(unused_imports)]
-pub use logic_alethe_lowered::*;
-
-#[allow(unsafe_code)]
-mod logic_horn_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_horn.rs");
-}
-#[allow(unused_imports)]
-pub use logic_horn_lowered::*;
-
-#[allow(unsafe_code)]
-mod logic_lia_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_lia.rs");
-}
-#[allow(unused_imports)]
-pub use logic_lia_lowered::*;
-
-#[allow(unsafe_code)]
-mod logic_normal_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_normal.rs");
-}
-#[allow(unused_imports)]
-pub use logic_normal_lowered::*;
-
-#[allow(unsafe_code)]
-mod logic_search_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_search.rs");
-}
-#[allow(unused_imports)]
-pub use logic_search_lowered::*;
-
-#[allow(unsafe_code)]
-mod logic_smtlib_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/logic_smtlib.rs");
-}
-#[allow(unused_imports)]
-pub use logic_smtlib_lowered::*;
-
-#[allow(unsafe_code)]
 mod lsp_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2682,17 +2622,6 @@ mod prove_text_lowered {
 pub use prove_text_lowered::*;
 
 #[allow(unsafe_code)]
-mod prover_arena_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/prover_arena.rs");
-}
-#[allow(unused_imports)]
-pub use prover_arena_lowered::*;
-
-#[allow(unsafe_code)]
 mod prover_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2847,17 +2776,6 @@ mod signature_lowered {
 pub use signature_lowered::*;
 
 #[allow(unsafe_code)]
-mod solver_terms_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/solver_terms.rs");
-}
-#[allow(unused_imports)]
-pub use solver_terms_lowered::*;
-
-#[allow(unsafe_code)]
 mod sources_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2900,215 +2818,6 @@ mod surface_lowered {
 }
 #[allow(unused_imports)]
 pub use surface_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_ask_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_ask.rs");
-}
-#[allow(unused_imports)]
-pub use sv_ask_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_check_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_check.rs");
-}
-#[allow(unused_imports)]
-pub use sv_check_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_cnf_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_cnf.rs");
-}
-#[allow(unused_imports)]
-pub use sv_cnf_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_elim_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_elim.rs");
-}
-#[allow(unused_imports)]
-pub use sv_elim_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_fast_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_fast.rs");
-}
-#[allow(unused_imports)]
-pub use sv_fast_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_lemma_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_lemma.rs");
-}
-#[allow(unused_imports)]
-pub use sv_lemma_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_nl_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_nl.rs");
-}
-#[allow(unused_imports)]
-pub use sv_nl_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_num_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_num.rs");
-}
-#[allow(unused_imports)]
-pub use sv_num_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_pre_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_pre.rs");
-}
-#[allow(unused_imports)]
-pub use sv_pre_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_proof_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_proof.rs");
-}
-#[allow(unused_imports)]
-pub use sv_proof_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_rod_line_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_rod_line.rs");
-}
-#[allow(unused_imports)]
-pub use sv_rod_line_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_row_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_row.rs");
-}
-#[allow(unused_imports)]
-pub use sv_row_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_sat_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_sat.rs");
-}
-#[allow(unused_imports)]
-pub use sv_sat_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_simplex_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_simplex.rs");
-}
-#[allow(unused_imports)]
-pub use sv_simplex_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_smt_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_smt.rs");
-}
-#[allow(unused_imports)]
-pub use sv_smt_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_smtlib_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_smtlib.rs");
-}
-#[allow(unused_imports)]
-pub use sv_smtlib_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_strategy_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_strategy.rs");
-}
-#[allow(unused_imports)]
-pub use sv_strategy_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_theory_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_theory.rs");
-}
-#[allow(unused_imports)]
-pub use sv_theory_lowered::*;
-
-#[allow(unsafe_code)]
-mod sv_walk_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/sv_walk.rs");
-}
-#[allow(unused_imports)]
-pub use sv_walk_lowered::*;
 
 #[allow(unsafe_code)]
 mod sync_lowered {
@@ -3871,30 +3580,6 @@ pub mod locks {
     #[allow(unused_imports)]
     pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
 }
-pub mod logic_alethe {
-    #[allow(unused_imports)]
-    pub use super::{lg_alethe_write};
-}
-pub mod logic_horn {
-    #[allow(unused_imports)]
-    pub use super::{LgExit, LgLoop, LgQuery, LgLoopVerdict, lg_primed, lg_loop_check, lg_proved, lg_horn_write};
-}
-pub mod logic_lia {
-    #[allow(unused_imports)]
-    pub use super::{LgUnknown, LgWhy, LgBudget, LgStep, LgRefutation, LgCertificate, LgModel, LgAnswer, LgRejected, LgLin, LgItem, LgIndexed};
-}
-pub mod logic_normal {
-    #[allow(unused_imports)]
-    pub use super::{LgNormal, lg_normal_of, lg_certificate_text, lg_certificate_of, lg_model_text, lg_model_of};
-}
-pub mod logic_search {
-    #[allow(unused_imports)]
-    pub use super::{lg_check, lg_verify_model, lg_verify};
-}
-pub mod logic_smtlib {
-    #[allow(unused_imports)]
-    pub use super::{lg_smtlib_write, LgScript, LgReadError, LgRead, lg_smtlib_read};
-}
 pub mod lsp {
     #[allow(unused_imports)]
     pub use super::{LspHost, LspRefusal, lsp_serve, lsp_position};
@@ -4024,10 +3709,6 @@ pub mod prove_text {
     #[allow(unused_imports)]
     pub use super::{shown};
 }
-pub mod prover_arena {
-    #[allow(unused_imports)]
-    pub use super::{TermArena};
-}
 pub mod prover_calls {
     #[allow(unused_imports)]
     pub use super::{FreeFunction, ProverOutside};
@@ -4084,10 +3765,6 @@ pub mod signature {
     #[allow(unused_imports)]
     pub use super::{Translated, Resulted, translate, result_of, sent_across, sends, WrittenFn, contract};
 }
-pub mod solver_terms {
-    #[allow(unused_imports)]
-    pub use super::{SolverTerm};
-}
 pub mod sources {}
 pub mod specbook {
     #[allow(unused_imports)]
@@ -4100,76 +3777,6 @@ pub mod spelling {
 pub mod surface {
     #[allow(unused_imports)]
     pub use super::{Arg, Function, Surface, empty, read_items, resolve, offered, candidates};
-}
-pub mod sv_ask {
-    #[allow(unused_imports)]
-    pub use super::{SV_ASK_COMPARE, SV_LOG_PREFIX};
-}
-pub mod sv_check {
-    #[allow(unused_imports)]
-    pub use super::{SvBound, SvEntry, SvVerdict};
-}
-pub mod sv_cnf {
-    #[allow(unused_imports)]
-    pub use super::{SvCnf};
-}
-pub mod sv_elim {}
-pub mod sv_fast {
-    #[allow(unused_imports)]
-    pub use super::{SvFastEnd, SvFastRun};
-}
-pub mod sv_lemma {
-    #[allow(unused_imports)]
-    pub use super::{SvLemma, sv_lemma_alethe};
-}
-pub mod sv_nl {
-    #[allow(unused_imports)]
-    pub use super::{SvNlRun};
-}
-pub mod sv_num {
-    #[allow(unused_imports)]
-    pub use super::{SvUnknown, SvRat, SvDelta};
-}
-pub mod sv_pre {
-    #[allow(unused_imports)]
-    pub use super::{SvPre};
-}
-pub mod sv_proof {
-    #[allow(unused_imports)]
-    pub use super::{SvRel, SvAtom, SvQuery, SvSrc, SvStep, SvLog, SvBook, SvClause, SvAsserted, SvExtended};
-}
-pub mod sv_rod_line {}
-pub mod sv_row {
-    #[allow(unused_imports)]
-    pub use super::{SvRow, SvTerm, SvVars};
-}
-pub mod sv_sat {
-    #[allow(unused_imports)]
-    pub use super::{SvSatAnswer, SvSatStats, SvSat, sv_sat};
-}
-pub mod sv_simplex {
-    #[allow(unused_imports)]
-    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvViolation};
-}
-pub mod sv_smt {
-    #[allow(unused_imports)]
-    pub use super::{SvDriven, SvEngineRun, SvSmtStats, SvBoth, SvSmt, SvSmtEnd};
-}
-pub mod sv_smtlib {
-    #[allow(unused_imports)]
-    pub use super::{SvReadWhy, SvNl, SvSorts, SvSmtRead, sv_smtlib_read};
-}
-pub mod sv_strategy {
-    #[allow(unused_imports)]
-    pub use super::{SvParams, SvFeatures};
-}
-pub mod sv_theory {
-    #[allow(unused_imports)]
-    pub use super::{SvHeld, SvChecked, SvSolved, SvTheory, SvTh};
-}
-pub mod sv_walk {
-    #[allow(unused_imports)]
-    pub use super::{SvWalkParams, SvRandom, SvWalkRun};
 }
 pub mod sync {
     #[allow(unused_imports)]
@@ -4249,8 +3856,13 @@ pub mod json {
     use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
     include!("lowered/json/lowered.rs");
 }
+pub mod logic {
+    #[allow(unused_imports)]
+    use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
+    include!("lowered/logic/lowered.rs");
+}
 
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a10dea7837a782bb1d6652702936108a7aa8cfd196849e61500515c044d29381";
+pub const LOWERED_DIGEST: &str = "c56efda8bfd84711dcc04c6d41d6b1a9036841edb9b8f23bf31e1a1f1b8f3f50";

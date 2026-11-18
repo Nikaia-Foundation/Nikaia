@@ -10,6 +10,12 @@
 //   nikaia run scripts/solver.nika -- fetch [DIR]
 //   nikaia run scripts/solver.nika -- sample DIR OUT [N]
 //   nikaia run scripts/solver.nika -- compare [--timeout S] [--instructions] --files DIR|FILE...
+//   nikaia run scripts/solver.nika -- build
+//
+// `build` builds the program `run` answers with (see `solver_build`) and
+// prints the kept binary's path: CI runs it before the tests (#2023), so the
+// tests that run this script find the binary built and spend their time
+// limit on the answers, not on a cold build of the program.
 //
 // `fetch` (#1338 item 2) builds the SMT-LIB set: it clones each source of
 // `solver_sources` at its fixed commit into `DIR/.sources/` (default DIR
@@ -35,16 +41,15 @@
 // `tune` (ADR-270 D14, #1284 item 5) splits the `.smt2` files of DIR
 // (default `tests/solver/qflia`), sorted by name, into two fixed halves: the
 // files at even places tune, the files at odd places are held out. It walks
-// the parameters of `sv_params` (`tools/sv_strategy.nika`) one by one, tries
+// the parameters of `sv_params` (`packages/logic/src/sv_strategy.nika`) one by one, tries
 // each of its candidate values on the tuning half with the engine
 // `new:name=value,...`, and keeps a value only where it lowers the half's
 // PAR-2 with no wrong answer. Then it reports the defaults and the tuned set
 // on the held-out half, which the tuning never saw.
 //
-// `run` puts the logic layer's files of `crates/nikaia-std/src/compiler/` (read,
-// never copied), the new engine's files there too (moved in #1285),
-// and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
-// one package in a fixed slot of the user's cache, each its own file, builds it with the `nikaia` that runs
+// `run` builds the rod `packages/logic/rod` (its driver copied into a
+// package that depends on `packages/logic` by its path, ADR-270 D1, D26,
+// #2020) in a fixed slot of the user's cache with the `nikaia` that runs
 // this script (the binary kept in `target/solver-rod/`, see `solver_build`),
 // and answers every `.smt2` file: one line per file (`name answer work`),
 // then a row per directory: solved, unknown (overflow and files the reader
@@ -62,17 +67,6 @@ use std::env
 use std::fs
 use std::process
 use std::text
-
-// The logic layer's files, in the order the program takes them.
-fn solver_logic_files() -> Vec[String] {
-	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
-}
-
-// The new engine's files of `crates/nikaia-std/src/compiler/` (#1282, #1283, #1285), in the
-// order the program takes them, before the driver.
-fn solver_engine_files() -> Vec[String] {
-	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_lemma", "sv_nl", "sv_rod_line"]
-}
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
 // Fourier-Motzkin's search may look at.
@@ -108,47 +102,43 @@ fn solver_root() -> String throws {
 
 // --- Assembling and building the program ---
 
-// The program's files: the logic layer's, the engine's and the driver's, each
-// kept a file of its own in the package (Part I 9.1: one namespace), beside
-// a `main.nika` that calls `sv_rod_main`.
-//
-// **Files, not one concatenated text** (#1949): the build's ledger proves its
-// panics unit by unit, and the 17,800 lines as one unit took a cold build
-// about a minute longer than the same lines as 28 files.
-fn solver_program_files(repo: String) -> Vec[String] {
+// The files the kept binary is built from, for its key: the package
+// `logic`'s manifest and sources (ADR-270 D26, #2020), sorted by name, and
+// the rod's driver `packages/logic/rod/src/main.nika`. Empty where the
+// package cannot be listed.
+fn solver_program_files(repo: String) -> Vec[String] throws {
+	let listed = process::run("sh", ["-c", "ls \"$1\"/packages/logic/src/*.nika | LC_ALL=C sort", "sh", repo.clone()])
 	let mut paths: Vec[String] = []
-	for name in solver_logic_files() {
-		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
+	if !listed.ok { return paths }
+	paths.push(f"{repo}/packages/logic/nikaia.toml")
+	for line in listed.stdout.lines() {
+		if line != "" { paths.push(line.to_string()) }
 	}
-	for name in solver_engine_files() {
-		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
-	}
-	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
+	paths.push(f"{solver_rod_dir(repo)}/src/main.nika")
 	return paths
 }
 
-// The program's manifest. **Built at `opt-level = 3`** (#2004): without a
-// `[build.<target>]` table the build takes Cargo's `dev` profile at
-// opt-level 0, and every figure of the rod was one of an unoptimised binary
-// (`Diffusion2D-PT-D05N100-RC-00`: 157.2 M instructions at 0, 30.9 M at 3,
-// z3 26 M).
-fn solver_manifest() -> String {
-	return "[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\n"
+// The rod's package, `packages/logic/rod`: its `main.nika` depends on the
+// package `logic`, which holds the logic layer and the engine.
+fn solver_rod_dir(repo: String) -> String {
+	return f"{repo}/packages/logic/rod"
 }
 
-// Writes the program's package into `tmp`: its manifest, each file of
-// `solver_program_files` under `src/`, and `src/main.nika`.
+// The program's manifest, naming `logic` where it stands in `repo`. **Built
+// at `opt-level = 3`** (#2004): without a `[build.<target>]` table the build
+// takes Cargo's `dev` profile at opt-level 0, and every figure of the rod was
+// one of an unoptimised binary (`Diffusion2D-PT-D05N100-RC-00`: 157.2 M
+// instructions at 0, 30.9 M at 3, z3 26 M).
+fn solver_manifest(repo: String) -> String {
+	return f"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[dependencies]\nlogic = {{ path = \"{repo}/packages/logic\" }}\n\n[build.x86_64-linux]\nopt-level = 3\n"
+}
+
+// Writes the program's package into `tmp`: its manifest and the rod's
+// `src/main.nika`.
 fn solver_program(repo: String, tmp: String) throws {
 	process::run("mkdir", ["-p", f"{tmp}/src"])
-	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, solver_manifest())
-	let mut args: Vec[String] = solver_program_files(repo)
-	args.push(f"{tmp}/src/")
-	process::run("cp", args)
-	fs::write(
-		f"{tmp}/src/main.nika",
-		fs::Root::Anywhere,
-		"fn main() throws {\n    sv_rod_main()\n}\n",
-	)
+	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, solver_manifest(repo.clone()))
+	process::run("cp", [f"{solver_rod_dir(repo)}/src/main.nika", f"{tmp}/src/"])
 }
 
 // The environment the program builds in: the program's lints capped (#1949),
@@ -172,12 +162,14 @@ fn solver_build_env() -> Vec[(String, String)] {
 fn solver_key(repo: String, nikaia: String) -> String throws {
 	let mut args: Vec[String] = [
 		"-c",
-		"n=$1; m=$2; shift 2; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; echo '== main.nika'; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
+		"n=$1; m=$2; shift 2; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
 		"sh",
 		nikaia,
-		solver_manifest(),
+		solver_manifest(repo.clone()),
 	]
-	for f in solver_program_files(repo) { args.push(f.clone()) }
+	let files = solver_program_files(repo)
+	if files.len() == 0 { return "" }
+	for f in files { args.push(f.clone()) }
 	let out = process::run("sh", args)
 	if !out.ok { return "" }
 	return out.stdout.trim().clone()
@@ -1738,8 +1730,12 @@ fn main() throws {
 		solver_sample(rest)
 	} else if command == "compare" {
 		solver_compare(repo, nikaia, rest)
+	} else if command == "build" {
+		let bin = solver_build(repo, nikaia)
+		if bin == "" { process::exit(1) }
+		println(bin)
 	} else {
-		println("usage: solver.nika run|gen|oracle|fuzz|tune|fetch|sample|compare ... (see the head of scripts/solver.nika)")
+		println("usage: solver.nika run|gen|oracle|fuzz|tune|fetch|sample|compare|build ... (see the head of scripts/solver.nika)")
 		process::exit(2)
 	}
 }
