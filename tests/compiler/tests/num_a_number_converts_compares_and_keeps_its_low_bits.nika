@@ -1,0 +1,78 @@
+// Numbers below the language (`std::num`): `low_bits` keeps a value's lowest
+// bits for a count of any integer type, a count below zero keeping none and
+// one past the width keeping all (no `i128` count: Part I 2.2 has none); a `u64` and an `i64` compare as numbers; a
+// float converts into an `f32` and from one, and into each integer type,
+// towards zero, where it fits; a view of a number answers the number. Moved
+// from the `nikaia-std` unit tests `num::tests::*` (#2082); the conversions
+// that stop are `num_a_float_that_does_not_fit_stops`.
+use std::text
+
+fn keep(k: i64, w: i64) -> u64 {
+    if k >= w {
+        return u64::MAX
+    }
+    return (1 << (k as u64)) - 1
+}
+
+// The count read through a view of a list.
+fn by_view(x: u8, counts: Vec[u8]) -> u8 {
+    for n in counts {
+        return x.low_bits(n)
+    }
+    return 0
+}
+
+// Each number read through a view of its list.
+fn shown(xs: Vec[i32], fs: Vec[f64], cs: Vec[scalar], bs: Vec[bool]) -> String {
+    let mut out = ""
+    for x in xs { out += f"{x == 7} {x}" }
+    for f in fs { out += f" {f as i64}" }
+    for c in cs { out += f" {c as u32}" }
+    for b in bs { out += f" {b}" }
+    return out
+}
+
+fn main() throws {
+    let a: u64 = 0x0123456789abcdef
+    let mut wrong = 0
+    for n in -70..<141 {
+        let k = n.clamp(0, 128)
+        if a.low_bits(n) != (a & keep(k, 64)) { wrong += 1 }
+        let a32 = a.truncating_u32()
+        if a32.low_bits(n) != (a32 & keep(k, 32).truncating_u32()) { wrong += 1 }
+        let a8 = a.truncating_u8()
+        if a8.low_bits(n as i32) != (a8 & keep(k, 8).truncating_u8()) { wrong += 1 }
+        if n >= 0 {
+            if a.low_bits(n as u64) != (a & keep(k, 64)) { wrong += 1 }
+            let count = n as u8
+            if by_view(a8, [count]) != (a8 & keep(k, 8).truncating_u8()) { wrong += 1 }
+        }
+    }
+    println(f"low_bits wrong {wrong}")
+    println(f"{a.low_bits(u64::MAX) == a} {a.low_bits(i64::MIN)} {a.low_bits(1 << 40) == a}")
+
+    let zero: u64 = 0
+    let seven: u64 = 7
+    let six: u64 = 6
+    let top: u64 = u64::MAX
+    let minus: i64 = -1
+    let seven_signed: i64 = 7
+    println(f"{zero > minus} {top > i64::MAX} {seven == seven_signed} {six < seven_signed}")
+    println(f"{minus < zero} {i64::MIN < zero} {i64::MAX < top} {seven_signed == seven}")
+
+    let half = 2.5
+    // `f32::MAX`, written as the `f64` it widens to.
+    let largest = 3.4028234663852886e38
+    let inf = text::parse_f64("inf") ?? 0.0
+    let nan = text::parse_f64("nan") ?? 0.0
+    println(f"{half as f32 == 2.5} {(inf as f32) as f64 == inf} {((nan as f32) as f64).is_nan()} {((largest as f32) as f64) == largest}")
+    let q: f32 = 1.75
+    let r: f32 = 200.5
+    println(f"{q as i32} {r as u8} {half as u64}")
+
+    let n: i32 = 7
+    println(shown([n], [1.5], ['a'], [true]))
+
+    println(f"{42.9 as i32} {-42.9 as i32} {1e18 as i64} {(i32::MAX as f64) as i32 == i32::MAX} {(i32::MIN as f64) as i32 == i32::MIN}")
+    println(f"{9223372036854774784.0 as i64} {-0.5 as u64} {0.0 as u64}")
+}
