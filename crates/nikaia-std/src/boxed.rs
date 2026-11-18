@@ -78,28 +78,3 @@ impl<T> Peek for &mut Box<T> {
 pub fn peek<B: Peek>(boxed: &B) -> &B::Inside {
     boxed.peek()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_box_opens_to_its_value_and_a_lent_one_to_a_view() {
-        let owned: Box<i64> = Box::new(4);
-        assert_eq!(open(owned), 4);
-        let lent = Box::new(String::from("x"));
-        let view: &String = open(&lent);
-        assert_eq!(view, "x");
-        let mut changed = Box::new(1);
-        *open(&mut changed) += 1;
-        assert_eq!(*changed, 2);
-    }
-
-    #[test]
-    fn a_box_is_looked_into_whether_it_was_taken_or_lent() {
-        let owned: Box<i64> = Box::new(4);
-        assert!(matches!(peek(&owned), 4));
-        let lent = &owned;
-        assert!(matches!(peek(&lent), 4));
-    }
-}

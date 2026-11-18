@@ -136,22 +136,3 @@ impl std::fmt::Debug for NodeId {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn two_ids_are_equal_and_their_numbers_are_not() {
-        assert_eq!(NodeId::numbered(1), NodeId::numbered(2));
-        assert_ne!(NodeId::numbered(1).get(), NodeId::numbered(2).get());
-    }
-
-    #[test]
-    fn a_fresh_id_is_new_every_time_and_above_the_parser() {
-        let first = NodeId::fresh().get();
-        let second = NodeId::fresh().get();
-        assert!(first >= FIRST_BUILT);
-        assert_ne!(first, second);
-    }
-}

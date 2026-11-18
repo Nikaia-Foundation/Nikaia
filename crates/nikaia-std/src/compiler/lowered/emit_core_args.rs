@@ -462,7 +462,7 @@ impl EmitState {
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, method_callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
-        out.push(&before);
+        if !count { out.push(&before); }
         let owner_key = nikaia_std::index::or(match method_callee {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -521,7 +521,10 @@ impl EmitState {
         let held = has_how && how != "" && !boxed_alone || lent_whole;
         if held { out.push("("); }
         if pointer == 3 { out.push("&"); } else if pointer == 4 { out.push("&mut "); }
-        if count { out.push("nikaia_std::count::of("); }
+        if count {
+            out.push("nikaia_std::count::of(");
+            out.push(&before);
+        }
         let mut inside = flow;
         if wants_a_size && !count { inside = flow.inferred(); }
         if self.emit_arg_handed_on_changed(world, &scope.function, callee, i, arg) { inside = inside.place(); }
@@ -537,14 +540,17 @@ impl EmitState {
         if pointer == 6 { out.push(".lent()"); }
         if held { out.push(")"); }
         if has_how && how != "" { out.push(&how); }
-        if count { out.push(")"); }
+        if count {
+            out.push(&after);
+            out.push(")");
+        }
         if kept_here { out.push(")"); }
         if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
         out.push(&owner_close);
-        out.push(&after);
+        if !count { out.push(&after); }
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }
         if boxed_here { out.push(")"); }

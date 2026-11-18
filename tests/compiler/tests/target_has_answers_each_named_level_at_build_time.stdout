@@ -1,0 +1,4 @@
+x86-64: crc32c false, bmi2 false, avx2 false
+x86-64-v2: crc32c true, bmi2 false, avx2 false
+x86-64-v3: crc32c true, bmi2 true, avx2 true
+x86-64-v4: crc32c true, bmi2 true, avx2 true

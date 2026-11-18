@@ -1,0 +1,8 @@
+unsized: true true 1
+piece 1: 2000 2000 1
+piece 7: 2000 2000 1
+piece 64: 457 457 1
+piece 1000000: 1 1 1
+empty: 0 0
+three separators, piece 1: 2
+separators counted: 2000

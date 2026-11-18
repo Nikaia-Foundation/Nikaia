@@ -680,7 +680,12 @@ impl EmitState {
         if lent_option || lent_path {
             out.push("&")
         }
-        out.push(before)
+        // **A count's wrap goes inside `count::of`** (ADR-285 D15): a narrower
+        // integer widened into `i64` is still the count, and `count::of` takes
+        // it, never the other way round, `i64::from(count::of(n))`, a `usize`.
+        if !count {
+            out.push(before)
+        }
         // **A list or text a described Rust crate owns crosses as it is**
         // (ADR-327 D8, #1541): what the call hands over is placed outside the
         // task's block (a local handed to a call never is in it), so the
@@ -809,6 +814,7 @@ impl EmitState {
         }
         if count {
             out.push("nikaia_std::count::of(")
+            out.push(before)
         }
         // A count written only in literals is left for Rust to infer as a
         // `usize`, so a suffix may not be written into it either.
@@ -862,6 +868,7 @@ impl EmitState {
             out.push(how)
         }
         if count {
+            out.push(after)
             out.push(")")
         }
         if kept_here {
@@ -883,7 +890,9 @@ impl EmitState {
             out.push(".clone()")
         }
         out.push(owner_close)
-        out.push(after)
+        if !count {
+            out.push(after)
+        }
         // A kept function value copied from a place (#1031), where the
         // argument hands it over: not lent, not lent as its closure.
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(node)

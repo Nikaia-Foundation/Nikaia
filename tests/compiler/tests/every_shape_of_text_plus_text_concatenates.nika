@@ -1,0 +1,14 @@
+// `+` on text in all four shapes, owned or a view on either side
+// (`concat::plus`): the language below has an operator for one of them.
+fn owned() -> String {
+	return f"left{"-"}"
+}
+
+fn main() throws {
+	let right_view = "right"
+	let right_own: String = f"{right_view}"
+	println(owned() + right_view)
+	println(owned() + right_own.clone())
+	println("left-" + right_view)
+	println("left-" + right_own)
+}

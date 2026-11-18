@@ -68,17 +68,3 @@ arity!(A1, A2, A3);
 arity!(A1, A2, A3, A4);
 arity!(A1, A2, A3, A4, A5);
 arity!(A1, A2, A3, A4, A5, A6);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_kept_closure_is_called_cloned_and_printed() {
-        let n = 3;
-        let add: Kept<dyn Fn(i64) -> i64> = Kept::from(move |x| x + n);
-        let again = add.clone();
-        assert_eq!(add(1) + again(2), 9);
-        assert_eq!(format!("{add:?}"), "<fn>");
-    }
-}

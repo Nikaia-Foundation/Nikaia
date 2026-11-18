@@ -1607,3 +1607,16 @@ pub enum ConfigZone {
     /// The name the parameter struct arrives under.
     Spread(winnow_grammar::Symbol),
 }
+
+test "two node ids are equal and their numbers are not" {
+    assert(node_id::NodeId::numbered(1) == node_id::NodeId::numbered(2))
+    assert(node_id::NodeId::numbered(1).get() != node_id::NodeId::numbered(2).get())
+}
+
+test "a fresh node id is new every time and above the parser's" {
+    let first = node_id::NodeId::fresh().get()
+    let second = node_id::NodeId::fresh().get()
+    // `node_id::FIRST_BUILT`, `1 << 31`: the parser numbers below it.
+    assert(first >= 2147483648)
+    assert(first != second)
+}

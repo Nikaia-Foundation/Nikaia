@@ -1,0 +1,23 @@
+// A `par_iter` walk keeps the list's order and has a sequence's surface:
+// `map`, `filter`, `count`, `take`, `skip`, `rev`, `step_by`, `nth`, `zip`,
+// `fold` and a `for` (`par.rs`'s `iter`, Part II 12.6). Moved from the
+// `nikaia-std` unit test `par::tests::the_walk_keeps_the_lists_order_and_seqs_surface` (#2082).
+fn main() throws {
+	let xs: Vec[i64] = (1..100).collect()
+	let big: Vec[i64] = xs.par_iter().map(fn(x) { x * 2 }).filter(fn(x) { x > 150 }).collect()
+	let want: Vec[i64] = (76..100).map(fn(x) { x * 2 }).collect()
+	println(big == want)
+	println(xs.par_iter().filter(fn(x) { x % 2 == 0 }).count())
+	println(xs.par_iter().filter(fn(x) { x > 10 }).take(2).join(","))
+	println(xs.par_iter().skip(98).rev().join(","))
+	println(xs.par_iter().step_by(40).nth(2) ?? -1)
+	let names: Vec[String] = ["a", "b"]
+	println(xs.par_iter().zip(names.iter()).map(fn(p) { f"{p.0}{p.1}" }).join(","))
+	let seen = xs.par_iter().fold(fn { 0 }, fn(n, x) { n + x }, fn(a, b) { a + b })
+	println(seen)
+	let mut looped: Vec[i64] = []
+	for x in xs.par_iter().map(fn(x) { x + 1 }).take(3) {
+		looped.push(x)
+	}
+	println(looped.iter().join(","))
+}
