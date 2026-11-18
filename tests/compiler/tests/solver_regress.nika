@@ -15,6 +15,11 @@
 // combination looked every assumed literal up in the other set, in the
 // engine and in the certificate checker; since the two sorted sets are
 // merged, about 2 s (#2012).
+// QF_LRA sal carpark-Carpark2-ausgabe-6 took about 6 s on the rod until
+// 310f645c6 (the simplex's propagation scanned the trail for each atom) and
+// about 0.7 s after it, at opt-level 0; since the rod is built at opt-level
+// 3 (c41d26781, #2004), about 0.07 s. Its second run, alone under a 1 s
+// limit, shows a slowdown the 10 s limit would hide (#1967).
 use std::fs
 use std::process
 
@@ -51,7 +56,28 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"]
+	inner(
+		nikaia,
+		repo,
+		["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"],
+	)
+	inner(
+		nikaia,
+		repo,
+		[
+			"run",
+			"scripts/solver.nika",
+			"--",
+			"run",
+			"--timeout",
+			"1",
+			"tests/solver/regress/sal-carpark-Carpark2-ausgabe-6.smt2",
+		],
+	)
+}
+
+// Runs `nikaia ALL` in the repository and prints its output.
+fn inner(nikaia: String, repo: String, all: Vec[String]) throws {
 	let out = process::run(nikaia, all.clone(); dir: repo)
 	println(out.stdout.trim())
 	// A failed inner run names its cause in the diff (#1305).

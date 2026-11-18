@@ -13,7 +13,7 @@ its `; EXPECT:` line.
 | `qflra/` | QF_LRA, non-incremental, under 64 KiB | see below | see below |
 | `sample/` | the fixed 50-file sample of the SMT-LIB set below (25 QF_LIA, 25 QF_LRA), run in CI by `tests/compiler/tests/solver_sample.nika` (#1338) | `scripts/solver.nika sample target/smtlib tests/solver/sample 25` | per family, see below |
 | `compiler/` | the compiler's own questions (D9's set, #1285 item 3): 4884 distinct normal forms the bounds walk and the prover ask over the tools package, 3014 `unsat`, 1854 `sat`, 16 with no status (unknown to both engines); file name the `nikaia.proofs` key | `NIKAIA_DUMP_QUERIES=DIR nikaia lower-std --bounds`, status the compiler's checked answer (Fourier-Motzkin, then the new engine) | the repository's |
-| `regress/` | files of the SMT-LIB set below that a fix brought within the limit, run under a 10 s wall-clock limit by `tests/compiler/tests/solver_regress.nika` (#1961); the file name is `FAMILY-` and the set's name | the SMT-LIB set below, unchanged | per family, see below |
+| `regress/` | files of the SMT-LIB set below that a fix brought within the limit, run under a 10 s wall-clock limit by `tests/compiler/tests/solver_regress.nika` (#1961), `sal-` also alone under 1 s (#1967); the file name is `FAMILY-` and the set's name | the SMT-LIB set below, unchanged | per family, see below |
 | `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with the expected status (z3's, or for a status-keeping mutant the original's); none committed | generated | the repository's |
 
 ## Checked against z3, nightly (#1989)
