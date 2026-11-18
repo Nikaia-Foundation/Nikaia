@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] [--budget N] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] [--budget N] [--cases N] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] [--rlimit R] DIR|FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED [--size S] [--rlimit R]
@@ -64,6 +64,10 @@
 // which no case counts, with the search's, so a file past it answers
 // `unknown (steps)` on every machine alike (#2107). With `--budget` and no
 // `--timeout` a file has no wall-clock limit; without either, 60 s.
+// `--cases N` gives a new engine a case budget of N (the parameter `cases`
+// of `sv_params`) in place of the build-time one, for a file a fix brought
+// within reach only past `lg_budget()` (#1962); PAR-2 still doubles the
+// build-time budget.
 // `--stats` adds below each file's line the new
 // engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
 // theory lemmas and those repeating an earlier one, decisions, restarts.
@@ -439,6 +443,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut stats = false
 	let mut timeout = -1
 	let mut budget = 0
+	let mut cases = 0
 	let mut targets: Vec[String] = []
 	let mut i = 0
 	while i < args.len() {
@@ -457,6 +462,15 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			budget = text::parse_i64(args[i + 1].clone()) ?? 0
 			if budget <= 0 {
 				println(f"--budget takes a positive number of steps, not {args[i + 1]}")
+				process::exit(2)
+			}
+			i += 2
+			continue
+		}
+		if a == "--cases" && i + 1 < args.len() {
+			cases = text::parse_i64(args[i + 1].clone()) ?? 0
+			if cases <= 0 {
+				println(f"--cases takes a positive number of cases, not {args[i + 1]}")
 				process::exit(2)
 			}
 			i += 2
@@ -483,6 +497,14 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			process::exit(2)
 		}
 		answering = f"{engine}:steps={budget}"
+	}
+	if cases > 0 {
+		if engine == "fm" {
+			println("--cases sets the new engine's case budget: not with --engine fm")
+			process::exit(2)
+		}
+		let head = if budget > 0 { f"{answering}," } else { f"{engine}:" }
+		answering = f"{head}cases={cases}"
 	}
 	let mut files: Vec[(String, String)] = []
 	for t in targets { files.extend(solver_files(t)) }
