@@ -7,7 +7,7 @@ pub enum Switch {
     Moved(String),
 }
 
-pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks")] }
+pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("unproved-checks"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks")] }
 
 pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-paths-anywhere")] }
 
