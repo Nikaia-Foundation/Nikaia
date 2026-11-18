@@ -1,0 +1,73 @@
+// The Benchmarks Game's `reverse-complement`: each sequence of a FASTA file
+// on standard input, its header line as it is, then its letters reversed and
+// each replaced by its complement (A and T, C and G, and the IUB codes in
+// pairs), in lines of 60.
+//
+//     nikaia run main.nika < fasta-output.txt
+use std::io
+
+// The complement of one IUB code, upper or lower case, in upper case.
+fn complement(b: u8) -> u8 {
+	return match b as char {
+		'A' | 'a' => 'T' as u8,
+		'C' | 'c' => 'G' as u8,
+		'G' | 'g' => 'C' as u8,
+		'T' | 't' => 'A' as u8,
+		'U' | 'u' => 'A' as u8,
+		'M' | 'm' => 'K' as u8,
+		'R' | 'r' => 'Y' as u8,
+		'W' | 'w' => 'W' as u8,
+		'S' | 's' => 'S' as u8,
+		'Y' | 'y' => 'R' as u8,
+		'K' | 'k' => 'M' as u8,
+		'V' | 'v' => 'B' as u8,
+		'H' | 'h' => 'D' as u8,
+		'D' | 'd' => 'H' as u8,
+		'B' | 'b' => 'V' as u8,
+		'N' | 'n' => 'N' as u8,
+		else => b,
+	}
+}
+
+// The letters of `body`, the lines after a header, reversed and complemented
+// into `out` in lines of 60.
+fn reverse_complement(body: String, mut out: Vec[u8]) {
+	let mut letters: Vec[u8] = []
+	for line in body.lines() {
+		for b in line.bytes {
+			letters.push(b)
+		}
+	}
+	let mut i = letters.len()
+	let mut column = 0
+	while i > 0 {
+		i = i - 1
+		out.push(complement(letters[i]))
+		column = column + 1
+		if column == 60 {
+			out.push(10)
+			column = 0
+		}
+	}
+	if column > 0 {
+		out.push(10)
+	}
+}
+
+fn main() throws {
+	let input = io::read_to_string() catch {
+		eprintln(f"cannot read standard input: {error}")
+		return
+	}
+	let mut out: Vec[u8] = []
+	for section in input.split(">").skip(1) {
+		let (header, body) = section.split_once("\n") ?? (section, "")
+		out.push('>' as u8)
+		for b in header.bytes {
+			out.push(b)
+		}
+		out.push(10)
+		reverse_complement(body, out)
+	}
+	print(Bytes(out))
+}

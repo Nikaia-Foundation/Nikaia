@@ -1,0 +1,17 @@
+error[NK1201]: You can't put `Bytes` in an `f"…"` hole.
+  --> tests/bytes_in_a_text_hole_is_refused.nika:5:5
+   |
+ 5 |     let line = f"image {b}"
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A hole is written as its value's text, and bytes are not text (ADR-019 D7). `b` is `Bytes`.
+   = help: Print the bytes beside the line: `print(b)`, or write their text: `{b.text_lossy()}`.
+error[NK1201]: You can't put `Bytes` in an `f"…"` hole.
+  --> tests/bytes_in_a_text_hole_is_refused.nika:7:5
+   |
+ 7 |     println(f"{Bytes([0x41])}")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A hole is written as its value's text, and bytes are not text (ADR-019 D7). `Bytes([65])` is `Bytes`.
+   = help: Print the bytes beside the line: `print(Bytes([65]))`, or write their text: `{(Bytes([65])).text_lossy()}`.
+2 type errors

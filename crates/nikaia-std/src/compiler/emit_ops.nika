@@ -204,12 +204,6 @@ fn is_length(method: ref String, args: ref Vec[Expr]) -> bool {
     return method == "len" && args.len() == 0
 }
 
-/// Whether a callee's argument at `at` is a **count** the language below takes
-/// in `usize` (ADR-285 D15): today `str::repeat`'s first.
-pub fn is_count(callee: ref String, at: i64) -> bool {
-    return callee == "repeat" && at == 0
-}
-
 /// A list a function value only reads is a slice (#458): `&Vec<T>` written
 /// as `&[T]`, and with a named lifetime `&'r Vec<T>` as `&'r [T]` (#1016);
 /// `&mut Vec<T>` stays.

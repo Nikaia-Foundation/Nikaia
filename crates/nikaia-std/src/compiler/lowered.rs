@@ -3445,7 +3445,7 @@ pub mod emit_needs {
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
-    pub use super::{precedence, unary_op, pointing, jumps, is_count};
+    pub use super::{precedence, unary_op, pointing, jumps};
 }
 pub mod emit_order {
     #[allow(unused_imports)]
@@ -3912,4 +3912,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "619cbc6993eaf97e5c847be04a2b516789406faa4a865103276ffb49b1a3f6e3";
+pub const LOWERED_DIGEST: &str = "20bb65820b02c5599199973c7d86d3afc8a595b281f7fb597a66a574bd051406";

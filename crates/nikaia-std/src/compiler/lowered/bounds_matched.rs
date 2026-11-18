@@ -249,6 +249,7 @@ pub(crate) fn bm_each(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collecti
                 names.insert(nikaia_std::block::Text::from(option.name.to_string()));
             }
             names.insert(String::from("item"));
+            names.insert(String::from("turn"));
             names.insert(String::from("self.len()"));
             let mut conditions: Vec<Vec<logic::SolverTerm>> = vec![];
             for text in contract.ensures_each.iter() {

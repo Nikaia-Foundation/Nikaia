@@ -1,0 +1,25 @@
+// What `io::read()` and `p.parts()` hand back is a program's own `Vec`: each
+// goes on to a parameter that declares `mut v: Vec[...]` and grows it (#1619).
+// Both were plain Rust `Vec`s, which rustc refused to give where a program's
+// `Vec` (a block's list) was wanted: an internal error NK1343.
+use std::io
+use std::fs
+
+fn grown(mut v: Vec[u8]) -> i64 {
+    v.push(10)
+    return v.len()
+}
+
+fn more(mut v: Vec[fs::Path]) -> i64 {
+    let p: fs::Path = "c"
+    v.push(p)
+    return v.len()
+}
+
+fn main() throws {
+    let mut data = io::read() catch { return }
+    println(f"{grown(data)} bytes")
+    let name: fs::Path = "a/b"
+    let mut parts = name.parts()
+    println(f"{more(parts)} parts")
+}

@@ -146,7 +146,7 @@ pub(crate) fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, in
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let params = call_arguments(signature);
     if i >= params.len() as i64 { return None; }
-    let ty = nikaia_std::index::get(&params, nikaia_std::index::at(i)).1.clone();
+    let ty = unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1.clone();
     if inside {
         return match ty {
             Ty::Nullable(ref item) => { let item = nikaia_std::boxed::open(item); emit_rust_crossing(item, true, 0) },
@@ -437,7 +437,7 @@ impl EmitState {
             None => None,
         }, || nikaia_std::block::Text::from(callee.to_string()).into()), i);
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node)?;
-        let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
+        let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
@@ -454,7 +454,7 @@ impl EmitState {
         if self.foreign_params.contains_key(callee) {
             let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if i < params.len() as i64 {
-                let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).clone();
+                let ty = (*unsafe { nikaia_std::proven::read(&params, (i) as usize) }).clone();
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }
@@ -1734,6 +1734,15 @@ impl EmitState {
                     Expr::LitInterpolated { parts, .. } => { self.emit_core_joined_name(world, walk, out, host, parts, &names, depth, flow, scope)?; },
                     _ => { self.emit_expr(world, walk, out, host, given, depth, flow, scope)?; },
                 }
+                out.push(&format!("), {}, {})", to_err, newline));
+                if !fails { out.push(".unwrap_or(())"); }
+                return Ok(());
+            }
+            if self.facts.printed_bytes.contains(&key) {
+                let to_err = text.starts_with('e');
+                let newline = text.ends_with("ln");
+                out.push("nikaia_std::io::print_bytes(&(");
+                self.emit_expr(world, walk, out, host, given, depth, flow, scope)?;
                 out.push(&format!("), {}, {})", to_err, newline));
                 if !fails { out.push(".unwrap_or(())"); }
                 return Ok(());

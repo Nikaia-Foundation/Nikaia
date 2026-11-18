@@ -175,6 +175,14 @@ impl CheckState {
                     return;
                 }
                 if name == "Self" { return; }
+                if name == "Bytes" {
+                    if !printed {
+                        let note = format!("A hole is written as its value's text, and bytes are not text (ADR-019 D7). `{}` is `{}`.", written, held.text());
+                        let out = format!("Print the bytes beside the line: `print({})`, or write their text: `{{{}.text_lossy()}}`.", written, shown);
+                        self.findings.push(check_refusal("NK1201", span, format!("You can't put `{}` in an `f\"…\"` hole.", held.text()), vec![note], Some(out)));
+                    }
+                    return;
+                }
                 let mut package_type: Option<TypeContract> = None;
                 if name.contains("::") { package_type = check_exprs_package_type(world, &self.std_in_scope, name); }
                 let from_a_package = package_type.is_some();

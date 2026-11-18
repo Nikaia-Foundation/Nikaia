@@ -1,0 +1,34 @@
+// A function of the program's own called `repeat` takes its first argument as
+// written: only `str::repeat`'s count is converted to `usize`, by the entry
+// the call resolved to, not by the name (it was `count::of(text)`, an
+// internal error, in fasta of benches/game, #1617).
+fn repeat(sequence: String, times: i64) -> String {
+	let mut out = String()
+	for _ in 0..<times {
+		out.push_str(sequence)
+	}
+	return out
+}
+
+struct Line {
+	text: String,
+}
+
+impl Line {
+	fn repeat(self, sequence: String, times: i64) -> String {
+		return f"{self.text}{repeat(sequence, times)}"
+	}
+}
+
+fn main() throws {
+	let alu = "GGC"
+	let n = 2
+	println(repeat(alu, n * 2))
+	let line = Line { text: ">" }
+	println(line.repeat(alu, n))
+	let mut width = 3
+	width = width + n
+	println("ab".repeat(width))
+	println(alu.repeat(n))
+	println(repeat(alu.repeat(n), 2))
+}
