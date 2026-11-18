@@ -1,0 +1,8 @@
+# The solver's measuring rod (ADR-270 D17): a program over the package
+# `logic`, built by `scripts/solver.nika`.
+[package]
+name = "solver_rod"
+version = "0.1.0"
+
+[dependencies]
+logic = { path = ".." }

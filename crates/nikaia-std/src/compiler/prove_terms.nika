@@ -10,13 +10,15 @@
 // named by their place in `out`: the same terms in the same order the Rust
 // made them.
 
+use logic
+
 /// **A value a `let mut` or an assignment gives, as a term** (ADR-361 D13,
 /// #1848): a `bool` name is a number to the walk, `true` 1 and `false` 0, so a
 /// flag a loop sets is a state name like a counter. `lin_term` itself reads
 /// numbers only: the ledgers and the summaries read it too.
-fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
     return match expr {
-        Expr::LitBool(b, _) => built(SolverTerm::Int(if b { 1 } else { 0 }), out),
+        Expr::LitBool(b, _) => built(logic::SolverTerm::Int(if b { 1 } else { 0 }), out),
         else => lin_term(expr, words, var, pinned, out),
     }
 }
@@ -26,20 +28,20 @@ fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: f
 /// is a constant. A name or a call `pinned` gives a value the build knows is
 /// that value: a `comptime` binding (ADR-359 D7), a call run while the
 /// program was built (D11).
-fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
     return match expr {
         // A literal no `i64` holds is outside what the solver reads.
         Expr::LitInt { value, negative, .. } => {
             let n = literal_value(value, negative) ?? return null
-            built(SolverTerm::Int(n), out)
+            built(logic::SolverTerm::Int(n), out)
         },
         Expr::Variable(name, _) => {
             let text = words.resolve(name)
             if !var(text) {
                 let known = pinned(text) ?? return null
-                return built(SolverTerm::Int(known), out)
+                return built(logic::SolverTerm::Int(known), out)
             }
-            built(SolverTerm::Var(text.clone()), out)
+            built(logic::SolverTerm::Var(text.clone()), out)
         },
         // `xs.len()` of a list that does not change is a variable of its own.
         Expr::MethodCall { receiver, method, args, .. } => {
@@ -50,11 +52,11 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             // is 1.
             let counted = text_literal_length(receiver)
             if counted != null {
-                return built(SolverTerm::Int(counted ?? 0), out)
+                return built(logic::SolverTerm::Int(counted ?? 0), out)
             }
             // A path of fields counts as a name does (ADR-306 D17).
             let length = length_path(receiver, words, var) ?? return null
-            built(SolverTerm::Var(length), out)
+            built(logic::SolverTerm::Var(length), out)
         },
         // **A path of fields from a name** (ADR-306 D17, ADR-269 D9): `p.end`
         // is a name of its own where the walk made it one.
@@ -63,7 +65,7 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             if !var(path) {
                 return null
             }
-            built(SolverTerm::Var(path), out)
+            built(logic::SolverTerm::Var(path), out)
         },
         // **One element of a list** (ADR-306 D33): `xs[c]` of a list that is
         // a path, indexed by a name or a literal, is a name of its own where
@@ -73,7 +75,7 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             if !var(element) {
                 return null
             }
-            built(SolverTerm::Var(element), out)
+            built(logic::SolverTerm::Var(element), out)
         },
         // **A call's result**, where the walk made it a name of its own
         // (`call_result_name`, ADR-314 D3).
@@ -81,19 +83,19 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             let name = call_result_name(expr)
             let ran = pinned(name)
             if ran != null {
-                return built(SolverTerm::Int(ran ?? 0), out)
+                return built(logic::SolverTerm::Int(ran ?? 0), out)
             }
             if !var(name) {
                 return null
             }
-            built(SolverTerm::Var(name), out)
+            built(logic::SolverTerm::Var(name), out)
         },
         Expr::Unary { op, expr, .. } => {
             if op != UnaryOp::Neg {
                 return null
             }
             let a = lin_term(expr, words, var, pinned, out) ?? return null
-            built(SolverTerm::Neg(a), out)
+            built(logic::SolverTerm::Neg(a), out)
         },
         // **A conversion into a whole number keeps the value or stops the
         // program** (Part III A.2), so where it goes on the number is the one
@@ -109,13 +111,13 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             let l = lin_term(lhs, words, var, pinned, out) ?? return null
             let r = lin_term(rhs, words, var, pinned, out) ?? return null
             match op {
-                BinaryOp::Add => built(SolverTerm::Add(l, r), out),
-                BinaryOp::Sub => built(SolverTerm::Sub(l, r), out),
+                BinaryOp::Add => built(logic::SolverTerm::Add(l, r), out),
+                BinaryOp::Sub => built(logic::SolverTerm::Sub(l, r), out),
                 BinaryOp::Mul => {
                     if constant_at(l, out) == null && constant_at(r, out) == null {
                         return null
                     }
-                    built(SolverTerm::Mul(l, r), out)
+                    built(logic::SolverTerm::Mul(l, r), out)
                 },
                 // **A quotient or a remainder of two known numbers is its
                 // value** (ADR-359 D5), as Part I 2.2 folds it: truncated
@@ -128,27 +130,27 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
                     let known = constant_at(l, out)
                     if known != null {
                         let q = (known ?? 0).checked_div(y) ?? return null
-                        return built(SolverTerm::Int(q), out)
+                        return built(logic::SolverTerm::Int(q), out)
                     }
                     if y <= 0 {
                         return null
                     }
-                    built(SolverTerm::Quot(l, y), out)
+                    built(logic::SolverTerm::Quot(l, y), out)
                 },
                 BinaryOp::Rem => {
                     let y = constant_at(r, out) ?? pinned(divisor_name(rhs)) ?? return null
                     let known = constant_at(l, out)
                     if known != null {
                         let m = (known ?? 0).checked_rem(y) ?? return null
-                        return built(SolverTerm::Int(m), out)
+                        return built(logic::SolverTerm::Int(m), out)
                     }
                     if y <= 0 {
                         return null
                     }
-                    let q = built(SolverTerm::Quot(l, y), out)
-                    let k = built(SolverTerm::Int(y), out)
-                    let kq = built(SolverTerm::Mul(k, q), out)
-                    built(SolverTerm::Sub(l, kq), out)
+                    let q = built(logic::SolverTerm::Quot(l, y), out)
+                    let k = built(logic::SolverTerm::Int(y), out)
+                    let kq = built(logic::SolverTerm::Mul(k, q), out)
+                    built(logic::SolverTerm::Sub(l, kq), out)
                 },
                 else => null,
             }
@@ -249,9 +251,9 @@ fn call_result_name(call: ref Expr) -> String {
 
 /// The claim `expr` as a formula over [`lin_term`]s, where it is one this
 /// prover reads.
-pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
     return match expr {
-        Expr::LitBool(b, _) => built(SolverTerm::Bool(b), out),
+        Expr::LitBool(b, _) => built(logic::SolverTerm::Bool(b), out),
         // **A `bool` name the walk follows is a number** (ADR-361 D13):
         // `true` is 1, so the claim is that it is at least 1 (#1848).
         Expr::Variable(name, _) => {
@@ -259,9 +261,9 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
             if !var(n) {
                 return null
             }
-            let named = built(SolverTerm::Var(n.clone()), out)
-            let one = built(SolverTerm::Int(1), out)
-            built(SolverTerm::Ge(named, one), out)
+            let named = built(logic::SolverTerm::Var(n.clone()), out)
+            let one = built(logic::SolverTerm::Int(1), out)
+            built(logic::SolverTerm::Ge(named, one), out)
         },
         // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
         // a name of its own as `lin_term` reads it.
@@ -270,27 +272,27 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
                 return null
             }
             let length = length_path(receiver, words, var) ?? return null
-            let counted = built(SolverTerm::Var(length), out)
-            let zero = built(SolverTerm::Int(0), out)
-            built(SolverTerm::Eq(counted, zero), out)
+            let counted = built(logic::SolverTerm::Var(length), out)
+            let zero = built(logic::SolverTerm::Int(0), out)
+            built(logic::SolverTerm::Eq(counted, zero), out)
         },
         Expr::Unary { op, expr, .. } => {
             if op != UnaryOp::Not {
                 return null
             }
             let a = claim_term(expr, words, var, pinned, out) ?? return null
-            built(SolverTerm::Not(a), out)
+            built(logic::SolverTerm::Not(a), out)
         },
         Expr::Binary { op, lhs, rhs, .. } => match op {
             BinaryOp::And => {
                 let l = claim_term(lhs, words, var, pinned, out) ?? return null
                 let r = claim_term(rhs, words, var, pinned, out) ?? return null
-                built(SolverTerm::And([l, r]), out)
+                built(logic::SolverTerm::And([l, r]), out)
             },
             BinaryOp::Or => {
                 let l = claim_term(lhs, words, var, pinned, out) ?? return null
                 let r = claim_term(rhs, words, var, pinned, out) ?? return null
-                built(SolverTerm::Or([l, r]), out)
+                built(logic::SolverTerm::Or([l, r]), out)
             },
             BinaryOp::Lt => compared(op, lhs, rhs, words, var, pinned, out),
             BinaryOp::Le => compared(op, lhs, rhs, words, var, pinned, out),
@@ -308,13 +310,13 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
 /// where it holds (`holds`), each part of an `&&` it reads holds; where it
 /// fails, each part of an `||` it reads fails; a `!` swaps the two.
 /// `return 0 if key != "exit" || args.len() == 0` leaves `args.len() != 0`.
-fn claim_parts(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> Vec[i64] {
+fn claim_parts(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> Vec[i64] {
     let mut parts: Vec[i64] = []
     claim_parts_into(expr, holds, words, var, pinned, out, parts)
     return parts
 }
 
-fn claim_parts_into(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm], mut parts: Vec[i64]) {
+fn claim_parts_into(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm], mut parts: Vec[i64]) {
     match expr {
         Expr::Unary { op, expr, .. } => {
             if op == UnaryOp::Not {
@@ -335,55 +337,55 @@ fn claim_parts_into(expr: ref Expr, holds: bool, words: ref winnow_grammar::Inte
     if holds {
         parts.push(part)
     } else {
-        parts.push(built(SolverTerm::Not(part), out))
+        parts.push(built(logic::SolverTerm::Not(part), out))
     }
 }
 
 /// A comparison of two linear terms.
-fn compared(op: BinaryOp, lhs: ref Expr, rhs: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+fn compared(op: BinaryOp, lhs: ref Expr, rhs: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
     let a = lin_term(lhs, words, var, pinned, out) ?? return null
     let b = lin_term(rhs, words, var, pinned, out) ?? return null
     return match op {
-        BinaryOp::Lt => built(SolverTerm::Lt(a, b), out),
-        BinaryOp::Le => built(SolverTerm::Le(a, b), out),
-        BinaryOp::Gt => built(SolverTerm::Gt(a, b), out),
-        BinaryOp::Ge => built(SolverTerm::Ge(a, b), out),
-        BinaryOp::Eq => built(SolverTerm::Eq(a, b), out),
-        else => built(SolverTerm::Ne(a, b), out),
+        BinaryOp::Lt => built(logic::SolverTerm::Lt(a, b), out),
+        BinaryOp::Le => built(logic::SolverTerm::Le(a, b), out),
+        BinaryOp::Gt => built(logic::SolverTerm::Gt(a, b), out),
+        BinaryOp::Ge => built(logic::SolverTerm::Ge(a, b), out),
+        BinaryOp::Eq => built(logic::SolverTerm::Eq(a, b), out),
+        else => built(logic::SolverTerm::Ne(a, b), out),
     }
 }
 
 /// `node` appended, and its place.
-fn built(node: SolverTerm, mut out: Vec[SolverTerm]) -> i64 {
+fn built(node: logic::SolverTerm, mut out: Vec[logic::SolverTerm]) -> i64 {
     out.push(node)
     return out.len() - 1
 }
 
 /// The value of the term at `at` where it reads no variable and fits, as
 /// `nikaia-logic`'s `Arena::constant` reads it.
-fn constant_at(at: i64, out: ref Vec[SolverTerm]) -> i64? {
+fn constant_at(at: i64, out: ref Vec[logic::SolverTerm]) -> i64? {
     return match out[at] {
-        SolverTerm::Int(n) => n,
-        SolverTerm::Neg(a) => {
+        logic::SolverTerm::Int(n) => n,
+        logic::SolverTerm::Neg(a) => {
             let v = constant_at(a, out) ?? return null
             v.checked_neg()
         },
-        SolverTerm::Add(a, b) => {
+        logic::SolverTerm::Add(a, b) => {
             let x = constant_at(a, out) ?? return null
             let y = constant_at(b, out) ?? return null
             x.checked_add(y)
         },
-        SolverTerm::Sub(a, b) => {
+        logic::SolverTerm::Sub(a, b) => {
             let x = constant_at(a, out) ?? return null
             let y = constant_at(b, out) ?? return null
             x.checked_sub(y)
         },
-        SolverTerm::Mul(a, b) => {
+        logic::SolverTerm::Mul(a, b) => {
             let x = constant_at(a, out) ?? return null
             let y = constant_at(b, out) ?? return null
             x.checked_mul(y)
         },
-        SolverTerm::Quot(a, k) => {
+        logic::SolverTerm::Quot(a, k) => {
             let x = constant_at(a, out) ?? return null
             x.checked_div(k)
         },

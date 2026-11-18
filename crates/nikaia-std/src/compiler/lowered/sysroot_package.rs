@@ -268,6 +268,9 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n");
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::text::TextNormalized as _;\n");
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::prelude::Hasher;\n");
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::abort::{ShownByDebug as _, ShownByNothing as _};\n");
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::seq::Join as _;\n");
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::text::TextQuoted as _;\n");
     imports.sort();
     for import in imports.iter() {
         rust.push_str("#[allow(unused_imports)]\n");

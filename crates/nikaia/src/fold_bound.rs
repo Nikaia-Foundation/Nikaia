@@ -28,7 +28,7 @@ use nikaia_std::compiler::fold_bound::{
     FbHost, FbSource, fb_fold_counters, fb_folds, fb_index, fb_least_width, fb_most_steps, fb_uses,
     fb_whole_changes_itself,
 };
-use nikaia_std::compiler::prover_arena::TermArena;
+use nikaia_std::compiler::logic::prover_arena::TermArena;
 
 /// What the Nikaia walk asks of the compiler: the holes of a literal, and the
 /// solver.

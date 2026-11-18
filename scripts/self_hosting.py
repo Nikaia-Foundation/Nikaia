@@ -22,6 +22,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUST = ROOT / "crates" / "nikaia" / "src"
 TOOLS = ROOT / "crates" / "nikaia-std" / "src" / "compiler"
+# The logic layer and the solvers the compiler depends on (ADR-270 D1, #2020).
+LOGIC = ROOT / "packages" / "logic" / "src"
+
+
+def source(name):
+    """Where one of the toolchain's `.nika` files lives: the compiler, or the
+    package `logic` it depends on."""
+    path = TOOLS / name
+    return path if path.exists() else LOGIC / name
 
 # The toolchain's Nikaia, and the Rust module each one took the place of or
 # serves. `http1.nika` is not here: it is `std`'s HTTP server, which a program
@@ -299,7 +308,7 @@ def code_lines(path):
 
 def measure():
     rust = sum(code_lines(p) for p in sorted(RUST.rglob("*.rs")))
-    nika = {name: code_lines(TOOLS / name) for name in COMPILER_NIKA}
+    nika = {name: code_lines(source(name)) for name in COMPILER_NIKA}
     total = rust + sum(nika.values())
     share = 100.0 * sum(nika.values()) / total if total else 0.0
     return rust, nika, share

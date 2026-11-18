@@ -1,0 +1,28 @@
+// A package that depends on `logic` reads an SMT-LIB script, asks the
+// reference solver whether it is `unsat`, and checks the certificate it
+// answers with (ADR-270 D1, D24, #2020; the probe of #1946).
+use logic
+
+fn main() throws {
+    let source = "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 3))\n(assert (< x 2))\n(check-sat)\n"
+    let script = match logic::lg_smtlib_read(source) {
+        logic::LgRead::Script(script) => script,
+        logic::LgRead::Failed(_) => {
+            println("not read")
+            return
+        }
+    }
+    let mut arena = script.arena.clone()
+    let goal = arena.boolean(false)
+    match logic::lg_check(arena, script.assertions, goal, logic::lg_budget()) {
+        logic::LgAnswer::Proved { certificate } => {
+            if logic::lg_verify(arena, script.assertions, goal, certificate) == null {
+                println("unsat, certificate checked")
+            } else {
+                println("unsat, certificate rejected")
+            }
+        }
+        logic::LgAnswer::Refuted { .. } => println("sat"),
+        logic::LgAnswer::Unknown { .. } => println("unknown"),
+    }
+}

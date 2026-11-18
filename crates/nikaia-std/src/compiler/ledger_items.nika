@@ -9,6 +9,7 @@
 // and the workshop that computes a default stay Rust.
 
 use std::collections
+use logic
 
 /// The types Part I 2.2 offers, by name. Two questions read it: whether `as`
 /// names a type this language has (ADR-285 D1), and whether an `impl`'s type
@@ -361,9 +362,9 @@ fn expression_ensures(item: ref Item, words: ref winnow_grammar::InternerContext
     for arg in args {
         names.insert(words.resolve(arg.name).clone())
     }
-    let mut nodes: Vec[SolverTerm] = []
+    let mut nodes: Vec[logic::SolverTerm] = []
     let term = lin_term(value, words, fn(candidate) { names.contains(candidate) }, fn(name) { nothing_pinned(name) }, nodes) ?? return null
-    let text = term_ledger_text(term, fn(at) { nodes[at].clone() })
+    let text = logic::term_ledger_text(term, fn(at) { nodes[at].clone() })
     let condition = f"result == {text}"
     let mut readable = names.clone()
     readable.insert("result")
