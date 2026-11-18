@@ -42,7 +42,7 @@ fn case_with(nikaia: String, repo: String, tmp: String, name: String, cycle: Str
 // depend on the checkout's settings.
 fn unblock(text: String) -> String throws {
     let mut out = text.clone()
-    for n in 1..10 {
+    for n in 1..<10 {
         out = out.replace(f"a block of {n} (drive_lane_block); at {n}:", "a block of B (drive_lane_block); at B:")
     }
     return out

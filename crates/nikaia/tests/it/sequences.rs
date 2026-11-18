@@ -321,6 +321,18 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
     // package they are.
     let mut loose: Vec<nikaia::parser::Parsed> = Vec::new();
     let mut tools: Vec<(PathBuf, nikaia::parser::Parsed)> = Vec::new();
+    let mut logic: Vec<(PathBuf, nikaia::parser::Parsed)> = Vec::new();
+    for entry in std::fs::read_dir(root.join("packages/logic/src"))
+        .expect("the logic package")
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "nika") {
+            let source = std::fs::read_to_string(&path).expect("read the logic file");
+            logic.push((path, parse_to_ast(&source).expect("the logic file parses")));
+        }
+    }
+    logic.sort_by(|a, b| a.0.cmp(&b.0));
     let mut pending = vec![root.join("examples"), root.join("crates/nikaia-std/src")];
     while let Some(dir) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -401,7 +413,37 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         let json_own = Ledger::infer_package(&[&json_parsed], &read);
         read.absorb(Some("json"), json_own.clone());
         own.absorb(Some("json"), json_own);
-        let packages: BTreeSet<String> = BTreeSet::from(["json".to_text()]);
+        // **The package `logic`** (ADR-270 D24, D26), the solvers and the logic
+        // layer the tools `use`: read as its own package, its ledger beside the
+        // library's, the json's and the tools'.
+        let logic_units: Vec<&nikaia::parser::Parsed> = logic.iter().map(|(_, p)| p).collect();
+        let logic_own = Ledger::infer_package(&logic_units, &library);
+        read.absorb(Some("logic"), logic_own.clone());
+        own.absorb(Some("logic"), logic_own.clone());
+        let packages: BTreeSet<String> = BTreeSet::from(["json".to_text(), "logic".to_text()]);
+        for (at, (_, parsed)) in logic.iter().enumerate() {
+            let beside: Vec<&nikaia::parser::Parsed> = logic
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, (_, p))| p)
+                .collect();
+            let checked = nikaia::check::check_against(
+                parsed,
+                &beside,
+                &logic_own,
+                &library,
+                &BTreeSet::new(),
+                &newly,
+                &reads,
+            );
+            unanswered += checked
+                .methods
+                .values()
+                .map(|c| c.unanswered as usize)
+                .sum::<usize>();
+        }
+        files += logic.len();
         // **On every core** (CI speed, 2026-11-14): each file is checked on
         // its own against the same package, so the files are shared out to
         // threads and their counts added; one thread took eight minutes.
