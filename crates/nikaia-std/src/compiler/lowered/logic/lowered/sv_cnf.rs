@@ -335,7 +335,6 @@ pub(crate) fn sv_cnf_overflow_lit(why: &mut LgWhy) -> Option<i64> {
     None
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_int(arena: &TermArena, id: i64, env: &collections::BTreeMap<String, i64>) -> i64 {
     match arena.at(id) {
         SolverTerm::Int(n) => n,
@@ -349,7 +348,6 @@ pub(crate) fn sv_cnf_test_int(arena: &TermArena, id: i64, env: &collections::BTr
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_bool(arena: &TermArena, id: i64, env: &collections::BTreeMap<String, i64>) -> bool {
     match arena.at(id) {
         SolverTerm::Bool(b) => b,
@@ -380,7 +378,6 @@ pub(crate) fn sv_cnf_test_bool(arena: &TermArena, id: i64, env: &collections::BT
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_row(r: &SvRow, names: &[String]) -> String {
     let mut out = String::from("");
     let mut i: i64 = 0;
@@ -397,10 +394,8 @@ pub(crate) fn sv_cnf_test_row(r: &SvRow, names: &[String]) -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_lit(l: u32) -> String { if l % 2u32 == 0u32 { format!("a{}", l / 2u32) } else { format!("-a{}", l / 2u32) } }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_holds(cnf: &SvCnf, values: &[i64], bits: i64) -> bool {
     let mut truth: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut d = 0;
@@ -437,7 +432,6 @@ pub(crate) fn sv_cnf_test_holds(cnf: &SvCnf, values: &[i64], bits: i64) -> bool 
     true
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_extends(cnf: &SvCnf, values: &mut Vec<i64>, free: &[i64], at: i64) -> bool {
     if at == free.len() as i64 {
         let mut defs = 0;
@@ -461,7 +455,6 @@ pub(crate) fn sv_cnf_test_extends(cnf: &SvCnf, values: &mut Vec<i64>, free: &[i6
     false
 }
 
-#[cfg(test)]
 pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goal: i64) -> String {
     let mut out = format!("{}\n", name);
     let mut why = lg_why();
@@ -533,7 +526,6 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
     nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  agree on {} of {} values; the formula holds on {}\n", agree, total, models)))
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut t = TermArena::empty();
     let x = t.var("x");
@@ -592,7 +584,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut t = TermArena::empty();
     let x = t.var("x");
@@ -616,14 +607,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn the_clauses_of_a_query_agree_with_its_formula_on_every_small_value() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_query_refuted_by_its_clauses_alone_is_unsat_and_its_log_checks() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_cnf_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_cnf::the_clauses_of_a_query_agree_with_its_formula_on_every_small_value", __nikaia_test_0),
+        ("sv_cnf::a_query_refuted_by_its_clauses_alone_is_unsat_and_its_log_checks", __nikaia_test_1),
+    ]
 }

@@ -39,7 +39,6 @@ pub(crate) fn sv_mul_add(a: i64, x: i64, b: i64, y: i64) -> Option<i64> {
     left.checked_add(right)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_fits32(k: i64) -> bool { k >= -2147483648 && k <= 2147483647 }
 
 pub(crate) fn sv_content(ks: &[i64]) -> Option<i64> {
@@ -52,7 +51,6 @@ pub(crate) fn sv_content(ks: &[i64]) -> Option<i64> {
     Some(g)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
     let g = match sv_content(&ks) { Some(__nikaia_value) => __nikaia_value, None => return ks };
     if g <= 1 { return ks; }
@@ -64,7 +62,6 @@ pub(crate) fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_max_abs(ks: &[i64]) -> Option<i64> {
     let mut most: i64 = 0;
     for k in ks.iter() {
@@ -75,7 +72,6 @@ pub(crate) fn sv_max_abs(ks: &[i64]) -> Option<i64> {
     Some(most)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_dense_combine(a: i64, x: &[i64], b: i64, y: &[i64]) -> Option<Vec<i64>> {
     if (x.len() as i64) != y.len() as i64 { return None; }
     let mut out: Vec<i64> = vec![];
@@ -99,14 +95,12 @@ pub(crate) fn sv_cancelling(xj: i64, yj: i64) -> Option<Vec<i64>> {
     Some(vec![a, b])
 }
 
-#[cfg(test)]
 pub(crate) fn sv_dense_eliminate(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
     if j < 0 || j >= x.len() as i64 || j >= y.len() as i64 { return None; }
     let ab = match sv_cancelling(*unsafe { nikaia_std::proven::read(&x, (j) as usize) }, *unsafe { nikaia_std::proven::read(&y, (j) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_dense_combine(*nikaia_std::index::get(&ab, 0), x, *nikaia_std::index::get(&ab, 1), y)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -> i64 {
     let mut best: i64 = -1;
     let mut best_cost: i64 = 0;
@@ -129,7 +123,6 @@ pub(crate) fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -
     best
 }
 
-#[cfg(test)]
 pub(crate) fn sv_column_cost(xj: i64, yj: i64) -> Option<i64> {
     if xj == 1 || xj == -1 || yj == 1 || yj == -1 { return Some(0); }
     let ab = match sv_cancelling(xj, yj) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -235,7 +228,6 @@ pub(crate) fn sv_delta_add(a: &SvDelta, b: &SvDelta) -> Option<SvDelta> {
     Some(SvDelta { c, k })
 }
 
-#[cfg(test)]
 pub(crate) fn sv_delta_sub(a: &SvDelta, b: &SvDelta) -> Option<SvDelta> {
     let c = match sv_rat_sub(&a.c, &b.c) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let k = match sv_rat_sub(&a.k, &b.k) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -254,7 +246,6 @@ pub(crate) fn sv_delta_cmp(a: &SvDelta, b: &SvDelta) -> i64 {
     sv_rat_cmp(&a.k, &b.k)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_delta_text(a: &SvDelta) -> String {
     if a.k.num == 0 { return sv_rat_text(&a.c); }
     let real = if a.c.num == 0 { String::from("") } else { sv_rat_text(&a.c) };
@@ -264,10 +255,8 @@ pub(crate) fn sv_delta_text(a: &SvDelta) -> String {
     format!("{}{}{}δ", real, sign, sv_rat_text(&a.k))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_partner(n: i64) -> Vec<i64> { vec![-2, 1, 5, unsafe { nikaia_std::proven::add::<i64>(1, n % 7) }] }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_naive(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
     let mut a = *nikaia_std::index::get(&y, nikaia_std::index::at(j));
     let mut b = *nikaia_std::index::get(&x, nikaia_std::index::at(j));
@@ -281,7 +270,6 @@ pub(crate) fn sv_num_test_naive(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>
     Some(out)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_chain(reduce: bool, steps: i64) -> String {
     let mut c: Vec<i64> = vec![2, 1, 3, 4];
     let mut n: i64 = 0;
@@ -303,27 +291,23 @@ pub(crate) fn sv_num_test_chain(reduce: bool, steps: i64) -> String {
     format!("{} steps, largest coefficient {}, within 32 bits: {}", steps, largest, sv_fits32(largest))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_show(r: Option<&SvRat>) -> String {
     let v = match r { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused") };
     sv_rat_text(v)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_order(a: &SvRat, b: &SvRat) -> String {
     let c = sv_rat_cmp(a, b);
     let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" };
     format!("{} {} {}", sv_rat_text(a), op, sv_rat_text(b))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_num_test_dorder(a: &SvDelta, b: &SvDelta) -> String {
     let c = sv_delta_cmp(a, b);
     let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" };
     format!("{} {} {}", sv_delta_text(a), op, sv_delta_text(b))
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 1: i64 kept small\n"));
@@ -351,7 +335,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 2: rationals and delta\n"));
@@ -392,14 +375,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn i64_coefficients_are_kept_small_and_never_wrapped() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn rationals_and_delta_are_normalised_ordered_and_refuse_overflow() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_num_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_num::i64_coefficients_are_kept_small_and_never_wrapped", __nikaia_test_0),
+        ("sv_num::rationals_and_delta_are_normalised_ordered_and_refuse_overflow", __nikaia_test_1),
+    ]
 }

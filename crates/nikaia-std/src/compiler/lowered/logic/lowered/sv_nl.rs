@@ -264,7 +264,6 @@ pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<Str
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_nl_test_lemmas(source: &str) -> String {
     let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut defs: Vec<SvNl> = vec![];
@@ -299,21 +298,18 @@ pub(crate) fn sv_nl_test_lemmas(source: &str) -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn sv_nl_test_script(logic: &str, status: &str, sort: &str, names: &str, asserts: &str) -> String {
     let mut text = format!("(set-logic {})\n(set-info :status {})\n", logic, status);
     for n in names.split(' ') { text = nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(declare-const {} {})\n", n, sort))); }
     nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, asserts)), "(check-sat)\n"))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_nl_test_lines(files: &[(String, String)]) -> String {
     let mut out: String = String::from("");
     for (name, text) in files.iter() { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{}.smt2: {}{}\n", name, sv_line(&nikaia_std::block::Text::from(text.to_string()), "new"), sv_nl_test_lemmas(text)))); }
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("sat-abstraction"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (* x y) 0))\n(assert (= x 0))\n")), (String::from("unsat-abstraction"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (> (* x y) 5))\n(assert (< (* y x) 3))\n")), (String::from("sat-repaired"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (int.pow2 x) 8))\n(assert (> y x))\n")), (String::from("sat-refined"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (- x y) (int.pow2 x)))\n")), (String::from("arguments"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= (* (+ x 1) (* 2 y)) 6))\n(assert (= x 0))\n(assert (= y 2))\n")), (String::from("square"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x", "(assert (< (* x x) 0))\n")), (String::from("division"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (mod x 3) 4))\n")), (String::from("remainder"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (div x 3) 2))\n(assert (= (mod x 3) 1))\n(assert (distinct x 7))\n")), (String::from("free"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x y", "(assert (= (/ x 0) 1))\n(assert (= (/ y 0) 2))\n(assert (= x y))\n")), (String::from("point"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= x 3))\n(assert (= y 2))\n(assert (= (* x y) 7))\n")), (String::from("irrational"), sv_nl_test_script("QF_NRA", "sat", "Real", "x", "(assert (= (* x x) 2))\n"))];
     let out = sv_nl_test_lines(&files);
@@ -322,7 +318,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("parallel-let"), sv_nl_test_script("QF_LIA", "unknown", "Int", "x", "(assert (let ((a x) (b (+ a x))) (> b a)))\n")), (String::from("zero-denominator"), sv_nl_test_script("QF_LRA", "unknown", "Real", "x y", "(assert (= (+ x y) 5/0))\n"))];
     let out = sv_nl_test_lines(&files);
@@ -332,14 +327,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn non_linear_terms_are_abstracted_and_refined_with_lemmas() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_parallel_let_and_a_zero_denominator_are_refused_with_their_place() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_nl_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_nl::non_linear_terms_are_abstracted_and_refined_with_lemmas", __nikaia_test_0),
+        ("sv_nl::a_parallel_let_and_a_zero_denominator_are_refused_with_their_place", __nikaia_test_1),
+    ]
 }

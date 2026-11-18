@@ -107,7 +107,6 @@ pub(crate) fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
     s
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_of(query: &SvQuery) -> Option<SvSat> {
     let log = match sv_log(query) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut s = sv_sat(log.atoms, log);
@@ -707,7 +706,6 @@ impl SvSat {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_query(vars: u32, clauses: Vec<Vec<u32>>) -> SvQuery {
     let mut atoms: Vec<SvAtom> = vec![];
     let mut v: u32 = 0u32;
@@ -718,13 +716,10 @@ pub(crate) fn sv_sat_test_query(vars: u32, clauses: Vec<Vec<u32>>) -> SvQuery {
     SvQuery { atoms, clauses, columns: 0, reals: vec![] }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_pos(v: u32) -> u32 { sv_lit(v, false) }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_neg(v: u32) -> u32 { sv_lit(v, true) }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_pigeons(p: u32, h: u32) -> SvQuery {
     let mut clauses: Vec<Vec<u32>> = vec![];
     let mut i: u32 = 0u32;
@@ -754,7 +749,6 @@ pub(crate) fn sv_sat_test_pigeons(p: u32, h: u32) -> SvQuery {
     sv_sat_test_query(p * h, clauses)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_random3(n: u32, m: u32, seed: i64) -> SvQuery {
     let mut state = seed;
     let mut clauses: Vec<Vec<u32>> = vec![];
@@ -776,7 +770,6 @@ pub(crate) fn sv_sat_test_random3(n: u32, m: u32, seed: i64) -> SvQuery {
     sv_sat_test_query(n, clauses)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_answer_text(a: &SvSatAnswer) -> &'static str {
     match a {
         SvSatAnswer::Sat => "sat",
@@ -785,16 +778,13 @@ pub(crate) fn sv_sat_test_answer_text(a: &SvSatAnswer) -> &'static str {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_work(s: &SvSatStats) -> String { format!("  work: decisions {}, propagations {}, conflicts {}, learned {}, deleted {}, restarts {}, reductions {}, compactions {}", s.decisions, s.propagations, s.conflicts, s.learned, s.deleted, s.restarts, s.reductions, s.compactions) }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_verdict(q: &SvQuery, steps: &[SvStep]) -> String {
     let v = sv_check(q, steps);
     if v.ok { format!("accepted ({} steps)", v.step) } else { format!("rejected at step {}: {}", v.step, v.reason) }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_satisfied(q: &SvQuery, s: &SvSat) -> i64 {
     let mut n: i64 = 0;
     for clause in q.clauses.iter() {
@@ -808,7 +798,6 @@ pub(crate) fn sv_sat_test_satisfied(q: &SvQuery, s: &SvSat) -> i64 {
     n
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_lits_text(lits: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for l in lits.iter() {
@@ -819,7 +808,6 @@ pub(crate) fn sv_sat_test_lits_text(lits: &[u32]) -> String {
     format!("[{}]", nikaia_std::block::Text::from(parts.join(" ")))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_sat_test_run(name: &str, q: &SvQuery, s: &mut SvSat, budget: i64) -> String {
     let answer = s.solve(budget);
     let mut out: String = format!("{}: {}\n", name, sv_sat_test_answer_text(&answer));
@@ -842,7 +830,6 @@ pub(crate) fn sv_sat_test_run(name: &str, q: &SvQuery, s: &mut SvSat, budget: i6
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let hole = sv_sat_test_pigeons(4u32, 3u32);
     let made = sv_sat_of(&hole);
@@ -854,7 +841,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let chain = sv_sat_test_query(6u32, vec![vec![sv_sat_test_pos(0u32), sv_sat_test_pos(1u32)], vec![sv_sat_test_pos(0u32), sv_sat_test_neg(1u32), sv_sat_test_pos(2u32)], vec![sv_sat_test_neg(1u32), sv_sat_test_neg(2u32), sv_sat_test_pos(3u32)], vec![sv_sat_test_neg(2u32), sv_sat_test_neg(3u32)], vec![sv_sat_test_neg(0u32), sv_sat_test_pos(4u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_pos(5u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_neg(5u32)]]);
     let made = sv_sat_of(&chain);
@@ -877,7 +863,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let random = sv_sat_test_random3(150u32, 600u32, 7);
     let made = sv_sat_of(&random);
@@ -889,7 +874,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let six = sv_sat_test_pigeons(6u32, 5u32);
     let made = sv_sat_of(&six);
@@ -904,7 +888,6 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let hole = sv_sat_test_pigeons(4u32, 3u32);
     let made = sv_sat_of(&hole);
@@ -932,7 +915,6 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let seven = sv_sat_test_pigeons(7u32, 6u32);
     let made = sv_sat_of(&seven);
@@ -945,30 +927,14 @@ pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn pigeonhole_4_into_3_is_unsat_and_its_log_is_accepted() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_unit_learned_through_a_hint_chain_four_clauses_long_is_replayed() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn a_satisfiable_random_3_sat_instance_s_model_holds_on_every_clause() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn pigeonhole_6_into_5_reduced_and_compacted_on_the_way_is_still_accepted() {
-        super::__nikaia_test_3().unwrap()
-    }
-    #[test]
-    fn a_log_with_one_learned_clause_s_hints_cut_to_one_is_rejected() {
-        super::__nikaia_test_4().unwrap()
-    }
-    #[test]
-    fn a_search_stopped_by_its_budget_answers_unknown() {
-        super::__nikaia_test_5().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_sat_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_sat::pigeonhole_4_into_3_is_unsat_and_its_log_is_accepted", __nikaia_test_0),
+        ("sv_sat::a_unit_learned_through_a_hint_chain_four_clauses_long_is_replayed", __nikaia_test_1),
+        ("sv_sat::a_satisfiable_random_3_sat_instance_s_model_holds_on_every_clause", __nikaia_test_2),
+        ("sv_sat::pigeonhole_6_into_5_reduced_and_compacted_on_the_way_is_still_accepted", __nikaia_test_3),
+        ("sv_sat::a_log_with_one_learned_clause_s_hints_cut_to_one_is_rejected", __nikaia_test_4),
+        ("sv_sat::a_search_stopped_by_its_budget_answers_unknown", __nikaia_test_5),
+    ]
 }
