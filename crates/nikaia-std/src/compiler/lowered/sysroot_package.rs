@@ -327,9 +327,9 @@ pub(crate) fn sysroot_package_tests(package: &[(String, String)], dependencies: 
     text.push_str(&format!("pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, {})> {{\n    let mut all: std::vec::Vec<(std::string::String, {})> = std::vec::Vec::new();\n", run, run));
     text.push_str(&calls);
     text.push_str("    all\n}\n");
-    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names. Whether every test run passed and one was run at all.\n");
-    text.push_str("pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {\n");
-    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n");
+    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names; `more` are std's other packages' lists (ADR-403 D3), run\n/// with this one. Whether every test run passed and one was run at all.\n");
+    text.push_str(&format!("pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::vec::Vec<(std::string::String, {})>) -> bool {{\n", run));
+    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().chain(more).filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n");
     text.push_str("    if list {\n        for (name, _) in &wanted {\n            println!(\"{name}\");\n        }\n        return !wanted.is_empty();\n    }\n");
     text.push_str("    let (mut passed, mut failed) = (0usize, 0usize);\n");
     text.push_str("    for (name, run) in &wanted {\n");

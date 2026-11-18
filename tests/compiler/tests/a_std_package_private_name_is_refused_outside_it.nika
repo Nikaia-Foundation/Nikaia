@@ -1,0 +1,9 @@
+// ADR-403 D2-D3: `is_float_word` is a private name of std's `runtime`
+// package (`text_float.nika`, behind `text::parse_f64`), which a `test`
+// block in that file calls. A program outside the package reaches std's
+// public API only, so naming it through `text` is refused.
+use std::text
+
+fn main() throws {
+    println(text::is_float_word("inf".bytes, 0, "inf"))
+}
