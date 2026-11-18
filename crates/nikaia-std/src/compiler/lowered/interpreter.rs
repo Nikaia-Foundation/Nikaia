@@ -44,6 +44,7 @@ pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, de
         Stmt::Assign { .. } => { out.push(String::from("[Nikaia Runtime] Assignment (Skipped)")); },
         Stmt::Return(_) => { out.push(String::from("[Nikaia Runtime] Return (Skipped)")); },
         Stmt::Break => { out.push(String::from("[Nikaia Runtime] Break (Skipped)")); },
+        Stmt::Emit(_) => { out.push(String::from("[Nikaia Runtime] Emit (Skipped)")); },
         Stmt::Continue => { out.push(String::from("[Nikaia Runtime] Continue (Skipped)")); },
         Stmt::For { body, .. } => {
             out.push(String::from("[Nikaia Runtime] For loop (single pass)"));

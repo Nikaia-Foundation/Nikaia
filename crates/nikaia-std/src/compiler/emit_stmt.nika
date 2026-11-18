@@ -520,6 +520,11 @@ impl EmitState {
                 }
             },
             Stmt::Expr(expr) => self.emit_stmt_expr(world, walk, out, host, expr, span, depth, tail, here, scope),
+            // **An item handed to a `@stream` entry's walk** (ADR-grammar-2
+            // D7, amended 2026-11-18): the engine has no sink a nested rule's
+            // action reaches yet (#2061, item 4), so the build stops here
+            // rather than drop the item.
+            Stmt::Emit(_) => throw EmitRefused { message: "The compiler can't translate `emit` yet: the grammar engine does not yet hand a `@stream` entry's sink to the actions of the rules below it.", at: at },
         }
     }
 

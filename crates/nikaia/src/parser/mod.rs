@@ -2650,6 +2650,7 @@ grammar! {
           | t:throw_stmt -> { Spanned::new(t, Span::from(_span)) }
           | w:while_stmt -> { Spanned::new(w, Span::from(_span)) }
           | f:for_stmt -> { Spanned::new(f, Span::from(_span)) }
+          | m:emit_stmt -> { Spanned::new(m, Span::from(_span)) }
           | a:assign_stmt -> { Spanned::new(a, Span::from(_span)) }
           | e:expr_stmt -> { Spanned::new(e, Span::from(_span)) }
           | b:break_stmt -> { Spanned::new(b, Span::from(_span)) }
@@ -2706,6 +2707,16 @@ grammar! {
 
         rule continue_stmt -> Stmt =
             KW_CONTINUE semi? -> { Stmt::Continue }
+
+        // **`emit item` hands one item to a `@stream` entry's walk**
+        // ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md)
+        // D7, amended 2026-11-18, #2061), in the action of a rule the entry
+        // reaches. `emit` is no reserved word, so a call, a field, an index
+        // or an assignment of a name `emit` (`emit(x)`, `emit.x`, `emit = 1`)
+        // stays what it was: the statement needs a value on the same line,
+        // and none of those.
+        rule emit_stmt -> Stmt =
+            KW_EMIT same_line not("(") not("[") not(".") not("=") not("?") not("{") value:expr semi? -> { Stmt::Emit(value) }
 
         // Kap 7.1: `throw` is the only way an error originates. Without it a
         // program could propagate what `std` produced and never produce one of
@@ -4416,6 +4427,7 @@ grammar! {
         rule KW_CONTINUE = "continue" not(ident)
         rule KW_DSL = "dsl" not(ident)
         rule KW_ELSE = "else" not(ident)
+        rule KW_EMIT = "emit" not(ident)
         rule KW_ENUM = "enum" not(ident)
         rule KW_EXTERN = "extern" not(ident)
         rule KW_FALSE = "false" not(ident)

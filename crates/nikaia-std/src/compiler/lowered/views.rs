@@ -584,6 +584,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                 stores(unit, asked, value, &span, &own_buffer, here);
             },
             Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, &own_buffer, here); },
+            Stmt::Emit(expr) => { stores(unit, asked, expr, &span, &own_buffer, here); },
             Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, &own_buffer, here); } else { stores(unit, asked, expr, &span, &own_buffer, here); } },
             Stmt::For { bindings, iter, body, .. } => {
                 if mentions(unit, asked, &here, iter) {
@@ -1231,6 +1232,7 @@ pub(crate) fn statement_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
         Stmt::Let { value, .. } => mentions(unit, asked, here, value),
         Stmt::Comptime { value, .. } => mentions(unit, asked, here, value),
         Stmt::Expr(expr) => mentions(unit, asked, here, expr),
+        Stmt::Emit(expr) => mentions(unit, asked, here, expr),
         Stmt::Return(value) => maybe_mentions(unit, asked, here, (value).as_ref()),
         Stmt::Assign { target, value, .. } => mentions(unit, asked, here, target) || mentions(unit, asked, here, value),
         Stmt::For { iter, body, .. } => mentions(unit, asked, here, iter) || block_mentions(unit, asked, here, body),
@@ -1949,6 +1951,7 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                 let reach = rsrc_maybe(unit, asked, here, known, &own_buffer, (value).as_ref(), flow);
                 rsrc_record(&reach, flow);
             },
+            Stmt::Emit(expr) => { let reach = rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow); },
             Stmt::Expr(expr) => {
                 let reach = rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow);
                 if last { tail = reach; }

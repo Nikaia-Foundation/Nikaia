@@ -227,6 +227,7 @@ pub(crate) fn panics_stmt(stmt: &Stmt, span: &Span, items: &[Spanned<Item>], nam
         Stmt::Break => { },
         Stmt::Continue => { },
         Stmt::Expr(inner) => { panics_expr(inner, items, names, &holes_of, facts, own, library, reach); },
+        Stmt::Emit(inner) => { panics_expr(inner, items, names, &holes_of, facts, own, library, reach); },
     }
 }
 

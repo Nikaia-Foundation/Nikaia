@@ -769,6 +769,7 @@ pub(crate) fn derived_statement(stmt: &Stmt, at: i64, words: &winnow_grammar::In
         },
         Stmt::Comptime { value, .. } => { derived_expr(value, at, words, scan); },
         Stmt::Expr(value) => { derived_expr(value, at, words, scan); },
+        Stmt::Emit(value) => { derived_expr(value, at, words, scan); },
         Stmt::Assign { target, value, .. } => {
             derived_expr(target, at, words, scan);
             derived_expr(value, at, words, scan);

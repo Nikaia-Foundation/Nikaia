@@ -381,6 +381,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
         Stmt::Break => true,
         Stmt::Continue => true,
         Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
+        Stmt::Emit(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
     }
 }
 

@@ -231,13 +231,24 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
     }
     state.rule_results = results;
     for rule in gram.rules.iter() { for alt in rule.alts.iter() { state.a_name_the_page_does_not_have(world, &alt.pattern); } }
+    let streamed = grammar_streamed_rules(world, gram, &state.rule_results, &rules);
+    for refused in grammar_emits_undone(world, gram, &streamed) { state.findings.push(refused); }
     for rule in gram.rules.iter() {
         if rule.stream {
-            match grammar_stream_refused(world, rule, &state.rule_results, &rules) {
+            let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), &rules);
+            match grammar_stream_refused(world, rule, &state.rule_results, &rules, emitted) {
                 Some(refused) => { state.findings.push(refused); },
                 None => { },
             }
         }
+        let outer_emitting: Option<Ty> = match state.emitting.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        state.emitting = match *nikaia_std::index::get(&streamed, world.words.resolve(rule.name)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
         let mut expected: Option<Ty> = None;
         let written: Option<Type> = match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -278,6 +289,7 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
             }
         }
         state.current = outer_current;
+        state.emitting = outer_emitting;
     }
 }
 

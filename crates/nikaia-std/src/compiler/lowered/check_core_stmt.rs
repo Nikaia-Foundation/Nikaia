@@ -1774,7 +1774,23 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
+        Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_emit<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) -> Ty {
+    let found = check_core_expr(state, world, host, value, span);
+    match state.emitting {
+        Some(ref item) => { state.expect_type(world, &found, &item.clone(), span, "argument", &|was, wanted| { format!("This `emit` hands over `{}`, but the `@stream` entry's items are `{}`.", was, wanted) }); },
+        None => {
+            let notes: Vec<String> = vec![String::from("An item goes to the walk of a `@stream` entry (ADR-grammar-2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.")];
+            let help: String = if state.inside_an_action.is_some() { String::from("Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead.") } else { String::from("Return the value instead, or emit it from the action of a rule a `@stream` entry reaches.") }; #[allow(clippy::redundant_locals)] let notes = notes;
+            state.findings.push(check_refusal("NK1371", span, String::from("`emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place."), notes, Some(help)));
+        },
+    }
+    Ty::Unknown
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -2153,6 +2169,7 @@ pub(crate) fn check_core_stays_in_stmt(state: &CheckState, world: &CheckWorld<'_
         Stmt::Let { value, .. } => check_core_stays_in(state, world, value, name),
         Stmt::Comptime { value, .. } => check_core_stays_in(state, world, value, name),
         Stmt::Expr(value) => check_core_stays_in(state, world, value, name),
+        Stmt::Emit(value) => check_core_stays_in(state, world, value, name),
         Stmt::Assign { target, value, .. } => check_core_stays_in_target(state, world, target, name) && check_core_stays_in(state, world, value, name),
         Stmt::For { iter, body, .. } => (check_core_is_the_name(world, iter, name) || check_core_stays_in(state, world, iter, name)) && check_core_stays_in_block(state, world, body, name),
         Stmt::While { cond, body } => check_core_stays_in(state, world, cond, name) && check_core_stays_in_block(state, world, body, name),
@@ -2427,6 +2444,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                     _ => { check_async_in(state, value, group, &stmt.span); },
                 }
             },
+            Stmt::Emit(value) => { check_async_in(state, value, group, &stmt.span); },
             Stmt::Expr(value) => {
                 match value {
                     Expr::Spawn { child, .. } if { let child = *child; child } => {
