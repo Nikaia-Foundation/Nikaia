@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1437] — 2026-11-18
+
+**Builders' changes (#2107)**
+- Fixed: an i32 (or other narrower integer) count, as in `"ab".repeat(n)`, no longer stops the build with an internal error (NK1343).
+- solver_regress no longer depends on wall-clock time: solver.nika run --budget N bounds each run by N proof-log steps, deterministic on every machine, and an over-budget run answers "unknown (steps)".
+
 ## [0.0.1436] — 2026-11-18
 
 **A narrower integer count goes into count::of widened, not around it**
