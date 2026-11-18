@@ -1,0 +1,6 @@
+cleared, then removed: [ONLY=1]
+NotFound definitely-not-a-program-726
+Other env: the environment has entries no platform accepts: the name "" in `env` is empty; the name "A=B" in `env` holds `=`; the value of "OK" in `env` holds a NUL; the name "N\0" in `env_remove` holds a NUL
+ran 0
+./x ran
+removed, then set: A=1 C=y PATH=/p Path=w path=u

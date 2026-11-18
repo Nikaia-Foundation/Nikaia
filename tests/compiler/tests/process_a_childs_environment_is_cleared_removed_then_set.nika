@@ -1,0 +1,81 @@
+// A child's environment is the caller's changed by `env_clear`, then
+// `env_remove`, then `env`, a later pair of a name replacing an earlier one,
+// names compared by case on Unix (ADR-243 D5); every entry no platform accepts
+// is named in one `IoError::Other` and starts nothing (D7); a program not on
+// `PATH` is `IoError::NotFound`, and a name with a separator is not looked up
+// (D6). Moved from the `nikaia-std` unit tests `process::tests::*` but the
+// Windows half of `names_compare_by_case_on_unix_and_without_on_windows`
+// (#2082).
+use std::fs
+use std::io
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn named(text: String, names: Vec[String]) -> String {
+    let mut kept: Vec[String] = []
+    for line in text.lines() {
+        for n in names {
+            if line.starts_with(f"{n}=") {
+                kept.push(line.clone())
+            }
+        }
+    }
+    kept.sort()
+    return kept.join(" ")
+}
+
+fn tried(program: String, env: Vec[(String, String)], env_remove: Vec[String]) -> String {
+    let out = process::run(program, []; env: env, env_remove: env_remove) catch {
+        match error {
+            io::IoError::NotFound(p) => return f"NotFound {p.display()}",
+            io::IoError::Other(m) => return f"Other {m}",
+            else => return "other",
+        }
+    }
+    return f"ran {out.code}"
+}
+
+fn main() throws {
+    let cleared = process::run("env", []; env_clear: true, env_remove: ["HOME", "NOPE"], env: [("ONLY", "1")])
+    println(f"cleared, then removed: [{cleared.stdout.trim()}]")
+    println(tried("definitely-not-a-program-726", [], []))
+    println(tried("env", [("", "x"), ("A=B", "y"), ("OK", "v\u{0}w"), ("FINE", "z")], ["N\u{0}"]))
+    println(tried("env", [("FINE", "z")], ["X"]))
+
+    // What the caller inherited (`A`, `B`, `Path`, `path`) comes from a run
+    // of a program beside this one.
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(
+        f"{tmp}/inner.nika",
+        fs::Root::Anywhere,
+        "use std::process\n\nfn main() throws {\n    let out = process::run(\"env\", []; env_remove: [\"A\", \"B\"], env: [(\"A\", \"1\"), (\"C\", \"x\"), (\"C\", \"y\"), (\"PATH\", \"/p\")])\n    for line in out.stdout.lines() {\n        for n in [\"A\", \"B\", \"C\", \"PATH\", \"Path\", \"path\"] {\n            if line.starts_with(f\"{n}=\") { println(line) }\n        }\n    }\n    println(process::run(\"./x\", []).stdout.trim())\n}\n",
+    )
+    fs::write(f"{tmp}/x", fs::Root::Anywhere, "#!/bin/sh\necho ./x ran\n")
+    process::run("chmod", ["+x", f"{tmp}/x"])
+    let out = process::run(
+        "sh",
+        ["-c", "\"$0\" run --unproved-claims=warn inner.nika", toolchain()];
+        dir: tmp.clone(),
+        env: [("A", "old"), ("B", "b"), ("Path", "w"), ("path", "u")],
+    )
+    let lines: Vec[String] = out.stdout.lines().map(fn(l) { l.clone() }).collect()
+    let mut env_lines: Vec[String] = []
+    for l in lines {
+        if !l.starts_with("./x") { env_lines.push(l.clone()) } else { println(l) }
+    }
+    env_lines.sort()
+    println(f"removed, then set: {env_lines.join(" ")}")
+    if out.code != 0 { println(out.stderr) }
+    process::run("rm", ["-rf", tmp])
+}
