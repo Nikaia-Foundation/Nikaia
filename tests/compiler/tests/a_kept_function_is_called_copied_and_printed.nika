@@ -1,0 +1,18 @@
+// A function value that is kept, in a `let` and in a field, is called as the
+// closure it holds, copied by a `let` and printed as `<fn>` (`func.rs`'s
+// `Kept`, Part I 5.3). Moved from the `nikaia-std` unit test
+// `func::tests::a_kept_closure_is_called_cloned_and_printed` (#2082).
+struct Adder {
+    add: fn(i64) -> i64,
+}
+
+fn main() throws {
+    let n = 3
+    let add: fn(i64) -> i64 = fn(x) { x + n }
+    let again = add
+    println(add(1) + again(2))
+    println(f"{add:?}")
+    let held = Adder { add: again }
+    println(f"{held:?}")
+    println(held.add(10))
+}
