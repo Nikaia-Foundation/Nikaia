@@ -207,6 +207,17 @@ fold's count, stays private to the grammar's module. An item is owned, so it
 is `'static`; an item type that is not `Send` is refused at the build of the
 feature (`NK1345`).
 
+*Amended November 18, 2026 (owner's decision on #2030, option A):* an item
+need not be the element the entry's body repeats. A rule reached from a
+`@stream` entry may hand over an item with an `emit` form in its action; the
+item is the entry's output, not a value passed between rules, so 10.8 holds.
+An `emit` is allowed only where the parse cannot go back past it: once the
+rules that led to it have matched far enough that no alternative around them
+can still be tried. An `emit` the parse could still undo is refused with a
+code of its own; the compiler does not buffer items to hide a backtrack. The
+fixed-path body (`NK1349`) stays the plain form; an entry whose items are all
+emitted states no repetition of its own.
+
 ### D8 — Writing stays a function per type.
 
 `json::write[T]` walks the type with `match T::kind` and `T::fields`, builds
