@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1434] — 2026-11-18
+
+**Builders' changes (#1617, #1618, #1619, #1859)**
+- benches/game: fasta against the Benchmarks Game's fastest Rust entry (Rust entry 7, held to one thread). `nikaia run benches/game/game.nika -- fasta` counts it: the plain program 3.66x Rust's instructions at a third of the tokens (1.16x the same algorithm in plain Rust); written for speed, with a letter table and a byte buffer, 0.96x
+- A function or method of a program's own called `repeat` takes its arguments as written; only `str::repeat`'s count is converted, by the entry the call resolves to (it was an internal error)
+- benches/game: k-nucleotide against the Benchmarks Game's fastest Rust entry (Rust entry 7), on fasta's output. `nikaia run benches/game/game.nika -- k-nucleotide` counts it: the plain program 8.08x Rust's instructions at a third of its tokens, written for speed with two-bit codes as map keys 3.15x; most of both losses is the keyed hash an input-keyed map gets (1.13x Rust for speed when the input is trusted)
+- benches/game: reverse-complement against the Benchmarks Game's fastest Rust entry (Rust entry 1). `nikaia run benches/game/game.nika -- reverse-complement` counts it: the program as first written 23.2x Rust's instructions at a fifth of its tokens, written for speed (in place, a table) 5.5x; the gap is the entry's SSSE3 run-time byte shuffle and vector stores, which std::simd does not offer yet
+- benches/game: the json package against serde_json, reading standard input into the tree and writing it back. `nikaia run benches/game/game.nika -- json` counts three generated inputs (1 KB, 10 MB, 512 levels deep): 1.4x, 1.8x and 2.0x serde_json's instructions at about a third of its tokens, most of the gap the path text the package builds for every value and its copying a character at a time
+- print, println, eprint and eprintln take Bytes and write them unchanged (ADR-019 D7); Bytes in a hole of a text f"…" is refused with NK1201, not an internal error.
+
 ## [0.0.1433] — 2026-11-18
 
 **Builders' changes (#2020, #2023)**
