@@ -261,7 +261,6 @@ fn sv_sx_lemma(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause? {
 	let mut row = sv_row_constant(0)
 	let mut equality = true
 	let mut strict = false
-	let mut assumed: Vec[u32] = []
 	let mut i = 0
 	while i < mult.sources.len() {
 		let b = book.source(mult.sources[i]) ?? return null
@@ -280,7 +279,6 @@ fn sv_sx_lemma(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause? {
 		equality = equality && is_eq
 		strict = strict || (is_lt && m > 0)
 		row = sv_row_sum(1, row, m, b.row) ?? return null
-		assumed = sv_lits_union(assumed, b.assumed)
 		i += 1
 	}
 	if row.cols.len() > 0 {
@@ -291,6 +289,7 @@ fn sv_sx_lemma(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause? {
 	if !closes {
 		return null
 	}
+	let assumed = book.log.walk.assumed(book.log.steps, mult.sources, mult.ms) ?? return null
 	let mut lits: Vec[u32] = []
 	for l in assumed {
 		lits.push(sv_sx_not(l))
@@ -1939,7 +1938,7 @@ fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
 
 // Refuted by the split x <= 0 or x >= 1, each side by a Farkas sum.
 fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_real_test_row([1], 0), sv_real_test_row([-1], 1))
@@ -1961,7 +1960,7 @@ fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
 
 // Refuted by rounding each bound: x <= 0 and x >= 1.
 fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let up = log.combine([SvSrc::Lit(sv_lit(0, false))], [1])
@@ -1983,7 +1982,7 @@ fn sv_real_test_empty() -> SvQuery {
 }
 
 fn sv_real_test_empty_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(

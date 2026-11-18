@@ -135,6 +135,20 @@ panics = false
 touches = []
 signature = "(ref self) -> String"
 
+[fn."SvAssumes::assumed"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+views = ["steps: borrowed", "sources: borrowed", "multipliers: borrowed"]
+signature = "(ref mut self, steps: ref Vec[SvStep], sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> Vec[u32]?"
+
+[fn."SvAssumes::made"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref mut self, step: u32, made: u32)"
+
 [fn."SvBook::asserted"]
 sync = "inferred"
 panics = true
@@ -159,6 +173,7 @@ signature = "(ref mut self, l: SvRow, m: i64) -> SvExtended?"
 sync = "inferred"
 keeps = ["multipliers", "sources"]
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> SvClause?"
 
@@ -237,6 +252,7 @@ signature = "(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) 
 [fn."SvBoth::explain"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, lit: u32, mut book: SvBook) -> SvClause?"
 
@@ -446,9 +462,10 @@ signature = "(ref mut self, l: ref SvRow, m: i64, q: u32) -> String"
 [fn."SvReplay::farkas"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
-views = ["lits: borrowed", "sources: borrowed", "multipliers: borrowed"]
-signature = "(ref mut self, lits: ref Vec[u32], sources: ref Vec[SvSrc], multipliers: ref Vec[i64], den: i64) -> String"
+views = ["log: borrowed", "lits: borrowed", "sources: borrowed", "multipliers: borrowed"]
+signature = "(ref mut self, log: ref Vec[SvStep], lits: ref Vec[u32], sources: ref Vec[SvSrc], multipliers: ref Vec[i64], den: i64) -> String"
 
 [fn."SvReplay::input"]
 sync = "inferred"
@@ -511,8 +528,8 @@ sync = "inferred"
 panics = true
 places = true
 touches = []
-views = ["query: borrowed", "step: borrowed"]
-signature = "(ref mut self, query: ref SvQuery, step: ref SvStep) -> String"
+views = ["query: borrowed", "log: borrowed", "step: borrowed"]
+signature = "(ref mut self, query: ref SvQuery, log: ref Vec[SvStep], step: ref SvStep) -> String"
 
 [fn."SvSat::above"]
 sync = "inferred"
@@ -782,6 +799,7 @@ signature = "(ref mut self, col: u32) -> i64"
 [fn."SvSimplex::conflict"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, parts: Vec[SvPart], mut book: SvBook) -> SvChecked"
 
@@ -802,6 +820,7 @@ signature = "(ref self, r: i64, below: bool, bland: bool) -> Vec[i64]"
 [fn."SvSimplex::explain"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, lit: u32, mut book: SvBook) -> SvClause?"
 
@@ -855,6 +874,7 @@ signature = "(ref self) -> i64"
 [fn."SvSimplex::gcd_conflict"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, mut book: SvBook) -> SvClause?"
 
@@ -979,6 +999,7 @@ signature = "(ref self, r: i64, up: bool) -> SvDelta?"
 [fn."SvSimplex::row_gcd"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, r: i64, mut book: SvBook) -> SvClause?"
 
@@ -1010,6 +1031,7 @@ signature = "(ref self) -> Vec[u32]"
 sync = "inferred"
 keeps = ["side"]
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, v: i64, upper: bool, side: SvSide, mut book: SvBook) -> SvChecked"
 
@@ -1319,6 +1341,7 @@ signature = "(ref self) -> Vec[u32]"
 [fn."SvTheory::assert"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, lit: u32, mut book: SvBook) -> SvChecked"
 
@@ -1338,6 +1361,7 @@ signature = "(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) 
 [fn."SvTheory::explain"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 signature = "(ref mut self, lit: u32, mut book: SvBook) -> SvClause?"
 
@@ -2546,6 +2570,12 @@ panics = true
 touches = []
 signature = "(mut value: Vec[i64], l: u32)"
 
+[fn."sv_assumes"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> SvAssumes"
+
 [fn."sv_back_substituted"]
 sync = "inferred"
 panics = true
@@ -2676,6 +2706,13 @@ sync = "inferred"
 panics = true
 places = true
 signature = "() -> SvQuery"
+
+[fn."sv_check_test_parity_lits"]
+sync = "inferred"
+keeps = ["lits"]
+panics = true
+places = true
+signature = "(divisor: i64, m: i64, q: u32, lits: Vec[u32]) -> SvLog"
 
 [fn."sv_check_test_parity_log"]
 sync = "inferred"
@@ -2826,13 +2863,6 @@ places = true
 views = ["name: borrowed", "arena: borrowed"]
 signature = "(name: String, arena: ref TermArena, facts: Vec[i64], goal: i64) -> String"
 
-[fn."sv_cols_key"]
-sync = "inferred"
-panics = true
-touches = []
-views = ["r: borrowed"]
-signature = "(r: ref SvRow) -> i64"
-
 [fn."sv_column_cost"]
 sync = "inferred"
 panics = true
@@ -2850,8 +2880,14 @@ signature = "(c: u32, names: ref Vec[String]) -> String"
 sync = "inferred"
 panics = true
 touches = []
-views = ["held: borrowed"]
-signature = "(held: ref Vec[SvHeld]) -> Vec[i64]"
+views = ["held: borrowed", "r: borrowed"]
+signature = "(held: ref Vec[SvHeld], r: ref SvRow) -> Vec[i64]"
+
+[fn."sv_compact"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(mut held: Vec[SvHeld])"
 
 [fn."sv_content"]
 sync = "inferred"
@@ -2906,6 +2942,12 @@ panics = true
 places = true
 views = ["title: borrowed", "kind: borrowed", "how: borrowed"]
 signature = "(title: String, names: Vec[String], atoms: Vec[SvAtom], kind: String, how: String) -> String"
+
+[fn."sv_dead_row"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> SvRow"
 
 [fn."sv_decimal"]
 sync = "inferred"
@@ -3045,6 +3087,7 @@ signature = "(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32?
 sync = "inferred"
 locks = "?"
 panics = true
+places = true
 views = ["cnf: borrowed", "ids: borrowed"]
 signature = "(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastRun"
 
@@ -3065,6 +3108,7 @@ signature = "(cnf: ref SvCnf) -> bool"
 [fn."sv_fast_constants"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["cnf: borrowed", "ids: borrowed"]
 signature = "(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd"
@@ -3073,6 +3117,7 @@ signature = "(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd"
 sync = "inferred"
 locks = "?"
 panics = true
+places = true
 views = ["cnf: borrowed", "ids: borrowed"]
 signature = "[T: SvDist](mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32], mut d: T) -> SvFastRun"
 
@@ -3086,6 +3131,7 @@ signature = "(b: ref SvFastBound, zero: i64) -> SvEdge?"
 [fn."sv_fast_interval"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["cnf: borrowed", "ids: borrowed"]
 signature = "(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd"
@@ -3094,6 +3140,7 @@ signature = "(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd"
 sync = "inferred"
 keeps = ["multipliers", "sources"]
 panics = true
+places = true
 touches = []
 views = ["ids: borrowed"]
 signature = "(mut book: SvBook, ids: ref Vec[u32], sources: Vec[SvSrc], multipliers: Vec[i64], units: Vec[u32]) -> SvFastEnd"
@@ -3170,6 +3217,13 @@ panics = true
 touches = []
 signature = "(a: i64, b: i64) -> i64?"
 
+[fn."sv_has_unit"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> bool"
+
 [fn."sv_i64s_of"]
 sync = "inferred"
 panics = true
@@ -3190,6 +3244,13 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(n: i64) -> SvRat"
+
+[fn."sv_is_dead"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> bool"
 
 [fn."sv_is_numeral"]
 sync = "inferred"
@@ -4063,6 +4124,13 @@ touches = []
 views = ["word: borrowed"]
 signature = "(word: ref String) -> SvRow?"
 
+[fn."sv_row_keys"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> (i64, i64)"
+
 [fn."sv_row_of"]
 sync = "inferred"
 keeps = ["terms"]
@@ -4672,6 +4740,7 @@ signature = "(mut held: Vec[SvHeld], lo: i64, hi: i64, x: u32, s: i64, mut book:
 [fn."sv_sx_lemma"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["parts: borrowed"]
 signature = "(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause?"
@@ -5291,6 +5360,13 @@ compares = true
 equates = true
 hashes = true
 
+[type."SvAssumes"]
+pub = true
+fields = ["pub made_by: Vec[u32]", "pub seen: Vec[i64]", "pub stamp: i64"]
+compares = true
+equates = true
+hashes = true
+
 [type."SvAtom"]
 pub = true
 fields = ["pub row: SvRow", "pub rel: SvRel"]
@@ -5314,7 +5390,7 @@ hashes = true
 
 [type."SvBound"]
 pub = true
-fields = ["pub row: SvRow", "pub rel: SvRel", "pub assumed: Vec[u32]"]
+fields = ["pub row: SvRow", "pub rel: SvRel"]
 compares = true
 equates = true
 hashes = true
@@ -5509,7 +5585,7 @@ copies = true
 
 [type."SvLog"]
 pub = true
-fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32", "pub limit: i64"]
+fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32", "pub limit: i64", "pub walk: SvAssumes"]
 compares = true
 equates = true
 hashes = true
@@ -5630,7 +5706,7 @@ hashes = true
 copies = true
 
 [type."SvReplay"]
-fields = ["atoms: Vec[SvAtom]", "entries: Vec[SvEntry]", "columns: u32", "reals: Vec[u32]", "refuted: bool", "value: Vec[i64]"]
+fields = ["atoms: Vec[SvAtom]", "entries: Vec[SvEntry]", "columns: u32", "reals: Vec[u32]", "refuted: bool", "value: Vec[i64]", "walk: SvAssumes"]
 compares = true
 equates = true
 hashes = true

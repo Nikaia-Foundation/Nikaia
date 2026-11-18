@@ -312,7 +312,12 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
                     let tainted = from_outside(value, &scope.tainted, words, library, &walk.state, &mut &mut *holes_of) || op.is_some() && scope.tainted.contains(&n);
                     if !prover_assigned(walk, &n, (op).as_ref(), value, &span, scope, words) {
+                        let followed = scope.mutables.contains(&n) && scope.ints.contains(&n);
                         scope.rebind(&walk.arena, &n);
+                        if followed {
+                            scope.ints.insert(nikaia_std::block::Text::from(n.to_string()));
+                            scope.loose.insert(nikaia_std::block::Text::from(n.to_string()));
+                        }
                         if op.is_none() && !tainted {
                             let bits = prover_bit_range(walk, value, &scope, words);
                             if bits.is_some() { scope.bounded_bits(&mut walk.arena, &n, &match bits { Some(__nikaia_value) => __nikaia_value, None => return false }); }
@@ -2616,6 +2621,10 @@ pub(crate) fn prover_follow_mutables(walk: &mut ProverWalk, stmt: &Stmt, span: &
                     let named = walk.arena.var(&n);
                     scope.facts.push(walk.arena.equal(named, v));
                     if at_entry.is_some() { scope.entry.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(at_entry, || 0)); }
+                } else if !untracked.contains(&n) && prover_let_typed(&walk, (ty).as_ref(), &span, words, 0) {
+                    scope.ints.insert(nikaia_std::block::Text::from(n.to_string()));
+                    scope.loose.insert(nikaia_std::block::Text::from(n.to_string()));
+                    scope.mutables.insert(nikaia_std::block::Text::from(n.to_string()));
                 }
             }
         },

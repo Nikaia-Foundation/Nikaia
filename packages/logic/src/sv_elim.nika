@@ -38,14 +38,24 @@ fn sv_opposite(r: ref SvRow, s: ref SvRow) -> bool {
 	return true
 }
 
-/// A signature of `r`'s columns: rows with the same columns have the same
-/// one, so only rows sharing it can be opposite (#1957).
-fn sv_cols_key(r: ref SvRow) -> i64 {
+/// A signature of `r`'s columns and coefficients, and the one of `-r`'s:
+/// a row `s` opposite to `r` has the second as its first, so a row looks
+/// for its opposites only among the rows with that signature (#1957,
+/// #2012).
+fn sv_row_keys(r: ref SvRow) -> (i64, i64) {
+	// 40 bits, so no step leaves `i64` and none divides.
+	let mask: i64 = 1099511627775
 	let mut s: i64 = 0
-	for c in r.cols {
-		s = (s * 31 + (c as i64)) % 1000000007
+	let mut n: i64 = 0
+	let mut i = 0
+	while i < r.cols.len() {
+		let c = r.cols[i] as i64
+		let k = r.ks[i] & mask
+		s = ((s * 31 + c) * 31 + k) & mask
+		n = ((n * 31 + c) * 31 + ((mask + 1 - k) & mask)) & mask
+		i += 1
 	}
-	return s * 64 + (if r.cols.len() < 63 { r.cols.len() } else { 63 })
+	return (s, n)
 }
 
 /// `h` divided by the gcd of its coefficients and constant, then by that of
@@ -69,25 +79,43 @@ fn sv_tidy(h: SvHeld, mut book: SvBook) -> SvHeld? {
 	return SvHeld { row: row, src: src }
 }
 
-/// For each column, how many bounds of `held` hold it (a coefficient other
-/// than 0), indexed by the column: counted once per round, so choosing a
-/// unit column does not scan `held` again for each candidate (#1957).
-fn sv_column_uses(held: ref Vec[SvHeld]) -> Vec[i64] {
+/// For each column of `r`, how many bounds of `held` hold it (a coefficient
+/// other than 0), indexed by the column; the columns above `r`'s are not
+/// counted. Counted once per round, for the equality chosen, so choosing a
+/// unit column does not scan `held` again for each candidate (#1957), nor
+/// count the columns no candidate reads (#2012).
+fn sv_column_uses(held: ref Vec[SvHeld], r: ref SvRow) -> Vec[i64] {
 	let mut uses: Vec[i64] = []
+	for c in r.cols {
+		while uses.len() <= (c as i64) {
+			uses.push(0)
+		}
+	}
 	for h in held {
 		let mut i = 0
 		while i < h.row.cols.len() {
+			let c = h.row.cols[i] as i64
+			if c >= uses.len() {
+				break
+			}
 			if h.row.ks[i] != 0 {
-				let c = h.row.cols[i] as i64
-				while uses.len() <= c {
-					uses.push(0)
-				}
 				uses[c] += 1
 			}
 			i += 1
 		}
 	}
 	return uses
+}
+
+/// Whether `r` has a coefficient `±1`: where it does, `sv_unit_column`
+/// finds a column.
+fn sv_has_unit(r: ref SvRow) -> bool {
+	for k in r.ks {
+		if k == 1 || k == -1 {
+			return true
+		}
+	}
+	return false
 }
 
 /// The column of `r` with a coefficient `±1` that most other bounds of
@@ -164,11 +192,35 @@ fn sv_substitute(
 		held[at[k]] = made[k].clone()
 		k += 1
 	}
-	let first = if lo < hi { lo } else { hi }
-	let second = if lo < hi { hi } else { lo }
-	held.remove(second)
-	held.remove(first)
+	// The two sides left dead where they are, not removed: a removal moved
+	// every row after them, twice an equality, most of a round on SMPT's
+	// Petri-net queries (#2012). `sv_eliminate` compacts them.
+	held[lo] = SvHeld { row: sv_dead_row(), src: held[lo].src }
+	held[hi] = SvHeld { row: sv_dead_row(), src: held[hi].src }
 	return true
+}
+
+/// The row a dead bound of `held` has: no column and the constant 0, true of
+/// every value, so it changes no sum, product or count; `sv_eliminate`
+/// skips it and drops it, keeping the others in their order.
+fn sv_dead_row() -> SvRow {
+	return SvRow { cols: [], ks: [], constant: 0 }
+}
+
+/// Whether `r` is dead (`sv_dead_row`).
+fn sv_is_dead(r: ref SvRow) -> bool {
+	return r.cols.len() == 0 && r.constant == 0
+}
+
+/// `held` without its dead rows, the others in their order.
+fn sv_compact(mut held: Vec[SvHeld]) {
+	let mut kept: Vec[SvHeld] = []
+	for h in held {
+		if !sv_is_dead(h.row) {
+			kept.push(h.clone())
+		}
+	}
+	held = kept
 }
 
 /// `a mod^ m` for `m > 0` (Pugh's symmetric modulo): `a - m·⌊a/m + 1/2⌋`,
@@ -346,8 +398,14 @@ fn sv_eliminate(
 		// tidy already, as most are after the first round: `sv_tidy` would
 		// copy it to give it back as it was (#2012).
 		let mut t_at = 0
+		let mut dead = 0
 		while t_at < held.len() {
 			if held[t_at].row.cols.len() > 0 && (sv_row_content(held[t_at].row) ?? 2) == 1 {
+				t_at += 1
+				continue
+			}
+			if sv_is_dead(held[t_at].row) {
+				dead += 1
 				t_at += 1
 				continue
 			}
@@ -362,23 +420,48 @@ fn sv_eliminate(
 					?? return SvChecked::Unknown(LgUnknown::Overflow)
 				return SvChecked::Conflict(clause)
 			}
-			held.remove(t_at)
+			held[t_at] = SvHeld { row: sv_dead_row(), src: t.src }
+			dead += 1
+			t_at += 1
 		}
-		let uses = sv_column_uses(held)
-		// Each row's next row with the same column signature, -1 after the
-		// last: the pairs `i < j` below visit only those, in the order of
-		// a scan of every pair (#1957).
+		// Compacted once a quarter is dead, so the scans below stay short.
+		if dead * 4 > held.len() {
+			sv_compact(held)
+		}
+		// The rows by the signature of their columns and coefficients, in a
+		// table of chains: `head[b]` the first row of bucket `b`, `next` each
+		// row's next one in its bucket, ascending, -1 after the last. A row
+		// `i` visits only the bucket of its opposite signature, so the pairs
+		// `i < j` below are those of a scan of every pair, in its order,
+		// that can be opposite (#1957); a map of the column signatures
+		// visited every pair of rows with the same columns, and was most of
+		// a round's cost on SMPT's Petri-net queries (#2012).
+		let mut size = 1
+		while size < 2 * held.len() {
+			size *= 2
+		}
+		let mut head: Vec[i64] = []
+		while head.len() < size {
+			head.push(-1)
+		}
 		let mut next: Vec[i64] = []
-		let mut first: collections::BTreeMap[i64, i64] = collections::BTreeMap()
-		for _ in held {
+		let mut own: Vec[i64] = []
+		let mut opposite: Vec[i64] = []
+		for h in held {
+			let (s, n) = sv_row_keys(h.row)
 			next.push(-1)
+			own.push(s % size)
+			opposite.push(n % size)
 		}
 		let mut at = held.len()
 		while at > 0 {
 			at -= 1
-			let key = sv_cols_key(held[at].row)
-			next[at] = first.get(key) ?? -1
-			first.insert(key, at)
+			if sv_is_dead(held[at].row) {
+				continue
+			}
+			let b = own[at]
+			next[at] = head[b]
+			head[b] = at
 		}
 		// The equality to solve: `lo` and `hi`, opposite rows whose
 		// constants cancel; opposite rows whose constants sum above zero
@@ -388,7 +471,14 @@ fn sv_eliminate(
 		let mut best = 0
 		let mut i = 0
 		while i < held.len() {
-			let mut j = next[i]
+			if sv_is_dead(held[i].row) {
+				i += 1
+				continue
+			}
+			let mut j = head[opposite[i]]
+			while j >= 0 && j <= i {
+				j = next[j]
+			}
 			while j >= 0 {
 				if sv_opposite(held[i].row, held[j].row) {
 					let sum = held[i].row.constant.checked_add(held[j].row.constant)
@@ -403,7 +493,7 @@ fn sv_eliminate(
 						known = known || sv_row_same(s, held[i].row)
 					}
 					if sum == 0 && !known {
-						let unit = sv_unit_column(held[i].row, uses) != null
+						let unit = sv_has_unit(held[i].row)
 						// A unit coefficient first, then the fewest columns: an
 						// equality just extended has fewer columns than its `S`,
 						// and chosen again it would be extended for ever (#1283).
@@ -426,7 +516,7 @@ fn sv_eliminate(
 			}
 			break
 		}
-		let column = sv_unit_column(held[lo].row, uses)
+		let column = sv_unit_column(held[lo].row, sv_column_uses(held, held[lo].row))
 		if column == null {
 			let at = held.len()
 			let eq = held[lo].row.clone()
@@ -457,6 +547,7 @@ fn sv_eliminate(
 		}
 		solved.push(SvSolved { column: x, row: row })
 	}
+	sv_compact(held)
 	return SvChecked::Consistent
 }
 
@@ -815,4 +906,45 @@ test "the elimination's log broken twice is rejected each time" {
 		"  exact, round: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; rejected at 39: round: the coefficient -707520802296 of x0 is not divisible by 298",
 	]
 	assert(out == expected.join("\n") + "\n")
+}
+
+test "a row's opposite signature is its negation's signature, and the uses count only its columns" {
+	let r = SvRow { cols: [2, 5, 9], ks: [3, -1, 9223372036854775807], constant: 4 }
+	let neg = SvRow { cols: [2, 5, 9], ks: [-3, 1, -9223372036854775807], constant: -4 }
+	let (s, n) = sv_row_keys(r)
+	let (ns, nn) = sv_row_keys(neg)
+	assert(n == ns && s == nn && s != n)
+	let other = SvRow { cols: [2, 5, 7], ks: [3, -1, 1], constant: 0 }
+	let (os, _) = sv_row_keys(other)
+	assert(os != s)
+	let held = [
+		SvHeld { row: r.clone(), src: SvSrc::Lit(0) },
+		SvHeld { row: SvRow { cols: [1, 5, 40], ks: [1, 2, 1], constant: 0 }, src: SvSrc::Lit(1) },
+	]
+	let uses = sv_column_uses(held, SvRow { cols: [1, 5], ks: [1, 1], constant: 0 })
+	assert(uses.len() == 6 && uses[1] == 1 && uses[5] == 2 && uses[2] == 1)
+	assert((sv_unit_column(r, sv_column_uses(held, r)) ?? 0) == 5)
+	assert(sv_has_unit(r) && !sv_has_unit(SvRow { cols: [1], ks: [2], constant: 0 }))
+}
+
+test "dead rows are skipped where they stand and compacted away in order" {
+	let mut held = [
+		SvHeld { row: SvRow { cols: [1], ks: [1], constant: 0 }, src: SvSrc::Lit(0) },
+		SvHeld { row: sv_dead_row(), src: SvSrc::Lit(1) },
+		SvHeld { row: SvRow { cols: [2], ks: [1], constant: -1 }, src: SvSrc::Lit(2) },
+		SvHeld { row: SvRow { cols: [], ks: [], constant: -3 }, src: SvSrc::Lit(3) },
+		SvHeld { row: SvRow { cols: [3], ks: [2], constant: 0 }, src: SvSrc::Lit(4) },
+	]
+	assert(sv_is_dead(held[1].row) && !sv_is_dead(held[3].row))
+	assert(sv_column_uses(held, SvRow { cols: [3], ks: [1], constant: 0 })[3] == 1)
+	sv_compact(held)
+	assert(held.len() == 4)
+	let mut lits: Vec[String] = []
+	for h in held {
+		lits.push(match h.src {
+			SvSrc::Lit(l) => f"{l}",
+			else => "fact",
+		})
+	}
+	assert(lits.join(",") == "0,2,3,4")
 }

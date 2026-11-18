@@ -1,0 +1,13 @@
+bounds in tests/an_outside_let_mut_with_an_unreadable_value_reads_a_goal.nika: 0 indexes, 0 proved; 6 operations, 0 proved
+    14  n * 1000 / (n + 1)     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    14  n * 1000               checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    14  n + 1                  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    15  a - line.trim().len()  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    20  b - line.trim().len()  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    25  c - line.trim().len()  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  outside  14  `n * 1000 / (n + 1)`, `n` from `io::read_to_string`: checked: not proved, an NK1303 site (ADR-396 D8)
+  outside  14  `n * 1000`, `n` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  14  `n + 1`, `n` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  15  `a - line.trim().len()`, `a` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  20  `b - line.trim().len()`, `b` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  25  `c - line.trim().len()`, `c` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)

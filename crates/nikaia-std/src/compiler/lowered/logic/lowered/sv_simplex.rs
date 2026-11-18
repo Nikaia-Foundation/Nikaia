@@ -120,7 +120,6 @@ pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClaus
     let mut row = sv_row_constant(0);
     let mut equality = true;
     let mut strict = false;
-    let mut assumed: Vec<u32> = vec![];
     let mut i: i64 = 0;
     while ((i) as usize) < mult.sources.len() {
         let b = match book.source(unsafe { nikaia_std::proven::read(&mult.sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -131,13 +130,13 @@ pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClaus
         equality = equality && is_eq;
         strict = strict || is_lt && m > 0;
         row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        assumed = sv_lits_union(&assumed, &b.assumed);
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if !row.cols.is_empty() { return None; }
     let c = row.constant;
     let closes = if equality { c != 0 } else if strict { c >= 0 } else { c > 0 };
     if !closes { return None; }
+    let assumed = match book.log.walk.assumed(&book.log.steps, &mult.sources, &mult.ms) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut lits: Vec<u32> = vec![];
     for l in assumed.iter() {
         let l = nikaia_std::num::value(l);
@@ -1308,7 +1307,7 @@ pub(crate) fn sv_real_test_units(atoms: Vec<SvAtom>, columns: u32, reals: Vec<u3
 pub(crate) fn sv_real_test_half(reals: Vec<u32>) -> SvQuery { sv_real_test_units(vec![SvAtom { row: sv_real_test_row(&vec![2], -1), rel: SvRel::Le }, SvAtom { row: sv_real_test_row(&vec![-2], 1), rel: SvRel::Le }], 1u32, reals) }
 
 pub(crate) fn sv_real_test_split_log(query: &SvQuery) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let s = log.split(sv_real_test_row(&vec![1], 0), sv_real_test_row(&vec![-1], 1));
@@ -1319,7 +1318,7 @@ pub(crate) fn sv_real_test_split_log(query: &SvQuery) -> SvLog {
 }
 
 pub(crate) fn sv_real_test_round_log(query: &SvQuery) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let up = log.combine(vec![SvSrc::Lit(sv_lit(0u32, false))], vec![1]);
@@ -1334,7 +1333,7 @@ pub(crate) fn sv_real_test_round_log(query: &SvQuery) -> SvLog {
 pub(crate) fn sv_real_test_empty() -> SvQuery { sv_real_test_units(vec![SvAtom { row: sv_real_test_row(&vec![1], 0), rel: SvRel::Lt }, SvAtom { row: sv_real_test_row(&vec![-1], 0), rel: SvRel::Lt }], 1u32, vec![0u32]) }
 
 pub(crate) fn sv_real_test_empty_log(query: &SvQuery) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(vec![sv_lit(0u32, true), sv_lit(1u32, true)], vec![SvSrc::Lit(sv_lit(0u32, false)), SvSrc::Lit(sv_lit(1u32, false))], vec![1, 1], 1);

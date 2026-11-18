@@ -1,0 +1,3 @@
+exit 101
+same.nika:2: the program stopped: assertion failed
+    assert(a == b)

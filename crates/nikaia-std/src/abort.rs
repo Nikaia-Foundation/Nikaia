@@ -243,20 +243,6 @@ mod tests {
         (99, "src/main.nika", 7),
     ];
 
-    /// Lookup picks `Debug` where there is one, and nothing where there is
-    /// not - a type with no `Debug` is left out rather than refused.
-    // The `&&` is the point: it is what the emitter writes, and lookup falls
-    // back one reference where the type is not `Debug`.
-    #[allow(clippy::needless_borrow)]
-    #[test]
-    fn an_operand_prints_where_it_can() {
-        struct Opaque;
-        // Kept as Rust (#2082): every type a program writes is `Debug`, so
-        // no program reaches the `None`; the shown operands are checked by
-        // `tests/compiler/tests/abort_a_failed_claim_names_its_line_and_its_operands`.
-        assert_eq!((&&Operand(&Opaque)).shown(), None);
-    }
-
     /// The half that keeps a program from being worse off: a line the table does
     /// not know is not answered wrongly. Kept as Rust (#2082): the emitter maps
     /// every line a stop can name, so no program reaches an unknown one.
