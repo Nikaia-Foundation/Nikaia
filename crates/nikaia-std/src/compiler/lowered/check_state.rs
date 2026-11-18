@@ -357,6 +357,9 @@ pub struct CheckCodeArg {
     pub changes: String,
     pub runs: Vec<String>,
     pub handed: String,
+    pub bound: bool,
+    pub item: bool,
+    pub at_once: bool,
     pub span: Span,
 }
 

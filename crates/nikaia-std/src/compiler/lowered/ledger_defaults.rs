@@ -20,7 +20,7 @@ pub(crate) fn ld_variant_named(ledger: &Ledger, library: &Ledger, name: &str, wo
     None
 }
 
-pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, ty: &Ty, argument: &Expr, computed: &impl Fn(&Ty, &Expr) -> Option<String>) -> Option<String> {
+pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, ty: &Ty, argument: &Expr, computed: &mut impl FnMut(&Ty, &Expr) -> Option<String>) -> Option<String> {
     if a_literal(argument) { return Some(default_text(argument)); }
     match argument {
         Expr::Variable(word, _) => {
@@ -42,7 +42,7 @@ pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow
     computed(ty, argument)
 }
 
-pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, name: &str, attribute: &Attribute, computed: &impl Fn(&Ty, &Expr) -> Option<String>) -> Option<String> {
+pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, name: &str, attribute: &Attribute, computed: &mut impl FnMut(&Ty, &Expr) -> Option<String>) -> Option<String> {
     let found = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position: i64 = 0;
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -50,7 +50,7 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
         let mut value: String = String::from("");
         if field.default.is_empty() {
             if ((position) as usize) >= attribute.args.len() { return None; }
-            value = match ld_argument_text(ledger, library, words, &field.ty, unsafe { nikaia_std::proven::read(&attribute.args, (position) as usize) }, computed) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            value = match ld_argument_text(ledger, library, words, &field.ty, unsafe { nikaia_std::proven::read(&attribute.args, (position) as usize) }, &mut *computed) { Some(__nikaia_value) => __nikaia_value, None => return None };
             position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         } else {
             let mut given: i64 = -1;
@@ -59,7 +59,7 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
                 if given < 0 && words.resolve(option.name) == field.name { given = at; }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = nikaia_std::block::Text::from(field.default.to_string()); }
+            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, &mut *computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = nikaia_std::block::Text::from(field.default.to_string()); }
         }
         written.push(format!("{}: {}", field.name, value));
     }
@@ -108,7 +108,7 @@ pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
     out
 }
 
-pub(crate) fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&Ledger) -> ResultPackage, sources: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<PlacesStored>) {
+pub(crate) fn write_result_sources(ledger: &mut Ledger, units: i64, package: &mut impl FnMut(&Ledger) -> ResultPackage, sources: &mut impl FnMut(i64, &Ledger, &ResultPackage) -> Vec<ResultSource>, stored: &mut impl FnMut(i64, &Ledger, &ResultPackage) -> Vec<PlacesStored>) {
     let shared = package(&ledger);
     let mut before = ld_columns(&ledger);
     for round in 0..8 {

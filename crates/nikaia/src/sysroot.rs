@@ -1061,14 +1061,14 @@ fn with_tests_as_functions(
         &mut again.program.items,
         &source,
         0,
-        &|text| interner.intern_string(text),
+        &mut |text| interner.intern_string(text),
     );
     nikaia_std::compiler::modules::modules_mark_test_only(
         &mut again.program.items,
         only_tests,
         found.len() as i64,
         interner,
-        &|text| interner.intern_string(text),
+        &mut |text| interner.intern_string(text),
     );
     let titles: Vec<String> = found.into_iter().map(|(title, _)| title).collect();
     // A file without tests only marks what other files' tests reach.

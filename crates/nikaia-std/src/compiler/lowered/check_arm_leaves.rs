@@ -417,7 +417,7 @@ impl CheckState {
         let mut form = FactKeyForm::Lent;
         if writing {
             if self.text_literal(world, keys, index, true).is_none() {
-                self.expect_kept_asked(world, found, keys, Some(index), "a map keeps its keys", span, "assign", &map_key_message);
+                self.expect_kept_asked(world, found, keys, Some(index), "a map keeps its keys", span, "assign", &mut map_key_message);
                 self.hands_over(world, index, found, "used as a map key", span);
             }
             form = FactKeyForm::Handed;
@@ -541,7 +541,7 @@ impl CheckState {
             if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, unsafe { nikaia_std::proven::read(&given, (i) as usize) }, true), || found_here.clone().into()); }
             if !views_into_text(&ty, &want) { continue; }
             let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*unsafe { nikaia_std::proven::read(&given, (i) as usize) }), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
+            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*unsafe { nikaia_std::proven::read(&given, (i) as usize) }), &keeper, span, "argument", &mut |found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &mut |found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
         }
     }
 }
@@ -593,16 +593,16 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn expect_kept_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_kept_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         let pushed = self.findings.len() as i64;
         let waiting = self.slots_waiting(span);
-        self.expect_kept(world, found, want, value, keeper, span, what, message);
+        self.expect_kept(world, found, want, value, keeper, span, what, &mut *message);
         self.findings_moved(span, at, pushed, &waiting);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn expect_kept_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_kept_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         let mut arms: Vec<CheckArm<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
@@ -612,7 +612,7 @@ impl CheckState {
             if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
         }
         if arms.is_empty() {
-            self.expect_kept_moved(world, found, want, value, keeper, span, &at, what, message);
+            self.expect_kept_moved(world, found, want, value, keeper, span, &at, what, &mut *message);
             return;
         }
         let mut mixed = false;
@@ -644,7 +644,7 @@ impl CheckState {
             let here = check_span_at(world, arm, span);
             if ty.is_unknown() {
                 let pushed = self.findings.len() as i64;
-                let refused = self.an_open_number_where_none_fits(world, &ty, want, arm, span, what, message);
+                let refused = self.an_open_number_where_none_fits(world, &ty, want, arm, span, what, &mut *message);
                 let mut i = pushed;
                 while i < self.findings.len() as i64 {
                     self.findings[nikaia_std::index::at(i)].span = Span { start: here.start, end: here.end };
@@ -652,7 +652,7 @@ impl CheckState {
                 }
                 if refused { continue; }
             }
-            self.expect_kept_moved(world, &ty, want, Some(arm), keeper, span, &here, what, message);
+            self.expect_kept_moved(world, &ty, want, Some(arm), keeper, span, &here, what, &mut *message);
         }
         if mixed && a_view {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };

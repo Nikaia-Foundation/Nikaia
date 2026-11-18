@@ -64,12 +64,12 @@ pub(crate) fn trimmed_len(c: &[scalar], to: i64) -> i64 {
     end
 }
 
-pub(crate) fn parses_further(input: &str, past: i64, stops_at: &impl Fn(&str) -> i64) -> bool {
+pub(crate) fn parses_further(input: &str, past: i64, stops_at: &mut impl FnMut(&str) -> i64) -> bool {
     let stop = stops_at(input);
     stop < 0 || stop > past
 }
 
-pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at: &impl Fn(&str) -> i64) -> Option<ParseReading> {
+pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at: &mut impl FnMut(&str) -> i64) -> Option<ParseReading> {
     let source = slice(c, 0, c.len() as i64);
     let prev_end = trimmed_len(c, at);
     let prev = previous_token(&source, prev_end);
@@ -144,7 +144,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
         let l = line.trim_start();
         if l.starts_with("if ") || l.starts_with("while ") || l.contains(" if ") {
             let compared = format!("{}=={}", upto(c, at), slice(c, at + 1, c.len() as i64));
-            if parses_further(&compared, at + 2, stops_at) { return Some(reading_at(at, "=", "`=` gives a name a value; a condition compares with `==`.", "Write `==` here.")); }
+            if parses_further(&compared, at + 2, &mut *stops_at) { return Some(reading_at(at, "=", "`=` gives a name a value; a condition compares with `==`.", "Write `==` here.")); }
         }
     }
     let closer_wanted = lists(&error.expected, "`}`") || lists(&error.expected, "`)`") || lists(&error.expected, "`]`");
@@ -155,14 +155,14 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
             let first = *nikaia_std::index::get(&letters, 0);
             if first.is_alphabetic() || first == '_' {
                 let separated = format!("{},{}", upto(c, prev_end), slice(c, prev_end, c.len() as i64));
-                if parses_further(&separated, at + 1, stops_at) { return Some(reading_at(prev_end, "", &format!("A `,` is missing before `{}`.", word), &format!("Separate `{}` and `{}` with a comma.", prev, word))); }
+                if parses_further(&separated, at + 1, &mut *stops_at) { return Some(reading_at(prev_end, "", &format!("A `,` is missing before `{}`.", word), &format!("Separate `{}` and `{}` with a comma.", prev, word))); }
             }
         }
     }
     None
 }
 
-pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at: i64, stops_at: &impl Fn(&str) -> i64) -> Option<String> {
+pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at: i64, stops_at: &mut impl FnMut(&str) -> i64) -> Option<String> {
     if !has_found { return None; }
     let token = nikaia_std::block::Text::from(found.to_string());
     let mut listed = false;
@@ -183,7 +183,7 @@ pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at:
         placed = unsafe { nikaia_std::proven::add::<i64>(placed, 1) };
     }
     with_a_name = format!("{}{}", with_a_name, slice(c, at + width, c.len() as i64));
-    if parses_further(&with_a_name, at + width, stops_at) { return Some(format!("`{}` is a reserved word, so it can't be used as a name here.", token)); }
+    if parses_further(&with_a_name, at + width, &mut *stops_at) { return Some(format!("`{}` is a reserved word, so it can't be used as a name here.", token)); }
     None
 }
 
@@ -249,13 +249,13 @@ pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
     out
 }
 
-pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
+pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &mut impl FnMut(&str) -> i64) -> ParseReading {
     let c: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut at = error.offset;
     if at > c.len() as i64 { at = c.len() as i64; }
     let before = last_line_to(&c, at);
     if !error.has_message {
-        let better = a_better_reading(error, &c, at, stops_at);
+        let better = a_better_reading(error, &c, at, &mut *stops_at);
         if better.is_some() { return nikaia_std::index::or(better, || reading_at(at, "", "", "").into()); }
     }
     let mut help: Option<String> = None;
@@ -267,7 +267,7 @@ pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&s
     }
     #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     let said_word = nikaia_std::block::Text::from(error.found.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
-    let reserved = reserved_word_note(error.has_found, &error.found, &c, at, stops_at); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    let reserved = reserved_word_note(error.has_found, &error.found, &c, at, &mut *stops_at); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if reserved.is_some() {
         if error.has_message { notes.push(nikaia_std::index::or(reserved, || "".into())); } else {
             notes.push(nikaia_std::block::Text::from(message.to_string()));

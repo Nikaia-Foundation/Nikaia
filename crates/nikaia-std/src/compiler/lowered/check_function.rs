@@ -266,7 +266,7 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
         let values = state.rule_values(world, host, rule);
         for option in rule.config.iter() {
             let given = check_core_expr(state, world, host, &option.default, &option.default_span);
-            state.expect_type(world, &given, &host.type_of(&option.ty), &option.default_span, "argument", &|was, wanted| { format!("This default is `{}`, but the option is `{}`.", was, wanted) });
+            state.expect_type(world, &given, &host.type_of(&option.ty), &option.default_span, "argument", &mut |was, wanted| { format!("This default is `{}`, but the option is `{}`.", was, wanted) });
         }
         for alt in rule.alts.iter() {
             let outer_action: Option<String> = match state.inside_an_action.as_ref() {
@@ -318,7 +318,7 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
             Stmt::Expr(value) => { tail = nikaia_std::index::or(state.text_literal(world, &wanted, value, true), || tail.into()); },
             _ => { },
         }
-        state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &|found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
+        state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &mut |found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
         match &unsafe { nikaia_std::proven::read(&action.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
             Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, &tail, &wanted, value, &Span { start: at.start, end: at.end }); },
             _ => { },
@@ -539,9 +539,9 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
                 shown = nikaia_std::index::or(result, || shown.into());
             }
             check_function_wrap_tail(state, world, host, &shown, expected, value, span);
-            state.expect_kept_asked(world, &shown, expected, Some(value), "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) });
+            state.expect_kept_asked(world, &shown, expected, Some(value), "the function returns it, and the caller keeps it after the call ends", span, "returns", &mut |found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) });
         },
-        _ => { state.expect_kept_asked(world, &shown, expected, None, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) }); },
+        _ => { state.expect_kept_asked(world, &shown, expected, None, "the function returns it, and the caller keeps it after the call ends", span, "returns", &mut |found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) }); },
     }
 }
 

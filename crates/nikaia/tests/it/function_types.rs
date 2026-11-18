@@ -137,7 +137,10 @@ fn a_run_parameter_lowers_to_a_closure_argument() {
     // long as nothing handed a handler **on** - and then `rustc` said *use of
     // moved value* about a file nobody wrote.
     let rust = lowered("fn on_tick(handler: fn() sync) { }\nfn main() { }\n");
-    assert!(rust.contains("fn on_tick(handler: &impl Fn())"), "{rust}");
+    assert!(
+        rust.contains("fn on_tick(handler: &mut impl FnMut())"),
+        "{rust}"
+    );
 }
 
 /// **A run parameter's call hands back what its type says** (#125): typed as
@@ -177,7 +180,9 @@ fn throws_on_the_type_is_the_result_a_throws_function_has() {
     // word adds.
     let plain = lowered("fn load(reader: fn(Path) -> Bytes sync throws) { }\nfn main() { }\n");
     assert!(
-        plain.contains("&impl Fn(&Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>"),
+        plain.contains(
+            "&mut impl FnMut(&Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>"
+        ),
         "{plain}"
     );
     // Without it, the same `Result` is what the **async closure** hands back
@@ -187,13 +192,13 @@ fn throws_on_the_type_is_the_result_a_throws_function_has() {
     let run = lowered("fn load(reader: fn(Path) -> Bytes throws) { }\nfn main() { }\n");
     assert!(
         run.contains(
-            "&impl AsyncFn(&Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>"
+            "&mut impl AsyncFnMut(&Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>"
         ),
         "{run}"
     );
     let nothing = lowered("fn attempt(step: fn() sync throws) { }\nfn main() { }\n");
     assert!(
-        nothing.contains("impl Fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>"),
+        nothing.contains("impl FnMut() -> Result<(), std::boxed::Box<dyn std::error::Error>>"),
         "{nothing}"
     );
 }
@@ -217,13 +222,13 @@ fn a_lambda_that_pauses_fits_a_parameter_that_allows_pausing() {
     // to return an error here rather than write anything.
     let rust = lowered(source);
     assert!(
-        rust.contains("fn run(f: &impl AsyncFn() -> String)"),
+        rust.contains("fn run(f: &mut impl AsyncFnMut() -> String)"),
         "a run parameter takes the bound, and a view of it: {rust}"
     );
     // **No `move`**, which is Part I 5.4 A: a lambda handed to a parameter the
     // body only calls borrows what it captures.
     assert!(
-        rust.contains("run(&async || {"),
+        rust.contains("run(&mut async || {"),
         "and the lambda is an `async` closure: {rust}"
     );
     assert!(
@@ -486,7 +491,10 @@ fn the_parameters_type_decides_whether_the_callee_pauses() {
          fn main() throws { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n",
     );
     assert!(future.contains("async fn twice("), "{future}");
-    assert!(future.contains("f(f(x).await).await"), "{future}");
+    assert!(
+        future.contains("({ let __nikaia_arg0 = f(x).await; f(__nikaia_arg0).await })"),
+        "{future}"
+    );
 }
 
 /// **A kept one is answered from the type** (D3), and a body that stores *and*
@@ -631,14 +639,15 @@ fn a_handler_passed_on_inside_a_loop_is_lent() {
                   }\n";
     let rust = lowered(source);
     assert!(
-        rust.contains("f: &impl AsyncFn(i64) -> i64"),
+        rust.contains("f: &mut impl AsyncFnMut(i64) -> i64"),
         "the declaration takes a view of it: {rust}"
     );
-    // **And the call hands it on as it has it**: `f` is a `&impl AsyncFn`
-    // already, and a reference is a copy. A second `&` compiled here and was a
-    // new type at every level of a recursion (ADR-294 D11, found moving `fold`).
+    // **And the call hands it on as it has it**: `f` is a `&mut impl
+    // AsyncFnMut` already (ADR-views-3 D17), reborrowed. A second `&` compiled
+    // here and was a new type at every level of a recursion (ADR-294 D11,
+    // found moving `fold`).
     assert!(
-        rust.contains("twice(n, f)"),
+        rust.contains("twice(n, &mut *f)"),
         "and the call hands on the view it was lent: {rust}"
     );
 }

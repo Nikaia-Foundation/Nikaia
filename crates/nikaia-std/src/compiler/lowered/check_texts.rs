@@ -16,14 +16,14 @@ pub(crate) fn ascii_scalar(n: i64) -> Option<scalar> {
 // this was written - see `contracts::sync`.
 pub(crate) fn literal_is_a_byte(written: &str) -> bool {
     if a_high_byte(written).is_some() { return true; }
-    let text = match decoded(written, &|n| { ascii_scalar(n) }) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let text = match decoded(written, &mut |n| { ascii_scalar(n) }) { Some(__nikaia_value) => __nikaia_value, None => return false };
     (text.chars().count() as i64) == 1 && text.len() == 1
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_byte_literal(written: &str) -> String {
-    let text = nikaia_std::index::or(decoded(written, &|n| { ascii_scalar(n) }), || "".into());
+    let text = nikaia_std::index::or(decoded(written, &mut |n| { ascii_scalar(n) }), || "".into());
     let mut byte: i64 = nikaia_std::index::or(a_high_byte(written), || -1);
     for b in text.bytes() { if byte < 0 { byte = b as i64; } }
     if byte < 0 { byte = 0; }

@@ -22,7 +22,7 @@ impl std::fmt::Display for ProjectWriteRefusal {
 }
 impl std::error::Error for ProjectWriteRefusal {}
 
-pub async fn project_write_ledger(path: &std::path::Path, ledger: &str, locked: bool, whole: &impl Fn(&std::path::Path, &str) -> Option<String>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+pub async fn project_write_ledger(path: &std::path::Path, ledger: &str, locked: bool, whole: &mut impl FnMut(&std::path::Path, &str) -> Option<String>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     if !locked {
         let failed = match whole(path, ledger) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         return Err(nikaia_std::error::raise(ProjectWriteRefusal::Failed(failed), &"project_write_ledger"));
@@ -35,9 +35,9 @@ pub async fn project_write_ledger(path: &std::path::Path, ledger: &str, locked: 
     Ok(())
 }
 
-pub async fn project_write_proofs(root: &std::path::Path, book: &ProofsBook, locked: bool, whole: &impl Fn(&std::path::Path, &str) -> Option<String>) -> Result<(), nikaia_std::error::Thrown<ProjectWriteRefusal>> {
+pub async fn project_write_proofs(root: &std::path::Path, book: &ProofsBook, locked: bool, whole: &mut impl FnMut(&std::path::Path, &str) -> Option<String>) -> Result<(), nikaia_std::error::Thrown<ProjectWriteRefusal>> {
     if !locked {
-        let failed = match proofs_book_write(book, root, whole) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let failed = match proofs_book_write(book, root, &mut *whole) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         return Err(nikaia_std::error::throwing(ProjectWriteRefusal::Failed(format!("writing {}: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&(PROOFS_FILE))))), failed)), &"project_write_proofs"));
     }
     if book.searched > 0 || !proofs_book_as_recorded(book, root).await {

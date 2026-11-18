@@ -130,7 +130,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let hoisted = self.emit_call_hoisted(world, func, args);
+        let hoisted = self.emit_call_hoisted(world, &walk.keep_function, func, args);
         if hoisted.is_empty() {
             walk.hoisted_args = None;
             self.emit_core_call_body(world, walk, out, host, func, args, config, depth, flow, scope)?;
@@ -156,7 +156,7 @@ impl EmitState {
         out.push(" })");
         Ok(())
     }
-    pub(crate) fn emit_call_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> Vec<i64> {
+    pub(crate) fn emit_call_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, func: &Expr, args: &[Expr]) -> Vec<i64> {
         let callee = self.emit_call_callee(world, func);
         let mut lent: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0;
@@ -180,6 +180,17 @@ impl EmitState {
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
+        let called: String = match func {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(emit_text(world, name).to_string()) },
+            _ => String::from(""),
+        };
+        if called != "" && self.emit_call_names_code_taken(function, &called) {
+            let mut j: i64 = 0;
+            for arg in args.iter() {
+                if j > last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && emit_mentions(world, arg, &called) { last = j; }
+                j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+            }
+        }
         let mut hoisted: Vec<i64> = vec![];
         let mut k: i64 = 0;
         for arg in args.iter() {
@@ -187,6 +198,11 @@ impl EmitState {
             k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         }
         hoisted
+    }
+    pub(crate) fn emit_call_names_code_taken(&self, function: &str, name: &str) -> bool {
+        let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        signature.params.iter().any(|param| { param.0 == name && matches!(param.1, Ty::Fn { .. }) })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -1343,8 +1359,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple99341| {
-        let (i, word) = __nikaia_tuple99341;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple100734| {
+        let (i, word) = __nikaia_tuple100734;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

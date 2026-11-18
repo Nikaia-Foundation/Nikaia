@@ -465,7 +465,7 @@ impl CheckState {
             found = found.owned();
             wanted = wanted.owned();
         }
-        self.expect_type(world, &found, &wanted, span, "argument", &|was, wanted| { format!("{} here is `{}`, but it has to be `{}`.", what, was, wanted) });
+        self.expect_type(world, &found, &wanted, span, "argument", &mut |was, wanted| { format!("{} here is `{}`, but it has to be `{}`.", what, was, wanted) });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

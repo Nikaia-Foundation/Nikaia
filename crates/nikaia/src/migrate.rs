@@ -34,12 +34,13 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
         let source = std::fs::read_to_string(file)
             .with_context(|| format!("cannot read {}", file.display()))?;
         let migrated = if file.extension().is_some_and(|e| e == "md") {
-            nikaia_std::compiler::migrate_views3::migrate_views3_markdown(&source, &keeps_alone)
+            nikaia_std::compiler::migrate_views3::migrate_views3_markdown(&source, &mut keeps_alone)
         } else {
             match keeps_in_package(file)? {
-                Package::None => {
-                    nikaia_std::compiler::migrate_views3::migrate_views3_nika(&source, &keeps_alone)
-                }
+                Package::None => nikaia_std::compiler::migrate_views3::migrate_views3_nika(
+                    &source,
+                    &mut keeps_alone,
+                ),
                 Package::Keeps(dropped, keep_at) => {
                     let by_value =
                         nikaia_std::compiler::migrate_views3::migrate_views3_selves(&source);
@@ -250,7 +251,7 @@ fn keeps_of(
             library: &library_methods,
         },
         &checked.methods,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         &checked.findings,
     )
 }

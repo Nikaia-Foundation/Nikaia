@@ -375,6 +375,11 @@ code parameter allows it too: `fn each(xs: Vec[i64], f: fn(i64))` takes
   that changes nothing fits there as before.
 * A kept code parameter (`keep f: fn(i64)`, a field) follows the same rule by
   where the kept value is called.
+* The body alone decides, whoever calls (supervisor, 2026-11-17, #2046): a
+  parameter run one call at a time takes such a lambda from a caller in any
+  file or package. The parameters run at once are published in the function's
+  ledger entry (`at_once`, Part III 13.5), which a caller elsewhere reads for
+  `NK2104`; a `pub` function that gains one changes its contract (`NK1208`).
 * No such program reaches `rustc` with a borrow error (Part III C.1).
 
 ## 5. Consequences

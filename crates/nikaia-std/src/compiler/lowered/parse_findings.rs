@@ -32,10 +32,10 @@ pub(crate) fn parse_findings_reading(reading: ParseReading, source: &str) -> Fin
     parse_findings_at(at, reading.word, reading.message, reading.notes, reading.help)
 }
 
-pub fn parse_findings_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> Finding { parse_findings_reading(a_parse_error(error, source, stops_at), source) }
+pub fn parse_findings_parse_error(error: &Failure, source: &str, stops_at: &mut impl FnMut(&str) -> i64) -> Finding { parse_findings_reading(a_parse_error(error, source, &mut *stops_at), source) }
 
-pub fn parse_findings_failure(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> Finding {
-    let unclosed = match unclosed_block_comment(error, source) { Some(__nikaia_value) => __nikaia_value, None => return parse_findings_parse_error(error, source, stops_at) };
+pub fn parse_findings_failure(error: &Failure, source: &str, stops_at: &mut impl FnMut(&str) -> i64) -> Finding {
+    let unclosed = match unclosed_block_comment(error, source) { Some(__nikaia_value) => __nikaia_value, None => return parse_findings_parse_error(error, source, &mut *stops_at) };
     parse_findings_reading(unclosed, source)
 }
 

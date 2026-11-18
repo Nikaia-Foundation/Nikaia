@@ -1,0 +1,19 @@
+error[NK2104]: This lambda changes `total`, but `compiler_tests::code_beside_each_at_once` runs `f` from tasks that run at once.
+  --> tests/code_run_at_once_beside_refuses_a_lambda_that_changes_a_capture.nika:9:54
+   |
+ 9 |     compiler_tests::code_beside_each_at_once([1, 2], fn(v) { total = total + v })
+   |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Each of those tasks would change `total` at the same time.
+   = note: Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2).
+   = help: Return a value from the lambda and combine the results afterwards, or keep `total` in a `SharedMut` and change it through `update`.
+error[NK2104]: This lambda changes `total`, but `compiler_tests::code_beside_hands_on` runs `g` from tasks that run at once.
+   --> tests/code_run_at_once_beside_refuses_a_lambda_that_changes_a_capture.nika:10:50
+    |
+ 10 |     compiler_tests::code_beside_hands_on([1, 2], fn(v) { total = total + v })
+    |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Each of those tasks would change `total` at the same time.
+    = note: Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2).
+    = help: Return a value from the lambda and combine the results afterwards, or keep `total` in a `SharedMut` and change it through `update`.
+2 branches that cannot run beside the others

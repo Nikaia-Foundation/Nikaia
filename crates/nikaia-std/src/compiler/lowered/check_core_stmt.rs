@@ -770,7 +770,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             found_kept = want.clone();
         }
         if state.lends_where_a_function_type_reads(world, Some(value), &found_kept, &want) { found_kept = want.clone(); }
-        state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &|was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
+        state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &mut |was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, &want, value, span);
         bound = want;
     } else if mutable && state.flow.mixed_text.contains(&name) && found.is_a_view() && check_core_stmt_literal(value).is_some() {
@@ -1420,7 +1420,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, &into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-        state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
+        state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
         state.findings_moved(span, &at, pushed, &waiting);
     }
     check_core_stmt_unit()
@@ -1783,7 +1783,7 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
 pub(crate) fn check_core_stmt_emit<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) -> Ty {
     let found = check_core_expr(state, world, host, value, span);
     match state.emitting {
-        Some(ref item) => { state.expect_type(world, &found, &item.clone(), span, "argument", &|was, wanted| { format!("This `emit` hands over `{}`, but the `@stream` entry's items are `{}`.", was, wanted) }); },
+        Some(ref item) => { state.expect_type(world, &found, &item.clone(), span, "argument", &mut |was, wanted| { format!("This `emit` hands over `{}`, but the `@stream` entry's items are `{}`.", was, wanted) }); },
         None => {
             let notes: Vec<String> = vec![String::from("An item goes to the walk of a `@stream` entry (ADR-grammar-2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.")];
             let help: String = if state.inside_an_action.is_some() { String::from("Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead.") } else { String::from("Return the value instead, or emit it from the action of a rule a `@stream` entry reaches.") }; #[allow(clippy::redundant_locals)] let notes = notes;

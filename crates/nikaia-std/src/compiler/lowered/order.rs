@@ -453,14 +453,14 @@ pub(crate) fn an_arm_throws(arms: &[MatchArm], bound: bool) -> bool {
     false
 }
 
-pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool) -> String {
+pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &mut impl FnMut(&Block) -> Vec<Block>, pauses: &mut impl FnMut(&Spanned<Stmt>) -> bool) -> String {
     let mut out: String = String::from("");
     for item in items.iter() {
         match &item.node {
-            Item::Fn { .. } => { block_report(&item.node, None, names, walking, overlaps_in, pauses, &mut out); },
+            Item::Fn { .. } => { block_report(&item.node, None, names, walking, &mut *overlaps_in, &mut *pauses, &mut out); },
             Item::Impl { target, methods, .. } => {
                 let owner: Option<String> = Some(nikaia_std::block::Text::from(names.resolve(target.name).to_string()));
-                for method in methods.iter() { block_report(&method.node, (owner).as_deref(), names, walking, overlaps_in, pauses, &mut out); }
+                for method in methods.iter() { block_report(&method.node, (owner).as_deref(), names, walking, &mut *overlaps_in, &mut *pauses, &mut out); }
             },
             _ => { },
         }
@@ -469,13 +469,13 @@ pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerC
     out
 }
 
-pub(crate) fn block_report(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
+pub(crate) fn block_report(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &mut impl FnMut(&Block) -> Vec<Block>, pauses: &mut impl FnMut(&Spanned<Stmt>) -> bool, out: &mut String) {
     match item {
         Item::Fn { name, body, .. } => {
             let name = *name;
             let own_name = function_name(names, name);
             let key = keyed(target, &own_name);
-            for block in overlaps_in(body) { one_block_report(&key, &block, names, walking, pauses, out); }
+            for block in overlaps_in(body) { one_block_report(&key, &block, names, walking, &mut *pauses, out); }
         },
         _ => { },
     }
@@ -486,7 +486,7 @@ pub(crate) fn keyed(target: Option<&str>, own_name: &str) -> String {
     format!("{}::{}", owner, own_name)
 }
 
-pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
+pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, pauses: &mut impl FnMut(&Spanned<Stmt>) -> bool, out: &mut String) {
     if block.stmts.is_empty() { return; }
     let mut operations: Vec<Operation> = vec![];
     let mut present: Vec<bool> = vec![];

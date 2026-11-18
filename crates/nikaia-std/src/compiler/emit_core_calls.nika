@@ -188,7 +188,7 @@ impl EmitState {
         // `&mut` from the first argument to the call, so `f(w, g(w))` is
         // `({ let a = g(&mut w); f(&mut w, a) })`. Every argument up to it
         // that does something is bound too, in order.
-        let hoisted = self.emit_call_hoisted(world, func, args)
+        let hoisted = self.emit_call_hoisted(world, walk.keep_function, func, args)
         if hoisted.len() == 0 {
             walk.hoisted_args = null
             self.emit_core_call_body(world, walk, out, host, func, args, config, depth, flow, scope)
@@ -213,10 +213,11 @@ impl EmitState {
 
     /// The arguments of a call bound before it: none, unless one
     /// after an argument lent to a `mut` parameter is made in the call and
-    /// uses the local that argument is rooted in. Then every argument up to
+    /// uses the local that argument is rooted in, or one made in the call
+    /// names the parameter of code called. Then every argument up to
     /// the last such one that is made in the call, is not code and is not
     /// itself lent to a `mut` parameter.
-    fn emit_call_hoisted(ref self, world: ref EmitWorld, func: ref Expr, args: ref Vec[Expr]) -> Vec[i64] {
+    fn emit_call_hoisted(ref self, world: ref EmitWorld, function: ref String, func: ref Expr, args: ref Vec[Expr]) -> Vec[i64] {
         let callee = self.emit_call_callee(world, func)
         let mut lent: Vec[bool] = []
         let mut at = 0
@@ -242,6 +243,23 @@ impl EmitState {
             }
             i += 1
         }
+        // **And one that runs the code called** (ADR-views-3 D17): a
+        // parameter of code is `&mut impl FnMut` below, which Rust holds for
+        // the call from before its arguments, so `f(f(x))` is
+        // `({ let a = f(x); f(a) })`.
+        let called: String = match func {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => "",
+        }
+        if called != "" && self.emit_call_names_code_taken(function, called) {
+            let mut j = 0
+            for arg in args {
+                if j > last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && emit_mentions(world, arg, called) {
+                    last = j
+                }
+                j += 1
+            }
+        }
         let mut hoisted: Vec[i64] = []
         let mut k = 0
         for arg in args {
@@ -251,6 +269,19 @@ impl EmitState {
             k += 1
         }
         return hoisted
+    }
+
+    /// Whether `name` is a parameter of code of `function`, the function
+    /// being written.
+    fn emit_call_names_code_taken(ref self, function: ref String, name: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(function) ?? return false
+        let signature = contract.signature ?? return false
+        return signature.params.iter().any(fn(param) {
+            param.0 == name && match param.1 {
+                Ty::Fn { .. } => true,
+                else => false,
+            }
+        })
     }
 
     /// The call itself, its arguments bound or not.

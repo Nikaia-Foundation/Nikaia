@@ -66,6 +66,11 @@ pub(crate) fn cx_lent(contracts: &Ledger, key: &str, position: i64) -> bool {
     lends_in(contract, position, &copying)
 }
 
+pub(crate) fn cx_code_at_once(contracts: &Ledger, key: &str, param: &str) -> bool {
+    let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    nikaia_std::list::contains(&contract.at_once, &param)
+}
+
 pub(crate) fn cx_fails_with(contracts: &Ledger, key: &str) -> Vec<String> {
     let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     contract.fails_with.copy_owned()
@@ -720,8 +725,14 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             params.rust_params.push(format!("{}: Option<extern \"C\" fn({}){}>, {}_ctx: *mut std::ffi::c_void", local, nikaia_std::block::Text::from(rust_args.join(", ")), rust_result, local));
             params.c_params.push(format!("{} (*{})({}), void *{}_ctx", c_result, param, nikaia_std::block::Text::from(c_args.join(", ")), param));
             passed.push(format!("{}_ctx", local));
-            params.checks.push_str(&format!("    let Some({}) = {} else {{ return -1; }};\n    let {} = move |{}|{} {{ {}({}) }};\n", local, local, local, nikaia_std::block::Text::from(closure_params.join(", ")), rust_result, local, nikaia_std::block::Text::from(passed.join(", "))));
-            params.call_args.push(format!("&{}", local));
+            let mut binding: &'static str = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
+            let mut lend: &'static str = "&";
+            if !cx_code_at_once(contracts, key, param) {
+                binding = "mut ";
+                lend = "&mut ";
+            }
+            params.checks.push_str(&format!("    let Some({}) = {} else {{ return -1; }};\n    let {}{} = move |{}|{} {{ {}({}) }};\n", local, local, binding, local, nikaia_std::block::Text::from(closure_params.join(", ")), rust_result, local, nikaia_std::block::Text::from(passed.join(", "))));
+            params.call_args.push(format!("{}{}", lend, local));
         },
         CxIn::Records { record, whole } => {
             let record = *record; let whole = *whole;

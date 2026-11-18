@@ -736,18 +736,18 @@ pub fn sharing_moves_unknown() -> SharingMoves { SharingMoves { known: false, mo
 
 pub fn sharing_moves_of(facts: &CheckFacts) -> SharingMoves { SharingMoves { known: true, moved: facts.moved_handles.copy_owned(), stored: facts.stored_handles.copy_owned(), stored_fields: facts.stored_handle_fields.copy_owned(), task_handles: facts.task_handles.copy_owned() } }
 
-pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
+pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ty_of: &mut impl FnMut(&Type) -> Ty, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
     let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new(), moves, variants: variants_here(asked.names, &program.items) };
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
+            Item::Fn { .. } => { sharing_function(&item.node, "", asked, &mut *holes_of, &mut *ty_of, &mut walk); },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(asked.names.resolve(target.name).to_string());
-                for method in methods.iter() { sharing_function(&method.node, &owner, asked, holes_of, ty_of, &mut walk); }
+                for method in methods.iter() { sharing_function(&method.node, &owner, asked, &mut *holes_of, &mut *ty_of, &mut walk); }
             },
             Item::Struct { name, fields, is_public, .. } => {
                 let is_public = *is_public; let name = *name;
-                if is_public { public_fields(asked.names.resolve(name), fields, asked, ty_of, &mut walk); }
+                if is_public { public_fields(asked.names.resolve(name), fields, asked, &mut *ty_of, &mut walk); }
             },
             _ => { },
         }
@@ -757,7 +757,7 @@ pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl 
     sharing
 }
 
-pub(crate) fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_, '_, '_>, ty_of: &mut impl FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     for field in fields.iter() {
         if !field.is_public { continue; }
         let ty = ty_of(&field.ty);
@@ -768,7 +768,7 @@ pub(crate) fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_, 
     }
 }
 
-pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ty_of: &mut impl FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     match item {
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
@@ -784,7 +784,7 @@ pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '
                 let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
                 position(RESULT, &ty_of(result), is_public, asked, walk);
             }
-            sharing_block(body, asked, holes_of, ty_of, walk);
+            sharing_block(body, asked, &mut *holes_of, &mut *ty_of, walk);
         },
         _ => { },
     }
@@ -798,14 +798,14 @@ pub(crate) fn position(named: &str, ty: &Ty, is_public: bool, asked: &Asked<'_, 
     } else if is_public { for field in shared_fields(&ty.text(), asked) { walk.slots.force(FIELDS, &field, published_reason(&function, named), Some(Fallback::PublicSignature)); } }
 }
 
-pub(crate) fn sharing_block(block: &Block, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) { for stmt in block.stmts.iter() { sharing_statement(&stmt.node, asked, &holes_of, &ty_of, walk); } }
+pub(crate) fn sharing_block(block: &Block, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) { for stmt in block.stmts.iter() { sharing_statement(&stmt.node, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); } }
 
-pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if names.len() != 1 { return; }
-            let_binding(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), (ty).as_ref(), value, asked, &ty_of, walk);
-            sharing_expression(value, asked, &holes_of, &ty_of, walk);
+            let_binding(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), (ty).as_ref(), value, asked, &mut &mut *ty_of, walk);
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Stmt::Comptime { .. } => { },
         Stmt::Assign { target, value, .. } => {
@@ -818,34 +818,34 @@ pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of
                     origin_unseen(&at, &named, value, asked, walk);
                 } else { walk.slots.join(&known, nikaia_std::index::or(source.as_deref(), || "")); }
             }
-            sharing_expression(target, asked, &holes_of, &ty_of, walk);
-            sharing_expression(value, asked, &holes_of, &ty_of, walk);
+            sharing_expression(target, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Stmt::For { iter, body, .. } => {
-            sharing_expression(iter, asked, &holes_of, &ty_of, walk);
-            sharing_block(body, asked, &holes_of, &ty_of, walk);
+            sharing_expression(iter, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Stmt::While { cond, body } => {
-            sharing_expression(cond, asked, &holes_of, &ty_of, walk);
-            sharing_block(body, asked, &holes_of, &ty_of, walk);
+            sharing_expression(cond, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Stmt::Return(value) => {
             let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             hands_back(returned, asked, walk);
-            sharing_expression(returned, asked, &holes_of, &ty_of, walk);
+            sharing_expression(returned, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Stmt::Expr(value) => {
             hands_back(value, asked, walk);
-            sharing_expression(value, asked, &holes_of, &ty_of, walk);
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         _ => { },
     }
 }
 
-pub(crate) fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &mut impl FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     if walks_in_parallel(value, asked.names, &walk.parallel) { walk.parallel.insert(nikaia_std::block::Text::from(named.to_string())); }
     let aliased = named_handle(value, asked.names, &walk.scope);
-    let ty = match binding_type(written, (aliased).as_deref(), value, asked, ty_of, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let ty = match binding_type(written, (aliased).as_deref(), value, asked, &mut *ty_of, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
     if holds_shared(&ty) {
         let function = nikaia_std::block::Text::from(walk.function.to_string());
         walk.slots.note(&function, &named, ty.clone(), false, false);
@@ -860,7 +860,7 @@ pub(crate) fn let_binding(named: String, written: Option<&Type>, value: &Expr, a
     walk.scope.insert(named, ty);
 }
 
-pub(crate) fn binding_type(written: Option<&Type>, aliased: Option<&str>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, scope: &collections::BTreeMap<String, Ty>) -> Option<Ty> {
+pub(crate) fn binding_type(written: Option<&Type>, aliased: Option<&str>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &mut impl FnMut(&Type) -> Ty, scope: &collections::BTreeMap<String, Ty>) -> Option<Ty> {
     if written.is_some() { return Some(ty_of(match written { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     if aliased.is_some() {
         let handle = match aliased { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -939,7 +939,7 @@ pub(crate) fn field_slot(base: &Expr, field: &str, asked: &Asked<'_, '_, '_>, wa
     Some(slot(FIELDS, &key))
 }
 
-pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     match expr {
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
@@ -947,7 +947,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
                 if a_handle_by_value(&named, &walk) && (!walk.moves.known || walk.moves.task_handles.contains(&(node_key(body), nikaia_std::block::Text::from(named.to_string())))) { walk.slots.duplicates(&walk.function, &named, String::from("used by a `spawn` body, which takes a handle of its own")); }
                 a_crossing_reaches(&named, "a `spawn` body uses it, and a task runs on a thread of its own", None, asked, walk);
             }
-            sharing_expression(body, asked, holes_of, ty_of, walk);
+            sharing_expression(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -963,77 +963,77 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
                 }
             }
             if walk.variants.contains(&path) { for arg in args.iter() { a_handle_given(arg, asked, &format!("put into variant `{}`", path), walk); } }
-            sharing_arguments(&SharingCall { callee, is_method: false }, args, config, asked, &holes_of, &ty_of, walk);
-            sharing_expression(func, asked, holes_of, ty_of, walk);
+            sharing_arguments(&SharingCall { callee, is_method: false }, args, config, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(func, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
-        Expr::MethodCall { .. } => { sharing_method(expr, asked, &holes_of, &ty_of, walk); },
-        Expr::SafeMethod { .. } => { sharing_method(expr, asked, &holes_of, &ty_of, walk); },
+        Expr::MethodCall { .. } => { sharing_method(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::SafeMethod { .. } => { sharing_method(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
             let owner = nikaia_std::block::Text::from(asked.names.resolve(name).to_string());
-            for field in fields.iter() { struct_field(&owner, node_key(expr), field, asked, &holes_of, &ty_of, walk); }
+            for field in fields.iter() { struct_field(&owner, node_key(expr), field, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); }
         },
-        Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { sharing_expression(&hole, asked, holes_of, ty_of, walk); } },
+        Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { sharing_expression(&hole, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); } },
         Expr::Closure { body, .. } => {
             a_kept_lambda_uses(expr, asked, walk);
-            sharing_block(body, asked, &holes_of, &ty_of, walk);
+            sharing_block(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
-        Expr::Block(block, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
-        Expr::AsyncGroup(block, _, _, _, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
-        Expr::Overlap(block, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
+        Expr::Block(block, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Overlap(block, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            sharing_expression(cond, asked, holes_of, ty_of, walk);
-            sharing_block(then_branch, asked, &holes_of, &ty_of, walk);
-            sharing_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, asked, &holes_of, &ty_of, walk);
+            sharing_expression(cond, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(then_branch, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            sharing_expression(value, asked, holes_of, ty_of, walk);
-            for arm in arms.iter() { sharing_expression(&arm.body, asked, holes_of, ty_of, walk); }
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            for arm in arms.iter() { sharing_expression(&arm.body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); }
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            sharing_expression(lhs, asked, holes_of, ty_of, walk);
-            sharing_expression(rhs, asked, holes_of, ty_of, walk);
+            sharing_expression(lhs, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(rhs, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, holes_of, ty_of, walk); },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, holes_of, ty_of, walk); },
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, holes_of, ty_of, walk); },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, holes_of, ty_of, walk); },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            sharing_expression(base, asked, holes_of, ty_of, walk);
-            sharing_expression(index, asked, holes_of, ty_of, walk);
+            sharing_expression(base, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(index, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            sharing_expression(value, asked, holes_of, ty_of, walk);
-            sharing_expression(fallback, asked, holes_of, ty_of, walk);
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(fallback, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            sharing_expression(expr, asked, holes_of, ty_of, walk);
-            sharing_block(handler, asked, &holes_of, &ty_of, walk);
+            sharing_expression(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(handler, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::Tuple(parts, _) => {
             for part in parts.iter() {
                 a_handle_given(part, asked, "put into a tuple", walk);
-                sharing_expression(part, asked, holes_of, ty_of, walk);
+                sharing_expression(part, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
             }
         },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-            sharing_expression(start, asked, holes_of, ty_of, walk);
-            sharing_expression(end, asked, holes_of, ty_of, walk);
+            sharing_expression(start, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(end, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
-            sharing_expression(value, asked, holes_of, ty_of, walk);
-            sharing_expression(count, asked, holes_of, ty_of, walk);
+            sharing_expression(value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(count, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::ListLit { items, .. } => {
             for item in items.iter() {
@@ -1041,7 +1041,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
                     let named = named_handle(item, asked.names, &walk.scope);
                     if named.is_some() { walk.slots.duplicates(&walk.function, nikaia_std::index::or(named.as_deref(), || ""), String::from("put into a list, which holds a handle of its own")); }
                 }
-                sharing_expression(item, asked, holes_of, ty_of, walk);
+                sharing_expression(item, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
             }
         },
         _ => { },
@@ -1072,7 +1072,7 @@ pub(crate) fn a_handle_by_value(named: &str, walk: &SharingWalk) -> bool {
     by_value_shared(ty)
 }
 
-pub(crate) fn struct_field(owner: &str, literal: i64, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn struct_field(owner: &str, literal: i64, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     let field_name = nikaia_std::block::Text::from(asked.names.resolve(field.name).to_string());
     let value = nikaia_std::index::or(match field.value.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1100,10 +1100,10 @@ pub(crate) fn struct_field(owner: &str, literal: i64, field: &FieldInit, asked: 
             if source.is_none() { if !made_into(&value, &field_ty, &slot(FIELDS, &key), asked, walk) { origin_unseen(FIELDS, &key, &value, asked, walk); } } else { walk.slots.join(nikaia_std::index::or(source.as_deref(), || ""), &slot(FIELDS, &key)); }
         }
     }
-    sharing_expression(&value, asked, &holes_of, &ty_of, walk);
+    sharing_expression(&value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
 }
 
-pub(crate) fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     let (receiver, method, args, config) = match call {
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(asked.names.resolve(method).to_string()), args, config) },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(asked.names.resolve(method).to_string()), args, config) },
@@ -1122,10 +1122,10 @@ pub(crate) fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &
             None => None,
         };
         walk.scope.insert(nikaia_std::block::Text::from(param.to_string()), content);
-        sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &holes_of, &ty_of, walk);
+        sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         if before.is_none() { walk.scope.remove(&param); } else { walk.scope.insert(param, nikaia_std::index::or(before, || Ty::Unknown)); }
-    } else { sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &holes_of, &ty_of, walk); }
-    sharing_expression(receiver, asked, &holes_of, &ty_of, walk);
+    } else { sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); }
+    sharing_expression(receiver, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
 }
 
 pub(crate) fn door_opened(method: &str, receiver: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>, walk: &SharingWalk) -> Option<(String, Ty)> {
@@ -1155,14 +1155,14 @@ pub(crate) struct SharingCall {
     pub(crate) is_method: bool,
 }
 
-pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     let described = parameters_of((called.callee).as_deref(), asked, &mut walk.own_keys, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
         let handle = named_handle(arg, asked.names, &walk.scope);
         if handle.is_none() {
             an_argument_that_is_not_a_handle(called, (described).as_ref(), at, arg, asked, walk);
-            a_lambda_handed_on((described).as_ref(), at, arg, asked, &holes_of, &ty_of, walk);
+            a_lambda_handed_on((described).as_ref(), at, arg, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
             continue;
         }
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(arg)), walk);
@@ -1173,17 +1173,17 @@ pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[C
             None => None,
         }, || "the callee".into()), asked.names.resolve(setting.name));
         for named in names_used_by(&setting.value, asked) { a_crossing_reaches(&named, &why, Some(Fallback::UncoveredArgument), asked, walk); }
-        sharing_expression(&setting.value, asked, &holes_of, &ty_of, walk);
+        sharing_expression(&setting.value, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
     }
 }
 
-pub(crate) fn a_lambda_handed_on(described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn a_lambda_handed_on(described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     match arg {
         Expr::Closure { body, .. } => {
             if described.is_some() && a_kept_position(match described { Some(__nikaia_value) => __nikaia_value, None => return }, at) { a_kept_lambda_uses(arg, asked, walk); }
-            sharing_block(body, asked, &holes_of, &ty_of, walk);
+            sharing_block(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
-        _ => { sharing_expression(arg, asked, &holes_of, &ty_of, walk); },
+        _ => { sharing_expression(arg, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
     }
 }
 

@@ -29,14 +29,14 @@ pub struct PanicsGraph {
     pub reaches: collections::BTreeMap<String, PanicReach>,
 }
 
-pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, graph: &mut PanicsGraph) -> Vec<String> {
+pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, graph: &mut PanicsGraph) -> Vec<String> {
     let mut walked: Vec<String> = vec![];
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                panics_function(&key, body, &program.items, names, holes_of, facts, own, library, graph);
+                panics_function(&key, body, &program.items, names, &mut *holes_of, facts, own, library, graph);
                 walked.push(key);
             },
             Item::Impl { target, methods, .. } => {
@@ -46,7 +46,7 @@ pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, h
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            panics_function(&key, body, &program.items, names, holes_of, facts, own, library, graph);
+                            panics_function(&key, body, &program.items, names, &mut *holes_of, facts, own, library, graph);
                             walked.push(key);
                         },
                         _ => { },
@@ -124,11 +124,11 @@ pub fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap
     false
 }
 
-pub fn panics_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
+pub fn panics_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
     let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
     match task {
-        Expr::Closure { body, .. } => { panics_block(body, items, names, holes_of, facts, own, library, &mut reach); },
-        _ => { panics_expr(task, items, names, holes_of, facts, own, library, &mut reach); },
+        Expr::Closure { body, .. } => { panics_block(body, items, names, &mut *holes_of, facts, own, library, &mut reach); },
+        _ => { panics_expr(task, items, names, &mut *holes_of, facts, own, library, &mut reach); },
     }
     if reach.sure || reach.unknown || reach.checks { return true; }
     for callee in reach.calls.iter() {
@@ -141,11 +141,11 @@ pub fn panics_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_gramm
     false
 }
 
-pub fn places_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
+pub fn places_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
     let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
     match task {
-        Expr::Closure { body, .. } => { panics_block(body, items, names, holes_of, facts, own, library, &mut reach); },
-        _ => { panics_expr(task, items, names, holes_of, facts, own, library, &mut reach); },
+        Expr::Closure { body, .. } => { panics_block(body, items, names, &mut *holes_of, facts, own, library, &mut reach); },
+        _ => { panics_expr(task, items, names, &mut *holes_of, facts, own, library, &mut reach); },
     }
     if reach.places { return true; }
     for callee in reach.calls.iter() { if nikaia_std::index::or((*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) { return true; } }
@@ -159,9 +159,9 @@ pub(crate) fn panics_own(reach: &PanicReach) -> Panics {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn panics_function(key: &str, body: &Block, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, graph: &mut PanicsGraph) {
+pub(crate) fn panics_function(key: &str, body: &Block, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, graph: &mut PanicsGraph) {
     let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
-    panics_block(body, items, names, holes_of, facts, own, library, &mut reach);
+    panics_block(body, items, names, &mut *holes_of, facts, own, library, &mut reach);
     panics_methods(*nikaia_std::index::get(&graph.methods, key), own, library, &mut reach);
     graph.reaches.insert(nikaia_std::block::Text::from(key.to_string()), reach);
 }
@@ -194,12 +194,12 @@ pub(crate) fn panics_check(proved: bool, facts: &PanicFacts, reach: &mut PanicRe
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn panics_block(block: &Block, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) { for stmt in block.stmts.iter() { panics_stmt(&stmt.node, &stmt.span, items, names, &holes_of, facts, own, library, reach); } }
+pub(crate) fn panics_block(block: &Block, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) { for stmt in block.stmts.iter() { panics_stmt(&stmt.node, &stmt.span, items, names, &mut &mut *holes_of, facts, own, library, reach); } }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn panics_stmt(stmt: &Stmt, span: &Span, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
+pub(crate) fn panics_stmt(stmt: &Stmt, span: &Span, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
     match stmt {
-        Stmt::Let { value, .. } => { panics_expr(value, items, names, &holes_of, facts, own, library, reach); },
+        Stmt::Let { value, .. } => { panics_expr(value, items, names, &mut &mut *holes_of, facts, own, library, reach); },
         Stmt::Comptime { .. } => { },
         Stmt::Assign { target, op, value } => {
             let at = span.start as i64;
@@ -207,27 +207,27 @@ pub(crate) fn panics_stmt(stmt: &Stmt, span: &Span, items: &[Spanned<Item>], nam
                 None => { },
                 Some(which) => { if *which == BinaryOp::Div || *which == BinaryOp::Rem { panics_division(value, reach); } else if facts.arithmetic.contains_key(&at) { panics_check(facts.proven_arithmetic.contains(&at), facts, reach); } },
             }
-            panics_expr(target, items, names, &holes_of, facts, own, library, reach);
-            panics_expr(value, items, names, &holes_of, facts, own, library, reach);
+            panics_expr(target, items, names, &mut &mut *holes_of, facts, own, library, reach);
+            panics_expr(value, items, names, &mut &mut *holes_of, facts, own, library, reach);
         },
         Stmt::For { iter, body, .. } => {
-            panics_expr(iter, items, names, &holes_of, facts, own, library, reach);
-            panics_block(body, items, names, &holes_of, facts, own, library, reach);
+            panics_expr(iter, items, names, &mut &mut *holes_of, facts, own, library, reach);
+            panics_block(body, items, names, &mut &mut *holes_of, facts, own, library, reach);
         },
         Stmt::While { cond, body, .. } => {
-            panics_expr(cond, items, names, &holes_of, facts, own, library, reach);
-            panics_block(body, items, names, &holes_of, facts, own, library, reach);
+            panics_expr(cond, items, names, &mut &mut *holes_of, facts, own, library, reach);
+            panics_block(body, items, names, &mut &mut *holes_of, facts, own, library, reach);
         },
         Stmt::Return(value) => {
             match value {
                 None => { },
-                Some(inner) => { panics_expr(inner, items, names, &holes_of, facts, own, library, reach); },
+                Some(inner) => { panics_expr(inner, items, names, &mut &mut *holes_of, facts, own, library, reach); },
             }
         },
         Stmt::Break => { },
         Stmt::Continue => { },
-        Stmt::Expr(inner) => { panics_expr(inner, items, names, &holes_of, facts, own, library, reach); },
-        Stmt::Emit(inner) => { panics_expr(inner, items, names, &holes_of, facts, own, library, reach); },
+        Stmt::Expr(inner) => { panics_expr(inner, items, names, &mut &mut *holes_of, facts, own, library, reach); },
+        Stmt::Emit(inner) => { panics_expr(inner, items, names, &mut &mut *holes_of, facts, own, library, reach); },
     }
 }
 
@@ -243,14 +243,14 @@ pub(crate) fn panics_division(divisor: &Expr, reach: &mut PanicReach) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
+pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
     if facts.placed.contains(&node_key(expr)) { reach.places = true; }
     match expr {
         Expr::Async(_, _, within, _) => {
             let within = nikaia_std::boxed::open(within);
             match within {
                 None => { },
-                Some(deadline) => { panics_expr(deadline, items, names, holes_of, facts, own, library, reach); },
+                Some(deadline) => { panics_expr(deadline, items, names, &mut &mut *holes_of, facts, own, library, reach); },
             }
             return;
         },
@@ -279,9 +279,9 @@ pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_g
         },
         _ => { },
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { panics_expr(&hole, items, names, holes_of, facts, own, library, reach); } }
-    for child in check_visit_children(expr) { panics_expr(child, items, names, holes_of, facts, own, library, reach); }
-    for block in panics_blocks(expr) { panics_block(block, items, names, &holes_of, facts, own, library, reach); }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { panics_expr(&hole, items, names, &mut &mut *holes_of, facts, own, library, reach); } }
+    for child in check_visit_children(expr) { panics_expr(child, items, names, &mut &mut *holes_of, facts, own, library, reach); }
+    for block in panics_blocks(expr) { panics_block(block, items, names, &mut &mut *holes_of, facts, own, library, reach); }
 }
 
 pub(crate) fn panics_blocks(expr: &Expr) -> Vec<&Block> {

@@ -175,7 +175,7 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
         }
     }
     if check_core_comptime_nullable(want) && narrowed.fits(&check_core_comptime_arrives(want)) { return; }
-    state.expect_type(world, narrowed, want, span, "const", &|found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
+    state.expect_type(world, narrowed, want, span, "const", &mut |found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
 }
 
 pub(crate) fn check_core_comptime_a_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
@@ -368,7 +368,7 @@ pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, 
         }, || Ty::Unknown);
         if is_fixed(&wanted) {
             let pairs = check_core_comptime_items((evaluated).as_ref());
-            let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
+            let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &mut |of, variant| { check_walked_payload_of(world, of, variant) }, &mut |number| { host.float_text(number) });
             if table.found {
                 crossed = true;
                 table_below = nikaia_std::block::Text::from(table.below.to_string());
@@ -382,7 +382,7 @@ pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, 
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        written = written_below(&state, world, &computed, (want).as_ref(), &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
+        written = written_below(&state, world, &computed, (want).as_ref(), &mut |of, variant| { check_walked_payload_of(world, of, variant) }, &mut |number| { host.float_text(number) });
         let optional = match computed {
             BuildValue::Variant { ref ty, .. } => ty == "Option",
             _ => false,
@@ -402,7 +402,7 @@ pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, 
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        let part = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
+        let part = unwritable_in(&state, world, &computed, &mut |of, variant| { check_walked_payload_of(world, of, variant) });
         if part.len() == 2 {
             state.a_field_that_owns_memory(&bound, unsafe { nikaia_std::proven::read(&part, (0) as usize) }, unsafe { nikaia_std::proven::read(&part, (1) as usize) }, "a `comptime`", span);
             said_a_part = true;

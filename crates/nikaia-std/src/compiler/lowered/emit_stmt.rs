@@ -447,7 +447,10 @@ impl EmitState {
     pub(crate) fn emit_stmt_let<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(&node_key(value));
-        let mut_word = if mutable && !unmuted { "mut " } else { "" };
+        let mut mut_word = if mutable && !unmuted { "mut " } else { "" };
+        let bound_lambda = names.len() == 1 && shape.is_empty() && emit_arg_is_closure(value);
+        let lambda_muted = bound_lambda && mut_word == "";
+        if lambda_muted { mut_word = "mut "; }
         for each in names.iter() {
             let each = *each;
             walk.kept_names.remove(&emit_text(world, each));
@@ -502,7 +505,7 @@ impl EmitState {
             return Ok(());
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
-        if mut_word != "" && self.facts.view_list_rebound.contains(&at) { out.push("#[allow(unused_mut)] "); }
+        if mut_word != "" && self.facts.view_list_rebound.contains(&at) || lambda_muted { out.push("#[allow(unused_mut)] "); }
         out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
         out.push(&before);
         match value {

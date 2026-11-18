@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Option<String> {
+pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String) -> Option<String> {
     match value {
         BuildValue::Int(n) => return Some(integer_text(n)),
         BuildValue::Float(n) => {
@@ -20,7 +20,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
         BuildValue::Tuple(parts) => {
             let mut written: Vec<String> = vec![];
             for held in parts.iter() {
-                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(tuple_spelled(&written));
@@ -29,7 +29,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
             if payload.is_empty() { return Some(format!("{}::{}", variant_path(ty), variant)); }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
-                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("{}::{}({})", variant_path(ty), variant, nikaia_std::block::Text::from(written.join(", "))));
@@ -37,7 +37,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
         BuildValue::Struct { name, fields } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
-                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
             return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
@@ -45,7 +45,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
         BuildValue::List(items) => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in items.iter() {
-                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("[{}]", nikaia_std::block::Text::from(written.join(", "))));
@@ -53,7 +53,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
         BuildValue::Constant { constructor, parts } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in parts.iter() {
-                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("{}({})", constructor, nikaia_std::block::Text::from(written.join(", "))));
@@ -253,7 +253,7 @@ pub(crate) fn nth_type(declared: &[Ty], at: i64) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     let carried = match payloads(ty, variant) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     for held in carried.iter() { if rust_constant_type(world.library, held).is_none() && state.declared_below(world, held).is_none() { return vec![format!("{}::{}", ty, variant), held.text()]; } }
     vec![]
@@ -261,36 +261,36 @@ pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &dyn Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub(crate) fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     match value {
         BuildValue::Struct { name, fields } => {
             let own = state.unwritable_field(world, &Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false });
             if !own.is_empty() { return own; }
             for (_, held) in fields.iter() {
-                let inner = unwritable_in(state, world, held, payloads);
+                let inner = unwritable_in(state, world, held, &mut &mut *payloads);
                 if !inner.is_empty() { return inner; }
             }
             return vec![];
         },
         BuildValue::Variant { ty, variant, payload } => {
-            let own = unwritable_payload(state, world, ty, variant, &payloads);
+            let own = unwritable_payload(state, world, ty, variant, &mut &mut *payloads);
             if !own.is_empty() { return own; }
             for held in payload.iter() {
-                let inner = unwritable_in(state, world, held, payloads);
+                let inner = unwritable_in(state, world, held, &mut &mut *payloads);
                 if !inner.is_empty() { return inner; }
             }
             return vec![];
         },
         BuildValue::List(items) => {
             for held in items.iter() {
-                let inner = unwritable_in(state, world, held, payloads);
+                let inner = unwritable_in(state, world, held, &mut &mut *payloads);
                 if !inner.is_empty() { return inner; }
             }
             return vec![];
         },
         BuildValue::Tuple(parts) => {
             for held in parts.iter() {
-                let inner = unwritable_in(state, world, held, payloads);
+                let inner = unwritable_in(state, world, held, &mut &mut *payloads);
                 if !inner.is_empty() { return inner; }
             }
             return vec![];
@@ -308,8 +308,8 @@ pub(crate) fn tuple_spelled(parts: &[String]) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &dyn Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &dyn Fn(f64) -> String) -> Option<String> {
-    if want.is_none() { return rust_value(value, &float_text); }
+pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut dyn FnMut(f64) -> String) -> Option<String> {
+    if want.is_none() { return rust_value(value, &mut &mut *float_text); }
     let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
     match value {
         BuildValue::List(items) => {
@@ -323,7 +323,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             let some_held: Option<Ty> = Some(held.clone());
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() {
-                let text = match written_below(state, world, item, (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match written_below(state, world, item, (some_held).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("{}[{}]", borrow, nikaia_std::block::Text::from(written.join(", "))));
@@ -333,7 +333,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
                 let field_want = const_field_type((declared).as_ref(), field);
-                let text = match written_below(state, world, held, (field_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match written_below(state, world, held, (field_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
             return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
@@ -345,7 +345,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for held in payload.iter() {
                 let part_want = nth_type(&declared, at);
-                let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
@@ -360,13 +360,13 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for held in parts.iter() {
                 let part_want = nth_type(&declared, at);
-                let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             return Some(tuple_spelled(&written));
         },
-        _ => return rust_value(value, &float_text),
+        _ => return rust_value(value, &mut &mut *float_text),
     }
 }
 
@@ -374,7 +374,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> CheckTable {
+    pub(crate) fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut impl FnMut(f64) -> String) -> CheckTable {
         let args = type_arguments(want);
         if args.len() != 2 { return no_table(false); }
         if !a_str_view_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
@@ -409,7 +409,7 @@ impl CheckState {
             }
             seen.insert(nikaia_std::block::Text::from(key.to_string()), at);
             keys.push(nikaia_std::block::Text::from(key.to_string()));
-            let text = match written_below(self, world, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            let text = match written_below(self, world, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, (some_held).as_ref(), &mut *payloads, &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             values.push(format!("{}{}", borrow, text));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }

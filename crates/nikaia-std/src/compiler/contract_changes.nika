@@ -34,6 +34,13 @@ pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, keepers: ref co
         if !new.public || !mine(key) {
             continue
         }
+        // **Code run from tasks at once now** (ADR-views-3 D17): a caller's
+        // lambda that changes what it captures is refused there now.
+        for param in new.at_once {
+            if !old.at_once.contains(param) {
+                out.push_str(f"warning[NK1208]: `{key}` asks more of its callers than the committed ledger says.\n   = note: it runs `{param}` from tasks at once now, and ran it one call at a time.\n   = note: a caller that hands it a lambda changing what it captures is refused now (NK2104).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
+            }
+        }
         let names = condition_names(new)
         if !implies(old.requires, new.requires, names) {
             out.push_str(f"warning[NK1208]: `{key}` asks more of its callers than the committed ledger says.\n   = note: it required {conditions_said(old.requires)}, and now requires {conditions_said(new.requires)}.\n   = note: a caller that showed what it required before may now stop where it is checked.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
