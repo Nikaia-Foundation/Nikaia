@@ -88,7 +88,7 @@ fn sv_row_real(row: ref SvRow, reals: ref Vec[u32]) -> bool {
 /// overflows.
 fn sv_lit_bound(atom: ref SvAtom, l: u32, real: bool) -> SvBound? {
 	if l % 2 == 0 {
-		return SvBound { row: atom.row.clone(), rel: atom.rel, assumed: [l] }
+		return SvBound { row: atom.row.clone(), rel: atom.rel }
 	}
 	let le = match atom.rel {
 		SvRel::Le => true,
@@ -98,11 +98,11 @@ fn sv_lit_bound(atom: ref SvAtom, l: u32, real: bool) -> SvBound? {
 	if real {
 		let negated = sv_row_scale(atom.row, -1) ?? return null
 		let rel = if le { SvRel::Lt } else { SvRel::Le }
-		return SvBound { row: negated, rel: rel, assumed: [l] }
+		return SvBound { row: negated, rel: rel }
 	}
 	let shift: i64 = if le { 1 } else { 0 }
 	let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
-	return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
+	return SvBound { row: negated, rel: SvRel::Le }
 }
 
 /// What a combination adds: the bound of a literal, assumed, or an earlier
@@ -139,12 +139,124 @@ pub struct SvLog {
 	/// `steps=N` (`sv_params`), counted, unlike a wall-clock limit, the same
 	/// on every machine (#2107). The compiler sets none.
 	pub limit: i64,
+	/// Per entry, the step that made it, which a Farkas lemma walks for
+	/// what it assumes.
+	pub walk: SvAssumes,
 }
 
 /// An empty log over `query`.
 fn sv_log(query: ref SvQuery) -> SvLog? {
 	let atoms = query.atoms.len().checked_u32() ?? return null
-	return SvLog { steps: [], entries: 0, atoms: atoms, columns: query.columns, limit: 0 }
+	return SvLog { steps: [], entries: 0, atoms: atoms, columns: query.columns, limit: 0, walk: sv_assumes() }
+}
+
+/// What a bound assumes, found when a lemma needs it (#2012): per entry the
+/// step that made it, and a mark per entry for one walk. A bound carried
+/// its literals before, and the union at every combination grew with the
+/// equalities the elimination substituted: 47 % of SMPT
+/// RwMutex-PT-r0100w0010-RF-00 went to it, for bounds no lemma used.
+pub struct SvAssumes {
+	pub made_by: Vec[u32],
+	pub seen: Vec[i64],
+	pub stamp: i64,
+}
+
+fn sv_assumes() -> SvAssumes {
+	return SvAssumes { made_by: [], seen: [], stamp: 0 }
+}
+
+impl SvAssumes {
+	/// `made` entries made by step `step`.
+	fn made(ref mut self, step: u32, made: u32) {
+		let mut k: u32 = 0
+		while k < made {
+			self.made_by.push(step)
+			self.seen.push(0)
+			k += 1
+		}
+	}
+
+	/// The literals the combination of `sources` with `multipliers`
+	/// assumes, ascending, once each: every literal it adds, and what every
+	/// bound entry it adds assumes, through the steps of `steps` that made
+	/// them - a combination its sources with a multiplier other than zero, a
+	/// rounding its bound, an extension nothing; `null` where an entry was
+	/// made by no such step.
+	fn assumed(ref mut self, steps: ref Vec[SvStep], sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> Vec[u32]? {
+		self.stamp += 1
+		let mut lits: Vec[u32] = []
+		let mut queue: Vec[u32] = []
+		let mut i = 0
+		while i < sources.len() {
+			if multipliers[i] != 0 {
+				match sources[i] {
+					SvSrc::Lit(l) => lits.push(l),
+					SvSrc::Fact(id) => {
+						let at = id as i64
+						if at >= self.seen.len() {
+							return null
+						}
+						if self.seen[at] != self.stamp {
+							self.seen[at] = self.stamp
+							queue.push(id)
+						}
+					},
+				}
+			}
+			i += 1
+		}
+		let mut next = 0
+		while next < queue.len() {
+			let step = self.made_by[queue[next] as i64] as i64
+			next += 1
+			if step >= steps.len() {
+				return null
+			}
+			match steps[step] {
+				SvStep::Combine(srcs, ms) => {
+					let mut j = 0
+					while j < srcs.len() {
+						if ms[j] != 0 {
+							match srcs[j] {
+								SvSrc::Lit(l) => lits.push(l),
+								SvSrc::Fact(id) => {
+									let at = id as i64
+									if at >= self.seen.len() {
+										return null
+									}
+									if self.seen[at] != self.stamp {
+										self.seen[at] = self.stamp
+										queue.push(id)
+									}
+								},
+							}
+						}
+						j += 1
+					}
+				},
+				SvStep::Round(id, _) => {
+					let at = id as i64
+					if at >= self.seen.len() {
+						return null
+					}
+					if self.seen[at] != self.stamp {
+						self.seen[at] = self.stamp
+						queue.push(id)
+					}
+				},
+				SvStep::Extend(_, _, _) => {},
+				else => return null,
+			}
+		}
+		lits.sort()
+		let mut once: Vec[u32] = []
+		for l in lits {
+			if once.len() == 0 || once[once.len() - 1] != l {
+				once.push(l)
+			}
+		}
+		return once
+	}
 }
 
 impl SvLog {
@@ -156,6 +268,8 @@ impl SvLog {
 	/// Appends `step`, which makes `made` entries; the id of the first.
 	fn add(ref mut self, step: SvStep, made: u32) -> u32 {
 		let id = self.entries
+		let at = self.steps.len().checked_u32() ?? 0
+		self.walk.made(at, made)
 		self.steps.push(step)
 		self.entries += made
 		return id
@@ -354,7 +468,6 @@ impl SvBook {
 	/// `i64`.
 	fn sum(ref self, sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> SvBound? {
 		let mut row = sv_row_constant(0)
-		let mut assumed: Vec[u32] = []
 		let mut equality = true
 		let mut strict = false
 		let mut i = 0
@@ -376,12 +489,11 @@ impl SvBook {
 				}
 				strict = strict || (is_lt && m > 0)
 				row = sv_row_sum(1, row, m, b.row) ?? return null
-				assumed = sv_lits_union(assumed, b.assumed)
 			}
 			i += 1
 		}
 		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
-		return SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed }
+		return SvBound { row: sv_row_reduced(row), rel: rel }
 	}
 
 	/// The combination kept as a bound entry; its id.
@@ -436,8 +548,9 @@ impl SvBook {
 		if b.row.cols.len() > 0 || b.row.constant < floor {
 			return null
 		}
+		let assumed = self.log.walk.assumed(self.log.steps, sources, multipliers) ?? return null
 		let mut lits: Vec[u32] = []
-		for l in b.assumed {
+		for l in assumed {
 			// `l ^ 1` written as a branch: #1286.
 			let negation = if l % 2 == 0 { l + 1 } else { l - 1 }
 			lits.push(negation)
@@ -472,8 +585,8 @@ impl SvBook {
 		let above0 = sv_row_sum(1, l, -1, mq) ?? return null
 		let above = sv_row_sum(1, above0, -(m - 1), sv_row_constant(1)) ?? return null
 		let first = self.log.extend(l, m)
-		self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le, assumed: [] })
-		self.bounds.insert(first + 1, SvBound { row: above, rel: SvRel::Le, assumed: [] })
+		self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le })
+		self.bounds.insert(first + 1, SvBound { row: above, rel: SvRel::Le })
 		return SvExtended { column: q, first: first }
 	}
 
@@ -527,6 +640,5 @@ fn sv_rounded(b: ref SvBound, d: i64) -> SvBound? {
 	return SvBound {
 		row: SvRow { cols: cols, ks: ks, constant: constant },
 		rel: rel,
-		assumed: b.assumed.clone(),
 	}
 }
