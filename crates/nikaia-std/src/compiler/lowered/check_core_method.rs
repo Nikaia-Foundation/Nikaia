@@ -733,14 +733,21 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
     let mut code_keys: Vec<String> = vec![];
     if adds && !args.is_empty() { code_keys = check_core_places_code_keys(&state, world, receiver); }
     for arg in args.iter() { check_core_method_code_lent(state, world, arg); }
+    let mapped = name == "map" && args.len() == 1 && matches!(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }, Expr::Closure { .. });
+    if mapped { state.stored_frames.push(CheckStoredCode::empty()); }
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    let listed = mapped && check_core_stmt_a_list_type(&walked);
     let found = check_core_method_deadline(&state, world, receiver, config, walked);
     state.flow.method_passed.remove(&(id_of(receiver) as i64));
     for (name, ty, to) in nikaia_std::index::or(state.flow.method_moved.remove(&(id_of(receiver) as i64)), || vec![].into()) { for option in config.iter() { if world.words.resolve(option.name) == name { state.hands_over(world, &option.value, &ty, &to, span); } } }
     if !code_keys.is_empty() {
         let last = unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) };
         check_core_places_stored_keys(state, world, host, Some(nikaia_std::index::get(&args, nikaia_std::index::at(last))), &code_keys);
+    }
+    if mapped {
+        let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
+        if listed && state.a_lambda_touching_nothing(world, host, &frame, nikaia_std::index::get(&args, 0)) { state.facts.fused_maps.insert(id_of(expr) as i64); }
     }
     found
 }

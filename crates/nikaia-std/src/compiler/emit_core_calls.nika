@@ -1597,7 +1597,29 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
             out.push(f".{entry}(")
         } else {
+            // **A list's `map` whose result goes straight into the next step
+            // runs element by element with it** (ADR-342 D1): a `len()` of it
+            // counts the walk, and a `map` of it is one more step of the walk,
+            // which starts with `into_iter()` at the first `map`.
+            let stepping = name == "map" && walk.stepping_receiver == on_node
+            if stepping {
+                walk.stepping_receiver = -1
+            }
+            let mut on_fused = false
+            if (stepping || (name == "len" && args.len() == 0)) && receiver != null {
+                let on = receiver ?? return
+                on_fused = self.facts.fused_maps.contains(node_key(on))
+                if on_fused {
+                    walk.fused.insert(node_key(on))
+                }
+            }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            if stepping && !on_fused {
+                out.push(".into_iter()")
+            }
+            if name == "len" && on_fused {
+                written = "count"
+            }
             // **Text views read from `String` slots, collected** (#1388,
             // ADR-282 D1): each item is made the `&str` the list holds, from
             // a `&String` or a `&&str` alike.
@@ -2019,6 +2041,9 @@ impl EmitState {
             self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
             out.push(f".or_insert_with(|| {made})")
         } else {
+            if name == "map" && walk.fused.contains(node_key(node)) {
+                walk.stepping_receiver = node_key(receiver)
+            }
             self.emit_core_method_call(world, walk, out, host, receiver, node_key(receiver), method, args, config, depth, flow, scope)
         }
         // **Views of values that copy are the values** (ADR-231 D1).

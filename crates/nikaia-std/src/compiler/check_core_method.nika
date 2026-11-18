@@ -1041,10 +1041,21 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     for arg in args {
         check_core_method_code_lent(state, world, arg)
     }
+    // **A list's `map` whose lambda touches nothing** (ADR-342 D1): the
+    // methods its walk reaches go to a frame of their own, which the lambda is
+    // asked about.
+    let mapped = name == "map" && args.len() == 1 && match args[0] {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+    if mapped {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
     if code_keys.len() > 0 {
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    let listed = mapped && check_core_stmt_a_list_type(walked)
     let found = check_core_method_deadline(state, world, receiver, config, walked)
     state.flow.method_passed.remove(id_of(receiver) as i64)
     // **What an option keeps, it is given** (#1595), as at a function's.
@@ -1058,6 +1069,12 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     if code_keys.len() > 0 {
         let last = args.len() as i64 - 1
         check_core_places_stored_keys(state, world, host, args[last], code_keys)
+    }
+    if mapped {
+        let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+        if listed && state.a_lambda_touching_nothing(world, host, frame, args[0]) {
+            state.facts.fused_maps.insert(id_of(expr) as i64)
+        }
     }
     return found
 }

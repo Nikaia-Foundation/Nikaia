@@ -1,0 +1,61 @@
+// A list's `map` whose result goes straight into the next step runs element
+// by element with it, where every lambda touches nothing (ADR-342 D1): the
+// output is today's, a chain whose lambda prints runs as written, and a `for`
+// over such a `map` builds no list first, which a step that stops the task
+// shows: the body has run for the elements before it (D2).
+
+fn numbers(n: i64) -> Vec[i64] {
+	let mut xs: Vec[i64] = []
+	for i in 1..n {
+		xs.push(i)
+	}
+	return xs
+}
+
+fn shown(label: String, x: i64) -> i64 {
+	println(f"{label} {x}") catch {}
+	return x
+}
+
+fn quiet() -> i64 {
+	return 1
+}
+
+fn walk(n: i64) -> i64 throws {
+	let xs = numbers(n)
+	for q in xs.map(fn(x) { x * 4611686018427387904 }) {
+		println(f"walked {q}")
+	}
+	return 0
+}
+
+fn walked(n: i64) -> i64 throws {
+	let a = async walk(n)
+	let b = async quiet()
+	return a + b
+}
+
+fn main() throws {
+	let xs = numbers(3)
+	for z in xs.map(fn(x) { x * 2 }).map(fn(y) { y + 1 }) {
+		println(f"twice and one more: {z}")
+	}
+	let ys = numbers(3)
+	println(f"counted: {ys.map(fn(x) { x + 1 }).len()}")
+	let zs = numbers(3)
+	for z in zs.map(fn(x) { shown("first", x) }).map(fn(y) { y + 1 }) {
+		println(f"body {z}")
+	}
+	let ws = numbers(3)
+	for z in ws.map(fn(x) { x + 1 }).map(fn(y) { shown("second", y) }) {
+		println(f"body {z}")
+	}
+	let m = walked(2) catch {
+		match error {
+			task::Crashed { .. } => println("the overflow stopped the task"),
+			else => println(f"caught: {error}"),
+		}
+		0
+	}
+	println(f"after: {m}")
+}

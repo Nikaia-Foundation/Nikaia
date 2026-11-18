@@ -672,6 +672,7 @@ signature = "(n: i64) -> Bytes"
 pub = true
 panics = false
 sync = "sync(f)"
+touches = []
 # The list goes in by value and a new one comes out, which is what the language
 # below's trait does; `U` is what the lambda comes to (ADR-293 D20).
 signature = "[T, U](self: Vec[T], f: fn(T) -> U) -> Vec[U]"
