@@ -1,0 +1,16 @@
+// A channel holds at least one value: a capacity of nothing, known only when
+// the program runs, stops it (`std::channel::bounded`). Moved from the
+// `nikaia-std` unit test `channel::tests::a_capacity_of_nothing_is_refused`
+// (#2082).
+use std::channel
+use std::cli
+
+fn main() throws {
+    let mut n = 0
+    for _ in cli::args() {
+        n += 1
+    }
+    let (tx, rx) = channel::bounded[i64](n - 1)
+    tx.send(1)
+    println(rx.recv() ?? -1)
+}

@@ -56,7 +56,9 @@ pub struct Receiver<T> {
 ///
 /// A capacity below one is refused rather than quietly turned into something
 /// else: `bounded(0)` is a rendezvous channel, which is a different promise and
-/// which no page writes (§4).
+/// which no page writes (§4). The stop names the program's line, not this
+/// one (ADR-300 D10), so it is `#[track_caller]`.
+#[track_caller]
 pub fn bounded<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
     let room = usize::try_from(capacity).unwrap_or(0);
     assert!(
