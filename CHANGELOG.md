@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1429] — 2026-11-18
+
+**Builders' changes (#2033, #2034)**
+- A `match` pattern `name(…)` whose one-word name nothing declares (`some(_)` over a `T?`) is refused with NK1117 instead of failing in rustc (NK1343).
+- Self-hosting: which launcher variables (NIKAIA_EXE, NIKAIA_MAIN) a program does not see is decided in runtime/env.nika; `env::pairs()` is now the bare OS list.
+
 ## [0.0.1428] — 2026-11-18
 
 **Builders' changes (#1553, #2008, #2022, #2045, #2047)**
