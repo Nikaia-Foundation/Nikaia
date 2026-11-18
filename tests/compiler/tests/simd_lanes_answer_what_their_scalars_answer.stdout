@@ -1,0 +1,23 @@
+width true true true
+none: none/0 none/0 none/0 none/0
+0: 0/0 0/0 0/0 0/0
+5: 5/0 5/0 5/0 5/0
+15: none/0 15/0 15/0 15/0
+31/0 63/0
+load 1 2 3 4
+wrapping 4 11 12 13
+saturating 255 11 12 13
+below 3 1 2 3 true
+select 250 10 10 10
+shift 122 1 2 3
+0 250
+shuffle 3 2 1 250
+0: = =
+1: = =
+2: = =
+3: = =
+3 true 3 0 2 0.3 0.1
+dot 12 32767
+dot 39
+widen 1 255
+narrow 127 -128
