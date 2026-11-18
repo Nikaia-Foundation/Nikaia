@@ -461,123 +461,6 @@ impl<'a> IntoIterator for &'a Bytes {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Bytes;
-
-    /// **Handing one on is a count**, which is the whole claim of the type: two
-    /// holders, one allocation.
-    #[test]
-    fn a_clone_shares_the_buffer() {
-        let one = Bytes::from(vec![1u8, 2, 3]);
-        let two = one.clone();
-        assert_eq!(one.as_slice().as_ptr(), two.as_slice().as_ptr());
-        assert_eq!(&*two, &[1u8, 2, 3]);
-    }
-
-    /// **`Bytes(v)` hands the vector over** (ADR-373 D2): the buffer is the
-    /// vector's memory. And **a `Bytes` is its content**, whatever owns it
-    /// (D1): a vector handed over, a copy of a run, text, a cut.
-    #[test]
-    fn a_vec_is_handed_over_and_equal_by_content_across_owners() {
-        use std::hash::{BuildHasher, RandomState};
-        let v = b"Oslo;3".to_vec();
-        let at = v.as_ptr();
-        let handed = Bytes::from(v);
-        assert_eq!(handed.as_slice().as_ptr(), at, "nothing copied");
-        let copied = Bytes::from(&b"Oslo;3"[..]);
-        let text = Bytes::from(String::from("Oslo;3"));
-        let cut = Bytes::from("x Oslo;3 x").cut(2..8);
-        let hashes = RandomState::new();
-        for other in [&copied, &text, &cut] {
-            assert_eq!(&handed, other);
-            assert_eq!(hashes.hash_one(&handed), hashes.hash_one(other));
-        }
-        assert!(handed < Bytes::from("Oslo;4"));
-        assert_eq!(Bytes::default(), Bytes::new());
-    }
-
-    /// **It reads as a run of bytes**, so everything written against `&[u8]`
-    /// takes one without knowing what it is.
-    #[test]
-    fn it_derefs_to_a_slice() {
-        let bytes = Bytes::from("Ada");
-        assert_eq!(bytes.len(), 3);
-        assert!(!bytes.is_empty());
-        assert_eq!(bytes.first(), Some(&b'A'));
-    }
-
-    /// **Text is a view of it**, and only where the bytes are text.
-    #[test]
-    fn text_is_a_view_and_may_not_be_there() {
-        assert_eq!(Bytes::from("Ada").text().ok(), Some("Ada"));
-        assert!(matches!(
-            Bytes::from(vec![0xff_u8]).text(),
-            Err(crate::io::IoError::NotText(_))
-        ));
-        let b = Bytes::from("a;b;c");
-        assert_eq!(b.find(b';', 0), Some(1));
-        assert_eq!(b.find(b';', 2), Some(3));
-        assert_eq!(b.find(b';', 4), None);
-        assert_eq!(b.find(b';', 9), None);
-    }
-
-    /// **`find` finds a byte wherever it is** (#701): at every offset of a
-    /// 64-byte buffer, from every start, where `memchr`'s word-wide search
-    /// and its tail meet; and nothing where it is absent or there are no bytes.
-    #[test]
-    fn find_at_every_offset() {
-        for at in 0..64usize {
-            let mut v = vec![b'.'; 64];
-            v[at] = b';';
-            let b = Bytes::from(v);
-            for from in -1..=65i64 {
-                let want = (from <= at as i64).then_some(at as i64);
-                assert_eq!(b.find(b';', from), want, "needle {at}, from {from}");
-            }
-            assert_eq!(b.find(b'x', 0), None);
-        }
-        assert_eq!(Bytes::new().find(b';', 0), None);
-        assert_eq!(Bytes::from(vec![b';'; 64]).find(b';', 63), Some(63));
-    }
-
-    /// **A word is read in the order its name says** (ADR-320 D12), on a
-    /// `Bytes` and on a text's own bytes alike, up to the last whole word.
-    #[test]
-    fn words_in_both_orders() {
-        let b = Bytes::from((1u8..=9).collect::<Vec<u8>>());
-        assert_eq!(b.u32_le(0), 0x0403_0201);
-        assert_eq!(b.u32_be(0), 0x0102_0304);
-        assert_eq!(b.u64_le(1), 0x0908_0706_0504_0302);
-        assert_eq!(b.u64_be(1), 0x0203_0405_0607_0809);
-        assert_eq!(b.u32_le(5), 0x0908_0706);
-        let text: &[u8] = b"abcd";
-        assert_eq!(super::ByteReads::u32_be(text, 0), 0x6162_6364);
-    }
-
-    /// **And outside, it stops as the cut does**: with the cut's message.
-    #[test]
-    #[should_panic(expected = "range end index 9 out of range for slice of length 8")]
-    fn a_word_past_the_end_stops() {
-        let _ = Bytes::from(vec![0u8; 8]).u64_le(1);
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds: the index is -1")]
-    fn a_word_before_the_start_stops() {
-        let _ = Bytes::from(vec![0u8; 8]).u32_le(-1);
-    }
-
-    /// **And a copy is asked for**, never taken.
-    #[test]
-    fn a_copy_is_asked_for() {
-        let bytes = Bytes::from(vec![7u8]);
-        assert_eq!(bytes.to_vec(), vec![7u8]);
-        assert_eq!(Bytes::new().len(), 0);
-        assert_eq!((1u8..=3).collect::<Bytes>().to_vec(), vec![1, 2, 3]);
-    }
-}
-
 /// **Two cuts compared, `a[i..<j] == b[k..<l]`** (#776 step 4 of the 1BRC
 /// work): the lowering writes `nikaia_std::same!(a, b)` for an `==` or `!=`
 /// whose sides are both cuts. It means `a == b`, whatever the types; two runs
@@ -661,26 +544,39 @@ pub fn same_bytes(a: &[u8], b: &[u8]) -> bool {
 }
 
 #[cfg(test)]
-mod same_tests {
-    use super::same_bytes;
+mod tests {
+    use super::Bytes;
 
-    /// Every length to 200, equal and with each single byte changed, against
-    /// `==`.
+    // Equality, hash and order across owners, reads, text, `find`, words and
+    // their stops are `tests/compiler/tests/bytes_*.nika` (#2082). What stays
+    // here no program sees: where the buffer is, and the copies a program does
+    // not ask for by these names.
+
+    /// **Handing one on is a count**, which is the whole claim of the type: two
+    /// holders, one allocation.
     #[test]
-    fn same_bytes_is_equality() {
-        for n in 0..200 {
-            let a: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
-            assert!(same_bytes(&a, &a.clone()));
-            for at in 0..n {
-                let mut b = a.clone();
-                b[at] ^= 0x20;
-                assert!(!same_bytes(&a, &b), "{n} {at}");
-            }
-            assert!(!same_bytes(&a, &a[..n.saturating_sub(1)]) || n == 0);
-        }
-        assert!(crate::same!("abc", "abc"));
-        assert!(!crate::same!(&b"abc"[..], &b"abd"[..]));
-        assert!(crate::same!(&[1i64, 2][..], &[1i64, 2][..]));
-        assert!(crate::same!(String::from("x"), "x"));
+    fn a_clone_shares_the_buffer() {
+        let one = Bytes::from(vec![1u8, 2, 3]);
+        let two = one.clone();
+        assert_eq!(one.as_slice().as_ptr(), two.as_slice().as_ptr());
+        assert_eq!(&*two, &[1u8, 2, 3]);
+    }
+
+    /// **`Bytes(v)` hands the vector over** (ADR-373 D2): the buffer is the
+    /// vector's memory.
+    #[test]
+    fn a_vec_is_handed_over() {
+        let v = b"Oslo;3".to_vec();
+        let at = v.as_ptr();
+        let handed = Bytes::from(v);
+        assert_eq!(handed.as_slice().as_ptr(), at, "nothing copied");
+    }
+
+    /// **And a copy is asked for**, never taken.
+    #[test]
+    fn a_copy_is_asked_for() {
+        let bytes = Bytes::from(vec![7u8]);
+        assert_eq!(bytes.to_vec(), vec![7u8]);
+        assert_eq!((1u8..=3).collect::<Bytes>().to_vec(), vec![1, 2, 3]);
     }
 }
