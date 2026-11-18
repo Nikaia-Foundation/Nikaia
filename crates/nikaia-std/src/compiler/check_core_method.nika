@@ -1181,6 +1181,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         state.flow.empty_lists.insert(empty_map, held.clone())
     }
     on = check_core_method_literal(state, receiver, on)
+    state.open_receiver_placed(world, receiver, on, span)
     // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
     if safe {
         let mut unknown = false

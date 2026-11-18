@@ -962,7 +962,7 @@ signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
 sync = "inferred"
 panics = true
 touches = []
-signature = "(ref mut self) -> bool"
+signature = "(ref mut self, v: i64) -> bool"
 
 [fn."SvSimplex::row_bound"]
 sync = "inferred"
@@ -3328,6 +3328,13 @@ touches = []
 views = ["atom: borrowed"]
 signature = "(atom: ref SvAtom, l: u32, real: bool) -> SvBound?"
 
+[fn."sv_lits_ascending"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["ls: borrowed"]
+signature = "(ls: ref Vec[u32]) -> bool"
+
 [fn."sv_lits_union"]
 sync = "inferred"
 panics = false
@@ -4649,12 +4656,12 @@ touches = []
 views = ["cnf: borrowed", "values: borrowed"]
 signature = "(cnf: ref SvCnf, values: ref Vec[i64]) -> collections::BTreeMap[String, i64]"
 
-[fn."sv_substituted"]
+[fn."sv_substitute"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
-views = ["held: borrowed"]
-signature = "(held: ref Vec[SvHeld], lo: i64, hi: i64, x: u32, s: i64, mut book: SvBook) -> Vec[SvHeld]?"
+signature = "(mut held: Vec[SvHeld], lo: i64, hi: i64, x: u32, s: i64, mut book: SvBook) -> bool"
 
 [fn."sv_sx_lemma"]
 sync = "inferred"

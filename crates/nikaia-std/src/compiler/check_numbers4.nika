@@ -226,6 +226,11 @@ impl CheckState {
     /// and every caller acts on each it is handed.
     fn open_numbers_in(ref self, world: ref CheckWorld, expr: ref Expr) -> Vec[i64] sync {
         let mut out: Vec[i64] = []
+        let placed: i64? = self.flow.open_receivers[id_of(expr) as i64]
+        if placed != null {
+            out.push(self.open_root(placed ?? 0))
+            return out
+        }
         match expr {
             Expr::Variable(name, _) => {
                 let found = self.binding(world.words.resolve(name))
@@ -566,6 +571,24 @@ impl CheckState {
         entry.typed = true
         self.flow.open_numbers.insert(head, entry)
         return true
+    }
+
+    /// **A receiver written in literals only is one open number** (#2068,
+    /// ADR-285 D1): `(3 + 4).abs()` is typed as `let n = 3 + 4` and then
+    /// `n.abs()` is. No `let` stands where its type is written, so its
+    /// literals carry the type, as a list literal walked in place does.
+    fn open_receiver_placed(ref mut self, world: ref CheckWorld, receiver: ref Expr, on: ref Ty, span: ref Span) sync {
+        if !on.is_unknown() || a_lit_int(receiver) || !self.number_shaped(world, receiver) {
+            return
+        }
+        if self.open_numbers_in(world, receiver).len() > 0 {
+            return
+        }
+        let at = -(id_of(receiver) as i64) - 1
+        self.flow.open_numbers.insert(at, CheckOpenNumber { name: written_expression(world.words, receiver), element: false, levels: 0, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
+        self.flow.open_literal_lists.insert(at)
+        self.flow.open_receivers.insert(id_of(receiver) as i64, at)
+        self.open_number_given(world, at, receiver, span)
     }
 
     /// **A method called on an open number needs its type written** (#629

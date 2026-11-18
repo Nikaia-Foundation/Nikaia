@@ -8,6 +8,13 @@
 // its time limit while only the theory checks that pivot counted toward the
 // budget (#2011); since a check costs one case and two more a pivot (#2048)
 // it ends `unknown (cases)` within about 3 s.
+// QF_LIA 20220307-SMPT Diffusion2D-PT-D50N010-RC-00 took about 19 s while
+// each round of the equality elimination copied and tidied every bound
+// again; since it substitutes in place and tidies only what changed, about
+// 4 s (#2012). Referendum-PT-0200-RF-00 took about 20 s while each
+// combination looked every assumed literal up in the other set, in the
+// engine and in the certificate checker; since the two sorted sets are
+// merged, about 2 s (#2012).
 use std::fs
 use std::process
 

@@ -64,8 +64,8 @@ rayon = ["1.12.0"]
 rayon-core = ["1.13.0"]
 redox_syscall = ["0.5.18"]
 ref-or-box = ["0.1.0"]
-regex-automata = ["0.4.18"]
-regex-syntax = ["0.8.11"]
+regex-automata = ["0.4.19"]
+regex-syntax = ["0.8.12"]
 ring = ["0.17.14"]
 rustix = ["1.1.6"]
 rustls = ["0.23.46"]
@@ -117,4 +117,4 @@ zerocopy-derive = ["0.8.63"]
 zeroize = ["1.9.2"]
 
 [units."src/main.nika"]
-source = "6721737a73080003435ca33f842c4f72ed5df22bf18a928ccefa1c6d06b74e76"
+source = "cc270b2d66718ee15df05887ba816e16b240e9caea857e6257d9d5d62336b65b"

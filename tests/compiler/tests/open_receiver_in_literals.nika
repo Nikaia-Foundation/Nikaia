@@ -1,0 +1,14 @@
+// A method called on a parenthesised expression of literals (#2068): the
+// receiver is one open number, typed as `let n = 3 + 4` and then `n.abs()`
+// would be (ADR-285 D1), so it builds as `7.abs()` does.
+
+fn main() throws {
+    println((1 << 4).wrapping_mul(2))
+    println((3 + 4).checked_mul(2) ?? 0)
+    println((3 + 4).abs())
+    println((0 - 5).abs())
+    println((2000000000 + 2000000000).wrapping_add(1))
+    let (low, high) = (1 << 40).widening_mul(1 << 40)
+    println(low)
+    println(high)
+}

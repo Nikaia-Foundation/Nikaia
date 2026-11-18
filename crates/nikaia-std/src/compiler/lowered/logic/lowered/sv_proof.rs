@@ -141,6 +141,33 @@ pub struct SvClause {
 }
 
 pub(crate) fn sv_lits_union(a: &[u32], b: &[u32]) -> Vec<u32> {
+    if sv_lits_ascending(a) && sv_lits_ascending(b) {
+        let mut merged: Vec<u32> = vec![];
+        let mut i: i64 = 0;
+        let mut j: i64 = 0;
+        while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
+            if *unsafe { nikaia_std::proven::read(&a, (i) as usize) } < *unsafe { nikaia_std::proven::read(&b, (j) as usize) } {
+                merged.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            } else if *unsafe { nikaia_std::proven::read(&b, (j) as usize) } < *unsafe { nikaia_std::proven::read(&a, (i) as usize) } {
+                merged.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+                j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+            } else {
+                merged.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+                j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+            }
+        }
+        while ((i) as usize) < a.len() {
+            merged.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        }
+        while ((j) as usize) < b.len() {
+            merged.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+        return merged;
+    }
     let mut out = a.copy_owned();
     for l in b.iter() {
         let l = nikaia_std::num::value(l);
@@ -148,6 +175,15 @@ pub(crate) fn sv_lits_union(a: &[u32], b: &[u32]) -> Vec<u32> {
     }
     out.sort();
     out
+}
+
+pub(crate) fn sv_lits_ascending(ls: &[u32]) -> bool {
+    let mut i: i64 = 1;
+    while ((i) as usize) < ls.len() {
+        if *unsafe { nikaia_std::proven::read(&ls, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } >= *unsafe { nikaia_std::proven::read(&ls, (i) as usize) } { return false; }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    true
 }
 
 impl SvBook {

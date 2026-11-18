@@ -172,14 +172,10 @@ impl SvReplay {
                 let is_lt = matches!(b.rel, SvRel::Lt);
                 strict = strict || is_lt && m > 0;
                 row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return SvSum { bound: None, why: String::from("overflow") } };
-                for l in b.assumed.iter() {
-                    let l = nikaia_std::num::value(l);
-                    if !assumed.contains(&l) { assumed.push(l); }
-                }
+                assumed = sv_lits_union(&assumed, &b.assumed);
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        assumed.sort();
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
         SvSum { bound: Some(SvBound { row: sv_row_reduced(row), rel, assumed }), why: String::from("") }
     }

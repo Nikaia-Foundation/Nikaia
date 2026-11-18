@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1435] — 2026-11-18
+
+**Builders' changes (#1555, #2004, #2068)**
+- Integers say whether a step overflowed and give a product's high half: `overflowing_add`, `overflowing_sub`, `overflowing_mul` and `widening_mul` on i32, i64, u32, u8 and u64, and `--bounds` proves an index past `if !overflowed` (#1555)
+- The solver benchmark builds the solver at opt-level 3 (it built at opt-level 0, so every figure was of an unoptimised binary); the comparison with z3 and cvc5 in docs/solver-workload.md section 9 was measured again.
+- Solver: QF_LIA 20220307-SMPT solves 356 of 371, up from 338: the equality elimination substitutes in place and tidies only the bounds that changed, and two sorted assumption sets are merged instead of looked up literal by literal, in the solver and the certificate checker
+- A method called on a parenthesised integer expression of literals, `(1 << 4).wrapping_mul(2)`, builds: the expression is one open number and takes its type as a `let` of it would.
+
 ## [0.0.1434] — 2026-11-18
 
 **Builders' changes (#1617, #1618, #1619, #1859)**

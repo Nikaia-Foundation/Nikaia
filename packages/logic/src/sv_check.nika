@@ -278,15 +278,13 @@ impl SvReplay {
 				}
 				strict = strict || (is_lt && m > 0)
 				row = sv_row_sum(1, row, m, b.row) ?? return SvSum { bound: null, why: "overflow" }
-				for l in b.assumed {
-					if !assumed.contains(l) {
-						assumed.push(l)
-					}
-				}
+				// One merge, not a `contains` per literal: quadratic in the
+				// assumptions, the replay of SMPT Referendum-PT-0200-RF-00
+				// ran past its limit (#2012).
+				assumed = sv_lits_union(assumed, b.assumed)
 			}
 			i += 1
 		}
-		assumed.sort()
 		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
 		return SvSum {
 			bound: SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed },

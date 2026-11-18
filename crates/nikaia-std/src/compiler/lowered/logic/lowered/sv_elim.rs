@@ -75,40 +75,44 @@ pub(crate) fn sv_unit_column(r: &SvRow, uses: &[i64]) -> Option<u32> {
     best
 }
 
-pub(crate) fn sv_substituted(held: &[SvHeld], lo: i64, hi: i64, x: u32, s: i64, book: &mut SvBook) -> Option<Vec<SvHeld>> {
+pub(crate) fn sv_substitute(held: &mut Vec<SvHeld>, lo: i64, hi: i64, x: u32, s: i64, book: &mut SvBook) -> bool {
     let mut i: i64 = 0;
-    while ((i) as usize) < held.len() {
+    while i < held.len() as i64 {
         let b = sv_row_coef(&unsafe { nikaia_std::proven::read(&held, (i) as usize) }.row, x);
         if i != lo && i != hi && b != 0 {
             let same = b > 0;
             let side = if same == (s > 0) { hi } else { lo };
-            let m = match b.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return None };
-            match sv_row_sum(1, &unsafe { nikaia_std::proven::read(&held, (i) as usize) }.row, m, &nikaia_std::index::get(&held, nikaia_std::index::at(side)).row) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let m = match b.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return false };
+            match sv_row_sum(1, &unsafe { nikaia_std::proven::read(&held, (i) as usize) }.row, m, &nikaia_std::index::get(&held, nikaia_std::index::at(side)).row) { Some(__nikaia_value) => __nikaia_value, None => return false };
         }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
-    let mut out: Vec<SvHeld> = vec![];
+    let mut at: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut made: Vec<SvHeld> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     i = 0;
-    while ((i) as usize) < held.len() {
+    while i < held.len() as i64 {
         let b = sv_row_coef(&unsafe { nikaia_std::proven::read(&held, (i) as usize) }.row, x);
-        if i == lo || i == hi {
-            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-            continue;
+        if i != lo && i != hi && b != 0 {
+            let same = b > 0;
+            let side = if same == (s > 0) { hi } else { lo };
+            let m = match b.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let id = match book.combine(vec![unsafe { nikaia_std::proven::read(&held, (i) as usize) }.src.clone(), nikaia_std::index::get(&held, nikaia_std::index::at(side)).src.clone()], vec![1, m]) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let row = match book.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return false }.row.clone();
+            at.push(i);
+            made.push(SvHeld { row, src: SvSrc::Fact(id) });
         }
-        if b == 0 {
-            out.push((*unsafe { nikaia_std::proven::read(&held, (i) as usize) }).clone());
-            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-            continue;
-        }
-        let same = b > 0;
-        let side = if same == (s > 0) { hi } else { lo };
-        let m = match b.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let id = match book.combine(vec![unsafe { nikaia_std::proven::read(&held, (i) as usize) }.src.clone(), nikaia_std::index::get(&held, nikaia_std::index::at(side)).src.clone()], vec![1, m]) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let row = match book.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None }.row.clone();
-        out.push(SvHeld { row, src: SvSrc::Fact(id) });
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
-    Some(out)
+    let mut k: i64 = 0;
+    while ((k) as usize) < at.len() {
+        { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&made, (k) as usize) }).clone(); nikaia_std::index::set(&mut *held, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&at, (k) as usize) }), __nikaia_stored); }
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
+    }
+    let first = if lo < hi { lo } else { hi };
+    let second = if lo < hi { hi } else { lo };
+    held.remove(nikaia_std::count::of(second));
+    held.remove(nikaia_std::count::of(first));
+    true
 }
 
 pub(crate) fn sv_mod_hat(a: i64, m: i64) -> i64 {
@@ -202,13 +206,10 @@ pub(crate) fn sv_reduce_step(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>,
             let at = held.len() as i64;
             held.push(SvHeld { row: lo_row.clone(), src: SvSrc::Fact(second) });
             held.push(SvHeld { row: hi_row, src: SvSrc::Fact(ext.first) });
-            match sv_substituted(&held, at, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, v, 1, book) {
-                None => {
-                    held.pop();
-                    held.pop();
-                    return false;
-                },
-                Some(next) => { *held = next; },
+            if !sv_substitute(held, at, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, v, 1, book) {
+                held.pop();
+                held.pop();
+                return false;
             }
             solved.push(SvSolved { column: v, row: lo_row });
             return true;
@@ -224,21 +225,26 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
     let mut rounds = 0;
     while rounds < 4096 {
         rounds += 1;
-        let mut kept: Vec<SvHeld> = vec![];
-        for h in held.iter() {
-            let t = match sv_tidy(&h.clone(), book) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
+        let mut t_at: i64 = 0;
+        while t_at < held.len() as i64 {
+            if !unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row.cols.is_empty() && nikaia_std::index::or(sv_row_content(&unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row), || 2) == 1 {
+                t_at = unsafe { nikaia_std::proven::add::<i64>(t_at, 1) };
+                continue;
+            }
+            let t = match sv_tidy(&(*unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }).clone(), book) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
             if !t.row.cols.is_empty() {
-                kept.push(t);
+                { let __nikaia_stored = t; unsafe { nikaia_std::proven::write(&mut *held, (t_at) as usize, __nikaia_stored) }; }
+                t_at = unsafe { nikaia_std::proven::add::<i64>(t_at, 1) };
                 continue;
             }
             if t.row.constant > 0 {
                 let clause = match book.farkas(vec![t.src], vec![1]) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
                 return SvChecked::Conflict(clause);
             }
+            held.remove(nikaia_std::count::of(t_at));
         }
-        *held = kept;
         let uses = sv_column_uses(&held);
-        let mut next: Vec<i64> = vec![];
+        let mut next: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut first: collections::BTreeMap<i64, i64> = collections::BTreeMap::new();
         for _ in held.iter() { next.push(-1); }
         let mut at = held.len() as i64;
@@ -292,12 +298,10 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
                     let x = xk;
                     let s_row = nikaia_std::index::get(&held, nikaia_std::index::at(at)).row.clone();
                     let unit = sv_row_coef(&s_row, x);
-                    let next = sv_substituted(&held, at, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, x, unit, book);
-                    if next.is_none() {
+                    if !sv_substitute(held, at, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, x, unit, book) {
                         skipped.push(eq);
                         continue;
                     }
-                    *held = match next { Some(__nikaia_value) => __nikaia_value, None => break };
                     solved.push(SvSolved { column: x, row: s_row });
                 },
             }
@@ -306,12 +310,10 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
         let x = match column { Some(__nikaia_value) => __nikaia_value, None => break };
         let s = sv_row_coef(&unsafe { nikaia_std::proven::read(&held, (lo) as usize) }.row, x);
         let row = unsafe { nikaia_std::proven::read(&held, (lo) as usize) }.row.clone();
-        let next = sv_substituted(&held, lo, hi, x, s, book);
-        if next.is_none() {
+        if !sv_substitute(held, lo, hi, x, s, book) {
             skipped.push(row);
             continue;
         }
-        *held = match next { Some(__nikaia_value) => __nikaia_value, None => break };
         solved.push(SvSolved { column: x, row });
     }
     SvChecked::Consistent
