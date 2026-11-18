@@ -135,7 +135,10 @@ fn one_byte(needle: &str) -> Option<char> {
 /// `text` cut in two at the byte position `at` (#616): what stands before it
 /// and what from it on. A position before the start, past the end or off a
 /// scalar's start stops the program, as the language below's `split_at` does.
+/// The stop names the program's line, not this one (ADR-300 D10), so it is
+/// `#[track_caller]`.
 #[inline]
+#[track_caller]
 pub fn split_at(text: &str, at: i64) -> (&str, &str) {
     let Ok(at) = usize::try_from(at) else {
         panic!("byte index {at} is before the start of the text")
