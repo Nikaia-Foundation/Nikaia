@@ -64,7 +64,7 @@ reports under *Briefs and reports*.
 * **Green is green** (owner, 2026-11-17): a batch the full suite passed is
   not tested in full again only because `develop` moved meanwhile. The driver
   merges `origin/develop` and runs the short checks, up to three rounds
-  (#2008). Until that is built, and beyond it, the supervisor may push such
+  (#2008, *Suite watch*). Beyond that, the supervisor may push such
   a merge by judgment: it reads what the incoming commits touch, and where
   they share no files and no topic with the batch and the short checks are
   green, it pushes the merge. The full suite runs again only for red short
@@ -152,8 +152,8 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   never pushes. The badges are the driver's (owner, 2026-11-15): before each
   suite it regenerates them on HEAD and checks them with `badges.py --check`,
   up to three times; `pre-push.nika` only shows them, and fails on them only
-  as `pre-push.nika -- push`, for a session that pushes by hand. The driver runs the complete suite once per batch: when the
-  batch ends it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
+  as `pre-push.nika -- push`, for a session that pushes by hand. The driver runs the complete suite after every block of builders (#2022:
+  focus.txt's `block`, else 2) and when the batch ends: it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
   checkout, on CI: the tested commit pushed to `ci/<lane>` runs the whole
   workflow, `drive.nika --ci-wait` follows it with `gh api`); green, it pushes the
   tested commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and
@@ -388,8 +388,12 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   [--dry-run] [--loop M] DIR` raises the version once for the done reports'
   `Changelog:` lines.
 * **Suite watch (owner, 2026-10-31; replaces the builders' gate of #852).**
-  Builders and QA commit locally; the driver runs `gate.nika -- --all` once
-  per batch (owner, 2026-10-31: once per batch): when the batch ends it starts
+  Builders and QA commit locally; the driver runs `gate.nika -- --all` after
+  every block of builders and at the batch's end (owner, 2026-10-31: once per
+  batch; #2022: a lane whose queue `drive_queue` refills never reached `BATCH
+  DONE`, so the single-DIR loop now starts it after every `block` builder runs
+  too, `BLOCK <n> builder runs: the suite starts`, `block` from
+  `docs/briefs/focus.txt`, else 2; no settle run by hand is needed): it starts
   the suite on HEAD in the background (`SUITE <sha8> started in the
   background`); the next builders go on meanwhile (owner, 2026-11-06), a
   finished suite is handled before the next builder, and the driver waits for
@@ -398,7 +402,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   next suite pushes it all (lock
   `target/suite.lock`, so the two lanes' drivers
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
-  commit on green (`PUSHED <sha8>`), and on red starts QA
+  commit on green (`PUSHED <sha8>`); a push rejected because `develop`
+  moved is merged with `origin/develop`, short-checked and pushed, up to three
+  rounds (`MERGE <sha8> round <k>`, #2008, owner 2026-11-17: green is green),
+  and only red short checks or a third rejection leave the merge to the next
+  suite (a conflict outside `lowered/*.rs` escalates); on red it starts QA
   (on `DIR/qa/qa-task.md`, the lane's own copy of the template
   `docs/qa-task.md`, so its report and run files land in `DIR/qa/`;
   input `DIR/qa-input.txt`, log `DIR/suite.log`),

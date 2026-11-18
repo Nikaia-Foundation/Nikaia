@@ -266,6 +266,8 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                     state.a_lambdas_text_is_its_own(world, &inner, value);
                     state.a_kept_lambdas_hulls(world, value);
                     state.a_kept_lambda_takes_these(world, value, !is_sync, "a function kept for later", span);
+                    let changed: Option<String> = state.flow.lambda_outer_changes.remove(&(id_of(value) as i64));
+                    if changed.is_some() { state.a_kept_lambda_changes_a_capture(nikaia_std::index::or(changed.as_deref(), || ""), &check_span_at(world, value, span)); }
                 },
                 Expr::Variable(name, _) => {
                     let name = *name;

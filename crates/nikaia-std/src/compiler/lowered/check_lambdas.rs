@@ -159,6 +159,31 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn an_outer_binding_changed(&self, from: i64, floor: i64) -> Option<String> {
+        let mut at = from;
+        while at < self.flow.changes_bound.len() as i64 {
+            let (name, bound) = (*nikaia_std::index::get(&self.flow.changes_bound, nikaia_std::index::at(at))).clone();
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            if bound < 0 || bound > floor { continue; }
+            let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if local.id != bound || is_a_handle(&local.ty) { continue; }
+            return Some(name);
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_kept_lambda_changes_a_capture(&mut self, name: &str, span: &Span) {
+        let message = format!("This lambda is kept for later, so it takes its own copy of `{}`; a change it makes never reaches `{}` here.", name, name);
+        let note = nikaia_std::block::Text::from("A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17).");
+        let help = format!("Hand the value back instead: take `{}` as a parameter and return what it becomes (`fn(v, {}) {{ {} + v }}`), or keep `{}` in a `Shared` value both sides reach.", name, name, name, name);
+        self.findings.push(check_refusal("NK2101", span, message, vec![note], Some(help)));
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         match body {
             Expr::Closure { params, body, .. } => { self.state_of_a_child(world, params, body, span); },

@@ -972,6 +972,8 @@ impl CheckState {
     pub(crate) fn a_change_noted(&mut self, name: &str) {
         self.changed.push(nikaia_std::block::Text::from(name.to_string()));
         self.flow.changes_seen.push((nikaia_std::block::Text::from(name.to_string()), self.reads_on_paths.len() as i64));
+        let bound = nikaia_std::index::or(self.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1);
+        self.flow.changes_bound.push((nikaia_std::block::Text::from(name.to_string()), bound));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -153,6 +153,33 @@ fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld,
     }
 }
 
+/// **What a run lambda changes that it captures** (ADR-views-3 D17): the
+/// first binding bound outside it that its body changed, and the parameters
+/// of code it ran, which may change what they capture in turn.
+fn check_core_args_what_a_lambda_changes(mut state: CheckState, id: i64, changed_from: i64, runs_from: i64) sync {
+    let mut at = changed_from
+    while at < state.changed.len() {
+        let name = state.changed[at].clone()
+        if state.binding(name) != null {
+            state.facts.changing_lambdas.insert(id, name)
+            break
+        }
+        at += 1
+    }
+    let mut ran: Vec[String] = []
+    at = runs_from
+    while at < state.run_calls.len() {
+        let name = state.run_calls[at].clone()
+        if !ran.contains(name) {
+            ran.push(name)
+        }
+        at += 1
+    }
+    if !ran.is_empty() {
+        state.facts.lambda_runs.insert(id, ran)
+    }
+}
+
 fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, keeps: bool, span: ref Span) -> Ty sync {
     let id = id_of(arg) as i64
     // **Optional code keeps the lambda** (#1117): the option holds it, as a
@@ -192,7 +219,20 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                         state.a_kept_lambda_takes_these(world, arg, pauses, who, span)
                     }
                     state.a_lambdas_text_is_its_own(world, code, arg)
+                    let changed_from = state.changed.len()
+                    let runs_from = state.run_calls.len()
+                    let bound_from = state.flow.changes_bound.len()
+                    let floor = state.next_binding
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
+                    if runs {
+                        check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from)
+                    } else {
+                        // **A kept lambda changes only its own copy** (#2047).
+                        let outer: String? = state.an_outer_binding_changed(bound_from, floor)
+                        if outer != null {
+                            state.a_kept_lambda_changes_a_capture(outer ?? "", check_span_at(world, arg, span))
+                        }
+                    }
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)
                     }

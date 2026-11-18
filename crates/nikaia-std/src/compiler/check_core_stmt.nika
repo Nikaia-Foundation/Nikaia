@@ -1271,6 +1271,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             Expr::Closure { .. } => state.facts.let_lambdas.insert(id, value.clone()),
             else => {},
         }
+        // **A `let` keeps its lambda** (Part I 5.4 C, #2047), so a change it
+        // makes to a binding from outside reaches only its own copy.
+        let changed: String? = state.flow.lambda_outer_changes.remove(id_of(value) as i64)
+        if changed != null {
+            state.a_kept_lambda_changes_a_capture(changed ?? "", check_span_at(world, value, span))
+        }
     }
     if bytes_view {
         state.text_bytes_lets.insert(id)

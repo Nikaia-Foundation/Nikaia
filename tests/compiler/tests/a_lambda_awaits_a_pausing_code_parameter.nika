@@ -1,0 +1,11 @@
+// A lambda that runs a parameter of code that may pause waits for it: `g(v)`
+// in `fn(v) { g(v) }` runs before the lambda ends (#1553).
+fn each(xs: Vec[i64], f: fn(i64)) { for x in xs { f(x) } }
+
+fn around(g: fn(i64)) { each([10, 20], fn(v) { g(v) }) }
+
+fn main() throws {
+    let mut total = 0
+    around(fn(v) { total = total + v })
+    println(total)
+}
