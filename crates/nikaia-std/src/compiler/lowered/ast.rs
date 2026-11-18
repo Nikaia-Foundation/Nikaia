@@ -68,6 +68,7 @@ pub enum Stmt {
     Return(Option<Expr>),
     Break,
     Continue,
+    Emit(Expr),
     Expr(Expr),
 }
 

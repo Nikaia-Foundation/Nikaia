@@ -419,6 +419,7 @@ pub(crate) fn diverts_within(stmts: &[Spanned<Stmt>], bound: bool) -> bool {
             Stmt::Break => !bound,
             Stmt::Continue => !bound,
             Stmt::Expr(expr) => holds_throw(expr, bound),
+            Stmt::Emit(expr) => holds_throw(expr, bound),
             Stmt::Let { value, .. } => holds_throw(value, bound),
             Stmt::Comptime { value, .. } => holds_throw(value, bound),
             Stmt::Assign { value, .. } => holds_throw(value, bound),

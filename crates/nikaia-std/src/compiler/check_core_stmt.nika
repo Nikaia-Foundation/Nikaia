@@ -2512,7 +2512,25 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
         // **One site, not two.**
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
+        Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
     }
+}
+
+/// **`emit item`** (ADR-grammar-2 D7, amended 2026-11-18, #2061): only in
+/// the action of a rule a `@stream` entry reaches (`NK1371`), and the item
+/// has the entry's item type. Whether the parse could still undo it is the
+/// grammar's question (`grammar_emits_undone`, `NK1370`).
+fn check_core_stmt_emit[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) -> Ty sync {
+    let found = check_core_expr(state, world, host, value, span)
+    match state.emitting {
+        item => state.expect_type(world, found, item.clone(), span, "argument", fn(was, wanted) { f"This `emit` hands over `{was}`, but the `@stream` entry's items are `{wanted}`." }),
+        null => {
+            let notes: Vec[String] = ["An item goes to the walk of a `@stream` entry (ADR-grammar-2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to."]
+            let help: String = if state.inside_an_action != null { "Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead." } else { "Return the value instead, or emit it from the action of a rule a `@stream` entry reaches." }
+            state.findings.push(check_refusal("NK1371", span, "`emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place.", notes, help))
+        },
+    }
+    return Ty::Unknown
 }
 
 /// A `break` or a `continue`.
@@ -2993,6 +3011,7 @@ fn check_core_stays_in_stmt(state: ref CheckState, world: ref CheckWorld, stmt: 
         Stmt::Let { value, .. } => check_core_stays_in(state, world, value, name),
         Stmt::Comptime { value, .. } => check_core_stays_in(state, world, value, name),
         Stmt::Expr(value) => check_core_stays_in(state, world, value, name),
+        Stmt::Emit(value) => check_core_stays_in(state, world, value, name),
         Stmt::Assign { target, value, .. } => check_core_stays_in_target(state, world, target, name) && check_core_stays_in(state, world, value, name),
         Stmt::For { iter, body, .. } => (check_core_is_the_name(world, iter, name) || check_core_stays_in(state, world, iter, name)) && check_core_stays_in_block(state, world, body, name),
         Stmt::While { cond, body } => check_core_stays_in(state, world, cond, name) && check_core_stays_in_block(state, world, body, name),
@@ -3320,6 +3339,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                     else => check_async_in(state, value, group, stmt.span),
                 }
             },
+            Stmt::Emit(value) => check_async_in(state, value, group, stmt.span),
             Stmt::Expr(value) => {
                 match value {
                     // A child task as a statement runs to its end, waited for

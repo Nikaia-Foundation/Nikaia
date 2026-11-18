@@ -152,6 +152,7 @@ pub fn names_in_statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, 
         Stmt::Let { value, .. } => { names_in(value, words, out); },
         Stmt::Comptime { value, .. } => { names_in(value, words, out); },
         Stmt::Expr(value) => { names_in(value, words, out); },
+        Stmt::Emit(value) => { names_in(value, words, out); },
         Stmt::Assign { target, value, .. } => {
             names_in(target, words, out);
             names_in(value, words, out);

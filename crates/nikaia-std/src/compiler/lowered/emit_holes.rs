@@ -90,6 +90,7 @@ pub(crate) fn emit_holes_stmt_roots(stmt: &Stmt) -> Vec<&Expr> {
         Stmt::Break => { },
         Stmt::Continue => { },
         Stmt::Expr(inner) => { out.push(inner); },
+        Stmt::Emit(inner) => { out.push(inner); },
     }
     out
 }

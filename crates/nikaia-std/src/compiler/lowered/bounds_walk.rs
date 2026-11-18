@@ -2998,6 +2998,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
             return true;
         },
         Stmt::Expr(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, &mut &mut *ask),
+        Stmt::Emit(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, &mut &mut *ask),
     }
 }
 

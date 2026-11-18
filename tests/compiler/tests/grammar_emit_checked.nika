@@ -1,0 +1,24 @@
+// A `@stream` entry whose items are handed over by `emit` in the rules it
+// reaches (ADR-grammar-2 D7, amended 2026-11-18, #2061) needs no repetition
+// of its own: `Events` passes NK1349 with two alternatives and no item rule.
+// What an `emit` hands over is of the entry's item type: `Mistyped` is not.
+
+struct Event {
+	word: String,
+}
+
+grammar Events {
+	@stream entry rule events -> Event = "[" => line* "]" | "-"
+	rule line = w:until(";") ";" => -> {
+		emit Event { word: w.clone() }
+		emit Event { word: "end" }
+	}
+}
+
+grammar Mistyped {
+	@stream entry rule events -> Event = line*
+	rule line = w:until(";") ";" -> { emit w.clone() }
+}
+
+fn main() {
+}

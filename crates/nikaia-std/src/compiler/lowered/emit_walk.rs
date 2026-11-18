@@ -28,6 +28,7 @@ pub(crate) fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
         Stmt::Break => { },
         Stmt::Continue => { },
         Stmt::Expr(inner) => { out.extend(visited_in_expr(inner)); },
+        Stmt::Emit(inner) => { out.extend(visited_in_expr(inner)); },
     }
     out
 }
