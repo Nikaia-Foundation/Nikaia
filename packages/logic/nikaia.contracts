@@ -2883,6 +2883,12 @@ touches = []
 views = ["held: borrowed", "r: borrowed"]
 signature = "(held: ref Vec[SvHeld], r: ref SvRow) -> Vec[i64]"
 
+[fn."sv_compact"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(mut held: Vec[SvHeld])"
+
 [fn."sv_content"]
 sync = "inferred"
 panics = true
@@ -2936,6 +2942,12 @@ panics = true
 places = true
 views = ["title: borrowed", "kind: borrowed", "how: borrowed"]
 signature = "(title: String, names: Vec[String], atoms: Vec[SvAtom], kind: String, how: String) -> String"
+
+[fn."sv_dead_row"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> SvRow"
 
 [fn."sv_decimal"]
 sync = "inferred"
@@ -3232,6 +3244,13 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(n: i64) -> SvRat"
+
+[fn."sv_is_dead"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> bool"
 
 [fn."sv_is_numeral"]
 sync = "inferred"

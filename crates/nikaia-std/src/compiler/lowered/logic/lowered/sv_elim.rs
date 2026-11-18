@@ -121,14 +121,22 @@ pub(crate) fn sv_substitute(held: &mut Vec<SvHeld>, lo: i64, hi: i64, x: u32, s:
     }
     let mut k: i64 = 0;
     while ((k) as usize) < at.len() {
-        { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&made, (k) as usize) }).clone(); nikaia_std::index::set(&mut *held, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&at, (k) as usize) }), __nikaia_stored); }
+        { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&made, (k) as usize) }).clone(); unsafe { nikaia_std::proven::write(&mut *held, (*nikaia_std::proven::read(&at, (k) as usize)) as usize, __nikaia_stored) }; }
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
-    let first = if lo < hi { lo } else { hi };
-    let second = if lo < hi { hi } else { lo };
-    held.remove(nikaia_std::count::of(second));
-    held.remove(nikaia_std::count::of(first));
+    { let __nikaia_stored = SvHeld { row: sv_dead_row(), src: unsafe { nikaia_std::proven::read(&held, (lo) as usize) }.src }; unsafe { nikaia_std::proven::write(&mut *held, (lo) as usize, __nikaia_stored) }; }
+    { let __nikaia_stored = SvHeld { row: sv_dead_row(), src: nikaia_std::index::get(&held, nikaia_std::index::at(hi)).src }; unsafe { nikaia_std::proven::write(&mut *held, (hi) as usize, __nikaia_stored) }; }
     true
+}
+
+pub(crate) fn sv_dead_row() -> SvRow { SvRow { cols: vec![], ks: vec![], constant: 0 } }
+
+pub(crate) fn sv_is_dead(r: &SvRow) -> bool { r.cols.is_empty() && r.constant == 0 }
+
+pub(crate) fn sv_compact(held: &mut Vec<SvHeld>) {
+    let mut kept: Vec<SvHeld> = vec![];
+    for h in held.iter() { if !sv_is_dead(&h.row) { kept.push(h.clone()); } }
+    *held = kept;
 }
 
 pub(crate) fn sv_mod_hat(a: i64, m: i64) -> i64 {
@@ -243,8 +251,14 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
         rounds += 1;
         if book.log.over() { return SvChecked::Unknown(LgUnknown::TooManySteps); }
         let mut t_at: i64 = 0;
-        while t_at < held.len() as i64 {
+        let mut dead: i64 = 0;
+        while ((t_at) as usize) < held.len() {
             if !unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row.cols.is_empty() && nikaia_std::index::or(sv_row_content(&unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row), || 2) == 1 {
+                t_at = unsafe { nikaia_std::proven::add::<i64>(t_at, 1) };
+                continue;
+            }
+            if sv_is_dead(&unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row) {
+                dead = unsafe { nikaia_std::proven::add::<i64>(dead, 1) };
                 t_at = unsafe { nikaia_std::proven::add::<i64>(t_at, 1) };
                 continue;
             }
@@ -258,8 +272,11 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
                 let clause = match book.farkas(vec![t.src], vec![1]) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
                 return SvChecked::Conflict(clause);
             }
-            held.remove(nikaia_std::count::of(t_at));
+            { let __nikaia_stored = SvHeld { row: sv_dead_row(), src: t.src }; unsafe { nikaia_std::proven::write(&mut *held, (t_at) as usize, __nikaia_stored) }; }
+            dead = unsafe { nikaia_std::proven::add::<i64>(dead, 1) };
+            t_at = unsafe { nikaia_std::proven::add::<i64>(t_at, 1) };
         }
+        if ((unsafe { nikaia_std::proven::mul::<i64>(dead, 4) }) as usize) > held.len() { sv_compact(held); }
         let mut size: i64 = 1;
         while size < unsafe { nikaia_std::proven::mul::<i64>(2, held.len() as i64) } { size = unsafe { nikaia_std::proven::mul::<i64>(size, 2) }; }
         let mut head: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -276,6 +293,7 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
         let mut at = held.len() as i64;
         while at > 0 {
             at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if sv_is_dead(&unsafe { nikaia_std::proven::read(&held, (at) as usize) }.row) { continue; }
             let b = *unsafe { nikaia_std::proven::read(&own, (at) as usize) };
             { let __nikaia_stored = *nikaia_std::index::get(&head, nikaia_std::index::at(b)); unsafe { nikaia_std::proven::write(&mut next, (at) as usize, __nikaia_stored) }; }
             { let __nikaia_stored = at; unsafe { nikaia_std::proven::write(&mut head, (b) as usize, __nikaia_stored) }; }
@@ -285,6 +303,10 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
         let mut best: i64 = 0;
         let mut i: i64 = 0;
         while ((i) as usize) < held.len() {
+            if sv_is_dead(&unsafe { nikaia_std::proven::read(&held, (i) as usize) }.row) {
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+                continue;
+            }
             let mut j = *nikaia_std::index::get(&head, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&opposite, (i) as usize) }));
             while j >= 0 && j <= i { j = *nikaia_std::index::get(&next, nikaia_std::index::at(j)); }
             while j >= 0 {
@@ -343,6 +365,7 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
         }
         solved.push(SvSolved { column: x, row });
     }
+    sv_compact(held);
     SvChecked::Consistent
 }
 
@@ -638,6 +661,23 @@ pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut held = vec![SvHeld { row: SvRow { cols: vec![1], ks: vec![1], constant: 0 }, src: SvSrc::Lit(0) }, SvHeld { row: sv_dead_row(), src: SvSrc::Lit(1) }, SvHeld { row: SvRow { cols: vec![2], ks: vec![1], constant: -1 }, src: SvSrc::Lit(2) }, SvHeld { row: SvRow { cols: vec![], ks: vec![], constant: -3 }, src: SvSrc::Lit(3) }, SvHeld { row: SvRow { cols: vec![3], ks: vec![2], constant: 0 }, src: SvSrc::Lit(4) }];
+    if !(sv_is_dead(&unsafe { nikaia_std::proven::read(&held, (1) as usize) }.row) && !sv_is_dead(&unsafe { nikaia_std::proven::read(&held, (3) as usize) }.row)) { nikaia_std::abort::assertion_failed("assert(sv_is_dead(held[1].row) && !sv_is_dead(held[3].row))", None, &[]) };
+    if !(*nikaia_std::index::get(&sv_column_uses(&held, &SvRow { cols: vec![3], ks: vec![1], constant: 0 }), 3) == 1) { nikaia_std::abort::assertion_failed("assert(sv_column_uses(held, …)[3] == 1)", None, &[("sv_column_uses(held, …)[3]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&sv_column_uses(&held, &SvRow { cols: vec![3], ks: vec![1], constant: 0 }), 3)))).shown()), ]) };
+    sv_compact(&mut held);
+    if !(held.len() == 4) { nikaia_std::abort::assertion_failed("assert(held.len() == 4)", None, &[("held.len()", (&&nikaia_std::abort::Operand(&(held.len() as i64))).shown()), ]) };
+    let mut lits: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for h in held.iter() {
+        lits.push(match h.src {
+            SvSrc::Lit(l) => format!("{}", l),
+            _ => String::from("fact"),
+        });
+    }
+    if !(lits.join(",") == "0,2,3,4") { nikaia_std::abort::assertion_failed("assert(lits.join(\",\") == \"0,2,3,4\")", None, &[("lits.join(\",\")", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(lits.join(","))))).shown()), ]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn sv_elim_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
@@ -649,5 +689,6 @@ pub(crate) fn sv_elim_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), st
         ("sv_elim::an_equality_whose_gcd_does_not_divide_is_refuted_by_the_gcd_test_alone", __nikaia_test_4),
         ("sv_elim::the_elimination_s_log_broken_twice_is_rejected_each_time", __nikaia_test_5),
         ("sv_elim::a_row_s_opposite_signature_is_its_negation_s_signature_and_the_uses_count_only_its_columns", __nikaia_test_6),
+        ("sv_elim::dead_rows_are_skipped_where_they_stand_and_compacted_away_in_order", __nikaia_test_7),
     ]
 }

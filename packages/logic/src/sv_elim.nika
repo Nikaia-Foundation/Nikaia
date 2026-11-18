@@ -192,11 +192,35 @@ fn sv_substitute(
 		held[at[k]] = made[k].clone()
 		k += 1
 	}
-	let first = if lo < hi { lo } else { hi }
-	let second = if lo < hi { hi } else { lo }
-	held.remove(second)
-	held.remove(first)
+	// The two sides left dead where they are, not removed: a removal moved
+	// every row after them, twice an equality, most of a round on SMPT's
+	// Petri-net queries (#2012). `sv_eliminate` compacts them.
+	held[lo] = SvHeld { row: sv_dead_row(), src: held[lo].src }
+	held[hi] = SvHeld { row: sv_dead_row(), src: held[hi].src }
 	return true
+}
+
+/// The row a dead bound of `held` has: no column and the constant 0, true of
+/// every value, so it changes no sum, product or count; `sv_eliminate`
+/// skips it and drops it, keeping the others in their order.
+fn sv_dead_row() -> SvRow {
+	return SvRow { cols: [], ks: [], constant: 0 }
+}
+
+/// Whether `r` is dead (`sv_dead_row`).
+fn sv_is_dead(r: ref SvRow) -> bool {
+	return r.cols.len() == 0 && r.constant == 0
+}
+
+/// `held` without its dead rows, the others in their order.
+fn sv_compact(mut held: Vec[SvHeld]) {
+	let mut kept: Vec[SvHeld] = []
+	for h in held {
+		if !sv_is_dead(h.row) {
+			kept.push(h.clone())
+		}
+	}
+	held = kept
 }
 
 /// `a mod^ m` for `m > 0` (Pugh's symmetric modulo): `a - m·⌊a/m + 1/2⌋`,
@@ -374,8 +398,14 @@ fn sv_eliminate(
 		// tidy already, as most are after the first round: `sv_tidy` would
 		// copy it to give it back as it was (#2012).
 		let mut t_at = 0
+		let mut dead = 0
 		while t_at < held.len() {
 			if held[t_at].row.cols.len() > 0 && (sv_row_content(held[t_at].row) ?? 2) == 1 {
+				t_at += 1
+				continue
+			}
+			if sv_is_dead(held[t_at].row) {
+				dead += 1
 				t_at += 1
 				continue
 			}
@@ -390,7 +420,13 @@ fn sv_eliminate(
 					?? return SvChecked::Unknown(LgUnknown::Overflow)
 				return SvChecked::Conflict(clause)
 			}
-			held.remove(t_at)
+			held[t_at] = SvHeld { row: sv_dead_row(), src: t.src }
+			dead += 1
+			t_at += 1
+		}
+		// Compacted once a quarter is dead, so the scans below stay short.
+		if dead * 4 > held.len() {
+			sv_compact(held)
 		}
 		// The rows by the signature of their columns and coefficients, in a
 		// table of chains: `head[b]` the first row of bucket `b`, `next` each
@@ -420,6 +456,9 @@ fn sv_eliminate(
 		let mut at = held.len()
 		while at > 0 {
 			at -= 1
+			if sv_is_dead(held[at].row) {
+				continue
+			}
 			let b = own[at]
 			next[at] = head[b]
 			head[b] = at
@@ -432,6 +471,10 @@ fn sv_eliminate(
 		let mut best = 0
 		let mut i = 0
 		while i < held.len() {
+			if sv_is_dead(held[i].row) {
+				i += 1
+				continue
+			}
 			let mut j = head[opposite[i]]
 			while j >= 0 && j <= i {
 				j = next[j]
@@ -504,6 +547,7 @@ fn sv_eliminate(
 		}
 		solved.push(SvSolved { column: x, row: row })
 	}
+	sv_compact(held)
 	return SvChecked::Consistent
 }
 
@@ -881,4 +925,26 @@ test "a row's opposite signature is its negation's signature, and the uses count
 	assert(uses.len() == 6 && uses[1] == 1 && uses[5] == 2 && uses[2] == 1)
 	assert((sv_unit_column(r, sv_column_uses(held, r)) ?? 0) == 5)
 	assert(sv_has_unit(r) && !sv_has_unit(SvRow { cols: [1], ks: [2], constant: 0 }))
+}
+
+test "dead rows are skipped where they stand and compacted away in order" {
+	let mut held = [
+		SvHeld { row: SvRow { cols: [1], ks: [1], constant: 0 }, src: SvSrc::Lit(0) },
+		SvHeld { row: sv_dead_row(), src: SvSrc::Lit(1) },
+		SvHeld { row: SvRow { cols: [2], ks: [1], constant: -1 }, src: SvSrc::Lit(2) },
+		SvHeld { row: SvRow { cols: [], ks: [], constant: -3 }, src: SvSrc::Lit(3) },
+		SvHeld { row: SvRow { cols: [3], ks: [2], constant: 0 }, src: SvSrc::Lit(4) },
+	]
+	assert(sv_is_dead(held[1].row) && !sv_is_dead(held[3].row))
+	assert(sv_column_uses(held, SvRow { cols: [3], ks: [1], constant: 0 })[3] == 1)
+	sv_compact(held)
+	assert(held.len() == 4)
+	let mut lits: Vec[String] = []
+	for h in held {
+		lits.push(match h.src {
+			SvSrc::Lit(l) => f"{l}",
+			else => "fact",
+		})
+	}
+	assert(lits.join(",") == "0,2,3,4")
 }
