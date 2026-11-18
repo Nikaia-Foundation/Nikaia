@@ -1,0 +1,10 @@
+error[NK1152]: `TOTAL` took more than 5 steps while the program was built.
+  --> tests/a_build_time_run_one_step_short_is_refused.nika:9:1
+   |
+ 9 | comptime(steps: 5) TOTAL = spin(3)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: It was in `TOTAL` > `spin`.
+   = note: Each turn of a loop and each call is a step, and the count is the same on every machine.
+   = help: Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.
+1 type error

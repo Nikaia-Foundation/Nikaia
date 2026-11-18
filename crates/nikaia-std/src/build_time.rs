@@ -200,20 +200,3 @@ impl Parts for std::time::Duration {
         ]
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_step_counts_and_a_frame_leaves_the_path() {
-        start(100);
-        {
-            let _outer = enter("outer");
-            let _inner = enter("inner");
-            PATH.with(|p| assert_eq!(*p.borrow(), ["outer", "inner"]));
-        }
-        PATH.with(|p| assert!(p.borrow().is_empty()));
-        assert_eq!(LEFT.load(Ordering::Relaxed), 98);
-    }
-}

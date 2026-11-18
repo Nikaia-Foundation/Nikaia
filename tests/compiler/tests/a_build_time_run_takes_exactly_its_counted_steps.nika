@@ -1,0 +1,14 @@
+// A build-time run passes with a budget equal to its steps (ADR-321 D7):
+// the `comptime` itself is one, the call to `spin` one, and each turn of the
+// loop one; `0..3` holds 0, 1, 2 and 3, four turns. Six in all.
+fn spin(n: int) -> int {
+    let mut total = 0
+    for i in 0..n { total += i }
+    total
+}
+
+comptime(steps: 6) TOTAL = spin(3)
+
+fn main() throws {
+    println(TOTAL)
+}
