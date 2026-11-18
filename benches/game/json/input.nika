@@ -53,7 +53,7 @@ fn text(mut r: Random, words: i64) -> String {
 		if i > 0 {
 			out.push(' ')
 		}
-		for c in word(r).chars() {
+		for c in word(r).scalars {
 			if c == '"' {
 				out.push_str("\\\"")
 			} else if c == '\\' {
