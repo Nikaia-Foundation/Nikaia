@@ -1123,6 +1123,7 @@ nothing else.
 | 2026-11-18 | 551390 | check | 59 | 4.0 | 0 | - | |
 | 2026-11-18 | 0324d1 | check | 31 | 1.6 | 0 | - | |
 | 2026-11-18 | 815d46 | check | 5 | 0.2 | 0 | - | |
+| 2026-11-18 | 405b91 | check | 210 | 36.4 | 0 | - | |
 | 2026-11-17 | 7fa947 | check | 81 | 6.4 | 0 | - | |
 | 2026-11-17 | b85b3a | check | 38 | 1.9 | 0 | - | |
 | 2026-11-18 | ef6802 | check | 76 | 5.9 | 0 | - | |
@@ -1134,6 +1135,11 @@ nothing else.
 | 2026-11-18 | b80a7b | check | 43 | 2.6 | 0 | - | |
 | 2026-11-18 | de63f3 | check | 88 | 5.3 | 0 | - | |
 | 2026-11-18 | 683f03 | check | 15 | 0.5 | 0 | - | |
+| 2026-11-18 | 52319c | check | 65 | 4.5 | 0 | - | |
+| 2026-11-18 | 9f3093 | check | 22 | 0.8 | 0 | - | |
+| 2026-11-18 | cb0419 | check | 32 | 1.5 | 0 | - | |
+| 2026-11-18 | ec1369 | check | 10 | 0.3 | 0 | - | |
+| 2026-11-18 | c2a187 | check | 8 | 0.3 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)

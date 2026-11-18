@@ -351,7 +351,7 @@ pub(crate) fn check_core_arguments_to_code<H: CheckHost>(state: &mut CheckState,
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_argument_to_code_fits<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, given_type: &Ty, want: &Ty, name: &str, nth: i64, span: &Span) {
     state.constant_fits(world, arg, Some(want), span);
-    if want.is_unknown() || state.an_open_number_where_none_fits(world, given_type, want, arg, span, "argument", &|found_text, want_text| { format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want_text, found_text) }) { return; }
+    if want.is_unknown() || state.an_open_number_where_none_fits(world, given_type, want, arg, span, "argument", &mut |found_text, want_text| { format!("`{}` expects argument {} to be `{}`, but you're passing `{}`.", name, nth, want_text, found_text) }) { return; }
     let mut found = given_type.clone();
     if found.is_unknown() && an_integer_literal(arg) && state.no_integer_is(world, want) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
     if check_arguments_nullable(want) && !check_arguments_nullable(&found) && !ends_in_null(arg) {

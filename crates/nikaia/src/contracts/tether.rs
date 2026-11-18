@@ -270,7 +270,7 @@ pub(crate) fn makes_a_buffer(
             own,
             library,
         },
-        &|name: &str| parsed.unaliased(name),
+        &mut |name: &str| parsed.unaliased(name),
     )
 }
 

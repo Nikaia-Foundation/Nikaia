@@ -10,7 +10,7 @@ pub fn declared_at(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
     out
 }
 
-pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], reachable: &collections::BTreeSet<String>, alone: bool, beside: &impl Fn(&str) -> bool) -> Option<Finding> {
+pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], reachable: &collections::BTreeSet<String>, alone: bool, beside: &mut impl FnMut(&str) -> bool) -> Option<Finding> {
     let mut named: Vec<(String, String, Span)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let segments = use_segments(names, &item.node);
@@ -111,7 +111,7 @@ pub(crate) fn pause_path(chain: &[String]) -> String {
     nikaia_std::block::Text::from(steps.join(", which "))
 }
 
-pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &impl Fn(&CheckFinding, i64) -> String) -> String {
+pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String {
     let mut out: String = String::from("");
     for (key, now) in contracts.functions.iter() {
         if of_a_dependency(key, theirs) || !now.public || now.sync_claim.is_sync() { continue; }
@@ -176,7 +176,7 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
     out
 }
 
-pub(crate) fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
+pub(crate) fn as_promised(ledger: &mut Ledger, another: &mut impl FnMut(&str) -> bool) {
     let mut unpromised: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(nikaia_std::block::Text::from(key.to_string())); } }
     for key in unpromised.iter() {
@@ -188,12 +188,12 @@ pub(crate) fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) 
 
 pub fn contracts_as_promised(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>) -> Ledger {
     let mut promised = contracts.clone();
-    as_promised(&mut promised, &|key| { of_a_dependency(key, theirs) });
+    as_promised(&mut promised, &mut |key| { of_a_dependency(key, theirs) });
     promised
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, described: &Ledger, packages: &[Option<String>], renames: &[collections::BTreeMap<String, String>], reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, their_renames: &collections::BTreeMap<String, collections::BTreeMap<String, String>>, package_ledger: &impl Fn(i64, i64) -> Ledger) -> collections::BTreeMap<String, Ledger> {
+pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, described: &Ledger, packages: &[Option<String>], renames: &[collections::BTreeMap<String, String>], reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, their_renames: &collections::BTreeMap<String, collections::BTreeMap<String, String>>, package_ledger: &mut impl FnMut(i64, i64) -> Ledger) -> collections::BTreeMap<String, Ledger> {
     for (name, contract) in described.functions.iter() { if !library.functions.contains_key(name) { library.functions.insert(nikaia_std::block::Text::from(name.to_string()), contract.clone()); } }
     for (name, contract) in described.types.iter() { if !library.types.contains_key(name) { library.types.insert(nikaia_std::block::Text::from(name.to_string()), contract.clone()); } }
     let mut plain: collections::BTreeMap<String, Ledger> = collections::BTreeMap::new();
@@ -205,7 +205,7 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
         let module: Option<String> = Some(nikaia_std::block::Text::from(package.to_string()));
         let own = package_ledger(from, to);
         let mut promised = own.clone();
-        as_promised(&mut promised, &|key| { true });
+        as_promised(&mut promised, &mut |key| { true });
         absorb_into(library, (module).as_deref(), nikaia_std::index::get(&renames, nikaia_std::index::at(from)), &promised);
         absorb_into(contracts, (module).as_deref(), unsafe { nikaia_std::proven::read(&renames, (from) as usize) }, &own);
         plain.insert(package, own);
@@ -227,7 +227,7 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
             if ours == *package { continue; }
             let theirs = match *nikaia_std::index::get(&plain, &ours) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut promised = theirs.clone();
-            as_promised(&mut promised, &|key| { true });
+            as_promised(&mut promised, &mut |key| { true });
             let module: Option<String> = Some(nikaia_std::block::Text::from(word.to_string()));
             absorb_into(&mut seen_by_it, (module).as_deref(), &none, &promised);
         }
@@ -289,7 +289,7 @@ pub fn modules_cli_word(names: &winnow_grammar::InternerContext, items: &[Spanne
     None
 }
 
-pub fn modules_dispatcher_as_main(items: &mut Vec<Spanned<Item>>, names: &winnow_grammar::InternerContext, dispatch: &str, intern: &impl Fn(&str) -> winnow_grammar::Symbol) {
+pub fn modules_dispatcher_as_main(items: &mut Vec<Spanned<Item>>, names: &winnow_grammar::InternerContext, dispatch: &str, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) {
     let main = intern("main");
     let mut kept: Vec<Spanned<Item>> = vec![];
     for item in items.drain(..) {
@@ -313,7 +313,7 @@ pub(crate) fn modules_named(item: Item, to: winnow_grammar::Symbol) -> Item {
     }
 }
 
-pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, first: i64, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Vec<(String, i64)> {
+pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, first: i64, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Vec<(String, i64)> {
     let mut tests: Vec<(String, i64)> = vec![];
     let mut kept: Vec<Spanned<Item>> = vec![];
     for item in items.drain(..) {
@@ -533,7 +533,7 @@ pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, cand
     }
 }
 
-pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &collections::BTreeSet<String>, tests: i64, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) {
+pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &collections::BTreeSet<String>, tests: i64, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) {
     let mut marks = only_tests.copy_owned();
     for k in 0..tests { marks.insert(test_function(k)); }
     let mut kept: Vec<Spanned<Item>> = vec![];
@@ -874,7 +874,7 @@ pub struct ModulesProgramParts {
 pub fn modules_program_of<H: ModulesProgramHost>(host: &H, described: &Ledger, packages: &[Option<String>], renames: &[collections::BTreeMap<String, String>], reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, their_renames: &collections::BTreeMap<String, collections::BTreeMap<String, String>>) -> ModulesProgramParts {
     let mut contracts = host.empty_ledger();
     let mut library = host.std_library();
-    let as_its_own = dependency_ledgers(&mut library, &mut contracts, described, packages, renames, reaches, their_renames, &|from, to| { host.package_ledger(from, to) });
+    let as_its_own = dependency_ledgers(&mut library, &mut contracts, described, packages, renames, reaches, their_renames, &mut |from, to| { host.package_ledger(from, to) });
     let std_alone = described.functions.is_empty() && described.types.is_empty() && as_its_own.is_empty();
     let own_units = packages.iter().filter(|p| { p.is_none() }).count() as i64;
     let mut own_checked_from: Option<i64> = None;

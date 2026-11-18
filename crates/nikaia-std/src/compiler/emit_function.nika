@@ -770,10 +770,11 @@ impl EmitState {
                             let bound = (spelled.strip_prefix("impl ") ?? "").clone()
                             spelled = f"dyn {bound}"
                         }
-                        // **Code run one call at a time that is handed code
-                        // changing what it captures** (ADR-views-3 D17):
-                        // `&mut impl FnMut`, `&mut impl AsyncFnMut`.
-                        if runs && ty.code != null && !ty.is_nullable && reference.starts_with("&") && !reference.contains("mut") && self.facts.changing_code.contains(f"{key}::{pname}") {
+                        // **Code run one call at a time changes what it
+                        // captures** (ADR-views-3 D17), whoever calls:
+                        // `&mut impl FnMut`, `&mut impl AsyncFnMut`. Code run
+                        // from tasks at once stays shared.
+                        if runs && ty.code != null && !ty.is_nullable && reference.starts_with("&") && !reference.contains("mut") && !self.emit_fn_code_at_once(key, pname) {
                             spelled = emit_fn_code_that_changes(spelled)
                             reference = f"{reference}mut "
                         }
@@ -1488,6 +1489,19 @@ fn emit_holds_a_ref_of_a_type(world: ref EmitWorld, ty: ref Type) -> bool {
 /// **The trait of code that may change what it captures** (ADR-views-3 D17):
 /// `impl Fn(..)` is `impl FnMut(..)`, `impl AsyncFn(..)` `impl AsyncFnMut(..)`,
 /// and the same behind `dyn` or `for<'call>`.
+impl EmitState {
+    /// **Whether a function runs its parameter of code `param` from tasks at
+    /// once** (ADR-views-3 D17): the file's own walk, or the function's ledger
+    /// entry, which the package's other files decided it from.
+    fn emit_fn_code_at_once(ref self, key: ref String, param: ref String) -> bool {
+        if self.facts.code_at_once.contains(f"{key}::{param}") {
+            return true
+        }
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        return contract.at_once.contains(param)
+    }
+}
+
 fn emit_fn_code_that_changes(spelled: ref String) -> String {
     let async_at = spelled.find("AsyncFn(")
     if async_at != null {

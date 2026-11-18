@@ -159,8 +159,8 @@ pub fn analyse_program(
     nikaia_std::compiler::sharing::sharing_of(
         &parsed.program,
         &asked,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-        &|ty: &crate::ast::Type| Ty::from_ast(parsed, ty),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |ty: &crate::ast::Type| Ty::from_ast(parsed, ty),
         crossings_are_possible,
         // Which handovers duplicate a handle is the checker's (ADR-312 D2,
         // #1502); without a check every one counts, as before.

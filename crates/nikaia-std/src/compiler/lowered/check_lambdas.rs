@@ -274,7 +274,7 @@ impl CheckState {
         if a_text_literal_expr(value) { found = a_string_type(); }
         if text_wanted && (found == a_string_type() || lambda_a_text_view(&found)) { return; }
         found = nikaia_std::index::or(number_where_no_number_is(result, value), || found.into());
-        self.expect_type(world, &found, result, at, "returns", &|was, want| { format!("This lambda returns `{}`, but `{}` returns `{}`.", was, wanted, want) });
+        self.expect_type(world, &found, result, at, "returns", &mut |was, want| { format!("This lambda returns `{}`, but `{}` returns `{}`.", was, wanted, want) });
     }
 }
 

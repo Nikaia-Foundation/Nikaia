@@ -8,7 +8,7 @@ pub struct PbLine {
     pub body: String,
 }
 
-pub(crate) fn pb_read(text: &str, long: &impl Fn(&str) -> Option<String>) -> Vec<PbLine> {
+pub(crate) fn pb_read(text: &str, long: &mut impl FnMut(&str) -> Option<String>) -> Vec<PbLine> {
     let mut out: Vec<PbLine> = vec![];
     for line in text.lines() {
         if line.starts_with('#') || line.trim().is_empty() { continue; }

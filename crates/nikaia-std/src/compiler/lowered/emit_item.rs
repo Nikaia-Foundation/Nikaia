@@ -528,7 +528,7 @@ impl EmitState {
                 walk.in_parameter = inside;
                 walk.code_parameter_runs = held;
                 if self.emit_fn_lends(world, &key, at) { reference = "&"; }
-                if walk_runs && reference == "&" && !arg.ty.is_nullable && self.facts.changing_code.contains(&format!("{}::{}", key, emit_text(world, arg.name))) {
+                if walk_runs && reference == "&" && !arg.ty.is_nullable && !self.emit_fn_code_at_once(&key, &emit_text(world, arg.name)) {
                     written = emit_fn_code_that_changes(&written);
                     reference = "&mut ";
                 }

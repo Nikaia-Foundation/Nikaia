@@ -149,7 +149,7 @@ pub(crate) enum Root {
     Elsewhere,
 }
 
-pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
+pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
     let mut unit = plain_unit(&result_package(asked), borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];
@@ -160,7 +160,7 @@ pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buff
             match &item.node {
                 Item::Impl { target, methods, .. } => {
                     let subject: Option<Type> = Some(target.clone());
-                    for method in methods.iter() { scan(&unit, asked, (subject).as_ref(), method.span.start, &method.node, own_buffer, &mut round); }
+                    for method in methods.iter() { scan(&unit, asked, (subject).as_ref(), method.span.start, &method.node, &mut *own_buffer, &mut round); }
                 },
                 _ => { },
             }
@@ -177,17 +177,17 @@ pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buff
     let nothing: Option<Type> = None;
     for item in items.iter() {
         match &item.node {
-            Item::Fn { .. } => { scan(&unit, asked, (nothing).as_ref(), item.span.start, &item.node, own_buffer, &mut round); },
+            Item::Fn { .. } => { scan(&unit, asked, (nothing).as_ref(), item.span.start, &item.node, &mut *own_buffer, &mut round); },
             _ => { },
         }
     }
     in_source_order(&round)
 }
 
-pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Finding> {
+pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Finding> {
     let mut out: Vec<Finding> = vec![];
-    for stored in views_stored(asked, items, own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
-    rsrc_findings(asked, items, own_buffer, &mut out);
+    for stored in views_stored(asked, items, &mut *own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
+    rsrc_findings(asked, items, &mut *own_buffer, &mut out);
     out
 }
 
@@ -371,7 +371,7 @@ pub(crate) fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -
     out
 }
 
-pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>, method: u32, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Stored>) {
+pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>, method: u32, item: &Item, own_buffer: &mut impl FnMut(&Expr) -> bool, out: &mut Vec<Stored>) {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
             let name = *name;
@@ -400,7 +400,7 @@ pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }, subject_fields: subject_fields.copy_owned(), declared: declared.copy_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, locals: collections::BTreeSet::new(), ours_listed: listed_struct(unit, asked, (ret_type).as_ref()), backs: collections::BTreeSet::new(), places: if result_holds_view { collections::BTreeSet::new() } else { places.copy_owned() }, found: vec![] };
-                walk_block(unit, asked, body, true, own_buffer, &mut here);
+                walk_block(unit, asked, body, true, &mut *own_buffer, &mut here);
                 one_answer(asked, &here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: nikaia_std::block::Text::from(function.to_string()), subject: match subject_name.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -540,7 +540,7 @@ pub(crate) fn fields_of_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<
     }, || vec![].into())
 }
 
-pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     let count = block.stmts.len() as i64;
     for i in 0..count {
         let returning = tail && unsafe { nikaia_std::proven::add::<i64>(i, 1) } == count;
@@ -563,12 +563,12 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                     here.backs.insert(nikaia_std::block::Text::from(back.to_string()));
                     here.carriers.insert(back);
                 }
-                if handed == 0 { descend_items(unit, asked, value, &span, &own_buffer, here); } else if handed > 0 && here.ours_listed.is_some() { handed_back(unit, asked, value, &span, &own_buffer, here); } else if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &own_buffer, here); } else { stores(unit, asked, value, &span, &own_buffer, here); }
+                if handed == 0 { descend_items(unit, asked, value, &span, &mut &mut *own_buffer, here); } else if handed > 0 && here.ours_listed.is_some() { handed_back(unit, asked, value, &span, &mut &mut *own_buffer, here); } else if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &mut &mut *own_buffer, here); } else { stores(unit, asked, value, &span, &mut &mut *own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
                 if mentions(unit, asked, &here, value) { here.carriers.insert(nikaia_std::block::Text::from(asked.names.resolve(name).to_string())); }
-                stores(unit, asked, value, &span, &own_buffer, here);
+                stores(unit, asked, value, &span, &mut &mut *own_buffer, here);
             },
             Stmt::Assign { target, value, .. } => {
                 if mentions(unit, asked, &here, value) {
@@ -580,11 +580,11 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                         _ => { assigned(unit, asked, target, &span, here); },
                     }
                 }
-                stores(unit, asked, target, &span, &own_buffer, here);
-                stores(unit, asked, value, &span, &own_buffer, here);
+                stores(unit, asked, target, &span, &mut &mut *own_buffer, here);
+                stores(unit, asked, value, &span, &mut &mut *own_buffer, here);
             },
-            Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, &own_buffer, here); },
-            Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, &own_buffer, here); } else { stores(unit, asked, expr, &span, &own_buffer, here); } },
+            Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, &mut &mut *own_buffer, here); },
+            Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, &mut &mut *own_buffer, here); } else { stores(unit, asked, expr, &span, &mut &mut *own_buffer, here); } },
             Stmt::For { bindings, iter, body, .. } => {
                 if mentions(unit, asked, &here, iter) {
                     for binding in bindings.iter() {
@@ -592,12 +592,12 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                         here.carriers.insert(nikaia_std::block::Text::from(asked.names.resolve(binding).to_string()));
                     }
                 }
-                stores(unit, asked, iter, &span, &own_buffer, here);
-                walk_block(unit, asked, body, false, own_buffer, here);
+                stores(unit, asked, iter, &span, &mut &mut *own_buffer, here);
+                walk_block(unit, asked, body, false, &mut &mut *own_buffer, here);
             },
             Stmt::While { cond, body } => {
-                stores(unit, asked, cond, &span, &own_buffer, here);
-                walk_block(unit, asked, body, false, own_buffer, here);
+                stores(unit, asked, cond, &span, &mut &mut *own_buffer, here);
+                walk_block(unit, asked, body, false, &mut &mut *own_buffer, here);
             },
             Stmt::Break => { },
             Stmt::Continue => { },
@@ -677,10 +677,10 @@ pub(crate) fn a_reading_method(method: &str) -> bool { a_growing_method(method) 
 
 pub(crate) fn a_growing_method(method: &str) -> bool { method == "push" || method == "extend" }
 
-pub(crate) fn descend_items(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn descend_items(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     match value {
-        Expr::ListLit { items, .. } => { for item in items.iter() { descend(unit, asked, item, span, &own_buffer, here); } },
-        _ => { descend(unit, asked, value, span, &own_buffer, here); },
+        Expr::ListLit { items, .. } => { for item in items.iter() { descend(unit, asked, item, span, &mut &mut *own_buffer, here); } },
+        _ => { descend(unit, asked, value, span, &mut &mut *own_buffer, here); },
     }
 }
 
@@ -779,33 +779,33 @@ pub(crate) fn a_variable_named(names: &winnow_grammar::InternerContext, expr: &E
     }
 }
 
-pub(crate) fn handed_back_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, value: Option<&Expr>, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn handed_back_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, value: Option<&Expr>, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     let handed = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-    handed_back(unit, asked, handed, span, &own_buffer, here);
+    handed_back(unit, asked, handed, span, &mut &mut *own_buffer, here);
 }
 
-pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     match value {
         Expr::StructLit { name, .. } => {
             let name = *name;
-            if ours_is(asked, (here.ours).as_deref(), name) { descend(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); }
+            if ours_is(asked, (here.ours).as_deref(), name) { descend(unit, asked, value, span, &mut &mut *own_buffer, here); } else { stores(unit, asked, value, span, &mut &mut *own_buffer, here); }
         },
-        Expr::ListLit { .. } => { if here.ours_listed.is_some() { listed_back(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); } },
+        Expr::ListLit { .. } => { if here.ours_listed.is_some() { listed_back(unit, asked, value, span, &mut &mut *own_buffer, here); } else { stores(unit, asked, value, span, &mut &mut *own_buffer, here); } },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            stores(unit, asked, cond, span, &own_buffer, here);
-            walk_block(unit, asked, then_branch, true, &own_buffer, here);
+            stores(unit, asked, cond, span, &mut &mut *own_buffer, here);
+            walk_block(unit, asked, then_branch, true, &mut &mut *own_buffer, here);
             let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
-            walk_block(unit, asked, other, true, &own_buffer, here);
+            walk_block(unit, asked, other, true, &mut &mut *own_buffer, here);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            stores(unit, asked, value, span, &own_buffer, here);
-            for arm in arms.iter() { handed_back(unit, asked, &arm.body, span, own_buffer, here); }
+            stores(unit, asked, value, span, &mut &mut *own_buffer, here);
+            for arm in arms.iter() { handed_back(unit, asked, &arm.body, span, &mut &mut *own_buffer, here); }
         },
-        Expr::Block(block, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
-        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
-        _ => { stores(unit, asked, value, span, &own_buffer, here); },
+        Expr::Block(block, _) => { walk_block(unit, asked, block, true, &mut &mut *own_buffer, here); },
+        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, true, &mut &mut *own_buffer, here); },
+        _ => { stores(unit, asked, value, span, &mut &mut *own_buffer, here); },
     }
 }
 
@@ -904,34 +904,34 @@ pub(crate) fn is_self(asked: &Asked<'_, '_, '_>, expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     match expr {
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if a_push_into_a_local(asked, &here, receiver, method) {
-                for arg in args.iter() { if asked.names.resolve(method) == "extend" { descend_items(unit, asked, arg, span, &own_buffer, here); } else { descend(unit, asked, arg, span, &own_buffer, here); } }
+                for arg in args.iter() { if asked.names.resolve(method) == "extend" { descend_items(unit, asked, arg, span, &mut &mut *own_buffer, here); } else { descend(unit, asked, arg, span, &mut &mut *own_buffer, here); } }
                 return;
             }
             if a_push_into_a_back(asked, &here, receiver, method) {
-                for arg in args.iter() { listed_back(unit, asked, arg, span, &own_buffer, here); }
+                for arg in args.iter() { listed_back(unit, asked, arg, span, &mut &mut *own_buffer, here); }
                 return;
             }
             if a_push_into_a_place(asked, &here, receiver, method) {
                 for arg in args.iter() {
                     match arg {
-                        Expr::StructLit { .. } => { descend(unit, asked, arg, span, &own_buffer, here); },
-                        _ => { stores(unit, asked, arg, span, own_buffer, here); },
+                        Expr::StructLit { .. } => { descend(unit, asked, arg, span, &mut &mut *own_buffer, here); },
+                        _ => { stores(unit, asked, arg, span, &mut &mut *own_buffer, here); },
                     }
                 }
                 return;
             }
             handed_to(unit, asked, receiver, method, args, config, span, here);
-            descend(unit, asked, expr, span, &own_buffer, here);
+            descend(unit, asked, expr, span, &mut &mut *own_buffer, here);
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             handed_to(unit, asked, receiver, method, args, config, span, here);
-            descend(unit, asked, expr, span, &own_buffer, here);
+            descend(unit, asked, expr, span, &mut &mut *own_buffer, here);
         },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
@@ -943,14 +943,14 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
                 }, || vec![].into());
                 for init in fields.iter() { a_field_built(unit, asked, &owner, &declared, init, span, here); }
             }
-            descend(unit, asked, expr, span, &own_buffer, here);
+            descend(unit, asked, expr, span, &mut &mut *own_buffer, here);
         },
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
             if mentions(unit, asked, &here, body) { here.found.push((span.clone(), Destination::Task)); }
-            descend(unit, asked, expr, span, &own_buffer, here);
+            descend(unit, asked, expr, span, &mut &mut *own_buffer, here);
         },
-        _ => { descend(unit, asked, expr, span, &own_buffer, here); },
+        _ => { descend(unit, asked, expr, span, &mut &mut *own_buffer, here); },
     }
 }
 
@@ -978,14 +978,14 @@ pub(crate) fn a_push_into_a_back(asked: &Asked<'_, '_, '_>, here: &Here, receive
     }
 }
 
-pub(crate) fn listed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn listed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     match value {
-        Expr::ListLit { items, .. } => { for item in items.iter() { listed_back(unit, asked, item, span, own_buffer, here); } },
+        Expr::ListLit { items, .. } => { for item in items.iter() { listed_back(unit, asked, item, span, &mut &mut *own_buffer, here); } },
         Expr::StructLit { name, .. } => {
             let name = *name;
-            if ours_is(asked, (here.ours_listed).as_deref(), name) { descend(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); }
+            if ours_is(asked, (here.ours_listed).as_deref(), name) { descend(unit, asked, value, span, &mut &mut *own_buffer, here); } else { stores(unit, asked, value, span, &mut &mut *own_buffer, here); }
         },
-        _ => { stores(unit, asked, value, span, &own_buffer, here); },
+        _ => { stores(unit, asked, value, span, &mut &mut *own_buffer, here); },
     }
 }
 
@@ -1240,99 +1240,99 @@ pub(crate) fn statement_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
     }
 }
 
-pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) {
     match node {
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            stores(unit, asked, receiver, span, &own_buffer, here);
-            stores_all(unit, asked, args, span, &own_buffer, here);
-            stores_config(unit, asked, config, span, &own_buffer, here);
+            stores(unit, asked, receiver, span, &mut &mut *own_buffer, here);
+            stores_all(unit, asked, args, span, &mut &mut *own_buffer, here);
+            stores_config(unit, asked, config, span, &mut &mut *own_buffer, here);
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            stores(unit, asked, receiver, span, &own_buffer, here);
-            stores_all(unit, asked, args, span, &own_buffer, here);
-            stores_config(unit, asked, config, span, &own_buffer, here);
+            stores(unit, asked, receiver, span, &mut &mut *own_buffer, here);
+            stores_all(unit, asked, args, span, &mut &mut *own_buffer, here);
+            stores_config(unit, asked, config, span, &mut &mut *own_buffer, here);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            stores(unit, asked, func, span, &own_buffer, here);
+            stores(unit, asked, func, span, &mut &mut *own_buffer, here);
             let callee = match func {
                 Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(asked.names.resolve(n).to_string()) },
                 _ => String::from(""),
             };
             for i in 0..args.len() as i64 {
                 let literal = matches!(*unsafe { nikaia_std::proven::read(&args, (i) as usize) }, Expr::StructLit { .. });
-                if literal && callee != "" && config.is_empty() && unit.read_by_free.contains(&format!("{}#{}", callee, i)) { descend(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, own_buffer, here); } else { stores(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, &own_buffer, here); }
+                if literal && callee != "" && config.is_empty() && unit.read_by_free.contains(&format!("{}#{}", callee, i)) { descend(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, &mut &mut *own_buffer, here); } else { stores(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, &mut &mut *own_buffer, here); }
             }
-            stores_config(unit, asked, config, span, &own_buffer, here);
+            stores_config(unit, asked, config, span, &mut &mut *own_buffer, here);
         },
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); stores(unit, asked, base, span, &own_buffer, here); },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); stores(unit, asked, base, span, &own_buffer, here); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); stores(unit, asked, base, span, &mut &mut *own_buffer, here); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); stores(unit, asked, base, span, &mut &mut *own_buffer, here); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            stores(unit, asked, base, span, &own_buffer, here);
-            stores(unit, asked, index, span, &own_buffer, here);
+            stores(unit, asked, base, span, &mut &mut *own_buffer, here);
+            stores(unit, asked, index, span, &mut &mut *own_buffer, here);
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            stores(unit, asked, lhs, span, &own_buffer, here);
-            stores(unit, asked, rhs, span, &own_buffer, here);
+            stores(unit, asked, lhs, span, &mut &mut *own_buffer, here);
+            stores(unit, asked, rhs, span, &mut &mut *own_buffer, here);
         },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &own_buffer, here); },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &own_buffer, here); },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); stores(unit, asked, body, span, &own_buffer, here); },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &mut &mut *own_buffer, here); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &mut &mut *own_buffer, here); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &mut &mut *own_buffer, here); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &mut &mut *own_buffer, here); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &mut &mut *own_buffer, here); },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); stores(unit, asked, body, span, &mut &mut *own_buffer, here); },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            stores(unit, asked, value, span, &own_buffer, here);
-            stores(unit, asked, fallback, span, &own_buffer, here);
+            stores(unit, asked, value, span, &mut &mut *own_buffer, here);
+            stores(unit, asked, fallback, span, &mut &mut *own_buffer, here);
         },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-            stores(unit, asked, start, span, &own_buffer, here);
-            stores(unit, asked, end, span, &own_buffer, here);
+            stores(unit, asked, start, span, &mut &mut *own_buffer, here);
+            stores(unit, asked, end, span, &mut &mut *own_buffer, here);
         },
-        Expr::Tuple(parts, _) => { stores_all(unit, asked, parts, span, &own_buffer, here); },
+        Expr::Tuple(parts, _) => { stores_all(unit, asked, parts, span, &mut &mut *own_buffer, here); },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
-            stores(unit, asked, value, span, &own_buffer, here);
-            stores(unit, asked, count, span, &own_buffer, here);
+            stores(unit, asked, value, span, &mut &mut *own_buffer, here);
+            stores(unit, asked, count, span, &mut &mut *own_buffer, here);
         },
-        Expr::ListLit { items, .. } => { stores_all(unit, asked, items, span, &own_buffer, here); },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); stores_maybe(unit, asked, (value).as_ref(), span, &own_buffer, here); },
-        Expr::StructLit { fields, .. } => { stores_fields(unit, asked, fields, span, &own_buffer, here); },
+        Expr::ListLit { items, .. } => { stores_all(unit, asked, items, span, &mut &mut *own_buffer, here); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); stores_maybe(unit, asked, (value).as_ref(), span, &mut &mut *own_buffer, here); },
+        Expr::StructLit { fields, .. } => { stores_fields(unit, asked, fields, span, &mut &mut *own_buffer, here); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
-            stores(unit, asked, base, span, &own_buffer, here);
-            stores_fields(unit, asked, fields, span, &own_buffer, here);
+            stores(unit, asked, base, span, &mut &mut *own_buffer, here);
+            stores_fields(unit, asked, fields, span, &mut &mut *own_buffer, here);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            stores(unit, asked, value, span, &own_buffer, here);
-            for arm in arms.iter() { stores(unit, asked, &arm.body, span, &own_buffer, here); }
+            stores(unit, asked, value, span, &mut &mut *own_buffer, here);
+            for arm in arms.iter() { stores(unit, asked, &arm.body, span, &mut &mut *own_buffer, here); }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            stores(unit, asked, cond, span, &own_buffer, here);
-            walk_block(unit, asked, then_branch, false, &own_buffer, here);
-            walk_maybe_block(unit, asked, (else_branch).as_ref(), &own_buffer, here);
+            stores(unit, asked, cond, span, &mut &mut *own_buffer, here);
+            walk_block(unit, asked, then_branch, false, &mut &mut *own_buffer, here);
+            walk_maybe_block(unit, asked, (else_branch).as_ref(), &mut &mut *own_buffer, here);
         },
-        Expr::Block(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
-        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
-        Expr::Unsafe(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
-        Expr::Overlap(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
-        Expr::Closure { body, .. } => { walk_block(unit, asked, body, false, &own_buffer, here); },
+        Expr::Block(block, _) => { walk_block(unit, asked, block, false, &mut &mut *own_buffer, here); },
+        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, false, &mut &mut *own_buffer, here); },
+        Expr::Unsafe(block, _) => { walk_block(unit, asked, block, false, &mut &mut *own_buffer, here); },
+        Expr::Overlap(block, _) => { walk_block(unit, asked, block, false, &mut &mut *own_buffer, here); },
+        Expr::Closure { body, .. } => { walk_block(unit, asked, body, false, &mut &mut *own_buffer, here); },
         Expr::Select(arms, _) => {
-            for arm in arms.iter() { stores(unit, asked, &arm.value, span, &own_buffer, here); }
-            for arm in arms.iter() { walk_block(unit, asked, &arm.body, false, &own_buffer, here); }
+            for arm in arms.iter() { stores(unit, asked, &arm.value, span, &mut &mut *own_buffer, here); }
+            for arm in arms.iter() { walk_block(unit, asked, &arm.body, false, &mut &mut *own_buffer, here); }
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            stores(unit, asked, expr, span, &own_buffer, here);
-            walk_block(unit, asked, handler, false, &own_buffer, here);
+            stores(unit, asked, expr, span, &mut &mut *own_buffer, here);
+            walk_block(unit, asked, handler, false, &mut &mut *own_buffer, here);
         },
         Expr::Break(_) => { },
         Expr::Continue(_) => { },
@@ -1350,15 +1350,15 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
     }
 }
 
-pub(crate) fn stores_all(unit: &Unit, asked: &Asked<'_, '_, '_>, exprs: &[Expr], span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) { for expr in exprs.iter() { stores(unit, asked, expr, span, &own_buffer, here); } }
+pub(crate) fn stores_all(unit: &Unit, asked: &Asked<'_, '_, '_>, exprs: &[Expr], span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) { for expr in exprs.iter() { stores(unit, asked, expr, span, &mut &mut *own_buffer, here); } }
 
-pub(crate) fn stores_config(unit: &Unit, asked: &Asked<'_, '_, '_>, config: &[ConfigArg], span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) { for setting in config.iter() { stores(unit, asked, &setting.value, span, &own_buffer, here); } }
+pub(crate) fn stores_config(unit: &Unit, asked: &Asked<'_, '_, '_>, config: &[ConfigArg], span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) { for setting in config.iter() { stores(unit, asked, &setting.value, span, &mut &mut *own_buffer, here); } }
 
-pub(crate) fn stores_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, fields: &[FieldInit], span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) { for field in fields.iter() { stores_maybe(unit, asked, (field.value).as_ref(), span, &own_buffer, here); } }
+pub(crate) fn stores_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, fields: &[FieldInit], span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) { for field in fields.iter() { stores_maybe(unit, asked, (field.value).as_ref(), span, &mut &mut *own_buffer, here); } }
 
-pub(crate) fn stores_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: Option<&Expr>, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) { stores(unit, asked, match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, &own_buffer, here); }
+pub(crate) fn stores_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: Option<&Expr>, span: &Span, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) { stores(unit, asked, match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, &mut &mut *own_buffer, here); }
 
-pub(crate) fn walk_maybe_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: Option<&Block>, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) { walk_block(unit, asked, match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, &own_buffer, here); }
+pub(crate) fn walk_maybe_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: Option<&Block>, own_buffer: &mut dyn FnMut(&Expr) -> bool, here: &mut Here) { walk_block(unit, asked, match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, &mut &mut *own_buffer, here); }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldsHeld {
@@ -1625,8 +1625,8 @@ pub(crate) fn rsrc_any_ty_holds_view(asked: &Asked<'_, '_, '_>, types: &[Ty]) ->
     false
 }
 
-pub(crate) fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let reach = rsrc_eval_node(unit, asked, here, known, &own_buffer, node, flow);
+pub(crate) fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let reach = rsrc_eval_node(unit, asked, here, known, &mut &mut *own_buffer, node, flow);
     if rsrc_passes_whole(node) { return reach; }
     rsrc_derived(&reach)
 }
@@ -1639,39 +1639,39 @@ pub(crate) fn rsrc_derived(reach: &collections::BTreeSet<String>) -> collections
     out
 }
 
-pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     match node {
         Expr::Variable(name, _) => { let name = *name; rsrc_of_name(&flow, asked.names.resolve(name)) },
-        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, &own_buffer, base, asked.names.resolve(name), flow) },
-        Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, &own_buffer, base, asked.names.resolve(name), flow) },
-        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); rsrc_index(unit, asked, here, known, &own_buffer, base, index, flow) },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow) },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &own_buffer, inner, flow) },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &own_buffer, inner, flow) },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow) },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_nothing(unit, asked, here, known, &own_buffer, inner, flow) },
-        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); rsrc_both(unit, asked, here, known, &own_buffer, value, fallback, flow) },
-        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); rsrc_nothing_of(unit, asked, here, known, &own_buffer, lhs, rhs, flow) },
-        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); rsrc_nothing_of(unit, asked, here, known, &own_buffer, start, end, flow) },
-        Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, &own_buffer, parts, flow),
-        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); rsrc_nothing_of(unit, asked, here, known, &own_buffer, value, count, flow) },
-        Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, &own_buffer, items, flow),
-        Expr::StructLit { name, fields, .. } => { let name = *name; rsrc_struct_fields(unit, asked, here, known, &own_buffer, asked.names.resolve(name), fields, flow) },
-        Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); rsrc_with(unit, asked, here, known, &own_buffer, base, fields, flow) },
-        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, &own_buffer, receiver, method, args, config, flow) },
-        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, &own_buffer, receiver, method, args, config, flow) },
-        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); rsrc_call(unit, asked, here, known, &own_buffer, func, args, config, flow) },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); rsrc_return(unit, asked, here, known, &own_buffer, (value).as_ref(), flow) },
-        Expr::Block(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
-        Expr::AsyncGroup(block, _, _, _, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
-        Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
-        Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
-        Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); rsrc_if(unit, asked, here, known, &own_buffer, cond, then_branch, (else_branch).as_ref(), flow) },
-        Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); rsrc_match(unit, asked, here, known, &own_buffer, value, arms, flow) },
-        Expr::Closure { body, .. } => rsrc_closure(unit, asked, here, known, &own_buffer, body, flow),
-        Expr::Select(arms, _) => rsrc_select(unit, asked, here, known, &own_buffer, arms, flow),
-        Expr::TryCatch { expr, handler, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_both_blocks(unit, asked, here, known, &own_buffer, expr, handler, flow) },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); rsrc_task(unit, asked, here, known, &own_buffer, body, flow) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, &mut &mut *own_buffer, base, asked.names.resolve(name), flow) },
+        Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, &mut &mut *own_buffer, base, asked.names.resolve(name), flow) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); rsrc_index(unit, asked, here, known, &mut &mut *own_buffer, base, index, flow) },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, expr, flow) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, inner, flow) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, inner, flow) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, expr, flow) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_nothing(unit, asked, here, known, &mut &mut *own_buffer, inner, flow) },
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); rsrc_both(unit, asked, here, known, &mut &mut *own_buffer, value, fallback, flow) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); rsrc_nothing_of(unit, asked, here, known, &mut &mut *own_buffer, lhs, rhs, flow) },
+        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); rsrc_nothing_of(unit, asked, here, known, &mut &mut *own_buffer, start, end, flow) },
+        Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, &mut &mut *own_buffer, parts, flow),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); rsrc_nothing_of(unit, asked, here, known, &mut &mut *own_buffer, value, count, flow) },
+        Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, &mut &mut *own_buffer, items, flow),
+        Expr::StructLit { name, fields, .. } => { let name = *name; rsrc_struct_fields(unit, asked, here, known, &mut &mut *own_buffer, asked.names.resolve(name), fields, flow) },
+        Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); rsrc_with(unit, asked, here, known, &mut &mut *own_buffer, base, fields, flow) },
+        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, &mut &mut *own_buffer, receiver, method, args, config, flow) },
+        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, &mut &mut *own_buffer, receiver, method, args, config, flow) },
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); rsrc_call(unit, asked, here, known, &mut &mut *own_buffer, func, args, config, flow) },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); rsrc_return(unit, asked, here, known, &mut &mut *own_buffer, (value).as_ref(), flow) },
+        Expr::Block(block, _) => rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, block, flow),
+        Expr::AsyncGroup(block, _, _, _, _) => rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, block, flow),
+        Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, block, flow),
+        Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, block, flow),
+        Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); rsrc_if(unit, asked, here, known, &mut &mut *own_buffer, cond, then_branch, (else_branch).as_ref(), flow) },
+        Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); rsrc_match(unit, asked, here, known, &mut &mut *own_buffer, value, arms, flow) },
+        Expr::Closure { body, .. } => rsrc_closure(unit, asked, here, known, &mut &mut *own_buffer, body, flow),
+        Expr::Select(arms, _) => rsrc_select(unit, asked, here, known, &mut &mut *own_buffer, arms, flow),
+        Expr::TryCatch { expr, handler, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_both_blocks(unit, asked, here, known, &mut &mut *own_buffer, expr, handler, flow) },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); rsrc_task(unit, asked, here, known, &mut &mut *own_buffer, body, flow) },
         Expr::Break(_) => rsrc_none(),
         Expr::Continue(_) => rsrc_none(),
         Expr::Asm { .. } => rsrc_none(),
@@ -1687,51 +1687,51 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
     }
 }
 
-pub(crate) fn rsrc_nothing(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let walked = rsrc_eval(unit, asked, here, known, &own_buffer, node, flow);
+pub(crate) fn rsrc_nothing(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let walked = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, node, flow);
     rsrc_none()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_nothing_of(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let walked = rsrc_eval(unit, asked, here, known, &own_buffer, first, flow);
-    let other = rsrc_eval(unit, asked, here, known, &own_buffer, second, flow);
+pub(crate) fn rsrc_nothing_of(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let walked = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, first, flow);
+    let other = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, second, flow);
     rsrc_none()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_both(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let mut out = rsrc_eval(unit, asked, here, known, &own_buffer, first, flow);
-    let more = rsrc_eval(unit, asked, here, known, &own_buffer, second, flow);
+pub(crate) fn rsrc_both(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, first, flow);
+    let more = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, second, flow);
     rsrc_join(&mut out, &more);
     out
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_both_blocks(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, first: &Expr, handler: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let mut out = rsrc_eval(unit, asked, here, known, &own_buffer, first, flow);
-    let more = rsrc_block(unit, asked, here, known, &own_buffer, handler, flow);
+pub(crate) fn rsrc_both_blocks(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, first: &Expr, handler: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, first, flow);
+    let more = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, handler, flow);
     rsrc_join(&mut out, &more);
     out
 }
 
-pub(crate) fn rsrc_all(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, exprs: &[Expr], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_all(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, exprs: &[Expr], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for expr in exprs.iter() {
-        let more = rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow);
+        let more = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, expr, flow);
         rsrc_join(&mut out, &more);
     }
     out
 }
 
-pub(crate) fn rsrc_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, expr: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, expr: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let written = match expr { Some(__nikaia_value) => __nikaia_value, None => return rsrc_none() };
-    rsrc_eval(unit, asked, here, known, &own_buffer, written, flow)
+    rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, written, flow)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_field(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let inner = rsrc_eval(unit, asked, here, known, &own_buffer, base, flow);
+pub(crate) fn rsrc_field(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let inner = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, base, flow);
     let hidden = rsrc_type(unit, asked, here, &flow, base);
     if hidden.is_none() && rsrc_root_name(asked, base).is_some() && !is_self(asked, base) { return rsrc_out_of(name, &inner); }
     let declared = match field_type(unit, asked, here, base, name) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_out_of(name, &inner) };
@@ -1740,20 +1740,20 @@ pub(crate) fn rsrc_field(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_index(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, base: &Expr, index: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let inner = rsrc_eval(unit, asked, here, known, &own_buffer, base, flow);
-    let read = rsrc_eval(unit, asked, here, known, &own_buffer, index, flow);
+pub(crate) fn rsrc_index(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, base: &Expr, index: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let inner = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, base, flow);
+    let read = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, index, flow);
     inner
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, owner: &str, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let declared = match *nikaia_std::index::get(&unit.fields, owner) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_fields(unit, asked, here, known, &own_buffer, fields, flow) };
+pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, owner: &str, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let declared = match *nikaia_std::index::get(&unit.fields, owner) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_fields(unit, asked, here, known, &mut &mut *own_buffer, fields, flow) };
     let mut out = rsrc_none();
     for field in fields.iter() {
         let named = asked.names.resolve(field.name);
         let mut more = rsrc_none();
-        if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, &own_buffer, Option::as_ref(&field.value), flow); }
+        if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, &mut &mut *own_buffer, Option::as_ref(&field.value), flow); }
         let mut whole = true;
         if field.value.is_some() { whole = rsrc_bare_variable(Option::as_ref(&field.value)); }
         let mut owning = false;
@@ -1777,19 +1777,19 @@ pub(crate) fn rsrc_bare_variable(value: Option<&Expr>) -> bool {
     matches!(given, Expr::Variable(_, _))
 }
 
-pub(crate) fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for field in fields.iter() {
         let mut more = rsrc_none();
-        if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, &own_buffer, Option::as_ref(&field.value), flow); }
+        if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, &mut &mut *own_buffer, Option::as_ref(&field.value), flow); }
         rsrc_join(&mut out, &rsrc_under(asked.names.resolve(field.name), &more));
     }
     out
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_with(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let mut out = rsrc_eval(unit, asked, here, known, &own_buffer, base, flow);
+pub(crate) fn rsrc_with(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, base, flow);
     let mut owner: Option<String> = None;
     match base {
         Expr::Variable(name, _) => {
@@ -1802,15 +1802,15 @@ pub(crate) fn rsrc_with(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
         _ => { },
     }
     let more = match owner {
-        None => rsrc_fields(unit, asked, here, known, &own_buffer, fields, flow),
-        Some(ref o) => rsrc_struct_fields(unit, asked, here, known, &own_buffer, o, fields, flow),
+        None => rsrc_fields(unit, asked, here, known, &mut &mut *own_buffer, fields, flow),
+        Some(ref o) => rsrc_struct_fields(unit, asked, here, known, &mut &mut *own_buffer, o, fields, flow),
     };
     rsrc_join(&mut out, &more);
     out
 }
 
-pub(crate) fn rsrc_return(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, value: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let reach = rsrc_maybe(unit, asked, here, known, &own_buffer, value, flow);
+pub(crate) fn rsrc_return(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, value: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let reach = rsrc_maybe(unit, asked, here, known, &mut &mut *own_buffer, value, flow);
     rsrc_record(&reach, flow);
     rsrc_none()
 }
@@ -1824,11 +1824,11 @@ pub(crate) fn rsrc_record(reach: &collections::BTreeSet<String>, flow: &mut Resu
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_if(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let tested = rsrc_eval(unit, asked, here, known, &own_buffer, cond, flow);
-    let mut out = rsrc_block(unit, asked, here, known, &own_buffer, then_branch, flow);
+pub(crate) fn rsrc_if(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let tested = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, cond, flow);
+    let mut out = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, then_branch, flow);
     let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
-    let more = rsrc_block(unit, asked, here, known, &own_buffer, other, flow);
+    let more = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, other, flow);
     rsrc_join(&mut out, &more);
     out
 }
@@ -1846,8 +1846,8 @@ pub(crate) fn rsrc_pattern_names(asked: &Asked<'_, '_, '_>, pattern: &MatchPatte
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_match(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, value: &Expr, arms: &[MatchArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let matched = rsrc_eval(unit, asked, here, known, &own_buffer, value, flow);
+pub(crate) fn rsrc_match(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, value: &Expr, arms: &[MatchArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let matched = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, value, flow);
     let mut out = rsrc_none();
     for arm in arms.iter() {
         let mut names: Vec<String> = vec![];
@@ -1856,45 +1856,45 @@ pub(crate) fn rsrc_match(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
             rsrc_shadow(asked, here, name, flow);
             rsrc_bind(flow, name, &matched);
         }
-        let guarded = rsrc_maybe(unit, asked, here, known, &own_buffer, (arm.guard).as_ref(), flow);
-        let more = rsrc_eval(unit, asked, here, known, &own_buffer, &arm.body, flow);
+        let guarded = rsrc_maybe(unit, asked, here, known, &mut &mut *own_buffer, (arm.guard).as_ref(), flow);
+        let more = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, &arm.body, flow);
         rsrc_join(&mut out, &more);
     }
     out
 }
 
-pub(crate) fn rsrc_closure(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, body: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_closure(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, body: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let saved = flow.inner.copy_owned();
     flow.inner = rsrc_none();
     flow.depth += 1;
-    let mut out = rsrc_block(unit, asked, here, known, &own_buffer, body, flow);
+    let mut out = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, body, flow);
     flow.depth -= 1;
     out.extend(flow.inner.iter().cloned());
     flow.inner = saved;
     out
 }
 
-pub(crate) fn rsrc_task(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, body: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_task(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, body: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let saved = flow.inner.copy_owned();
     flow.depth += 1;
-    let walked = rsrc_eval(unit, asked, here, known, &own_buffer, body, flow);
+    let walked = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, body, flow);
     flow.depth -= 1;
     flow.inner = saved;
     rsrc_none()
 }
 
-pub(crate) fn rsrc_select(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, arms: &[SelectArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_select(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, arms: &[SelectArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for arm in arms.iter() {
-        let raced = rsrc_eval(unit, asked, here, known, &own_buffer, &arm.value, flow);
+        let raced = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, &arm.value, flow);
         rsrc_bind_symbol(asked, arm.binding, &raced, flow);
-        let more = rsrc_block(unit, asked, here, known, &own_buffer, &arm.body, flow);
+        let more = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, &arm.body, flow);
         rsrc_join(&mut out, &more);
     }
     out
 }
 
-pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, block: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, block: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let count = block.stmts.len() as i64;
     let mut tail = rsrc_none();
     for i in 0..count {
@@ -1902,7 +1902,7 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
         let last = unsafe { nikaia_std::proven::add::<i64>(i, 1) } == count;
         match &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.node {
             Stmt::Let { names, value, ty, .. } => {
-                let reach = rsrc_eval(unit, asked, here, known, &own_buffer, value, flow);
+                let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, value, flow);
                 for name in names.iter() {
                     let name = *name;
                     rsrc_shadow(asked, here, asked.names.resolve(name), flow);
@@ -1932,11 +1932,11 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
-                let reach = rsrc_eval(unit, asked, here, known, &own_buffer, value, flow);
+                let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, value, flow);
                 rsrc_bind(flow, asked.names.resolve(name), &reach);
             },
             Stmt::Assign { target, value, .. } => {
-                let reach = rsrc_eval(unit, asked, here, known, &own_buffer, value, flow);
+                let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, value, flow);
                 match target {
                     Expr::Variable(name, _) => { let name = *name; rsrc_bind(flow, asked.names.resolve(name), &reach); },
                     _ => {
@@ -1946,25 +1946,25 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                 }
             },
             Stmt::Return(value) => {
-                let reach = rsrc_maybe(unit, asked, here, known, &own_buffer, (value).as_ref(), flow);
+                let reach = rsrc_maybe(unit, asked, here, known, &mut &mut *own_buffer, (value).as_ref(), flow);
                 rsrc_record(&reach, flow);
             },
             Stmt::Expr(expr) => {
-                let reach = rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow);
+                let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, expr, flow);
                 if last { tail = reach; }
             },
             Stmt::For { bindings, iter, body, .. } => {
-                let reach = rsrc_eval(unit, asked, here, known, &own_buffer, iter, flow);
+                let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, iter, flow);
                 for binding in bindings.iter() {
                     let binding = *binding;
                     rsrc_shadow(asked, here, asked.names.resolve(binding), flow);
                     rsrc_bind(flow, asked.names.resolve(binding), &reach);
                 }
-                let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
+                let walked = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, body, flow);
             },
             Stmt::While { cond, body } => {
-                let tested = rsrc_eval(unit, asked, here, known, &own_buffer, cond, flow);
-                let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
+                let tested = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, cond, flow);
+                let walked = rsrc_block(unit, asked, here, known, &mut &mut *own_buffer, body, flow);
             },
             Stmt::Break => { },
             Stmt::Continue => { },
@@ -2004,18 +2004,18 @@ pub(crate) fn rsrc_root_local(asked: &Asked<'_, '_, '_>, here: &Here, flow: &Res
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
-    let on = rsrc_eval(unit, asked, here, known, &own_buffer, receiver, flow);
+pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let on = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, receiver, flow);
     let mut positional: Vec<collections::BTreeSet<String>> = vec![];
     positional.push(on.copy_owned());
     let mut everything = on.copy_owned();
     for arg in args.iter() {
-        let reach = rsrc_eval(unit, asked, here, known, &own_buffer, arg, flow);
+        let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, arg, flow);
         rsrc_join(&mut everything, &reach);
         positional.push(reach);
     }
     for option in config.iter() {
-        let reach = rsrc_eval(unit, asked, here, known, &own_buffer, &option.value, flow);
+        let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, &option.value, flow);
         rsrc_join(&mut everything, &reach);
     }
     let name = asked.names.resolve(method);
@@ -2128,7 +2128,7 @@ pub(crate) fn rsrc_described_params(asked: &Asked<'_, '_, '_>, ty: Option<&Type>
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, func: &Expr, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &mut dyn FnMut(&Expr) -> bool, func: &Expr, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut key: String = String::from("");
     let mut named = false;
     let mut everything = rsrc_none();
@@ -2148,18 +2148,18 @@ pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
             named = true;
         },
         _ => {
-            let reach = rsrc_eval(unit, asked, here, known, &own_buffer, func, flow);
+            let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, func, flow);
             rsrc_join(&mut everything, &reach);
         },
     }
     let mut positional: Vec<collections::BTreeSet<String>> = vec![];
     for arg in args.iter() {
-        let reach = rsrc_eval(unit, asked, here, known, &own_buffer, arg, flow);
+        let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, arg, flow);
         rsrc_join(&mut everything, &reach);
         positional.push(reach);
     }
     for option in config.iter() {
-        let reach = rsrc_eval(unit, asked, here, known, &own_buffer, &option.value, flow);
+        let reach = rsrc_eval(unit, asked, here, known, &mut &mut *own_buffer, &option.value, flow);
         rsrc_join(&mut everything, &reach);
     }
     if !named { return everything; }
@@ -2359,7 +2359,7 @@ pub(crate) fn rsrc_seed(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
+pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, at: &Span, item: &Item, own_buffer: &mut impl FnMut(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, ret_from, .. } => {
             let name = *name;
@@ -2418,7 +2418,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             while rounds < 64 {
                 flow.ways = vec![];
                 flow.depth = 0;
-                let tail = rsrc_block(unit, asked, &walked_here, &known, own_buffer, body, &mut flow);
+                let tail = rsrc_block(unit, asked, &walked_here, &known, &mut *own_buffer, body, &mut flow);
                 rsrc_tail(body, &tail, &mut flow);
                 let now = rsrc_size(&flow);
                 if rounds > 0 && now == size {
@@ -2620,21 +2620,21 @@ pub struct ResultSource {
     pub returns: String,
 }
 
-pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> { result_sources_in(asked, &result_package(asked), items, own_buffer) }
+pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> { result_sources_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub fn result_sources_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let mut out = result_sources_inferred_in(asked, package, items, own_buffer);
+pub fn result_sources_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> {
+    let mut out = result_sources_inferred_in(asked, package, items, &mut *own_buffer);
     result_from_as_written(asked.names, items, &mut out);
     out
 }
 
-pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> { result_sources_inferred_in(asked, &result_package(asked), items, own_buffer) }
+pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> { result_sources_inferred_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub(crate) fn result_sources_inferred_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
+pub(crate) fn result_sources_inferred_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> {
     let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
-    rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
+    rsrc_solve(&unit, asked, items, &mut *own_buffer, &mut known, &mut ignored);
     let mut out: Vec<ResultSource> = vec![];
     for (key, found) in known.iter() {
         if !found.declared { continue; }
@@ -2652,21 +2652,21 @@ pub struct PlacesStored {
     pub stores: Vec<String>,
 }
 
-pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> { places_stored_in(asked, &result_package(asked), items, own_buffer) }
+pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<PlacesStored> { places_stored_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub fn places_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
+pub fn places_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<PlacesStored> {
     let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
-    rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
+    rsrc_solve(&unit, asked, items, &mut *own_buffer, &mut known, &mut ignored);
     let mut out: Vec<PlacesStored> = vec![];
     let nothing: Option<Type> = None;
     for item in items.iter() {
         match &item.node {
-            Item::Fn { .. } => { places_of(&unit, asked, (nothing).as_ref(), &item.span, &item.node, own_buffer, &known, &mut out); },
+            Item::Fn { .. } => { places_of(&unit, asked, (nothing).as_ref(), &item.span, &item.node, &mut *own_buffer, &known, &mut out); },
             Item::Impl { target, methods, .. } => {
                 let subject: Option<Type> = Some(target.clone());
-                for method in methods.iter() { places_of(&unit, asked, (subject).as_ref(), &method.span, &method.node, own_buffer, &known, &mut out); }
+                for method in methods.iter() { places_of(&unit, asked, (subject).as_ref(), &method.span, &method.node, &mut *own_buffer, &known, &mut out); }
             },
             _ => { },
         }
@@ -2675,7 +2675,7 @@ pub fn places_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, item
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<PlacesStored>) {
+pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, at: &Span, item: &Item, own_buffer: &mut impl FnMut(&Expr) -> bool, known: &collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<PlacesStored>) {
     match item {
         Item::Fn { name, receiver, args, config, body, .. } => {
             let name = *name;
@@ -2720,7 +2720,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             while rounds < 64 {
                 flow.ways = vec![];
                 flow.depth = 0;
-                let tail = rsrc_block(unit, asked, &here, known, own_buffer, body, &mut flow);
+                let tail = rsrc_block(unit, asked, &here, known, &mut *own_buffer, body, &mut flow);
                 let mut now = rsrc_size(&flow);
                 for (_, kept) in flow.stores.iter() { now += kept.len() as i64; }
                 if now == size { break; }
@@ -2763,14 +2763,14 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
     nikaia_std::block::Text::from(parts.join(", "))
 }
 
-pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
+pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool, out: &mut Vec<Finding>) {
     let package = result_package(asked);
     let unit = plain_unit(&package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
-    rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
+    rsrc_solve(&unit, asked, items, &mut *own_buffer, &mut known, out);
 }
 
-pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>) {
+pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>) {
     let nothing: Option<Type> = None;
     let no_trait: Option<winnow_grammar::Symbol> = None;
     let no_result = RsrcTraitResult { found: false, view: false, from: vec![] };
@@ -2790,10 +2790,10 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
         let mut grew = false;
         for item in items.iter() {
             match &item.node {
-                Item::Fn { .. } => { if rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, own_buffer, known, out, false) { grew = true; } },
+                Item::Fn { .. } => { if rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, &mut *own_buffer, known, out, false) { grew = true; } },
                 Item::Impl { target, methods, .. } => {
                     let subject: Option<Type> = Some(target.clone());
-                    for method in methods.iter() { if rsrc_function(unit, asked, (subject).as_ref(), (no_trait).as_ref(), &no_result, &method.span, &method.node, own_buffer, known, out, false) { grew = true; } }
+                    for method in methods.iter() { if rsrc_function(unit, asked, (subject).as_ref(), (no_trait).as_ref(), &no_result, &method.span, &method.node, &mut *own_buffer, known, out, false) { grew = true; } }
                 },
                 _ => { },
             }
@@ -2812,7 +2812,7 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
     for item in items.iter() {
         match &item.node {
             Item::Fn { args, ret_type, .. } => {
-                let grew = rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, own_buffer, known, out, true);
+                let grew = rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, &mut *own_buffer, known, out, true);
                 rsrc_function_types(unit, asked, args, (ret_type).as_ref(), &item.span, out);
             },
             Item::Impl { trait_name, target, methods, .. } => {
@@ -2820,7 +2820,7 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
                 let subject: Option<Type> = Some(target.clone());
                 for method in methods.iter() {
                     let declared_result = rsrc_trait_result(asked, items, (trait_name).as_ref(), &method.node);
-                    let grew = rsrc_function(unit, asked, (subject).as_ref(), (trait_name).as_ref(), &declared_result, &method.span, &method.node, own_buffer, known, out, true);
+                    let grew = rsrc_function(unit, asked, (subject).as_ref(), (trait_name).as_ref(), &declared_result, &method.span, &method.node, &mut *own_buffer, known, out, true);
                     match &method.node {
                         Item::Fn { args, ret_type, .. } => { rsrc_function_types(unit, asked, args, (ret_type).as_ref(), &method.span, out); },
                         _ => { },

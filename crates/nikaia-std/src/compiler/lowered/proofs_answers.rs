@@ -523,7 +523,7 @@ pub async fn proofs_book_read(root: &std::path::Path) -> ProofsBook {
         Err(_error) => { return book; },
     };
     let long = proofs_long_files(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(PROOFS_LONG_DIR)))).await;
-    for line in pb_read(&text, &|key| {
+    for line in pb_read(&text, &mut |key| {
         match long.get(key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -556,7 +556,7 @@ pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
     pb_render(&lines, PROOFS_LONG)
 }
 
-pub fn proofs_book_write(book: &ProofsBook, root: &std::path::Path, whole: &impl Fn(&std::path::Path, &str) -> Option<String>) -> Option<String> {
+pub fn proofs_book_write(book: &ProofsBook, root: &std::path::Path, whole: &mut impl FnMut(&std::path::Path, &str) -> Option<String>) -> Option<String> {
     let rendered = proofs_book_render(book);
     let failed = whole(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(PROOFS_FILE))), &rendered.text);
     if failed.is_some() { return std::convert::identity(failed); }

@@ -471,37 +471,28 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn code_parameters_that_change(&mut self, groups: &collections::BTreeMap<String, String>) {
-        let mut changing: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut at_once: collections::BTreeSet<String> = self.code_at_once.copy_owned();
+        let mut hands: collections::BTreeSet<(String, String)> = collections::BTreeSet::new();
+        for arg in self.code_args.iter() {
+            let target = format!("{}::{}", arg.callee, arg.param);
+            if arg.at_once { at_once.insert(nikaia_std::block::Text::from(target.to_string())); }
+            if arg.handed != "" { hands.insert((format!("{}::{}", arg.caller, arg.handed), nikaia_std::block::Text::from(target.to_string()))); }
+            for ran in arg.runs.iter() { hands.insert((format!("{}::{}", arg.caller, ran), nikaia_std::block::Text::from(target.to_string()))); }
+        }
         let mut grew = true;
         while grew {
             grew = false;
-            for arg in self.code_args.iter() {
-                let target = format!("{}::{}", arg.callee, arg.param);
-                let from = format!("{}::{}", arg.caller, arg.handed);
-                let mut changes = arg.changes != "";
-                for ran in arg.runs.iter() { if changing.contains(&format!("{}::{}", arg.caller, ran)) { changes = true; } }
-                if arg.handed != "" && changing.contains(&from) { changes = true; }
-                if changes && !changing.contains(&target) {
-                    changing.insert(nikaia_std::block::Text::from(target.to_string()));
-                    grew = true;
-                }
-                if arg.handed != "" && changing.contains(&target) && !changing.contains(&from) {
-                    changing.insert(nikaia_std::block::Text::from(from.to_string()));
-                    grew = true;
-                }
-                if arg.handed != "" && at_once.contains(&target) && !at_once.contains(&from) {
+            for (from, target) in hands.iter() {
+                if at_once.contains(target) && !at_once.contains(from) {
                     at_once.insert(nikaia_std::block::Text::from(from.to_string()));
                     grew = true;
                 }
             }
-            if check_walks_share_in_traits(groups, &mut changing) { grew = true; }
             if check_walks_share_in_traits(groups, &mut at_once) { grew = true; }
         }
         let args: Vec<CheckCodeArg> = self.code_args.copy_owned();
         for arg in args.iter() {
             let target = format!("{}::{}", arg.callee, arg.param);
-            if !changing.contains(&target) { continue; }
             if at_once.contains(&target) {
                 if arg.changes != "" {
                     let name = nikaia_std::block::Text::from(arg.changes.to_string());
@@ -512,10 +503,11 @@ impl CheckState {
                 continue;
             }
             let from = format!("{}::{}", arg.caller, arg.handed);
-            let kind: i64 = if arg.lambda { 1 } else if arg.handed != "" && changing.contains(&from) && !at_once.contains(&from) { 2 } else if arg.handed != "" { 3 } else { 4 };
+            let kind: i64 = if arg.lambda { 1 } else if arg.handed != "" && !at_once.contains(&from) { 2 } else if arg.handed != "" { 3 } else if arg.bound { 5 } else if arg.item { 6 } else { 4 };
             self.facts.changing_code_args.insert(arg.node, kind);
         }
-        for one in changing.iter() { if !at_once.contains(one) { self.facts.changing_code.insert(nikaia_std::block::Text::from(one.to_string())); } }
+        self.facts.code_at_once = at_once;
+        self.facts.code_hands = hands;
     }
 }
 

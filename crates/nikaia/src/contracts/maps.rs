@@ -130,7 +130,7 @@ pub fn analyse_with(units: &[&Parsed], seeds: &Seeds) -> Vec<FnMaps> {
     };
     let key = |unit: i64, ty: &crate::ast::Type| seeds.key(units[to_usize(unit)], ty, true);
     let arity = |name: &str| seeds.arity(name) as i64;
-    mp_analyse(&held, &key, &arity)
+    mp_analyse(&held, &mut &key, &mut &arity)
         .into_iter()
         .map(FnMaps::from)
         .collect()

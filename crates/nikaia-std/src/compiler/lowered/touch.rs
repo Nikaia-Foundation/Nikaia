@@ -92,14 +92,14 @@ pub struct TouchGraph {
     pub reaches: collections::BTreeMap<String, Reach>,
 }
 
-pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
+pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
                 let mut reach = Reach { unknown: false, outside: vec![], calls: collections::BTreeSet::new() };
-                reached_by(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, names, own, library, &mut reach);
+                reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut reach);
                 methods_reach(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut reach);
                 graph.reaches.insert(key, reach);
             },
@@ -111,7 +111,7 @@ pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, 
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
                             let mut reach = Reach { unknown: false, outside: vec![], calls: collections::BTreeSet::new() };
-                            reached_by(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, names, own, library, &mut reach);
+                            reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut reach);
                             methods_reach(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut reach);
                             graph.reaches.insert(key, reach);
                         },
@@ -124,7 +124,7 @@ pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, 
                 for rule in def.rules.iter() {
                     for alt in rule.alts.iter() {
                         let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        reached_by(&seen_in(action, names, unaliased, holes_of, &no_root, false), program, names, own, library, &mut whole);
+                        reached_by(&seen_in(action, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut whole);
                     }
                 }
                 rules_into(def, names, &whole, own, library, graph);

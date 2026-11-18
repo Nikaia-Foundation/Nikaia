@@ -625,7 +625,7 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn migrate_views3_nika(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64>) -> String {
+pub fn migrate_views3_nika(source: &str, keeps_of: &mut impl FnMut(&str) -> Vec<i64>) -> String {
     let by_value = migrate_views3_selves(&nikaia_std::block::Text::from(source.to_string()));
     let lent = migrate_views3_lent(&nikaia_std::block::Text::from(source.to_string()));
     let dropped = migrate_views3_code(source, &vec![], &vec![], &vec![]);
@@ -635,7 +635,7 @@ pub fn migrate_views3_nika(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64>) -
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn migrate_views3_markdown(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64>) -> String {
+pub fn migrate_views3_markdown(source: &str, keeps_of: &mut impl FnMut(&str) -> Vec<i64>) -> String {
     let mut out: String = String::from("");
     let mut block: String = String::from("");
     let mut inside = false;
@@ -643,7 +643,7 @@ pub fn migrate_views3_markdown(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64
     for line in source.split("\n") {
         let fence = line.trim();
         if inside && fence == "```" {
-            out.push_str(&migrate_views3_nika(&block, keeps_of));
+            out.push_str(&migrate_views3_nika(&block, &mut *keeps_of));
             block = String::from("");
             inside = false;
         }
@@ -665,17 +665,17 @@ pub fn migrate_views3_markdown(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64
     out
 }
 
-pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
+pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     let plain = hb_plain_enums(view.items, view.words);
     for item in view.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { migrate_keeps_of_body(view, item, None, own, library, &indexes, resolved, holes_of, findings, &plain, &mut out); },
+            Item::Fn { .. } => { migrate_keeps_of_body(view, item, None, own, library, &indexes, resolved, &mut *holes_of, findings, &plain, &mut out); },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 if trait_name.is_none() {
                     let target_name = view.text(target.name);
-                    for method in methods.iter() { migrate_keeps_of_body(view, method, Some(&nikaia_std::block::Text::from(target_name.to_string())), own, library, &indexes, resolved, holes_of, findings, &plain, &mut out); }
+                    for method in methods.iter() { migrate_keeps_of_body(view, method, Some(&nikaia_std::block::Text::from(target_name.to_string())), own, library, &indexes, resolved, &mut *holes_of, findings, &plain, &mut out); }
                 }
             },
             _ => { },
@@ -685,7 +685,7 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], plain: &collections::BTreeSet<String>, out: &mut Vec<i64>) {
+pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding], plain: &collections::BTreeSet<String>, out: &mut Vec<i64>) {
     match &item.node {
         Item::Fn { args, is_extern, receiver, .. } => {
             let is_extern = *is_extern;
@@ -703,7 +703,7 @@ pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, i
             let found = match keeps_uses_of(view, &item.node, (match target {
                 Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
-            }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            }).as_deref(), own, library, &indexes, resolved, &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
             let copies = keeps_copy_types(view);
             for arg in args.iter() {

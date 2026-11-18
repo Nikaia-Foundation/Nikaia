@@ -79,7 +79,7 @@ pub fn constant_of(expr: &Expr, name_is: Lookup<'_>) -> Option<Constant> {
         Some(known) => nika::Folded::Value(known),
         None => nika::Folded::Nothing,
     };
-    match nika::constant_of(expr, &lookup) {
+    match nika::constant_of(expr, &mut &lookup) {
         nika::Folded::Value(c) | nika::Folded::Overflows(c) => Some(from_nikaia(c)),
         nika::Folded::TooLarge(negative) => Some(Constant {
             value: integer(u64::MAX, negative),

@@ -272,7 +272,7 @@ impl TermArena {
         }
         total
     }
-    pub fn text(&self, id: i64) -> String { term_text(id, &|at| { self.at(at) }) }
+    pub fn text(&self, id: i64) -> String { term_text(id, &mut |at| { self.at(at) }) }
     pub fn adopt(&mut self, nodes: &[SolverTerm]) -> i64 {
         let base = self.nodes.len() as i64;
         for node in nodes.iter() {

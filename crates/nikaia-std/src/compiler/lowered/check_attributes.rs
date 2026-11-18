@@ -415,7 +415,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
         state.findings.push(check_refusal("NK1102", span, format!("`@{}`'s `{}` is `{}`, and this gives {}.", owner, field_name, wanted, said), vec![], Some(format!("Give `{}` a `{}`.", field_name, wanted))));
         return;
     }
-    state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("`@{}`'s `{}` is `{}`, and this gives `{}`.", owner, field_name, wanted_text, found_text) });
+    state.expect_type(world, &found, &want, span, "argument", &mut |found_text, wanted_text| { format!("`@{}`'s `{}` is `{}`, and this gives `{}`.", owner, field_name, wanted_text, found_text) });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

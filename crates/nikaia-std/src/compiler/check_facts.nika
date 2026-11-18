@@ -468,13 +468,22 @@ pub struct CheckFacts {
     pub changing_lambdas: collections::BTreeMap[i64, String],
     /// The parameters of code a run lambda runs, by the lambda's node.
     pub lambda_runs: collections::BTreeMap[i64, Vec[String]],
-    /// **Code parameters lowered to change what they capture** (ADR-views-3
-    /// D17), `function::parameter`: called one call at a time, and handed
-    /// code that changes what it captures.
-    pub changing_code: collections::BTreeSet[String],
-    /// **An argument handed to such a parameter**, by its node: `1` lent
-    /// `&mut`, `2` a parameter of the same kind lent on as `&mut *`, `3` one
-    /// lowered to `Fn` as `&mut &*`, `4` any other code `&mut` before it.
+    /// **Code parameters run from tasks at once** (ADR-views-3 D17),
+    /// `function::parameter`: lowered shared, where every other parameter of
+    /// code a body runs lowers to code that changes what it captures. The
+    /// package's ledger reads them into `FnContract.at_once`.
+    pub code_at_once: collections::BTreeSet[String],
+    /// **Code handed on to a parameter of code**, `(from, to)` as
+    /// `function::parameter`: a parameter handed on, or run by a lambda
+    /// handed, to `to`. The package's ledger follows `at_once` back along
+    /// them across its files.
+    pub code_hands: collections::BTreeSet[(String, String)],
+    /// **An argument handed to a parameter of code run one call at a time**,
+    /// by its node: `1` lent `&mut`, `2` a parameter of the same kind lent on
+    /// as `&mut *` (`&mut &mut *` where it is `dyn`), `3` one lowered to `Fn`
+    /// as `&mut &*`, `4` any other code `&mut` before the lambda it is written
+    /// as, `5` a lambda a `let` bound, `&mut` itself, `6` a function named, as
+    /// `4`.
     pub changing_code_args: collections::BTreeMap[i64, i64],
     pub sync_functions_run_async: collections::BTreeMap[i64, i64],
     /// A declared function that throws, named where a parameter of a
@@ -885,7 +894,8 @@ impl CheckFacts {
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),
             lambda_runs: collections::BTreeMap(),
-            changing_code: collections::BTreeSet(),
+            code_at_once: collections::BTreeSet(),
+            code_hands: collections::BTreeSet(),
             changing_code_args: collections::BTreeMap(),
             sync_functions_run_async: collections::BTreeMap(),
             boxed_fn_values: collections::BTreeMap(),

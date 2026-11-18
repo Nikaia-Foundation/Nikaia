@@ -280,9 +280,11 @@ fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee
     }
 }
 
-// **The arguments handed to parameters of code of this file's own
-// function** (ADR-views-3 D17), kept until the whole file is walked: whether
-// one lowers to code that changes what it captures depends on every call.
+// **The arguments handed to parameters of code of a function of this
+// package or another one** (ADR-views-3 D17), kept until the whole file is
+// walked: the callee's body alone decides whether it runs one from tasks at
+// once, which its ledger entry says for another file or package and the
+// file's own walk finds for this one.
 fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, seen: ref String, args: ref Vec[Expr], span: ref Span) sync {
     if seen.len() == 0 {
         return
@@ -307,22 +309,46 @@ fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, calle
         let node = id_of(arg) as i64
         let mut handed: String = ""
         let mut lambda = false
+        let mut bound_code = false
+        let mut item = false
         match arg {
             Expr::Variable(name, _) => {
                 let named = world.words.resolve(name)
+                if state.binding(named) == null {
+                    item = true
+                }
                 if state.run_code.contains(named) {
-                    handed = named.clone()
                     state.a_code_parameter_named(named)
+                    if check_core_call_a_parameter(state, named) {
+                        handed = named.clone()
+                    } else {
+                        bound_code = true
+                    }
                 }
             },
             Expr::Closure { .. } => {
                 lambda = true
             },
+            Expr::Path(_, _) => {
+                item = true
+            },
             else => {},
         }
         let changes: String = (state.facts.changing_lambdas.get(node) ?? "").clone()
         let runs: Vec[String] = state.facts.lambda_runs.get(node)?.clone() ?? []
-        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: seen.clone(), param: param.clone(), node: node, lambda: lambda, changes: changes, runs: runs, handed: handed, span: check_span_at(world, arg, span) })
+        let at_once = contract.at_once.contains(param)
+        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: seen.clone(), param: param.clone(), node: node, lambda: lambda, changes: changes, runs: runs, handed: handed, bound: bound_code, item: item, at_once: at_once, span: check_span_at(world, arg, span) })
+    }
+}
+
+// **A parameter of the function walked, not a `let` that hides one**: code
+// a `let` binds is handed as other code is, never as a parameter lent on.
+fn check_core_call_a_parameter(state: ref CheckState, name: ref String) -> bool sync {
+    let local: CheckLocal = state.binding(name) ?? return false
+    let written: CheckImmutable = local.without_mut ?? return false
+    return match written.kind {
+        CheckKind::Parameter => true,
+        else => false,
     }
 }
 
@@ -932,7 +958,13 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         seen_key = key.clone()
     }
     check_core_call_mut_args(state, world, callee, seen_key, args)
-    check_core_call_code_args(state, world, callee, seen_key, args, span)
+    // **Code handed to a function of another package too** (`lib::each`):
+    // its parameter takes `&mut` code as one of this package's does.
+    let mut code_key: String = ""
+    if declared_here {
+        code_key = key.clone()
+    }
+    check_core_call_code_args(state, world, callee, code_key, args, span)
     if feeds {
         let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
         let contract: FnContract = callee?.clone() ?? FnContract::empty()

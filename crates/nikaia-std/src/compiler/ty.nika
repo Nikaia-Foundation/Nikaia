@@ -1643,6 +1643,13 @@ pub struct FnContract {
     /// fixes. Worked out with `keeps`; not spelled.
     pub by_value: Vec[String],
     pub keeps: Vec[String],
+    /// **The parameters of code its body runs from tasks at once**
+    /// (ADR-views-3 D17): a `par_iter()` lambda, a task of `task::scope` or
+    /// an `async` task that names one, or a callee's such parameter it is
+    /// handed on to. Every other parameter of code it runs, one call at a
+    /// time, takes a lambda that changes what it captures; one of these
+    /// refuses it (`NK2104`), whichever file or package calls.
+    pub at_once: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
     /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
@@ -1720,6 +1727,7 @@ impl FnContract {
             stores: [],
             by_value: [],
             keeps: [],
+            at_once: [],
             mutates: false,
             touches_a_lock: Lock::No,
             panics: Panics::Unknown,

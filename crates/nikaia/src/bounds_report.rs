@@ -129,7 +129,7 @@ pub fn report_checked(
         &facts,
         &bounds,
         &overflow,
-        &|e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
+        &mut |e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
     );
     report + &traced
 }
@@ -198,6 +198,6 @@ pub fn unproved(
         &parsed.interner,
         source,
         &facts,
-        &|e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
+        &mut |e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
     )
 }

@@ -84,13 +84,13 @@ impl Range {
     }
 }
 
-pub fn candidate(term: i64, facts: &[i64], term_of: &impl Fn(i64) -> SolverTerm) -> Range {
-    let form = match linear_form(term, term_of) { Some(__nikaia_value) => __nikaia_value, None => return Range::open() };
-    let known = propagate(facts, term_of);
+pub fn candidate(term: i64, facts: &[i64], term_of: &mut impl FnMut(i64) -> SolverTerm) -> Range {
+    let form = match linear_form(term, &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return Range::open() };
+    let known = propagate(facts, &mut *term_of);
     evaluate(&form, &known)
 }
 
-pub(crate) fn linear_form(term: i64, term_of: &dyn Fn(i64) -> SolverTerm) -> Option<Form> {
+pub(crate) fn linear_form(term: i64, term_of: &mut dyn FnMut(i64) -> SolverTerm) -> Option<Form> {
     match term_of(term) {
         SolverTerm::Int(n) => Some(Form { vars: collections::BTreeMap::new(), k: n }),
         SolverTerm::Var(ref name) => {
@@ -99,22 +99,22 @@ pub(crate) fn linear_form(term: i64, term_of: &dyn Fn(i64) -> SolverTerm) -> Opt
             Some(Form { vars, k: 0 })
         },
         SolverTerm::Add(a, b) => {
-            let left = match linear_form(a, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let right = match linear_form(b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let left = match linear_form(a, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let right = match linear_form(b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             sum(&left, &right, 1)
         },
         SolverTerm::Sub(a, b) => {
-            let left = match linear_form(a, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let right = match linear_form(b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let left = match linear_form(a, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let right = match linear_form(b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             sum(&left, &right, -1)
         },
         SolverTerm::Neg(a) => {
-            let inner = match linear_form(a, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let inner = match linear_form(a, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             scaled(&inner, -1)
         },
         SolverTerm::Mul(a, b) => {
-            let left = match linear_form(a, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let right = match linear_form(b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let left = match linear_form(a, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let right = match linear_form(b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if left.vars.is_empty() { return scaled(&right, left.k); }
             if right.vars.is_empty() { return scaled(&left, right.k); }
             None
@@ -153,36 +153,36 @@ pub(crate) fn shifted(form: &Form, n: i64) -> Option<Form> {
     Some(Form { vars: form.vars.copy_owned(), k })
 }
 
-pub(crate) fn atoms(fact: i64, term_of: &dyn Fn(i64) -> SolverTerm, out: &mut Vec<Form>) {
+pub(crate) fn atoms(fact: i64, term_of: &mut dyn FnMut(i64) -> SolverTerm, out: &mut Vec<Form>) {
     match term_of(fact) {
         SolverTerm::And(ref parts) => {
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
-                atoms(part, term_of, out);
+                atoms(part, &mut &mut *term_of, out);
             }
         },
         SolverTerm::Le(a, b) => {
-            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(d);
         },
         SolverTerm::Lt(a, b) => {
-            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let strict = match shifted(&d, 1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(strict);
         },
         SolverTerm::Ge(a, b) => {
-            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(turned);
         },
         SolverTerm::Gt(a, b) => {
-            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             let strict = match shifted(&turned, 1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(strict);
         },
         SolverTerm::Eq(a, b) => {
-            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &mut &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(turned);
             out.push(d);
@@ -191,17 +191,17 @@ pub(crate) fn atoms(fact: i64, term_of: &dyn Fn(i64) -> SolverTerm, out: &mut Ve
     }
 }
 
-pub(crate) fn difference(a: i64, b: i64, term_of: &impl Fn(i64) -> SolverTerm) -> Option<Form> {
-    let left = match linear_form(a, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let right = match linear_form(b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+pub(crate) fn difference(a: i64, b: i64, term_of: &mut impl FnMut(i64) -> SolverTerm) -> Option<Form> {
+    let left = match linear_form(a, &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let right = match linear_form(b, &mut *term_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sum(&left, &right, -1)
 }
 
-pub(crate) fn propagate(facts: &[i64], term_of: &impl Fn(i64) -> SolverTerm) -> collections::BTreeMap<String, Range> {
+pub(crate) fn propagate(facts: &[i64], term_of: &mut impl FnMut(i64) -> SolverTerm) -> collections::BTreeMap<String, Range> {
     let mut all: Vec<Form> = vec![];
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        atoms(fact, term_of, &mut all);
+        atoms(fact, &mut *term_of, &mut all);
     }
     let mut known: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     for _ in 0..4 {

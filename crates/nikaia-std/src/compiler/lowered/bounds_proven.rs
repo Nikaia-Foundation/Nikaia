@@ -14,13 +14,13 @@ pub struct BoundsAllProven {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext, beside: &[&BoundsBeside], facts: &CheckFacts, ledgers: &[&Ledger], nonnegative: &collections::BTreeSet<i64>, through_loops: bool, trace: &[i64], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, ask: &impl Fn(&TermArena, &[i64], i64) -> bool, ask_in: &impl Fn(&str, i64, &TermArena, &[i64], i64) -> bool, record: &impl Fn(&collections::BTreeMap<i64, String>), counted: &impl Fn(&Block, &[winnow_grammar::Symbol]), folded: &impl Fn() -> collections::BTreeSet<i64>) -> BoundsAllProven {
+pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext, beside: &[&BoundsBeside], facts: &CheckFacts, ledgers: &[&Ledger], nonnegative: &collections::BTreeSet<i64>, through_loops: bool, trace: &[i64], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, ask: &mut impl FnMut(&TermArena, &[i64], i64) -> bool, ask_in: &mut impl FnMut(&str, i64, &TermArena, &[i64], i64) -> bool, record: &mut impl FnMut(&collections::BTreeMap<i64, String>), counted: &mut impl FnMut(&Block, &[winnow_grammar::Symbol]), folded: &mut impl FnMut() -> collections::BTreeSet<i64>) -> BoundsAllProven {
     #[allow(unused_mut)] let mut out = BoundsAllProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), derived: vec![], gates: collections::BTreeMap::new(), trace: vec![] };
     let around = bounds_around(program, beside, ledgers, &facts.std_receivers, &facts.simd_loads, words);
-    let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, read), required: bm_required(ledgers, read), each: bm_each(ledgers, read), collected: bm_collected(ledgers, read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), divisions: facts.divisions.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_types: facts.whole_types.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, trace: trace.copy_owned(), decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), text_bytes: facts.text_bytes.copy_owned(), text_scalars: facts.text_scalars.copy_owned(), returns: collections::BTreeMap::new(), owner: String::from("") };
+    let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, &mut *read), required: bm_required(ledgers, &mut *read), each: bm_each(ledgers, &mut *read), collected: bm_collected(ledgers, &mut *read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), divisions: facts.divisions.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_types: facts.whole_types.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, trace: trace.copy_owned(), decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), text_bytes: facts.text_bytes.copy_owned(), text_scalars: facts.text_scalars.copy_owned(), returns: collections::BTreeMap::new(), owner: String::from("") };
     bp_summed(&mut context, &facts.summaries);
-    bounds_fields(&mut context, program, words, ask);
-    bounds_returns(&mut context, program, words, ask);
+    bounds_fields(&mut context, program, words, &mut *ask);
+    bounds_returns(&mut context, program, words, &mut *ask);
     let mut bodies: Vec<&Spanned<Item>> = vec![];
     let mut owners: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for item in program.items.iter() {
@@ -56,7 +56,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                 let counters = nonnegative_locals(body);
                 counted(body, &counters);
                 context.owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&owners, nikaia_std::index::at(k))).to_string());
-                let walked = bounds_aggressive(args, body, bp_names(&counters, words), &context, program, words, &|arena, known, goal| { ask_in(&function, at, arena, known, goal) });
+                let walked = bounds_aggressive(args, body, bp_names(&counters, words), &context, program, words, &mut |arena, known, goal| { ask_in(&function, at, arena, known, goal) });
                 record(&walked.loops);
                 for (of, holding) in walked.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
                 let entries = context.around.derived.entry.len() as i64;
@@ -77,7 +77,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
             Item::Grammar(def) => {
                 let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for rule in def.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(rule.name).to_string())); }
-                let ranges = bp_rule_ranges(def, &rules, &context, program, words, ask);
+                let ranges = bp_rule_ranges(def, &rules, &context, program, words, &mut *ask);
                 for rule in def.rules.iter() {
                     let function = nikaia_std::block::Text::from(words.resolve(rule.name).to_string());
                     let at = rule.span.start as i64;
@@ -90,7 +90,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                         inner.classes = found.classes;
                         inner.text_lengths = found.text_lengths;
                         inner.text_classes = found.text_classes;
-                        let walked = bounds_aggressive(&none, action, bp_names(&nonnegative_locals(action), words), &inner, program, words, &|arena, known, goal| { ask_in(&function, at, arena, known, goal) });
+                        let walked = bounds_aggressive(&none, action, bp_names(&nonnegative_locals(action), words), &inner, program, words, &mut |arena, known, goal| { ask_in(&function, at, arena, known, goal) });
                         record(&walked.loops);
                         bp_add(&mut out, &walked);
                     }
@@ -103,7 +103,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
     out
 }
 
-pub(crate) fn bp_rule_ranges(def: &GrammarDef, rules: &collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
+pub(crate) fn bp_rule_ranges(def: &GrammarDef, rules: &collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
     let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     for _round in 0..def.rules.len() as i64 {
         let mut added = false;
@@ -126,7 +126,7 @@ pub(crate) fn bp_rule_ranges(def: &GrammarDef, rules: &collections::BTreeSet<Str
                 inner.classes = found.classes;
                 inner.text_lengths = found.text_lengths;
                 inner.text_classes = found.text_classes;
-                let range = match bounds_action_range(action, &inner, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => {
+                let range = match bounds_action_range(action, &inner, program, words, &mut *ask) { Some(__nikaia_value) => __nikaia_value, None => {
                     every = false;
                     break;
                 } };

@@ -213,16 +213,20 @@ pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWor
         let node = id_of(arg) as i64;
         let mut handed: String = String::from("");
         let mut lambda = false;
+        let mut bound_code = false;
+        let mut item = false;
         match arg {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let named = world.words.resolve(name);
+                if state.binding(named).is_none() { item = true; }
                 if state.run_code.contains(named) {
-                    handed = nikaia_std::block::Text::from(named.to_string());
                     state.a_code_parameter_named(named);
+                    if check_core_call_a_parameter(&state, named) { handed = nikaia_std::block::Text::from(named.to_string()); } else { bound_code = true; }
                 }
             },
             Expr::Closure { .. } => { lambda = true; },
+            Expr::Path(_, _) => { item = true; },
             _ => { },
         }
         let changes: String = nikaia_std::block::Text::from(nikaia_std::index::or(state.facts.changing_lambdas.get(&node), || "").to_string());
@@ -230,8 +234,17 @@ pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWor
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        state.code_args.push(CheckCodeArg { caller: nikaia_std::block::Text::from(caller.to_string()), callee: nikaia_std::block::Text::from(seen.to_string()), param: nikaia_std::block::Text::from(param.to_string()), node, lambda, changes, runs, handed, span: check_span_at(world, arg, span) });
+        let at_once = nikaia_std::list::contains(&contract.at_once, &param);
+        state.code_args.push(CheckCodeArg { caller: nikaia_std::block::Text::from(caller.to_string()), callee: nikaia_std::block::Text::from(seen.to_string()), param: nikaia_std::block::Text::from(param.to_string()), node, lambda, changes, runs, handed, bound: bound_code, item, at_once, span: check_span_at(world, arg, span) });
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_a_parameter(state: &CheckState, name: &str) -> bool {
+    let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let written: CheckImmutable = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(written.kind, CheckKind::Parameter)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -399,7 +412,7 @@ pub(crate) fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState
             check_core_places_give_handle(state, world, arg, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, span);
             if a_plain_str_view(unsafe { nikaia_std::proven::read(&found, (i) as usize) }) && a_plain_string(unsafe { nikaia_std::proven::read(&parts, (i) as usize) }) {
                 let keeper = format!("`{}` keeps its part after this line", name);
-                state.expect_kept_asked(world, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, Some(arg), &keeper, span, "field", &|was, wanted| { format!("`{}` holds `{}`, but you're giving it `{}`.", name, wanted, was) });
+                state.expect_kept_asked(world, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, Some(arg), &keeper, span, "field", &mut |was, wanted| { format!("`{}` holds `{}`, but you're giving it `{}`.", name, wanted, was) });
             }
         }
         check_core_a_kept_lambda(state, world, host, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, arg, span);
@@ -717,7 +730,9 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = nikaia_std::block::Text::from(key.to_string()); }
     check_core_call_mut_args(state, world, (callee).as_ref(), &seen_key, args);
-    check_core_call_code_args(state, world, (callee).as_ref(), &seen_key, args, span);
+    let mut code_key: String = String::from("");
+    if declared_here { code_key = nikaia_std::block::Text::from(key.to_string()); }
+    check_core_call_code_args(state, world, (callee).as_ref(), &code_key, args, span);
     if feeds {
         let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
         let contract: FnContract = nikaia_std::index::or(match callee.as_ref() {

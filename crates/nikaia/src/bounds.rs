@@ -118,23 +118,23 @@ pub fn proven_traced(
         nonnegative,
         through_loops,
         trace,
-        &|text, names| crate::prove::condition_nodes(text, names),
-        &|arena, known, goal| {
+        &mut |text, names| crate::prove::condition_nodes(text, names),
+        &mut |arena, known, goal| {
             crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
         },
-        &|function, at, arena, known, goal| {
+        &mut |function, at, arena, known, goal| {
             crate::proofs::in_function(function, at as usize, || {
                 crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
             })
         },
-        &|used| crate::proofs::record_bound_invariants(used),
-        &|body, symbols| {
+        &mut |used| crate::proofs::record_bound_invariants(used),
+        &mut |body, symbols| {
             counters.borrow_mut().insert(
                 std::ptr::from_ref(body) as usize,
                 symbols.iter().copied().collect(),
             );
         },
-        &|| crate::fold_bound::proven_counters(parsed, &facts.arithmetic),
+        &mut || crate::fold_bound::proven_counters(parsed, &facts.arithmetic),
     );
     Proven {
         indices: all.indices.into_iter().collect(),

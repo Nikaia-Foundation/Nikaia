@@ -88,7 +88,7 @@ pub(crate) fn lg_loop_exit_queries(arena: &mut TermArena, problem: &LgLoop, inva
     queries
 }
 
-pub fn lg_loop_check(arena: &mut TermArena, problem: &LgLoop, invariant: i64, proved: &impl Fn(&TermArena, &[i64], i64) -> bool) -> LgLoopVerdict {
+pub fn lg_loop_check(arena: &mut TermArena, problem: &LgLoop, invariant: i64, proved: &mut impl FnMut(&TermArena, &[i64], i64) -> bool) -> LgLoopVerdict {
     let mut verdict = LgLoopVerdict { holds_at_entry: false, kept_by_a_turn: false, gives_the_goals: vec![] };
     let entry = lg_loop_entry_query(problem, invariant);
     verdict.holds_at_entry = proved(&arena, &entry.facts, entry.goal);

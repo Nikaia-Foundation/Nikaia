@@ -191,7 +191,7 @@ pub fn overlap_report(
             library,
             into: super::send::Destination::Ours,
         },
-        &|body: &crate::ast::Block| {
+        &mut |body: &crate::ast::Block| {
             let mut blocks = Vec::new();
             crate::emit::visit_block(body, &mut |expr| {
                 if let Expr::Overlap(block, _) = expr {
@@ -200,7 +200,7 @@ pub fn overlap_report(
             });
             blocks
         },
-        &|stmt: &Spanned<Stmt>| pauses(stmt),
+        &mut |stmt: &Spanned<Stmt>| pauses(stmt),
     )
 }
 

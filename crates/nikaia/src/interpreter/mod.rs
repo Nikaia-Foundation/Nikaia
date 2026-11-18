@@ -24,8 +24,8 @@ impl Interpreter {
         let lines = nikaia_std::compiler::interpreter::run(
             &parsed.program.items,
             &self.interner,
-            &|expr| format!("{expr:?}"),
-            &|parts| crate::emit::format_of(parts),
+            &mut |expr| format!("{expr:?}"),
+            &mut |parts| crate::emit::format_of(parts),
         );
         for line in lines {
             println!("{line}");
