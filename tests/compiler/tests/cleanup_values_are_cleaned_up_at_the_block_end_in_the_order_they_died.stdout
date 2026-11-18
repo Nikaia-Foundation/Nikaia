@@ -1,0 +1,16 @@
+cleanup g
+drop g
+failed: the body would not flush
+before the end
+cleanup b
+drop b
+cleanup a
+drop a
+after two
+cleanup f
+drop f
+failed: cleaning up a `Noted` failed: f would not flush
+cleanup c
+drop c
+after close
+drop p
