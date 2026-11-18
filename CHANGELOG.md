@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1440] — 2026-11-18
+
+**Builders' changes (#1967, #1968, #1972)**
+- The solver's regression set pins QF_LRA sal carpark-Carpark2-ausgabe-6 under a 1 s limit; it takes about 0.07 s since the faster simplex propagation and the opt-level 3 build (was about 6 s).
+- The solver's regression set pins QF_LRA spider_benchmarks current_frame.base under a 1 s limit. It has taken about 0.06 s since the faster simplex propagation and the opt-level 3 build (about 8 s before).
+- `--bounds` now gives an outside operation a goal when an operand is a method result. The prover reads each call as a fresh value of its type (ADR-270 D29), so `size + asked.length()` reads "not proved within ±2^62" and a u8 sum with a pinned 0 is proved.
+
 ## [0.0.1439] — 2026-11-18
 
 **std::collections: HashMap.remove, HashMap.retain and BTreeMap.retain (#2111)**
