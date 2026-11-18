@@ -113,17 +113,20 @@ fn sv_unit_column(r: ref SvRow, uses: ref Vec[i64]) -> u32? {
 	return best
 }
 
-/// `held` with column `x` substituted by the equality `lo` (`R <= 0`) and
-/// `hi` (`-R <= 0`), `R`'s coefficient `s = ±1` on `x`; the two sides
-/// dropped. `null`, and nothing written, where a row leaves `i64`.
-fn sv_substituted(
-	held: ref Vec[SvHeld],
+/// Column `x` of `held` substituted by the equality `lo` (`R <= 0`) and
+/// `hi` (`-R <= 0`), `R`'s coefficient `s = ±1` on `x`, in place: the rows
+/// that hold `x` replaced, the two sides dropped, the others kept where they
+/// are, not copied (a copy of every row per equality was most of the
+/// elimination's cost on SMPT's Petri-net queries, #2012). `false`, and
+/// `held` as it was, where a row leaves `i64`.
+fn sv_substitute(
+	mut held: Vec[SvHeld],
 	lo: i64,
 	hi: i64,
 	x: u32,
 	s: i64,
 	mut book: SvBook,
-) -> Vec[SvHeld]? {
+) -> bool {
 	// The rows first, so an overflow writes nothing.
 	let mut i = 0
 	while i < held.len() {
@@ -132,34 +135,40 @@ fn sv_substituted(
 			// #1293: `(b > 0) == (s > 0)` loses its parentheses.
 			let same = b > 0
 			let side = if same == (s > 0) { hi } else { lo }
-			let m = b.checked_abs() ?? return null
-			sv_row_sum(1, held[i].row, m, held[side].row) ?? return null
+			let m = b.checked_abs() ?? return false
+			sv_row_sum(1, held[i].row, m, held[side].row) ?? return false
 		}
 		i += 1
 	}
-	let mut out: Vec[SvHeld] = []
+	// The new rows with their places, written into `held` only once all are
+	// made.
+	let mut at: Vec[i64] = []
+	let mut made: Vec[SvHeld] = []
 	i = 0
 	while i < held.len() {
 		let b = sv_row_coef(held[i].row, x)
-		if i == lo || i == hi {
-			i += 1
-			continue
+		if i != lo && i != hi && b != 0 {
+			// #1293: `(b > 0) == (s > 0)` loses its parentheses.
+			let same = b > 0
+			let side = if same == (s > 0) { hi } else { lo }
+			let m = b.checked_abs() ?? return false
+			let id = book.combine([held[i].src.clone(), held[side].src.clone()], [1, m]) ?? return false
+			let row = (book.bounds.get(id) ?? return false).row.clone()
+			at.push(i)
+			made.push(SvHeld { row: row, src: SvSrc::Fact(id) })
 		}
-		if b == 0 {
-			out.push(held[i].clone())
-			i += 1
-			continue
-		}
-		// #1293: `(b > 0) == (s > 0)` loses its parentheses.
-		let same = b > 0
-		let side = if same == (s > 0) { hi } else { lo }
-		let m = b.checked_abs() ?? return null
-		let id = book.combine([held[i].src.clone(), held[side].src.clone()], [1, m]) ?? return null
-		let row = (book.bounds.get(id) ?? return null).row.clone()
-		out.push(SvHeld { row: row, src: SvSrc::Fact(id) })
 		i += 1
 	}
-	return out
+	let mut k = 0
+	while k < at.len() {
+		held[at[k]] = made[k].clone()
+		k += 1
+	}
+	let first = if lo < hi { lo } else { hi }
+	let second = if lo < hi { hi } else { lo }
+	held.remove(second)
+	held.remove(first)
+	return true
 }
 
 /// `a mod^ m` for `m > 0` (Pugh's symmetric modulo): `a - m·⌊a/m + 1/2⌋`,
@@ -297,13 +306,10 @@ fn sv_reduce_step(
 			let at = held.len()
 			held.push(SvHeld { row: lo_row.clone(), src: SvSrc::Fact(second) })
 			held.push(SvHeld { row: hi_row, src: SvSrc::Fact(ext.first) })
-			match sv_substituted(held, at, at + 1, v, 1, book) {
-				null => {
-					held.pop()
-					held.pop()
-					return false
-				},
-				next => { held = next ?? return false },
+			if !sv_substitute(held, at, at + 1, v, 1, book) {
+				held.pop()
+				held.pop()
+				return false
 			}
 			solved.push(SvSolved { column: v, row: lo_row })
 			return true
@@ -332,11 +338,19 @@ fn sv_eliminate(
 	let mut rounds = 0
 	while rounds < 4096 {
 		rounds += 1
-		let mut kept: Vec[SvHeld] = []
-		for h in held {
-			let t = sv_tidy(h.clone(), book) ?? return SvChecked::Unknown(LgUnknown::Overflow)
+		// Tidied in place. A row with columns whose coefficients' gcd is 1 is
+		// tidy already, as most are after the first round: `sv_tidy` would
+		// copy it to give it back as it was (#2012).
+		let mut t_at = 0
+		while t_at < held.len() {
+			if held[t_at].row.cols.len() > 0 && (sv_row_content(held[t_at].row) ?? 2) == 1 {
+				t_at += 1
+				continue
+			}
+			let t = sv_tidy(held[t_at].clone(), book) ?? return SvChecked::Unknown(LgUnknown::Overflow)
 			if t.row.cols.len() > 0 {
-				kept.push(t)
+				held[t_at] = t
+				t_at += 1
 				continue
 			}
 			if t.row.constant > 0 {
@@ -344,8 +358,8 @@ fn sv_eliminate(
 					?? return SvChecked::Unknown(LgUnknown::Overflow)
 				return SvChecked::Conflict(clause)
 			}
+			held.remove(t_at)
 		}
-		held = kept
 		let uses = sv_column_uses(held)
 		// Each row's next row with the same column signature, -1 after the
 		// last: the pairs `i < j` below visit only those, in the order of
@@ -421,12 +435,10 @@ fn sv_eliminate(
 					let x = xk ?? break
 					let s_row = held[at].row.clone()
 					let unit = sv_row_coef(s_row, x)
-					let next = sv_substituted(held, at, at + 1, x, unit, book)
-					if next == null {
+					if !sv_substitute(held, at, at + 1, x, unit, book) {
 						skipped.push(eq)
 						continue
 					}
-					held = next ?? break
 					solved.push(SvSolved { column: x, row: s_row })
 				},
 			}
@@ -435,12 +447,10 @@ fn sv_eliminate(
 		let x = column ?? break
 		let s = sv_row_coef(held[lo].row, x)
 		let row = held[lo].row.clone()
-		let next = sv_substituted(held, lo, hi, x, s, book)
-		if next == null {
+		if !sv_substitute(held, lo, hi, x, s, book) {
 			skipped.push(row)
 			continue
 		}
-		held = next ?? break
 		solved.push(SvSolved { column: x, row: row })
 	}
 	return SvChecked::Consistent

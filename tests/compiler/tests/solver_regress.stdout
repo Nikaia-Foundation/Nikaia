@@ -1,3 +1,4 @@
+regress/20220307-SMPT-Diffusion2D-PT-D50N010-RC-00.smt2 refuted 124/pre:l5001f4
 regress/20231117-c_inference-30_30_86_7_sat.smt2 unknown (cases) 1024/pre:l126f52
 regress/bofill-scheduling-SMT_real_LIA-ex2360_2400_100.smt2 proved 2113/pre:l1007f128
-regress: 2 files, solved 1 (proved 1, refuted 0), unknown 1 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 2080.5, certificates checked 1, models evaluated 0
+regress: 3 files, solved 2 (proved 1, refuted 1), unknown 1 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 1428.3, certificates checked 1, models evaluated 1
