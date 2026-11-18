@@ -146,17 +146,17 @@ pub fn reading(code: &str, name: &str) -> Option<String> {
 
 /// **Where a build of a loose file compiles its build-time code**: the user's
 /// cache, beside the store.
-pub fn workshop() -> PathBuf {
+pub fn build_time_dir() -> PathBuf {
     orchestrator::cache::Layout::user_cache_dir().join("build-time")
 }
 
 /// Take every block as far as it goes, as a build reads it: a `comptime` that
-/// calls something is compiled and run in `workshop`
+/// calls something is compiled and run in `build_time_dir`
 /// ([ADR-321](../../docs/specification/adr/adr-321.md) D1). Which reading got
 /// furthest is **`tools/specbook.nika`**'s (`specbook_furthest`, #125); taking
 /// one source through the compiler is [`reach`]'s.
-pub fn verdicts(dir: &Path, workshop: &Path) -> Vec<Verdict> {
-    let reads = crate::assets::Reads::at(dir).building_in(workshop);
+pub fn verdicts(dir: &Path, build_time_dir: &Path) -> Vec<Verdict> {
+    let reads = crate::assets::Reads::at(dir).building_in(build_time_dir);
     let host = Host { reads: &reads };
     blocks(dir)
         .into_iter()
@@ -210,7 +210,7 @@ fn reach(source: &str, reads: &crate::assets::Reads) -> (Stage, BTreeSet<String>
     let Ok(parsed) = crate::parser::parse_to_ast(source) else {
         return (Stage::Fragment, BTreeSet::new());
     };
-    let place = reads.workshop().place();
+    let place = reads.build_time_dir().place();
     let own = crate::comptime_run::defaults_compiled_in(place, || {
         crate::contracts::Ledger::infer(&parsed)
     });
@@ -246,8 +246,8 @@ fn reach(source: &str, reads: &crate::assets::Reads) -> (Stage, BTreeSet<String>
 /// its notes and its first line of code. Written by **`tools/specbook.nika`**
 /// (`specbook_report`, #125), which says why a block is not addressed by its
 /// line.
-pub fn report(dir: &Path, workshop: &Path) -> String {
-    let lines: Vec<nikaia_std::compiler::specbook::SpecLine> = verdicts(dir, workshop)
+pub fn report(dir: &Path, build_time_dir: &Path) -> String {
+    let lines: Vec<nikaia_std::compiler::specbook::SpecLine> = verdicts(dir, build_time_dir)
         .into_iter()
         .map(|v| nikaia_std::compiler::specbook::SpecLine {
             file: v.block.file,

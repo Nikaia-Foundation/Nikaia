@@ -105,7 +105,7 @@ pub struct Reads {
     /// can carry, both are wanted by the evaluator, and both are off for a
     /// caller that says nothing. A grammar run's bytes come through
     /// `asset("…")`, so the two arrive together in practice as well.
-    workshop: crate::grammar_run::Workshop,
+    build_time_dir: crate::grammar_run::BuildTimeDir,
     /// Path (as the literal wrote it) to the SHA-256 of what was read.
     ///
     /// **Behind a lock because the evaluator holds a `&Reads`** and the cache
@@ -150,7 +150,7 @@ impl Reads {
     /// it, so this is handed the cache's own neighbour rather than the root.
     pub fn building_in(self, at: impl Into<PathBuf>) -> Reads {
         Reads {
-            workshop: crate::grammar_run::Workshop::at(at),
+            build_time_dir: crate::grammar_run::BuildTimeDir::at(at),
             ..self
         }
     }
@@ -159,14 +159,14 @@ impl Reads {
     /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D7, D10).
     pub fn bounded(self, bounds: crate::comptime_run::Bounds) -> Reads {
         Reads {
-            workshop: self.workshop.bounded(bounds),
+            build_time_dir: self.build_time_dir.bounded(bounds),
             ..self
         }
     }
 
     /// Where a parser is compiled, for the evaluator that runs one.
-    pub fn workshop(&self) -> &crate::grammar_run::Workshop {
-        &self.workshop
+    pub fn build_time_dir(&self) -> &crate::grammar_run::BuildTimeDir {
+        &self.build_time_dir
     }
 
     /// Whether a list is in effect at all — D1 read as a question.

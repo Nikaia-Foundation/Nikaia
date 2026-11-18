@@ -42,7 +42,7 @@ pub type Known<'a> = &'a dyn Fn(&str) -> Option<Value>;
 
 /// The evaluator, over one unit's items. The evaluator itself is
 /// `tools/build_eval.nika` (ADR-294, #125); this holds what it asks for - the
-/// program's files, the ledger, what a build may read, and the grammar workshop.
+/// program's files, the ledger, what a build may read, and the grammar build-time directory.
 pub struct BuildTime<'a> {
     parsed: &'a Parsed,
     /// **Every file of this program**: a variant or a grammar may be declared
@@ -92,7 +92,7 @@ impl<'a> BuildTime<'a> {
 }
 
 /// What the evaluator asks the compiler: the files by number (0 is the one
-/// being checked), the ledger, what may be read, and the grammar workshop.
+/// being checked), the ledger, what may be read, and the grammar build-time directory.
 struct Host<'h> {
     units: Vec<&'h Parsed>,
     reads: &'h Reads,
@@ -167,7 +167,7 @@ impl BtHost for Host<'_> {
         };
         let outcome = self
             .reads
-            .workshop()
+            .build_time_dir()
             .run(parsed, &ask)
             .and_then(|dump| crate::grammar_run::decode(&dump));
         match outcome {

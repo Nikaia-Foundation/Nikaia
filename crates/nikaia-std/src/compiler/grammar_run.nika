@@ -5,7 +5,7 @@
 // Cargo and run over the input, moved from `crates/nikaia/src/grammar_run.rs`.
 // What it needs from the compiler - the driver text, the manifest, the shared
 // target directory and where tools start - comes from `GrammarRunHost`; the
-// Rust `Workshop` keeps the lock that refuses a run inside a run.
+// Rust `BuildTimeDir` keeps the lock that refuses a run inside a run.
 
 use std::collections
 use std::env
@@ -62,7 +62,7 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
 
     // **One target directory for every parser on the machine**: what a
     // parser depends on - `std`, `winnow`, the grammar runtime - is the
-    // same for all of them, and under each project's workshop it was
+    // same for all of them, and under each project's build-time directory it was
     // compiled again for every new project (half a minute before the
     // first grammar could run). Each parser is a crate of its own name
     // (`p<key>`), so they share the directory without meeting. **And the

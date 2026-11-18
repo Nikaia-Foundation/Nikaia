@@ -33,7 +33,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// A scratch directory with somewhere to compile a parser.
-fn workshop(purpose: &str) -> (PathBuf, Reads) {
+fn build_time_dir(purpose: &str) -> (PathBuf, Reads) {
     let dir = common::scratch_dir(purpose);
     let reads = Reads::at(&dir).building_in(dir.join("build-time"));
     (dir, reads)
@@ -90,7 +90,7 @@ const SETTINGS: &str = "pub struct Setting {\n\
 /// test against the checker could not see.
 #[test]
 fn a_grammar_runs_while_the_program_is_built_and_the_answer_is_a_const() {
-    let (dir, reads) = workshop("grammar-at-build");
+    let (dir, reads) = build_time_dir("grammar-at-build");
     let source = format!(
         "{SETTINGS}\n\
          comptime SETTINGS: Array[Setting, 2] = \
@@ -133,7 +133,7 @@ fn a_grammar_runs_while_the_program_is_built_and_the_answer_is_a_const() {
 /// anything.
 #[test]
 fn invalid_input_fails_the_build_in_the_parsers_own_words() {
-    let (dir, reads) = workshop("grammar-bad-input");
+    let (dir, reads) = build_time_dir("grammar-bad-input");
     let source = format!(
         "{SETTINGS}\n\
          comptime SETTINGS: Array[Setting, 1] = Cfg::file(\"host = ok\\n!!! broken\\n\")\n\
@@ -187,7 +187,7 @@ const SHADES: &str = "enum Shade { Odd, Even, Named(ref String), Weight(f64) }\n
 /// built.
 #[test]
 fn an_enum_crosses_from_a_grammar_by_the_variant_the_value_is() {
-    let (dir, reads) = workshop("grammar-enum");
+    let (dir, reads) = build_time_dir("grammar-enum");
     let source = format!(
         "{SHADES}\n\
          comptime SHADES: Array[Shade, 4] = Pick::many(\"odd even n:blue w:2.5\")\n\
@@ -233,7 +233,7 @@ fn an_enum_crosses_from_a_grammar_by_the_variant_the_value_is() {
 /// than something about `const`, which holds `Shape::Spot { x: 1 }` fine.
 #[test]
 fn a_variant_with_named_fields_is_refused_by_name() {
-    let (dir, reads) = workshop("grammar-named-variant");
+    let (dir, reads) = build_time_dir("grammar-named-variant");
     let source = "enum Shape { Spot { x: i64 } }\n\
          \n\
          grammar Pick {\n\
@@ -361,7 +361,7 @@ fn the_decoder_reads_every_shape_the_dumper_writes() {
 /// **program's** declaration — reads a run either way.
 #[test]
 fn a_rule_that_hands_back_a_run_crosses_as_a_view() {
-    let (dir, reads) = workshop("grammar-run-view");
+    let (dir, reads) = build_time_dir("grammar-run-view");
     let source = format!(
         "{SETTINGS}\n\
          comptime SETTINGS: ref Array[Setting] = \
@@ -398,7 +398,7 @@ fn a_rule_that_hands_back_a_run_crosses_as_a_view() {
 /// every entry rule of the grammar, as it was.
 #[test]
 fn an_action_that_reaches_c_is_refused_once() {
-    let (dir, reads) = workshop("grammar-reaches-c");
+    let (dir, reads) = build_time_dir("grammar-reaches-c");
     let source = "extern {\n    fn abs(n: i32) -> i32\n}\n\n\
          fn doubled(n: i64) -> i64 {\n    return n * 2 + unsafe { abs(-1) } as i64\n}\n\n\
          fn tripled(n: i64) -> i64 {\n    return n * 3\n}\n\n\

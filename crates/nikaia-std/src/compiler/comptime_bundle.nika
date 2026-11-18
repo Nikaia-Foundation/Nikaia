@@ -18,7 +18,7 @@ use std::time
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
 /// by Cargo from the same compiled dependencies as anything else in the
-/// workshop.
+/// build-time directory.
 pub struct ComptimeBundle {
     /// The library itself.
     pub dylib: fs::Path,
@@ -189,7 +189,7 @@ fn comptime_bundle_digest(text: String) -> String {
 /// **Once per machine, not per project**: what it is depends on its manifest
 /// (where `std` comes from), its one file and the toolchain, never on the
 /// program - so it lives under the user cache, keyed by the first two, as the
-/// compiled `std` of ADR-002 D4 does. Under each project's own workshop it was
+/// compiled `std` of ADR-002 D4 does. Under each project's own build-time directory it was
 /// built again for every new project, some forty crates (half a minute) before
 /// the first `comptime` could run. Cargo's lock on the target directory is what
 /// makes two builds at once wait for one another rather than collide.
@@ -567,7 +567,7 @@ fn comptime_bundle_tidy(binary: ref fs::Path, dir: ref fs::Path, scratch: ref fs
 }
 
 /// Written only when it changed, so that Cargo's freshness keeps working.
-/// **Written whole or not at all**: builds side by side share the workshop,
+/// **Written whole or not at all**: builds side by side share the build-time directory,
 /// and one that read a file another was still writing compiled half a program
 /// or read half an answer; so the text goes to `partial` first (a path no
 /// other build writes, `ComptimeBundleHost::unique_beside`) and is moved into

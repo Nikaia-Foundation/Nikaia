@@ -15,7 +15,7 @@ fn main() {
         "{}",
         nikaia::specbook::report(
             &nikaia::specbook::specification_dir(),
-            &nikaia::specbook::workshop(),
+            &nikaia::specbook::build_time_dir(),
         )
     );
 }

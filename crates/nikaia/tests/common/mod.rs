@@ -233,7 +233,7 @@ pub fn standalone_programs(dir: &Path) -> Vec<PathBuf> {
 /// callee, which keeps what it is handed (ADR-094 D2 fails closed), and refuse
 /// a lambda's `serve(at)` the build accepts. Every other file is checked alone.
 ///
-/// **With a workshop, as the build has one** (ADR-321 D19, #1530): an option
+/// **With a build-time directory, as the build has one** (ADR-321 D19, #1530): an option
 /// default such as `examples/http`'s `head_timeout: time::Duration =
 /// 10.seconds()` is computed by compiling it, and a check handed no place to
 /// compile refuses it with `NK1127` although `nikaia build` accepts it.
@@ -244,9 +244,9 @@ pub fn corpus_findings(
     library: &nikaia::contracts::Ledger,
 ) -> Vec<nikaia::check::Finding> {
     use nikaia::contracts::LedgerOps;
-    let workshop = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("corpus-workshop");
+    let build_time_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("corpus-build-time");
     let root = path.parent().unwrap_or(Path::new("."));
-    let reads = nikaia::assets::Reads::at(root).building_in(workshop);
+    let reads = nikaia::assets::Reads::at(root).building_in(build_time_dir);
     let checked = |own: &nikaia::contracts::Ledger, modules: &BTreeSet<String>| {
         nikaia::check::check_against(
             parsed,
@@ -471,28 +471,28 @@ pub fn undescribed_value(receiver: &str) -> String {
 
 // --- build-time code ----------------------------------------------------------
 
-/// **One workshop for every test**, as a build keeps one beside its cache: a
+/// **One build-time directory for every test**, as a build keeps one beside its cache: a
 /// `comptime` or a default that calls something is compiled and run there
 /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D1), and the library
 /// it links against is built once.
-pub fn workshop() -> PathBuf {
+pub fn build_time_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("comptime-compiled")
 }
 
-/// What a build may read, with the workshop it builds in.
+/// What a build may read, with the build-time directory it builds in.
 pub fn reads() -> nikaia::assets::Reads {
-    nikaia::assets::Reads::at(workshop()).building_in(workshop())
+    nikaia::assets::Reads::at(build_time_dir()).building_in(build_time_dir())
 }
 
-/// The ledger as a build infers it, its defaults compiled in the workshop.
+/// The ledger as a build infers it, its defaults compiled in the build-time directory.
 pub fn infer(parsed: &nikaia::parser::Parsed) -> nikaia::contracts::Ledger {
     use nikaia::contracts::LedgerOps;
-    nikaia::comptime_run::defaults_compiled_in(Some(&workshop()), || {
+    nikaia::comptime_run::defaults_compiled_in(Some(&build_time_dir()), || {
         nikaia::contracts::Ledger::infer(parsed)
     })
 }
 
-/// The check a build runs, with the workshop.
+/// The check a build runs, with the build-time directory.
 pub fn checked(
     parsed: &nikaia::parser::Parsed,
     own: &nikaia::contracts::Ledger,

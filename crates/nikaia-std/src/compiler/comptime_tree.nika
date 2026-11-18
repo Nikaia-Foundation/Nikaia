@@ -775,7 +775,7 @@ pub struct ComptimeDeclared {
 
 /// What computing a build-time constant asks of the compiler (K3a, #125):
 /// the program's files, the units made from them, the inference, the emitter
-/// and the workshop stay Rust. Files are named by their place among the
+/// and the build-time directory stay Rust. Files are named by their place among the
 /// program's, units by the index the host handed out.
 pub trait ComptimeComputeHost {
     /// How many files the program has.
@@ -822,7 +822,7 @@ pub trait ComptimeComputeHost {
     fn dump(ref self, unit: i64, ty: ref Ty, mut out: String) -> CheckWall? sync
     /// What a run may spend: counted steps and bytes (ADR-321 D7, D10).
     fn bounds(ref self) -> (u64, u64) sync
-    /// `program` compiled and run in the workshop under `bound`: its answer
+    /// `program` compiled and run in the build-time directory under `bound`: its answer
     /// written to `answer`, or the wall it met.
     fn run_comptime(ref self, program: ref String, bound: ref String, mut answer: String) -> CheckWall? sync
     /// A run's answer read back as a value.

@@ -328,8 +328,8 @@ pub fn emit_program(parsed: &Parsed, build: Build) -> Result<Lowered> {
 /// [`assets::Reads::none`], which is D1.
 pub fn emit_program_reading(parsed: &Parsed, build: Build, reads: &Reads) -> Result<Lowered> {
     // **A default is compiled where a `comptime` is** (ADR-321 D1): the ledger
-    // this lowering infers records it from the same workshop.
-    crate::comptime_run::defaults_compiled_in(reads.workshop().place(), || {
+    // this lowering infers records it from the same build-time directory.
+    crate::comptime_run::defaults_compiled_in(reads.build_time_dir().place(), || {
         let trust = crate::contracts::trust::analyse(parsed, std_ledger());
         Emitter::new_reading(parsed, build, trust.provenance, reads).program()
     })

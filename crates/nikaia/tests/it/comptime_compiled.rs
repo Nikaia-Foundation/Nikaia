@@ -7,7 +7,7 @@
 //! the program, and a function of `std`'s Rust half runs as it does in the
 //! program.
 //!
-//! **One workshop for the whole file**, under Cargo's own scratch directory:
+//! **One build-time directory for the whole file**, under Cargo's own scratch directory:
 //! the library build-time code links against is built once and kept, as a
 //! build keeps it beside its cache.
 
@@ -21,12 +21,12 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-fn workshop() -> PathBuf {
+fn build_time_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("comptime-compiled")
 }
 
 fn reads() -> Reads {
-    Reads::at(workshop()).building_in(workshop())
+    Reads::at(build_time_dir()).building_in(build_time_dir())
 }
 
 fn findings(source: &str) -> Vec<Finding> {
@@ -164,7 +164,7 @@ fn an_unchanged_comptime_is_answered_from_what_was_kept() {
                   \x20   println(f\"{T}\")\n\
                   }\n";
     assert!(lowered(source).contains("const T: i64 = 8642;"));
-    let kept = workshop().join("comptime");
+    let kept = build_time_dir().join("comptime");
     let runs = |dir: &PathBuf| -> Vec<(PathBuf, std::time::SystemTime)> {
         let mut out: Vec<_> = std::fs::read_dir(dir)
             .expect("the kept runs")
@@ -422,7 +422,7 @@ fn a_file_the_build_reads_is_handed_to_a_compiled_call() {
         &dir,
         nikaia::assets::Allowlist::read(&dir.join("reads.txt")).expect("the list reads"),
     )
-    .building_in(workshop());
+    .building_in(build_time_dir());
     let checked = |source: &str| {
         let parsed = parse_to_ast(source).expect("the source parses");
         let own = Ledger::infer(&parsed);
@@ -591,7 +591,7 @@ fn an_options_default_is_compiled_and_recorded() {
              }}\n"
         )
     };
-    let at = workshop();
+    let at = build_time_dir();
     let lowered = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
         let parsed = parse_to_ast(&source("sq(9)")).expect("the source parses");
         assert!(findings(&source("sq(9)")).is_empty());
@@ -725,9 +725,9 @@ fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
 
 // --- ADR-321 D19: no place to compile is a refusal, never an interpretation --
 
-/// A check made through the library with no workshop, as a caller that hands
+/// A check made through the library with no build-time directory, as a caller that hands
 /// it none makes: nothing to compile build-time code in.
-fn findings_without_a_workshop(source: &str) -> Vec<Finding> {
+fn findings_without_a_build_time_dir(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
@@ -753,8 +753,8 @@ const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\
 /// `NK1127` and says why; it neither computes it another way nor leaves it
 /// open.
 #[test]
-fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
-    let found = findings_without_a_workshop(DIVIDED);
+fn a_check_with_no_build_time_dir_refuses_a_comptime_that_calls() {
+    let found = findings_without_a_build_time_dir(DIVIDED);
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
     assert_eq!(
@@ -771,17 +771,17 @@ fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
     );
     // An initialiser of literals alone is still folded (D1's last paragraph).
     assert!(
-        findings_without_a_workshop(
+        findings_without_a_build_time_dir(
             "comptime K = 4 * 1024\n\nfn main() throws {\n    println(f\"{K}\")\n}\n"
         )
         .is_empty()
     );
 }
 
-/// **The same program with a workshop**, as a check through the library
+/// **The same program with a build-time directory**, as a check through the library
 /// that is handed one and as the command line has it, computes the value.
 #[test]
-fn a_check_with_a_workshop_computes_the_same_comptime() {
+fn a_check_with_a_build_time_dir_computes_the_same_comptime() {
     assert!(findings(DIVIDED).is_empty(), "{:#?}", findings(DIVIDED));
     assert!(
         lowered(DIVIDED).contains("const B: i64 = 1;"),
@@ -805,7 +805,7 @@ fn a_check_with_a_workshop_computes_the_same_comptime() {
 }
 
 /// **An option's default that calls a function, both ways** (ADR-318 D1,
-/// ADR-321 D1, D19): compiled where the check has a workshop, `NK1127` at
+/// ADR-321 D1, D19): compiled where the check has a build-time directory, `NK1127` at
 /// the default where it has none.
 #[test]
 fn an_options_default_that_calls_is_compiled_or_refused() {
@@ -820,14 +820,14 @@ fn an_options_default_that_calls_is_compiled_or_refused() {
                   fn main() throws {\n\
                   \x20   println(shout(\"go\"))\n\
                   }\n";
-    let found = findings_without_a_workshop(source);
+    let found = findings_without_a_build_time_dir(source);
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
     assert_eq!(
         refused[0].message,
         "`times` can't be computed while the program is built."
     );
-    let at = workshop();
+    let at = build_time_dir();
     let lowered = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
         assert!(findings(source).is_empty(), "{:#?}", findings(source));
         let parsed = parse_to_ast(source).expect("the source parses");

@@ -1089,11 +1089,11 @@ fn an_integer_comptime_binding_is_its_value() {
 // --- ADR-359 D11-D13: a call with known arguments a claim needs is run -------
 
 /// **A check with a place to compile build-time code**, as every command-line
-/// build has (ADR-321 D19): one workshop for the file, under Cargo's scratch
+/// build has (ADR-321 D19): one build-time directory for the file, under Cargo's scratch
 /// directory.
 fn checked_building(source: &str) -> nikaia::check::Checked {
-    let workshop = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("claims-run");
-    let reads = nikaia::assets::Reads::at(&workshop).building_in(&workshop);
+    let build_time_dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("claims-run");
+    let reads = nikaia::assets::Reads::at(&build_time_dir).building_in(&build_time_dir);
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's ledger");

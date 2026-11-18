@@ -274,7 +274,7 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
 /// call resolves to and not for what a `comptime` comes to
 /// ([ADR-321](../../docs/specification/adr/adr-321.md) D1). A value is computed
 /// once, by the check that reports it, and compiled there; this pass has no
-/// workshop to compile it in, and nothing it hands on reads one.
+/// build-time directory to compile it in, and nothing it hands on reads one.
 pub(crate) fn check_for_the_ledger<'a>(
     parsed: &'a Parsed,
     beside: &'a [&'a Parsed],
