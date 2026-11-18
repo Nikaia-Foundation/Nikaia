@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1433 (Draft)
+**Version:** 0.0.1434 (Draft)
 **Date:** 2026-11-18
 
 ---
@@ -873,7 +873,7 @@ asks for an `fs::Path`, an `f"…"` builds one, and its holes may be a path, tex
 or a number (Part III 17.1); a `let` without a type takes it from the binding's
 first use. A path in a hole of an `f"…"` that is text is refused (`NK1201`): the text is
 written `p.to_text()` or `p.display()`. Handed to `print` or `println`, a path
-in a hole is written as its bytes are.
+in a hole is written as its bytes are. `print`, `println`, `eprint` and `eprintln` also take `Bytes` and write them unchanged, `println` with a `\n` after them ([ADR-019](adr/adr-019.md) D7); `Bytes` in a hole of a text `f"…"` is refused.
 
 **A template's holes need no `f`.** `dsl html { <p>{name}</p> } eod` (Part II)
 marks the construct as a place where code appears.

@@ -1,0 +1,19 @@
+// `print` and `println` of `Bytes` write them unchanged (ADR-019 D7, #1859):
+// bytes that are not text, a view of them, and the line end `println` adds.
+fn shown(b: ref Bytes) throws {
+    println(b)
+}
+
+fn main() throws {
+    let mut v: Vec[u8] = []
+    v.push(200 as u8)
+    v.push(10 as u8)
+    print(Bytes(v))
+    let b = Bytes([0x50, 0x34, 0xff])
+    println(b)
+    shown(b)
+    print(b)
+    eprint(Bytes([0x65]))
+    eprintln(Bytes([0x6f, 0x6b]))
+    println("text after")
+}

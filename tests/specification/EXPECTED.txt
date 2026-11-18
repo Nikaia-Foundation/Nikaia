@@ -82,7 +82,7 @@
 10-nikaia-light.md #82 lowered (as written)  struct FileHandle {
 10-nikaia-light.md #83 lowered (as written)  use std::fs
 10-nikaia-light.md #84 lowered (as written)  use std::fs
-10-nikaia-light.md #85 refused (as written) [sketch NK1135]  use std::fs
+10-nikaia-light.md #85 refused (as written) [sketch NK1135,NK1201]  use std::fs
 10-nikaia-light.md #86 lowered (as written)  struct Expr { n: i64 }
 10-nikaia-light.md #87 fragment (as written) [sketch]  struct Token {
 10-nikaia-light.md #88 lowered (as written)  struct Reading { name: String, temp: i32 }   // `name` …

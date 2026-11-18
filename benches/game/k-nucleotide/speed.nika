@@ -1,0 +1,104 @@
+// The Benchmarks Game's `k-nucleotide`, written for speed: the same output as
+// `main.nika`. Each letter of the `THREE`
+// section becomes its two-bit code (A 0, C 1, T 2, G 3: bits 1 and 2 of its
+// ASCII, in either case), and a fragment of up to 32 letters is the number its
+// codes make, so a map is keyed by a `u64`, rolled one letter at a time,
+// instead of by text.
+//
+//     nikaia run speed.nika < fasta-output.txt
+//
+// Standard input is untrusted, so the maps keyed by it get the keyed hash
+// with a per-process seed (ADR-365 D2), as in `main.nika`.
+use std::io
+use std::collections
+
+// The two-bit codes of the section whose header starts with `THREE`.
+fn section_three(input: String) -> Vec[u64] sync {
+	let mut codes: Vec[u64] = []
+	for section in input.split(">") {
+		if section.starts_with("THREE") {
+			for line in section.lines().skip(1) {
+				for b in line.bytes {
+					codes.push(((b >> 1) & 3) as u64)
+				}
+			}
+		}
+	}
+	return codes
+}
+
+// Every fragment of length `k`, by its code, and how often it occurs.
+fn count(codes: Vec[u64], k: i64) -> collections::HashMap[u64, i64] sync {
+	let mut counts: collections::HashMap[u64, i64] = collections::HashMap()
+	if codes.len() < k {
+		return counts
+	}
+	let mask: u64 = (1 << (2 * k as u64)) - 1
+	let mut key: u64 = 0
+	for i in 0..<k - 1 {
+		key = (key << 2) | codes[i]
+	}
+	for i in k - 1..<codes.len() {
+		key = ((key << 2) | codes[i]) & mask
+		counts
+			.entry(key)
+			.and_modify fn (n) { n += 1 }
+			.or_insert(1)
+	}
+	return counts
+}
+
+// The fragment of length `k` that `key` codes.
+fn letters(key: u64, k: i64) -> String sync {
+	let names = ["A", "C", "T", "G"]
+	let mut out = String()
+	for i in 0..<k {
+		let shift = 2 * (k - 1 - i) as u64
+		let c = ((key >> shift) & 3) as i64
+		out.push_str(names[c])
+	}
+	return out
+}
+
+fn report_frequencies(codes: Vec[u64], k: i64) throws {
+	let counts = count(codes, k)
+	let mut rows = Vec()
+	let mut total = 0
+	for (key, n) in counts {
+		total += n
+		rows.push((letters(key, k), n))
+	}
+	rows.sort_by fn (a, b) { a.0.compare(b.0) }
+	rows.sort_by fn (a, b) { b.1.compare(a.1) }
+	for row in rows {
+		let percent = (row.1 as f64) * 100.0 / (total as f64)
+		println(f"{row.0} {percent:.3}")
+	}
+	println("")
+}
+
+fn report_fragment(codes: Vec[u64], fragment: String) throws {
+	let mut key: u64 = 0
+	for b in fragment.bytes {
+		key = (key << 2) | ((b >> 1) & 3) as u64
+	}
+	let counts = count(codes, fragment.bytes.len())
+	let n = counts.get(key) ?? 0
+	println(f"{n}\t{fragment}")
+}
+
+fn main() throws {
+	let input = io::read_to_string() catch {
+		eprintln(f"cannot read standard input: {error}")
+		return
+	}
+	let codes = section_three(input)
+
+	report_frequencies(codes, 1)
+	report_frequencies(codes, 2)
+	report_fragment(codes, "GGT")
+	report_fragment(codes, "GGTA")
+	report_fragment(codes, "GGTATT")
+	report_fragment(codes, "GGTATTTTAATT")
+	report_fragment(codes, "GGTATTTTAATTTATAGT")
+}

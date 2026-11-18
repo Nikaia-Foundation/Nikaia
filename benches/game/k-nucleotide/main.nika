@@ -1,0 +1,112 @@
+// The Benchmarks Game's `k-nucleotide`: reads DNA in FASTA form from standard
+// input, takes the section whose header starts with `THREE`, and reports how
+// often each fragment of length 1 and 2 occurs, as percentages, then the count
+// of five named fragments (lengths 3, 4, 6, 12 and 18).
+//
+//     nikaia run main.nika < fasta-output.txt
+//     A 30.297
+//     T 30.151
+//     ...
+//     147166	GGT
+//     ...
+//
+// The input is fasta's output (benches/game/fasta). Written as a Nikaia
+// programmer writes it first, from examples/k-nucleotide: a `grammar` for
+// FASTA, map keys that are views into the DNA rather than copies, a count
+// per fragment. Standard input is untrusted, so the maps keyed by it get the
+// keyed hash with a per-process seed (ADR-365 D2; `nikaia build --trust`
+// lists it).
+use std::io
+use std::collections
+
+grammar Fasta {
+	// A newline is the structure, not a blank to skip.
+	rule WS = "" -> { }
+
+	entry rule file -> Vec[Section] =
+		sections:section* -> { sections }
+
+	rule section -> Section =
+		">" header:LINE body:body_line* -> { Section { header, lines: body } }
+
+	rule body_line -> String = not(">") l:LINE -> { l }
+
+	rule LINE -> String = s:until(line_ending) line_ending -> { s }
+}
+
+pub struct Section {
+	header: String,
+	lines: Vec[String],
+}
+
+// Every fragment of length `k` in `dna`, and how often it occurs. The keys
+// are cuts of `dna`, not copies.
+fn count(dna: String, k: i64) -> collections::HashMap[String, i64] {
+	let mut counts: collections::HashMap[String, i64] = collections::HashMap()
+	if dna.len() < k {
+		return counts
+	}
+	for i in 0..<dna.len() - k + 1 {
+		// A cut through a scalar is no fragment of DNA (Part I 2.6).
+		let fragment = dna.bytes[i..<i + k].text() catch {
+			continue
+		}
+		counts
+			.entry(fragment)
+			.and_modify fn (n) { n += 1 }
+			.or_insert(1)
+	}
+	return counts
+}
+
+// The fragments of one length, as percentages, most frequent first; ties
+// alphabetically (the second stable sort keeps the first's order).
+fn report_frequencies(dna: String, k: i64) throws {
+	let counts = count(dna, k)
+	let mut rows = Vec()
+	let mut total = 0
+	for (fragment, n) in counts {
+		total += n
+		rows.push((fragment, n))
+	}
+	rows.sort_by_key fn (row) { row.0.clone() }
+	rows.sort_by_key fn (row) { -row.1 }
+	for row in rows {
+		let percent = (row.1 as f64) * 100.0 / (total as f64)
+		println(f"{row.0} {percent:.3}")
+	}
+	println("")
+}
+
+fn report_fragment(dna: String, fragment: String) throws {
+	let counts = count(dna, fragment.len())
+	let n = counts.get(fragment) ?? 0
+	println(f"{n}\t{fragment}")
+}
+
+fn main() throws {
+	let text = io::read_to_string() catch {
+		eprintln(f"cannot read standard input: {error}")
+		return
+	}
+	let sections = Fasta::file(text) catch {
+		eprintln(f"standard input is not FASTA: {error}")
+		return
+	}
+	let mut dna = String()
+	for section in sections {
+		if section.header.starts_with("THREE") {
+			for line in section.lines {
+				dna.push_str(line.to_uppercase())
+			}
+		}
+	}
+
+	report_frequencies(dna, 1)
+	report_frequencies(dna, 2)
+	report_fragment(dna, "GGT")
+	report_fragment(dna, "GGTA")
+	report_fragment(dna, "GGTATT")
+	report_fragment(dna, "GGTATTTTAATT")
+	report_fragment(dna, "GGTATTTTAATTTATAGT")
+}

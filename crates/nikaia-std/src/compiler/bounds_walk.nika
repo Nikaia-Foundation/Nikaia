@@ -3971,12 +3971,16 @@ fn bounding_derived_entry(
 
 /// **What `std`'s ledger states of each element a sequence yields**
 /// (ADR-375 D5): `b.find_all(set; from: f)` yields positions with
-/// `f <= s < b.len()`. The facts of `item` for the call `iter`; none where
-/// `iter` is no call whose entry states any, or its receiver is no path.
+/// `f <= s < b.len()`, rising, so the one after `turn` others is at or above
+/// `turn` (#432). The facts of `item` for the call `iter`, with `turn` for
+/// the number of elements before it where a `for` counts them (ADR-361 D13)
+/// and a number of its own elsewhere; none where `iter` is no call whose
+/// entry states any, or its receiver is no path.
 fn bounding_each(
 	mut walk: BoundsWalk,
 	iter: ref Expr,
 	item: i64,
+	turn: i64?,
 	facts: ref BoundsFacts,
 	context: ref BoundsContext,
 	program: ref Program,
@@ -4016,6 +4020,8 @@ fn bounding_each(
 				given.insert(name.clone(), term ?? 0)
 			}
 			given.insert("item", item)
+			let before = turn ?? bounding_fresh(walk)
+			given.insert("turn", before)
 			given.insert(length_of("self"), bounding_length_named(walk, path, true))
 			for nodes in each.conditions {
 				let read = walk.arena.adopt(nodes)
@@ -7775,7 +7781,7 @@ fn bounding_let(
 	// **A sequence held under a name keeps what `std`'s ledger states of
 	// each element** (ADR-375 D5), as facts of a name within it.
 	let held = walk.arena.var(bounding_element_of(name))
-	for each in bounding_each(walk, value, held, facts, context, program, words) {
+	for each in bounding_each(walk, value, held, null, facts, context, program, words) {
 		// Nothing where the sequence is empty (#1483).
 		let fact = bounding_each_guarded(walk, each)
 		bounding_push(walk, facts, fact)
@@ -8407,7 +8413,8 @@ fn bounding_for(
 	// span where its start lies at or below its end, a collection's length.
 	let mut all_turns: i64? = null
 	if !steps.is_empty() {
-		let t = walk.arena.var(f"#turn{walk.entries}")
+		let turn_name = f"#turn{walk.entries}"
+		let t = walk.arena.var(turn_name)
 		walk.entries += 1
 		let mut limit: i64? = null
 		let mut binding_at: i64? = null
@@ -8452,10 +8459,29 @@ fn bounding_for(
 				limit = walk.arena.lt(t, length)
 			}
 		}
-		if limit != null {
+		// **A sequence whose ledger ties its elements to the turns** (#432,
+		// ADR-375 D5): `find_all`'s positions rise, so the one a turn binds
+		// lies at or above `t` and below the bytes' length, and `t` below it.
+		// Stated of an element of its own: one exists at each head.
+		let mut counted_by: Vec[i64] = []
+		if limit == null && bindings.len() == 1 {
+			let element = bounding_fresh(walk)
+			let mut tied = false
+			for fact in bounding_each(walk, iter, element, t, facts, context, program, words) {
+				tied = tied || walk.arena.mentions(fact, turn_name)
+				counted_by.push(fact)
+			}
+			if !tied {
+				counted_by = []
+			}
+		}
+		if limit != null || !counted_by.is_empty() {
 			let zero = walk.arena.int(0)
 			turn_facts.push(walk.arena.ge(t, zero))
-			turn_facts.push(limit ?? 0)
+			if limit != null {
+				turn_facts.push(limit ?? 0)
+			}
+			turn_facts.extend(counted_by)
 			if binding_at != null {
 				turn_facts.push(binding_at ?? 0)
 			}
@@ -8580,7 +8606,7 @@ fn bounding_for(
 	if bindings.len() == 1 && !counted {
 		let only = words.resolve(bindings[0]).clone()
 		let item = walk.arena.var(only)
-		let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
+		let mut stated = bounding_each(walk, iter, item, null, facts, context, program, words)
 		// An inner list of a field (`t.col[c]`, its `.clone()`) is named
 		// by its list's `t.col[]` (ADR-306 D28).
 		// A list field by its path (`self.at`, #1688), what its rules and

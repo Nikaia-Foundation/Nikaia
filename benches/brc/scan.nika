@@ -14,7 +14,10 @@ fn main() throws {
         return
     }
     let seps = bytes::ByteSet([';', '\n'])
-    let mut n = 0
+    // An `i64`, as `src/bin/scan.rs`'s `u64`: a file of a billion rows has
+    // two billion separators, at the top of an `i32`. Raised once a position,
+    // it stays below the file's length, so it needs no check (#432).
+    let mut n: i64 = 0
     let mut x = 0
     for p in data.find_all(seps) {
         n += 1

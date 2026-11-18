@@ -301,9 +301,10 @@ fn bm_required(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collection
 }
 
 /// **What each sequence the ledgers describe holds of each element**
-/// (ADR-375 D5), read back over the parameters, the options, `self.len()` and
-/// `item`, by the ledger's key (`Bytes::find_all`). The first ledger that has
-/// an entry answers; a condition that does not read back is left out.
+/// (ADR-375 D5), read back over the parameters, the options, `self.len()`,
+/// `item` and `turn`, the number of elements before it (#432), by the
+/// ledger's key (`Bytes::find_all`). The first ledger that has an entry
+/// answers; a condition that does not read back is left out.
 fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
     let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
     for ledger in ledgers {
@@ -328,6 +329,7 @@ fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::B
                 names.insert(option.name.clone())
             }
             names.insert("item")
+            names.insert("turn")
             names.insert("self.len()")
             let mut conditions: Vec[Vec[logic::SolverTerm]] = []
             for text in contract.ensures_each {

@@ -142,6 +142,9 @@ shows, without collector pauses, and can spread their work over every core.
   ([benches/brc](benches/brc/README.md)) at the baseline CPU level, Nikaia's safe program
   already does less work than the fastest Rust a person wrote, and mispredicts a third as many
   branches. The figures and how they are taken are in that README.
+- Programs from the Computer Language Benchmarks Game, each counted against the fastest
+  Rust entry published there, are in [benches/game](benches/game/README.md), with
+  the rows where Nikaia loses and what is known of their causes.
 - Whether your code may run on several cores is one line in
   `nikaia.toml`, and the code does not change:
 

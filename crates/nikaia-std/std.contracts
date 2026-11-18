@@ -7199,7 +7199,9 @@ signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 # count, `last` searches from the end. A consumer written right after
 # `find_all` is the one named here; a step between them is another sequence.
 # **Each position lies at or after `from` and inside the bytes** (ADR-375 D5):
-# a fact for the bounds walk on the name a `for` binds.
+# a fact for the bounds walk on the name a `for` binds. **The positions
+# rise**, so the one after `turn` others lies at or above `turn`, and a `for`
+# over them turns fewer times than the bytes are long (ADR-361 D13, #432).
 # **How it goes from one hit to the next is the program's** (ADR-375 D6):
 # `ByBlock` reads the next block when the last one's hits are spent,
 # `AfterHit` looks for each hit in the half block right after the one before.
@@ -7209,7 +7211,7 @@ panics = false
 sync = true
 touches = []
 consumers = ["count", "nth", "last"]
-ensures_each = ["from <= item", "item < self.len()"]
+ensures_each = ["from <= item", "item < self.len()", "turn <= item"]
 signature = "(ref self, set: bytes::ByteSet; from: i64 = 0, scan: bytes::Scan = bytes::Scan::ByBlock) -> Seq[i64] sync"
 
 # How `find_all` goes from one hit to the next (ADR-375 D6): by block, or

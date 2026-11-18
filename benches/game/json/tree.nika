@@ -1,0 +1,19 @@
+// The json rows' Nikaia side (#1620): standard input read into a `json::Value`
+// with the json package (`packages/json`) and written back as JSON text
+// without blanks.
+//
+//     nikaia run tree.nika < input.json
+use std::io
+use json
+
+fn main() throws {
+	let text = io::read_to_string() catch {
+		eprintln(f"cannot read standard input: {error}")
+		return
+	}
+	let value = json::parse(text) catch {
+		eprintln(f"standard input is not JSON: {error}")
+		return
+	}
+	println(json::to_string(value))
+}
