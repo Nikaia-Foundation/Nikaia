@@ -1,0 +1,6 @@
+30 10
+7
+bc bcd
+exit 101
+neg.nika:7: the program stopped: index out of bounds: the index is -1
+wrapped: false
