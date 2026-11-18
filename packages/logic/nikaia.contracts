@@ -962,7 +962,7 @@ signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
 sync = "inferred"
 panics = true
 touches = []
-signature = "(ref mut self) -> bool"
+signature = "(ref mut self, v: i64) -> bool"
 
 [fn."SvSimplex::row_bound"]
 sync = "inferred"
