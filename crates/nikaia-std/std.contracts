@@ -2257,6 +2257,33 @@ panics = false
 sync = true
 signature = "() -> i64"
 
+# ## The name of the calling thread (ADR-401)
+#
+# **`thread::id()` names the thread that calls it with a `thread::Id`**: two
+# calls on one thread give equal ids, two threads never do (ADR-401 D1). The id
+# is taken from a process-wide counter on the thread's first call and never
+# handed out again, so a thread started after another ended never looks like it
+# (D2). It names a thread, not a task: a task may be resumed on another thread
+# (D3). No `touches` line, as `mem::allocations`: which thread runs a call is
+# the outside world. `sync`: a read of a per-thread slot.
+
+# The name of a thread: compared with `==` and `!=`, and a map key or set
+# member; no order, no arithmetic, no number.
+[type."thread::Id"]
+pub = true
+crosses = true
+compares = true
+equates = true
+hashes = true
+copies = true
+
+# The calling thread's id.
+[fn."thread::id"]
+pub = true
+panics = false
+sync = true
+signature = "() -> thread::Id"
+
 # ## The CPU level a program is built for (ADR-371 D6)
 #
 # **`target::has(i)` answers whether the level `--cpu` named has the instruction

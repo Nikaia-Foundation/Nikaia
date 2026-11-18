@@ -83,6 +83,7 @@ pub mod supervisor;
 pub mod target;
 pub mod task;
 pub mod tether;
+pub mod thread;
 mod tls;
 /// **What a library's entry point reads from C and writes back to it**
 /// ([ADR-284](../../../docs/specification/adr/adr-284.md) D5-D7): the wrapper
@@ -822,6 +823,8 @@ pub mod prelude {
     pub use crate::num::LowBits as _;
     pub use crate::supervisor;
     pub use crate::task;
+    // The calling thread's name, `thread::id()` (ADR-401).
+    pub use crate::thread;
     // **A duration and the call that waits one out**
     // ([ADR-150](../../../docs/specification/adr/adr-150.md) D1, D2). The type
     // so that `let deadline: Duration = 2.minutes()` can be written, the
