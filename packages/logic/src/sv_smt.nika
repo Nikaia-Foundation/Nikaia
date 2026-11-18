@@ -705,6 +705,7 @@ fn sv_smt_search_cnf(
 		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
 	}
 	let mut book = sv_book(cnf.query) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
+	book.log.limit = p.steps
 	let mut ids: Vec[u32] = []
 	let mut c: u32 = 0
 	for _ in cnf.query.clauses {
@@ -730,6 +731,11 @@ fn sv_smt_search_cnf(
 		SvFastEnd::Skip => {},
 	}
 	let pre = if p.pre { sv_pre(book, cnf, ids) } else { sv_pre_none() }
+	// An elimination stopped by the step budget leaves the rest unproved:
+	// the search would only stop at its first check (#2107).
+	if book.log.over() {
+		return sv_engine_unknown(LgUnknown::TooManySteps, 0)
+	}
 	if pre.unsat {
 		return SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),

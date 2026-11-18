@@ -338,6 +338,10 @@ fn sv_eliminate(
 	let mut rounds = 0
 	while rounds < 4096 {
 		rounds += 1
+		// The step budget (#2107): no case of the search counts a round.
+		if book.log.over() {
+			return SvChecked::Unknown(LgUnknown::TooManySteps)
+		}
 		// Tidied in place. A row with columns whose coefficients' gcd is 1 is
 		// tidy already, as most are after the first round: `sv_tidy` would
 		// copy it to give it back as it was (#2012).

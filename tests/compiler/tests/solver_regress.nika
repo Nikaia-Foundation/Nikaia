@@ -1,8 +1,13 @@
 // The solver's regression set (`tests/solver/regress`, #1961): files of the
 // SMT-LIB set (`tests/solver/SOURCES.md`) a fix brought within the limit,
-// run under a 10 s wall-clock limit, so a slowdown back to the old cost
-// shows as `unknown` in the diff. QF_LIA bofill-scheduling
-// SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
+// run under a work budget of 300000 steps of the proof log (`--budget`,
+// #2107), so a file whose elimination or search grows past it shows as
+// `unknown (steps)` in the diff. A count, not a wall-clock limit: the arm64
+// CI runner overran 10 s on the two SMPT files that take 4 s and 2 s on an
+// x86 machine (`docs/measuring.md`: count, never time). The files need 31128
+// (Diffusion2D), 225922 (Referendum), 851 (c_inference, which its cases stop
+// first) and 9967 steps (bofill), the same on every machine.
+// QF_LIA bofill-scheduling SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
 // and about 2 s since. QF_LIA 20231117-c_inference 30_30_86_7_sat ran past
 // its time limit while only the theory checks that pivot counted toward the
@@ -51,7 +56,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"]
+	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--budget", "300000", "tests/solver/regress"]
 	let out = process::run(nikaia, all.clone(); dir: repo)
 	println(out.stdout.trim())
 	// A failed inner run names its cause in the diff (#1305).

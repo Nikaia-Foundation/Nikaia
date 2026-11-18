@@ -46,6 +46,7 @@ pub(crate) fn sv_unknown(why: &LgUnknown) -> String {
         LgUnknown::Overflow => String::from("unknown (overflow)"),
         LgUnknown::TooManyCases => String::from("unknown (cases)"),
         LgUnknown::TooManyBounds => String::from("unknown (bounds)"),
+        LgUnknown::TooManySteps => String::from("unknown (steps)"),
         LgUnknown::NoContradiction => String::from("unknown (no contradiction)"),
         _ => String::from("unknown"),
     }

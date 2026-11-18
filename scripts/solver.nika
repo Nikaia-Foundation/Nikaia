@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] [--budget N] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] [--rlimit R] DIR|FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED [--size S] [--rlimit R]
@@ -55,7 +55,13 @@
 // then a row per directory: solved, unknown (overflow and files the reader
 // refuses among them), malformed (a script that is not well-formed
 // SMT-LIB, its reason on its line, ADR-270 D28), wrong, PAR-2 over the work budget, certificates
-// checked, models evaluated. `--stats` adds below each file's line the new
+// checked, models evaluated. `--budget N` gives a new engine a work budget
+// of N steps of its proof log (the parameter `steps` of `sv_params`,
+// `packages/logic/src/sv_strategy.nika`): the equality elimination's steps,
+// which no case counts, with the search's, so a file past it answers
+// `unknown (steps)` on every machine alike (#2107). With `--budget` and no
+// `--timeout` a file has no wall-clock limit; without either, 60 s.
+// `--stats` adds below each file's line the new
 // engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
 // theory lemmas and those repeating an earlier one, decisions, restarts.
 // The query is the conjunction of a file's assertions with the goal `false`:
@@ -341,7 +347,12 @@ fn solver_answer_stats(
 	stats: bool,
 ) -> (String, i64, String, String) throws {
 	let args: Vec[String] = if stats { ["--stats", engine, path] } else { [engine, path] }
-	let out = process::run(bin, args; within: timeout.seconds())
+	// A `timeout` of 0 is no wall-clock limit (`--budget`, #2107).
+	let out = if timeout > 0 {
+		process::run(bin, args; within: timeout.seconds())
+	} else {
+		process::run(bin, args)
+	}
 	if out.timed_out { return ("unknown (timeout)", -1, "-1", "") }
 	if !out.ok { return ("unknown (crashed)", -1, "-1", "") }
 	// Each text of the returned tuple made with `f"..."`: a `.to_string()`
@@ -412,7 +423,8 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut engine: String = "new"
 	let mut summary_only = false
 	let mut stats = false
-	let mut timeout = 60
+	let mut timeout = -1
+	let mut budget = 0
 	let mut targets: Vec[String] = []
 	let mut i = 0
 	while i < args.len() {
@@ -424,6 +436,15 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		}
 		if a == "--timeout" && i + 1 < args.len() {
 			timeout = text::parse_i64(args[i + 1].clone()) ?? 60
+			i += 2
+			continue
+		}
+		if a == "--budget" && i + 1 < args.len() {
+			budget = text::parse_i64(args[i + 1].clone()) ?? 0
+			if budget <= 0 {
+				println(f"--budget takes a positive number of steps, not {args[i + 1]}")
+				process::exit(2)
+			}
 			i += 2
 			continue
 		}
@@ -440,6 +461,15 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		println(f"unknown engine {engine}: fm, new, new-fm or new-simplex")
 		process::exit(2)
 	}
+	if timeout < 0 { timeout = if budget > 0 { 0 } else { 60 } }
+	let mut answering = engine.clone()
+	if budget > 0 {
+		if engine == "fm" {
+			println("--budget counts the new engine's steps: not with --engine fm")
+			process::exit(2)
+		}
+		answering = f"{engine}:steps={budget}"
+	}
 	let mut files: Vec[(String, String)] = []
 	for t in targets { files.extend(solver_files(t)) }
 	if files.len() == 0 {
@@ -452,7 +482,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	for (group, path) in files {
 		let (answer, work, shown, counted) = solver_answer_stats(
 			bin.clone(),
-			engine.clone(),
+			answering.clone(),
 			path.clone(),
 			timeout,
 			stats,

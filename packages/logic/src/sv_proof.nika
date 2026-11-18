@@ -134,15 +134,25 @@ pub struct SvLog {
 	pub entries: u32,
 	pub atoms: u32,
 	pub columns: u32,
+	/// The most steps the log may hold before the elimination stops with
+	/// `TooManySteps`, `0` for no limit: the work budget the rod sets with
+	/// `steps=N` (`sv_params`), counted, unlike a wall-clock limit, the same
+	/// on every machine (#2107). The compiler sets none.
+	pub limit: i64,
 }
 
 /// An empty log over `query`.
 fn sv_log(query: ref SvQuery) -> SvLog? {
 	let atoms = query.atoms.len().checked_u32() ?? return null
-	return SvLog { steps: [], entries: 0, atoms: atoms, columns: query.columns }
+	return SvLog { steps: [], entries: 0, atoms: atoms, columns: query.columns, limit: 0 }
 }
 
 impl SvLog {
+	/// Whether the log holds more steps than its `limit` allows.
+	fn over(ref self) -> bool {
+		return self.limit > 0 && self.steps.len() > self.limit
+	}
+
 	/// Appends `step`, which makes `made` entries; the id of the first.
 	fn add(ref mut self, step: SvStep, made: u32) -> u32 {
 		let id = self.entries

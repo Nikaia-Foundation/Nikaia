@@ -420,6 +420,7 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
     let real = !cnf.query.reals.is_empty();
     if real && theory == "fm" { return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0); }
     let mut book = match sv_book(&cnf.query) { Some(__nikaia_value) => __nikaia_value, None => return sv_engine_unknown(LgUnknown::Overflow, 0) };
+    book.log.limit = p.steps;
     let mut ids: Vec<u32> = vec![];
     let mut c: u32 = 0u32;
     for _ in cnf.query.clauses.iter() {
@@ -433,6 +434,7 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
         SvFastEnd::Skip => { },
     }
     let pre = if p.pre { sv_pre(&mut book, cnf, &ids) } else { sv_pre_none() };
+    if book.log.over() { return sv_engine_unknown(LgUnknown::TooManySteps, 0); }
     if pre.unsat { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.copy_owned()), work: 0, path: String::from("pre"), carried: vec![], stats: sv_smt_stats_none() }; }
     let shown = sv_smt_pre_shown(&pre);
     let mut units: Vec<u32> = vec![];

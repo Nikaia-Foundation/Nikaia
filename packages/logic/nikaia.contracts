@@ -385,6 +385,12 @@ panics = true
 touches = []
 signature = "(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32"
 
+[fn."SvLog::over"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> bool"
+
 [fn."SvLog::round"]
 sync = "inferred"
 panics = true
@@ -5236,7 +5242,7 @@ hashes = true
 
 [type."LgUnknown"]
 pub = true
-variants = ["OutsideTheTheory", "Overflow", "TooManyCases", "TooManyBounds", "NoContradiction"]
+variants = ["OutsideTheTheory", "Overflow", "TooManyCases", "TooManyBounds", "TooManySteps", "NoContradiction"]
 compares = true
 equates = true
 hashes = true
@@ -5503,7 +5509,7 @@ copies = true
 
 [type."SvLog"]
 pub = true
-fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32"]
+fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32", "pub limit: i64"]
 compares = true
 equates = true
 hashes = true
@@ -5545,7 +5551,7 @@ copies = true
 
 [type."SvParams"]
 pub = true
-fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64"]
+fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64"]
 compares = true
 equates = true
 hashes = true
