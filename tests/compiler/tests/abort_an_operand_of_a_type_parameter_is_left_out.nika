@@ -1,0 +1,51 @@
+// A false `assert` checked at run time (`unproved-claims = "warn"`, ADR-396
+// D3) whose operands have a type parameter's type stops with the claim as it
+// was written and no operand line: such an operand is not `Debug` in the
+// generated Rust, so it is left out of the message rather than refused
+// (ADR-269 D2). Moved from the `nikaia-std` unit test
+// `abort::tests::an_operand_prints_where_it_can` (#2167).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn stops(text: String) -> String {
+    let mut lines: Vec[String] = []
+    let mut on = false
+    for line in text.lines() {
+        if line.contains("the program stopped") {
+            on = true
+        }
+        if on {
+            lines.push(line.clone())
+        }
+    }
+    return lines.join("\n")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(
+        f"{tmp}/same.nika",
+        fs::Root::Anywhere,
+        "fn same[T: Eq](a: T, b: T) {\n    assert(a == b)\n}\n\nfn main() {\n    same(1, 2)\n}\n",
+    )
+    let out = process::run(
+        "sh",
+        ["-c", "\"$0\" run --unproved-claims=warn same.nika", toolchain()]; dir: tmp.clone(),
+    )
+    println(f"exit {out.code}")
+    print(out.stdout)
+    println(stops(out.stderr))
+    process::run("rm", ["-rf", tmp])
+}
