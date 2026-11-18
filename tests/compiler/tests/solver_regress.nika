@@ -20,6 +20,13 @@
 // combination looked every assumed literal up in the other set, in the
 // engine and in the certificate checker; since the two sorted sets are
 // merged, about 2 s (#2012).
+// QF_LRA sal carpark-Carpark2-ausgabe-6 (#1967) took about 6 s on the rod
+// until 310f645c6 (the simplex's propagation scanned the trail for each
+// atom), and QF_LRA spider_benchmarks current_frame.base (#1968) about 8 s;
+// at opt-level 3 (c41d26781, #2004) both take under 0.1 s. They need 7983
+// and 4541 steps. Their old cost was the price of each step, not the number
+// of steps, so the budget does not catch its return; the measuring rod's
+// count of instructions does (`docs/measuring.md`).
 use std::fs
 use std::process
 

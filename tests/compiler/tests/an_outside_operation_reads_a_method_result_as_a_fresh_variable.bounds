@@ -1,0 +1,7 @@
+bounds in tests/an_outside_operation_reads_a_method_result_as_a_fresh_variable.nika: 0 indexes, 0 proved; 3 operations, 0 proved
+    26  n + line.trim().len()                  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    27  line.trim().len() - line.trim().len()  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    33  k + g.read()                           checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  outside  26  `n + line.trim().len()`, `n` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  27  `line.trim().len() - line.trim().len()`, `line.trim().len()` from `io::read_to_string`: checked: not proved within ±2^62, an NK1303 site (ADR-396 D8)
+  outside  33  `k + g.read()`, `k` from `io::read_to_string`: proved by the guard on line 29 (`k != 0`)

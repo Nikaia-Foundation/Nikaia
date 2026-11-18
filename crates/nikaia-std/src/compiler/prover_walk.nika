@@ -2645,7 +2645,8 @@ fn prover_overflow_goal(mut walk: ProverWalk, expr: ref Expr, op_at: i64, scope:
     if walk.state.unfit_numbers.len() > 0 {
         return null
     }
-    let term = lin_term(expr, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return null
+    let mut calls: Vec[i64] = []
+    let term = goal_term(expr, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes, calls) ?? return null
     let low = walk.arena.int(lo)
     let mut goal = walk.arena.le(low, term)
     if hi != null {
@@ -2653,7 +2654,25 @@ fn prover_overflow_goal(mut walk: ProverWalk, expr: ref Expr, op_at: i64, scope:
         let below = walk.arena.le(term, high)
         goal = walk.arena.and([goal, below])
     }
-    return goal
+    // **A method result is a fresh variable inside its type** (ADR-270
+    // D29): the goal holds for every result the type has, so it is asked
+    // as "outside the type, or the goal". An `i64`'s ends bound nothing
+    // the window does not.
+    if calls.is_empty() || ty == "i64" {
+        return goal
+    }
+    let (least, most) = prover_type_range(ty) ?? return null
+    let mut either: Vec[i64] = []
+    let bottom = walk.arena.int(least)
+    for result in calls {
+        either.push(walk.arena.lt(result, bottom))
+        if most != null {
+            let top = walk.arena.int(most ?? 0)
+            either.push(walk.arena.lt(top, result))
+        }
+    }
+    either.push(goal)
+    return walk.arena.or(either)
 }
 
 /// Whether `goal` holds of what is known here, or of that with what the

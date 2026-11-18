@@ -29,6 +29,23 @@ fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: f
 /// that value: a `comptime` binding (ADR-359 D7), a call run while the
 /// program was built (D11).
 fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
+    let mut calls: Vec[i64] = []
+    return lin_term_in(expr, words, var, pinned, out, false, calls)
+}
+
+/// **An operation's goal reads each method result as a fresh variable, one
+/// per call** (ADR-270 D29, #1972): `expr` as [`lin_term`] reads it, where a
+/// method call it reads no whole number of, `asked.length()`, is a variable
+/// named by the call's id, never by its text, so two calls are two values.
+/// Each such variable's node goes into `calls`, for the caller to bound by
+/// the operation's type: an operand of a `+`, `-` or `*` has the type of
+/// the operation, and a call under a conversion, of another type, is none.
+fn goal_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm], mut calls: Vec[i64]) -> i64? {
+    return lin_term_in(expr, words, var, pinned, out, true, calls)
+}
+
+/// [`lin_term`], and with `fresh` [`goal_term`].
+fn lin_term_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm], fresh: bool, mut calls: Vec[i64]) -> i64? {
     return match expr {
         // A literal no `i64` holds is outside what the solver reads.
         Expr::LitInt { value, negative, .. } => {
@@ -45,18 +62,25 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
         },
         // `xs.len()` of a list that does not change is a variable of its own.
         Expr::MethodCall { receiver, method, args, .. } => {
-            if !args.is_empty() || words.resolve(method) != "len" {
+            if args.is_empty() && words.resolve(method) == "len" {
+                // **A literal's length is its bytes** (ADR-396 D4):
+                // `"\n".len()` is 1.
+                let counted = text_literal_length(receiver)
+                if counted != null {
+                    return built(logic::SolverTerm::Int(counted ?? 0), out)
+                }
+                // A path of fields counts as a name does (ADR-306 D17).
+                let length = length_path(receiver, words, var)
+                if length != null {
+                    return built(logic::SolverTerm::Var(length ?? String()), out)
+                }
+            }
+            if !fresh {
                 return null
             }
-            // **A literal's length is its bytes** (ADR-396 D4): `"\n".len()`
-            // is 1.
-            let counted = text_literal_length(receiver)
-            if counted != null {
-                return built(logic::SolverTerm::Int(counted ?? 0), out)
-            }
-            // A path of fields counts as a name does (ADR-306 D17).
-            let length = length_path(receiver, words, var) ?? return null
-            built(logic::SolverTerm::Var(length), out)
+            let result = built(logic::SolverTerm::Var(f"call@{node_key(expr)}"), out)
+            calls.push(result)
+            result
         },
         // **A path of fields from a name** (ADR-306 D17, ADR-269 D9): `p.end`
         // is a name of its own where the walk made it one.
@@ -94,7 +118,7 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             if op != UnaryOp::Neg {
                 return null
             }
-            let a = lin_term(expr, words, var, pinned, out) ?? return null
+            let a = lin_term_in(expr, words, var, pinned, out, fresh, calls) ?? return null
             built(logic::SolverTerm::Neg(a), out)
         },
         // **A conversion into a whole number keeps the value or stops the
@@ -105,11 +129,11 @@ fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(
             if !ty.generics.is_empty() || !is_whole_number(words.resolve(ty.name)) {
                 return null
             }
-            lin_term(expr, words, var, pinned, out)
+            lin_term_in(expr, words, var, pinned, out, false, calls)
         },
         Expr::Binary { op, lhs, rhs, .. } => {
-            let l = lin_term(lhs, words, var, pinned, out) ?? return null
-            let r = lin_term(rhs, words, var, pinned, out) ?? return null
+            let l = lin_term_in(lhs, words, var, pinned, out, fresh, calls) ?? return null
+            let r = lin_term_in(rhs, words, var, pinned, out, fresh, calls) ?? return null
             match op {
                 BinaryOp::Add => built(logic::SolverTerm::Add(l, r), out),
                 BinaryOp::Sub => built(logic::SolverTerm::Sub(l, r), out),

@@ -1,0 +1,34 @@
+// An operation that data from outside reaches, with a method result as an
+// operand: the prover reads the result as a fresh variable of its type, one
+// per call (ADR-270 D29, #1972), so the row reads a goal, not "the prover
+// reads no whole number of an operand". Two calls of the same method are two
+// values: their difference is not proved. A `u8` result is inside `0..255`,
+// which proves the sum with a pinned `0`.
+use std::io
+use std::text
+
+struct Gauge {
+    level: u8,
+}
+
+impl Gauge {
+    fn read(self) -> u8 {
+        return self.level
+    }
+}
+
+fn main() throws {
+    let line = io::read_to_string()
+    let n = text::parse_i64(line.trim()) ?? 0
+    if n > 1000 || n < 0 {
+        return
+    }
+    println(n + line.trim().len())
+    println(line.trim().len() - line.trim().len())
+    let k = (text::parse_i64(line.trim()) ?? 0) as u8
+    if k != 0 {
+        return
+    }
+    let g = Gauge { level: 7 }
+    println(k + g.read())
+}
