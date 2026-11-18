@@ -7308,6 +7308,16 @@ sync = true
 touches = []
 signature = "(ref self, suffix: ref Bytes) -> bool"
 
+# Whether the bytes equal `other` with ASCII case ignored (#2156): the
+# same length, and each pair of bytes equal once `A`-`Z` read as `a`-`z`;
+# every other byte compares exactly, with no locale or Unicode folding.
+[fn."Bytes::eq_ignore_ascii_case"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(ref self, other: ref Bytes) -> bool"
+
 # The bytes as text, where they are text (ADR-320 D7): a view into the
 # buffer, and `NotText` where the bytes are not UTF-8.
 [fn."Bytes::text"]

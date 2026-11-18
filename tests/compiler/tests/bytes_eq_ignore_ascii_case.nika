@@ -1,0 +1,9 @@
+// `Bytes.eq_ignore_ascii_case` folds only `A`-`Z` to `a`-`z` (#2156).
+fn main() throws {
+    println("Path".bytes.eq_ignore_ascii_case("PATH".bytes))
+    println("Path".bytes.eq_ignore_ascii_case("Pat".bytes))
+    println("a1_".bytes.eq_ignore_ascii_case("A1_".bytes))
+    // `[` and `{` are 32 apart, as `A` and `a` are, but are not letters.
+    println("[".bytes.eq_ignore_ascii_case("{".bytes))
+    println("".bytes.eq_ignore_ascii_case("".bytes))
+}

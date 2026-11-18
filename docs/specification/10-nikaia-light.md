@@ -990,7 +990,10 @@ while true {
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, `b.iter()`, the bytes one at a time as a
 list's `iter` gives its elements, `b.starts_with(prefix)` and
-`b.ends_with(suffix)`, each a `Bytes` compared byte for byte, and
+`b.ends_with(suffix)`, each a `Bytes` compared byte for byte,
+`b.eq_ignore_ascii_case(other) -> bool`, true where both have the same length
+and each pair of bytes is equal once `A`-`Z` read as `a`-`z` (every other byte
+compares exactly, with no locale or Unicode folding), and
 `b.text()`, which checks UTF-8 and is
 `NotText` where it fails, and `b.text_lossy()`, an owned copy in which each
 run that is not UTF-8 is U+FFFD. An index outside stops the program, as a list's does.
