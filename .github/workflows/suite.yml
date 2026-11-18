@@ -46,7 +46,9 @@ jobs:
   # the dumps of all shards.
   #
   # One toolchain per leg (ADR-001 D1): `rust-toolchain.toml` names it and
-  # `rustup show` installs exactly that.
+  # `rustup show` installs it. The build records its `rustc -V` in the
+  # artifact and every test shard runs that exact version (#2116): runners
+  # of one run may carry images with different stables.
   build:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
@@ -171,6 +173,7 @@ jobs:
       # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
       - name: Pack the build
         run: |
+          rustc -V >target/release/rustc-version
           cut -f1 target/release/test-binaries.tsv | grep '/target/debug/' | sed "s|^$PWD/||" >"$RUNNER_TEMP/unit-binaries"
           tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' \
             -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries" \
@@ -326,6 +329,23 @@ jobs:
 
       - name: Unpack the build
         run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
+
+      # The rlibs in `deps/` link only with the rustc that wrote them
+      # (E0514 otherwise, #2116): this shard's image may carry another stable.
+      - name: Use the rustc the build used
+        run: |
+          built="$(cat target/release/rustc-version)"
+          if [ "$(rustc -V)" != "$built" ]; then
+            version="$(echo "$built" | cut -d' ' -f2)"
+            rustup toolchain install "$version" --profile minimal --component rustfmt,clippy
+            echo "RUSTUP_TOOLCHAIN=$version" >>"$GITHUB_ENV"
+            export RUSTUP_TOOLCHAIN="$version"
+          fi
+          if [ "$(rustc -V)" != "$built" ]; then
+            echo "::error::the build used $built, this shard has $(rustc -V)"
+            exit 1
+          fi
+          rustc -V
 
       # How long each program of `tests/compiler` took last time: `nikaia
       # test` starts the longest first (#1600). Restored from the newest run
