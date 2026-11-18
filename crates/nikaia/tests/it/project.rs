@@ -433,10 +433,24 @@ fn the_triple_of_the_target_is_handed_to_cargo() {
                 .any(|named| Path::new(&named).canonicalize().ok().as_ref() == Some(&root))
         })
         .expect("a shared directory names this project");
-    let programs = std::fs::read_dir(tree.join(host.triple()).join("debug/deps"))
-        .expect("Cargo built under the triple")
+    // Cargo before 1.100 puts the crate in `deps/`; 1.100's build-dir layout
+    // puts it in `build/<crate>/<hash>/` (#2136). Either sits under the
+    // triple's profile, and the binary Cargo lifts out sits in the profile.
+    let profile = tree.join(host.triple()).join("debug");
+    assert!(
+        profile.is_dir(),
+        "Cargo built under the triple: {}",
+        profile.display()
+    );
+    let programs = ["", "deps", "build"]
+        .iter()
+        .flat_map(|sub| std::fs::read_dir(profile.join(sub)).into_iter().flatten())
         .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_name().to_string_lossy().starts_with("triple_"))
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("triple_") || name.starts_with("triple-")
+        })
         .count();
     assert!(
         programs > 0,
