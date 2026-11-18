@@ -1,0 +1,9 @@
+error[NK1171]: `text` has no function called `is_float_word`.
+  --> tests/a_std_package_private_name_is_refused_outside_it.nika:8:5
+   |
+ 8 |     println(text::is_float_word("inf".bytes, 0, "inf"))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What can be called is what is written down: `text::is_float_word` is in no declaration, ledger or description this program reads.
+   = help: Only what is written down for `text` can be called; a Rust function or method of the same name is not reached.
+1 type error

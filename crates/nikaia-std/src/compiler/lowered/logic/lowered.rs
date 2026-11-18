@@ -485,9 +485,10 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
 
 /// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of
 /// them with none, and prints one line each and a summary; `list` prints
-/// only the names. Whether every test run passed and one was run at all.
-pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
-    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();
+/// only the names; `more` are std's other packages' lists (ADR-403 D3), run
+/// with this one. Whether every test run passed and one was run at all.
+pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)>) -> bool {
+    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().chain(more).filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();
     if list {
         for (name, _) in &wanted {
             println!("{name}");
@@ -519,4 +520,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4aed5784b2149ab7d2cb746adac632f64967ff2b76c54e1558cd2ac92b9a6646";
+pub const LOWERED_DIGEST: &str = "6598fd99ca18f0a1521a7641c42381e851358b45f92927f8dee30115edb20822";

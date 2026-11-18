@@ -227,7 +227,49 @@ pub mod time_spans {
     pub use super::{span_saturating_add, span_saturating_sub, span_saturating_mul, span_min, span_max, span_nanos_i64, span_nanos_i32};
 }
 
+/// **The `test` blocks of this package and of its dependencies** (#2082), by
+/// name, as `nikaia test --std` runs them.
+pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(text_float_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all
+}
+
+/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of
+/// them with none, and prints one line each and a summary; `list` prints
+/// only the names; `more` are std's other packages' lists (ADR-403 D3), run
+/// with this one. Whether every test run passed and one was run at all.
+pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)>) -> bool {
+    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().chain(more).filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();
+    if list {
+        for (name, _) in &wanted {
+            println!("{name}");
+        }
+        return !wanted.is_empty();
+    }
+    let (mut passed, mut failed) = (0usize, 0usize);
+    for (name, run) in &wanted {
+        match std::panic::catch_unwind(*run) {
+            Ok(Ok(())) => {
+                passed += 1;
+                println!("test {name} ... ok");
+            }
+            Ok(Err(e)) => {
+                failed += 1;
+                println!("test {name} ... FAILED: {e}");
+            }
+            Err(_) => {
+                failed += 1;
+                println!("test {name} ... FAILED: it panicked");
+            }
+        }
+    }
+    let outcome = if failed == 0 { "ok" } else { "FAILED" };
+    println!("test result: {outcome}. {passed} passed; {failed} failed");
+    failed == 0 && !wanted.is_empty()
+}
+
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "6664b5a156180219cb150193c3a870c27353a1ee30ce995b20caa7dff32e8de8";
+pub const LOWERED_DIGEST: &str = "b8f135147ff9bbd81d987c7c41f0ce9db0f4f42a2d92e9c19dd3e8b2fc464d7e";

@@ -41,3 +41,18 @@ pub fn writes_float(text: &str) -> bool {
     stop == b.len() as i64
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    if !(is_float_word(&"-InF".as_bytes(), 1, "inf")) { nikaia_std::abort::assertion_failed("assert(is_float_word(\"-InF\".bytes, 1, \"inf\"))", None, &[]) };
+    if !(is_float_word(&"nan".as_bytes(), 0, "nan")) { nikaia_std::abort::assertion_failed("assert(is_float_word(\"nan\".bytes, 0, \"nan\"))", None, &[]) };
+    if !(!is_float_word(&"infinity".as_bytes(), 0, "inf")) { nikaia_std::abort::assertion_failed("assert(!is_float_word(\"infinity\".bytes, 0, \"inf\"))", None, &[]) };
+    if !(!is_float_word(&"1.5".as_bytes(), 0, "nan")) { nikaia_std::abort::assertion_failed("assert(!is_float_word(\"1.5\".bytes, 0, \"nan\"))", None, &[]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn text_float_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("text_float::a_float_word_is_read_in_any_case_and_nothing_else_is_one", __nikaia_test_0),
+    ]
+}
