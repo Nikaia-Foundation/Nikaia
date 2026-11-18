@@ -293,7 +293,7 @@ impl EmitState {
         let mut takes_out = false
         let mut place = 0
         while place < names.len() as i64 {
-            if self.facts.copied_item_params.contains((node_key(node), place)) {
+            if self.facts.copied_item_params.contains((node_key(node), place)) || self.facts.copied_mut_item_params.contains((node_key(node), place)) {
                 takes_out = true
             }
             place += 1
@@ -306,6 +306,8 @@ impl EmitState {
             for name in names {
                 if self.facts.copied_item_params.contains((node_key(node), at)) {
                     written.push(f"&{name}")
+                } else if self.facts.copied_mut_item_params.contains((node_key(node), at)) {
+                    written.push(f"&mut {name}")
                 } else {
                     written.push(name.clone())
                 }

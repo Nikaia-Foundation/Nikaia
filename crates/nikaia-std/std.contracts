@@ -2898,6 +2898,26 @@ signature = "() -> collections::HashMap[?, ?]"
 # checker's scope is a map of names, and *is this name declared* is the question
 # it asks most (0.0.232, the miniature compiler written to measure how far
 # self-hosting is).
+# Take a key and what it names out of the map, and hand back what it named,
+# or nothing where the key was not there, as `collections::BTreeMap::remove`
+# does (#2111).
+[fn."collections::HashMap::remove"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[K, V](mut self: ref collections::HashMap[K, V], key: ?) -> V?"
+
+# Keep the pairs the function says yes to and drop the rest, in place (#2111).
+#
+# Each pair is handed to the function once, its key and its value, as
+# `Vec::retain` hands each element.
+[fn."collections::HashMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::HashMap[K, V], f: fn(ref K, ref V) -> bool)"
+
 # Whether the map holds this key.
 [fn."collections::HashMap::contains_key"]
 pub = true
@@ -3154,6 +3174,15 @@ panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V])"
+
+# Keep the pairs the function says yes to and drop the rest, in place, as
+# `collections::HashMap::retain` does (#2111). The pairs are handed over in
+# key order.
+[fn."collections::BTreeMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V], f: fn(ref K, ref V) -> bool)"
 
 # Whether the map holds this key.
 [fn."collections::BTreeMap::contains_key"]

@@ -1,0 +1,58 @@
+// `collections::HashMap` takes a key out with `remove`, and both maps keep
+// only the pairs a function says yes to with `retain` (#2111): a number is
+// taken out of its view, a text is compared as text, a struct is read through.
+use std::collections
+
+struct Stock {
+    count: i64,
+    name: String,
+}
+
+fn make(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert("a", 1)
+    m.insert("b", 2)
+    m.insert("c", 3)
+    println(m.remove("a") ?? -1)
+    println(m.remove("a") ?? -1)
+    m.retain(fn(_, n) { return n > 2 })
+    println(m.len())
+    println(m.get("c") ?? -1)
+
+    let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    b.insert("x", 1)
+    b.insert("y", 5)
+    b.insert("z", 7)
+    b.retain(fn(k, n) { return k != "y" && n > 0 })
+    for k in b.keys() {
+        println(k)
+    }
+
+    let mut owned: collections::HashMap[String, String] = collections::HashMap()
+    owned.insert(make("p"), make("q"))
+    owned.insert(make("r"), make("s"))
+    owned.retain(fn(k, v) { return k != "p" && v.len() > 0 })
+    println(owned.len())
+    println(owned.remove("r") ?? "none")
+
+    let mut by_number: collections::BTreeMap[i64, Stock] = collections::BTreeMap()
+    by_number.insert(1, Stock { count: 0, name: make("nails") })
+    by_number.insert(2, Stock { count: 4, name: make("screws") })
+    by_number.insert(3, Stock { count: 9, name: make("bolts") })
+    by_number.retain(fn(k, s) { return k > 1 && s.count > 0 && s.name != "bolts" })
+    for (k, s) in by_number.iter() {
+        println(f"{k} {s.name}")
+    }
+
+    let mut open = collections::HashMap()
+    open.insert(1, 10)
+    open.insert(2, 20)
+    open.retain(fn(k, v) { return k + v > 15 })
+    println(open.len())
+}
