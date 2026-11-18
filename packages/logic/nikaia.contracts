@@ -258,6 +258,12 @@ panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
+[fn."SvBoth::pivots"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
 [fn."SvBoth::propagate"]
 sync = "inferred"
 panics = true
@@ -921,6 +927,12 @@ places = true
 touches = []
 signature = "(ref mut self, r: i64, j: i64) -> bool"
 
+[fn."SvSimplex::pivots"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
 [fn."SvSimplex::propagate"]
 sync = "inferred"
 panics = true
@@ -1273,6 +1285,11 @@ pub = true
 sync = true
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
+[fn."SvTh::pivots"]
+pub = true
+sync = true
+signature = "(ref self) -> i64"
+
 [fn."SvTh::propagate"]
 pub = true
 sync = true
@@ -1335,6 +1352,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
+
+[fn."SvTheory::pivots"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
 
 [fn."SvTheory::propagate"]
 sync = "inferred"
@@ -2543,6 +2566,15 @@ sync = "inferred"
 panics = true
 touches = []
 signature = "(xj: i64, yj: i64) -> Vec[i64]?"
+
+[fn."sv_cases_per_pivot"]
+sync = "inferred"
+panics = false
+touches = []
+ensures = ["result == 2"]
+inferred = ["result == 2"]
+from = ["return"]
+signature = "() -> i64"
 
 [fn."sv_ceil_div"]
 sync = "inferred"
@@ -4314,6 +4346,12 @@ locks = "?"
 panics = true
 signature = "[T: SvTh](mut s: SvSmt[T]) -> SvChecked"
 
+[fn."sv_smt_check"]
+sync = "inferred"
+locks = "?"
+panics = true
+signature = "[T: SvTh](mut s: SvSmt[T], final: bool) -> SvChecked"
+
 [fn."sv_smt_congruence"]
 sync = "inferred"
 panics = true
@@ -5637,7 +5675,7 @@ hashes = true
 
 [type."SvSmt"]
 pub = true
-fields = ["pub sat: SvSat", "pub th: $T", "pub theory_atom: Vec[bool]", "pub head: i64", "pub budget: LgBudget", "pub checks: i64", "pub conflicts: i64", "pub propagated: i64", "pub propagating: bool", "pub lemmas: i64", "pub repeated: i64", "pub seen: collections::BTreeSet[Vec[u32]]", "pub fresh: bool"]
+fields = ["pub sat: SvSat", "pub th: $T", "pub theory_atom: Vec[bool]", "pub head: i64", "pub budget: LgBudget", "pub checks: i64", "pub spent: i64", "pub conflicts: i64", "pub propagated: i64", "pub propagating: bool", "pub lemmas: i64", "pub repeated: i64", "pub seen: collections::BTreeSet[Vec[u32]]", "pub fresh: bool"]
 compares = true
 equates = true
 hashes = true
