@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1430 (Draft)
+**Version:** 0.0.1431 (Draft)
 **Date:** 2026-11-18
 
 ---
@@ -573,6 +573,26 @@ a division by zero is `null` too. The conversions are `checked_i32`,
 integer type that has values the destination lacks and out of an `f64`. A
 value that is not a number fits no integer; an infinity and a value that is
 not a number carry over into an `f32`.
+
+**Where a program goes on with both answers, it asks for them**: whether the
+step overflowed, or the whole of a product (#1555). A wider type than `i64` is
+taken only for a measured reason ([ADR-270](adr/adr-270.md) D11), and these
+are the means instead:
+
+```nika
+let (sum, overflowed) = a.overflowing_add(b)      // wrapped, and whether it wrapped
+let (low, high) = a.widening_mul(b)               // high * 2^64 + low is the product
+```
+
+`overflowing_add`, `overflowing_sub` and `overflowing_mul` give the result the
+`wrapping_` name gives, with `true` beside it where it wrapped. `widening_mul`
+gives the exact product in two halves: the low one in the unsigned type of the
+same width (`u64` for an `i64`, `u32` for an `i32`), the high one in the
+receiver's type. Both are on the five types the wrapping names have. The
+compiler reads them as it reads a `checked_` answer: past `if !overflowed`
+the result is the exact value, and past `high == 0` with the low half within
+the receiver's type it is the product, so an index computed from it is proved
+there.
 
 Two conversions lose digits without anything failing:
 

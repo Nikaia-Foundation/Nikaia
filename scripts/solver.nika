@@ -127,15 +127,20 @@ fn solver_program_files(repo: String) -> Vec[String] {
 	return paths
 }
 
+// The program's manifest. **Built at `opt-level = 3`** (#2004): without a
+// `[build.<target>]` table the build takes Cargo's `dev` profile at
+// opt-level 0, and every figure of the rod was one of an unoptimised binary
+// (`Diffusion2D-PT-D05N100-RC-00`: 157.2 M instructions at 0, 30.9 M at 3,
+// z3 26 M).
+fn solver_manifest() -> String {
+	return "[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\n"
+}
+
 // Writes the program's package into `tmp`: its manifest, each file of
 // `solver_program_files` under `src/`, and `src/main.nika`.
 fn solver_program(repo: String, tmp: String) throws {
 	process::run("mkdir", ["-p", f"{tmp}/src"])
-	fs::write(
-		f"{tmp}/nikaia.toml",
-		fs::Root::Anywhere,
-		"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n",
-	)
+	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, solver_manifest())
 	let mut args: Vec[String] = solver_program_files(repo)
 	args.push(f"{tmp}/src/")
 	process::run("cp", args)
@@ -161,15 +166,16 @@ fn solver_build_env() -> Vec[(String, String)] {
 	return [("NIKAIA_CAP_LINTS", "allow")]
 }
 
-// The key of the kept binary: a hash of the program's files, as
+// The key of the kept binary: a hash of the program's files and manifest, as
 // `solver_program` writes them, and of the `nikaia` that builds it (its size
 // and age). "" where it cannot be taken.
 fn solver_key(repo: String, nikaia: String) -> String throws {
 	let mut args: Vec[String] = [
 		"-c",
-		"n=$1; shift; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== main.nika'; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
+		"n=$1; m=$2; shift 2; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; echo '== main.nika'; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
 		"sh",
 		nikaia,
+		solver_manifest(),
 	]
 	for f in solver_program_files(repo) { args.push(f.clone()) }
 	let out = process::run("sh", args)
@@ -265,7 +271,10 @@ fn solver_build_in(dir: String, repo: String, nikaia: String, kept: String) thro
 		}
 		process::exit(1)
 	}
-	let copied = process::run("sh", ["-c", "cp \"$1\" \"$2.$$\" && mv -f \"$2.$$\" \"$2\"", "sh", bin, kept])
+	let copied = process::run(
+		"sh",
+		["-c", "cp \"$1\" \"$2.$$\" && mv -f \"$2.$$\" \"$2\"", "sh", bin, kept],
+	)
 	if !copied.ok {
 		println(f"the solver program was built but not kept: {copied.stderr.trim()}")
 		process::exit(1)

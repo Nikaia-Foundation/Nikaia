@@ -447,18 +447,20 @@ file, `examples/n-body`, is +1.2 %.
 
 ## 9. Against z3 and cvc5 on SMT-LIB (#1338)
 
-**Ran on 2026-11-17**, on the set `scripts/solver.nika fetch` builds from
-GitHub at fixed commits (`tests/solver/SOURCES.md`): 578 QF_LIA and 519 QF_LRA
-files, each one query with a status and at most 1 MiB. Ours is the rod
-(`sv_rod`, the CDCL(T) engine, `new`) at ce7825c7, z3 5.3.3, cvc5 1.4.2 (its
-static Linux release). `compare --files target/smtlib/qflia` (and `qflra`),
-one wall-clock limit of 10 s per file for all three, four cores, other agents'
-builds running beside it part of the time: a file near the limit can fall on
-either side of it, which is why time is ranked here and not quoted.
+**Ran on 2026-11-18** (0.0.1430, at 1ea45b4bf), on the set `scripts/solver.nika
+fetch` builds from GitHub at fixed commits (`tests/solver/SOURCES.md`): 578
+QF_LIA and 519 QF_LRA files, each one query with a status and at most 1 MiB.
+Ours is the rod (`sv_rod`, the CDCL(T) engine, `new`) **built at
+`opt-level = 3`** (#2004; every figure here before that date was one of a
+binary built at opt-level 0, Cargo's `dev` default, which cost about five
+times the instructions: `Diffusion2D-PT-D05N100-RC-00` 157 M then, 31 M
+now), z3 5.3.3, cvc5 1.4.2 (its static Linux release). `compare --files
+target/smtlib/qflia` (and `qflra`), one wall-clock limit of 10 s per file for
+all three, four cores, other agents' builds running beside it part of the
+time: a file near the limit can fall on either side of it, which is why time
+is ranked here and not quoted.
 
 No wrong answer and no disagreement, from any of the three, on 1097 files.
-One file drew a proof log our own checker rejected (so no answer was
-given: counted as wrong in the row, it is none in fact).
 
 **Per family** (solved of the files; PAR-2 in seconds, an unsolved file 20 s;
 *why* is ours' reason for the files it did not solve):
@@ -466,39 +468,42 @@ given: counted as wrong in the row, it is none in fact).
 | family | files | ours | z3 | cvc5 | ours is | why |
 | :--- | ---: | ---: | ---: | ---: | :--- | :--- |
 | QF_LIA 20180326-Bromberger | 1 | 1 | 1 | 1 | level | |
-| QF_LIA 20220307-SMPT | 371 | 293 (4.3 s) | 367 (0.2 s) | 367 (0.3 s) | behind | 75 timeouts, 1 rejected log, 2 over the limit |
-| QF_LIA 20231117-c_inference | 31 | 0 | 29 (2.4 s) | 10 (15.0 s) | behind | 31 timeouts |
+| QF_LIA 20220307-SMPT | 371 | 339 (2.1 s) | 367 (0.2 s) | 368 (0.2 s) | behind | 32 timeouts |
+| QF_LIA 20231117-c_inference | 31 | 0 | 30 (1.9 s) | 14 (13.3 s) | behind | 31 case budget |
 | QF_LIA CAV_2009_benchmarks | 1 | 1 | 1 | 1 | level | |
-| QF_LIA bofill-scheduling | 2 | 0 | 2 | 2 | behind | 2 timeouts |
+| QF_LIA bofill-scheduling | 2 | 2 (0.4 s) | 2 (0.0 s) | 2 (0.1 s) | behind on time | |
 | QF_LIA cut_lemmas | 1 | 0 | 1 | 0 | behind | overflow |
-| QF_LIA nec-smt | 3 | 0 | 1 | 0 | behind | 1 stack overflow (nesting 963 deep), 2 timeouts nobody solves |
+| QF_LIA nec-smt | 3 | 1 (16.1 s) | 1 (14.4 s) | 0 | level with z3 | 2 timeouts nobody solves |
 | QF_LIA rings | 1 | 1 | 1 | 1 | level | |
-| QF_LIA rings_preprocessed | 2 | 1 (10.0 s) | 2 (0.0 s) | 2 (3.4 s) | behind | 1 timeout |
-| QF_LIA seeds | 164 | 113 (6.2 s) | 163 (0.2 s) | 157 (1.2 s) | behind | 48 overflow, 3 case budget |
+| QF_LIA rings_preprocessed | 2 | 1 (10.0 s) | 2 (0.0 s) | 2 (2.7 s) | behind | case budget |
+| QF_LIA seeds | 164 | 113 (6.2 s) | 163 (0.2 s) | 158 (1.1 s) | behind | 48 overflow, 3 case budget |
 | QF_LIA tightrhombus | 1 | 0 | 1 | 1 | behind | overflow |
-| QF_LRA 2017-Heizmann | 4 | 0 | 1 | 1 | behind | overflow (the one the others solve), 3 nobody solves |
+| QF_LRA 2017-Heizmann | 4 | 0 | 1 | 1 | behind | 1 overflow, 3 case budget (one the others solve) |
 | QF_LRA LassoRanker | 1 | 0 | 1 | 1 | behind | case budget |
 | QF_LRA clock_synchro | 4 | 1 | 3 | 3 | behind | 3 overflow |
 | QF_LRA keymaera | 2 | 2 | 2 | 2 | level | |
-| QF_LRA sal | 3 | 3 (2.4 s) | 3 (0.0 s) | 3 (0.0 s) | behind on time | `carpark-Carpark2-ausgabe-6` 6.1 s against 32 ms |
+| QF_LRA sal | 3 | 3 | 3 | 3 | level | |
 | QF_LRA seeds | 499 | 499 | 499 | 499 | level | |
-| QF_LRA spider_benchmarks | 2 | 2 (4.3 s) | 2 (0.0 s) | 2 (0.0 s) | behind on time | `current_frame.base` 8.5 s against 21 ms |
-| QF_LRA tta_startup | 2 | 0 | 2 | 2 | behind | 2 timeouts |
-| QF_LRA uart | 2 | 0 | 1 | 1 | behind | 2 timeouts (one nobody solves) |
-| **QF_LIA** | 578 | 410 (5.9 s) | 569 (0.4 s) | 542 (1.5 s) | behind | |
+| QF_LRA spider_benchmarks | 2 | 2 | 2 | 2 | level | |
+| QF_LRA tta_startup | 2 | 0 | 2 | 2 | behind | 2 case budget |
+| QF_LRA uart | 2 | 0 | 1 | 1 | behind | 2 case budget (one nobody solves) |
+| **QF_LIA** | 578 | 459 (4.3 s) | 570 (0.4 s) | 548 (1.3 s) | behind | |
 | **QF_LRA** | 519 | 507 (0.4 s) | 514 (0.2 s) | 514 (0.2 s) | behind | |
 
-Nowhere ahead on what is solved; level on the small families and on the
-499 QF_LRA seeds. The overflow rows are the files that leave `i64` (ADR-270
-D11): counted as overflow, not as a defect. Every other row where ours is
-behind is an issue of its own (the solver lane).
+Nowhere ahead on what is solved; level on the small families, on `sal`,
+`spider_benchmarks` (at opt-level 0 6.1 s and 8.5 s on one file each, now
+105 ms and 66 ms) and the 499 QF_LRA seeds. Against 2026-11-17, ours solves 46
+SMPT files more within the limit, and the nec-smt file nested 963 deep
+(then a stack overflow). The overflow rows are the files that leave `i64`
+(ADR-270 D11): counted as overflow, not as a defect. Every other row where
+ours is behind is an issue of its own (the solver lane).
 
-**Memory.** The median peak is ours 17 MiB, z3 34 MiB (QF_LIA) and 31 MiB
-(QF_LRA), cvc5 18 and 17 MiB; the runner itself already holds 17 MiB, the
-floor below which no child reads (§ *Against another solver* in
+**Memory.** The median peak is ours 17 MiB, z3 34 MiB, cvc5 18 MiB (QF_LIA),
+ours 16, z3 32, cvc5 17 MiB (QF_LRA); the runner itself already holds 15 MiB,
+the floor below which no child reads (§ *Against another solver* in
 `docs/measuring.md`), so ours and cvc5 are at most that on most files. The
-largest peaks: ours 170 MiB (the nec-smt file that overflows the stack), z3
-259 MiB, cvc5 1179 MiB (both on SMPT).
+largest peaks: ours 2538 MiB (`Referendum-PT-0500-RF-00`, a timeout), z3
+259 MiB, cvc5 1179 MiB (both on SMPT `RwMutex`).
 
 **Instructions** (`compare --instructions --files tests/solver/sample`, the
 50-file CI sample, callgrind; the same answers as above, with the limit and
@@ -507,25 +512,35 @@ solve:
 
 | sample family | files | ours, median | z3, median | cvc5, median | ours, total | z3, total | cvc5, total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| QF_LIA 20180326-Bromberger | 1 | 417.8 M | 38.7 M | 370.0 M | 418 M | 39 M | 370 M |
-| QF_LIA 20220307-SMPT | 16 | 80.8 M | 20.5 M | 33.5 M | 14 201 M | 376 M | 761 M |
-| QF_LIA seeds | 6 | 62.6 M | 24.5 M | 55.4 M | 665 M | 1 278 M | 768 M |
-| QF_LRA seeds | 24 | 4.1 M | 8.7 M | 17.6 M | 776 M | 217 M | 467 M |
-| all | 47 | 12.5 M | 14.0 M | 18.9 M | 16 060 M | 1 909 M | 2 366 M |
+| QF_LIA 20180326-Bromberger | 1 | 92.3 M | 38.7 M | 370.0 M | 92 M | 39 M | 370 M |
+| QF_LIA 20220307-SMPT | 16 | 12.9 M | 20.5 M | 33.5 M | 767 M | 376 M | 761 M |
+| QF_LIA seeds | 6 | 13.9 M | 24.5 M | 55.4 M | 116 M | 536 M | 768 M |
+| QF_LRA seeds | 24 | 1.3 M | 8.7 M | 17.6 M | 59 M | 217 M | 467 M |
+| all | 47 | 3.2 M | 14.0 M | 18.9 M | 1 034 M | 1 166 M | 2 366 M |
 
-Without the copies the solver only read (#1987, 2026-11-17), ours, median / total: Bromberger 408.1 M, SMPT 80.4 M / 14 176 M, QF_LIA seeds 60.4 M / 655 M, QF_LRA seeds 4.1 M / 769 M, all 12.5 M / 16 007 M (0.3 % fewer), the same answers.
+At opt-level 0 (2026-11-17) ours' totals were Bromberger 418 M, SMPT
+14 201 M, QF_LIA seeds 665 M, QF_LRA seeds 776 M, all 16 060 M: the
+optimised build runs 6 % of those instructions.
 
-A small query costs ours fewer instructions than either (the QF_LRA seeds:
-a half of z3's median, a quarter of cvc5's): no start-up to pay. A hard one
-costs many times more: SMPT's total is 38 times z3's, one file
-(`Diffusion2D-PT-D05N100-RC-00`, 247 M against 26 M) nearly ten. The three
-files of the sample ours does not solve all overflow; z3 solves them in
-44-351 M.
+Ours now costs fewer instructions in total than z3 over the 47 files, and
+less than half of cvc5's; its median is a quarter of z3's. It is behind on two
+families: Bromberger (2.4 times z3's) and SMPT (twice z3's total; one file,
+`Diffusion2D-PT-D10N150-RF-00`, 348 M against 55 M, six times). The three
+files of the sample ours does not solve stop at the overflow or the case
+budget; z3 solves them in 44-351 M.
+
+**Where SMPT's instructions go** (the 16 sample files, 767 M, callgrind at
+opt-level 3): 56 % is allocation (libc's `malloc`, `free` and their
+internals, and the `task_block::Place` allocator), charged to the first
+solver function up the call graph: `sv_eliminate` 236 M (31 % of the
+total), `sv_substituted` 56 M (7 %), `sv_smtlib_script` 30 M (4 %),
+`sv_row_sum` 22 M (3 %), `sv_smt_run` 17 M (2 %). `sv_eliminate`'s own
+code is the largest own cost after that (9 % on `Diffusion2D-PT-D05N100`).
 
 **Wall time, beside** (the sum over the set, a run cut at the 10 s limit):
-QF_LIA ours 1 266 s, z3 190 s, cvc5 518 s; QF_LRA ours 89 s, z3 68 s, cvc5
-79 s (the QF_LRA row before the Heizmann files were read: three of them ran
-to the limit afterwards). It ranks as the solved count does.
+QF_LIA ours 530 s, z3 167 s, cvc5 483 s; QF_LRA ours 5 s, z3 65 s, cvc5
+76 s (ours gives up early on the files it does not solve). It ranks as the
+solved count does on QF_LIA.
 
 ## 10. What this does not measure
 
