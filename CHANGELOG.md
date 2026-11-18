@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1432] — 2026-11-18
+
+**Builders' changes (#1510, #2046, #2076)**
+- An element of a list a function or method of another file of the package handed back can be handed back as text; the list moves into the caller's keep.
+- A function's code parameter that its body runs one call at a time now takes a lambda that changes what it captures from a caller in another file or another package (it reached rustc as NK1343); one run from tasks at once is published in the ledger as `at_once`, so such a caller gets NK2104, and a `pub` function that starts running one at once is a contract change (NK1208).
+- A C library whose `pub extern fn` runs its callback one call at a time builds again: the C wrapper lends the callback as the changing closure the function now takes (it reached rustc as NK1343 since #2046).
+
 ## [0.0.1431] — 2026-11-18
 
 **Builders' changes (#1497, #2026, #2042, #2043, #2052)**
