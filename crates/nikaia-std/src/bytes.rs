@@ -362,6 +362,36 @@ impl PartialEq<Bytes> for &[u8] {
     }
 }
 
+/// **And are ordered against one as against another `Bytes`** (#2082):
+/// `name < text.bytes`, either way round, byte by byte, as `==` compares.
+impl PartialOrd<[u8]> for Bytes {
+    #[inline]
+    fn partial_cmp(&self, other: &[u8]) -> Option<std::cmp::Ordering> {
+        self.buffer.as_slice().partial_cmp(other)
+    }
+}
+
+impl PartialOrd<&[u8]> for Bytes {
+    #[inline]
+    fn partial_cmp(&self, other: &&[u8]) -> Option<std::cmp::Ordering> {
+        self.buffer.as_slice().partial_cmp(*other)
+    }
+}
+
+impl PartialOrd<Bytes> for [u8] {
+    #[inline]
+    fn partial_cmp(&self, other: &Bytes) -> Option<std::cmp::Ordering> {
+        self.partial_cmp(other.buffer.as_slice())
+    }
+}
+
+impl PartialOrd<Bytes> for &[u8] {
+    #[inline]
+    fn partial_cmp(&self, other: &Bytes) -> Option<std::cmp::Ordering> {
+        (*self).partial_cmp(other.buffer.as_slice())
+    }
+}
+
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
         self.buffer.as_slice()
