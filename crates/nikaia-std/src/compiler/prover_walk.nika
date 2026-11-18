@@ -435,7 +435,14 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                     let n = words.resolve(name).clone()
                     let tainted = from_outside(value, scope.tainted, words, library, walk.state, holes_of) || (op != null && scope.tainted.contains(n))
                     if !prover_assigned(walk, n, op, value, span, scope, words) {
+                        // **An unreadable value of a followed whole number is
+                        // a fresh loose name** (ADR-361 D9, #2108).
+                        let followed = scope.mutables.contains(n) && scope.ints.contains(n)
                         scope.rebind(walk.arena, n)
+                        if followed {
+                            scope.ints.insert(n.clone())
+                            scope.loose.insert(n.clone())
+                        }
                         if op == null && !tainted {
                             let bits = prover_bit_range(walk, value, scope, words)
                             if bits != null {
@@ -3552,6 +3559,12 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
                     if at_entry != null {
                         scope.entry.insert(n.clone(), at_entry ?? 0)
                     }
+                } else if !untracked.contains(n) && prover_let_typed(walk, ty, span, words, 0) {
+                    // **A value the walk cannot read is a loose name** (ADR-361
+                    // D9, #2108), as a `let`'s is (`prover_let`).
+                    scope.ints.insert(n.clone())
+                    scope.loose.insert(n.clone())
+                    scope.mutables.insert(n.clone())
                 }
             }
         },
