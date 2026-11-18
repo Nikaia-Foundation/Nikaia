@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1445] — 2026-11-18
+
+**Bytes gets eq_ignore_ascii_case, an ASCII case-insensitive compare (#2156)**
+- Bytes.eq_ignore_ascii_case(other) compares two runs of bytes with ASCII case ignored (A-Z read as a-z, every other byte exactly).
+
 ## [0.0.1444] — 2026-11-18
 
 **std's runtime package runs its own test blocks under nikaia test --std (#2146)**
