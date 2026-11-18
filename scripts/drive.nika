@@ -2808,7 +2808,7 @@ fn drive_sweep() -> i64 throws {
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
@@ -2825,6 +2825,9 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		process::run("rm", ["-rf", "target/debug"])
 	}
 	process::run("rm", ["-rf", "target/nikaia-example-tests"])
+	// The temporary copies gate.nika and pre-push.nika made before their
+	// fixed slots (ADR-021 D14, #2015).
+	process::run("sh", ["-c", "rm -rf target/gate-tests-* target/pre-push-*"])
 	let swept = drive_sweep()
 	let mut pruned: String = "no cache"
 	if exe != "" && fs::exists("target/nikaia-project-tests", fs::Root::Anywhere) {

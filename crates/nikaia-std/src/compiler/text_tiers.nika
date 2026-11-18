@@ -1236,6 +1236,24 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     // A list that comes whole from a position is linked to it below, and the
     // link is all that flows.
     let mut linked = a_container(ask.names, ty) && comes_whole(value, ask, walk)
+    // **A list literal of tuples goes in item by item** (#1989): each item
+    // into the element as `flow_tuple_parts` takes it, so that a part with no
+    // text (a struct, a number) beside a literal makes no text of its own
+    // (#999), as `push` of the same tuple does.
+    if !linked && value != null && a_container(ask.names, ty) && !a_map(ask.names, ty) && ty.generics.len() == 1 && a_followed_tuple(ask.names, ty.generics[0]) {
+        let whole = value ?? return
+        match whole {
+            Expr::ListLit { items, .. } => {
+                let mut inner = path.clone()
+                inner.push(0)
+                for item in items {
+                    flow_value(going_into(owner, ty.generics[0], inner.clone(), going.wrap), item, kinds, ask, walk)
+                }
+                linked = true
+            }
+            else => {}
+        }
+    }
     // **Text read out of a position and put back into it** adds nothing to
     // what flows there (#659): a key of a map walked whole, entered again.
     if plain && tier_a_name(value) {

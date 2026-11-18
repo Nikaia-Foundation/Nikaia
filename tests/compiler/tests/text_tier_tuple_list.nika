@@ -1,0 +1,22 @@
+// A list literal of tuples, a literal beside a struct, goes into its element
+// item by item (#1989): the struct is no text of its own (#999), so the list
+// stays a list of static text, as the one the call hands back is, and taking
+// that list's items into it compiles (it was `EitherText` against
+// `&'static str`, NK1343).
+struct Q {
+	n: i64,
+}
+
+fn pairs(q: Q) -> Vec[(String, Q, bool)] {
+	let mut out: Vec[(String, Q, bool)] = []
+	out.push(("one", Q { n: q.n }, true))
+	out.push(("two", Q { n: q.n + 1 }, false))
+	return out
+}
+
+fn main() throws {
+	let q = Q { n: 3 }
+	let mut all: Vec[(String, Q, bool)] = [("", Q { n: q.n }, false)]
+	for m in pairs(q) { all.push(m) }
+	for (k, v, same) in all { println(f"[{k}] {v.n} {same}") }
+}

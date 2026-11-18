@@ -3847,7 +3847,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, impl_parameters, a_literal, literal_of, PublishedEnsures, ComputedAt, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
+    pub use super::{types_this_file_declares, impl_parameters, a_literal, literal_of, PublishedEnsures, ComputedAt, attribute_values, ledger_items_stored, LedgerDerives, LedgerInferHost, ledger_infer_package};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]
@@ -4251,4 +4251,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e1cc673a1d92a3de86f22c9dd2976cef0ea88a37a2652fe5864da9d1c3a02ff7";
+pub const LOWERED_DIGEST: &str = "f1ae2232960d99d31e4a60efca7fc393fc9c2dd981eafa39f786f28e8b0d5315";

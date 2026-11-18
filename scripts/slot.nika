@@ -1,0 +1,83 @@
+// A fixed directory for a tool's private copy, under an exclusive lock
+// (ADR-021 D14, #2015).
+//
+//     nikaia run scripts/slot.nika -- BASE COMMAND [ARG...]
+//
+// D14's rustc store keys a build by the project's path, so a program built in
+// a fresh `mktemp -d` misses it on every run. A tool that needs a copy of its
+// own to build in builds it here instead: in the first free of the numbered
+// slots `BASE/0` to `BASE/3`, each held under `flock` on `BASE/<n>.lock` for
+// the whole of COMMAND. Under the lock the slot is emptied and made again, and
+// COMMAND runs with each argument `{slot}` replaced by the slot's absolute
+// path, its output and its error output this run's own. This run ends with
+// COMMAND's exit code. All four held: it waits for `BASE/0`.
+//
+// The lock is the kernel's, so it ends with the process that holds it: a run
+// that is killed leaves no slot taken. A tool takes a slot by running itself
+// again as COMMAND, with an argument that names `{slot}` (scripts/pre-push.nika,
+// gate.nika, solver.nika, java_binding.nika).
+//
+// Exit 2 without COMMAND. A COMMAND that itself exits 197 (`flock -E`, a slot
+// held) is taken for a held slot and run again on the next one.
+
+use std::cli
+use std::process
+
+fn slot_count() -> i64 {
+	return 4
+}
+
+// The busy code `flock -n` gives for a held lock.
+fn slot_busy() -> i64 {
+	return 197
+}
+
+// COMMAND with `{slot}` replaced by DIR, behind the shell line that empties
+// DIR first: what `flock` runs.
+fn slot_line(dir: String, command: Vec[String]) -> Vec[String] {
+	let mut line: Vec[String] = ["sh", "-c", "rm -rf \"$1\" && mkdir -p \"$1\" && shift && exec \"$@\"", "sh", dir.clone()]
+	for a in command {
+		if a == "{slot}" { line.push(dir.clone()) } else { line.push(a.clone()) }
+	}
+	return line
+}
+
+// Runs COMMAND in slot N of BASE under its lock, without waiting when WAIT is
+// false: the exit code, `slot_busy()` when the slot is held.
+fn slot_take(base: String, n: i64, command: Vec[String], wait: bool) -> i64 throws {
+	let dir = f"{base}/{n}"
+	let mut args: Vec[String] = []
+	if !wait {
+		args.push("-n")
+		args.push("-E")
+		args.push(f"{slot_busy()}")
+	}
+	args.push(f"{dir}.lock")
+	for a in slot_line(dir, command) { args.push(a.clone()) }
+	let ran = process::run("flock", args; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)
+	return ran.code
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	if args.len() < 3 {
+		eprintln("usage: nikaia run scripts/slot.nika -- BASE COMMAND [ARG...]")
+		process::exit(2)
+	}
+	process::run("mkdir", ["-p", args[1].clone()])
+	let base = process::run("realpath", [args[1].clone()]).stdout.trim().clone()
+	let mut command: Vec[String] = []
+	let mut i = 2
+	while i < args.len() {
+		command.push(args[i].clone())
+		i += 1
+	}
+	let mut n = 0
+	while n < slot_count() {
+		let code = slot_take(base.clone(), n, command.clone(), false)
+		if code != slot_busy() { process::exit(code) }
+		n += 1
+	}
+	process::exit(slot_take(base, 0, command, true))
+}

@@ -24,3 +24,7 @@ signature = "()"
 
 [type."Op"]
 variants = ["Times", "Divide"]
+compares = true
+equates = true
+hashes = true
+copies = true

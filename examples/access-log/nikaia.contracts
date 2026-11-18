@@ -66,13 +66,22 @@ signature = "()"
 [type."Counts"]
 pub = true
 fields = ["hits: i64", "bytes: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Hit"]
 pub = true
 fields = ["path: ref String", "status: i32", "bytes: i64"]
+compares = true
+equates = true
+hashes = true
 tethered = ["path"]
 
 [type."Report"]
 pub = true
 fields = ["paths: collections::HashMap[ref String, Counts]", "requests: i64", "failures: i64"]
+compares = true
+equates = true
 tethered = ["paths"]

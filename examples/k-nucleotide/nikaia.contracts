@@ -62,8 +62,15 @@ signature = "(dna: String, k: i64)"
 [type."Section"]
 pub = true
 fields = ["header: ref String", "lines: Vec[ref String]"]
+compares = true
+equates = true
+hashes = true
 tethered = ["header", "lines"]
 
 [type."Tally"]
 pub = true
 fields = ["n: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true

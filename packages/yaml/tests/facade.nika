@@ -5,6 +5,10 @@
 // `test_serde.rs` (#1515).
 // A `FAILED` line is a case the native core does not pass yet, filed
 // against the core.
+// The copy is built in a slot of `target/yaml-facade`, emptied first
+// (`scripts/slot.nika`: a fixed place, so the build hits ADR-021 D14's rustc
+// store, #2015). A test program cannot be run again with `nikaia run`, so
+// the slot runs `facade_script`, the copy, build and run as a shell line.
 use std::fs
 use std::process
 
@@ -31,27 +35,41 @@ fn root() -> String throws {
 	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// The shell line run in the slot ($1), with the package at $2, the compiler
+// at $3 and Cargo's target at $4: copies the package, builds it and runs the
+// facade crate, printing each's output trimmed, its error output after it
+// when it failed, with the slot's path as `TMP`.
+fn facade_script() -> String {
+	return "d=$1; from=$2; nikaia=$3; export CARGO_TARGET_DIR=$4 CARGO_NET_OFFLINE=true
+mkdir -p \"$d/yaml/tests\" && cp -r \"$from/nikaia.toml\" \"$from/src\" \"$from/rust\" \"$d/yaml\" && cp -r \"$from/tests/facade\" \"$d/yaml/tests\" || exit 1
+shown() { printf '%s\\n' \"$1\" | sed \"s|$d|TMP|g\"; }
+out=$(cd \"$d/yaml\" && \"$nikaia\" build 2>\"$d/build.err\"); c=$?
+shown \"$out\"; [ $c = 0 ] || shown \"$(cat \"$d/build.err\")\"
+out=$(cd \"$d/yaml/tests/facade\" && cargo run -q 2>\"$d/run.err\"); c=$?
+shown \"$out\"; [ $c = 0 ] || shown \"$(cat \"$d/run.err\")\"
+exit 0"
+}
+
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain(repo.clone())
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	let from = f"{repo}/packages/yaml"
-	process::run("mkdir", ["-p", f"{tmp}/yaml/tests"])
-	process::run("cp", ["-r", f"{from}/nikaia.toml", f"{from}/src", f"{from}/rust", f"{tmp}/yaml"])
-	process::run("cp", ["-r", f"{from}/tests/facade", f"{tmp}/yaml/tests"])
 	let cache = f"{repo}/target/nikaia-project-tests/yaml-facade"
-	let mut env: Vec[(String, String)] = []
-	env.push(("CARGO_TARGET_DIR", cache))
-	env.push(("CARGO_NET_OFFLINE", "true"))
-	let built = process::run(nikaia, ["build"]; dir: f"{tmp}/yaml", env: env.clone())
-	println(built.stdout.trim().replace(tmp, "TMP"))
-	if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
-	let ran = process::run(
-		"cargo",
-		["run", "-q"]; dir: f"{tmp}/yaml/tests/facade",
-		env: env,
+	process::run(
+		nikaia.clone(),
+		[
+			"run",
+			f"{repo}/scripts/slot.nika",
+			"--",
+			f"{repo}/target/yaml-facade",
+			"sh",
+			"-c",
+			facade_script(),
+			"sh",
+			"{slot}",
+			f"{repo}/packages/yaml",
+			nikaia,
+			cache,
+		]; stdout: process::Stream::Inherited,
+		stderr: process::Stream::Inherited,
 	)
-	println(ran.stdout.trim())
-	if ran.code != 0 { println(ran.stderr.trim()) }
-	process::run("rm", ["-rf", tmp])
 }
