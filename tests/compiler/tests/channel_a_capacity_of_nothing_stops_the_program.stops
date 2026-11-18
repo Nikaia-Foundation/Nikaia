@@ -1,0 +1,1 @@
+tests/channel_a_capacity_of_nothing_stops_the_program.nika:13: the program stopped: a channel's capacity is at least one; `bounded(0)` is a rendezvous channel, which this language does not have (ADR-149 §4)

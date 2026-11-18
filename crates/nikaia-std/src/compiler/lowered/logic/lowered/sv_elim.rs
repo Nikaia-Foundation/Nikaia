@@ -225,6 +225,7 @@ pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, b
     let mut rounds = 0;
     while rounds < 4096 {
         rounds += 1;
+        if book.log.over() { return SvChecked::Unknown(LgUnknown::TooManySteps); }
         let mut t_at: i64 = 0;
         while t_at < held.len() as i64 {
             if !unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row.cols.is_empty() && nikaia_std::index::or(sv_row_content(&unsafe { nikaia_std::proven::read(&held, (t_at) as usize) }.row), || 2) == 1 {

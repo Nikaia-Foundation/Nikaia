@@ -61,6 +61,10 @@ pub struct SvParams {
 	/// satisfiable to a walk and gets `walk-first`.
 	pub dense_width: i64,
 	pub dense_share: i64,
+	/// The most steps of the proof log, `0` for no limit (`SvLog.limit`,
+	/// #2107): a work budget that counts the equality elimination, which no
+	/// case does. The runner's `--budget N`.
+	pub steps: i64,
 }
 
 /// The set's defaults.
@@ -81,6 +85,7 @@ fn sv_params() -> SvParams {
 		cut_rounds: 8,
 		dense_width: 4,
 		dense_share: 100,
+		steps: 0,
 	}
 }
 
@@ -150,6 +155,8 @@ fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 		p.dense_width = n
 	} else if name == "dense_share" && n <= 1000 {
 		p.dense_share = n
+	} else if name == "steps" {
+		p.steps = n
 	} else {
 		return false
 	}
@@ -401,6 +408,8 @@ fn sv_strategy_run(
 	}
 	match run.driven {
 		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::OutsideTheTheory }) => return run,
+		// The step budget is spent: the walk would run past it (#2107).
+		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::TooManySteps }) => return run,
 		SvDriven::Answer(LgAnswer::Unknown { .. }) => {},
 		else => return run,
 	}

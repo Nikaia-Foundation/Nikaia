@@ -789,6 +789,9 @@ mod exit_tests {
     }
 }
 
+// Kept as Rust (#2082): names compared without case is the Windows half of
+// `merged`, which no program run on Unix reaches. The Unix half and the rest
+// are `tests/compiler/tests/process_a_childs_environment_is_cleared_removed_then_set.nika`.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -799,87 +802,18 @@ mod tests {
             .collect()
     }
 
-    fn owned(list: &[(&str, &str)]) -> Vec<(String, String)> {
-        list.iter()
-            .map(|(n, v)| (n.to_string(), v.to_string()))
-            .collect()
-    }
-
     #[test]
-    fn set_after_remove_and_later_pair_wins() {
-        let inherited = pairs(&[("HOME", "/h"), ("A", "old"), ("B", "b")]);
-        let got = merged(
-            inherited,
-            false,
-            &["A".to_string(), "B".to_string()],
-            &owned(&[("A", "1"), ("C", "x"), ("C", "y")]),
-            false,
-        );
-        assert_eq!(got, pairs(&[("HOME", "/h"), ("A", "1"), ("C", "y")]));
-    }
-
-    #[test]
-    fn clear_then_remove_does_nothing() {
-        let got = merged(
-            pairs(&[("HOME", "/h")]),
-            true,
-            &["HOME".to_string(), "NOPE".to_string()],
-            &owned(&[("ONLY", "1")]),
-            false,
-        );
-        assert_eq!(got, pairs(&[("ONLY", "1")]));
-    }
-
-    #[test]
-    fn names_compare_by_case_on_unix_and_without_on_windows() {
+    fn names_compare_without_case_on_windows() {
         let inherited = pairs(&[("Path", "C:\\w"), ("path", "/u")]);
-        let unix = merged(
-            inherited.clone(),
-            false,
-            &[],
-            &owned(&[("PATH", "/p")]),
-            false,
-        );
-        assert_eq!(
-            unix,
-            pairs(&[("Path", "C:\\w"), ("path", "/u"), ("PATH", "/p")])
-        );
         let windows = merged(
             inherited.clone(),
             false,
             &[],
-            &owned(&[("PATH", "x")]),
+            &[("PATH".to_string(), "x".to_string())],
             true,
         );
         assert_eq!(windows, pairs(&[("PATH", "x")]));
         let removed = merged(inherited, false, &["PATH".to_string()], &[], true);
         assert!(removed.is_empty());
-    }
-
-    #[test]
-    fn every_invalid_entry_is_named() {
-        let found = invalid_entries(
-            &owned(&[("", "x"), ("A=B", "y"), ("OK", "v\0w"), ("FINE", "z")]),
-            &["N\0".to_string()],
-        );
-        assert_eq!(found.len(), 4, "{found:?}");
-        assert!(invalid_entries(&owned(&[("FINE", "z")]), &["X".to_string()]).is_empty());
-    }
-
-    #[test]
-    fn a_name_with_a_separator_is_not_looked_up() {
-        assert_eq!(
-            found_on_path("./x", Some(OsStr::new("")), None, false),
-            Some(PathBuf::from("./x"))
-        );
-        assert_eq!(
-            found_on_path(
-                "definitely-not-a-program-726",
-                std::env::var_os("PATH").as_deref(),
-                None,
-                false
-            ),
-            None
-        );
     }
 }

@@ -74,14 +74,16 @@ pub struct SvLog {
     pub entries: u32,
     pub atoms: u32,
     pub columns: u32,
+    pub limit: i64,
 }
 
 pub(crate) fn sv_log(query: &SvQuery) -> Option<SvLog> {
     let atoms = match u32::try_from(query.atoms.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(SvLog { steps: vec![], entries: 0, atoms, columns: query.columns })
+    Some(SvLog { steps: vec![], entries: 0, atoms, columns: query.columns, limit: 0 })
 }
 
 impl SvLog {
+    pub(crate) fn over(&self) -> bool { self.limit > 0 && (self.steps.len() as i64) > self.limit }
     pub(crate) fn add(&mut self, step: SvStep, made: u32) -> u32 {
         let id = self.entries;
         self.steps.push(step);

@@ -359,7 +359,7 @@ pub(crate) fn sv_check_test_clauses() -> SvQuery {
 
 pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
     let query = sv_check_test_clauses();
-    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let c0 = log.input(0u32);
     let c1 = log.input(1u32);
     let c2 = log.input(2u32);
@@ -374,7 +374,7 @@ pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
 pub(crate) fn sv_check_test_bounds() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![1], -2), sv_check_test_le(&vec![-1], 3)], 1u32) }
 
 pub(crate) fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec<u32>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(lits, vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], vec![m, m], den);
@@ -387,7 +387,7 @@ pub(crate) fn sv_check_test_strict() -> SvQuery { sv_check_test_units(vec![sv_ch
 pub(crate) fn sv_check_test_equal() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![-1, 1], 0), sv_check_test_le(&vec![-1, 1], 1)], 2u32) }
 
 pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)], vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], m, den);
@@ -398,7 +398,7 @@ pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) ->
 pub(crate) fn sv_check_test_parity() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![1, -2], 0), sv_check_test_eq(&vec![1], -5)], 2u32) }
 
 pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let ext = log.extend(sv_check_test_row(&vec![1], 0), m);
@@ -421,7 +421,7 @@ pub(crate) fn sv_check_test_fits() -> SvQuery { sv_check_test_units(vec![sv_chec
 pub(crate) fn sv_check_test_half() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![2], -1), sv_check_test_le(&vec![-2], 1)], 1u32) }
 
 pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let s = log.split(sv_check_test_row(&vec![1], 0), sv_check_test_row(&vec![-1], ge_constant));
@@ -432,7 +432,7 @@ pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
 }
 
 pub(crate) fn sv_check_test_single(query: &SvQuery, steps: Vec<SvStep>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     log.steps = steps;
     log
 }

@@ -18,9 +18,10 @@ pub struct SvParams {
     pub cut_rounds: i64,
     pub dense_width: i64,
     pub dense_share: i64,
+    pub steps: i64,
 }
 
-pub(crate) fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100 } }
+pub(crate) fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100, steps: 0 } }
 
 pub(crate) fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     if name == "pipeline" {
@@ -46,7 +47,7 @@ pub(crate) fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     }
     let n = match text::parse_i64(value) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if n < 0 { return false; }
-    if name == "walk_first" && n <= 1000 { p.walk_first = n; } else if name == "moves_per_unit" && n > 0 { p.walk.moves_per_unit = n; } else if name == "noise" && n <= 1000 { p.walk.noise = n; } else if name == "tenure" { p.walk.tenure = n; } else if name == "bound" && n > 0 { p.walk.bound = n; } else if name == "seed" { p.walk.seed = n; } else if name == "bland_after" { p.bland_after = n; } else if name == "pivot_limit" && n > 0 { p.pivot_limit = n; } else if name == "cut_rounds" { p.cut_rounds = n; } else if name == "dense_width" { p.dense_width = n; } else if name == "dense_share" && n <= 1000 { p.dense_share = n; } else { return false; }
+    if name == "walk_first" && n <= 1000 { p.walk_first = n; } else if name == "moves_per_unit" && n > 0 { p.walk.moves_per_unit = n; } else if name == "noise" && n <= 1000 { p.walk.noise = n; } else if name == "tenure" { p.walk.tenure = n; } else if name == "bound" && n > 0 { p.walk.bound = n; } else if name == "seed" { p.walk.seed = n; } else if name == "bland_after" { p.bland_after = n; } else if name == "pivot_limit" && n > 0 { p.pivot_limit = n; } else if name == "cut_rounds" { p.cut_rounds = n; } else if name == "dense_width" { p.dense_width = n; } else if name == "dense_share" && n <= 1000 { p.dense_share = n; } else if name == "steps" { p.steps = n; } else { return false; }
     true
 }
 
@@ -200,6 +201,7 @@ pub(crate) fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budge
     if !p.walk_after || real { return run; }
     match run.driven {
         SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::OutsideTheTheory }) => { return run; },
+        SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::TooManySteps }) => { return run; },
         SvDriven::Answer(LgAnswer::Unknown { .. }) => { },
         _ => { return run; },
     }

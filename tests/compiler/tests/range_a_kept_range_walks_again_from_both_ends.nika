@@ -1,0 +1,29 @@
+// A range kept in a name is walked again, from the back and with a step; an
+// inclusive one ends on its last value; an empty one is empty from both ends;
+// and a kept range cuts a list as a written one does (a text is cut only by
+// positions it handed out, NK1214). Moved from
+// the `nikaia-std` unit tests `range::tests::*` (#2082).
+
+fn shown(xs: Vec[i64]) -> String {
+    return f"[{xs.iter().join(", ")}]"
+}
+
+fn main() throws {
+    let r = 0..<3
+    let first: Vec[i64] = r.collect()
+    let second: Vec[i64] = r.collect()
+    println(f"{shown(first)} {shown(second)}")
+    let ten = 0..<10
+    println(shown(ten.rev().collect()))
+    println(shown(ten.step_by(3).rev().collect()))
+    let (a, z) = ten.zip(ten.rev()).last() ?? (-1, -1)
+    println(f"{ten.count()} ({a}, {z})")
+    let through = 1..3
+    println(f"{shown(through.collect())} {shown(through.rev().collect())} {through.count()}")
+    println(f"{shown((3..3).collect())} {(4..3).count()}")
+    let empty = 5..<2
+    println(f"{empty.count()} {empty.rev().count()} {empty.count()}")
+    let xs: Vec[i64] = [1, 2, 3, 4]
+    let middle = 1..2
+    println(f"[{xs[middle].iter().join(", ")}]")
+}

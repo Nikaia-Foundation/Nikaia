@@ -1939,7 +1939,7 @@ fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
 
 // Refuted by the split x <= 0 or x >= 1, each side by a Farkas sum.
 fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_real_test_row([1], 0), sv_real_test_row([-1], 1))
@@ -1961,7 +1961,7 @@ fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
 
 // Refuted by rounding each bound: x <= 0 and x >= 1.
 fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let up = log.combine([SvSrc::Lit(sv_lit(0, false))], [1])
@@ -1983,7 +1983,7 @@ fn sv_real_test_empty() -> SvQuery {
 }
 
 fn sv_real_test_empty_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(

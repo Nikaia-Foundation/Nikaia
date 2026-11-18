@@ -5,6 +5,3 @@ regress/bofill-scheduling-SMT_real_LIA-ex2360_2400_100.smt2 proved 2113/pre:l100
 regress/sal-carpark-Carpark2-ausgabe-6.smt2 proved 198
 regress/spider_benchmarks-current_frame.base.smt2 proved 719
 regress: 6 files, solved 5 (proved 4, refuted 1), unknown 1 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 867.0, certificates checked 4, models evaluated 1
-regress/sal-carpark-Carpark2-ausgabe-6.smt2 proved 198
-regress/spider_benchmarks-current_frame.base.smt2 proved 719
-regress: 2 files, solved 2 (proved 2, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 458.5, certificates checked 2, models evaluated 0

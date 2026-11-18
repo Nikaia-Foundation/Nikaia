@@ -1,0 +1,72 @@
+// A walk whose lambda pauses (ADR-233): a lazy `map` or `filter` is a
+// sequence whose step pauses, chained with plain steps, cut by `skip`,
+// `step_by`, `take` and `zip`; the eager `sort_by_key`, a list's `map`,
+// `or_insert_with` and `and_modify` await the lambda where the entry calls
+// it; and `io::lines()`, a sequence that can fail (ADR-234 D1), hands each
+// item to the lambda and the failure on to the walk, past a `skip` too.
+// Moved from the `nikaia-std` unit tests `seq::tests::*` (#2082).
+use std::collections
+use std::fs
+use std::process
+use std::time
+
+fn slow(x: i64) -> i64 {
+    time::sleep(1.millis())
+    return x
+}
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let xs: Vec[i64] = [1, 2, 3]
+    println(xs.iter().map(fn(x) { x * 2 }).join("-"))
+    let none: Vec[i64] = []
+    println(f"[{none.iter().join(",")}]")
+    let doubled: Vec[i64] = xs.iter().map(fn(x) { slow(x) * 2 }).collect()
+    println(f"[{doubled.iter().join(", ")}]")
+    let four: Vec[i64] = [1, 2, 3, 4]
+    println(f"{four.iter().filter(fn(x) { slow(x) > 2 }).count()}")
+    println(xs.iter().map(fn(x) { slow(x) + 1 }).map(fn(x) { x * 10 }).filter(fn(x) { x > 20 }).join(","))
+    let names: Vec[String] = ["a", "b", "c"]
+    let cut = (1..10).map(fn(x) { slow(x) }).skip(1).step_by(3).take(2).zip(names.iter()).collect()
+    println(cut.iter().map(fn(p) { f"({p.0}, {p.1})" }).join(" "))
+    let mut ys: Vec[i64] = [3, 1, 2]
+    ys.sort_by_key(fn(y) { slow(y) })
+    println(f"[{ys.iter().join(", ")}]")
+    let bumped: Vec[i64] = [1, 2].map(fn(x) { slow(x) + 1 })
+    println(f"[{bumped.iter().join(", ")}]")
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.entry(f"a").or_insert_with(fn() { slow(5) })
+    m.entry(f"a").or_insert_with(fn() { slow(7) })
+    m.entry(f"a").and_modify(fn(mut v) { v += slow(1) })
+    println(f"{m["a"] ?? 0}")
+    let mut b: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    b.entry(1).or_insert_with(fn() { slow(2) })
+    println(f"{b[1] ?? 0}")
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/lines.nika", fs::Root::Anywhere, "use std::cli\nuse std::io\nuse std::text\nuse std::time\n\nfn slow(x: i64) -> i64 {\n    time::sleep(1.millis())\n    return x\n}\n\nfn n(line: String) -> i64 {\n    return text::parse_i64(line) ?? -1\n}\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let which = args[args.len() - 1]\n    if which == \"take\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { n(l) * 10 }).take(2).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"then\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { slow(n(l)) + 1 }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"past\" {\n        let got: Vec[i64] = io::lines().skip(3).filter(fn(l) { slow(n(l)) > 4 }).map(fn(l) { n(l) }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"count\" {\n        println(f\"{io::lines().filter(fn(l) { n(l) > 1 }).count()}\")\n    }\n    if which == \"nth\" {\n        println(f\"{io::lines().skip(3).step_by(2).nth(0) ?? \"none\"}\")\n    }\n    println(\"held\")\n}\n")
+    for case in ["take", "then", "past", "count", "nth"] {
+        let out = process::run(
+            "sh",
+            ["-c", f"printf '1\\n2\\n\\377\\n4\\n5\\n' | \"$0\" run lines.nika -- {case}", toolchain()]; dir: tmp.clone(),
+        )
+        println(f"== {case}: exit {out.code}")
+        print(out.stdout)
+        for line in out.stderr.lines() {
+            if line.starts_with("Error:") {
+                println(line)
+            }
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

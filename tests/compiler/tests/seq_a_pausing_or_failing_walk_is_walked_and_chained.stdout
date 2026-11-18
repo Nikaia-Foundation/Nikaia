@@ -1,0 +1,23 @@
+2-4-6
+[]
+[2, 4, 6]
+2
+30,40
+(2, a) (5, b)
+[1, 2, 3]
+[2, 3]
+6
+2
+== take: exit 0
+[10, 20]
+held
+== then: exit 1
+Error: not valid UTF-8: standard input
+== past: exit 0
+[5]
+held
+== count: exit 1
+Error: not valid UTF-8: standard input
+== nth: exit 0
+4
+held

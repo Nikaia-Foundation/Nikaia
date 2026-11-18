@@ -243,20 +243,6 @@ mod tests {
         (99, "src/main.nika", 7),
     ];
 
-    #[test]
-    fn a_failed_claim_names_what_it_claimed() {
-        let values = [("blank", Some("2".to_string())), ("xs", None)];
-        assert_eq!(
-            failed_claim("assert(blank == 1)", None, &values),
-            "assertion failed\n    assert(blank == 1)\n    blank is 2"
-        );
-        let message: &dyn std::fmt::Display = &"an empty line is blank";
-        assert_eq!(
-            failed_claim("assert(ok)", Some(message), &[]),
-            "assertion failed: an empty line is blank\n    assert(ok)"
-        );
-    }
-
     /// Lookup picks `Debug` where there is one, and nothing where there is
     /// not - a type with no `Debug` is left out rather than refused.
     // The `&&` is the point: it is what the emitter writes, and lookup falls
@@ -265,22 +251,15 @@ mod tests {
     #[test]
     fn an_operand_prints_where_it_can() {
         struct Opaque;
-        assert_eq!((&&Operand(&2)).shown(), Some("2".to_string()));
-        assert_eq!(
-            (&&Operand(&"a".to_string())).shown(),
-            Some("\"a\"".to_string())
-        );
+        // Kept as Rust (#2082): every type a program writes is `Debug`, so
+        // no program reaches the `None`; the shown operands are checked by
+        // `tests/compiler/tests/abort_a_failed_claim_names_its_line_and_its_operands`.
         assert_eq!((&&Operand(&Opaque)).shown(), None);
     }
 
-    #[test]
-    fn a_known_line_is_translated() {
-        assert_eq!(lookup(TABLE, 24), Some(("src/parse.nika", 41)));
-        assert_eq!(lookup(TABLE, 10), Some(("src/main.nika", 3)));
-    }
-
     /// The half that keeps a program from being worse off: a line the table does
-    /// not know is not answered wrongly.
+    /// not know is not answered wrongly. Kept as Rust (#2082): the emitter maps
+    /// every line a stop can name, so no program reaches an unknown one.
     #[test]
     fn an_unknown_line_is_not_guessed_at() {
         assert_eq!(lookup(TABLE, 11), None);

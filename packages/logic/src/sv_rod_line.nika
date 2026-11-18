@@ -79,6 +79,7 @@ fn sv_unknown(why: LgUnknown) -> String {
 		LgUnknown::Overflow => "unknown (overflow)",
 		LgUnknown::TooManyCases => "unknown (cases)",
 		LgUnknown::TooManyBounds => "unknown (bounds)",
+		LgUnknown::TooManySteps => "unknown (steps)",
 		LgUnknown::NoContradiction => "unknown (no contradiction)",
 		else => "unknown",
 	}
