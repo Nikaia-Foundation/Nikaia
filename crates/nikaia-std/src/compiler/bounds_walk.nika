@@ -402,10 +402,11 @@ struct BoundsWalk {
 	checking: bool,
 	checked_results: collections::BTreeSet[i64],
 	rule_failed: collections::BTreeSet[i64],
-	/// **The rules of `self` each loop around the walk was given at its
-	/// head**, innermost last (`rules_loop_entry`, #1925): asked for at each
-	/// end of its turn (`bounding_turn_end`).
-	rule_loops: Vec[Vec[i64]],
+	/// **The rules each loop around the walk was given at its head**, as
+	/// the value they hold of (`self` or a value a builder builds) and the
+	/// rule's index, innermost last (`rules_loop_entry`, #1925, #2063):
+	/// asked for at each end of its turn (`bounding_turn_end`).
+	rule_loops: Vec[Vec[(String, i64)]],
 	/// **The value a builder builds** (`rules_builder`, ADR-306 D25): its
 	/// `length` rules are asked for where it is handed back and before each
 	/// method of its type is called on it, not given; empty in any other
