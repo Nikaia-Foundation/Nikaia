@@ -1,0 +1,15 @@
+== ab, exit 101
+claims.nika:23: the program stopped: assertion failed
+    precondition of `plain`: `blank == 1`
+    blank is 2
+== told, exit 101
+claims.nika:24: the program stopped: assertion failed: an empty line is blank
+    precondition of `told`: `blank == 1`
+    blank is 4
+== quoted, exit 101
+quoted
+claims.nika:15: the program stopped: assertion failed
+    assert(name == "a")
+    name is "quoted"
+== a, exit 0
+held

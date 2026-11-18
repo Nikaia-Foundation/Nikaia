@@ -1,0 +1,57 @@
+// A false `assert` checked at run time (`unproved-claims = "warn"`, ADR-396
+// D3) stops the program with the claim as it was written and each operand's
+// value by its name (ADR-269 D2), a message after `assertion failed:` where
+// it has one, a text operand quoted as `Debug` writes it, and the Nikaia
+// file and line of the claim found in the program's line table (ADR-300 D9,
+// D10). Moved from the `nikaia-std` unit tests
+// `abort::tests::{a_failed_claim_names_what_it_claimed, a_known_line_is_translated}`
+// and the shown operands of `an_operand_prints_where_it_can` (#2082).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn stops(text: String) -> String {
+    let mut lines: Vec[String] = []
+    let mut on = false
+    for line in text.lines() {
+        if line.contains("the program stopped") {
+            on = true
+        }
+        if on {
+            lines.push(line.clone())
+        }
+    }
+    return lines.join("\n")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(
+        f"{tmp}/claims.nika",
+        fs::Root::Anywhere,
+        "use std::cli\n\nfn plain(blank: i64) throws {\n    println(\"plain\")\n    assert(blank == 1)\n}\n\nfn told(blank: i64) throws {\n    println(\"told\")\n    assert(blank == 1; message: \"an empty line is blank\")\n}\n\nfn quoted(name: String) throws {\n    println(\"quoted\")\n    assert(name == \"a\")\n}\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let which = args[args.len() - 1].clone()\n    let blank = which.bytes.len()\n    if which == \"ab\" { plain(blank) }\n    if which == \"told\" { told(blank) }\n    if which == \"quoted\" { quoted(which) }\n    println(\"held\")\n}\n",
+    )
+    for case in ["ab", "told", "quoted", "a"] {
+        let out = process::run(
+            "sh",
+            ["-c", f"\"$0\" run --unproved-claims=warn claims.nika -- {case}", toolchain()]; dir: tmp.clone(),
+        )
+        println(f"== {case}, exit {out.code}")
+        print(out.stdout)
+        if out.code != 0 {
+            println(stops(out.stderr))
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}
