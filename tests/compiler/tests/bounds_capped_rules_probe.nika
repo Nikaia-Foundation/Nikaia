@@ -1,0 +1,82 @@
+// The bounds walk's cost probe (#2052): a type of six lists of one length,
+// whose marks are capped by the trail's length (ADR-306 D21), and a
+// builder that calls its methods fifteen times a turn. Each call asks the
+// type's rules of the value built (`rules_lengths_hold`), each exit what
+// the function returns (`bounding_returned`). The callgrind total of
+// `check --bounds` on it is the figure the walk's cost work counts; the
+// `.bounds` pins the rows it proves.
+
+struct Table {
+	a: Vec[i64],
+	b: Vec[i64],
+	c: Vec[i64],
+	d: Vec[i64],
+	e: Vec[i64],
+	f: Vec[i64],
+	marks: Vec[i64],
+	trail: Vec[i64],
+}
+
+impl Table {
+	fn add(ref mut self, x: i64) {
+		self.a.push(x)
+		self.b.push(x)
+		self.c.push(x)
+		self.d.push(x)
+		self.e.push(x)
+		self.f.push(x)
+	}
+
+	fn decide(ref mut self, x: i64) {
+		self.marks.push(self.trail.len())
+		self.trail.push(x)
+	}
+
+	fn first(ref self) -> i64 {
+		let top = if self.marks.len() > 0 { self.marks[0] } else { self.trail.len() }
+		let mut out = 0
+		for i in 0..<top {
+			out = out + self.trail[i]
+		}
+		return out
+	}
+
+	fn sum(ref self) -> i64 {
+		let mut out = 0
+		for i in 0..<self.a.len() {
+			out = out + self.a[i] + self.b[i] + self.c[i] + self.d[i] + self.e[i] + self.f[i]
+		}
+		return out
+	}
+}
+
+fn build(n: i64) -> Table {
+	let mut t = Table { a: [], b: [], c: [], d: [], e: [], f: [], marks: [], trail: [] }
+	let mut i = 0
+	while i < n {
+		t.add(1)
+		t.decide(2)
+		t.add(3)
+		t.decide(4)
+		t.add(5)
+		t.decide(6)
+		t.add(7)
+		t.decide(8)
+		t.add(9)
+		t.decide(10)
+		t.add(11)
+		t.decide(12)
+		t.add(13)
+		t.decide(14)
+		t.add(15)
+		i += 1
+	}
+	return t
+}
+
+fn main() throws {
+	let t = build(2)
+	println(t.sum())
+	println(t.marks.len())
+	println(t.first())
+}
