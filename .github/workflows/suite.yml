@@ -136,7 +136,15 @@ jobs:
           done
           du -sh target ~/.cargo/registry || true
 
+      # **The big caches are saved on `develop` only** (#2087): every other
+      # branch restores, never saves. One run wrote about 3.5 GB (both
+      # arches), the repository holds 10 GB, and the `ci/*` runs saved theirs
+      # like a `develop` run, so `develop`'s own entries were evicted before
+      # the next commit could restore them (x64 missed in most runs). GitHub
+      # lets a branch restore only its own and the default branch's entries,
+      # so a `ci/*` run's saves served nobody but its own next run.
       - name: Save the build for the next commit
+        if: github.ref == 'refs/heads/develop'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -413,8 +421,10 @@ jobs:
           path: target/nikaia-project-tests/test-times
           key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # On `develop` only, as the build (#2087). The test times stay per run
+      # and branch: a few KB per shard.
       - name: Save the rustc store
-        if: ${{ !cancelled() && startsWith(matrix.shard, 'compiler-') }}
+        if: ${{ !cancelled() && startsWith(matrix.shard, 'compiler-') && github.ref == 'refs/heads/develop' }}
         uses: actions/cache/save@v4
         with:
           path: target/nikaia-project-tests/rustc
@@ -432,7 +442,7 @@ jobs:
       # repository's 10 GB, or unused for 7 days); the size of a saved tree
       # is printed here.
       - name: Keep only the std of this run
-        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop' }}
         run: |
           names=$(for m in crates/nikaia-std/Cargo.toml crates/unsafe/*/Cargo.toml; do
             sed -n 's/^name = "\(.*\)"$/\1/p;T;q' "$m"; done)
@@ -453,7 +463,7 @@ jobs:
           du -sh target/nikaia-project-tests/rlib/* || true
 
       - name: Save the program std
-        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop' }}
         uses: actions/cache/save@v4
         with:
           path: target/nikaia-project-tests/rlib
