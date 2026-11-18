@@ -118,6 +118,7 @@ impl SvTh for SvBoth {
         self.simplex.real_values()
     }
     fn shared(&self) -> Vec<u32> { vec![] }
+    fn pivots(&self) -> i64 { self.simplex.pivots }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -128,6 +129,7 @@ pub struct SvSmt<T: SvTh> {
     pub head: i64,
     pub budget: LgBudget,
     pub checks: i64,
+    pub spent: i64,
     pub conflicts: i64,
     pub propagated: i64,
     pub propagating: bool,
@@ -211,10 +213,21 @@ pub(crate) fn sv_smt_propagate<T: SvTh>(s: &mut SvSmt<T>) -> bool {
     any
 }
 
+pub(crate) fn sv_cases_per_pivot() -> i64 { 2 }
+
+pub(crate) fn sv_smt_check<T: SvTh>(s: &mut SvSmt<T>, r#final: bool) -> SvChecked {
+    let before = s.th.pivots();
+    let got = s.th.check(r#final, &s.budget, &mut s.sat.book);
+    let pivots = s.th.pivots() - before;
+    s.checks += 1;
+    s.spent += 1 + sv_cases_per_pivot() * pivots;
+    got
+}
+
 pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
     loop {
         if s.sat.refuted { return SvSmtEnd::Unsat; }
-        if s.checks >= s.budget.cases { return SvSmtEnd::Unknown(LgUnknown::TooManyCases); }
+        if s.spent >= s.budget.cases { return SvSmtEnd::Unknown(LgUnknown::TooManyCases); }
         let conflict = s.sat.propagate();
         if conflict >= 0 {
             s.sat.stats.conflicts += 1;
@@ -243,8 +256,7 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
             }
         }
         s.fresh = false;
-        s.checks = unsafe { nikaia_std::proven::add::<i64>(s.checks, 1) };
-        let partial = s.th.check(false, &s.budget, &mut s.sat.book);
+        let partial = sv_smt_check(s, false);
         match partial {
             SvChecked::Conflict(_) => {
                 let end = sv_smt_answer(s, &partial);
@@ -256,8 +268,7 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
         if s.propagating && sv_smt_propagate(s) { continue; }
         let next = s.sat.pick();
         if next.is_none() {
-            s.checks += 1;
-            let last = s.th.check(true, &s.budget, &mut s.sat.book);
+            let last = sv_smt_check(s, true);
             match last {
                 SvChecked::Consistent => { return SvSmtEnd::Sat; },
                 _ => { },
@@ -473,7 +484,7 @@ pub(crate) fn sv_smt_pre_shown(pre: &SvPre) -> String {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sv_smt_run<T: SvTh>(th: T, sat: SvSat, theory_atom: Vec<bool>, known: &[u32], cnf: &SvCnf, arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget) -> SvEngineRun {
-    let mut s = SvSmt { sat, th, theory_atom, head: 0, budget: budget.clone(), checks: 0, conflicts: 0, propagated: 0, propagating: true, lemmas: 0, repeated: 0, seen: collections::BTreeSet::new(), fresh: true };
+    let mut s = SvSmt { sat, th, theory_atom, head: 0, budget: budget.clone(), checks: 0, spent: 0, conflicts: 0, propagated: 0, propagating: true, lemmas: 0, repeated: 0, seen: collections::BTreeSet::new(), fresh: true };
     for f in known.iter() {
         let f = nikaia_std::num::value(f);
         match s.th.fact(f, &mut s.sat.book) {
@@ -484,19 +495,19 @@ pub(crate) fn sv_smt_run<T: SvTh>(th: T, sat: SvSat, theory_atom: Vec<bool>, kno
     let end = sv_smt_search(&mut s);
     let stats = SvSmtStats { conflicts: s.sat.stats.conflicts, theory_conflicts: s.conflicts, lemmas: s.lemmas, repeated: s.repeated, decisions: s.sat.stats.decisions, restarts: s.sat.stats.restarts };
     match end {
-        SvSmtEnd::Unsat => SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.copy_owned()), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() },
+        SvSmtEnd::Unsat => SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.copy_owned()), work: s.spent, path: String::from(""), carried: vec![], stats: stats.clone() },
         SvSmtEnd::Sat => {
-            if cnf.query.reals.is_empty() { return SvEngineRun { driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, &s.th.model())), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() }; }
+            if cnf.query.reals.is_empty() { return SvEngineRun { driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, &s.th.model())), work: s.spent, path: String::from(""), carried: vec![], stats: stats.clone() }; }
             let values = s.th.real_values();
             if !sv_real_model_holds(arena, facts, goal, &values) {
-                let mut none = sv_engine_unknown(LgUnknown::NoContradiction, s.checks);
+                let mut none = sv_engine_unknown(LgUnknown::NoContradiction, s.spent);
                 none.stats = stats.clone();
                 return none;
             }
-            SvEngineRun { driven: SvDriven::RealModel(values), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() }
+            SvEngineRun { driven: SvDriven::RealModel(values), work: s.spent, path: String::from(""), carried: vec![], stats: stats.clone() }
         },
         SvSmtEnd::Unknown(why) => {
-            let mut run = sv_engine_unknown(why.clone(), s.checks);
+            let mut run = sv_engine_unknown(why.clone(), s.spent);
             run.stats = stats.clone();
             let atoms = cnf.query.atoms.len() as i64;
             for c in s.sat.carried() {
@@ -629,7 +640,7 @@ pub(crate) fn sv_smt_test_lines(files: &[(String, String)]) -> String {
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("bits-20"), sv_smt_test_family(20, 1, 21, "unsat", "")), (String::from("bits-sat"), sv_smt_test_family(12, 1, 5, "sat", "(assert (<= (+ x1 x2 x3) 1))\n(assert (>= (+ x4 x5) 2))\n"))];
     let out = sv_smt_test_lines(&files);
-    let expected = vec!["bits-20.smt2: simplex proved 344; fm proved 402; both proved 344", "  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0", "bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49", "  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0"];
+    let expected = vec!["bits-20.smt2: simplex proved 384; fm proved 402; both proved 384", "  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0", "bits-sat.smt2: simplex refuted 73; fm refuted 72; both refuted 73", "  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }
@@ -638,7 +649,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("threes-10"), sv_smt_test_family(10, 3, 16, "unsat", "")), (String::from("branch-depth"), String::from("(set-logic QF_LIA)\n(set-info :status sat)\n(declare-fun x () Int)\n(declare-fun x6 () Int)\n(declare-fun x4 () Int)\n(assert (and (= 0 (+ x6 1 (* 2 x4))) (= 0 (+ (* x 51725) (* x6 241)))))\n(check-sat)\n")), (String::from("bounds"), String::from("(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(declare-const y Int)\n(assert (or (< x 0) (> x 10)))\n(assert (<= 0 x 10))\n(assert (= y (+ x 1)))\n(check-sat)\n"))];
     let out = sv_smt_test_lines(&files);
-    let expected = vec!["threes-10.smt2: simplex proved 1; fm proved 1; both proved 1", "  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0", "branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2", "  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0", "bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0", "  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0"];
+    let expected = vec!["threes-10.smt2: simplex proved 23; fm proved 1; both proved 23", "  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0", "branch-depth.smt2: simplex refuted 988; fm refuted 2; both refuted 988", "  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0", "bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0", "  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }
