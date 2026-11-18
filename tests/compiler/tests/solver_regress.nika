@@ -1,7 +1,10 @@
 // The solver's regression set (`tests/solver/regress`, #1961): files of the
 // SMT-LIB set (`tests/solver/SOURCES.md`) a fix brought within the limit,
-// run under a 10 s wall-clock limit, so a slowdown back to the old cost
-// shows as `unknown` in the diff. QF_LIA bofill-scheduling
+// run under a 15 s wall-clock limit, so a slowdown back to the old cost
+// shows as `unknown` in the diff. The limit is 15 s, not 10 s, since the
+// arm64 CI runner, busy with its shard, took over 10 s for Diffusion2D (4 s
+// here) and Referendum (2 s here) (the suite of ci/solver, 2026-11-18); the
+// old cost of both, about 20 s here, still runs past it. QF_LIA bofill-scheduling
 // SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
 // and about 2 s since. QF_LIA 20231117-c_inference 30_30_86_7_sat ran past
@@ -62,7 +65,7 @@ fn main() throws {
 	inner(
 		nikaia,
 		repo,
-		["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"],
+		["run", "scripts/solver.nika", "--", "run", "--timeout", "15", "tests/solver/regress"],
 	)
 	inner(
 		nikaia,
