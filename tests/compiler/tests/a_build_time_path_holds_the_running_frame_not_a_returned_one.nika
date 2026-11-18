@@ -1,0 +1,19 @@
+// The path `NK1152` names is the calls the build-time run is in when it
+// stops (ADR-321 D7): the first `spin` has returned and left it, the second
+// is running and is in it.
+fn spin(n: int) -> int {
+    let mut total = 0
+    for i in 0..<n { total += i }
+    total
+}
+
+fn outer() -> int {
+    let first = spin(1)
+    spin(1000)
+}
+
+comptime(steps: 100) TOTAL = outer()
+
+fn main() throws {
+    println(TOTAL)
+}

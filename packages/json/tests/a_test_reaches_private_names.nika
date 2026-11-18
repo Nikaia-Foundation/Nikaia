@@ -1,0 +1,15 @@
+// A package's own test program reaches its non-`pub` names (ADR-403 D1,
+// #2135): `Reader`, its fields and the functions over it are private to
+// `json`, and this program in `json`'s `tests/` calls them.
+use json
+
+fn main() throws {
+    println(json::is_digit('7'))
+    println(json::is_digit('x'))
+    let mut r = json::Reader { cs: [' ', '\n', '4', '2'], pos: 0 }
+    json::blanks(r)
+    println(r.pos)
+    println(json::peek(r))
+    r.pos = 4
+    println(json::at_end(r))
+}

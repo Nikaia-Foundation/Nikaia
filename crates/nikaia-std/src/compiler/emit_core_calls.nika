@@ -107,6 +107,23 @@ fn emit_call_few_bytes(world: ref EmitWorld, arg: ref Expr) -> Vec[Expr] {
     return few
 }
 
+/// **The function of `std`'s runtime a span's method is** (ADR-402): the
+/// name in `runtime/time_spans.nika` the ledger entry `callee` is written to,
+/// or nothing. The language below has `saturating_add`, `saturating_sub`,
+/// `min` and `max` on its `Duration` and a `saturating_mul` taking a `u32`,
+/// so the call is written to the function rather than as a method.
+fn emit_call_span_function(callee: ref String) -> String sync {
+    if callee == "i64::nanos" || callee == "i32::nanos" {
+        let ty = callee.strip_suffix("::nanos") ?? ""
+        return f"span_nanos_{ty}"
+    }
+    let name = callee.strip_prefix("time::Duration::") ?? return ""
+    if name == "saturating_add" || name == "saturating_sub" || name == "saturating_mul" || name == "min" || name == "max" {
+        return f"span_{name}"
+    }
+    return ""
+}
+
 /// Which hull constructor a name is: the three types whose hull a program
 /// writes by calling their name (ADR-281 D2).
 fn emit_call_is_a_hull(name: ref String) -> bool {
@@ -1064,6 +1081,26 @@ impl EmitState {
             if flow.can_throw && !flow.caught && self.method_can_fail(on_node) {
                 out.push("?")
             }
+            return
+        }
+        // **A span's `saturating_*`, `min` and `max`, an integer's `nanos`,
+        // are `std`'s runtime functions** (ADR-402): written in Nikaia, and
+        // called by their path, which no method of the language below's
+        // `Duration` can shadow.
+        let spanned = emit_call_span_function(self.facts.method_callees[on_node]?.clone() ?? "")
+        if spanned != "" {
+            out.push(f"nikaia_std::runtime::{spanned}(")
+            if receiver == null {
+                out.push("__nikaia_it")
+            } else {
+                let on = receiver ?? return
+                self.emit_core_nested(world, walk, out, host, on, 0, depth, flow, scope)
+            }
+            if args.len() > 0 {
+                out.push(", ")
+                self.emit_core_args(world, walk, out, host, name, args, [], depth, flow, scope)
+            }
+            out.push(")")
             return
         }
         // **`x.truncating_i32()` is Rust's `as`** (ADR-285 D13): the operation the

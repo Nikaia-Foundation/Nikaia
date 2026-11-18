@@ -1,0 +1,10 @@
+sub 0 2000
+add 12000
+add past true true true
+mul 20 4500 0 0
+mul parts 7500000000922500
+mul past true true
+min 5 5
+max 7 7
+7500000000
+nanos 1500 0 0 999999

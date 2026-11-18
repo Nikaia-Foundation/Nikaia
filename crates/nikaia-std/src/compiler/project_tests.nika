@@ -221,6 +221,20 @@ pub fn project_tests_is_program(file: ref fs::Path, root: ref fs::Path) -> bool 
     return project_members_canonical(parent) == project_members_canonical(root.join("tests"))
 }
 
+/// **Whether the program read from `input` is one of the test programs of
+/// the package at `root`** (ADR-403 D1, D4): `input` is straight in its
+/// `tests/`, as `check` and `lower` read it, or `nikaia test` builds it from
+/// its copy and names the test's file in `env::current_main`, which a process
+/// the build starts does not inherit. Such a program reaches the package's
+/// non-`pub` names, and the package is lowered for it with every item `pub`.
+pub fn project_tests_tests_of(root: ref fs::Path, input: ref fs::Path) -> bool {
+    if project_tests_is_program(input, root) {
+        return true
+    }
+    let main = env::current_main() ?? return false
+    return project_tests_is_program(main, root)
+}
+
 /// **The manifest a test program is built under**: the one
 /// `project_tests_program_test` writes, a package of its own that depends on
 /// the project's package, by its name, where the project names one (#972).
@@ -717,8 +731,10 @@ pub trait ProjectTestsProgramHost {
     /// (`env::current_main`, ADR-program-path-1 D3): the test's own file.
     fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64, main: ref fs::Path) -> ProjectTestsRan sync throws
     /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
-    /// `--asserts`): what it printed.
-    fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
+    /// `--asserts`): what it printed. `main` is the test's own file, as for
+    /// `compiler`, so the check reads the program as a test of the package
+    /// (ADR-403 D1).
+    fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path, main: ref fs::Path) -> Bytes sync throws
     /// The program the build of `project` made, run directly where the build
     /// puts it (`project_settings_own_copy`'s place, with no variant), in
     /// `dir`, with `own` as the test's directory; nothing where it is not
@@ -728,7 +744,10 @@ pub trait ProjectTestsProgramHost {
     /// --user-parallelism SETTING --project PROJECT` in `own`, with
     /// `project_batch_var()` naming `list`, ended after `within` seconds; the
     /// program it made, nothing where the build failed or ran out of time.
-    fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path, within: i64) -> ProjectTestsBatchBuilt sync throws
+    /// `main` is one of the batch's test files: every program of a batch is
+    /// a test of the package, which they all link lowered for them (ADR-403
+    /// D4).
+    fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path, within: i64, main: ref fs::Path) -> ProjectTestsBatchBuilt sync throws
     /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
     /// directory and `stdin` on its standard input (none where it is empty).
     fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64, processes: i64, main: ref fs::Path) -> ProjectTestsRan sync throws
@@ -884,7 +903,8 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
         }
         let list = dir.join("batch.list")
         fs::write(list, fs::Root::Anywhere, lines.join(""))
-        let built = host.batched(setting, dir.join("project"), dir, list, project_tests_build_time_limit())
+        let main = chunk[0].dir.join(f"{chunk[0].name}.nika")
+        let built = host.batched(setting, dir.join("project"), dir, list, project_tests_build_time_limit(), main)
         // **A batch that ran out of time is not built again** (#1774), in
         // part or in halves, to run out of it again: its programs are built
         // alone, each within the limit, and one that hangs fails by name.
@@ -1045,14 +1065,15 @@ pub fn project_tests_reports[H: ProjectTestsProgramHost](host: ref H, program: r
     }
     let entry = project_tests_prepared(host, program, root, own)
     let written = f"tests/{program.name}.nika"
+    let main = program.dir.join(f"{program.name}.nika")
     if program.bounds != null {
-        found.bounds = project_tests_relocated(host.explained(["--bounds"], entry, own), entry, written, root)
+        found.bounds = project_tests_relocated(host.explained(["--bounds"], entry, own, main), entry, written, root)
     }
     if program.asserts != null {
-        found.asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
+        found.asserts = project_tests_relocated(host.explained(["--asserts"], entry, own, main), entry, written, root)
     }
     if program.sharing != null {
-        found.sharing = project_tests_relocated(host.explained(["--sharing"], entry, own), entry, written, root)
+        found.sharing = project_tests_relocated(host.explained(["--sharing"], entry, own, main), entry, written, root)
     }
     return found
 }

@@ -124,6 +124,11 @@ pub struct Build {
     /// calls its `pub` functions, so the error sums they fail with are `pub`
     /// too (#1447).
     pub offered_to_rust: bool,
+    /// **Every item `pub`** ([ADR-403](../../docs/specification/adr/adr-403.md)
+    /// D4): the package as it is lowered for its own `tests/` programs, a
+    /// build of its own, so they reach its private names. Every other build
+    /// keeps the package private.
+    pub every_item_public: bool,
 }
 
 impl Default for Build {
@@ -142,6 +147,7 @@ impl Default for Build {
             called_from_c: false,
             crate_root: "crate",
             offered_to_rust: false,
+            every_item_public: false,
         }
     }
 }
@@ -167,6 +173,7 @@ impl Build {
             called_from_c: false,
             crate_root: "crate",
             offered_to_rust: false,
+            every_item_public: false,
         })
     }
 
@@ -718,6 +725,7 @@ impl<'p> Emitter<'p> {
                 trusted: provenance == crate::contracts::Provenance::Trusted,
                 crate_root: build.crate_root.to_text(),
                 offered_to_rust: build.offered_to_rust,
+                every_item_public: build.every_item_public,
             },
             graphs,
         );

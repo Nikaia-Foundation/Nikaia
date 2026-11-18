@@ -167,6 +167,17 @@ mod thread_lowered {
 #[allow(unused_imports)]
 pub use thread_lowered::*;
 
+#[allow(unsafe_code)]
+mod time_spans_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/time_spans.rs");
+}
+#[allow(unused_imports)]
+pub use time_spans_lowered::*;
+
 pub mod cli {
     #[allow(unused_imports)]
     pub use super::{an};
@@ -211,8 +222,12 @@ pub mod thread {
     #[allow(unused_imports)]
     pub use super::{Id, thread_numbered};
 }
+pub mod time_spans {
+    #[allow(unused_imports)]
+    pub use super::{span_saturating_add, span_saturating_sub, span_saturating_mul, span_min, span_max, span_nanos_i64, span_nanos_i32};
+}
 
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4b0b1cfd9b79e27ee3b8b5ac3048692eae591dd4657a20d34542da9a0b7e45d4";
+pub const LOWERED_DIGEST: &str = "6664b5a156180219cb150193c3a870c27353a1ee30ce995b20caa7dff32e8de8";

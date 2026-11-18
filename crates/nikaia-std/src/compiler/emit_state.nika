@@ -170,6 +170,9 @@ pub struct EmitState {
     /// **The package is offered to Rust** (`artifact = "rust-library"`,
     /// ADR-393 D1): its error sums are `pub`, as `std`'s are (#1447).
     pub offered_to_rust: bool,
+    /// **Every item is `pub`** (ADR-403 D4): the package as it is lowered for
+    /// its own `tests/` programs, which reach its private names.
+    pub every_item_public: bool,
     /// Some function in the file can throw.
     pub fails: bool,
     /// The whole input is trusted.

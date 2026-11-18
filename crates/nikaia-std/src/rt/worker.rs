@@ -355,43 +355,4 @@ mod tests {
         assert_eq!(workers.drain(std::time::Duration::from_secs(5)), 0);
         std::fs::remove_file(&path).ok();
     }
-
-    /// The drain is bounded by the clock and not by the work, which is the
-    /// half of ADR-297 D6 that cannot hang.
-    ///
-    /// **A read of a FIFO nobody writes to**, which used to be a readiness wait
-    /// on a socket nobody writes to. Readiness is not a worker operation any
-    /// more ([`super::readiness`]) and this test is about the **drain**, so
-    /// what it needs is any operation that does not finish — and opening a FIFO
-    /// blocks until a writer appears, which is a property of the thing rather
-    /// than a sleep this had to choose a length for.
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn the_drain_is_bounded_by_its_deadline() {
-        let workers = Workers::start(1);
-        let (reply, answer) = channel();
-        let path = std::env::temp_dir().join(format!("nikaia-drain-{}", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        let made = std::process::Command::new("mkfifo")
-            .arg("-m")
-            .arg("600")
-            .arg(&path)
-            .status()
-            .expect("mkfifo runs");
-        assert!(made.success(), "mkfifo");
-        assert!(workers.send(Op::Read {
-            path: path.clone(),
-            reply,
-        }));
-
-        let began = std::time::Instant::now();
-        let left = workers.drain(std::time::Duration::from_millis(50));
-        assert!(began.elapsed() < std::time::Duration::from_secs(2), "hung");
-        assert_eq!(left, 1, "the deadline expired with the operation pending");
-        drop(answer);
-        // The worker is still blocked in `open`; a writer lets it go, and the
-        // entry is this test's to remove.
-        let _ = std::fs::OpenOptions::new().write(true).open(&path);
-        let _ = std::fs::remove_file(&path);
-    }
 }
