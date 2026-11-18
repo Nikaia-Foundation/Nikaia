@@ -1,0 +1,17 @@
+list exit 0
+touch::a_touch_round_trips_through_its_text
+touch::a_touch_names_its_kind_and_parameter
+touch::a_malformed_touch_says_what_is_wrong
+touch::an_unknown_kind_would_be_disjoint_from_everything
+touch::different_kinds_never_conflict
+touch::the_two_console_handles_may_be_one_destination
+touch::two_reads_never_conflict
+touch::two_named_resources_are_compared_by_name
+touch::an_unnameable_resource_conflicts_with_its_whole_kind
+one exit 0
+test touch::two_reads_never_conflict ... ok
+test result: ok. 1 passed; 0 failed
+dependency exit 0
+logic::sv_walk::the_walk_finds_a_random_system_s_model_and_nothing_where_there_is_none
+none exit 1
+test result: ok. 0 passed; 0 failed

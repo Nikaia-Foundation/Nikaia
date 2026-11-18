@@ -332,9 +332,9 @@ pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, 
     tests
 }
 
-pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
-    let mut text: String = String::from("\n#[cfg(test)]\nmod nikaia_tests {\n");
-    let mut k = first;
+pub fn modules_test_wrappers(titles: &[String], stem: &str) -> String {
+    let mut text: String = format!("\n/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.\npub(crate) fn {}_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {{\n    vec![\n", stem);
+    let mut k: i64 = 0;
     for title in titles.iter() {
         let mut slug: String = String::from("");
         let mut gap = false;
@@ -350,10 +350,10 @@ pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
                 slug.push_str(&format!("{}", (u8::try_from(unsafe { nikaia_std::proven::add::<i64>(c, 32) }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
             } else { gap = true; }
         }
-        text.push_str(&format!("    #[test]\n    fn {}() {{\n        super::{}().unwrap()\n    }}\n", slug, test_function(k)));
-        k += 1;
+        text.push_str(&format!("        (\"{}::{}\", {}),\n", stem, slug, test_function(k)));
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
-    text.push_str("}\n");
+    text.push_str("    ]\n}\n");
     text
 }
 
@@ -956,7 +956,6 @@ pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<Str
     Ok(rust)
 }
 
-#[cfg(test)]
 pub(crate) fn modules_reach_test_file(items: &[(&'static str, bool, Vec<&'static str>)]) -> ModulesReach {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     let mut tests: Vec<bool> = vec![];
@@ -975,7 +974,6 @@ pub(crate) fn modules_reach_test_file(items: &[(&'static str, bool, Vec<&'static
     ModulesReach { names, tests, calls }
 }
 
-#[cfg(test)]
 pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) -> String {
     let mut out: String = String::from("");
     for set in found.iter() {
@@ -987,7 +985,6 @@ pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) 
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec!["a_deeper"]), ("a_deeper", false, vec![]), ("", false, vec!["a_used"]), ("a_used", false, vec![])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_help", "b_help"]), ("b_help", false, vec!["a_used"])]);
@@ -997,7 +994,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec![]), ("", true, vec!["a_help"])]);
     let b = modules_reach_test_file(&vec![("", false, vec!["a_help"])]);
@@ -1007,7 +1003,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("twin", false, vec![]), ("", true, vec!["twin"])]);
     let b = modules_reach_test_file(&vec![("twin", false, vec![])]);
@@ -1017,7 +1012,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("ARun", false, vec![]), ("a_check", false, vec!["ARun"]), ("AKept", false, vec![]), ("", false, vec!["AKept"])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_check", "AKept"])]);
@@ -1028,22 +1022,12 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn a_helper_only_another_file_s_test_calls_is_test_only_1160() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_helper_another_file_s_code_calls_stays_plain_1160() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn a_name_two_files_declare_is_never_test_only_1160() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn a_type_only_test_only_helpers_name_is_test_only_one_an_impl_names_is_not_1160() {
-        super::__nikaia_test_3().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn modules_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("modules::a_helper_only_another_file_s_test_calls_is_test_only_1160", __nikaia_test_0),
+        ("modules::a_helper_another_file_s_code_calls_stays_plain_1160", __nikaia_test_1),
+        ("modules::a_name_two_files_declare_is_never_test_only_1160", __nikaia_test_2),
+        ("modules::a_type_only_test_only_helpers_name_is_test_only_one_an_impl_names_is_not_1160", __nikaia_test_3),
+    ]
 }

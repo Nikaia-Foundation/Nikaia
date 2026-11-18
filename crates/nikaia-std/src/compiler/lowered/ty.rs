@@ -1623,20 +1623,16 @@ pub(crate) fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn ty_test_bound(pattern: &str, actual: &str) -> collections::BTreeMap<String, Ty> {
     let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     bind(&parse(pattern), &parse(actual), &mut out);
     out
 }
 
-#[cfg(test)]
 pub(crate) fn ty_test_view(name: String) -> Ty { Ty::Named { name, args: vec![], view: true } }
 
-#[cfg(test)]
 pub(crate) fn ty_test_name(name: String) -> Ty { Ty::Named { name, args: vec![], view: false } }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["i32", "ref String", "String", "Vec[Row]", "HashMap[ref String, Stats]", "(Op, i64)", "Vec[(ref String, i64)]", "?"] {
         let ty = parse(written);
@@ -1646,7 +1642,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let pairs = nikaia_std::block::List::from_array_in([("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")], nikaia_std::block::Place::Block);
     for (old, new) in pairs.iter() {
@@ -1657,7 +1652,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let known = ty_test_name(String::from("i32"));
     if !(Ty::Unknown.fits(&known)) { nikaia_std::abort::assertion_failed("assert(Ty::Unknown.fits(known))", None, &[]) };
@@ -1666,7 +1660,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     if !(ty_test_name(String::from("i32")).fits(&ty_test_name(String::from("i32")))) { nikaia_std::abort::assertion_failed("assert(ty_test_name(\"i32\").fits(ty_test_name(\"i32\")))", None, &[]) };
     if !(!ty_test_name(String::from("i32")).fits(&ty_test_name(String::from("i64")))) { nikaia_std::abort::assertion_failed("assert(!ty_test_name(\"i32\").fits(ty_test_name(\"i64\")))", None, &[]) };
@@ -1676,7 +1669,6 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     if !(parse("Vec[?]").fits(&parse("Vec[Row]"))) { nikaia_std::abort::assertion_failed("assert(parse(\"Vec[?]\").fits(parse(\"Vec[Row]\")))", None, &[]) };
     if !(parse("(i32, ?)").fits(&parse("(i32, String)"))) { nikaia_std::abort::assertion_failed("assert(parse(\"(i32, ?)\").fits(parse(\"(i32, String)\")))", None, &[]) };
@@ -1684,13 +1676,11 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["fn()", "fn(ref Stats)", "fn(ref String, i64)", "fn(?)"] { if !(AsRef::<str>::as_ref(&(parse(written).text())) == AsRef::<str>::as_ref(&(written))) { nikaia_std::abort::assertion_failed("assert(parse(written).text() == written)", None, &[("parse(written).text()", (&&nikaia_std::abort::Operand(&(parse(written).text()))).shown()), ("written", (&&nikaia_std::abort::Operand(&(written))).shown()), ]) }; }
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let parsed = parse("fn(&Stats)");
     let params: Vec<Ty> = match parsed {
@@ -1702,7 +1692,6 @@ pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let one = parse("fn(&Stats)");
     if !(one.fits(&parse("fn(&Stats)"))) { nikaia_std::abort::assertion_failed("assert(one.fits(parse(\"fn(&Stats)\")))", None, &[]) };
@@ -1715,7 +1704,6 @@ pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     if !(parse("$V") == Ty::Var { name: String::from("V"), view: false }) { nikaia_std::abort::assertion_failed("assert(parse(\"$V\") == …)", None, &[("parse(\"$V\")", (&&nikaia_std::abort::Operand(&(parse("$V")))).shown()), ("…", (&&nikaia_std::abort::Operand(&(Ty::Var { name: String::from("V"), view: false }))).shown()), ]) };
     if !(parse("ref $V").text() == "ref $V") { nikaia_std::abort::assertion_failed("assert(parse(\"ref $V\").text() == \"ref $V\")", None, &[("parse(\"ref $V\").text()", (&&nikaia_std::abort::Operand(&(parse("ref $V").text()))).shown()), ]) };
@@ -1726,7 +1714,6 @@ pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]");
     if !(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "K") {
@@ -1746,7 +1733,6 @@ pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[?, ?]");
     if !(substitute(&parse("Entry[$V]"), &bound) == parse("Entry[?]")) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"Entry[$V]\"), bound) == parse(\"Entry[?]\"))", None, &[("substitute(parse(\"Entry[$V]\"), bound)", (&&nikaia_std::abort::Operand(&(substitute(&parse("Entry[$V]"), &bound)))).shown()), ("parse(\"Entry[?]\")", (&&nikaia_std::abort::Operand(&(parse("Entry[?]")))).shown()), ]) };
@@ -1756,7 +1742,6 @@ pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::E
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_11() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let empty: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     if !(substitute(&parse("$V"), &empty) == Ty::Unknown) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"$V\"), empty) == Ty::Unknown)", None, &[("substitute(parse(\"$V\"), empty)", (&&nikaia_std::abort::Operand(&(substitute(&parse("$V"), &empty)))).shown()), ("Ty::Unknown", (&&nikaia_std::abort::Operand(&(Ty::Unknown))).shown()), ]) };
@@ -1766,7 +1751,6 @@ pub(crate) fn __nikaia_test_11() -> Result<(), std::boxed::Box<dyn std::error::E
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_12() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let at_entry = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]");
     let entry = substitute(&parse("Entry[$V]"), &at_entry);
@@ -1777,7 +1761,6 @@ pub(crate) fn __nikaia_test_12() -> Result<(), std::boxed::Box<dyn std::error::E
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_13() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let bound = ty_test_bound("&Vec[$T]", "Vec[i64]");
     if !(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "T") {
@@ -1791,62 +1774,22 @@ pub(crate) fn __nikaia_test_13() -> Result<(), std::boxed::Box<dyn std::error::E
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn a_type_round_trips_through_its_text() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn the_spelling_it_replaces_reads_back_as_the_same_type() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn unknown_fits_anything() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn two_known_types_fit_only_when_equal() {
-        super::__nikaia_test_3().unwrap()
-    }
-    #[test]
-    fn an_unknown_argument_makes_the_whole_fit() {
-        super::__nikaia_test_4().unwrap()
-    }
-    #[test]
-    fn a_function_type_round_trips() {
-        super::__nikaia_test_5().unwrap()
-    }
-    #[test]
-    fn a_function_type_is_not_a_name() {
-        super::__nikaia_test_6().unwrap()
-    }
-    #[test]
-    fn a_function_type_fits_its_own_shape() {
-        super::__nikaia_test_7().unwrap()
-    }
-    #[test]
-    fn a_variable_round_trips_and_is_not_a_name() {
-        super::__nikaia_test_8().unwrap()
-    }
-    #[test]
-    fn the_receiver_binds_what_the_signature_names() {
-        super::__nikaia_test_9().unwrap()
-    }
-    #[test]
-    fn a_receiver_that_says_nothing_leaves_the_variables_unbound() {
-        super::__nikaia_test_10().unwrap()
-    }
-    #[test]
-    fn an_unbound_variable_becomes_unknown() {
-        super::__nikaia_test_11().unwrap()
-    }
-    #[test]
-    fn the_chain_from_a_map_to_a_lambda_parameter() {
-        super::__nikaia_test_12().unwrap()
-    }
-    #[test]
-    fn a_view_binds_against_a_value() {
-        super::__nikaia_test_13().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn ty_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("ty::a_type_round_trips_through_its_text", __nikaia_test_0),
+        ("ty::the_spelling_it_replaces_reads_back_as_the_same_type", __nikaia_test_1),
+        ("ty::unknown_fits_anything", __nikaia_test_2),
+        ("ty::two_known_types_fit_only_when_equal", __nikaia_test_3),
+        ("ty::an_unknown_argument_makes_the_whole_fit", __nikaia_test_4),
+        ("ty::a_function_type_round_trips", __nikaia_test_5),
+        ("ty::a_function_type_is_not_a_name", __nikaia_test_6),
+        ("ty::a_function_type_fits_its_own_shape", __nikaia_test_7),
+        ("ty::a_variable_round_trips_and_is_not_a_name", __nikaia_test_8),
+        ("ty::the_receiver_binds_what_the_signature_names", __nikaia_test_9),
+        ("ty::a_receiver_that_says_nothing_leaves_the_variables_unbound", __nikaia_test_10),
+        ("ty::an_unbound_variable_becomes_unknown", __nikaia_test_11),
+        ("ty::the_chain_from_a_map_to_a_lambda_parameter", __nikaia_test_12),
+        ("ty::a_view_binds_against_a_value", __nikaia_test_13),
+    ]
 }

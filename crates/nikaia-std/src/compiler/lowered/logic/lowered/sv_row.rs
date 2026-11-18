@@ -118,7 +118,6 @@ pub(crate) fn sv_row_eliminate(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> 
     sv_row_combine(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     let mut best: Option<u32> = None;
     let mut best_cost: i64 = 0;
@@ -142,7 +141,6 @@ pub(crate) fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     best
 }
 
-#[cfg(test)]
 pub(crate) fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
     let mut sum = sv_int(r.constant);
     let mut i: i64 = 0;
@@ -202,16 +200,13 @@ pub(crate) fn sv_row_of_lin(lin: &LgLin, vars: &mut SvVars) -> Option<SvRow> {
     sv_row_of(terms, lin.constant)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_row_test_term(col: u32, k: i64) -> SvTerm { SvTerm { col, k } }
 
-#[cfg(test)]
 pub(crate) fn sv_row_test_show(r: Option<&SvRow>) -> String {
     let row = match r { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused") };
     sv_row_text(row)
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== building\n"));
@@ -266,10 +261,9 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn rows_are_built_combined_reduced_evaluated_and_read_from_lglin() {
-        super::__nikaia_test_0().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_row_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_row::rows_are_built_combined_reduced_evaluated_and_read_from_lglin", __nikaia_test_0),
+    ]
 }

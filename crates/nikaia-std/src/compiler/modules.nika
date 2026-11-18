@@ -583,13 +583,16 @@ pub fn modules_tests_as_functions(mut items: Vec[Spanned[Item]], source: ref Str
     return tests
 }
 
-/// **The Rust a tools file's tests are run by** (#1147): `lower-std` lowers each
-/// `test` block as the function `test_function(k)` (`modules_tests_as_functions`)
-/// and this is the `#[cfg(test)]` module beside it, one `#[test]` per title,
-/// named after the title in snake case, that calls it.
-pub fn modules_test_wrappers(titles: ref Vec[String], first: i64) -> String {
-    let mut text: String = "\n#[cfg(test)]\nmod nikaia_tests {\n"
-    let mut k = first
+/// **The Rust a tools file's tests are run by** (#1147, #2082): `lower-std`
+/// lowers each `test` block as the function `test_function(k)`
+/// (`modules_tests_as_functions`) and this is the list beside it,
+/// `<stem>_nikaia_tests()`, one entry per title: `<stem>::` and the title in
+/// snake case, and the function. No `#[cfg(test)]`: the tests are compiled
+/// into the compiler, and `nikaia test --std` runs them through the package's
+/// `nikaia_tests()` (`sysroot_package_tests`), so `nikaia-std` has no test build.
+pub fn modules_test_wrappers(titles: ref Vec[String], stem: ref String) -> String {
+    let mut text: String = f"\n/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.\npub(crate) fn {stem}_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {{\n    vec![\n"
+    let mut k = 0
     for title in titles {
         let mut slug: String = ""
         let mut gap = false
@@ -611,10 +614,10 @@ pub fn modules_test_wrappers(titles: ref Vec[String], first: i64) -> String {
                 gap = true
             }
         }
-        text.push_str(f"    #[test]\n    fn {slug}() {{\n        super::{test_function(k)}().unwrap()\n    }}\n")
+        text.push_str(f"        (\"{stem}::{slug}\", {test_function(k)}),\n")
         k += 1
     }
-    text.push_str("}\n")
+    text.push_str("    ]\n}\n")
     return text
 }
 

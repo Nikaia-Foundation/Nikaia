@@ -232,10 +232,8 @@ pub(crate) fn holds_touch(touches: &[Touch], touch: &Touch) -> bool {
     false
 }
 
-#[cfg(test)]
 pub(crate) fn touch_test_reached(kind: String, named: Option<String>, write: bool) -> Reached { Reached { kind, named, unknown: false, write } }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["file(path) read", "file(path) write", "file('a.txt') write", "stdout write", "stderr write", "args read"] {
         let touch = match touch_of(written) {
@@ -250,7 +248,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let touch = match touch_of("file(path) read") {
         Ok(value) => value,
@@ -275,7 +272,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["file(path)", "file(path) maybe", "file(path read", "(x) read"] {
         let mut parsed = true;
@@ -288,7 +284,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let typo = touch_test_reached(String::from("stdoutt"), None, true);
     if !(!typo.conflicts_with(&touch_test_reached(String::from("stdout"), None, true))) { nikaia_std::abort::assertion_failed("assert(!typo.conflicts_with(touch_test_reached(\"stdout\", null, true)))", None, &[]) };
@@ -296,7 +291,6 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let file = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
     let out = touch_test_reached(String::from("stdout"), None, true);
@@ -304,7 +298,6 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = touch_test_reached(String::from("stdout"), None, true);
     let err = touch_test_reached(String::from("stderr"), None, true);
@@ -315,7 +308,6 @@ pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let one = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
     let same = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
@@ -326,7 +318,6 @@ pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
     let b = touch_test_reached(String::from("file"), Some(String::from("b.txt")), true);
@@ -334,7 +325,6 @@ pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let unknown = Reached { kind: String::from("file"), named: None, unknown: true, write: true };
     let read = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
@@ -345,42 +335,17 @@ pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn a_touch_round_trips_through_its_text() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_touch_names_its_kind_and_parameter() {
-        super::__nikaia_test_1().unwrap()
-    }
-    #[test]
-    fn a_malformed_touch_says_what_is_wrong() {
-        super::__nikaia_test_2().unwrap()
-    }
-    #[test]
-    fn an_unknown_kind_would_be_disjoint_from_everything() {
-        super::__nikaia_test_3().unwrap()
-    }
-    #[test]
-    fn different_kinds_never_conflict() {
-        super::__nikaia_test_4().unwrap()
-    }
-    #[test]
-    fn the_two_console_handles_may_be_one_destination() {
-        super::__nikaia_test_5().unwrap()
-    }
-    #[test]
-    fn two_reads_never_conflict() {
-        super::__nikaia_test_6().unwrap()
-    }
-    #[test]
-    fn two_named_resources_are_compared_by_name() {
-        super::__nikaia_test_7().unwrap()
-    }
-    #[test]
-    fn an_unnameable_resource_conflicts_with_its_whole_kind() {
-        super::__nikaia_test_8().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn touch_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("touch::a_touch_round_trips_through_its_text", __nikaia_test_0),
+        ("touch::a_touch_names_its_kind_and_parameter", __nikaia_test_1),
+        ("touch::a_malformed_touch_says_what_is_wrong", __nikaia_test_2),
+        ("touch::an_unknown_kind_would_be_disjoint_from_everything", __nikaia_test_3),
+        ("touch::different_kinds_never_conflict", __nikaia_test_4),
+        ("touch::the_two_console_handles_may_be_one_destination", __nikaia_test_5),
+        ("touch::two_reads_never_conflict", __nikaia_test_6),
+        ("touch::two_named_resources_are_compared_by_name", __nikaia_test_7),
+        ("touch::an_unnameable_resource_conflicts_with_its_whole_kind", __nikaia_test_8),
+    ]
 }

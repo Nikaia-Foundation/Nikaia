@@ -277,7 +277,6 @@ pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, s
     Some(out)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_answer_kind(answer: &LgAnswer) -> String {
     match answer {
         LgAnswer::Proved { .. } => String::from("proved"),
@@ -286,7 +285,6 @@ pub(crate) fn sv_theory_test_answer_kind(answer: &LgAnswer) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_both(name: &str, source: &str) -> String {
     let script = match lg_smtlib_read(source) {
         LgRead::Script(ref s) => s.clone(),
@@ -308,7 +306,6 @@ pub(crate) fn sv_theory_test_both(name: &str, source: &str) -> String {
     format!("{}: lg_check {}; interface {}\n", name, old, new)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
@@ -320,7 +317,6 @@ pub(crate) fn sv_theory_test_row1(ks: &[i64], c: i64) -> SvRow {
     nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_lits_text(ls: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for l in ls.iter() {
@@ -330,7 +326,6 @@ pub(crate) fn sv_theory_test_lits_text(ls: &[u32]) -> String {
     nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus("[", nikaia_std::block::Text::from(parts.join(", ")))), "]"))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_said_by(checked: &SvChecked) -> String {
     match checked {
         SvChecked::Consistent => String::from("consistent"),
@@ -340,7 +335,6 @@ pub(crate) fn sv_theory_test_said_by(checked: &SvChecked) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_theory_test_calls() -> String {
     let mut out: String = String::from("");
     let atoms = vec![SvAtom { row: sv_theory_test_row1(&vec![1], -2), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![1], -5), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![-1], 3), rel: SvRel::Le }];
@@ -376,7 +370,6 @@ pub(crate) fn sv_theory_test_calls() -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_theory_test_calls();
     let expected = vec!["assert x <= 2: consistent", "propagate: [2, 5]", "explain x <= 5: [1, 2]", "check: consistent, model x = 0", "assert x >= 3 at level 2: consistent", "check: conflict [1, 5]", "backtrack to 1, check: consistent, shared []", "log of 5 steps: checked"];
@@ -384,7 +377,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("refused-function.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; An uninterpreted function: outside what the reader takes.", "(set-logic QF_UFLIA)", "(set-info :status sat)", "(declare-fun f (Int) Int)", "(assert (= (f 1) 2))", "(check-sat)"].join("\n")), "\n"))), ("sat-interval.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; A model: 1 <= x <= 3 and x != 2.", "(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x Int)", "(assert (<= 1 x))", "(assert (<= x 3))", "(assert (distinct x 2))", "(check-sat)"].join("\n")), "\n"))), ("unsat-bounds.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; The bounds check of ADR-270 D9: 0 <= i < n proves i < n + 1.", "(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const i Int)", "(declare-const n Int)", "(assert (<= 0 i))", "(assert (< i n))", "(assert (not (< i (+ n 1))))", "(check-sat)"].join("\n")), "\n"))), ("disjunctions-03.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(check-sat)", "(exit)"].join("\n")), "\n"))), ("disjunctions-04.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const x4 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (or (= x4 0) (= x4 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(assert (not (< i (+ k 1))))", "(check-sat)", "(exit)"].join("\n")), "\n")))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
@@ -398,14 +390,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn the_interface_s_calls_one_by_one_leave_a_log_sv_check_replays() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn smoke_and_disjunction_files_are_answered_alike_by_lg_check_and_over_the_interface() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_theory_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_theory::the_interface_s_calls_one_by_one_leave_a_log_sv_check_replays", __nikaia_test_0),
+        ("sv_theory::smoke_and_disjunction_files_are_answered_alike_by_lg_check_and_over_the_interface", __nikaia_test_1),
+    ]
 }
