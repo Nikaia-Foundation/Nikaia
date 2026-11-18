@@ -28,7 +28,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
                         given = given.owned();
                         wanted = wanted.owned();
                     }
-                    state.expect_type(world, &given, &wanted, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
+                    state.expect_type(world, &given, &wanted, span, "argument", &mut |was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
                 }
             }
             for c in config.iter() {
@@ -38,13 +38,13 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
                     if o.name == option {
                         found = true;
                         let given = check_core_expr(state, world, host, &c.value, span);
-                        state.expect_type(world, &given, &o.ty, span, "argument", &|was, wanted| { format!("The option `{}` is `{}`, but `{}` takes `{}`.", option, was, key, wanted) });
+                        state.expect_type(world, &given, &o.ty, span, "argument", &mut |was, wanted| { format!("The option `{}` is `{}`, but `{}` takes `{}`.", option, was, key, wanted) });
                     }
                 }
                 if !found && option == "words" && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
                     found = true;
                     let given = check_core_expr(state, world, host, &c.value, span);
-                    state.expect_type(world, &given.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
+                    state.expect_type(world, &given.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &mut |was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
                 }
                 if !found { state.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, option), vec![String::from("An entry's options are what its rule declares after its `;`.")], Some(String::from("Name an option the rule declares.")))); }
             }

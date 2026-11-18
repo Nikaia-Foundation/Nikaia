@@ -353,8 +353,8 @@ pub(crate) fn buffer_plans(
     nika::buffer_plans(
         &parsed.program,
         &ask,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-        &|path: &str| parsed.unaliased(path),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |path: &str| parsed.unaliased(path),
     )
 }
 
@@ -477,7 +477,7 @@ pub(crate) fn from_nikaia(plan: nikaia_std::compiler::buffers::BufferPlan) -> Pl
 
 /// The name a call's callee is written as.
 pub fn callee_name(parsed: &Parsed, func: &Expr) -> Option<String> {
-    nikaia_std::compiler::keep::written_callee(&parsed.interner, func, &|path: &str| {
+    nikaia_std::compiler::keep::written_callee(&parsed.interner, func, &mut |path: &str| {
         parsed.unaliased(path)
     })
 }

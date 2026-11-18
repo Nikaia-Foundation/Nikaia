@@ -160,7 +160,7 @@ pub(crate) fn folds_in_parallel(pattern: &Pattern) -> bool {
     }
 }
 
-pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Option<String> {
+pub fn literal_of(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String) -> Option<String> {
     match value {
         BuildValue::Int(n) => return Some(integer_text(n)),
         BuildValue::Float(f) => {
@@ -177,7 +177,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         BuildValue::Struct { name, fields } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
-                let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
             return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
@@ -186,7 +186,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             for item in items.iter() { if !is_a_scalar_value(item) { return None; } }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() {
-                let text = match literal_of(item, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match literal_of(item, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("[{}]", nikaia_std::block::Text::from(written.join(", "))));
@@ -195,7 +195,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
-                let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
@@ -203,7 +203,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         BuildValue::Constant { constructor, parts } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in parts.iter() {
-                let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
             return Some(format!("{}({})", constructor, nikaia_std::block::Text::from(written.join(", "))));
@@ -220,7 +220,7 @@ pub struct PublishedEnsures {
     pub condition: String,
 }
 
-pub(crate) fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &impl Fn(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
+pub(crate) fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
     let (name, receiver, args, config, ret_type, body) = match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => { let name = *name; (name, receiver, args, config, ret_type, body) },
         _ => return None,
@@ -240,8 +240,8 @@ pub(crate) fn expression_ensures(item: &Item, words: &winnow_grammar::InternerCo
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for arg in args.iter() { names.insert(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
     let mut nodes: Vec<SolverTerm> = vec![];
-    let term = match lin_term(value, words, &|candidate| { names.contains(candidate) }, &|name| { nothing_pinned(name) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let text = term_ledger_text(term, &|at| { (*nikaia_std::index::get(&nodes, nikaia_std::index::at(at))).clone() });
+    let term = match lin_term(value, words, &mut |candidate| { names.contains(candidate) }, &mut |name| { nothing_pinned(name) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let text = term_ledger_text(term, &mut |at| { (*nikaia_std::index::get(&nodes, nikaia_std::index::at(at))).clone() });
     let condition = format!("result == {}", text);
     let mut readable = names.copy_owned();
     readable.insert(String::from("result"));
@@ -336,7 +336,7 @@ pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64
     for at in computed_options(function) { into.push(ComputedAt { key: nikaia_std::block::Text::from(key.to_string()), at, unit, item, method, option: view.text(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name), field: false }); }
 }
 
-pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &impl Fn(i64, &Ty, &Expr) -> Option<String>) {
+pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) {
     let mut found: Vec<(String, i64, i64, String)> = vec![];
     for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         for item in view.items.iter() {
@@ -345,10 +345,10 @@ pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_,
                 Item::Enum { name, .. } => { let name = *name; view.text(name) },
                 _ => continue,
             };
-            for text in attribute_texts(&ledger, library, view, u, &item.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 0, 0, text)); }
+            for text in attribute_texts(&ledger, library, view, u, &item.attributes, &mut *computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 0, 0, text)); }
             match &item.node {
-                Item::Struct { fields, .. } => { for (at, field) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &field.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 1, at, text)); } } },
-                Item::Enum { variants, .. } => { for (at, variant) in variants.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &variant.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 2, at, text)); } } },
+                Item::Struct { fields, .. } => { for (at, field) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &field.attributes, &mut *computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 1, at, text)); } } },
+                Item::Enum { variants, .. } => { for (at, variant) in variants.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &variant.attributes, &mut *computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 2, at, text)); } } },
                 _ => { },
             }
         }
@@ -356,11 +356,11 @@ pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_,
     for (owner, kind, place, text) in found.into_iter() { apply_attribute(ledger, &owner, kind, place, text); }
 }
 
-pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedView<'_, '_, '_, '_, '_, '_>, unit: i64, attributes: &[Attribute], computed: &impl Fn(i64, &Ty, &Expr) -> Option<String>) -> Vec<String> {
+pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedView<'_, '_, '_, '_, '_, '_>, unit: i64, attributes: &[Attribute], computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) -> Vec<String> {
     attributes.iter().filter_map(|attribute| {
         let named = view.unaliased(&view.text(attribute.name));
         if named == check_attributes_mark_name() { return None; }
-        attribute_value(ledger, library, view.words, &named, attribute, &|ty, argument| { computed(unit, ty, argument) })
+        attribute_value(ledger, library, view.words, &named, attribute, &mut |ty, argument| { computed(unit, ty, argument) })
     }).collect::<Vec<_>>()
 }
 
@@ -384,6 +384,8 @@ pub struct LedgerDerives {
     pub equates: collections::BTreeSet<String>,
     pub hashes: collections::BTreeSet<String>,
     pub copies: collections::BTreeSet<String>,
+    pub code_at_once: collections::BTreeSet<String>,
+    pub code_hands: collections::BTreeSet<(String, String)>,
 }
 
 pub(crate) fn ledger_derives(ledger: &mut Ledger, derives: &LedgerDerives) {
@@ -394,6 +396,27 @@ pub(crate) fn ledger_derives(ledger: &mut Ledger, derives: &LedgerDerives) {
         if derives.equates.contains(name) { contract.equates = true; }
         if derives.hashes.contains(name) { contract.hashes = true; }
         if derives.copies.contains(name) { contract.copies = true; }
+    }
+}
+
+pub(crate) fn ledger_code_at_once(ledger: &mut Ledger, derives: &LedgerDerives) {
+    let mut at_once: collections::BTreeSet<String> = derives.code_at_once.copy_owned();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for (from, to) in derives.code_hands.iter() {
+            if at_once.contains(to) && !at_once.contains(from) {
+                at_once.insert(nikaia_std::block::Text::from(from.to_string()));
+                grew = true;
+            }
+        }
+    }
+    for one in at_once.iter() {
+        let at = match nikaia_std::search::rfind(&one, &"::") { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let key = nikaia_std::index::get(&one, nikaia_std::index::at(0..at));
+        let param = nikaia_std::index::get(&one, nikaia_std::index::at(at + 2..));
+        let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !nikaia_std::list::contains(&contract.at_once, &param) { contract.at_once.push(nikaia_std::block::Text::from(param.to_string())); }
     }
 }
 
@@ -422,7 +445,9 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     let defaults = declare_items(units, borrowing, ledger);
     host.check_units(&ledger);
     ledger_untrusted_results(ledger, &host.outside_results());
-    ledger_derives(ledger, &host.derives());
+    let derives = host.derives();
+    ledger_derives(ledger, &derives);
+    ledger_code_at_once(ledger, &derives);
     host.infer_sync(ledger);
     ledger_expression_ensures(ledger, units, host);
     host.infer_panics(ledger);
@@ -443,15 +468,15 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     host.infer_tether(ledger);
     ledger_result_sources(ledger, units.len() as i64, host);
     ledger_evaluate_defaults(ledger, units, &defaults, host);
-    attribute_values(ledger, units, library, &|unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });
+    attribute_values(ledger, units, library, &mut |unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });
 }
 
-pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &|own| { host.result_package(own) }, &|unit, own, package| { host.result_sources(unit, own, package) }, &|unit, own, package| { host.places_stored(unit, own, package) }); }
+pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &mut |own| { host.result_package(own) }, &mut |unit, own, package| { host.result_sources(unit, own, package) }, &mut |unit, own, package| { host.places_stored(unit, own, package) }); }
 
 pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], host: &H) {
     for view in units.iter() {
         for item in view.items.iter() {
-            let published = match expression_ensures(&item.node, view.words, &ledger, &|condition, readable| { host.reads_back(condition, readable) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let published = match expression_ensures(&item.node, view.words, &ledger, &mut |condition, readable| { host.reads_back(condition, readable) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let contract = match ledger.functions.get_mut(&published.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             contract.ensures = vec![published.condition];
             contract.from = vec![String::from("return")];

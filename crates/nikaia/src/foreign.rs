@@ -186,8 +186,8 @@ pub(crate) fn seen(parsed: &Parsed, root_at: &impl Fn(&str) -> i64) -> Vec<Seen>
     nikaia_std::compiler::foreign::written_in(
         &parsed.program,
         &parsed.interner,
-        &|name: &str| parsed.unaliased(name),
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-        root_at,
+        &mut |name: &str| parsed.unaliased(name),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut &root_at,
     )
 }

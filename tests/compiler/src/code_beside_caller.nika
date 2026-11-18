@@ -1,0 +1,7 @@
+/// A caller in another file of the package than `code_beside_each`, handing
+/// it a lambda that changes what it captures (ADR-views-3 D17, #2046).
+pub fn code_beside_sum(xs: Vec[i64]) -> i64 {
+    let mut total = 0
+    code_beside_each(xs, fn(v) { total = total + v })
+    return total
+}

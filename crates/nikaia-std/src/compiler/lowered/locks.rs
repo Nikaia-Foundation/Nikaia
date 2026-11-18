@@ -35,13 +35,13 @@ pub fn stored_reaches(field: &str, resolved: &collections::BTreeSet<String>, unr
     graph.insert(format!("{}{}", FIELD, field), reaches);
 }
 
-pub(crate) fn unit_reaches(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, calls: &collections::BTreeMap<String, BodyCalls>, graph: &mut collections::BTreeMap<String, Reaches>) {
+pub(crate) fn unit_reaches(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, calls: &collections::BTreeMap<String, BodyCalls>, graph: &mut collections::BTreeMap<String, Reaches>) {
     for item in items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                graph.insert(nikaia_std::block::Text::from(key.to_string()), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
+                graph.insert(nikaia_std::block::Text::from(key.to_string()), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, &mut *unaliased, &mut *holes_of));
             },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
@@ -50,26 +50,26 @@ pub(crate) fn unit_reaches(items: &[Spanned<Item>], names: &winnow_grammar::Inte
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            graph.insert(nikaia_std::block::Text::from(key.to_string()), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
+                            graph.insert(nikaia_std::block::Text::from(key.to_string()), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, &mut *unaliased, &mut *holes_of));
                         },
                         _ => { },
                     }
                 }
             },
-            Item::Grammar(def) => { rules_reaches(def, names, unaliased, holes_of, calls, graph); },
+            Item::Grammar(def) => { rules_reaches(def, names, &mut *unaliased, &mut *holes_of, calls, graph); },
             _ => { },
         }
     }
 }
 
-pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, stored: &collections::BTreeMap<String, CheckStoredCode>, holes_of: &impl Fn(i64, &Expr) -> Vec<Expr>) {
+pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, stored: &collections::BTreeMap<String, CheckStoredCode>, holes_of: &mut impl FnMut(i64, &Expr) -> Vec<Expr>) {
     let calls: collections::BTreeMap<String, BodyCalls> = resolved.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), outside_a_task(entry.1)) }).collect();
     let mut graph: collections::BTreeMap<String, Reaches> = collections::BTreeMap::new();
     for (field, code) in stored.iter() { stored_reaches(field, &code.resolved, code.unresolved, &code.free, &mut graph); }
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
     for unit in 0..units.len() as i64 {
         let view = unsafe { nikaia_std::proven::read(&units, (unit) as usize) };
-        unit_reaches(view.items, view.words, &|name| { view.unaliased(name) }, &|expr| { holes_of(unit, expr) }, &calls, &mut graph);
+        unit_reaches(view.items, view.words, &mut |name| { view.unaliased(name) }, &mut |expr| { holes_of(unit, expr) }, &calls, &mut graph);
         declared_types(view.items, view.words, &mut declared);
     }
     declared.extend(ledger.types.keys().cloned());
@@ -85,9 +85,9 @@ pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, 
 
 pub(crate) fn outside_a_task(calls: &CheckMethodCalls) -> BodyCalls { BodyCalls { resolved: calls.resolved.iter().filter(|&to| { !calls.in_a_task.resolved.contains(nikaia_std::index::as_text(&to)) }).cloned().collect(), unresolved: calls.unresolved && !calls.in_a_task.unresolved, fields_called: calls.fields_called.copy_owned() } }
 
-pub fn free_calls(body: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
+pub fn free_calls(body: &Block, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
     let mut reaches = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
-    walk_calls(body, names, unaliased, holes_of, &mut reaches);
+    walk_calls(body, names, &mut *unaliased, &mut *holes_of, &mut reaches);
     reaches.callees
 }
 
@@ -127,10 +127,10 @@ pub(crate) fn with_owner(owner: &str, own: &str) -> String {
     format!("{}::{}", owner, own)
 }
 
-pub(crate) fn body_reaches(body: &Block, calls: Option<&BodyCalls>, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Reaches {
+pub(crate) fn body_reaches(body: &Block, calls: Option<&BodyCalls>, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Reaches {
     let mut reaches = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     resolved_into(calls, true, &mut reaches);
-    walk_calls(body, names, unaliased, holes_of, &mut reaches);
+    walk_calls(body, names, &mut *unaliased, &mut *holes_of, &mut reaches);
     reaches
 }
 
@@ -142,13 +142,13 @@ pub(crate) fn resolved_into(calls: Option<&BodyCalls>, with_fields: bool, reache
     if with_fields { for field in known.fields_called.iter() { reaches.callees.insert(format!("{}{}", FIELD, field)); } }
 }
 
-pub(crate) fn rules_reaches(def: &GrammarDef, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, calls: &collections::BTreeMap<String, BodyCalls>, graph: &mut collections::BTreeMap<String, Reaches>) {
+pub(crate) fn rules_reaches(def: &GrammarDef, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, calls: &collections::BTreeMap<String, BodyCalls>, graph: &mut collections::BTreeMap<String, Reaches>) {
     let named = nikaia_std::block::Text::from(names.resolve(def.name).to_string());
     let mut whole = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     for rule in def.rules.iter() {
         for alt in rule.alts.iter() {
             let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            walk_calls(action, names, unaliased, holes_of, &mut whole);
+            walk_calls(action, names, &mut *unaliased, &mut *holes_of, &mut whole);
         }
     }
     for rule in def.rules.iter() {
@@ -160,8 +160,8 @@ pub(crate) fn rules_reaches(def: &GrammarDef, names: &winnow_grammar::InternerCo
     }
 }
 
-pub(crate) fn walk_calls(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, reaches: &mut Reaches) {
-    for seen in seen_in(block, names, unaliased, holes_of, &no_root, false) {
+pub(crate) fn walk_calls(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, reaches: &mut Reaches) {
+    for seen in seen_in(block, names, &mut *unaliased, &mut *holes_of, &mut no_root, false) {
         match seen {
             Seen::Call { ref name, .. } => {
                 let called = unaliased(name);

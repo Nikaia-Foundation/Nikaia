@@ -103,8 +103,8 @@ pub fn infer(
         nika::unit_throws(
             &parsed.program,
             &parsed.interner,
-            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-            &|expr: &Expr| match expr {
+            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+            &mut |expr: &Expr| match expr {
                 // **A task's crash, where the task can panic** (ADR-async-5
                 // D35): the walk is `tools/panics.nika`'s.
                 Expr::Async(task, _, _, _) => crashed(parsed, task, &facts, own, library),
@@ -146,7 +146,7 @@ fn crashed(
         task,
         &parsed.program.items,
         &parsed.interner,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         facts,
         own,
         library,
@@ -156,7 +156,7 @@ fn crashed(
         task,
         &parsed.program.items,
         &parsed.interner,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         facts,
         own,
         library,

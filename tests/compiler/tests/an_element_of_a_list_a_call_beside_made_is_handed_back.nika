@@ -1,0 +1,14 @@
+use compiler_tests
+
+/// An element of a list a function of another file of the package handed
+/// back, handed back (`src/list_beside_caller.nika`, #1510): before the fix
+/// the package was refused by rustc with NK1343, "cannot move out of a
+/// shared reference".
+fn main() throws {
+	println(compiler_tests::list_beside_first("a"))
+	println(compiler_tests::list_beside_last("b"))
+	println(compiler_tests::list_beside_through_a_let("c"))
+	println(compiler_tests::list_beside_grown("d"))
+	println(compiler_tests::list_beside_private("e"))
+	println(compiler_tests::list_beside_by_method(compiler_tests::ListBesideMaker { tag: "!" }, "f"))
+}

@@ -4193,7 +4193,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_calls, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_lists, tier_beside_calls, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills};
 }
 pub mod threads {
     #[allow(unused_imports)]
@@ -4253,4 +4253,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "f7b1ad2169456bfa927f971eda71b623d94db4c46ecc62d9b2e8db47aa9430fa";
+pub const LOWERED_DIGEST: &str = "2e3470dca761fc2ab07b033d1b6d782fe6efb5d705d00a0c69343517e155db0c";

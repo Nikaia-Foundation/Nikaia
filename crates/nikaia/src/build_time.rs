@@ -252,7 +252,7 @@ pub(crate) fn char_of(n: i64) -> Option<char> {
 /// here safe: everything this returns `Some` for is something `decoded`
 /// returns `None` for, and `rustc` refuses in its own words.
 pub fn an_escape_nothing_names(literal: &str) -> Option<Refused> {
-    nikaia_std::compiler::escapes::an_escape_nothing_names(literal, &char_of)
+    nikaia_std::compiler::escapes::an_escape_nothing_names(literal, &mut char_of)
 }
 
 /// **What a written string literal means** — the value behind the spelling.
@@ -269,7 +269,7 @@ pub fn an_escape_nothing_names(literal: &str) -> Option<Refused> {
 /// the pair to the only standard that settles it: the same literal, read at
 /// build time and at run time, printing the same bytes.
 pub fn decoded(literal: &str) -> Option<String> {
-    nikaia_std::compiler::escapes::decoded(literal, &char_of)
+    nikaia_std::compiler::escapes::decoded(literal, &mut char_of)
 }
 
 /// The inverse of [`decoded`]: a value, spelled as a literal `rustc` reads.

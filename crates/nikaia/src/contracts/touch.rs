@@ -215,8 +215,8 @@ pub fn infer(
         nika::unit_touches(
             &parsed.program,
             &parsed.interner,
-            &|name: &str| parsed.unaliased(name),
-            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+            &mut |name: &str| parsed.unaliased(name),
+            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
             ledger,
             library,
             &mut graph,

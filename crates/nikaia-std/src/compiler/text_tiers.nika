@@ -209,6 +209,69 @@ pub struct TierAsk {
     /// positions are decided as published ones, since the callers this file
     /// cannot see hold them to what they declare (ADR-282 D22, D23; #1831).
     pub beside_calls: ref collections::BTreeSet[String],
+    /// **The package's functions declared to hand back a list of text of
+    /// its own**, `Vec[String]`, by their bare names (`tier_beside_lists`):
+    /// a list a call of one in another file hands back is one the body
+    /// made, as a call of one in this file is (`made_list_local`, #1510).
+    pub beside_lists: ref collections::BTreeSet[String],
+}
+
+/// **The functions of the package's files declared to hand back a list of
+/// text of its own** (#1510), `fn words(a: String) -> Vec[String]`, by their
+/// bare names: such a function is published to the files beside
+/// (`tier_beside_calls`), so its items stay `String`, and an element of the
+/// list a caller in another file binds is handed back as a view of it, the
+/// list moving into the caller's keep (ADR-283 D23), as within one file.
+pub fn tier_beside_lists(files: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    // A method by `.name`, kept where it is the only one of that name and
+    // hands back such a list, as `method_result` finds one by its name alone.
+    let mut methods: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            match item.node {
+                Item::Fn { name, ret_type, receiver, .. } => {
+                    let returned = ret_type ?? continue
+                    if receiver == null && name != null && owned_text_list(file.words, returned) {
+                        out.insert(own_name(name, file.words))
+                    }
+                },
+                Item::Impl { methods: declared, .. } => {
+                    for method in declared {
+                        match method.node {
+                            Item::Fn { name, ret_type, .. } => {
+                                let key = f".{own_name(name, file.words)}"
+                                let owned = match ret_type {
+                                    null => false,
+                                    returned => owned_text_list(file.words, returned),
+                                }
+                                let mut seen = methods[key]?.clone() ?? []
+                                seen.push(owned)
+                                methods.insert(key, seen)
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    for (key, seen) in methods {
+        if seen.len() == 1 && seen[0] {
+            out.insert(key.clone())
+        }
+    }
+    return out
+}
+
+/// A list type of text of its own, as written: `Vec[String]`.
+fn owned_text_list(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() != 1 || !is_a_container_name(names.resolve(ty.name)) {
+        return false
+    }
+    let element = ty.generics[0]
+    return plain_string(names, element) && !element.is_nullable && !element.lasting
 }
 
 /// **The functions and methods one file declares and another file of the
@@ -3077,7 +3140,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let text_items = !written && (declared == null || adopted_list) && own_text_items(value, bound)
+        let text_items = !written && (declared == null || adopted_list) && (own_text_items(value, bound) || (declared == null && beside_list_call(value, ask, walk)))
         let mut element_of: String? = null
         if !written {
             element_of = made_element_read(value, ask, walk)
@@ -3770,6 +3833,27 @@ fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
         TextOwner::Returned(_) => local.made && local.called && !declared.ty.is_view && !declared.ty.is_nullable,
         else => false,
     }
+}
+
+/// **The call of a function another file of the package declares to hand
+/// back a list of text of its own** (`tier_beside_lists`, #1510): `words(a)`
+/// where this file declares no `words`, or `m.words(a)` where it declares no
+/// method `words` and the package one only.
+fn beside_list_call(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    let func = match value {
+        Expr::Call { func, .. } => func,
+        Expr::MethodCall { method, .. } => {
+            let named = ask.names.resolve(method)
+            return !walk.declared.methods.contains_key(named) && ask.beside_lists.contains(f".{named}")
+        },
+        else => return false,
+    }
+    match func {
+        Expr::Variable(_, _) => {},
+        else => return false,
+    }
+    let callee = tier_callee(func, ask) ?? return false
+    return !walk.declared.fns.contains_key(callee) && ask.beside_lists.contains(callee)
 }
 
 /// The call of a function by its name, `words(a)`, or of a method,

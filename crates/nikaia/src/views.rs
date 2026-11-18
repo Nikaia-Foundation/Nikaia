@@ -30,7 +30,7 @@ pub fn analyse(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Stored> {
     nikaia_std::compiler::views::views_stored(
         &asked(parsed, own, library),
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 
@@ -39,7 +39,7 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
     nikaia_std::compiler::views::views_checked(
         &asked(parsed, own, library),
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
     .into_iter()
     .map(crate::traits::from_nikaia)
@@ -56,7 +56,7 @@ pub fn result_sources(
     nikaia_std::compiler::views::result_sources(
         &asked(parsed, own, library),
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 
@@ -71,7 +71,7 @@ pub fn result_sources_inferred(
     nikaia_std::compiler::views::result_sources_inferred(
         &asked(parsed, own, library),
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 
@@ -96,7 +96,7 @@ pub fn result_sources_in(
         &asked(parsed, own, library),
         package,
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 
@@ -111,7 +111,7 @@ pub fn places_stored_in(
         &asked(parsed, own, library),
         package,
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 
@@ -125,7 +125,7 @@ pub fn places_stored(
     nikaia_std::compiler::views::places_stored(
         &asked(parsed, own, library),
         &parsed.program.items,
-        &|value: &Expr| own_buffer(parsed, value, own, library),
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )
 }
 

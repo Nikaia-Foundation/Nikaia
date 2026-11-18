@@ -106,13 +106,13 @@ pub struct SyncGraph {
     pub unit: i64,
 }
 
-pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut SyncGraph) {
+pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut SyncGraph) {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let is_sync = *is_sync; let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
+                let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                 sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                 declared_sync(is_sync, sync_by, &mut node);
                 graph.nodes.insert(key, node);
@@ -125,7 +125,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let is_sync = *is_sync; let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
+                            let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                             sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                             declared_sync(is_sync, sync_by, &mut node);
                             declared_by((trait_name).as_ref(), &key_of_function((name).as_ref(), "", names), names, own, library, &mut node);
@@ -315,14 +315,14 @@ pub(crate) struct Promise {
     pub(crate) allowed: collections::BTreeSet<String>,
 }
 
-pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger) -> Vec<Violation> {
+pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger) -> Vec<Violation> {
     let mut found: Vec<Violation> = vec![];
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let is_sync = *is_sync; let name = *name;
                 let promise = match promise_of(&key_of_function((name).as_ref(), "", names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
+                violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
             },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
@@ -331,7 +331,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let is_sync = *is_sync; let name = *name;
                             let promise = match promise_of(&key_of_function((name).as_ref(), &owner, names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
+                            violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
                         },
                         _ => { },
                     }

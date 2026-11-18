@@ -20,8 +20,8 @@ pub fn free_calls(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
     nika::free_calls(
         body,
         &parsed.interner,
-        &|name: &str| parsed.unaliased(name),
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |name: &str| parsed.unaliased(name),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
     )
 }
 
@@ -50,6 +50,6 @@ pub fn infer(
         library,
         resolved,
         stored,
-        &|unit: i64, expr: &Expr| crate::emit::literal_expressions(units[unit as usize], expr),
+        &mut |unit: i64, expr: &Expr| crate::emit::literal_expressions(units[unit as usize], expr),
     );
 }

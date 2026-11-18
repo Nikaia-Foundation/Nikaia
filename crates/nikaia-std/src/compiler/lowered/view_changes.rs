@@ -64,7 +64,7 @@ pub(crate) struct VcCall {
     pub(crate) lent_and_read: Vec<String>,
 }
 
-pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> VcAnswer {
+pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> VcAnswer {
     let mut methods: collections::BTreeMap<String, Vec<(bool, String)>> = collections::BTreeMap::new();
     for (key, _) in ask.own.functions.iter() { vc_index(&mut methods, key, true); }
     for (key, _) in ask.library.functions.iter() { vc_index(&mut methods, key, false); }
@@ -72,11 +72,11 @@ pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of:
     let none: Vec<VcView> = vec![];
     for item in ask.items.iter() {
         match &item.node {
-            Item::Fn { body, .. } => { vc_block(body, &none, ask, holes_of, &mut walk); },
+            Item::Fn { body, .. } => { vc_block(body, &none, ask, &mut *holes_of, &mut walk); },
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { body, .. } => { vc_block(body, &none, ask, holes_of, &mut walk); },
+                        Item::Fn { body, .. } => { vc_block(body, &none, ask, &mut *holes_of, &mut walk); },
                         _ => { },
                     }
                 }
@@ -198,28 +198,28 @@ pub(crate) fn vc_any_watches(views: &[VcView], root: &str, path: &str) -> bool {
     false
 }
 
-pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<VcCall> {
+pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Vec<VcCall> {
     let mut out: Vec<VcCall> = vec![];
     match stmt {
-        Stmt::Let { value, .. } => { vc_calls_in(value, ask, holes_of, &mut out); },
-        Stmt::Comptime { value, .. } => { vc_calls_in(value, ask, holes_of, &mut out); },
+        Stmt::Let { value, .. } => { vc_calls_in(value, ask, &mut *holes_of, &mut out); },
+        Stmt::Comptime { value, .. } => { vc_calls_in(value, ask, &mut *holes_of, &mut out); },
         Stmt::Assign { target, value, .. } => {
-            vc_calls_in(target, ask, holes_of, &mut out);
-            vc_calls_in(value, ask, holes_of, &mut out);
+            vc_calls_in(target, ask, &mut *holes_of, &mut out);
+            vc_calls_in(value, ask, &mut *holes_of, &mut out);
         },
-        Stmt::For { iter, .. } => { vc_calls_in(iter, ask, holes_of, &mut out); },
-        Stmt::While { cond, .. } => { vc_calls_in(cond, ask, holes_of, &mut out); },
+        Stmt::For { iter, .. } => { vc_calls_in(iter, ask, &mut *holes_of, &mut out); },
+        Stmt::While { cond, .. } => { vc_calls_in(cond, ask, &mut *holes_of, &mut out); },
         Stmt::Return(value) => {
             let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return out };
-            vc_calls_in(returned, ask, holes_of, &mut out);
+            vc_calls_in(returned, ask, &mut *holes_of, &mut out);
         },
-        Stmt::Expr(expr) => { vc_calls_in(expr, ask, holes_of, &mut out); },
+        Stmt::Expr(expr) => { vc_calls_in(expr, ask, &mut *holes_of, &mut out); },
         _ => { },
     }
     out
 }
 
-pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
+pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
     match expr {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -247,7 +247,7 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
                 let path = vc_path_of(unsafe { nikaia_std::proven::read(&args, (i) as usize) }, ask);
                 for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..args.len() as i64 {
                     let bound_ahead = made_in_the_call(unsafe { nikaia_std::proven::read(&args, (j) as usize) }) && !emit_arg_is_closure(unsafe { nikaia_std::proven::read(&args, (j) as usize) });
-                    if !bound_ahead && vc_reads_path(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, &path, ask, &holes_of) {
+                    if !bound_ahead && vc_reads_path(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, &path, ask, &mut &mut *holes_of) {
                         lent_and_read.push(nikaia_std::block::Text::from(root.to_string()));
                         break;
                     }
@@ -257,8 +257,8 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
         },
         _ => { },
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { vc_calls_in(&hole, ask, holes_of, out); } }
-    for child in check_visit_children(expr) { vc_calls_in(child, ask, holes_of, out); }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { vc_calls_in(&hole, ask, &mut &mut *holes_of, out); } }
+    for child in check_visit_children(expr) { vc_calls_in(child, ask, &mut &mut *holes_of, out); }
 }
 
 pub(crate) fn vc_variable(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
@@ -268,23 +268,23 @@ pub(crate) fn vc_variable(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
     match stmt {
-        Stmt::Let { value, .. } => vc_names_in(value, name, ask, holes_of),
-        Stmt::Comptime { value, .. } => vc_names_in(value, name, ask, holes_of),
-        Stmt::Assign { target, value, .. } => vc_names_in(target, name, ask, holes_of) || vc_names_in(value, name, ask, holes_of),
-        Stmt::For { iter, .. } => vc_names_in(iter, name, ask, holes_of),
-        Stmt::While { cond, .. } => vc_names_in(cond, name, ask, holes_of),
+        Stmt::Let { value, .. } => vc_names_in(value, name, ask, &mut *holes_of),
+        Stmt::Comptime { value, .. } => vc_names_in(value, name, ask, &mut *holes_of),
+        Stmt::Assign { target, value, .. } => vc_names_in(target, name, ask, &mut *holes_of) || vc_names_in(value, name, ask, &mut *holes_of),
+        Stmt::For { iter, .. } => vc_names_in(iter, name, ask, &mut *holes_of),
+        Stmt::While { cond, .. } => vc_names_in(cond, name, ask, &mut *holes_of),
         Stmt::Return(value) => match value {
             None => false,
-            Some(returned) => vc_names_in(returned, name, ask, holes_of),
+            Some(returned) => vc_names_in(returned, name, ask, &mut *holes_of),
         },
-        Stmt::Expr(expr) => vc_names_in(expr, name, ask, holes_of),
+        Stmt::Expr(expr) => vc_names_in(expr, name, ask, &mut *holes_of),
         _ => false,
     }
 }
 
-pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(n, _) => {
             let n = *n;
@@ -292,19 +292,19 @@ pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '
         },
         _ => { },
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_names_in(&hole, name, ask, holes_of) { return true; } } }
-    for child in check_visit_children(expr) { if vc_names_in(child, name, ask, holes_of) { return true; } }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_names_in(&hole, name, ask, &mut &mut *holes_of) { return true; } } }
+    for child in check_visit_children(expr) { if vc_names_in(child, name, ask, &mut &mut *holes_of) { return true; } }
     false
 }
 
-pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
-    if vc_names_in_stmt(stmt, name, ask, &holes_of) { return true; }
-    for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, holes_of) { return true; } } }
+pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    if vc_names_in_stmt(stmt, name, ask, &mut &mut *holes_of) { return true; }
+    for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &mut &mut *holes_of) { return true; } } }
     false
 }
 
-pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
-    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, holes_of), || each.span.clone().into())); } } }
+pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<Span> {
+    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &mut &mut *holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, &mut &mut *holes_of), || each.span.clone().into())); } } }
     None
 }
 
@@ -341,12 +341,12 @@ pub(crate) fn vc_subject_first(contract: &FnContract) -> bool {
     !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self"
 }
 
-pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
+pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
     match stmt {
         Stmt::Assign { target, .. } => { if vc_rooted(target, name, ask) { return true; } },
         _ => { },
     }
-    for call in vc_calls(stmt, ask, &holes_of) {
+    for call in vc_calls(stmt, ask, &mut &mut *holes_of) {
         if call.method {
             let root = match call.root { Some(__nikaia_value) => __nikaia_value, None => continue };
             let method = match call.callee { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -358,7 +358,7 @@ pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_
             if root == name && vc_changes_argument((call.callee).as_deref(), index, ask) { return true; }
         }
     }
-    for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_changes(&each.node, name, ask, holes_of, walk) { return true; } } }
+    for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_changes(&each.node, name, ask, &mut &mut *holes_of, walk) { return true; } } }
     false
 }
 
@@ -370,39 +370,39 @@ pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<
     nikaia_std::list::contains(&signature.mutable, &unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.0)
 }
 
-pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     let place = matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. });
     let read = vc_path_of(expr, ask);
     if place && read != "" && !read.starts_with('.') {
         if read == path || read.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", read)) { return true; }
         match expr {
-            Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); return vc_reads_path(index, path, ask, holes_of); },
+            Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); return vc_reads_path(index, path, ask, &mut &mut *holes_of); },
             _ => { return false; },
         }
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_reads_path(&hole, path, ask, holes_of) { return true; } } }
-    for child in check_visit_children(expr) { if vc_reads_path(child, path, ask, holes_of) { return true; } }
-    for block in check_visit_expr_blocks(expr) { if vc_block_reads_path(block, path, ask, &holes_of) { return true; } }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_reads_path(&hole, path, ask, &mut &mut *holes_of) { return true; } } }
+    for child in check_visit_children(expr) { if vc_reads_path(child, path, ask, &mut &mut *holes_of) { return true; } }
+    for block in check_visit_expr_blocks(expr) { if vc_block_reads_path(block, path, ask, &mut &mut *holes_of) { return true; } }
     false
 }
 
-pub(crate) fn vc_block_reads_path(block: &Block, path: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_block_reads_path(block: &Block, path: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     for each in block.stmts.iter() {
         let read = match &each.node {
-            Stmt::Let { value, .. } => vc_reads_path(value, path, ask, &holes_of),
-            Stmt::Comptime { value, .. } => vc_reads_path(value, path, ask, &holes_of),
-            Stmt::Assign { target, value, .. } => vc_reads_path(target, path, ask, &holes_of) || vc_reads_path(value, path, ask, &holes_of),
-            Stmt::For { iter, .. } => vc_reads_path(iter, path, ask, &holes_of),
-            Stmt::While { cond, .. } => vc_reads_path(cond, path, ask, &holes_of),
+            Stmt::Let { value, .. } => vc_reads_path(value, path, ask, &mut &mut *holes_of),
+            Stmt::Comptime { value, .. } => vc_reads_path(value, path, ask, &mut &mut *holes_of),
+            Stmt::Assign { target, value, .. } => vc_reads_path(target, path, ask, &mut &mut *holes_of) || vc_reads_path(value, path, ask, &mut &mut *holes_of),
+            Stmt::For { iter, .. } => vc_reads_path(iter, path, ask, &mut &mut *holes_of),
+            Stmt::While { cond, .. } => vc_reads_path(cond, path, ask, &mut &mut *holes_of),
             Stmt::Return(value) => match value {
                 None => false,
-                Some(returned) => vc_reads_path(returned, path, ask, &holes_of),
+                Some(returned) => vc_reads_path(returned, path, ask, &mut &mut *holes_of),
             },
-            Stmt::Expr(expr) => vc_reads_path(expr, path, ask, &holes_of),
+            Stmt::Expr(expr) => vc_reads_path(expr, path, ask, &mut &mut *holes_of),
             _ => false,
         };
         if read { return true; }
-        for inner in check_visit_stmt_blocks(&each.node) { if vc_block_reads_path(inner, path, ask, holes_of) { return true; } }
+        for inner in check_visit_stmt_blocks(&each.node) { if vc_block_reads_path(inner, path, ask, &mut &mut *holes_of) { return true; } }
     }
     false
 }
@@ -415,8 +415,8 @@ pub(crate) fn vc_lent_mut(callee: Option<&str>, index: i64, ask: &VcAsk<'_, '_, 
     nikaia_std::list::contains(&signature.mutable, &unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.0)
 }
 
-pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
-    let calls = vc_calls(stmt, ask, holes_of);
+pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+    let calls = vc_calls(stmt, ask, &mut *holes_of);
     for call in calls.iter() {
         let callee = match call.callee.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         for root in call.lent_and_read.iter() {
@@ -572,43 +572,43 @@ pub(crate) fn vc_mut_view(at: &Span, name: &str, place: &Expr, outer: &[VcView],
     Some(view)
 }
 
-pub(crate) fn vc_reads_expr(expr: &Expr, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_reads_expr(expr: &Expr, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(_, _) => { if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)); } },
         Expr::Field { .. } => { if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)); } },
         Expr::Index { index, .. } => {
             let index = nikaia_std::boxed::open(index);
-            if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)) || vc_reads_expr(index, view, root, ask, holes_of); }
+            if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)) || vc_reads_expr(index, view, root, ask, &mut &mut *holes_of); }
         },
         _ => { },
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_reads_expr(&hole, view, root, ask, holes_of) { return true; } } }
-    for child in check_visit_children(expr) { if vc_reads_expr(child, view, root, ask, holes_of) { return true; } }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { if vc_reads_expr(&hole, view, root, ask, &mut &mut *holes_of) { return true; } } }
+    for child in check_visit_children(expr) { if vc_reads_expr(child, view, root, ask, &mut &mut *holes_of) { return true; } }
     false
 }
 
-pub(crate) fn vc_reads_stmt(stmt: &Stmt, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_reads_stmt(stmt: &Stmt, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
     match stmt {
-        Stmt::Let { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
-        Stmt::Comptime { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
-        Stmt::Assign { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
-        Stmt::For { iter, .. } => vc_reads_expr(iter, view, root, ask, holes_of),
-        Stmt::While { cond, .. } => vc_reads_expr(cond, view, root, ask, holes_of),
+        Stmt::Let { value, .. } => vc_reads_expr(value, view, root, ask, &mut *holes_of),
+        Stmt::Comptime { value, .. } => vc_reads_expr(value, view, root, ask, &mut *holes_of),
+        Stmt::Assign { value, .. } => vc_reads_expr(value, view, root, ask, &mut *holes_of),
+        Stmt::For { iter, .. } => vc_reads_expr(iter, view, root, ask, &mut *holes_of),
+        Stmt::While { cond, .. } => vc_reads_expr(cond, view, root, ask, &mut *holes_of),
         Stmt::Return(value) => match value {
             None => false,
-            Some(returned) => vc_reads_expr(returned, view, root, ask, holes_of),
+            Some(returned) => vc_reads_expr(returned, view, root, ask, &mut *holes_of),
         },
-        Stmt::Expr(expr) => vc_reads_expr(expr, view, root, ask, holes_of),
+        Stmt::Expr(expr) => vc_reads_expr(expr, view, root, ask, &mut *holes_of),
         _ => false,
     }
 }
 
-pub(crate) fn vc_reads_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_reads_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     for view in views.iter() {
         if !view.exclusive { continue; }
-        if view.used.is_none() && !vc_mentions_stmt(stmt, &view.name, ask, holes_of) { continue; }
+        if view.used.is_none() && !vc_mentions_stmt(stmt, &view.name, ask, &mut *holes_of) { continue; }
         for root in view.roots.iter() {
-            if vc_reads_stmt(stmt, view, root, ask, holes_of) {
+            if vc_reads_stmt(stmt, view, root, ask, &mut *holes_of) {
                 vc_refuse_read(root, at, view, walk);
                 return;
             }
@@ -673,12 +673,12 @@ pub(crate) fn vc_returns(block: &Block, param: &str, ask: &VcAsk<'_, '_, '_, '_,
     false
 }
 
-pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
-    for k in from..block.stmts.len() as i64 { if vc_mentions_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, name, ask, holes_of) { return Some(unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.span.clone()); } }
+pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<Span> {
+    for k in from..block.stmts.len() as i64 { if vc_mentions_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, name, ask, &mut *holes_of) { return Some(unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.span.clone()); } }
     None
 }
 
-pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let mut views: Vec<VcView> = outer.copy_owned();
     let own_from = views.len() as i64;
     let mut declared: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
@@ -686,17 +686,17 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         let stmt = unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) };
         for v in own_from..views.len() as i64 {
             let name = nikaia_std::block::Text::from(nikaia_std::index::get(&views, nikaia_std::index::at(v)).name.to_string());
-            (*unsafe { nikaia_std::proven::slot(&mut views, (v) as usize) }).used = vc_used_after(block, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, &name, ask, &holes_of);
+            (*unsafe { nikaia_std::proven::slot(&mut views, (v) as usize) }).used = vc_used_after(block, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, &name, ask, &mut &mut *holes_of);
         }
         let looping = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
         let at = stmt.span.clone();
         let refused_before = walk.findings.len() as i64;
-        vc_changes_in(&stmt.node, &at, &views, ask, &holes_of, walk);
-        if (walk.findings.len() as i64) == refused_before { vc_reads_in(&stmt.node, &at, &views, ask, &holes_of, walk); }
+        vc_changes_in(&stmt.node, &at, &views, ask, &mut &mut *holes_of, walk);
+        if (walk.findings.len() as i64) == refused_before { vc_reads_in(&stmt.node, &at, &views, ask, &mut &mut *holes_of, walk); }
         match &stmt.node {
             Stmt::Assign { target, op, .. } => {
                 let whole = op.is_none() && matches!(target, Expr::Variable(_, _));
-                vc_assign(block, j, target, whole, &at, &mut views, &declared, ask, &holes_of, walk);
+                vc_assign(block, j, target, whole, &at, &mut views, &declared, ask, &mut &mut *holes_of, walk);
             },
             Stmt::Expr(expr) => {
                 match expr {
@@ -722,7 +722,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         if looping {
             for view in inner_views.iter_mut() {
                 let name = nikaia_std::block::Text::from((*view).name.to_string());
-                if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, &holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &holes_of), || at.clone().into())); }
+                if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, &mut &mut *holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &mut &mut *holes_of), || at.clone().into())); }
             }
         }
         match &stmt.node {
@@ -734,7 +734,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
             },
             _ => { },
         }
-        for inner in check_visit_stmt_blocks(&stmt.node) { vc_block(inner, &inner_views, ask, holes_of, walk); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { vc_block(inner, &inner_views, ask, &mut &mut *holes_of, walk); }
     }
     for (name, entry) in declared.iter() {
         if !entry.1 { continue; }
@@ -743,7 +743,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         for stmt in block.stmts.iter() {
             let start = stmt.span.start as i64;
             if start == entry.0 { continue; }
-            if walk.give_ups.rebound.contains_key(&start) && vc_assigns_to(&stmt.node, name, ask) { rebound = true; } else if vc_changes(&stmt.node, name, ask, &holes_of, &walk) { other = true; }
+            if walk.give_ups.rebound.contains_key(&start) && vc_assigns_to(&stmt.node, name, ask) { rebound = true; } else if vc_changes(&stmt.node, name, ask, &mut &mut *holes_of, &walk) { other = true; }
         }
         if rebound && !other { walk.give_ups.unmuted.insert(entry.0); }
     }
@@ -760,13 +760,13 @@ pub(crate) fn vc_assigns_to(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_,
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &Span, views: &mut Vec<VcView>, declared: &collections::BTreeMap<String, (i64, bool)>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &Span, views: &mut Vec<VcView>, declared: &collections::BTreeMap<String, (i64, bool)>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let root = match root_of(ask.names, target) { Some(__nikaia_value) => __nikaia_value, None => return };
     let viewer = vc_first_viewing(&views, &root);
     if whole && vc_looped_over(&views, &root) || !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
         let mut changed = false;
         for k in unsafe { nikaia_std::proven::add::<i64>(j, 1) }..block.stmts.len() as i64 {
-            if vc_changes(&unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.node, &root, ask, holes_of, &walk) {
+            if vc_changes(&unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.node, &root, ask, &mut *holes_of, &walk) {
                 changed = true;
                 break;
             }

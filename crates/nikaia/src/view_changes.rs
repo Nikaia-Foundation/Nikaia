@@ -41,7 +41,9 @@ pub fn analyse(
         refused: &parsed.refused_moves,
         viewed: &parsed.viewed_arms,
     };
-    let answer = vc_analyse(&ask, &|expr| crate::emit::literal_expressions(parsed, expr));
+    let answer = vc_analyse(&ask, &mut |expr| {
+        crate::emit::literal_expressions(parsed, expr)
+    });
     (
         answer
             .findings

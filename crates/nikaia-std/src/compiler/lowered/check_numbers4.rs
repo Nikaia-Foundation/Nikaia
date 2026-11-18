@@ -490,7 +490,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
+    pub(crate) fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) -> bool {
         if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(world, want) { return false; }
         let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let hole: String = String::from("\u{0}");

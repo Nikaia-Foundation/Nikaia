@@ -59,8 +59,8 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Violation> 
     let mut found = nikaia_std::compiler::sync::unit_violations(
         &parsed.program,
         &parsed.interner,
-        &|name: &str| parsed.unaliased(name),
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |name: &str| parsed.unaliased(name),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         own,
         library,
     );
@@ -128,8 +128,8 @@ pub fn infer(
         nika::unit_sync(
             &parsed.program,
             &parsed.interner,
-            &|name: &str| parsed.unaliased(name),
-            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+            &mut |name: &str| parsed.unaliased(name),
+            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
             ledger,
             library,
             &mut graph,

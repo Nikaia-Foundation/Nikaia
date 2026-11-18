@@ -220,11 +220,11 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
                 continue;
             }
             let ty = option.ty.text();
-            state.expect_type(world, found_option, &option.ty, span, "field", &|found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
+            state.expect_type(world, found_option, &option.ty, span, "field", &mut |found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
         }
         if !known && name == "words" && contract.interns {
             known = true;
-            state.expect_type(world, &found_option.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
+            state.expect_type(world, &found_option.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &mut |was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
         }
         if !known { state.no_such_option(key, name, signature, span); }
     }
@@ -293,7 +293,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.constant_fits(world, value, Some(&want), span);
-            if state.an_open_number_where_none_fits(world, &found_here, &want, value, span, "argument", &|found_text, want_text| { format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want_text, found_text) }) { continue; }
+            if state.an_open_number_where_none_fits(world, &found_here, &want, value, span, "argument", &mut |found_text, want_text| { format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want_text, found_text) }) { continue; }
             let receiver = check_arguments_literal_receiver(value);
             if receiver.is_some() {
                 let number = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
