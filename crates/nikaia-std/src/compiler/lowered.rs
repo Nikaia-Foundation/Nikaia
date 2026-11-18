@@ -3123,7 +3123,7 @@ pub mod cexport_python {
 }
 pub mod check_access {
     #[allow(unused_imports)]
-    pub use super::{check_access_inside_std};
+    pub use super::{check_access_inside_std, check_access_in_own_tests};
 }
 pub mod check_arguments {}
 pub mod check_arith {}
@@ -3683,7 +3683,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, project_tests_warm_up, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_tests_of, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, project_tests_warm_up, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -3912,4 +3912,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "17a77c8928ebac31f6c7a619aecb683cd73b2302706b5f49e6f7eeabe150b4bb";
+pub const LOWERED_DIGEST: &str = "3ad3227060b43497a697d6bc8bdba90f39333a3119e66daba7eeaf6ba70cb568";

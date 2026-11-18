@@ -212,7 +212,7 @@ impl EmitState {
                 let enum_name = emit_text(world, name)
                 // `pub` too where `main`'s signature names it in a program
                 // lowered as a module (#1582).
-                let vis = if is_public || self.named_by_main(world, enum_name) { "pub " } else { "" }
+                let vis = if is_public || self.every_item_public || self.named_by_main(world, enum_name) { "pub " } else { "" }
                 let mut params = ""
                 if self.borrowing.contains(enum_name) {
                     params = "<'a>"
@@ -300,7 +300,7 @@ impl EmitState {
                 if is_extern {
                     out.push("#[repr(C)]\n")
                 }
-                let vis = if is_public || self.named_by_main(world, text) { "pub " } else { "" }
+                let vis = if is_public || self.every_item_public || self.named_by_main(world, text) { "pub " } else { "" }
                 let mut body = EmitOut::empty()
                 // **One lifetime per view field** (ADR-views-3 D8): `'a`, `'a1`, ...
                 let slots = self.emit_item_slots(text)
@@ -330,7 +330,7 @@ impl EmitState {
                         }
                         position += 1
                     }
-                    let field_vis = if field.is_public || is_extern { "pub " } else { "" }
+                    let field_vis = if field.is_public || is_extern || self.every_item_public { "pub " } else { "" }
                     body.push(f"    {field_vis}{escaped_name(field_text)}: {self.boxed_ty(text, field_text, lowered)},\n")
                 }
                 let mut hidden = 0
@@ -424,7 +424,7 @@ impl EmitState {
             // the method is a signature with a `;` where an `impl`'s has a body
             // (ADR-295 D6). No method here is `async` (ADR-295 D9, #253).
             Item::Trait { name, methods, is_public } => {
-                let vis = if is_public { "pub " } else { "" }
+                let vis = if is_public || self.every_item_public { "pub " } else { "" }
                 out.push(f"{vis}trait {escaped_name(emit_text(world, name))} {{\n")
                 for method in methods {
                     let st = out.mark()
@@ -473,7 +473,7 @@ impl EmitState {
                     throw EmitRefused { message: f"`{bound}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", at: at }
                 }
                 let value = found ?? ("", "")
-                let vis = if public { "pub " } else { "" }
+                let vis = if public || self.every_item_public { "pub " } else { "" }
                 if self.facts.folded_comptimes.contains(emit_text(world, name)) {
                     out.push("#[allow(dead_code)]\n")
                 }

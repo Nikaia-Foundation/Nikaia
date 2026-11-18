@@ -208,7 +208,7 @@ pub fn cpu_config(words: ref ProjectWords, target: Target) -> Vec[String] {
 /// The cache's view of this build (ADR-021 D5): the key of
 /// `Settings::choices`, whose backend is `"rust"`. `cpu_key` is
 /// `Settings::cpu_key`'s answer, read only where a level is named.
-pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String, crate_root: ref String, counts_heap: bool) -> String {
+pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String, crate_root: ref String, counts_heap: bool, every_item_public: bool) -> String {
     let tests = if words.tests { "/tests" } else { "" }
     // A build that lets a refuted claim through must not hand its
     // lowering to one that refuses it.
@@ -236,7 +236,10 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
     // A dependency's lowering writes no allocator (ADR-327 D9).
     let heap = if counts_heap { "" } else { "/dependency" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{checks}{sinks}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}"
+    // A package lowered for its own `tests/` programs has every item `pub`,
+    // a build of its own beside the private one (ADR-403 D4).
+    let open = if every_item_public { "/every-item-pub" } else { "" }
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{checks}{sinks}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}{open}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.

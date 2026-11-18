@@ -93,6 +93,11 @@ pub struct CheckFacts {
     /// by the start of the call's span: refused (`NK1110`) in a program, and
     /// let through by `check_access_inside_std` where the file is `std`'s own.
     pub std_helpers_reached: collections::BTreeSet[i64],
+    /// **A non-`pub` name of a package reached** (`NK1110`), by the start of
+    /// the finding's span, with the package: let through by
+    /// `check_access_in_own_tests` where the program is one of that package's
+    /// own `tests/` (ADR-403 D1).
+    pub privates_reached: collections::BTreeMap[i64, String],
     /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
     pub held_across_a_pause: collections::BTreeSet[(i64, String)],
     pub comptime_values: collections::BTreeMap[i64, (String, String)],
@@ -754,6 +759,7 @@ impl CheckFacts {
     pub fn empty() -> CheckFacts {
         return CheckFacts {
             std_helpers_reached: collections::BTreeSet(),
+            privates_reached: collections::BTreeMap(),
             held_across_a_pause: collections::BTreeSet(),
             comptime_values: collections::BTreeMap(),
             turn_comptime_values: collections::BTreeMap(),

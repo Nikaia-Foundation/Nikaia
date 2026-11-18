@@ -112,7 +112,7 @@ pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str, counts_heap: bool) -> String {
+pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str, counts_heap: bool, every_item_public: bool) -> String {
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
@@ -131,7 +131,8 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
     let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
     let heap = if counts_heap { "" } else { "/dependency" };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, checks, sinks, removed_bounds, removed_overflow, skip_free, library, cpu, root, heap)
+    let open = if every_item_public { "/every-item-pub" } else { "" };
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, checks, sinks, removed_bounds, removed_overflow, skip_free, library, cpu, root, heap, open)
 }
 
 pub fn panic_strategy(target: &Target) -> String {

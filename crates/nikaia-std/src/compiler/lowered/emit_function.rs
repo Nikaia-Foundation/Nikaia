@@ -641,7 +641,7 @@ impl EmitState {
                 let outer_unpinned = walk.unpinned;
                 walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl;
                 let mut vis: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-                if nikaia_std::index::or(owner_bridged, || false) || is_public { vis = String::from("pub "); }
+                if nikaia_std::index::or(owner_bridged, || false) || is_public || self.every_item_public && !answers_a_trait { vis = String::from("pub "); }
                 let mut emitted: String = escaped_name(&own_name); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if depth == 0 && own_name == "main" && self.user_main(world).is_some() { emitted = String::from("__nikaia_main"); }
                 let mut copy = false;

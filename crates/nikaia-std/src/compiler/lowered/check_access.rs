@@ -23,6 +23,7 @@ impl CheckState {
         let package = nikaia_std::block::Text::from(nikaia_std::index::get(&shown, nikaia_std::index::at(0..at)).to_string());
         if !self.modules.contains(&package) { return; }
         let name = nikaia_std::block::Text::from(field.name.to_string());
+        self.facts.privates_reached.insert(span.start as i64, nikaia_std::block::Text::from(package.to_string()));
         self.findings.push(check_refusal("NK1110", span, format!("You can't reach `{}.{}` from here: it's private to `{}`.", ty, name, package), vec![String::from("A field is private to its package unless it's declared `pub`.")], Some(format!("Write `pub {}` in `{}`, or use a public method the type offers.", name, package))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -33,7 +34,7 @@ impl CheckState {
         let item = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
         let helper = of_std && self.std_modules.contains(&module) && !self.modules.contains(&module);
         if !(self.modules.contains(&module) || helper) || contract.public { return; }
-        if helper { self.facts.std_helpers_reached.insert(span.start as i64); }
+        if helper { self.facts.std_helpers_reached.insert(span.start as i64); } else { self.facts.privates_reached.insert(span.start as i64, nikaia_std::block::Text::from(module.to_string())); }
         let help: String = if self.modules.contains(&module) { format!("Write `pub fn {}` in `{}`, or use something it makes public.", item, module) } else { format!("`{}` is a helper inside `std`; use something `{}` makes public.", item, module) };
         self.findings.push(check_refusal("NK1110", span, format!("You can't use `{}` from here: it's private to `{}`.", item, module), vec![String::from("Everything is private to its package unless it's declared `pub`.")], Some(help)));
     }
@@ -158,6 +159,15 @@ pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections:
     let mut kept: Vec<CheckFinding> = vec![];
     for f in findings.iter() {
         if f.code == "NK1110" && reached.contains(&(f.span.start as i64)) { continue; }
+        kept.push(f.clone());
+    }
+    kept
+}
+
+pub fn check_access_in_own_tests(findings: &[CheckFinding], reached: &collections::BTreeMap<i64, String>, tested: &collections::BTreeSet<String>) -> Vec<CheckFinding> {
+    let mut kept: Vec<CheckFinding> = vec![];
+    for f in findings.iter() {
+        if f.code == "NK1110" && tested.contains(nikaia_std::index::or(reached.get(&(f.span.start as i64)), || "")) { continue; }
         kept.push(f.clone());
     }
     kept

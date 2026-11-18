@@ -4147,6 +4147,13 @@ Visibility is per package.
 The boundary is the package and not the file. Moving a declaration from one
 file of a package to another changes no visibility.
 
+**A package's own test programs see what the package sees**
+([ADR-403](adr/adr-403.md) D1, D2): `tests/NAME.nika` of a package that `use`s
+the package reaches its names that are not `pub`, by the same paths as its
+public ones. Nothing else does: another package, a program outside the
+package's `tests/`, and a `tests/` program of a package that depends on this
+one see only `pub` names. A test reaching a name publishes nothing.
+
 Reaching a private item or field from another package, by reading a field or
 by giving one a value in a struct literal, is refused with `NK1110`, and the
 message says which package keeps it:

@@ -145,7 +145,7 @@ impl EmitState {
                 out.push(&self.derives(world, name));
                 if is_extern { out.push("#[repr(C)]\n"); }
                 let enum_name = emit_text(world, name);
-                let vis = if is_public || self.named_by_main(world, &enum_name) { "pub " } else { "" };
+                let vis = if is_public || self.every_item_public || self.named_by_main(world, &enum_name) { "pub " } else { "" };
                 let mut params = "";
                 if self.borrowing.contains(&enum_name) { params = "<'a>"; }
                 out.push(&format!("{}enum {}{} {{\n", vis, escaped_name(&enum_name), params));
@@ -219,7 +219,7 @@ impl EmitState {
                 out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
-                let vis = if is_public || self.named_by_main(world, &text) { "pub " } else { "" };
+                let vis = if is_public || self.every_item_public || self.named_by_main(world, &text) { "pub " } else { "" };
                 let mut body = EmitOut::empty();
                 let slots = self.emit_item_slots(&text);
                 for field in fields.iter() {
@@ -241,7 +241,7 @@ impl EmitState {
                         }
                         position += 1;
                     }
-                    let field_vis = if field.is_public || is_extern { "pub " } else { "" };
+                    let field_vis = if field.is_public || is_extern || self.every_item_public { "pub " } else { "" };
                     body.push(&format!("    {}{}: {},\n", field_vis, escaped_name(&field_text), self.boxed_ty(&text, &field_text, lowered)));
                 }
                 let mut hidden: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots;
@@ -311,7 +311,7 @@ impl EmitState {
             },
             Item::Trait { name, methods, is_public } => {
                 let is_public = *is_public; let name = *name;
-                let vis = if is_public { "pub " } else { "" };
+                let vis = if is_public || self.every_item_public { "pub " } else { "" };
                 out.push(&format!("{}trait {} {{\n", vis, escaped_name(&emit_text(world, name))));
                 for method in methods.iter() {
                     let st = out.mark();
@@ -345,7 +345,7 @@ impl EmitState {
                 let found = self.emit_item_comptime(i64::from(at));
                 if found.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", bound), at: Some(i64::from(at)) }, &"emit_item")); }
                 let value = nikaia_std::index::or(found, || ("".into(), "".into()));
-                let vis = if public { "pub " } else { "" };
+                let vis = if public || self.every_item_public { "pub " } else { "" };
                 if self.facts.folded_comptimes.contains(&emit_text(world, name)) { out.push("#[allow(dead_code)]\n"); }
                 out.push(&format!("{}const {}: {} = {};\n", vis, bound, value.0, value.1));
             },

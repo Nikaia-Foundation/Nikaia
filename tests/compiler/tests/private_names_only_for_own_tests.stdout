@@ -1,0 +1,3 @@
+test own: exit 0, NK1110 false
+test other: exit 1, NK1110 true
+check src/main.nika: exit 1, NK1110 true

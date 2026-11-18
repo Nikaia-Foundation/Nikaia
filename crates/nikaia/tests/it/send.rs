@@ -129,6 +129,8 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
             // …and no allowlist, so it reads nothing while it builds
             // (ADR-310 D4).
             reads: &nikaia::assets::Reads::none(),
+            // …and it is no package's own test program (ADR-403 D1).
+            tested: &std::collections::BTreeSet::new(),
         },
         Path::new("app.nika"),
         source,
