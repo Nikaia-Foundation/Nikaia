@@ -456,9 +456,24 @@ jobs:
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
             # No dump: `nikaia test` builds every one of these programs with rustc
             # itself, so the accepted-sweep would only check and prove them again.
-            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
-              ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
-              tee "$RUNNER_TEMP/test.log"
+            nk() {
+              env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+                ./target/release/nikaia test --both-settings --project tests/compiler "$@"
+            }
+            # `solver_regress` gives each solver run a wall-clock limit, so it
+            # runs first, alone on the runner: since the solver is built in
+            # `build` (#2087) it ran beside the shard's rustc builds, and two
+            # SMPT files overran their 10 s on arm64. The rest runs after it.
+            case " $filters " in
+            *" --filter solver_regress "*)
+              filters=$(echo "$filters" | sed 's/ --filter solver_regress / /; s/ --filter solver_regress$//')
+              status=0
+              nk --filter solver_regress 2>&1 | tee "$RUNNER_TEMP/test.log" || status=1
+              nk $filters 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
+              exit $status
+              ;;
+            esac
+            nk $filters 2>&1 | tee "$RUNNER_TEMP/test.log"
             ;;
           esac
 
