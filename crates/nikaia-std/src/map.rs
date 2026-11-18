@@ -938,35 +938,13 @@ mod tests {
     use super::*;
     use crate::hash::TrustedMap;
 
+    // The lookups, the empty key, late-differing keys and other keys are
+    // `tests/compiler/tests/map_*.nika` (#2082). What stays here no program
+    // reaches yet: the hasher a text key goes through, `hashbrown`'s order,
+    // and a map's `remove` and `retain`, which `collections::HashMap` lacks.
+
     fn trusted() -> TrustedMap<&'static str, i64> {
         TrustedMap::default()
-    }
-
-    /// The equality by words agrees with `==` at every length and every place
-    /// a difference can be: the first byte, the middle, the last, and past 16.
-    #[test]
-    fn a_lookup_tells_every_byte() {
-        for len in 0..48usize {
-            let a: String = (0..len)
-                .map(|i| (b'a' + (i * 7 % 26) as u8) as char)
-                .collect();
-            let mut m: TrustedMap<&str, usize> = TrustedMap::default();
-            m.insert(a.as_str(), len);
-            let mut keyed: HashMap<String, usize> = HashMap::default();
-            keyed.insert(a.clone(), len);
-            assert_eq!(m.get(a.as_str()), Some(&len), "length {len}");
-            assert_eq!(keyed.get(a.as_str()), Some(&len), "length {len}");
-            for at in 0..len {
-                let mut b = a.clone().into_bytes();
-                b[at] ^= 0x20;
-                let b = String::from_utf8(b).expect("ASCII");
-                assert_eq!(m.get(b.as_str()), None, "length {len}, byte {at}");
-                assert!(!m.contains_key(b.as_str()), "length {len}, byte {at}");
-                assert_eq!(keyed.get(b.as_str()), None, "length {len}, byte {at}");
-            }
-            let longer = format!("{a}a");
-            assert_eq!(m.get(longer.as_str()), None, "length {len}");
-        }
     }
 
     /// A text key hashes to what the fast hasher gives the text, so a map of
@@ -992,39 +970,6 @@ mod tests {
                 "length {len}"
             );
         }
-    }
-
-    #[test]
-    fn the_empty_key_is_a_key() {
-        let mut m = trusted();
-        m.insert("", 1);
-        m.insert("a", 2);
-        assert_eq!(m.get(""), Some(&1));
-        assert_eq!(m.get("a"), Some(&2));
-        assert_eq!(m.len(), 2);
-    }
-
-    /// Keys longer than 16 bytes that differ only past the 16th, and ones of
-    /// one length that differ only in the middle, stay apart.
-    #[test]
-    fn keys_differing_late_stay_apart() {
-        let base = "Station-Name-1234567890-";
-        let keys: Vec<String> = (0..64).map(|i| format!("{base}{i:02}")).collect();
-        let mut m: TrustedMap<&str, usize> = TrustedMap::default();
-        for (i, k) in keys.iter().enumerate() {
-            assert_eq!(m.insert(k.as_str(), i), None);
-        }
-        assert_eq!(m.len(), 64);
-        for (i, k) in keys.iter().enumerate() {
-            assert_eq!(m.get(k.as_str()), Some(&i));
-        }
-        assert_eq!(m.get("Station-Name-1234567890-64"), None);
-        let mut short: TrustedMap<String, usize> = TrustedMap::default();
-        for i in 0..100 {
-            *short.entry(format!("ab{i:02}cd")).or_insert(0) += i;
-        }
-        assert_eq!(short.len(), 100);
-        assert_eq!(short.get("ab42cd"), Some(&42));
     }
 
     /// Keys that share a hash are told apart by their equality. Under the
@@ -1085,19 +1030,6 @@ mod tests {
         drained.sort();
         assert_eq!(drained, vec![("a", 3), ("b", 2)]);
         assert!(m.is_empty());
-    }
-
-    /// Other keys go by their own `Eq`, under either hasher.
-    #[test]
-    fn other_keys_and_the_keyed_hasher() {
-        let mut m: HashMap<(i64, char), i64> = HashMap::default();
-        m.insert((1, 'a'), 1);
-        m.insert((1, 'b'), 2);
-        assert_eq!(m.get(&(1, 'b')), Some(&2));
-        let mut k: HashMap<String, i64> = HashMap::default();
-        k.insert("Hamburg".to_string(), 1);
-        assert_eq!(k.get("Hamburg"), Some(&1));
-        assert_eq!(k, k.clone());
     }
 
     /// Same calls, same table: a trusted map holds its keys in the order

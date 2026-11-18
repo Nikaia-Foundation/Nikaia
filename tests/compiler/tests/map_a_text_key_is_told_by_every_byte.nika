@@ -1,0 +1,57 @@
+// A text-keyed map tells keys apart by every byte (map.rs's equality by
+// words, #2082): at every length to 47, a key with one byte flipped, or one
+// byte longer, is not found; the empty key is a key; keys that differ only
+// past the 16th byte stay apart.
+use std::collections
+
+fn main() throws {
+    let mut misses = 0
+    for len in 0..<48 {
+        let mut a = String()
+        for i in 0..<len {
+            a.push_str(["a", "h", "o", "v", "c", "j", "q", "x", "e", "l", "s", "z", "g"][i % 13])
+        }
+        let mut m: collections::HashMap[String, i64] = collections::HashMap()
+        m.insert(a.clone(), len)
+        if (m[a] ?? -1) != len {
+            println(f"length {len}: not found")
+        }
+        for at in 0..<len {
+            let (head, rest) = a.split_at(at)
+            let (one, tail) = rest.split_at(1)
+            let b = f"{head}{one.to_uppercase()}{tail}"
+            if m.contains_key(b) {
+                println(f"length {len}, byte {at}: found")
+            } else {
+                misses += 1
+            }
+        }
+        if m.contains_key(f"{a}a") {
+            println(f"length {len}: a longer key found")
+        }
+    }
+    println(f"{misses} flipped keys missed")
+
+    let mut e: collections::HashMap[String, i64] = collections::HashMap()
+    e.insert("", 1)
+    e.insert("a", 2)
+    println(f"empty {e[""] ?? 0}, a {e["a"] ?? 0}, len {e.len()}")
+
+    let mut late: collections::HashMap[String, i64] = collections::HashMap()
+    for i in 0..<64 {
+        let k = f"Station-Name-1234567890-{i / 10}{i % 10}"
+        late.insert(k, i)
+    }
+    let mut found = 0
+    for i in 0..<64 {
+        if (late[f"Station-Name-1234567890-{i / 10}{i % 10}"] ?? -1) == i {
+            found += 1
+        }
+    }
+    println(f"late: {late.len()} keys, {found} found, 64 found: {late.contains_key("Station-Name-1234567890-64")}")
+    let mut short: collections::HashMap[String, i64] = collections::HashMap()
+    for i in 0..<100 {
+        short.entry(f"ab{i / 10}{i % 10}cd").and_modify(fn(n) { n += i }).or_insert(i)
+    }
+    println(f"short: {short.len()} keys, ab42cd {short["ab42cd"] ?? -1}")
+}
