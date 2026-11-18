@@ -1011,6 +1011,30 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         }
     }
     if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 1) { { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; } }
+    let map_retain = key == "collections::HashMap::retain" || key == "collections::BTreeMap::retain";
+    if map_retain && args.len() == 1 && expected.len() == 1 {
+        let parts: Vec<Ty> = match on {
+            Ty::Named { args: held, .. } => held.copy_owned(),
+            _ => vec![],
+        };
+        let names: Vec<String> = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+            Expr::Closure { params, .. } => params.iter().map(|p| { nikaia_std::block::Text::from(world.words.resolve(*p).to_string()) }).collect::<Vec<_>>(),
+            _ => vec![],
+        };
+        let opens: Vec<i64> = check_core_call_on_open_map_parts(&state, world, receiver);
+        if parts.len() == 2 && names.len() == 2 {
+            let mut taken: Vec<bool> = vec![];
+            for index in 0..2 {
+                let part = unsafe { nikaia_std::proven::read(&parts, (index) as usize) };
+                let open = *nikaia_std::index::get(&opens, (index) as usize) >= 0;
+                let copies = open || !part.is_unknown() && !part.is_a_view() && !moves(part);
+                taken.push(copies);
+                if open { state.flow.open_params.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (index) as usize) }).to_string()), *unsafe { nikaia_std::proven::read(&opens, (index) as usize) }); }
+                if copies && index == 0 { state.facts.copied_item_params.insert((id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64, index)); } else if copies { state.facts.copied_mut_item_params.insert((id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64, index)); } else if check_owned_text(part) { let added = state.flow.lent_params.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (index) as usize) }).to_string())); }
+            }
+            { let __nikaia_stored = check_core_call_on_map_retain_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }, &taken); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; }
+        }
+    }
     let keyed = key == "Vec::sort_by_key" || key == "Array::sort_by_key";
     let compared = key == "Vec::sort_by" || key == "Array::sort_by";
     let mut handed: i64 = 1;
@@ -1377,6 +1401,43 @@ pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
         },
         _ => want.clone(),
     }
+}
+
+pub(crate) fn check_core_call_on_map_retain_fn(want: &Ty, taken: &[bool]) -> Ty {
+    match want {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
+            let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
+            let mut plain: Vec<Ty> = vec![];
+            let mut at: i64 = 0;
+            for p in params.iter() {
+                if at < taken.len() as i64 && *unsafe { nikaia_std::proven::read(&taken, (at) as usize) } { plain.push(unviewed_type(p)); } else { plain.push(p.clone()); }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            }
+            Ty::Fn { params: plain, result: std::boxed::Box::new(match result {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            }), is_sync, can_throw, spelled: spelled.clone() }
+        },
+        _ => want.clone(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_open_map_parts(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![-1, -1];
+    match receiver {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return out };
+            let key: Option<i64> = (*nikaia_std::index::get(&state.flow.open_keys, &local.id)).copied();
+            if key.is_some() { { let __nikaia_stored = state.open_root(nikaia_std::index::or(key, || -1)); unsafe { nikaia_std::proven::write(&mut out, (0) as usize, __nikaia_stored) }; } }
+            let value: Option<i64> = (*nikaia_std::index::get(&state.flow.open_elements, &local.id)).copied();
+            if value.is_some() { { let __nikaia_stored = state.open_root(nikaia_std::index::or(value, || -1)); unsafe { nikaia_std::proven::write(&mut out, (1) as usize, __nikaia_stored) }; } }
+        },
+        _ => { },
+    }
+    out
 }
 
 pub(crate) fn check_core_call_on_owned_text(ty: &Ty) -> bool {

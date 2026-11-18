@@ -2233,6 +2233,30 @@ sync = true
 provenance = "untrusted"
 signature = "() -> Vec[(Bytes, Bytes)]"
 
+# ## The calling thread's memory (ADR-400)
+#
+# **`mem::allocations()` is how many times the calling thread has requested
+# memory since it started; `mem::usage()` is the bytes it holds now, what it
+# allocated less what it freed** (ADR-400 D1, D2). A free counts on the thread
+# that frees, so `usage` may be negative. Both read a per-thread counter of the
+# program's allocator; neither hands out an address (D3). No `touches` line: an
+# absent one means *touches everything* (Part III 13.5), so a read keeps its
+# order against the allocations it counts. `sync`: a read of a counter.
+
+# How many times the calling thread has requested memory since it started.
+[fn."mem::allocations"]
+pub = true
+panics = false
+sync = true
+signature = "() -> i64"
+
+# The calling thread's bytes in use: allocated less freed, negative where it freed more.
+[fn."mem::usage"]
+pub = true
+panics = false
+sync = true
+signature = "() -> i64"
+
 # ## The CPU level a program is built for (ADR-371 D6)
 #
 # **`target::has(i)` answers whether the level `--cpu` named has the instruction
@@ -2898,6 +2922,26 @@ signature = "() -> collections::HashMap[?, ?]"
 # checker's scope is a map of names, and *is this name declared* is the question
 # it asks most (0.0.232, the miniature compiler written to measure how far
 # self-hosting is).
+# Take a key and what it names out of the map, and hand back what it named,
+# or nothing where the key was not there, as `collections::BTreeMap::remove`
+# does (#2111).
+[fn."collections::HashMap::remove"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[K, V](mut self: ref collections::HashMap[K, V], key: ?) -> V?"
+
+# Keep the pairs the function says yes to and drop the rest, in place (#2111).
+#
+# Each pair is handed to the function once, its key and its value, as
+# `Vec::retain` hands each element.
+[fn."collections::HashMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::HashMap[K, V], f: fn(ref K, ref V) -> bool)"
+
 # Whether the map holds this key.
 [fn."collections::HashMap::contains_key"]
 pub = true
@@ -3154,6 +3198,15 @@ panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V])"
+
+# Keep the pairs the function says yes to and drop the rest, in place, as
+# `collections::HashMap::retain` does (#2111). The pairs are handed over in
+# key order.
+[fn."collections::BTreeMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V], f: fn(ref K, ref V) -> bool)"
 
 # Whether the map holds this key.
 [fn."collections::BTreeMap::contains_key"]

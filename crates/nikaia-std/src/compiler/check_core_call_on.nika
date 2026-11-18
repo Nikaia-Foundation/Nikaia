@@ -1324,6 +1324,43 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, args[0], 1) {
         expected[0] = check_core_call_on_unviewed_fn(expected[0])
     }
+    // **A map's `retain` hands its lambda the key and the value** (#2111),
+    // `&K` and `&mut V` below: one that copies is taken out by the pattern
+    // (`&k`, `&mut v`), and a text is a view a comparison reads as `str`.
+    let map_retain = key == "collections::HashMap::retain" || key == "collections::BTreeMap::retain"
+    if map_retain && args.len() == 1 && expected.len() == 1 {
+        let parts: Vec[Ty] = match on {
+            Ty::Named { args: held, .. } => held.clone(),
+            else => [],
+        }
+        let names: Vec[String] = match args[0] {
+            Expr::Closure { params, .. } => params.iter().map(fn(p) { world.words.resolve(p).clone() }).collect(),
+            else => [],
+        }
+        // **A map of open numbers hands them too** (ADR-285 D34): each
+        // parameter is bound to its number, as `and_modify`'s is.
+        let opens: Vec[i64] = check_core_call_on_open_map_parts(state, world, receiver)
+        if parts.len() == 2 && names.len() == 2 {
+            let mut taken: Vec[bool] = []
+            for index in 0..<2 {
+                let part = parts[index]
+                let open = opens[index] >= 0
+                let copies = open || (!part.is_unknown() && !part.is_a_view() && !moves(part))
+                taken.push(copies)
+                if open {
+                    state.flow.open_params.insert(names[index].clone(), opens[index])
+                }
+                if copies && index == 0 {
+                    state.facts.copied_item_params.insert((id_of(args[0]) as i64, index))
+                } else if copies {
+                    state.facts.copied_mut_item_params.insert((id_of(args[0]) as i64, index))
+                } else if check_owned_text(part) {
+                    let added = state.flow.lent_params.insert(names[index].clone())
+                }
+            }
+            expected[0] = check_core_call_on_map_retain_fn(expected[0], taken)
+        }
+    }
     // **So do `sort_by_key` and `sort_by`** (#1754): each parameter is the
     // item, and the lowering writes the pattern `&a` for it.
     let keyed = key == "Vec::sort_by_key" || key == "Array::sort_by_key"
@@ -1834,6 +1871,48 @@ fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
         },
         else => want.clone(),
     }
+}
+
+/// **A map's `retain` lambda type with its copying parameters unviewed**
+/// (#2111): the key or the value that copies is the one the pattern takes out.
+fn check_core_call_on_map_retain_fn(want: ref Ty, taken: ref Vec[bool]) -> Ty {
+    return match want {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
+            let mut plain: Vec[Ty] = []
+            let mut at = 0
+            for p in params {
+                if at < taken.len() as i64 && taken[at] {
+                    plain.push(unviewed_type(p))
+                } else {
+                    plain.push(p.clone())
+                }
+                at += 1
+            }
+            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() }
+        },
+        else => want.clone(),
+    }
+}
+
+/// **The open numbers of a map's keys and values** (ADR-285 D34), by the
+/// receiver: each the number's root, or `-1` where that part is not open.
+fn check_core_call_on_open_map_parts(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> Vec[i64] sync {
+    let mut out: Vec[i64] = [-1, -1]
+    match receiver {
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name)) ?? return out
+            let key: i64? = state.flow.open_keys[local.id]
+            if key != null {
+                out[0] = state.open_root(key ?? -1)
+            }
+            let value: i64? = state.flow.open_elements[local.id]
+            if value != null {
+                out[1] = state.open_root(value ?? -1)
+            }
+        },
+        else => {}
+    }
+    return out
 }
 
 /// Whether a type is owned text: `String`, not a view of it.

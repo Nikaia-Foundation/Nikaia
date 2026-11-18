@@ -275,6 +275,52 @@ thread_local! {
     /// **Blocks of tasks that ended**, kept for the next task on this thread:
     /// a short task then costs no call to the system for its memory.
     static SPARE: Spares = const { Spares(Cell::new([std::ptr::null_mut(); SPARES])) };
+    /// **What this thread asked of the allocator** (ADR-400 D1, D2): how
+    /// many times it requested memory, and the bytes it holds now. Constant
+    /// and without a destructor, so the allocator may read it at any time,
+    /// a thread's last frees included.
+    static TALLY: Tally = const {
+        Tally {
+            allocations: Cell::new(0),
+            usage: Cell::new(0),
+        }
+    };
+}
+
+/// A thread's two counts of [`TALLY`].
+struct Tally {
+    allocations: Cell<i64>,
+    usage: Cell<i64>,
+}
+
+/// One request of `bytes` and a change of `bytes` in use on this thread
+/// (ADR-400): `requested` says whether it was a request for memory.
+#[inline(always)]
+fn tally(requested: bool, bytes: isize) {
+    TALLY.with(|tally| {
+        if requested {
+            tally
+                .allocations
+                .set(tally.allocations.get().wrapping_add(1));
+        }
+        tally
+            .usage
+            .set(tally.usage.get().wrapping_add(bytes as i64));
+    });
+}
+
+/// **How many times the calling thread has requested memory** since it
+/// started (ADR-400 D1): `std::mem::allocations()`.
+#[inline]
+pub fn allocations() -> i64 {
+    TALLY.with(|tally| tally.allocations.get())
+}
+
+/// **The calling thread's bytes in use** (ADR-400 D2): what it allocated
+/// less what it freed, negative where it freed more; `std::mem::usage()`.
+#[inline]
+pub fn usage() -> i64 {
+    TALLY.with(|tally| tally.usage.get())
 }
 
 /// How many ended tasks' blocks a thread keeps.
@@ -746,7 +792,8 @@ pub fn leftover() -> usize {
 pub struct Counting;
 
 // SAFETY: every call is the system allocator's with the caller's arguments;
-// the count touches only a `Cell` of the block in place, never memory.
+// the counts touch only a `Cell` of the block in place and the thread's
+// tally, never memory.
 unsafe impl GlobalAlloc for Counting {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -754,6 +801,7 @@ unsafe impl GlobalAlloc for Counting {
         let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
             count(layout.size().cast_signed());
+            tally(true, layout.size().cast_signed());
         }
         ptr
     }
@@ -764,6 +812,7 @@ unsafe impl GlobalAlloc for Counting {
         let ptr = unsafe { System.alloc_zeroed(layout) };
         if !ptr.is_null() {
             count(layout.size().cast_signed());
+            tally(true, layout.size().cast_signed());
         }
         ptr
     }
@@ -773,6 +822,7 @@ unsafe impl GlobalAlloc for Counting {
         // SAFETY: the caller keeps `dealloc`'s contract.
         unsafe { System.dealloc(ptr, layout) };
         count(-layout.size().cast_signed());
+        tally(false, -layout.size().cast_signed());
     }
 
     #[inline]
@@ -780,7 +830,13 @@ unsafe impl GlobalAlloc for Counting {
         // SAFETY: the caller keeps `realloc`'s contract.
         let moved = unsafe { System.realloc(ptr, layout, size) };
         if !moved.is_null() {
-            count(size.cast_signed().wrapping_sub(layout.size().cast_signed()));
+            let change = size.cast_signed().wrapping_sub(layout.size().cast_signed());
+            count(change);
+            // A request for memory (ADR-400 D1) where it asked for more, or
+            // where the system handed back another place: either way memory
+            // was requested. Only a shrink kept in place is none. Comparing
+            // the two addresses reads neither.
+            tally(size > layout.size() || !std::ptr::eq(moved, ptr), change);
         }
         moved
     }
@@ -847,7 +903,13 @@ unsafe impl Allocator for Place {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         match self.block() {
             Some(block) if layout.size() != 0 && layout.align() <= PAGE => {
-                answered(block.take(layout.size(), layout.align()), layout.size())
+                let taken = block.take(layout.size(), layout.align());
+                if taken.is_some() {
+                    // A request for memory, met by the block (ADR-400 D1);
+                    // the global allocator's are counted by `Counting`.
+                    tally(true, layout.size().cast_signed());
+                }
+                answered(taken, layout.size())
             }
             _ => Global.allocate(layout),
         }
@@ -857,8 +919,14 @@ unsafe impl Allocator for Place {
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         let at = ptr.as_ptr();
         match self.block() {
-            Some(block) if block.ours(at) => block.give(at, layout.size()),
-            Some(block) if block.chained(at) => block.give_chained(at, layout.size()),
+            Some(block) if block.ours(at) => {
+                block.give(at, layout.size());
+                tally(false, -layout.size().cast_signed());
+            }
+            Some(block) if block.chained(at) => {
+                block.give_chained(at, layout.size());
+                tally(false, -layout.size().cast_signed());
+            }
             // SAFETY: not a block's, so the global allocator's.
             _ => unsafe { Global.deallocate(ptr, layout) },
         }
@@ -881,10 +949,18 @@ unsafe impl Allocator for Place {
             return unsafe { Global.grow(ptr, old, new) };
         };
         if new.align() <= PAGE {
-            return answered(
-                block.grow(ptr.as_ptr(), old.size(), new.size(), new.align()),
-                new.size(),
-            );
+            let grown = block.grow(ptr.as_ptr(), old.size(), new.size(), new.align());
+            if grown.is_some() {
+                // A growth asks for memory (ADR-400 D1), as `Counting`'s
+                // `realloc` counts it.
+                tally(
+                    new.size() > old.size(),
+                    new.size()
+                        .cast_signed()
+                        .wrapping_sub(old.size().cast_signed()),
+                );
+            }
+            return answered(grown, new.size());
         }
         // An alignment past a page lives outside, as it does when allocated.
         let moved = Global.allocate(new)?;
@@ -893,6 +969,7 @@ unsafe impl Allocator for Place {
             std::ptr::copy_nonoverlapping(ptr.as_ptr(), moved.as_ptr().cast::<u8>(), old.size())
         };
         block.give_any(ptr.as_ptr(), old.size());
+        tally(false, -old.size().cast_signed());
         Ok(moved)
     }
 }

@@ -46,7 +46,9 @@ jobs:
   # the dumps of all shards.
   #
   # One toolchain per leg (ADR-001 D1): `rust-toolchain.toml` names it and
-  # `rustup show` installs exactly that.
+  # `rustup show` installs it. The build records its `rustc -V` in the
+  # artifact and every test shard runs that exact version (#2116): runners
+  # of one run may carry images with different stables.
   build:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
@@ -171,6 +173,8 @@ jobs:
       # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
       - name: Pack the build
         run: |
+          rustc -V >target/release/rustc-version
+          rustc --print sysroot >target/release/rustc-sysroot
           cut -f1 target/release/test-binaries.tsv | grep '/target/debug/' | sed "s|^$PWD/||" >"$RUNNER_TEMP/unit-binaries"
           tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' \
             -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries" \
@@ -327,6 +331,33 @@ jobs:
       - name: Unpack the build
         run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
 
+      # The rlibs in `deps/` link only with the rustc that wrote them
+      # (E0514 otherwise, #2116): this shard's image may carry another stable.
+      - name: Use the rustc the build used
+        run: |
+          built="$(cat target/release/rustc-version)"
+          if [ "$(rustc -V)" != "$built" ]; then
+            version="$(echo "$built" | cut -d' ' -f2)"
+            rustup toolchain install "$version" --profile minimal --component rustfmt,clippy
+            echo "RUSTUP_TOOLCHAIN=$version" >>"$GITHUB_ENV"
+            export RUSTUP_TOOLCHAIN="$version"
+          fi
+          if [ "$(rustc -V)" != "$built" ]; then
+            echo "::error::the build used $built, this shard has $(rustc -V)"
+            exit 1
+          fi
+          # The tests hand emitted programs to the `rustc` path the build
+          # script baked in (cargo's resolved one, the `stable-*` directory),
+          # not to PATH: where that directory holds another version, point it
+          # at the one the build used (#2116).
+          baked="$(cat target/release/rustc-sysroot)"
+          if [ "$("$baked/bin/rustc" -V 2>/dev/null)" != "$built" ]; then
+            rm -rf "$baked"
+            ln -s "$(rustc --print sysroot)" "$baked"
+            "$baked/bin/rustc" -V
+          fi
+          rustc -V
+
       # How long each program of `tests/compiler` took last time: `nikaia
       # test` starts the longest first (#1600). Restored from the newest run
       # of this shard, saved as this run's after the tests.
@@ -413,8 +444,8 @@ jobs:
           # comptime bundles a second time, in `~/.cache/nikaia`, beside the
           # ones the other tests build in this directory (#1600).
           export NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
           run_it() { (cd "$itdir" && "$it" --exact "$@"); }
           case "$SHARD" in
@@ -569,8 +600,8 @@ jobs:
           set -o pipefail
           mkdir -p "$NIKAIA_DUMP_ACCEPTED"
           echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
 
       - name: Name the sweep's failures

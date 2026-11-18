@@ -63,6 +63,7 @@ pub mod io;
 pub mod list;
 pub mod lock;
 pub mod map;
+pub mod mem;
 pub mod net;
 pub mod node_id;
 pub mod num;
@@ -752,7 +753,10 @@ pub mod prelude {
     pub use crate::cli;
     pub use crate::collections;
     pub use crate::env;
+    // The calling thread's memory, `mem::allocations()` and `mem::usage()`
+    // (ADR-400).
     pub use crate::graphemes::TextGraphemes as _;
+    pub use crate::mem;
     // A text in a normalisation form, `s.normalized(form)` (ADR-320 D10).
     pub use crate::text::TextNormalized as _;
     // A text between quotes as Rust's `{:?}` writes it, `s.quoted()` (#804).

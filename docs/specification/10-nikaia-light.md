@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1438 (Draft)
+**Version:** 0.0.1439 (Draft)
 **Date:** 2026-11-18
 
 ---
@@ -3231,6 +3231,44 @@ error[NK2301]: You're changing `users` while a loop is still reading it.
 For every known pattern of this kind, the standard library provides a safe,
 named method (`retain`, `drain`, `entry`, `swap(i, j)`, …), and the diagnostic
 names it.
+
+### 6.9. Measuring Memory: `std::mem`
+
+Whether an operation keeps a buffer or copies it is the compiler's choice, and
+a program reads no address of a value ([ADR-400](adr/adr-400.md) D3). What a
+program, and above all a test, can read is what the calling thread asked of
+the allocator:
+
+* `mem::allocations() -> i64` is how many times the calling thread has
+  requested memory since it started (D1). A growth that has to ask for more
+  counts; a shrink kept in place does not.
+* `mem::usage() -> i64` is the calling thread's bytes in use: what it
+  allocated less what it freed (D2). A free counts on the thread that frees,
+  so on a thread that frees what another allocated the value can be negative.
+
+Both count per thread, so `std`'s own helper threads do not change them while
+a test runs. Equal counts before and after an operation mean it requested
+nothing. A count is read into a `let` before anything is printed, since
+printing may allocate, and compared after; an `assert` cannot hold it, since
+its condition may not touch the outside world (NK1194):
+
+```nika
+use std::mem
+
+fn main() throws {
+    let mut numbers: Vec[i64] = []
+    let before = mem::allocations()
+    for i in 0..<1000 {
+        numbers.push(i)
+    }
+    let grown = mem::allocations()
+    let count = numbers.len()
+    let read = mem::allocations()
+    println(grown > before)   // true: the list asked for memory as it grew
+    println(read == grown)    // true: reading its length asked for none
+    println(count)
+}
+```
 
 ---
 

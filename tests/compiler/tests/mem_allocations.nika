@@ -1,0 +1,24 @@
+// ADR-400 D1: `mem::allocations()` counts the calling thread's requests for
+// memory. Each count is read before and after the operation and printed only
+// after both, since printing may allocate. Per thread, so `std`'s helper
+// threads leave it unchanged.
+use std::mem
+
+fn main() throws {
+    // Reading a text requests nothing.
+    let mut text = String()
+    text.push('a')
+    let before = mem::allocations()
+    let length = text.len()
+    let after = mem::allocations()
+    println(f"{length} byte, no request: {after == before}")
+
+    // A `String` pushed past its capacity has to ask for more.
+    let mut small = String()
+    let start = mem::allocations()
+    for _ in 0..<100 {
+        small.push('x')
+    }
+    let grown = mem::allocations()
+    println(f"{small.len()} bytes, more requests: {grown > start}")
+}
