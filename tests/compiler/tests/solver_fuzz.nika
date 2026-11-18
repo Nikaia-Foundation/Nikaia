@@ -1,8 +1,16 @@
 // The fuzzer of the measuring rod (#1281, ADR-270 D17): `scripts/solver.nika
-// fuzz --self-test` generates eight queries from a fixed seed, answers them
+// fuzz --self-test` generates eight queries from a fixed seed, growing in
+// size, and the five mutants of each (#1989: shuffle, rename, scale,
+// redundant, negate; those of the first query are printed), answers them
 // with the CDCL(T) engine (#1283) and compares with a stubbed oracle (z3 is
-// not in CI; it calls every third query `unsat`, so its disagreements are the
-// stub's): the same seed gives the same queries, answers and disagreements.
+// not in CI; it calls every third question `unsat`, so its disagreements are
+// the stub's): the same seed gives the same queries, answers and
+// disagreements, and a disagreement makes the run exit 1.
+//
+// `oracle` (#1989 item 1) is run with `$Z3` a stub that answers only when
+// given `rlimit=123`: `sat`, `unknown` for `unsat-gcd`, an `(error ...)` for
+// `unsat-fixed`. Each file stating `unsat` is then a disagreement and the
+// run exits 1; a file stating `sat` alone exits 0.
 use std::fs
 use std::process
 
@@ -39,16 +47,37 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	for args in [["fuzz", "--self-test"]] {
-		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
+	let stub_dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let stub = f"{stub_dir}/z3"
+	fs::write(
+		stub.clone(),
+		fs::Root::Anywhere,
+		"#!/bin/sh\ncase \"$*\" in *rlimit=123*) ;; *) echo '(error \"no rlimit\")'; exit 0;; esac\ncase \"$*\" in *unsat-gcd*) echo unknown;; *unsat-fixed*) echo '(error \"stub\")'; echo unsat;; *) echo sat;; esac\n",
+	)
+	process::run("chmod", ["+x", stub.clone()])
+	let runs: Vec[Vec[String]] = [
+		["fuzz", "--self-test"],
+		["oracle", "--rlimit", "123", "tests/solver/smoke", "tests/solver/pre"],
+		["oracle", "--rlimit", "123", "tests/solver/smoke/sat-interval.smt2"],
+	]
+	for args in runs {
+		let mut all: Vec[String] = [
+			f"Z3={stub}",
+			nikaia.clone(),
+			"run",
+			"scripts/solver.nika",
+			"--",
+		]
 		for a in args { all.push(a.clone()) }
-		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
+		let out = process::run("env", all; dir: repo.clone())
+		println(f"$ solver.nika {args.join(" ")}")
 		println(out.stdout.trim())
+		println(f"exit {out.code}")
 		// A failed inner run names its cause in the diff (#1305).
-		if !out.ok || out.stderr.trim().len() > 0 {
-			println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")
-			if out.stderr.trim().len()
-				== 0 { println("(empty)") } else { println(out.stderr.trim()) }
+		if out.stderr.trim().len() > 0 {
+			println("stderr:")
+			println(out.stderr.trim())
 		}
 	}
+	process::run("rm", ["-rf", stub_dir])
 }

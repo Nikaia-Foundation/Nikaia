@@ -578,6 +578,40 @@ pub fn ledger_items_stored(mut codes: Vec[collections::BTreeMap[String, CheckSto
     return all
 }
 
+/// **What the check derived for a package's own types**, by the name the
+/// package declares each with: those that compare with `==`, those whose
+/// equality is an equivalence, those that hash and those that copy.
+pub struct LedgerDerives {
+    pub compares: collections::BTreeSet[String],
+    pub equates: collections::BTreeSet[String],
+    pub hashes: collections::BTreeSet[String],
+    pub copies: collections::BTreeSet[String],
+}
+
+/// **The derive answers, written into the package's ledger** (ADR-010 D11,
+/// #2031): a consumer compares, hashes and copies a package's type as the
+/// package does, and what it asks is the ledger's `compares`, `equates`,
+/// `hashes` and `copies` (`CheckComparable::named`), which only a Rust
+/// description used to set.
+fn ledger_derives(mut ledger: Ledger, derives: ref LedgerDerives) {
+    let names: Vec[String] = ledger.types.keys().map(fn(x) { x.clone() }).collect()
+    for name in names {
+        let mut contract = ledger.types.get(name) ?? continue
+        if derives.compares.contains(name) {
+            contract.compares = true
+        }
+        if derives.equates.contains(name) {
+            contract.equates = true
+        }
+        if derives.hashes.contains(name) {
+            contract.hashes = true
+        }
+        if derives.copies.contains(name) {
+            contract.copies = true
+        }
+    }
+}
+
 /// What inferring a package's ledger asks of the compiler (M5, #125): the
 /// checker and the columns still inferred in Rust, each over the units the
 /// host holds, named by their place. The host keeps what they answer beside
@@ -591,6 +625,9 @@ pub trait LedgerInferHost {
     /// The functions whose result comes from outside, by the ledger's key,
     /// as the units' check found them (#1573).
     fn outside_results(ref self) -> collections::BTreeSet[String] sync
+    /// The declared types whose comparison, equivalence, hash and copy the
+    /// units' check derived (ADR-204 D1, ADR-010 D11), for the ledger.
+    fn derives(ref self) -> LedgerDerives sync
     fn infer_sync(ref self, mut ledger: Ledger) sync
     /// Whether the prover reads `condition` back over `readable`.
     fn reads_back(ref self, condition: ref String, readable: ref collections::BTreeSet[String]) -> bool sync
@@ -629,6 +666,7 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // there too, so the method calls the walks below read are the package's.
     host.check_units(ledger)
     ledger_untrusted_results(ledger, host.outside_results())
+    ledger_derives(ledger, host.derives())
     host.infer_sync(ledger)
     // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
     // which it is only given for.

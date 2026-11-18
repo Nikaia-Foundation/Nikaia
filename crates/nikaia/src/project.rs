@@ -4420,6 +4420,59 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         self.invocation.borrow_mut().args.push(OsString::from(arg));
     }
 
+    fn rustc(&self) -> String {
+        self.invocation.borrow().rustc.to_string_lossy().to_text()
+    }
+
+    fn user_cache_dir(&self) -> PathBuf {
+        Layout::user_cache_dir()
+    }
+
+    fn use_entry(&self, entry: &Path) {
+        orchestrator::cache::use_entry(entry);
+    }
+
+    /// **`rustc` run as [`Invocation::run`] runs it**, its standard error
+    /// passed on line by line as it comes and kept in `said` too, for the
+    /// second store to say again on a hit (ADR-021 D14). A `said` that
+    /// cannot be written is left out: the store then records nothing.
+    fn run_saying(&self, said: &Path) -> HostResult<i32> {
+        use std::io::{BufRead, Write};
+        let invocation = self.invocation.borrow();
+        let mut child = match std::process::Command::new(&invocation.rustc)
+            .args(&invocation.args)
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                return self.held(Err(anyhow::Error::new(error)
+                    .context(format!("running {}", invocation.rustc.to_string_lossy()))));
+            }
+        };
+        let mut kept: std::vec::Vec<u8> = std::vec::Vec::new();
+        if let Some(stderr) = child.stderr.take() {
+            let mut reader = std::io::BufReader::new(stderr);
+            let mut line: std::vec::Vec<u8> = std::vec::Vec::new();
+            while reader
+                .read_until(b'\n', &mut line)
+                .is_ok_and(|read| read > 0)
+            {
+                let _ = std::io::stderr().write_all(&line);
+                kept.extend_from_slice(&line);
+                line.clear();
+            }
+        }
+        let status = self.held(child.wait().context("waiting for rustc"))?;
+        let _ = std::fs::write(said, &kept);
+        Ok(status.code().unwrap_or(1))
+    }
+
+    fn eprint(&self, text: &str) {
+        use std::io::Write;
+        let _ = std::io::stderr().write_all(text.as_bytes());
+    }
+
     fn record_dependencies(&self, inputs: &[PathBuf]) -> HostResult<()> {
         let Some(dep_info) = self.invocation.borrow().dep_info() else {
             return Ok(());

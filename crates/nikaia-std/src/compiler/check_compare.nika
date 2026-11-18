@@ -303,6 +303,23 @@ impl CheckComparable {
         if nobody_knows(name, self.own, self.library) {
             return true
         }
+        // **Another package's hand-written equality or hash answers** as one
+        // of this package does (ADR-341 D5, ADR-010 D12, #2031): its ledger
+        // records the `impl`, and its type has no derive to stand for it.
+        if how == CompareStrength::Hashes {
+            if self.implements("Hash", name) {
+                return true
+            }
+            if self.implements("Eq", name) {
+                return false
+            }
+        } else if how == CompareStrength::Orders {
+            if self.implements("Ord", name) {
+                return true
+            }
+        } else if self.implements("Eq", name) {
+            return true
+        }
         // A type whose parts are Rust: the column, whose absence is no.
         for ledger in [self.own, self.library] {
             let contract = ledger.types.get(name) ?? continue

@@ -118,9 +118,18 @@ signature = "(body: String) -> String"
 
 [type."Block"]
 fields = ["page: String", "code: String", "sketch: bool"]
+compares = true
+equates = true
+hashes = true
 
 [type."Reached"]
 fields = ["stage: i64", "codes: Vec[String]"]
+compares = true
+equates = true
+hashes = true
 
 [type."Reading"]
 fields = ["name: ref String", "source: String"]
+compares = true
+equates = true
+hashes = true

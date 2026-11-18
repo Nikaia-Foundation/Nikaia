@@ -235,14 +235,22 @@ signature = "(at: String, refreshed: SharedMut[i64], asked: SharedMut[i64], cras
 [type."http::Body"]
 pub = true
 variants = ["Text(String)", "Bytes(Bytes)", "File(http::File)"]
+compares = true
+equates = true
 
 [type."http::File"]
 pub = true
 fields = ["pub path: String", "pub root: fs::Root", "pub status: i32", "pub size: i64"]
+compares = true
+equates = true
 
 [type."http::Method"]
 pub = true
 variants = ["Get", "Post"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."http::Request"]
 pub = true
@@ -251,3 +259,5 @@ fields = ["pub head: http1::Head", "pub body: String"]
 [type."http::Response"]
 pub = true
 fields = ["pub status: i32", "pub content_type: String", "pub body: http::Body"]
+compares = true
+equates = true

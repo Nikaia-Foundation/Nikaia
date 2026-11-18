@@ -801,6 +801,18 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
         for from_word in sources.iter() { if *from_word != to { walk.flows.read_into.insert((nikaia_std::block::Text::from(from_word.to_string()), nikaia_std::block::Text::from(to.to_string()))); } }
     }
     let mut linked = a_container(ask.names, &ty) && comes_whole(value, ask, walk);
+    if !linked && value.is_some() && a_container(ask.names, &ty) && !a_map(ask.names, &ty) && ty.generics.len() == 1 && a_followed_tuple(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) {
+        let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        match whole {
+            Expr::ListLit { items, .. } => {
+                let mut inner = path.copy_owned();
+                inner.push(0);
+                for item in items.iter() { flow_value(&going_into(&owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, inner.copy_owned(), going.wrap), Some(item), kinds, ask, walk); }
+                linked = true;
+            },
+            _ => { },
+        }
+    }
     if plain && tier_a_name(value) {
         let back = nikaia_std::index::or(text_source_word(value, ask, walk), || "".into());
         linked = back != "" && back == position_word(&owner, &path);

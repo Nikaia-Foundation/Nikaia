@@ -1,0 +1,121 @@
+name: z3
+
+# **Our solver checked against z3, outside develop's CI** (#1989). Nightly
+# and by hand, never on a push and never a required check: `nikaia.yml` and
+# `suite.yml` stay without z3 and as fast as they are.
+#
+# * **The stated statuses**: every file under `tests/solver/` that states one
+#   (`(set-info :status ...)` or `; EXPECT:`) is asked of z3
+#   (`scripts/solver.nika oracle`). `compiler/` holds the compiler's own
+#   checked answers, `stress/` z3 5.3.3's, written once: an answer built into
+#   both a test and the solver would pass every other check.
+# * **Differential fuzzing**: random queries within a growing size budget,
+#   each with five mutants (`scripts/solver.nika fuzz`), answered by z3 and
+#   our engine. The seed is the run number, printed; `fuzz N SEED --size S
+#   --rlimit R` repeats a run exactly.
+#
+# z3 is the pinned release below (also in `tests/solver/SOURCES.md`), so a
+# z3 change is a commit. It runs under its deterministic resource limit
+# (`rlimit`, `solver_rlimit` in `scripts/solver.nika`): a query past it is
+# `unknown` on every runner, and `unknown` is no failure. A disagreement turns
+# the job red and is uploaded; it is looked at by hand (a wrong expectation
+# is not rewritten automatically), and the ci lane files it
+# (`docs/supervisor.md`, *Lanes*).
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: "Fuzz queries (each with five mutants)"
+        default: "2000"
+      seed:
+        description: "Fuzz seed (empty: the run number)"
+        default: ""
+
+concurrency:
+  group: z3
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  Z3_VERSION: "4.15.4"
+  Z3_ASSET: z3-4.15.4-x64-glibc-2.39
+  Z3_SHA256: a41b690e89c343931471506cdc6d957b6044a200fd2d240cc017432afdff7d3e
+
+jobs:
+  z3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Install z3 ${{ env.Z3_VERSION }}
+        run: |
+          set -eu
+          curl -sSfL -o "$RUNNER_TEMP/z3.zip" \
+            "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/$Z3_ASSET.zip"
+          echo "$Z3_SHA256  $RUNNER_TEMP/z3.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/z3.zip" -d "$RUNNER_TEMP"
+          echo "Z3=$RUNNER_TEMP/$Z3_ASSET/bin/z3" >>"$GITHUB_ENV"
+          "$RUNNER_TEMP/$Z3_ASSET/bin/z3" --version
+
+      - name: Restore the build of an earlier run
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-z3-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-z3-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-
+
+      - name: Build nikaia
+        run: cargo build --release -p nikaia
+
+      # Both checks run, whatever the first finds; the job is red if either is.
+      - name: The stated statuses against z3
+        id: oracle
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/z3-findings"
+          target/release/nikaia run scripts/solver.nika -- oracle tests/solver \
+            | tee "$RUNNER_TEMP/z3-findings/oracle.txt"
+
+      - name: Differential fuzzing against z3
+        id: fuzz
+        continue-on-error: true
+        env:
+          QUERIES: ${{ inputs.queries || '2000' }}
+          SEED: ${{ inputs.seed || github.run_number }}
+        run: |
+          set -o pipefail
+          rm -rf tests/solver/bugs
+          target/release/nikaia run scripts/solver.nika -- fuzz "$QUERIES" "$SEED" \
+            | tee "$RUNNER_TEMP/z3-findings/fuzz.txt"
+
+      - name: Keep the disagreements
+        if: always()
+        run: |
+          if [ -d tests/solver/bugs ]; then cp -r tests/solver/bugs "$RUNNER_TEMP/z3-findings/"; fi
+
+      - name: Upload the findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: z3-findings-${{ github.run_number }}
+          path: ${{ runner.temp }}/z3-findings
+
+      - name: Red on any disagreement
+        if: steps.oracle.outcome != 'success' || steps.fuzz.outcome != 'success'
+        run: |
+          echo "oracle: ${{ steps.oracle.outcome }}, fuzz: ${{ steps.fuzz.outcome }} (the findings artifact holds the lines and the files)"
+          exit 1

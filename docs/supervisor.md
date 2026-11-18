@@ -580,6 +580,15 @@ own driver run:
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
   ledger's facts.
+* **CI lane, `docs/briefs/ci/`**: the issues labelled `ci`: the workflows,
+  the driver's suite and the checks around them. It also checks the result
+  of the z3 pipeline (`.github/workflows/z3.yml`, #1989) regularly, on the
+  Actions page or with `scripts/status.nika`. Nightly, it compares every
+  status stated under `tests/solver/` and a differential fuzz run with a
+  pinned z3 (`tests/solver/SOURCES.md`). It files each disagreement as its
+  own issue (the job files none): a wrong expectation for the solver lane,
+  a wrong verdict as a `solver` defect, each with the file from the run's
+  `z3-findings` artifact, and `fuzz N SEED` where the fuzzer found it.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.

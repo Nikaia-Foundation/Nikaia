@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1427] — 2026-11-18
+
+**Builders' changes (#2005, #2015, #2031)**
+- The compiler checks its own package faster: deciding which types derive Copy now asks for a type's cleanup only once its parts copy (61 G instructions less per lowering of the tools package).
+- Added: a nightly z3 workflow checks every stated solver status and fuzzes the solver with mutated queries against a pinned z3 (`scripts/solver.nika oracle`, `fuzz N SEED --size S --rlimit R`)
+- Fixed: a list literal of tuples with a text part no longer draws NK1343 when tuples of another tier are pushed into it
+- A program build reuses rustc's output when its emitted Rust did not change: a crate whose Rust, rustc arguments, --extern files and rustc version match an earlier build is not compiled again (ADR-021 D14).
+- Tools build in a fixed slot: pre-push, gate, the solver, java_binding and the yaml facade test build their private copy in a locked, numbered slot (target/<tool>/<n>, the solver in the user cache) instead of a fresh temp dir, so their builds hit ADR-021 D14's rustc store; new scripts/slot.nika.
+- A package's types compare, hash and copy in the program that uses it: `==` on a `lib::Point` or an enum holding one, a `HashSet[lib::Point]`, a copy of a `lib::Point` and a dependency type with its own `impl Eq` are no longer refused (NK1188, NK1260, NK2105); a package's `nikaia.contracts` now records `compares`, `equates`, `hashes` and `copies` for its own types.
+
 ## [0.0.1426] — 2026-11-17
 
 **Builders' changes (#2024, #2025)**

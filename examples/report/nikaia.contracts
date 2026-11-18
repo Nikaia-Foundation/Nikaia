@@ -30,4 +30,7 @@ signature = "(entries: Vec[Entry], total: i64) -> String"
 [type."Entry"]
 pub = true
 fields = ["category: ref String", "item: ref String", "count: i64"]
+compares = true
+equates = true
+hashes = true
 tethered = ["category", "item"]

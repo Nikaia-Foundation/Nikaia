@@ -44,7 +44,10 @@ signature = "() -> System"
 [type."Body"]
 pub = true
 fields = ["x: f64", "y: f64", "z: f64", "vx: f64", "vy: f64", "vz: f64", "mass: f64"]
+compares = true
+copies = true
 
 [type."System"]
 pub = true
 fields = ["bodies: Vec[Body]"]
+compares = true

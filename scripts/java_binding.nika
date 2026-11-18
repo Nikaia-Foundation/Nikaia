@@ -2,7 +2,9 @@
 //
 //     nikaia run scripts/java_binding.nika -- [--exe PATH]
 //
-// Copies `examples/c-library` to a fresh directory, writes its Java binding
+// Copies `examples/c-library` into a slot of target/java-binding, emptied
+// first (scripts/slot.nika: a fixed place, so its build hits ADR-021 D14's
+// rustc store, #2015), writes its Java binding
 // there with `nikaia bind java` (the compiler at PATH, default
 // `target/release/nikaia`, else `target/fast/nikaia`), runs `use.c` against
 // the library, compiles the binding and `java/Use.java` with
@@ -13,6 +15,7 @@
 // Java. CI runs it with JDK 22 (`.github/workflows/suite.yml`, shard `ledgers`).
 
 use std::cli
+use std::env
 use std::fs
 use std::process
 use std::text
@@ -46,26 +49,43 @@ fn java_binding_major(said: String) -> i64 {
 	return 0
 }
 
+// Runs this script again in a slot of target/java-binding (scripts/slot.nika,
+// ADR-021 D14), with `--exe EXE --in <slot>`, and ends with its exit code.
+fn java_binding_in_slot(exe: String) throws {
+	let runs = env::current_exe()?.display() ?? exe.clone()
+	let main = env::current_main()?.display() ?? "scripts/java_binding.nika"
+	let ran = process::run(
+		runs.clone(),
+		["run", "scripts/slot.nika", "--", "target/java-binding", runs, "run", main, "--", "--exe", exe, "--in", "{slot}"]; stdout: process::Stream::Inherited,
+		stderr: process::Stream::Inherited,
+	)
+	process::exit(ran.code)
+}
+
 fn main() throws {
 	let mut exe: String = "target/release/nikaia"
 	if !fs::exists(exe, fs::Root::Anywhere) {
 		exe = "target/fast/nikaia"
 	}
-	let mut named = false
+	let mut slot: String = ""
+	let mut named: String = ""
 	for arg in cli::args() {
-		if named {
-			exe = arg
-			named = false
-		} else if arg == "--exe" {
-			named = true
+		if named == "--exe" {
+			exe = arg.clone()
+		} else if named == "--in" {
+			slot = arg.clone()
 		}
+		named = arg
 	}
 	let here = process::run("pwd", []).stdout.trim().clone()
 	if !exe.starts_with("/") {
 		exe = f"{here}/{exe}"
 	}
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	let copy = f"{tmp}/c-library"
+	if slot == "" {
+		java_binding_in_slot(exe)
+		return
+	}
+	let copy = f"{slot}/c-library"
 	process::run("cp", ["-r", "examples/c-library", copy.clone()])
 	process::run("rm", ["-rf", f"{copy}/target"])
 	let bound = process::run(exe, ["bind", "java"]; dir: copy.clone())
@@ -101,7 +121,6 @@ fn main() throws {
 	let major = java_binding_major(f"{version.stdout} {version.stderr}")
 	if version.code != 0 || major < 22 {
 		println(f"skipped: the Java binding needs javac 22 or later (java.lang.foreign, JEP 454); this host has `{java_binding_said(f"{version.stdout}\n{version.stderr}")}`")
-		process::run("rm", ["-rf", tmp])
 		return
 	}
 	let binding = f"{made}/java/wordtally/Wordtally.java"
@@ -135,6 +154,5 @@ fn main() throws {
 		println(f"Use.java:\n{java_ran.stdout}")
 		process::exit(1)
 	}
-	process::run("rm", ["-rf", tmp])
 	println(f"Use.java prints what use.c prints (javac {major})")
 }

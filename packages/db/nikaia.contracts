@@ -109,16 +109,24 @@ signature = "(text: ref String) -> Raw"
 [type."NullInField"]
 pub = true
 fields = ["pub field: String", "pub column: String", "pub table: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Raw"]
 pub = true
 fields = ["text: ref String"]
+compares = true
+equates = true
+hashes = true
 tethered = ["text"]
 
 [type."Row"]
 pub = true
 fields = ["pub columns: Vec[String]", "pub values: Vec[Value]"]
+compares = true
 
 [type."Value"]
 pub = true
 variants = ["Null", "Bool(bool)", "Int(i64)", "Float(f64)", "Text(String)", "Bytes(Bytes)"]
+compares = true
