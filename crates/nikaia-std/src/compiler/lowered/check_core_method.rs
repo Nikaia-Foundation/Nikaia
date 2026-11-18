@@ -468,6 +468,10 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     };
     if bytes && name == "split" && args.len() == 1 { state.facts.bytes_splits.insert(id_of(receiver) as i64); }
     let std_type = check_core_method_ledger_type(&on, bytes);
+    if std_type == "" && name == "widening_mul" && args.len() == 1 {
+        let numbers = state.open_numbers_in(world, receiver);
+        if !numbers.is_empty() { state.flow.open_wides.insert(id_of(expr) as i64, *unsafe { nikaia_std::proven::read(&numbers, (0) as usize) }); }
+    }
     if std_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, std_type); } else {
         let own_type = check_core_method_own_type(world, &on, written);
         if own_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, own_type); } else if is_text_type(&on) && resolve_method(world, &format!("str::{}", written)).is_some() { state.facts.std_receivers.insert(id_of(expr) as i64, String::from("str")); }

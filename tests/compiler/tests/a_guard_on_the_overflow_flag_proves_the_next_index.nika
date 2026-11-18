@@ -1,0 +1,50 @@
+// Past `if !overflowed` the result of `overflowing_add` is the exact sum,
+// and past `high == 0` with the low half in range the low half of
+// `widening_mul` is the exact product, so an index or a step computed from
+// either is proved there, as past a `checked_add` guard (#1555). Without the
+// guard it stays checked.
+pub fn next(xs: Vec[i64], i: i64) -> i64 sync {
+    if i >= 0 && i + 1 < xs.len() {
+        let (s, overflowed) = i.overflowing_add(1)
+        if !overflowed {
+            return xs[s]
+        }
+    }
+    return 0
+}
+
+pub fn before(xs: Vec[i64], i: i64) -> i64 sync {
+    if i >= 1 && i < xs.len() {
+        let (s, overflowed) = i.overflowing_sub(1)
+        if !overflowed {
+            return xs[s]
+        }
+    }
+    return 0
+}
+
+pub fn twice(xs: Vec[i64], i: i64) -> u64 sync {
+    if i >= 0 && 2 * i < xs.len() {
+        let (low, high) = i.widening_mul(2)
+        if high == 0 && low <= 9223372036854775807 {
+            return low + 1
+        }
+    }
+    return 0
+}
+
+pub fn unguarded(xs: Vec[i64], i: i64) -> i64 sync {
+    if i >= 0 && i + 1 < xs.len() {
+        let (s, overflowed) = i.overflowing_add(1)
+        return xs[s] + if overflowed { 1 } else { 0 }
+    }
+    return 0
+}
+
+fn main() throws {
+    let xs = [10, 20, 30]
+    println(next(xs, 1))
+    println(before(xs, 1))
+    println(twice(xs, 1))
+    println(unguarded(xs, 0))
+}

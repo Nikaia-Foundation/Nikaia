@@ -646,6 +646,14 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // ADR-375 D5): the bounds walk reads what it ensures of the result and of
     // each element of the sequence it hands back.
     let std_type = check_core_method_ledger_type(on, bytes)
+    // **A `widening_mul` on an open number waits for its type** (#1555):
+    // the uses decide it, and the emitter writes the halves by its width.
+    if std_type == "" && name == "widening_mul" && args.len() == 1 {
+        let numbers = state.open_numbers_in(world, receiver)
+        if numbers.len() > 0 {
+            state.flow.open_wides.insert(id_of(expr) as i64, numbers[0])
+        }
+    }
     if std_type != "" {
         state.facts.std_receivers.insert(id_of(expr) as i64, std_type)
     } else {

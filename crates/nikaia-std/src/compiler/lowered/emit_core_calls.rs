@@ -1289,6 +1289,25 @@ impl EmitState {
                 return Ok(());
             }
         }
+        if rotation == "widening_mul" && args.len() == 1 {
+            let on_type = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.std_receivers, &(node_key(node))), || "");
+            let (wide, low, bits) = match on_type {
+                "u8" => ("u16", "u8", 8),
+                "u32" => ("u64", "u32", 32),
+                "i32" => ("i64", "u32", 32),
+                "u64" => ("u128", "u64", 64),
+                "i64" => ("i128", "u64", 64),
+                _ => ("", "", 0),
+            };
+            if bits != 0 {
+                out.push(&nikaia_std::block::Text::from("{ let __wide = ("));
+                self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)?;
+                out.push(&format!(") as {} * (", wide));
+                self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 0, depth, flow, scope)?;
+                out.push(&format!(") as {}; (__wide as {}, (__wide >> {}) as {}) }}", wide, low, bits, on_type));
+                return Ok(());
+            }
+        }
         if name == "cloned" && args.is_empty() && self.facts.owned_clones.contains(&node_key(node)) { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; } else if name == "or_default" && args.is_empty() && self.facts.defaulted_entries.contains_key(&node_key(node)) {
             let made = self.emit_place_all_defaults(world, nikaia_std::index::or(*nikaia_std::index::get(&self.facts.defaulted_entries, &(node_key(node))), || ""));
             self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
@@ -1324,8 +1343,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple98080| {
-        let (i, word) = __nikaia_tuple98080;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple99341| {
+        let (i, word) = __nikaia_tuple99341;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
