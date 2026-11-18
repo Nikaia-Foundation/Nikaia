@@ -4684,6 +4684,7 @@ fn drive_queue(dir: String, area: String) throws {
 			if !waits.contains(m.clone()) && drive_issue_open(m.clone()) { waits.push(m) }
 		}
 	}
+	waits = drive_not_fixed_on_develop(waits)
 	let fixed = drive_fixed_on_develop(open)
 	let mut numbers: Vec[String] = []
 	let bodies: Vec[(String, String)] = drive_queue_records(list.clone())
