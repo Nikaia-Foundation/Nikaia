@@ -1,0 +1,8 @@
+bounds in tests/a_guard_on_the_overflow_flag_proves_the_next_index.nika: 3 indexes, 2 proved; 4 operations, 1 proved
+     7  i + 1    checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    10  xs[s]    proved
+    20  xs[s]    proved
+    27  2 * i    checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    30  low + 1  proved
+    37  i + 1    checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    39  xs[s]    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

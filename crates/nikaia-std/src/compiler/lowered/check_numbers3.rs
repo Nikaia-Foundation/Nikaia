@@ -63,6 +63,18 @@ impl CheckState {
             sums.insert(head, receivers);
         }
         self.flow.open_sums.clear();
+        let mut wides: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
+        for (call, number) in self.flow.open_wides.iter() {
+            let call = nikaia_std::num::value(call);let number = nikaia_std::num::value(number);
+            let head = self.open_root(number);
+            let mut calls: Vec<i64> = nikaia_std::index::or(match *nikaia_std::index::get(&wides, &head) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            calls.push(call);
+            wides.insert(head, calls);
+        }
+        self.flow.open_wides.clear();
         self.flow.open_numbers.clear();
         for (head_at, members) in groups.iter() {
             let head_at = nikaia_std::num::value(head_at);
@@ -156,6 +168,10 @@ impl CheckState {
                         None => None,
                     }, || vec![].into()) { self.facts.summed.insert(receiver, nikaia_std::block::Text::from(ty.to_string())); }
                 }
+                for call in nikaia_std::index::or(match *nikaia_std::index::get(&wides, &head_at) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into()) { self.facts.std_receivers.insert(call, nikaia_std::block::Text::from(ty.to_string())); }
                 for member in members.iter() {
                     let mut written: String = nikaia_std::block::Text::from(ty.to_string());
                     let mut level: i64 = 0;

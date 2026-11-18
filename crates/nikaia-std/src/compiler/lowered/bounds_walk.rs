@@ -1752,6 +1752,48 @@ pub(crate) fn bounding_after_change(walk: &mut BoundsWalk, facts: &mut BoundsFac
     for place in changed.elements.iter() { bounding_forget_element(&walk, facts, place, false); }
 }
 
+pub(crate) fn bounding_halves(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], value: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if args.len() != 1 { return None; }
+            let picked = words.resolve(method);
+            let ty = match *nikaia_std::index::get(&context.std_receivers, &(node_key(value))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !is_whole_number(ty) { return None; }
+            let a = match bounding_lin(walk, receiver, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b = match bounding_lin(walk, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let first = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+            let second = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 1)).to_string());
+            for side in [a, b] { if walk.arena.mentions(side, &first) || walk.arena.mentions(side, &second) { return None; } }
+            let product = picked == "overflowing_mul" || picked == "widening_mul";
+            if product && walk.arena.constant(a).is_none() && walk.arena.constant(b).is_none() { return None; }
+            let exact = match picked {
+                "overflowing_add" => walk.arena.add(a, b),
+                "overflowing_sub" => walk.arena.sub(a, b),
+                "overflowing_mul" => walk.arena.mul(a, b),
+                "widening_mul" => walk.arena.mul(a, b),
+                _ => return None,
+            };
+            let result = walk.arena.var(&first);
+            let same = walk.arena.equal(result, exact);
+            let other = walk.arena.var(&second);
+            if picked == "widening_mul" {
+                let top = match match Range::of_type(ty) { Some(__nikaia_value) => __nikaia_value, None => return None }.hi { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let zero = walk.arena.int(0);
+                let high = walk.arena.unequal(other, zero);
+                let most = walk.arena.int(top);
+                let past = walk.arena.gt(result, most);
+                return Some(walk.arena.or(vec![high, past, same]));
+            }
+            let one = walk.arena.int(1);
+            let up = walk.arena.ge(other, one);
+            return Some(walk.arena.or(vec![up, same]));
+        },
+        _ => { },
+    }
+    None
+}
+
 pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
     if !walk.call_names.is_empty() {
         let named = match walk.call_names.get(&node_key(expr)) {
@@ -4328,11 +4370,24 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         measured = bounding_measured(walk, &facts, root, root, value, context, program, words);
         field_facts = bounding_fields_found(walk, &facts, root, value, &mut field_paths, context, program, words, &ask);
     }
+    let mut halves: Option<i64> = None;
+    if names.len() == 2 { halves = bounding_halves(walk, names, value, &facts, context, program, words); }
     for symbol in names.iter() {
         let symbol = *symbol;
         let name = words.resolve(symbol);
         bounding_forget(&walk, facts, name);
         facts.ints.remove(name);
+    }
+    if halves.is_some() {
+        facts.ints.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()));
+        match value {
+            Expr::MethodCall { method, .. } => {
+                let method = *method;
+                if words.resolve(method) == "widening_mul" { facts.ints.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 1)).to_string())); }
+            },
+            _ => { },
+        }
+        bounding_push(&walk, facts, nikaia_std::index::or(halves, || 0));
     }
     if names.len() != 1 { return; }
     let name = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());

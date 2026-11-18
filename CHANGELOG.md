@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1431] — 2026-11-18
+
+**Builders' changes (#1497, #2026, #2042, #2043, #2052)**
+- [build] unproved-checks = "error" (or --unproved-checks=error) refuses every index, overflow and division the compiler does not prove, as NK1313 with the guard that proves it as help
+- Self-hosting: one FNV-1a hash for comptime maps: `fnv` and `displace` live once, in Nikaia, in the runtime (`runtime/fixed.nika`); `Fixed::get` and the compiler's table builder both call it, the compiler through its described ledger (#2026).
+- Self-hosting: the article before a type name in command-line messages (an `i64`, a `u8`) is chosen in Nikaia (runtime/cli.nika).
+- Self-hosting: how an error's secondaries are indented under "and then:" is written in Nikaia (runtime/error.nika).
+- Bounds: a capped rule's standing marker is checked once per entry, newest first; the walk's cost probe is a committed test (#2052)
+
 ## [0.0.1430] — 2026-11-18
 
 **Builders' changes (#2011, #2048)**

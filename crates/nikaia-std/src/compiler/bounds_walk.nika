@@ -3128,6 +3128,72 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
 	}
 }
 
+/// **The halves of `let (r, o) = a.overflowing_add(b)` and of `let (low,
+/// high) = a.widening_mul(b)`** (#1555), as one fact: `o >= 1 || r == a + b`
+/// (and `-`, and `*` by a constant), so `if !o { … }` reads the exact value as
+/// a `checked_add` guard does; and `high != 0 || low > MAX || low == a * b`,
+/// the product where it fits the receiver's type. Null where the call is none
+/// of these, a side is no linear term, a product has no constant factor, or a
+/// side reads a name the `let` binds again.
+fn bounding_halves(
+	mut walk: BoundsWalk,
+	names: ref Vec[winnow_grammar::Symbol],
+	value: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) -> i64? {
+	match value {
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if args.len() != 1 {
+				return null
+			}
+			let picked = words.resolve(method)
+			let ty = context.std_receivers[node_key(value)] ?? return null
+			if !is_whole_number(ty) {
+				return null
+			}
+			let a = bounding_lin(walk, receiver, facts, context, program, words) ?? return null
+			let b = bounding_lin(walk, args[0], facts, context, program, words) ?? return null
+			let first = words.resolve(names[0]).clone()
+			let second = words.resolve(names[1]).clone()
+			for side in [a, b] {
+				if walk.arena.mentions(side, first) || walk.arena.mentions(side, second) {
+					return null
+				}
+			}
+			let product = picked == "overflowing_mul" || picked == "widening_mul"
+			if product && walk.arena.constant(a) == null && walk.arena.constant(b) == null {
+				return null
+			}
+			let exact = match picked {
+				"overflowing_add" => walk.arena.add(a, b),
+				"overflowing_sub" => walk.arena.sub(a, b),
+				"overflowing_mul" => walk.arena.mul(a, b),
+				"widening_mul" => walk.arena.mul(a, b),
+				else => return null,
+			}
+			let result = walk.arena.var(first)
+			let same = walk.arena.equal(result, exact)
+			let other = walk.arena.var(second)
+			if picked == "widening_mul" {
+				let top = (Range::of_type(ty) ?? return null).hi ?? return null
+				let zero = walk.arena.int(0)
+				let high = walk.arena.unequal(other, zero)
+				let most = walk.arena.int(top)
+				let past = walk.arena.gt(result, most)
+				return walk.arena.or([high, past, same])
+			}
+			let one = walk.arena.int(1)
+			let up = walk.arena.ge(other, one)
+			return walk.arena.or([up, same])
+		},
+		else => {},
+	}
+	return null
+}
+
 /// **`expr` as a linear term**, where it is one.
 fn bounding_lin(
 	mut walk: BoundsWalk,
@@ -7652,10 +7718,29 @@ fn bounding_let(
 		measured = bounding_measured(walk, facts, root, root, value, context, program, words)
 		field_facts = bounding_fields_found(walk, facts, root, value, field_paths, context, program, words, ask)
 	}
+	// **What `a.overflowing_add(b)` or `a.widening_mul(b)` says of its
+	// two halves** (#1555), read before the names move.
+	let mut halves: i64? = null
+	if names.len() == 2 {
+		halves = bounding_halves(walk, names, value, facts, context, program, words)
+	}
 	for symbol in names {
 		let name = words.resolve(symbol)
 		bounding_forget(walk, facts, name)
 		facts.ints.remove(name)
+	}
+	if halves != null {
+		facts.ints.insert(words.resolve(names[0]).clone())
+		// The high half of a product is a number, a flag is not.
+		match value {
+			Expr::MethodCall { method, .. } => {
+				if words.resolve(method) == "widening_mul" {
+					facts.ints.insert(words.resolve(names[1]).clone())
+				}
+			},
+			else => {},
+		}
+		bounding_push(walk, facts, halves ?? 0)
 	}
 	if names.len() != 1 {
 		return
