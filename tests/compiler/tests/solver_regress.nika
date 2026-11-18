@@ -19,7 +19,10 @@
 // 310f645c6 (the simplex's propagation scanned the trail for each atom) and
 // about 0.7 s after it, at opt-level 0; since the rod is built at opt-level
 // 3 (c41d26781, #2004), about 0.07 s. Its second run, alone under a 1 s
-// limit, shows a slowdown the 10 s limit would hide (#1967).
+// limit, shows a slowdown the 10 s limit would hide (#1967). QF_LRA
+// spider_benchmarks current_frame.base took about 8 s before 310f645c6,
+// about 0.4 s after it and about 0.06 s at opt-level 3; it runs alone
+// under 1 s beside carpark (#1968).
 use std::fs
 use std::process
 
@@ -72,6 +75,7 @@ fn main() throws {
 			"--timeout",
 			"1",
 			"tests/solver/regress/sal-carpark-Carpark2-ausgabe-6.smt2",
+			"tests/solver/regress/spider_benchmarks-current_frame.base.smt2",
 		],
 	)
 }
