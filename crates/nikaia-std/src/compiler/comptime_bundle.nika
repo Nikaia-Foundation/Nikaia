@@ -155,6 +155,47 @@ fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: 
     return ComptimeBundleArtifacts { dylib: dylib, rlibs: rlibs }
 }
 
+/// **Every crate Cargo built, in the `deps` directory** `-L dependency=` names
+/// (#2116): Cargo's newer layout keeps a crate's files in
+/// `<tree>/<triple>/debug/build/<crate>/<hash>/out`, one directory each, and a
+/// `deps` directory holds none, so rustc found no `nikaia_std` beside a bundle
+/// that depends on it. The files of such a directory are copied (a name taken
+/// by a copy beside it, then renamed, so a build beside this one never reads
+/// half a file) into `<tree>/<triple>/debug/deps`, what runs on the host (the
+/// proc macros) into `<tree>/debug/deps`: the two places the older layout
+/// wrote them. Where Cargo wrote them there already, nothing is copied.
+fn comptime_bundle_gather[H: ComptimeBundleHost](messages: String, tree: ref fs::Path, triple: String, host: ref H) throws {
+    let for_target = tree.join(triple.clone())
+    let target_deps = for_target.join("debug").join("deps")
+    let host_deps = tree.join("debug").join("deps")
+    for message in cargo_json_lines(messages) {
+        if !cargo_json_an_artifact(message) {
+            continue
+        }
+        for file in cargo_json_filenames(message) {
+            let extension = cargo_json_extension(file)
+            if !(extension == "rlib" || extension == "rmeta" || extension == "so" || extension == "dylib" || extension == "dll") {
+                continue
+            }
+            let name = file.file_name() ?? continue
+            let from = file.parent() ?? continue
+            if (from.file_name()?.text_of() ?? "") != "out" {
+                continue
+            }
+            let into = if file.starts_with(for_target) { target_deps.clone() } else { host_deps.clone() }
+            let made = into.join(name)
+            let there = fs::exists(made, fs::Root::Anywhere) catch { throw ComptimeBundleFailed::Said(f"{made.display()}: {error}") }
+            if there {
+                continue
+            }
+            fs::create_dir(into, fs::Root::Anywhere; recursive: true) catch { throw ComptimeBundleFailed::Said(f"{into.display()}: {error}") }
+            let beside = host.unique_beside(made)
+            fs::copy(file, beside, fs::Root::Anywhere) catch { throw ComptimeBundleFailed::Said(f"copying {file.display()}: {error}") }
+            fs::rename(beside, made, fs::Root::Anywhere) catch { throw ComptimeBundleFailed::Said(f"{made.display()}: {error}") }
+        }
+    }
+}
+
 fn comptime_bundle_named() -> Vec[String] {
     return COMPTIME_BUNDLE_NAMED.iter().map(fn(name) { name.clone() }).collect()
 }
@@ -416,12 +457,14 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
     if !built.ok {
         throw ComptimeBundleFailed::Said(built.stderr)
     }
+    let triple = host.build_target()
+    comptime_bundle_gather(built.stdout.clone(), target, triple.clone(), host)
     let found = comptime_bundle_artifacts(built.stdout, comptime_bundle_named(), comptime_bundle_library(flavour))
     if found.rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
         throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
     }
     let dylib = found.dylib ?? throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
-    let deps = found.rlibs[0].1.parent() ?? throw ComptimeBundleFailed::Said("no directory for std")
+    let deps = target.join(triple).join("debug").join("deps")
     let libdir = comptime_bundle_path(host.target_libdir())
     let stamp = comptime_bundle_stamp_of(dylib, found.rlibs, libdir)
     return ComptimeBundle { dylib: dylib, rlibs: found.rlibs, deps: deps, stamp: stamp, libdir: libdir }
