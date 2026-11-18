@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1439] — 2026-11-18
+
+**std::collections: HashMap.remove, HashMap.retain and BTreeMap.retain (#2111)**
+- `collections::HashMap` gains `remove` and `retain`, and `collections::BTreeMap` gains `retain`: `m.retain(fn(k, v) { return v > 1 })` keeps the pairs the function says yes to; a number key or value is handed as the number, a text as text.
+
 ## [0.0.1438] — 2026-11-18
 
 **Builders' changes**
