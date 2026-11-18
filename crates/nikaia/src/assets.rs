@@ -89,7 +89,7 @@ impl Allowlist {
 /// **One value for the whole build** (D6), carried beside the program's other
 /// files: a dependency's `asset("…")` is checked against the list of the build
 /// that is running, never against anything the dependency ships.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Reads {
     /// Every path is resolved under this, and one that leaves it is refused.
     root: PathBuf,
@@ -102,9 +102,10 @@ pub struct Reads {
     /// Here rather than threaded a second time through the same six
     /// signatures, and it belongs with the reads for the reason they belong
     /// with each other: both are facts about the **invocation** that no ledger
-    /// can carry, both are wanted by the evaluator, and both are off for a
-    /// caller that says nothing. A grammar run's bytes come through
-    /// `asset("…")`, so the two arrive together in practice as well.
+    /// can carry, and both are wanted by the evaluator. A caller that says
+    /// nothing reads nothing and builds in the shared directory (ADR-321
+    /// D19). A grammar run's bytes come through `asset("…")`, so the two
+    /// arrive together in practice as well.
     build_time_dir: crate::grammar_run::BuildTimeDir,
     /// Path (as the literal wrote it) to the SHA-256 of what was read.
     ///
@@ -114,6 +115,21 @@ pub struct Reads {
     /// D13), and the walk that produces it hands back findings rather than
     /// files.
     taken: Mutex<BTreeMap<String, String>>,
+}
+
+impl Default for Reads {
+    /// No root, no list, and **the shared build-time directory**
+    /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D19 as amended,
+    /// #2153): a check handed no directory of its own computes a `comptime`
+    /// where a command-line build of a loose file does.
+    fn default() -> Reads {
+        Reads {
+            root: PathBuf::new(),
+            list: None,
+            build_time_dir: crate::grammar_run::BuildTimeDir::at(crate::specbook::build_time_dir()),
+            taken: Mutex::default(),
+        }
+    }
 }
 
 impl Reads {
@@ -151,6 +167,16 @@ impl Reads {
     pub fn building_in(self, at: impl Into<PathBuf>) -> Reads {
         Reads {
             build_time_dir: crate::grammar_run::BuildTimeDir::at(at),
+            ..self
+        }
+    }
+
+    /// The same, with **no place** to compile build-time code in: a
+    /// `comptime` that calls a function is then refused with `NK1127`
+    /// (ADR-321 D19).
+    pub fn building_nowhere(self) -> Reads {
+        Reads {
+            build_time_dir: crate::grammar_run::BuildTimeDir::none(),
             ..self
         }
     }

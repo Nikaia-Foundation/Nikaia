@@ -273,7 +273,7 @@ fn a_build_with_nowhere_to_build_says_so() {
          \n\
          fn main() throws {{ println(f\"{{SETTINGS.len()}}\") }}"
     );
-    let found = one(&source, &Reads::none());
+    let found = one(&source, &Reads::none().building_nowhere());
     assert_eq!(found.code, "NK1178");
     assert!(
         found.message.contains("nowhere to compile its parser"),

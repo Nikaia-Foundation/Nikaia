@@ -145,7 +145,8 @@ pub fn reading(code: &str, name: &str) -> Option<String> {
 }
 
 /// **Where a build of a loose file compiles its build-time code**: the user's
-/// cache, beside the store.
+/// cache, beside the store. A check handed no directory of its own builds
+/// here too ([ADR-321](../../docs/specification/adr/adr-321.md) D19).
 pub fn build_time_dir() -> PathBuf {
     orchestrator::cache::Layout::user_cache_dir().join("build-time")
 }

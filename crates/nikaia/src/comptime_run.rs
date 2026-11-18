@@ -185,7 +185,8 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             contracts,
             &crate::contracts::Ledger::blank(),
             entry,
-            &crate::assets::Reads::none(),
+            // The run's own sub-program computes nothing itself (#2153).
+            &crate::assets::Reads::none().building_nowhere(),
             None,
         )
         .ok()?;

@@ -40,6 +40,7 @@ impl Error for CheckWall {
             CheckWall::InsideAnother { outer } => f"a grammar run inside the run of `{outer}`",
             CheckWall::NowhereToBuild => "no directory to compile the parser in",
             CheckWall::DidNotBuild { detail } => f"the parser did not build: {detail}",
+            CheckWall::Unwritable { dir } => f"the build-time directory {dir} can't be created or written",
             CheckWall::Unreadable { detail } => f"the parser's result could not be read: {detail}",
         }
     }
@@ -56,9 +57,11 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
     let key = hash::sha256_hex(bytes)
     let dir = at.join(key)
     let source = dir.join("src").join("main.rs")
-    grammar_run_write_if_changed(source, program, host.unique_beside(source))
+    // **A directory that can't be written says so** (ADR-321 D19 as
+    // amended, #2153), not that the parser did not build.
+    grammar_run_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     let manifest_path = dir.join("Cargo.toml")
-    grammar_run_write_if_changed(manifest_path, host.manifest(key, program), host.unique_beside(manifest_path))
+    grammar_run_write_if_changed(manifest_path, host.manifest(key, program), host.unique_beside(manifest_path)) catch { throw CheckWall::Unwritable { dir: at.display() } }
 
     // **One target directory for every parser on the machine**: what a
     // parser depends on - `std`, `winnow`, the grammar runtime - is the

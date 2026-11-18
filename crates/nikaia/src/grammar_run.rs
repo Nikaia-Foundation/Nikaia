@@ -62,8 +62,9 @@ pub struct Ask<'a> {
 /// Where a build compiles the parsers it runs, and the guard against nesting.
 ///
 /// **One per build**, carried with the rest of what a build may do while it
-/// builds. A build with no place to put a sub-project is one no person runs:
-/// every real build has a `target/`, and a bare `check` in a test has none.
+/// builds. A check handed none builds in the shared one, `user_cache_dir()/
+/// build-time` ([ADR-321](../../../docs/specification/adr/adr-321.md) D19);
+/// [`BuildTimeDir::none`] is for a caller that asks for no place.
 #[derive(Debug, Default)]
 pub struct BuildTimeDir {
     at: Option<PathBuf>,

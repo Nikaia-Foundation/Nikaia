@@ -624,7 +624,10 @@ pub const RUST_FLOOR: &str = "1.88";
 
 impl<'p> Emitter<'p> {
     fn new(parsed: &'p Parsed, build: Build, provenance: crate::contracts::Provenance) -> Self {
-        Self::new_reading(parsed, build, provenance, &Reads::none())
+        // A lowering handed no reads is one a run makes of its own
+        // sub-program, which computes nothing itself: a place here would run
+        // its option defaults again from inside that run (#2153).
+        Self::new_reading(parsed, build, provenance, &Reads::none().building_nowhere())
     }
 
     /// The same, told what this build may read

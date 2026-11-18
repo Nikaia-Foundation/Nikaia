@@ -495,13 +495,13 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
         detail => throw CheckWall::DidNotBuild { detail: detail },
     }
     let source = dir.join("main.rs")
-    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     // **Each build compiles and runs its own binary, in a directory of its
     // own**, moved into place after: `rustc` names its object files after the
     // crate, so two builds of the same program side by side wrote, linked and
     // deleted each other's.
     let scratch = host.unique_beside(dir.join("build"))
-    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::DidNotBuild { detail: f"{scratch.display()}: {error}" } }
+    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::Unwritable { dir: at.display() } }
     let binary = scratch.join("run")
     let mut args: Vec[String] = ["--edition=2024", "--crate-name", "comptime", "--crate-type", "bin", "-C", "opt-level=0", "-C", "overflow-checks=on", "-C", "debug-assertions=off", "-C", "prefer-dynamic", "-A", "warnings", "--extern", f"nikaia_bundle={bundle.dylib.display()}"]
     for (crate_name, rlib) in bundle.rlibs {
@@ -541,7 +541,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     comptime_bundle_tidy(binary, dir, scratch)
     if ran.success {
         let answer = ran.stdout.trim().clone()
-        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::Unwritable { dir: at.display() } }
         return answer
     }
     let mut said = ran.stderr.trim().clone()
@@ -554,7 +554,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     // code stops the same way. A run that died without a word is not, and is
     // tried again next time.
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
-        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     }
     throw CheckWall::Refused { detail: said }
 }

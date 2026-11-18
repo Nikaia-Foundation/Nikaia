@@ -725,9 +725,30 @@ fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
 
 // --- ADR-321 D19: no place to compile is a refusal, never an interpretation --
 
-/// A check made through the library with no build-time directory, as a caller that hands
-/// it none makes: nothing to compile build-time code in.
+/// A check made through the library that asks for no build-time directory:
+/// nothing to compile build-time code in.
 fn findings_without_a_build_time_dir(source: &str) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check_against(
+        &parsed,
+        &[],
+        &own,
+        &library,
+        &BTreeSet::new(),
+        &check::Newly::new(),
+        &Reads::none().building_nowhere(),
+    )
+    .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
+}
+
+/// A check made through the library that was handed no build-time directory
+/// at all: it builds in the shared one (D19 as amended, #2153).
+fn library_findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
@@ -749,7 +770,7 @@ const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\
                        }\n";
 
 /// **A `comptime` that calls a function is not interpreted** (ADR-321 D1,
-/// D19): a library check with no place to compile it refuses it with
+/// D19): a library check that asks for no place to compile it refuses it with
 /// `NK1127` and says why; it neither computes it another way nor leaves it
 /// open.
 #[test]
@@ -778,8 +799,9 @@ fn a_check_with_no_build_time_dir_refuses_a_comptime_that_calls() {
     );
 }
 
-/// **The same program with a build-time directory**, as a check through the library
-/// that is handed one and as the command line has it, computes the value.
+/// **The same program with a build-time directory**, as a check through the
+/// library that is handed one, one that is handed none (the shared one, D19
+/// as amended, #2153) and as the command line has it, computes the value.
 #[test]
 fn a_check_with_a_build_time_dir_computes_the_same_comptime() {
     assert!(findings(DIVIDED).is_empty(), "{:#?}", findings(DIVIDED));
@@ -788,6 +810,16 @@ fn a_check_with_a_build_time_dir_computes_the_same_comptime() {
         "{}",
         lowered(DIVIDED)
     );
+    assert!(
+        library_findings(DIVIDED).is_empty(),
+        "{:#?}",
+        library_findings(DIVIDED)
+    );
+    let parsed = parse_to_ast(DIVIDED).expect("the source parses");
+    let shared = nikaia::emit::emit_program_reading(&parsed, Default::default(), &Reads::none())
+        .expect("it lowers")
+        .rust;
+    assert!(shared.contains("const B: i64 = 1;"), "{shared}");
     let dir = common::scratch_dir("comptime-command-line");
     std::fs::write(dir.join("divided.nika"), DIVIDED).expect("the file is written");
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))

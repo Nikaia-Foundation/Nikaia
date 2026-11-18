@@ -358,15 +358,12 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     let source = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("main.rs")));
     match comptime_bundle_write_if_changed(&source, program, &host.unique_beside(&source)).await {
         Ok(_) => {},
-        Err(error) => {
-            let (error, __nikaia_site) = error.split();
-            return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}", error) }, &"comptime_bundle_run"));
-        },
+        Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"comptime_bundle_run")); },
     };
     let scratch = host.unique_beside(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("build"))));
     match fs::create_dir(&scratch, &fs::Root::Anywhere, true) {
         Ok(_) => {},
-        Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}: {}", nikaia_std::fs::path::display(&(scratch)), error) }, &"comptime_bundle_run")); },
+        Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"comptime_bundle_run")); },
     };
     let binary = nikaia_std::fs::path::join(&(scratch), std::path::Path::new(&("run")));
     #[allow(unused_mut)] let mut args: Vec<String> = vec![String::from("--edition=2024"), String::from("--crate-name"), String::from("comptime"), String::from("--crate-type"), String::from("bin"), String::from("-C"), String::from("opt-level=0"), String::from("-C"), String::from("overflow-checks=on"), String::from("-C"), String::from("debug-assertions=off"), String::from("-C"), String::from("prefer-dynamic"), String::from("-A"), String::from("warnings"), String::from("--extern"), format!("nikaia_bundle={}", nikaia_std::fs::path::display(&(bundle.dylib)))];
@@ -413,10 +410,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         let answer = nikaia_std::block::Text::from(ran.stdout.trim().to_string());
         match comptime_bundle_write_if_changed(&answered, &answer, &host.unique_beside(&answered)).await {
             Ok(_) => {},
-            Err(error) => {
-                let (error, __nikaia_site) = error.split();
-                return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}", error) }, &"comptime_bundle_run"));
-            },
+            Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"comptime_bundle_run")); },
         };
         return Ok(answer);
     }
@@ -425,10 +419,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
         match comptime_bundle_write_if_changed(&stopped, &said, &host.unique_beside(&stopped)).await {
             Ok(_) => {},
-            Err(error) => {
-                let (error, __nikaia_site) = error.split();
-                return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}", error) }, &"comptime_bundle_run"));
-            },
+            Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"comptime_bundle_run")); },
         };
     }
     return Err(nikaia_std::error::throwing(CheckWall::Refused { detail: said }, &"comptime_bundle_run"))
