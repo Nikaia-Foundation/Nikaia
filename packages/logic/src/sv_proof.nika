@@ -243,7 +243,37 @@ pub struct SvClause {
 }
 
 /// The literals in `a` and `b`, once each, ascending.
+/// Both strictly ascending, as every union this gives is, are merged in one
+/// pass: a `contains` per literal made each `SvBook.sum` quadratic in the
+/// assumptions, 83 % of SMPT SharedMemory-PT-000020-RC-00 (#2012).
 fn sv_lits_union(a: ref Vec[u32], b: ref Vec[u32]) -> Vec[u32] {
+	if sv_lits_ascending(a) && sv_lits_ascending(b) {
+		let mut merged: Vec[u32] = []
+		let mut i = 0
+		let mut j = 0
+		while i < a.len() && j < b.len() {
+			if a[i] < b[j] {
+				merged.push(a[i])
+				i += 1
+			} else if b[j] < a[i] {
+				merged.push(b[j])
+				j += 1
+			} else {
+				merged.push(a[i])
+				i += 1
+				j += 1
+			}
+		}
+		while i < a.len() {
+			merged.push(a[i])
+			i += 1
+		}
+		while j < b.len() {
+			merged.push(b[j])
+			j += 1
+		}
+		return merged
+	}
 	let mut out = a.clone()
 	for l in b {
 		if !out.contains(l) {
@@ -252,6 +282,18 @@ fn sv_lits_union(a: ref Vec[u32], b: ref Vec[u32]) -> Vec[u32] {
 	}
 	out.sort()
 	return out
+}
+
+/// Whether `ls` is strictly ascending.
+fn sv_lits_ascending(ls: ref Vec[u32]) -> bool {
+	let mut i = 1
+	while i < ls.len() {
+		if ls[i - 1] >= ls[i] {
+			return false
+		}
+		i += 1
+	}
+	return true
 }
 
 impl SvBook {
