@@ -387,6 +387,13 @@ pub enum Stmt {
     /// one ends a loop and one does not.
     Continue,
 
+    /// **`emit item`, in the action of a rule reached from a `@stream`
+    /// entry** ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md)
+    /// D7, amended 2026-11-18, #2061): hands one item of the entry to the
+    /// caller's walk. Anywhere else it is refused (`NK1371`), and so is one the
+    /// parse could still undo (`NK1370`).
+    Emit(Expr),
+
     // Ein "nackter" Ausdruck (z.B. Funktionsaufruf oder Return-Value)
     Expr(Expr),
 }

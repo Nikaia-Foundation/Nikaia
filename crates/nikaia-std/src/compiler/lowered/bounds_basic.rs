@@ -68,6 +68,7 @@ pub(crate) fn counted_statement(stmt: &Stmt, over: &mut Vec<CountedLoop>, words:
         },
         Stmt::Return(value) => { counted_maybe((value).as_ref(), &over, words, out); },
         Stmt::Expr(value) => { counted_expr(value, &over, words, out); },
+        Stmt::Emit(value) => { counted_expr(value, &over, words, out); },
         Stmt::Break => { },
         Stmt::Continue => { },
     }

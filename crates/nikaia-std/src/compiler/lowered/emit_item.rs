@@ -638,13 +638,12 @@ impl EmitState {
 pub(crate) fn emit_item_package_traits(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, package: &str) -> Vec<String> {
     let prefix = format!("{}::", package);
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (key, _) in own.traits.iter() {
-        let name = nikaia_std::index::or(key.strip_prefix(&*prefix), || "");
-        if !name.contains("::") && !name.is_empty() { names.insert(format!("{} as _", name)); }
-    }
-    for (key, _) in world.library.traits.iter() {
-        let name = nikaia_std::index::or(key.strip_prefix(&*prefix), || "");
-        if !name.contains("::") && !name.is_empty() { names.insert(format!("{} as _", name)); }
+    for ledger in [own, world.library] {
+        for (key, methods) in ledger.traits.iter() {
+            let name = nikaia_std::index::or(key.strip_prefix(&*prefix), || "");
+            let public = methods.iter().any(|m| { nikaia_std::index::or(ledger.functions.get(&format!("{}::{}", key, m)).map(|__nikaia_it| __nikaia_it.public), || false) });
+            if !name.contains("::") && !name.is_empty() && public { names.insert(format!("{} as _", name)); }
+        }
     }
     names.iter().cloned().collect::<Vec<_>>()
 }

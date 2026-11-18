@@ -27,6 +27,7 @@
 // D3).
 
 use std::collections
+use logic
 
 /// **What the walks proved** over one file: index nodes, arithmetic
 /// operators (by the byte their operator starts at), the values asked
@@ -62,9 +63,9 @@ pub fn bounds_proven(
 	nonnegative: ref collections::BTreeSet[i64],
 	through_loops: bool,
 	trace: ref Vec[i64],
-	read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
-	ask_in: fn(ref String, i64, ref TermArena, ref Vec[i64], i64) -> bool sync,
+	read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+	ask_in: fn(ref String, i64, ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 	record: fn(ref collections::BTreeMap[i64, String]) sync,
 	counted: fn(ref Block, ref Vec[winnow_grammar::Symbol]) sync,
 	folded: fn() -> collections::BTreeSet[i64] sync,
@@ -239,7 +240,7 @@ fn bp_rule_ranges(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> collections::BTreeMap[String, Range] {
 	let mut out: collections::BTreeMap[String, Range] = collections::BTreeMap()
 	for _round in 0..<def.rules.len() {

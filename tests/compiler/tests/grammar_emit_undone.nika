@@ -1,0 +1,35 @@
+// An `emit` is allowed only where the parse cannot go back past it
+// (ADR-grammar-2 D7, amended 2026-11-18, #2061): the compiler does not hold
+// items back. Each `emit` in rule `line` below is NK1370, for the choice its
+// grammar is named after; `Committed` cuts before what may fail, and passes.
+
+struct Item {
+	word: String,
+}
+
+grammar InAChoice {
+	@stream entry rule items -> Item = (line "!" | other)*
+	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
+	rule other = "-" -> { emit Item { word: "-" } }
+}
+
+grammar InARepetition {
+	@stream entry rule items -> Item = pair*
+	rule pair = line "!" -> { }
+	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
+}
+
+grammar InAnAlternative {
+	@stream entry rule items -> Item = pair*
+	rule pair = line "!" => -> { } | line "?" -> { }
+	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
+}
+
+grammar Committed {
+	@stream entry rule items -> Item = pair*
+	rule pair = line => "!" -> { }
+	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
+}
+
+fn main() {
+}

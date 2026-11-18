@@ -121,6 +121,7 @@ pub(crate) fn nn_kind(stmt: &Stmt) -> &'static str {
         Stmt::Break => "break",
         Stmt::Continue => "continue",
         Stmt::Expr(_) => "expr",
+        Stmt::Emit(_) => "emit",
     }
 }
 

@@ -21,6 +21,7 @@
 // `checked` `u64` and a bound past `u64` fits no type, as it did not before.
 
 use std::collections
+use logic
 
 /// A width never counts past this: every length is below 2^60, so a width of
 /// 2^62 and one of 2^63 both give no step.
@@ -85,7 +86,7 @@ pub trait FbHost {
     /// The expressions of the holes of a literal.
     fn literal_holes(ref self, literal: ref Expr) -> Vec[Expr] sync
     /// The goal under the facts, proved or not.
-    fn ask(ref self, arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> bool sync
+    fn ask(ref self, arena: ref logic::TermArena, facts: ref Vec[i64], goal: i64) -> bool sync
 }
 
 /// A parsed unit: the program, and the words its names are interned in.
@@ -269,7 +270,7 @@ pub fn fb_most_steps(width: u64) -> u64 {
 // ---------------------------------------------------------------------------
 
 /// `k * steps + k0 * pieces`, the most a counter reaches.
-fn fb_bound_term(mut a: TermArena, k: i64, k0: i64, steps: i64, pieces: i64) -> i64 {
+fn fb_bound_term(mut a: logic::TermArena, k: i64, k0: i64, steps: i64, pieces: i64) -> i64 {
     let k = a.int(k)
     let k0 = a.int(k0)
     let grown = a.mul(k, steps)
@@ -278,7 +279,7 @@ fn fb_bound_term(mut a: TermArena, k: i64, k0: i64, steps: i64, pieces: i64) -> 
 }
 
 /// `-bound <= x <= bound`.
-fn fb_invariant_term(mut a: TermArena, k: i64, k0: i64, x: i64, steps: i64, pieces: i64) -> i64 {
+fn fb_invariant_term(mut a: logic::TermArena, k: i64, k0: i64, x: i64, steps: i64, pieces: i64) -> i64 {
     let bound = fb_bound_term(a, k, k0, steps, pieces)
     let below = a.neg(bound)
     let low = a.le(below, x)
@@ -297,7 +298,7 @@ fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -
     }
     let k = k as i64
     let k0 = k0 as i64
-    let mut a = TermArena::empty()
+    let mut a = logic::TermArena::empty()
     let f = a.var("f")
     let low = a.int(0 - k0)
     let high = a.int(k0)
@@ -308,7 +309,7 @@ fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -
     if !host.ask(a, facts, goal) {
         return false
     }
-    let mut a = TermArena::empty()
+    let mut a = logic::TermArena::empty()
     let f = a.var("f")
     let d = a.var("d")
     let s = a.var("steps")
@@ -330,7 +331,7 @@ fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -
     }
     // The merge leaves the sum of both fields, or one of them.
     for kept in [-1, 0, 1] {
-        let mut a = TermArena::empty()
+        let mut a = logic::TermArena::empty()
         let fa = a.var("f_a")
         let sa = a.var("steps_a")
         let pa = a.var("pieces_a")

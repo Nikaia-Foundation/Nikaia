@@ -319,6 +319,7 @@ fn panics_stmt(stmt: ref Stmt, span: ref Span, items: ref Vec[Spanned[Item]], na
         Stmt::Break => {}
         Stmt::Continue => {}
         Stmt::Expr(inner) => panics_expr(inner, items, names, holes_of, facts, own, library, reach),
+        Stmt::Emit(inner) => panics_expr(inner, items, names, holes_of, facts, own, library, reach),
     }
 }
 

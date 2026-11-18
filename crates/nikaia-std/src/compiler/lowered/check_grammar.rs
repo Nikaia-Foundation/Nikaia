@@ -64,13 +64,17 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
-pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
+pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>, emitted: bool) -> Option<CheckFinding> {
     let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
     let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown);
     if wanted.is_unknown() { return Some(grammar_stream_refusal(&entry, &rule.span, "it names no item type", format!("Write the type of one item after the arrow: `@stream entry rule {} -> Item = item*`.", entry))); }
+    if emitted {
+        for alt in rule.alts.iter() { if alt.action.is_some() { return Some(grammar_stream_refusal(&entry, &rule.span, "it has an action", String::from("Leave the action out: the items are handed over by `emit` in the rules below it, so the entry builds nothing."))); } }
+        return None;
+    }
     if rule.alts.len() != 1 { return Some(grammar_stream_refusal(&entry, &rule.span, &format!("it has {} alternatives", rule.alts.len() as i64), String::from("Put the choice into the item's rule, and leave the entry one repetition: `item*`."))); }
     if unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.action.is_some() { return Some(grammar_stream_refusal(&entry, &rule.span, "it has an action", String::from("Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read."))); }
     let found = grammar_stream_paths(world, &unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.pattern.node, &wanted, results, rules);
@@ -496,5 +500,327 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1171", span, format!("Grammar `{}` has no rule called `{}`.", grammar_name, called), vec![String::from("A name called with values is a rule of the grammar; the built-ins that take patterns are Part II 10.8's.")], Some(String::from("Declare the rule, or call one the grammar has."))));
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_called_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>, out: &mut collections::BTreeSet<String>) {
+    match pattern {
+        Pattern::Seq(parts) => { for part in parts.iter() { grammar_called_rules(world, &part.node, rules, out); } },
+        Pattern::Choice(parts) => { for part in parts.iter() { grammar_called_rules(world, &part.node, rules, out); } },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_called_rules(world, &pat.node, rules, out); },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_called_rules(world, &pat.node, rules, out); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_called_rules(world, &pat.node, rules, out); },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); grammar_called_rules(world, &inner.node, rules, out); },
+        Pattern::Ref { name, args, .. } => {
+            let name = *name;
+            let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
+            if rules.contains(&called) { out.insert(called); }
+            for arg in args.iter() { grammar_called_rules(world, &arg.node, rules, out); }
+        },
+        Pattern::Call { name, .. } => {
+            let name = *name;
+            let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
+            if rules.contains(&called) { out.insert(called); }
+        },
+        Pattern::Fold(spec) => {
+            let called = nikaia_std::block::Text::from(world.words.resolve(spec.rule).to_string());
+            if rules.contains(&called) { out.insert(called); }
+        },
+        Pattern::Choose { arms, .. } => { for arm in arms.iter() { for alt in arm.alts.iter() { grammar_called_rules(world, &alt.pattern.node, rules, out); } } },
+        Pattern::Members { key, sep, .. } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
+            grammar_called_rules(world, &key.node, rules, out);
+            grammar_called_rules(world, &sep.node, rules, out);
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_streamed_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Ty> {
+    let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    for rule in gram.rules.iter() {
+        if rule.stream && rule.is_entry {
+            let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
+            let item: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Ty::Unknown);
+            for reached in grammar_reached_from(world, gram, &entry, rules) { if !out.contains_key(&reached) { out.insert(nikaia_std::block::Text::from(reached.to_string()), item.clone()); } }
+        }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_reached_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, start: &str, rules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(start.to_string())], nikaia_std::block::Place::Block);
+    while !todo.is_empty() {
+        let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if seen.contains(&next) { continue; }
+        seen.insert(nikaia_std::block::Text::from(next.to_string()));
+        for rule in gram.rules.iter() {
+            if world.words.resolve(rule.name) == next {
+                let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
+                for alt in rule.alts.iter() { grammar_called_rules(world, &alt.pattern.node, rules, &mut called); }
+                for one in called.iter() { if !seen.contains(one) { todo.push(nikaia_std::block::Text::from(one.to_string())); } }
+            }
+        }
+    }
+    seen
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_emits_in(block: &Block, out: &mut Vec<Span>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Emit(_) => { out.push(stmt.span.clone()); },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { grammar_emits_in(inner, out); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_rule_emits(rule: &GrammarRule) -> bool {
+    for alt in rule.alts.iter() {
+        let action = match match alt.action.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut found: Vec<Span> = vec![];
+        grammar_emits_in(&action, &mut found);
+        if !found.is_empty() { return true; }
+    }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_entry_emits(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, entry: &str, rules: &collections::BTreeSet<String>) -> bool {
+    let reached = grammar_reached_from(world, gram, entry, rules);
+    for rule in gram.rules.iter() { if reached.contains(world.words.resolve(rule.name)) && grammar_rule_emits(rule) { return true; } }
+    false
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum GrammarUndo {
+    Absent,
+    Undone(String),
+    Passed(bool),
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_can_fail(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Repeat { rep, .. } => *rep != Repeat::Star && *rep != Repeat::Optional,
+        Pattern::Cut => false,
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); grammar_can_fail(&inner.node) },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_can_fail(&pat.node) },
+        Pattern::Seq(parts) => parts.iter().any(|part| { grammar_can_fail(&part.node) }),
+        Pattern::Choice(parts) => parts.iter().all(|part| { grammar_can_fail(&part.node) }),
+        _ => true,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_undo_said(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &str, what: &str) -> String { format!("{} in rule `{}`", what, rule) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_undo_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, target: &str, failing: bool, rule: &str) -> GrammarUndo {
+    match pattern {
+        Pattern::Seq(parts) => {
+            let mut found = false;
+            let mut out = false;
+            let mut cut = false;
+            for i in 0..parts.len() as i64 {
+                match &unsafe { nikaia_std::proven::read(&parts, (i) as usize) }.node {
+                    Pattern::Cut => { cut = true; },
+                    _ => { },
+                }
+                match grammar_undo_in(world, &unsafe { nikaia_std::proven::read(&parts, (i) as usize) }.node, target, failing, rule) {
+                    GrammarUndo::Absent => { },
+                    GrammarUndo::Undone(said) => { return GrammarUndo::Undone(said); },
+                    GrammarUndo::Passed(inner) => {
+                        found = true;
+                        if !cut {
+                            let mut after = inner;
+                            let mut j = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+                            while j < parts.len() as i64 {
+                                match &unsafe { nikaia_std::proven::read(&parts, (j) as usize) }.node {
+                                    Pattern::Cut => { break; },
+                                    _ => { },
+                                }
+                                if grammar_can_fail(&unsafe { nikaia_std::proven::read(&parts, (j) as usize) }.node) { after = true; }
+                                j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+                            }
+                            out = out || after;
+                        }
+                    },
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent };
+        },
+        Pattern::Choice(options) => {
+            let mut found = false;
+            let mut out = false;
+            for k in 0..options.len() as i64 {
+                match grammar_undo_in(world, &unsafe { nikaia_std::proven::read(&options, (k) as usize) }.node, target, failing, rule) {
+                    GrammarUndo::Absent => { },
+                    GrammarUndo::Undone(said) => { return GrammarUndo::Undone(said); },
+                    GrammarUndo::Passed(inner) => {
+                        if inner && ((unsafe { nikaia_std::proven::add::<i64>(k, 1) }) as usize) < options.len() { return GrammarUndo::Undone(grammar_undo_said(world, rule, &format!("option {} of a choice", unsafe { nikaia_std::proven::add::<i64>(k, 2) }))); }
+                        found = true;
+                        out = out || inner;
+                    },
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent };
+        },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_undo_in(world, &inner.node, target, failing, rule) },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return grammar_undo_in(world, &pat.node, target, failing, rule) },
+        Pattern::Repeat { pat, rep } => {
+            let pat = nikaia_std::boxed::open(pat);
+            let inner = grammar_undo_in(world, &pat.node, target, failing, rule);
+            return match inner {
+                GrammarUndo::Passed(out) => match rep {
+                    Repeat::Exactly(_) => GrammarUndo::Passed(out),
+                    _ => if out { GrammarUndo::Undone(grammar_undo_said(world, rule, "the end of a repetition")) } else { GrammarUndo::Passed(false) },
+                },
+                _ => inner,
+            };
+        },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return grammar_undo_repeated(world, grammar_undo_in(world, &pat.node, target, failing, rule), rule) },
+        Pattern::Members { key, sep, .. } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
+            let keyed = grammar_undo_repeated(world, grammar_undo_in(world, &key.node, target, failing, rule), rule);
+            return match keyed {
+                GrammarUndo::Absent => grammar_undo_repeated(world, grammar_undo_in(world, &sep.node, target, failing, rule), rule),
+                _ => keyed,
+            };
+        },
+        Pattern::Fold(spec) => {
+            if world.words.resolve(spec.rule) != target { return GrammarUndo::Absent; }
+            return grammar_undo_repeated(world, GrammarUndo::Passed(failing), rule);
+        },
+        Pattern::Call { name, .. } => { let name = *name; return if world.words.resolve(name) == target { GrammarUndo::Passed(failing) } else { GrammarUndo::Absent } },
+        Pattern::Ref { name, args, .. } => {
+            let name = *name;
+            let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
+            if called == target { return GrammarUndo::Passed(failing); }
+            let mut found = false;
+            let mut out = false;
+            for arg in args.iter() {
+                match grammar_undo_in(world, &arg.node, target, failing, rule) {
+                    GrammarUndo::Absent => { },
+                    GrammarUndo::Undone(said) => { return GrammarUndo::Undone(said); },
+                    GrammarUndo::Passed(inner) => {
+                        found = true;
+                        out = out || inner;
+                    },
+                }
+            }
+            if !found { return GrammarUndo::Absent; }
+            if called == "peek" || called == "not" { return GrammarUndo::Undone(grammar_undo_said(world, rule, &format!("the lookahead `{}(..)`", called))); }
+            if called == "list" { return grammar_undo_repeated(world, GrammarUndo::Passed(out), rule); }
+            return GrammarUndo::Passed(out);
+        },
+        Pattern::Choose { arms, .. } => {
+            let mut found = false;
+            let mut out = false;
+            for arm in arms.iter() {
+                for k in 0..arm.alts.len() as i64 {
+                    match grammar_undo_in(world, &unsafe { nikaia_std::proven::read(&arm.alts, (k) as usize) }.pattern.node, target, failing, rule) {
+                        GrammarUndo::Absent => { },
+                        GrammarUndo::Undone(said) => { return GrammarUndo::Undone(said); },
+                        GrammarUndo::Passed(inner) => {
+                            if inner && ((unsafe { nikaia_std::proven::add::<i64>(k, 1) }) as usize) < arm.alts.len() { return GrammarUndo::Undone(grammar_undo_said(world, rule, &format!("alternative {} of a `choose` arm", unsafe { nikaia_std::proven::add::<i64>(k, 2) }))); }
+                            found = true;
+                            out = out || inner;
+                        },
+                    }
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent };
+        },
+        _ => return GrammarUndo::Absent,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_undo_repeated(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: GrammarUndo, rule: &str) -> GrammarUndo {
+    match inner {
+        GrammarUndo::Passed(out) => if out { GrammarUndo::Undone(grammar_undo_said(world, rule, "the end of a repetition")) } else { GrammarUndo::Passed(false) },
+        _ => inner,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_undone_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, target: &str, failing: bool, streamed: &collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    let key = format!("{}/{}", target, failing);
+    if seen.contains(&key) { return None; }
+    seen.insert(key);
+    for rule in gram.rules.iter() {
+        let name = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
+        if !streamed.contains_key(&name) { continue; }
+        let mut found = false;
+        let mut out = false;
+        for j in 0..rule.alts.len() as i64 {
+            match grammar_undo_in(world, &unsafe { nikaia_std::proven::read(&rule.alts, (j) as usize) }.pattern.node, target, failing, &name) {
+                GrammarUndo::Absent => { },
+                GrammarUndo::Undone(said) => { return Some(said); },
+                GrammarUndo::Passed(inner) => {
+                    if inner && ((unsafe { nikaia_std::proven::add::<i64>(j, 1) }) as usize) < rule.alts.len() { return Some(grammar_undo_said(world, &name, &format!("alternative {}", unsafe { nikaia_std::proven::add::<i64>(j, 2) }))); }
+                    found = true;
+                    out = out || inner;
+                },
+            }
+        }
+        if found && !(rule.stream && rule.is_entry) {
+            match grammar_undone_from(world, gram, &name, out, streamed, seen) {
+                Some(said) => { return Some(said); },
+                None => { },
+            }
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_emits_undone(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, streamed: &collections::BTreeMap<String, Ty>) -> Vec<CheckFinding> {
+    let mut out: Vec<CheckFinding> = vec![];
+    for rule in gram.rules.iter() {
+        let name = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
+        if !streamed.contains_key(&name) { continue; }
+        let mut emits: Vec<Span> = vec![];
+        for alt in rule.alts.iter() {
+            let action = match match alt.action.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            grammar_emits_in(&action, &mut emits);
+        }
+        if emits.is_empty() { continue; }
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let undone = match grammar_undone_from(world, gram, &name, false, streamed, &mut seen) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for at in emits.iter() {
+            let at = *at;
+            let notes: Vec<String> = vec![format!("The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `{}` fails, the parse goes back and tries {}, and the item is already handed over. The compiler does not hold items back to hide that.", name, undone)];
+            out.push(check_refusal("NK1370", &at, format!("This `emit` in rule `{}` could be undone: {} can still be tried after it runs.", name, undone), notes, Some(String::from("Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`."))));
+        }
+    }
+    out
 }
 

@@ -16,6 +16,7 @@
 // nothing is copied.
 
 use std::collections
+use logic
 
 /// **A closed interval of whole numbers**, either end open where nothing is
 /// known.
@@ -157,7 +158,7 @@ impl Range {
 /// **A candidate interval for `term` over `facts`**: the term as a linear
 /// form, the bounds a few rounds of propagation give its variables, and the
 /// interval the form takes over them. Open where the term is not linear.
-pub fn candidate(term: i64, facts: ref Vec[i64], term_of: fn(i64) -> SolverTerm sync) -> Range {
+pub fn candidate(term: i64, facts: ref Vec[i64], term_of: fn(i64) -> logic::SolverTerm sync) -> Range {
     let form = linear_form(term, term_of) ?? return Range::open()
     let known = propagate(facts, term_of)
     return evaluate(form, known)
@@ -165,29 +166,29 @@ pub fn candidate(term: i64, facts: ref Vec[i64], term_of: fn(i64) -> SolverTerm 
 
 /// `term` as a sum of variables times constants plus a constant, where it is
 /// one and fits.
-fn linear_form(term: i64, term_of: fn(i64) -> SolverTerm sync) -> Form? {
+fn linear_form(term: i64, term_of: fn(i64) -> logic::SolverTerm sync) -> Form? {
     return match term_of(term) {
-        SolverTerm::Int(n) => Form { vars: collections::BTreeMap(), k: n },
-        SolverTerm::Var(name) => {
+        logic::SolverTerm::Int(n) => Form { vars: collections::BTreeMap(), k: n },
+        logic::SolverTerm::Var(name) => {
             let mut vars: collections::BTreeMap[String, i64] = collections::BTreeMap()
             vars.insert(name.clone(), 1)
             Form { vars: vars, k: 0 }
         },
-        SolverTerm::Add(a, b) => {
+        logic::SolverTerm::Add(a, b) => {
             let left = linear_form(a, term_of) ?? return null
             let right = linear_form(b, term_of) ?? return null
             sum(left, right, 1)
         },
-        SolverTerm::Sub(a, b) => {
+        logic::SolverTerm::Sub(a, b) => {
             let left = linear_form(a, term_of) ?? return null
             let right = linear_form(b, term_of) ?? return null
             sum(left, right, -1)
         },
-        SolverTerm::Neg(a) => {
+        logic::SolverTerm::Neg(a) => {
             let inner = linear_form(a, term_of) ?? return null
             scaled(inner, -1)
         },
-        SolverTerm::Mul(a, b) => {
+        logic::SolverTerm::Mul(a, b) => {
             let left = linear_form(a, term_of) ?? return null
             let right = linear_form(b, term_of) ?? return null
             if left.vars.is_empty() {
@@ -234,35 +235,35 @@ fn shifted(form: ref Form, n: i64) -> Form? {
 }
 
 /// The comparisons a fact asserts, each as `form <= 0`.
-fn atoms(fact: i64, term_of: fn(i64) -> SolverTerm sync, mut out: Vec[Form]) {
+fn atoms(fact: i64, term_of: fn(i64) -> logic::SolverTerm sync, mut out: Vec[Form]) {
     match term_of(fact) {
-        SolverTerm::And(parts) => {
+        logic::SolverTerm::And(parts) => {
             for part in parts {
                 atoms(part, term_of, out)
             }
         },
-        SolverTerm::Le(a, b) => {
+        logic::SolverTerm::Le(a, b) => {
             let d = difference(a, b, term_of) ?? return
             out.push(d)
         },
         // Over whole numbers `a < b` is `a - b + 1 <= 0`.
-        SolverTerm::Lt(a, b) => {
+        logic::SolverTerm::Lt(a, b) => {
             let d = difference(a, b, term_of) ?? return
             let strict = shifted(d, 1) ?? return
             out.push(strict)
         },
-        SolverTerm::Ge(a, b) => {
+        logic::SolverTerm::Ge(a, b) => {
             let d = difference(a, b, term_of) ?? return
             let turned = scaled(d, -1) ?? return
             out.push(turned)
         },
-        SolverTerm::Gt(a, b) => {
+        logic::SolverTerm::Gt(a, b) => {
             let d = difference(a, b, term_of) ?? return
             let turned = scaled(d, -1) ?? return
             let strict = shifted(turned, 1) ?? return
             out.push(strict)
         },
-        SolverTerm::Eq(a, b) => {
+        logic::SolverTerm::Eq(a, b) => {
             let d = difference(a, b, term_of) ?? return
             let turned = scaled(d, -1) ?? return
             out.push(turned)
@@ -273,7 +274,7 @@ fn atoms(fact: i64, term_of: fn(i64) -> SolverTerm sync, mut out: Vec[Form]) {
 }
 
 /// `a - b` as a linear form.
-fn difference(a: i64, b: i64, term_of: fn(i64) -> SolverTerm sync) -> Form? {
+fn difference(a: i64, b: i64, term_of: fn(i64) -> logic::SolverTerm sync) -> Form? {
     let left = linear_form(a, term_of) ?? return null
     let right = linear_form(b, term_of) ?? return null
     return sum(left, right, -1)
@@ -282,7 +283,7 @@ fn difference(a: i64, b: i64, term_of: fn(i64) -> SolverTerm sync) -> Form? {
 /// **Bounds on each variable the facts imply**, by a few rounds of
 /// `c·x <= -k - (the least the other terms can be)`. Sound and not complete;
 /// the solver confirms each bound that is used.
-fn propagate(facts: ref Vec[i64], term_of: fn(i64) -> SolverTerm sync) -> collections::BTreeMap[String, Range] {
+fn propagate(facts: ref Vec[i64], term_of: fn(i64) -> logic::SolverTerm sync) -> collections::BTreeMap[String, Range] {
     let mut all: Vec[Form] = []
     for fact in facts {
         atoms(fact, term_of, all)

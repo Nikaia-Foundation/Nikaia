@@ -4270,6 +4270,7 @@ fn drive_queue_prune(dir: String) throws {
 			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report), false) {
 				if m != n && drive_issue_open(m.clone()) { held.push(m) }
 			}
+			held = drive_not_fixed_on_develop(held)
 			let line = drive_waits_line(n.clone(), held.clone(), held.clone())
 			if line != "" {
 				drive_report_aside(dir.clone(), f"{name}.md", held)
@@ -4290,6 +4291,7 @@ fn drive_queue_prune(dir: String) throws {
 				if drive_issue_open(m.clone()) { open.push(m) }
 			}
 		}
+		open = drive_not_fixed_on_develop(open)
 		let line = drive_waits_line(n.clone(), open.clone(), open)
 		if line != "" {
 			blocked.push(tag)
@@ -4317,6 +4319,18 @@ fn drive_queue_prune(dir: String) throws {
 	for i in 0..<waiting.len() {
 		if fixed.contains(waiting[i].clone()) { println(f"DROPPED {waiting_tags[i]} fixed on develop") }
 	}
+}
+
+// NUMBERS without those a commit on `develop` finishes (drive_fixed_on_develop):
+// such an issue stays open until `promote`, but what waits for it can run now
+// (#2020 was dropped waiting for #2031 after 17fb5b58 said `Fixes #2031`).
+fn drive_not_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
+	let fixed = drive_fixed_on_develop(numbers.clone())
+	let mut out: Vec[String] = []
+	for m in numbers {
+		if !fixed.contains(m.clone()) { out.push(m.clone()) }
+	}
+	return out
 }
 
 // The numbers among NUMBERS that a commit message in LOG (the bodies of
@@ -4738,6 +4752,7 @@ fn drive_queue(dir: String, area: String) throws {
 			if !waits.contains(m.clone()) && drive_issue_open(m.clone()) { waits.push(m) }
 		}
 	}
+	waits = drive_not_fixed_on_develop(waits)
 	let fixed = drive_fixed_on_develop(open)
 	let mut numbers: Vec[String] = []
 	let bodies: Vec[(String, String)] = drive_queue_records(list.clone())

@@ -16,6 +16,7 @@
 
 use std::collections
 use std::text
+use logic
 
 /// **A loop the walk passed, as the logic layer states it** (ADR-361 D1),
 /// kept in the scope after it until one of its names is bound again.
@@ -23,7 +24,7 @@ pub struct LoopRecord {
     /// Where the loop starts, which names its values before it and at the
     /// head of the last turn.
     pub start: i64,
-    pub problem: LgLoop,
+    pub problem: logic::LgLoop,
     /// **What one turn adds to each state name**, path by path, where every
     /// path adds a constant: the closed forms' and the intervals' input.
     pub steps: collections::BTreeMap[String, Vec[i64]],
@@ -97,7 +98,7 @@ fn loop_after_name(name: ref String, start: i64) -> String {
 /// whole numbers its turn changes, `facts` what holds before it, `ints` the
 /// whole numbers the prover reads there. Nothing where a turn holds what this
 /// does not follow - a way out it does not know, more paths than it counts.
-fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+fn loop_record(mut arena: logic::TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
     let condition = claim_term(cond, words, fn(name) { ints.contains(name) }, pinned, arena.nodes)
     return loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
 }
@@ -107,7 +108,7 @@ fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: 
 /// at the end of each turn, a `continue`'s too; the loop ends once it passes
 /// `high` (`inclusive`) or reaches it. `low` and `high` are terms over the
 /// names before the loop; `high` reads none the turn changes.
-fn loop_record_range(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, counter: ref String, low: i64, high: i64, inclusive: bool, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+fn loop_record_range(mut arena: logic::TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, counter: ref String, low: i64, high: i64, inclusive: bool, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
     let here = arena.var(counter)
     let mut condition = arena.lt(here, high)
     if inclusive {
@@ -118,7 +119,7 @@ fn loop_record_range(mut arena: TermArena, start: i64, state: ref Vec[String], f
 
 /// The loop problem of a `while` (`counter` empty) or of a `for` over a
 /// range: `condition` the term that keeps it turning, if the prover reads it.
-fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, condition: i64?, counter: ref String, low: i64, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+fn loop_record_of(mut arena: logic::TermArena, start: i64, outer: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, condition: i64?, counter: ref String, low: i64, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
     let mut state = outer.clone()
     if counter != "" {
         state.push(counter.clone())
@@ -168,10 +169,10 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
         ends = stepped
     }
     let mut turns: Vec[i64] = []
-    let mut exits: Vec[LgExit] = []
+    let mut exits: Vec[logic::LgExit] = []
     let mut same: Vec[i64] = []
     for name in state {
-        let primed = arena.var(lg_primed(name))
+        let primed = arena.var(logic::lg_primed(name))
         let here = arena.var(name)
         same.push(arena.equal(primed, here))
     }
@@ -180,7 +181,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
         let not_c = arena.not(c)
         same.insert(0, not_c)
     }
-    exits.push(LgExit { kind: "condition", relation: arena.and(same) })
+    exits.push(logic::LgExit { kind: "condition", relation: arena.and(same) })
     let mut steps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     let mut unsteady: collections::BTreeSet[String] = collections::BTreeSet()
     let mut kept_turns: Vec[LoopTurn] = []
@@ -194,7 +195,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
             kept_turns.push(LoopTurn { constraints: end.path.constraints.clone(), values: values })
         }
         for name in state {
-            let primed = arena.var(lg_primed(name))
+            let primed = arena.var(logic::lg_primed(name))
             let value = end.path.values[name] ?? arena.var(name)
             parts.push(arena.equal(primed, value))
             if end.kind == "turn" {
@@ -214,7 +215,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
             if c >= 0 {
                 parts.insert(0, c)
             }
-            exits.push(LgExit { kind: end.kind.clone(), relation: arena.and(parts) })
+            exits.push(logic::LgExit { kind: end.kind.clone(), relation: arena.and(parts) })
         }
     }
     for name in unsteady {
@@ -248,14 +249,14 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
             }
         }
     }
-    let problem = LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
+    let problem = logic::LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
     return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone(), turns: kept_turns, asserts: asserts }
 }
 
 /// What a turn adds to `name` where `value` is it plus a constant: the same
 /// difference under two choices of every name it reads. A guess only - what
 /// it proposes is proved or dropped (D4).
-fn loop_constant_step(mut arena: TermArena, name: ref String, value: i64) -> i64? {
+fn loop_constant_step(mut arena: logic::TermArena, name: ref String, value: i64) -> i64? {
     let here = arena.var(name)
     let difference = arena.sub(value, here)
     let mut read: collections::BTreeSet[String] = collections::BTreeSet()
@@ -278,7 +279,7 @@ fn loop_constant_step(mut arena: TermArena, name: ref String, value: i64) -> i64
 
 /// A term of the body, read on `path`: each name the path has a value for
 /// replaced by it.
-fn loop_read(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claim: bool) -> i64? {
+fn loop_read(mut arena: logic::TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claim: bool) -> i64? {
     let mut term: i64? = null
     if claim {
         term = claim_term(expr, words, fn(name) { path.values.contains_key(name) || (ints.contains(name) && !path.unread.contains(name)) }, pinned, arena.nodes)
@@ -291,7 +292,7 @@ fn loop_read(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref
 
 /// **A value a `let` or an assignment of the body gives**, read on `path`: a
 /// `bool` literal is the number 1 or 0 (ADR-361 D13).
-fn loop_value(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext) -> i64? {
+fn loop_value(mut arena: logic::TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext) -> i64? {
     return match expr {
         Expr::LitBool(b, _) => arena.int(if b { 1 } else { 0 }),
         else => loop_read(arena, expr, path, ints, pinned, words, false),
@@ -327,7 +328,7 @@ fn loop_grown(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> Str
 }
 
 /// `name` gets a value nothing follows on `path`.
-fn loop_forget(mut arena: TermArena, mut path: LoopPath, name: ref String) {
+fn loop_forget(mut arena: logic::TermArena, mut path: LoopPath, name: ref String) {
     let fresh = arena.var(f"{name}~{arena.nodes.len()}")
     path.values.insert(name.clone(), fresh)
 }
@@ -335,7 +336,7 @@ fn loop_forget(mut arena: TermArena, mut path: LoopPath, name: ref String) {
 /// **The statements of a block, on each live path** (ADR-361 D1): the paths
 /// still running after it; each that left is in `ends`. Nothing where a
 /// statement leaves in a way this does not follow.
-fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[LoopPath]? {
+fn loop_block(mut arena: logic::TermArena, block: ref Block, first: ref Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[LoopPath]? {
     let mut live = first.clone()
     for stmt in block.stmts {
         let mut next: Vec[LoopPath] = []
@@ -507,7 +508,7 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
 /// both sides of an `&&` that holds or of an `||` that fails, and the part
 /// itself otherwise. A part no term reads is left out, which only weakens
 /// what the branch knows (#1848).
-fn loop_read_parts(mut arena: TermArena, cond: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, holds: bool) -> Vec[i64] {
+fn loop_read_parts(mut arena: logic::TermArena, cond: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, holds: bool) -> Vec[i64] {
     match cond {
         Expr::Unary { op, expr, .. } => {
             if op == UnaryOp::Not {
@@ -530,7 +531,7 @@ fn loop_read_parts(mut arena: TermArena, cond: ref Expr, path: ref LoopPath, int
 /// An `if` or an `assert` standing as a statement, on one path: whether it
 /// was handled - the paths it leaves running pushed onto `next` - or is an
 /// ordinary statement. Nothing where a branch leaves in a way not followed.
-fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref LoopPath, mut next: Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool? {
+fn loop_expr_stmt(mut arena: logic::TermArena, expr: ref Expr, span: Span, path: ref LoopPath, mut next: Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool? {
     match expr {
         Expr::If { cond, then_branch, else_branch, .. } => {
             let c = loop_read(arena, cond, path, ints, pinned, words, true)
@@ -584,7 +585,7 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
 /// - a name a turn changes by one constant on every path is its start plus
 /// that constant times the turns taken, and a counter stops at its bound -
 /// then intervals.
-fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
+fn loop_candidates(mut arena: logic::TermArena, record: ref LoopRecord, proved: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let start = record.start
     // Closed forms: each name against its start, each pair against each other.
@@ -756,7 +757,7 @@ fn loop_flagged_origin() -> String {
 /// only grows), by Fourier-Motzkin on at most 2 names and 8 facts; what is
 /// beyond that is dropped, which only weakens the guess. Each guess is
 /// checked as any other (D4).
-fn loop_flagged(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
+fn loop_flagged(mut arena: logic::TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let start = record.start
     let state = record.problem.state.clone()
@@ -934,7 +935,7 @@ fn loop_form_key(f: ref Form) -> String sync {
 
 /// **`form <= 0` as a term**, each side without a negative coefficient:
 /// `i@ + 1 <= args.len()`.
-fn loop_form_term(mut arena: TermArena, f: ref Form) -> i64? sync {
+fn loop_form_term(mut arena: logic::TermArena, f: ref Form) -> i64? sync {
     let mut left: i64? = null
     let mut right: i64? = null
     for (name, cx) in f.vars {
@@ -971,7 +972,7 @@ fn loop_form_term(mut arena: TermArena, f: ref Form) -> i64? sync {
 /// `y`, `x - y` never grows past its start, `x - y <= x@ - y@`; the other
 /// way round it never falls below it. Two names that both step by one
 /// constant are the closed forms' already.
-fn loop_octagons(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
+fn loop_octagons(mut arena: logic::TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let origin: String = "octagons"
     let mut names: Vec[String] = []
@@ -1030,7 +1031,7 @@ fn loop_octagons(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, Stri
 
 /// What a state name was when the loop was reached: the term the facts
 /// before it pin, or the name of that value.
-fn loop_start_of(mut arena: TermArena, record: ref LoopRecord, name: ref String) -> i64 sync {
+fn loop_start_of(mut arena: logic::TermArena, record: ref LoopRecord, name: ref String) -> i64 sync {
     let ghost = loop_before_name(name, record.start)
     return loop_start_term(arena, record.problem.fixed, ghost) ?? arena.var(ghost)
 }
@@ -1056,7 +1057,7 @@ fn loop_unrolled_origin() -> String sync {
 /// hi_j`, one per turn, each linear; they are proved or dropped as every
 /// candidate is (D4). `v = v * 16 + d` with `0 <= d <= 15` over four turns
 /// is `0 <= v <= 65535`.
-fn loop_unrolled(mut arena: TermArena, record: ref LoopRecord, steady: ref Vec[(String, i64)], proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
+fn loop_unrolled(mut arena: logic::TermArena, record: ref LoopRecord, steady: ref Vec[(String, i64)], proved: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let c = record.problem.condition ?? return found
     let start = record.start
@@ -1179,28 +1180,28 @@ fn loop_unrolled(mut arena: TermArena, record: ref LoopRecord, steady: ref Vec[(
 /// a conjunction's parts, a negated disjunction's parts negated, a negated
 /// comparison turned. A disjunction implies none of its parts and is left
 /// out - what is left out only weakens a guess.
-fn loop_atoms(mut arena: TermArena, c: i64, negated: bool, mut out: Vec[i64]) sync {
+fn loop_atoms(mut arena: logic::TermArena, c: i64, negated: bool, mut out: Vec[i64]) sync {
     match arena.at(c) {
-        SolverTerm::And(parts) => {
+        logic::SolverTerm::And(parts) => {
             if !negated {
                 for part in parts {
                     loop_atoms(arena, part, false, out)
                 }
             }
         },
-        SolverTerm::Or(parts) => {
+        logic::SolverTerm::Or(parts) => {
             if negated {
                 for part in parts {
                     loop_atoms(arena, part, true, out)
                 }
             }
         },
-        SolverTerm::Not(a) => loop_atoms(arena, a, !negated, out),
-        SolverTerm::Lt(a, b) => out.push(if negated { arena.ge(a, b) } else { c }),
-        SolverTerm::Le(a, b) => out.push(if negated { arena.gt(a, b) } else { c }),
-        SolverTerm::Gt(a, b) => out.push(if negated { arena.le(a, b) } else { c }),
-        SolverTerm::Ge(a, b) => out.push(if negated { arena.lt(a, b) } else { c }),
-        SolverTerm::Eq(a, b) => {
+        logic::SolverTerm::Not(a) => loop_atoms(arena, a, !negated, out),
+        logic::SolverTerm::Lt(a, b) => out.push(if negated { arena.ge(a, b) } else { c }),
+        logic::SolverTerm::Le(a, b) => out.push(if negated { arena.gt(a, b) } else { c }),
+        logic::SolverTerm::Gt(a, b) => out.push(if negated { arena.le(a, b) } else { c }),
+        logic::SolverTerm::Ge(a, b) => out.push(if negated { arena.lt(a, b) } else { c }),
+        logic::SolverTerm::Eq(a, b) => {
             if !negated {
                 out.push(c)
             }
@@ -1223,7 +1224,7 @@ fn loop_whole_let(ty: ref Type?, value: ref Expr, words: ref winnow_grammar::Int
 
 /// `k · (name - start)`, written as plainly as the start allows: a start
 /// the facts before the loop pin is its value, and `0` and `1` leave no trace.
-fn loop_scaled_offset(mut arena: TermArena, record: ref LoopRecord, name: ref String, k: i64) -> i64 {
+fn loop_scaled_offset(mut arena: logic::TermArena, record: ref LoopRecord, name: ref String, k: i64) -> i64 {
     let ghost = loop_before_name(name, record.start)
     let here = arena.var(name)
     let known = loop_known_value(arena, record.problem.fixed, ghost)
@@ -1245,12 +1246,12 @@ fn loop_scaled_offset(mut arena: TermArena, record: ref LoopRecord, name: ref St
 /// **`name op e`, where the condition is that comparison** and `e` reads no
 /// state name: `<`, `<=`, `>` or `>=`, with the sides turned where `name`
 /// stands on the right.
-fn loop_bound_of(arena: ref TermArena, c: i64, name: ref String, state: ref Vec[String]) -> LoopBound? {
+fn loop_bound_of(arena: ref logic::TermArena, c: i64, name: ref String, state: ref Vec[String]) -> LoopBound? {
     let (op, left, right) = match arena.at(c) {
-        SolverTerm::Lt(a, b) => ("<", a, b),
-        SolverTerm::Le(a, b) => ("<=", a, b),
-        SolverTerm::Gt(a, b) => (">", a, b),
-        SolverTerm::Ge(a, b) => (">=", a, b),
+        logic::SolverTerm::Lt(a, b) => ("<", a, b),
+        logic::SolverTerm::Le(a, b) => ("<=", a, b),
+        logic::SolverTerm::Gt(a, b) => (">", a, b),
+        logic::SolverTerm::Ge(a, b) => (">=", a, b),
         else => return null,
     }
     let mut other = right
@@ -1282,7 +1283,7 @@ struct LoopBound {
 }
 
 /// The condition as `name op constant`, where it is one.
-fn loop_constant_limit(arena: ref TermArena, c: i64, name: ref String) -> LoopBound? {
+fn loop_constant_limit(arena: ref logic::TermArena, c: i64, name: ref String) -> LoopBound? {
     if c < 0 {
         return null
     }
@@ -1294,10 +1295,10 @@ fn loop_constant_limit(arena: ref TermArena, c: i64, name: ref String) -> LoopBo
 
 /// **What a state name was when the loop was reached**, as a term over the
 /// names the loop does not change: the other side of a fact `name == t`.
-fn loop_start_term(arena: ref TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
+fn loop_start_term(arena: ref logic::TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
     for fact in facts {
         match arena.at(fact) {
-            SolverTerm::Eq(a, b) => {
+            logic::SolverTerm::Eq(a, b) => {
                 if arena.is_the_variable(a, name) && !arena.text(b).contains("@") {
                     return b
                 }
@@ -1312,10 +1313,10 @@ fn loop_start_term(arena: ref TermArena, facts: ref Vec[i64], name: ref String) 
 }
 
 /// The value a fact `name == constant` among `facts` pins `name` to.
-fn loop_known_value(arena: ref TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
+fn loop_known_value(arena: ref logic::TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
     for fact in facts {
         match arena.at(fact) {
-            SolverTerm::Eq(a, b) => {
+            logic::SolverTerm::Eq(a, b) => {
                 if arena.is_the_variable(a, name) {
                     let v = arena.constant(b)
                     if v != null {
@@ -1341,7 +1342,7 @@ fn loop_known_value(arena: ref TermArena, facts: ref Vec[i64], name: ref String)
 /// invariant, by the three queries' first two - the third is the claim's
 /// own (`loop_facts`). Nothing where no candidate survives. `asked` counts
 /// the queries.
-fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+fn loop_found(mut arena: logic::TermArena, record: ref LoopRecord, proved: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
     let mut kept: Vec[(i64, String)] = []
     // A turn-indexed interval may be dropped one turn at a time: only a loop
     // that got them gets the rounds for it (ADR-258 D2).
@@ -1350,7 +1351,7 @@ fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermA
         if origin == loop_unrolled_origin() {
             most_rounds = 4 + loop_turns_most()
         }
-        let query = lg_loop_entry_query(record.problem, term)
+        let query = logic::lg_loop_entry_query(record.problem, term)
         asked.push(1)
         if proved(arena, query.facts, query.goal) {
             kept.push((term, origin.clone()))
@@ -1368,8 +1369,8 @@ fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermA
         let assumed = arena.and(all)
         let mut still: Vec[(i64, String)] = []
         for (term, origin) in kept {
-            let mut query = lg_loop_turn_query(arena, record.problem, assumed)
-            query.goal = lg_loop_primed(arena, record.problem, term)
+            let mut query = logic::lg_loop_turn_query(arena, record.problem, assumed)
+            query.goal = logic::lg_loop_primed(arena, record.problem, term)
             asked.push(1)
             if proved(arena, query.facts, query.goal) {
                 still.push((term, origin.clone()))
@@ -1387,7 +1388,7 @@ fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermA
         all.push(term)
     }
     let invariant = arena.and(all)
-    let verdict = lg_loop_check(arena, record.problem, invariant, fn(on, given, goal) { loop_proved_each(on, given, goal, proved) })
+    let verdict = logic::lg_loop_check(arena, record.problem, invariant, fn(on, given, goal) { loop_proved_each(on, given, goal, proved) })
     asked.push(2)
     if !verdict.proved() {
         return null
@@ -1400,9 +1401,9 @@ fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermA
 /// one query. An invariant's turn query asked whole adds its parts' cases up
 /// past the solver's budget (seven turn-indexed intervals already do), where
 /// each part alone, as the Houdini rounds ask it, stays well within.
-fn loop_proved_each(arena: ref TermArena, facts: ref Vec[i64], goal: i64, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool sync {
+fn loop_proved_each(arena: ref logic::TermArena, facts: ref Vec[i64], goal: i64, proved: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool sync {
     match arena.at(goal) {
-        SolverTerm::And(parts) => {
+        logic::SolverTerm::And(parts) => {
             for part in parts {
                 if !proved(arena, facts, part) {
                     return false
@@ -1417,16 +1418,16 @@ fn loop_proved_each(arena: ref TermArena, facts: ref Vec[i64], goal: i64, proved
 /// **What holds past the loop** (ADR-361 D4): what held before it, about
 /// the values it started from; the invariant at the head of the last turn;
 /// and one of the ways out that reach past it, from there.
-fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+fn loop_facts(mut arena: logic::TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
     let start = record.start
     let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut ghosts: Vec[String] = []
     for name in record.problem.state {
         renamed.insert(name.clone(), arena.var(loop_head_name(name, start)))
         if name == record.counter {
-            renamed.insert(lg_primed(name), arena.var(loop_after_name(name, start)))
+            renamed.insert(logic::lg_primed(name), arena.var(loop_after_name(name, start)))
         } else {
-            renamed.insert(lg_primed(name), arena.var(name))
+            renamed.insert(logic::lg_primed(name), arena.var(name))
         }
         ghosts.push(loop_before_name(name, start))
     }
@@ -1462,7 +1463,7 @@ fn loop_turn_name(name: ref String, start: i64) -> String {
 /// it, about the values it started from, and the invariant at the head of the
 /// turn the point stands in. The condition and the path from the head are the
 /// walk's own facts there.
-fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+fn loop_turn_facts(mut arena: logic::TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
     let start = record.start
     let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut ghosts: Vec[String] = []
@@ -1488,13 +1489,13 @@ fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref Loop
 /// **The invariant as `--asserts` names it** (ADR-361 D7): its parts, each
 /// start the facts before the loop pin written as its value, and the
 /// strategies that found them.
-fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
+fn loop_found_text(mut arena: logic::TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
     return loop_said(arena, record, found, "through")
 }
 
 /// The same for a claim inside the loop's body: `through` past
 /// the loop and `inside` in it (`place`).
-fn loop_said(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound, place: ref String) -> String {
+fn loop_said(mut arena: logic::TermArena, record: ref LoopRecord, found: ref LoopFound, place: ref String) -> String {
     let mut known: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for name in record.problem.state {
         let ghost = loop_before_name(name, record.start)
@@ -1546,7 +1547,7 @@ fn loop_open_text(records: ref Vec[LoopRecord]) -> String {
 /// **What a turn's path does to a flag** (ADR-361 D15): 1 where it raises
 /// it - sets it to a constant, or adds a positive constant to it - 0 where
 /// it leaves it, -1 where it may lower it.
-fn loop_raise(arena: ref TermArena, value: i64, flag: ref String) -> i64 {
+fn loop_raise(arena: ref logic::TermArena, value: i64, flag: ref String) -> i64 {
     let read = linear_form(value, fn(at) { arena.at(at) })
     if read == null {
         return -1
@@ -1563,7 +1564,7 @@ fn loop_raise(arena: ref TermArena, value: i64, flag: ref String) -> i64 {
 
 /// **Whether a state name is a flag** (ADR-361 D15): some path of a turn
 /// raises it and none lowers it.
-fn loop_is_flag(arena: ref TermArena, record: ref LoopRecord, flag: ref String) -> bool {
+fn loop_is_flag(arena: ref logic::TermArena, record: ref LoopRecord, flag: ref String) -> bool {
     let mut rises = false
     for turn in record.turns {
         let value = turn.values[flag] ?? continue
@@ -1581,7 +1582,7 @@ fn loop_is_flag(arena: ref TermArena, record: ref LoopRecord, flag: ref String) 
 /// **Whether a claim reads what one of the loops changes** (ADR-361 D2):
 /// through the facts that tie its names to others, one of their state names; or, as a flag's fact ties what held where it
 /// rose to the flag (D15), a fact that reads a flag of one of them.
-fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records: ref Vec[LoopRecord]) -> bool {
+fn loop_reads(arena: ref logic::TermArena, facts: ref Vec[i64], claim: i64, records: ref Vec[LoopRecord]) -> bool {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     arena.variables(claim, names)
     let mut flags: collections::BTreeSet[String] = collections::BTreeSet()
@@ -1643,7 +1644,7 @@ fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records: re
 
 /// A loop's record.problem as text: the key its invariant is kept under, so that a
 /// later pass that states it again finds it.
-fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
+fn loop_key(arena: ref logic::TermArena, record: ref LoopRecord) -> String {
     let mut parts: Vec[String] = [f"{record.start}"]
     for fact in record.problem.fixed {
         parts.push(arena.text(fact))
@@ -1663,7 +1664,7 @@ fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
 /// order, each `strategy=term`, joined by `;`. A term is written as its
 /// operator and its operands, `ge(i,0)`; a space in a strategy's name is a
 /// `-`.
-fn loop_parts_text(arena: ref TermArena, found: ref LoopFound) -> String {
+fn loop_parts_text(arena: ref logic::TermArena, found: ref LoopFound) -> String {
     let mut parts: Vec[String] = []
     for (term, origin) in found.parts {
         parts.push(f"{origin.replace(" ", "-")}={loop_term_word(arena, term)}")
@@ -1671,34 +1672,34 @@ fn loop_parts_text(arena: ref TermArena, found: ref LoopFound) -> String {
     return parts.join(";")
 }
 
-fn loop_term_word(arena: ref TermArena, id: i64) -> String {
+fn loop_term_word(arena: ref logic::TermArena, id: i64) -> String {
     return match arena.at(id) {
-        SolverTerm::Bool(b) => f"{b}",
-        SolverTerm::Int(n) => f"{n}",
-        SolverTerm::Var(name) => loop_name_word(name),
-        SolverTerm::Add(a, b) => loop_pair_word(arena, "add", a, b),
-        SolverTerm::Sub(a, b) => loop_pair_word(arena, "sub", a, b),
-        SolverTerm::Neg(a) => f"neg({loop_term_word(arena, a)})",
-        SolverTerm::Mul(a, b) => loop_pair_word(arena, "mul", a, b),
-        SolverTerm::Quot(a, k) => f"quot({loop_term_word(arena, a)},{k})",
-        SolverTerm::Le(a, b) => loop_pair_word(arena, "le", a, b),
-        SolverTerm::Lt(a, b) => loop_pair_word(arena, "lt", a, b),
-        SolverTerm::Ge(a, b) => loop_pair_word(arena, "ge", a, b),
-        SolverTerm::Gt(a, b) => loop_pair_word(arena, "gt", a, b),
-        SolverTerm::Eq(a, b) => loop_pair_word(arena, "eq", a, b),
-        SolverTerm::Ne(a, b) => loop_pair_word(arena, "ne", a, b),
-        SolverTerm::And(parts) => f"and({loop_list_word(arena, parts)})",
-        SolverTerm::Or(parts) => f"or({loop_list_word(arena, parts)})",
-        SolverTerm::Not(a) => f"not({loop_term_word(arena, a)})",
+        logic::SolverTerm::Bool(b) => f"{b}",
+        logic::SolverTerm::Int(n) => f"{n}",
+        logic::SolverTerm::Var(name) => loop_name_word(name),
+        logic::SolverTerm::Add(a, b) => loop_pair_word(arena, "add", a, b),
+        logic::SolverTerm::Sub(a, b) => loop_pair_word(arena, "sub", a, b),
+        logic::SolverTerm::Neg(a) => f"neg({loop_term_word(arena, a)})",
+        logic::SolverTerm::Mul(a, b) => loop_pair_word(arena, "mul", a, b),
+        logic::SolverTerm::Quot(a, k) => f"quot({loop_term_word(arena, a)},{k})",
+        logic::SolverTerm::Le(a, b) => loop_pair_word(arena, "le", a, b),
+        logic::SolverTerm::Lt(a, b) => loop_pair_word(arena, "lt", a, b),
+        logic::SolverTerm::Ge(a, b) => loop_pair_word(arena, "ge", a, b),
+        logic::SolverTerm::Gt(a, b) => loop_pair_word(arena, "gt", a, b),
+        logic::SolverTerm::Eq(a, b) => loop_pair_word(arena, "eq", a, b),
+        logic::SolverTerm::Ne(a, b) => loop_pair_word(arena, "ne", a, b),
+        logic::SolverTerm::And(parts) => f"and({loop_list_word(arena, parts)})",
+        logic::SolverTerm::Or(parts) => f"or({loop_list_word(arena, parts)})",
+        logic::SolverTerm::Not(a) => f"not({loop_term_word(arena, a)})",
         else => f"?",
     }
 }
 
-fn loop_pair_word(arena: ref TermArena, op: ref String, a: i64, b: i64) -> String {
+fn loop_pair_word(arena: ref logic::TermArena, op: ref String, a: i64, b: i64) -> String {
     return f"{op}({loop_term_word(arena, a)},{loop_term_word(arena, b)})"
 }
 
-fn loop_list_word(arena: ref TermArena, parts: ref Vec[i64]) -> String {
+fn loop_list_word(arena: ref logic::TermArena, parts: ref Vec[i64]) -> String {
     let mut words: Vec[String] = []
     for p in parts {
         words.push(loop_term_word(arena, p))
@@ -1726,7 +1727,7 @@ struct LoopParsed {
 
 /// **`loop_term_word` read back**, its nodes appended to the arena; nothing
 /// for text it did not write.
-fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
+fn loop_term_of(mut arena: logic::TermArena, word: ref String) -> LoopParsed? {
     let open = word.find("(") ?? word.len()
     let comma = word.find(",") ?? word.len()
     let close = word.find(")") ?? word.len()
@@ -1776,7 +1777,7 @@ fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
     return LoopParsed { term: term, rest: after }
 }
 
-fn loop_built(mut arena: TermArena, op: ref String, args: Vec[i64]) -> i64? {
+fn loop_built(mut arena: logic::TermArena, op: ref String, args: Vec[i64]) -> i64? {
     if op == "and" {
         return arena.and(args)
     }
@@ -1832,7 +1833,7 @@ fn loop_built(mut arena: TermArena, op: ref String, args: Vec[i64]) -> i64? {
 /// invariant found - nothing is searched. Nothing where the text does not
 /// read or a query is not proved; the loop is then searched as if the file
 /// held nothing for it. `asked` counts the queries.
-fn loop_recorded(mut arena: TermArena, record: ref LoopRecord, recorded: ref String, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+fn loop_recorded(mut arena: logic::TermArena, record: ref LoopRecord, recorded: ref String, proved: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
     let mut parts: Vec[(i64, String)] = []
     let mut all: Vec[i64] = []
     for part in recorded.split(";") {
@@ -1849,7 +1850,7 @@ fn loop_recorded(mut arena: TermArena, record: ref LoopRecord, recorded: ref Str
         return null
     }
     let invariant = arena.and(all)
-    let verdict = lg_loop_check(arena, record.problem, invariant, fn(on, given, goal) { loop_proved_each(on, given, goal, proved) })
+    let verdict = logic::lg_loop_check(arena, record.problem, invariant, fn(on, given, goal) { loop_proved_each(on, given, goal, proved) })
     asked.push(2)
     if !verdict.proved() {
         return null

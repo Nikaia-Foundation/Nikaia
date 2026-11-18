@@ -141,6 +141,7 @@ fn nn_kind(stmt: ref Stmt) -> String {
         Stmt::Break => "break",
         Stmt::Continue => "continue",
         Stmt::Expr(_) => "expr",
+        Stmt::Emit(_) => "emit",
     }
 }
 

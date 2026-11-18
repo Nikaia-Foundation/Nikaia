@@ -316,6 +316,27 @@ jobs:
           git ls-files -z -- crates/nikaia-std crates/unsafe ':!crates/nikaia-std/src/compiler' |
             xargs -0 touch -d '2000-01-01 00:00:00 UTC'
 
+      # **The solver program is built before the tests that run it** (#2023):
+      # `scripts/solver.nika` builds the solver from its sources (a cold build
+      # is a front end of about a minute and rustc of another, on one core),
+      # and the first of a shard's tests that run it paid that build inside
+      # its 300 s, which `solver_sample` overran at `user-parallelism = no`
+      # (its answers take seconds). Built here with the same toolchain, the
+      # binary is kept in `target/solver-rod/` under the key the tests look
+      # up (`solver_build`), so they build nothing. Only a shard that has
+      # such a test pays it.
+      - name: Build the solver program
+        if: startsWith(matrix.shard, 'compiler-')
+        run: |
+          k=${SHARD#compiler-}
+          # The shard's programs, picked as the Test step below picks them.
+          mine=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
+            awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {print "tests/compiler/tests/" $0 ".nika"}')
+          if [ -n "$mine" ] && grep -l 'scripts/solver.nika' $mine >/dev/null; then
+            env -u CARGO_TARGET_DIR NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+              ./target/release/nikaia run scripts/solver.nika -- build
+          fi
+
       # Each one-file program a checker test accepts is written to the dump
       # this shard sweeps (#705).
       - name: Test
@@ -373,10 +394,7 @@ jobs:
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
             # No dump: `nikaia test` builds every one of these programs with rustc
             # itself, so the accepted-sweep would only check and prove them again.
-            # The time limit is the machine's (`project_tests_time_limit`): a test that
-            # builds the solver at opt-level 3 (`scripts/solver.nika`) takes longer
-            # than 300 s on a loaded x64 runner.
-            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_TEST_TIME_LIMIT=900 NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
               ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
               tee "$RUNNER_TEMP/test.log"
             ;;

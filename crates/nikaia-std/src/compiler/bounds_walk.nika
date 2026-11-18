@@ -16,6 +16,7 @@
 use std::text
 use std::collections
 use std::node_id
+use logic
 
 /// **What the program around every body says**, read once per program.
 pub struct BoundsContext {
@@ -183,7 +184,7 @@ pub struct Ensured {
 	/// The options it takes by name, each with its default as the ledger
 	/// writes it (`ensures_each`, ADR-375 D5).
 	pub options: Vec[(String, String)],
-	pub conditions: Vec[Vec[SolverTerm]],
+	pub conditions: Vec[Vec[logic::SolverTerm]],
 }
 
 /// What the walk proved: index nodes (the `id_of` of the indexed `base`) and
@@ -266,7 +267,7 @@ pub struct BoundsChanged {
 }
 
 struct BoundsWalk {
-	arena: TermArena,
+	arena: logic::TermArena,
 	/// **The names the body never binds again that are lists by their
 	/// stated type**: a parameter, a `let` with its type written. Past a
 	/// read of one, its position lies inside (`rules_read_inside`).
@@ -583,7 +584,7 @@ fn bounds_aggressive(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProven {
 	let mut walk = bounding_new(args, body, nonnegative, context, program, words)
 	return bounds_rounds(walk, args, body, context, program, words, ask)
@@ -597,7 +598,7 @@ fn bounds_rounds(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProven {
 	let found_held = rules_settle(walk, args, body, context, program, words, ask)
 	let mut settled = false
@@ -692,7 +693,7 @@ fn bounds_fields(
 	mut context: BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	context.around.field_bounds.clear()
 	if context.around.fields.is_empty() {
@@ -745,7 +746,7 @@ fn fields_round(
 	bodies: ref Vec[ref Spanned[Item]],
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> collections::BTreeMap[String, Range] {
 	let mut written: collections::BTreeMap[String, Range] = collections::BTreeMap()
 	let mut lost: collections::BTreeSet[String] = collections::BTreeSet()
@@ -818,7 +819,7 @@ fn bounding_new(
 		}
 	}
 	let mut walk = BoundsWalk {
-		arena: TermArena::empty(),
+		arena: logic::TermArena::empty(),
 		proven: no_proofs(),
 		axioms: collections::BTreeMap(),
 		unsized_names: collections::BTreeSet(),
@@ -951,7 +952,7 @@ fn bounding_pass(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	walk.written.clear()
 	walk.poisoned.clear()
@@ -1030,7 +1031,7 @@ fn bounding_return_range(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if !walk.return_ranging || walk.return_unranged {
 		return
@@ -1061,7 +1062,7 @@ fn bounding_return_relations(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.return_scalars.is_empty() && walk.return_lens.is_empty() {
 		return
@@ -1181,7 +1182,7 @@ fn bounding_relations_of(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[(bool, i64)] {
 	let mut out: Vec[(bool, i64)] = []
 	if bounding_found_options(value) {
@@ -1228,7 +1229,7 @@ fn bounding_relation_grows(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if bounding_found_options(value) {
 		return false
@@ -1269,7 +1270,7 @@ fn bounds_action_range(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	let none: Vec[FnArg] = []
 	let mut walk = bounding_new(none, body, bp_names(nonnegative_locals(body), words), context, program, words)
@@ -1339,7 +1340,7 @@ fn bounding_write(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if !tracks(walk.shape, key) {
 		return
@@ -1390,7 +1391,7 @@ fn bounding_end_write(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if key.contains("[") || key.starts_with(".") || walk.unread.contains(key) {
 		return
@@ -1505,7 +1506,7 @@ fn bounding_end_inside(
 	index: ref Expr,
 	facts: ref BoundsFacts,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let base = match index {
 		Expr::Index { base, .. } => base,
@@ -1535,7 +1536,7 @@ fn bounding_field_inits(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	for field in fields {
 		let name = words.resolve(field.name)
@@ -1573,7 +1574,7 @@ fn bounding_field_list(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match value {
 		Expr::ListLit { items, .. } => {
@@ -1623,7 +1624,7 @@ fn bounding_proves_goal(
 	mut walk: BoundsWalk,
 	facts: ref BoundsFacts,
 	goal: i64,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if bounding_proves(walk, facts, goal, ask) {
 		bounding_traced(walk, facts, goal, true)
@@ -1747,7 +1748,7 @@ fn bounding_proves(
 	walk: ref BoundsWalk,
 	facts: ref BoundsFacts,
 	goal: i64,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	return ask(walk.arena, bounding_known(walk, facts, goal), goal)
 }
@@ -1913,7 +1914,7 @@ fn bounding_term(
 	mut walk: BoundsWalk,
 	term: i64,
 	facts: ref BoundsFacts,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range {
 	let known = walk.arena.constant(term)
 	if known != null {
@@ -1973,7 +1974,7 @@ fn bounding_range(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	let term = bounding_lin(walk, expr, facts, context, program, words)
 	if term != null {
@@ -2000,7 +2001,7 @@ fn bounding_range_shaped(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	match expr {
 		Expr::Binary { op, lhs, rhs, span, .. } => return bounding_range_of(
@@ -2136,7 +2137,7 @@ fn bounding_if_range(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	let otherwise = else_branch ?? return null
 	let decided = bounding_decided(walk, cond, context, words)
@@ -2173,7 +2174,7 @@ fn bounding_arm_range(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	if arm.stmts.len() != 1 {
 		return null
@@ -2235,7 +2236,7 @@ fn bounding_range_of(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Range? {
 	match op {
 		BinaryOp::Add => {
@@ -2396,7 +2397,7 @@ fn bounding_not_negative(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let term = bounding_lin(walk, side, facts, context, program, words) ?? return false
 	let zero = walk.arena.int(0)
@@ -2438,7 +2439,7 @@ fn bounding_fits(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let bounds = Range::of_type(ty) ?? return false
 	let widest_lo = bounds.lo ?? return false
@@ -2604,7 +2605,7 @@ fn bounding_mixed_fits(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let l = bounding_lin(walk, linear, facts, context, program, words) ?? return false
 	let r = bounding_range(walk, ranged, facts, context, program, words, ask) ?? return false
@@ -2638,7 +2639,7 @@ fn bounding_count_fits(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let width = bounding_bits(ty) ?? return false
 	let term = bounding_lin(walk, count, facts, context, program, words)
@@ -2671,7 +2672,7 @@ fn bounding_divides(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let typed = Range::of_type(ty) ?? Range { lo: -1, hi: null }
 	let least = typed.lo ?? -1
@@ -2775,7 +2776,7 @@ fn bounding_push(walk: ref BoundsWalk, mut facts: BoundsFacts, fact: i64) {
 	// A conjunction is held part by part: forgetting a name then keeps the
 	// parts that do not read it (ADR-306 D33, an element in one part).
 	match walk.arena.nodes[fact] {
-		SolverTerm::And(parts) => {
+		logic::SolverTerm::And(parts) => {
 			for part in parts {
 				bounding_push(walk, facts, part)
 			}
@@ -3456,7 +3457,7 @@ fn bounding_negation(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.collecting || context.negations.is_empty() {
 		return
@@ -3613,7 +3614,7 @@ fn bounding_required(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.collecting {
 		return
@@ -3682,7 +3683,7 @@ fn bounding_derived_call(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.collecting {
 		return
@@ -4775,7 +4776,7 @@ fn bounding_inside(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if walk.collecting || walk.pinned.contains(path_root(list)) {
 		return false
@@ -4849,7 +4850,7 @@ fn bounding_word_inside(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if walk.collecting || walk.pinned.contains(path_root(list)) {
 		return false
@@ -4874,7 +4875,7 @@ fn bounding_index(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let list = path_of(base, words) ?? return
 	if bounding_inside(walk, list, node_key(base), index, facts, context, program, words, ask) {
@@ -4913,7 +4914,7 @@ fn bounding_block(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let before = facts.ints.clone()
 	let mut bound: Vec[String] = []
@@ -4940,7 +4941,7 @@ fn bounding_leave(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 	let mut by = -1
 	for fact in facts.facts {
 		match walk.arena.at(fact) {
-			SolverTerm::Eq(a, b) => {
+			logic::SolverTerm::Eq(a, b) => {
 				if walk.arena.is_the_variable(a, name) && !walk.arena.mentions(b, name) {
 					value = b
 				} else if walk.arena.is_the_variable(b, name) && !walk.arena.mentions(a, name) {
@@ -4986,7 +4987,7 @@ fn bounding_stmts(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let mut at = from
 	for stmt in block.stmts[from..] {
@@ -5034,7 +5035,7 @@ fn bounding_maybe_block(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let present = block ?? return false
 	return bounding_block(walk, present, facts, context, program, words, ask)
@@ -5047,7 +5048,7 @@ fn bounding_stmt(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	walk.defining.clear()
 	match stmt {
@@ -5156,6 +5157,15 @@ fn bounding_stmt(
 			words,
 			ask,
 		),
+		Stmt::Emit(expr) => return bounding_expr_leaves(
+			walk,
+			expr,
+			facts,
+			context,
+			program,
+			words,
+			ask,
+		),
 	}
 }
 
@@ -5171,7 +5181,7 @@ fn bounding_for_stmt(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let changed = bounding_changed(body, context, words)
 	let mut cands = bounding_candidates(walk, changed, facts)
@@ -5238,7 +5248,7 @@ fn bounding_while_stmt(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let mut changed = bounding_changed(body, context, words)
 	bounding_extend(changed, bounding_changed_in_expr(cond, context, words))
@@ -5313,7 +5323,7 @@ fn bounding_loop_stmt(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let start = walk.at
 	let open = walk.open
@@ -5439,7 +5449,7 @@ fn bounding_loop_invariant(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsInvariant? {
 	let ways = match stmt {
 		Stmt::For { body, .. } => turn_jumps(body, words),
@@ -5660,7 +5670,7 @@ fn bounding_past_loop(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let start = walk.at
 	let entry = facts.clone()
@@ -5746,7 +5756,7 @@ fn bounding_could_pay(
 	mut walk: BoundsWalk,
 	guesses: ref Vec[i64],
 	open: i64,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	for missed in walk.missed_goals {
 		if missed.stamp <= open {
@@ -5772,7 +5782,7 @@ fn bounding_loop_framed(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let none: Vec[i64] = []
 	if walk.turns.is_empty() {
@@ -5796,7 +5806,7 @@ fn bounding_loop_walk(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match stmt {
 		Stmt::For { bindings, iter, body, .. } => bounding_for_stmt(
@@ -5866,7 +5876,7 @@ fn bounding_loop_guesses(
 			continue
 		}
 		match walk.arena.at(fact) {
-			SolverTerm::Eq(a, b) => {
+			logic::SolverTerm::Eq(a, b) => {
 				out.push(walk.arena.le(a, b))
 				out.push(walk.arena.ge(a, b))
 				for restated in bounding_restated(walk, entry, changed, a, b) {
@@ -6022,9 +6032,9 @@ fn bounding_restated(
 ) -> Vec[i64] {
 	let mut out: Vec[i64] = []
 	let (counter, start) = match walk.arena.at(a) {
-		SolverTerm::Var(x) => {
+		logic::SolverTerm::Var(x) => {
 			match walk.arena.at(b) {
-				SolverTerm::Var(v) => (x.clone(), v.clone()),
+				logic::SolverTerm::Var(v) => (x.clone(), v.clone()),
 				else => return out,
 			}
 		},
@@ -6080,7 +6090,7 @@ fn bounding_loop_proposals(
 	entry: ref BoundsFacts,
 	changed: ref BoundsChanged,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProposals {
 	return match stmt {
 		Stmt::While { cond, body } => bounding_while_proposals(
@@ -6110,7 +6120,7 @@ fn bounding_while_proposals(
 	entry: ref BoundsFacts,
 	changed: ref BoundsChanged,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProposals {
 	let mut out = BoundsProposals { ghosts: [], fixed: [], candidates: [] }
 	let mut state: Vec[String] = []
@@ -6198,7 +6208,7 @@ fn bounding_while_proposals(
 	let mut asked: Vec[i64] = []
 	for (candidate, origin) in loop_candidates(walk.arena, record, ask, asked) {
 		match walk.arena.at(candidate) {
-			SolverTerm::Eq(a, b) => {
+			logic::SolverTerm::Eq(a, b) => {
 				out.candidates.push((walk.arena.le(a, b), origin.clone()))
 				out.candidates.push((walk.arena.ge(a, b), origin.clone()))
 			},
@@ -6298,7 +6308,7 @@ fn bounding_turn_end(
 	facts: ref BoundsFacts,
 	jump: bool,
 	leaves: bool,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	rules_turn_end(walk, facts, ask)
 	if walk.turns.is_empty() {
@@ -6340,7 +6350,7 @@ fn bounding_while(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	// **A `while` counts its turns by a name each grows by exactly one**
 	// (ADR-361 D13): `t` is `i - i@`, and its other counters lie within
@@ -6470,7 +6480,7 @@ fn bounding_counter_below(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> i64? {
 	match cond {
 		Expr::Binary { op, lhs, rhs, .. } => {
@@ -6794,7 +6804,7 @@ fn bounding_turn_steps(
 	facts: ref BoundsFacts,
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 	mut pairs: Vec[(String, String)],
 ) -> Vec[(String, i64, i64, i64?)] {
 	let mut start = BoundsSteps { names: [], low: [], high: [], gap_low: [], gap_high: [], live: true }
@@ -7299,7 +7309,7 @@ fn bounding_turns_most(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> i64? {
 	match cond {
 		Expr::Binary { op, lhs, rhs, .. } => {
@@ -7364,7 +7374,7 @@ fn bounding_for_turns_most(
 	name: ref String,
 	facts: ref BoundsFacts,
 	constant_only: bool,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> i64? {
 	let l = low ?? return null
 	let h = high ?? return null
@@ -7615,7 +7625,7 @@ fn bounding_scaled_bounds(
 	facts: ref BoundsFacts,
 	scales: ref Vec[(String, i64, i64)],
 	turns: i64?,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[i64] {
 	let mut out: Vec[i64] = []
 	for (name, a, b) in scales {
@@ -7671,7 +7681,7 @@ fn bounding_let(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	bounding_expr(walk, value, facts, context, program, words, ask)
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
@@ -7857,7 +7867,7 @@ fn bounding_built_choice(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match value {
 		Expr::If { cond, then_branch, else_branch, .. } => {
@@ -7908,7 +7918,7 @@ fn bounding_choice_facts(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[i64] {
 	let mut own: Vec[Vec[i64]] = []
 	// What holds where each arm is taken: an `if`'s condition or its
@@ -8081,7 +8091,7 @@ fn bounding_arm_facts(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[i64]? {
 	let n = walk.arena.var(name)
 	let lin = bounding_lin(walk, value, facts, context, program, words)
@@ -8284,7 +8294,7 @@ fn bounding_assign_place(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let p = bounding_place_path(target, words) ?? return
 	if context.whole_fields.contains(node_key(target)) {
@@ -8307,7 +8317,7 @@ fn bounding_compound(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let operation = op ?? return
 	let arithmetic = match operation {
@@ -8356,7 +8366,7 @@ fn bounding_for(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	bounding_expr(walk, iter, facts, context, program, words, ask)
 	let changed = bounding_changed(body, context, words)
@@ -8761,7 +8771,7 @@ fn bounding_followers(
 	changed: ref BoundsChanged,
 	facts: ref BoundsFacts,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[String] {
 	let mut found: Vec[String] = []
 	if !counted || low == null || high == null {
@@ -8870,7 +8880,7 @@ fn bounding_lowers(
 	mut walk: BoundsWalk,
 	facts: ref BoundsFacts,
 	by: i64?,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	let step = by ?? return false
 	let zero = walk.arena.int(0)
@@ -8886,7 +8896,7 @@ fn bounding_set_lower(
 	name: ref String,
 	op: ref BinaryOp?,
 	value_lin: i64?,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if op != null {
 		return false
@@ -8910,7 +8920,7 @@ fn bounding_assign(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if !facts.ints.contains(name) {
 		if walk.growing.contains(name) {
@@ -9139,7 +9149,7 @@ fn bounding_place(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match target {
 		Expr::Index { base, index, .. } => {
@@ -9160,7 +9170,7 @@ fn bounding_expr_leaves(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	match expr {
 		Expr::If { cond, then_branch, else_branch, .. } => return bounding_if_leaves(
@@ -9220,7 +9230,7 @@ fn bounding_if_leaves(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	bounding_expr(walk, cond, facts, context, program, words, ask)
 	let mut then_facts = facts.clone()
@@ -9286,7 +9296,7 @@ fn bounding_flag_join(
 	changed: ref BoundsChanged,
 	then_facts: ref BoundsFacts,
 	else_facts: ref BoundsFacts,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if changed.values.is_empty() {
 		return
@@ -9370,7 +9380,7 @@ fn bounding_expr(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	bounding_nonnegative(walk, expr, facts, context, program, words, ask)
 	bounding_negation(walk, expr, facts, context, program, words, ask)
@@ -9655,7 +9665,7 @@ fn bounding_nonnegative(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.collecting || context.nonnegative.is_empty() {
 		return
@@ -9681,7 +9691,7 @@ fn bounding_maybe_expr(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let present = expr ?? return
 	bounding_expr(walk, present, facts, context, program, words, ask)
@@ -9698,7 +9708,7 @@ fn bounding_else(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let block = else_branch ?? return
 	let mut else_facts = facts.clone()
@@ -9718,7 +9728,7 @@ fn bounding_if_join(
 	changed: ref BoundsChanged,
 	then_facts: ref BoundsFacts,
 	else_facts: ref BoundsFacts,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if changed.values.is_empty() && changed.lengths.is_empty() {
 		return
@@ -9754,7 +9764,7 @@ fn bounding_match_join(
 	changed: ref BoundsChanged,
 	ends: ref Vec[BoundsFacts],
 	bound: ref Vec[Vec[String]],
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if (changed.values.is_empty() && changed.lengths.is_empty()) || ends.len() < 2 {
 		return
@@ -9840,17 +9850,17 @@ fn bounding_pinned_lengths(
 			continue
 		}
 		match walk.arena.at(fact) {
-			SolverTerm::Eq(a, b) => {
+			logic::SolverTerm::Eq(a, b) => {
 				let mut name: String? = null
 				let mut value: i64? = null
 				match walk.arena.at(a) {
-					SolverTerm::Var(v) => {
+					logic::SolverTerm::Var(v) => {
 						name = v.clone()
 						value = walk.arena.constant(b)
 					},
 					else => {
 						match walk.arena.at(b) {
-							SolverTerm::Var(v) => {
+							logic::SolverTerm::Var(v) => {
 								name = v.clone()
 								value = walk.arena.constant(a)
 							},
@@ -9944,17 +9954,17 @@ fn bounding_pinned(walk: ref BoundsWalk, branch: ref BoundsFacts) -> collections
 	let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
 	for fact in branch.facts {
 		match walk.arena.at(fact) {
-			SolverTerm::Eq(a, b) => {
+			logic::SolverTerm::Eq(a, b) => {
 				let mut name: String? = null
 				let mut value: i64? = null
 				match walk.arena.at(a) {
-					SolverTerm::Var(v) => {
+					logic::SolverTerm::Var(v) => {
 						name = v.clone()
 						value = walk.arena.constant(b)
 					},
 					else => {
 						match walk.arena.at(b) {
-							SolverTerm::Var(v) => {
+							logic::SolverTerm::Var(v) => {
 								name = v.clone()
 								value = walk.arena.constant(a)
 							},
@@ -9983,7 +9993,7 @@ fn bounding_inner_block(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let mut inner = facts.clone()
 	bounding_block(walk, block, inner, context, program, words, ask)
@@ -10001,7 +10011,7 @@ fn bounding_binary(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match op {
 		// The right side runs only where the left one decided it does.
@@ -10079,7 +10089,7 @@ fn bounding_method_call(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	bounding_expr(walk, receiver, facts, context, program, words, ask)
 	for arg in args {
@@ -10199,7 +10209,7 @@ fn bounding_method(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if keeps_length(method) || facts.ints.contains(name) {
 		return
@@ -10305,7 +10315,7 @@ fn bounding_children(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	match expr {
 		Expr::Range { start, end, .. } => {
@@ -10825,7 +10835,7 @@ fn bounds_returns(
 	mut context: BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	let mut assumed: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	let mut bodies: Vec[ref Spanned[Item]] = []
@@ -11173,7 +11183,7 @@ fn bounding_returns_round(
 	assumed: ref collections::BTreeMap[String, BoundsReturns],
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> collections::BTreeMap[String, BoundsReturns] {
 	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	// **The rules that hold, found once a round** (#1581): its bodies all
@@ -11435,7 +11445,7 @@ fn bounding_returned(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if throwing {
 		return
@@ -11486,7 +11496,7 @@ fn bounding_returned_value(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.return_ranging {
 		bounding_return_range(walk, facts, returned, context, program, words, ask)
@@ -11637,7 +11647,7 @@ fn bounding_return_lengths(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
 	if walk.return_wanted.is_empty() && walk.return_wanted_alike.is_empty() {
 		return
@@ -12189,7 +12199,7 @@ fn bounding_fields_found(
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[i64] {
 	let mut out: Vec[i64] = []
 	let call = match value {

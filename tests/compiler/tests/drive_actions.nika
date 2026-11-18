@@ -34,7 +34,18 @@ fn case_with(nikaia: String, repo: String, tmp: String, name: String, cycle: Str
     fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
     let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", flag]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
     println(f"== {name} (exit {out.code})")
-    println(unsha(out.stdout.trim().clone()).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
+    println(unblock(unsha(out.stdout.trim().clone())).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
+}
+
+// The block size comes from the local, untracked docs/briefs/focus.txt
+// (`block N`, 2 without it): it is printed as B, so the test does not
+// depend on the checkout's settings.
+fn unblock(text: String) -> String throws {
+    let mut out = text.clone()
+    for n in 1..<10 {
+        out = out.replace(f"a block of {n} (drive_lane_block); at {n}:", "a block of B (drive_lane_block); at B:")
+    }
+    return out
 }
 
 // The toolchain that runs this test (CI builds target/release only); if the
