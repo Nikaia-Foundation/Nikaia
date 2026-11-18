@@ -34,55 +34,11 @@ pub fn rustc() -> &'static str {
 }
 
 pub fn deps_dir() -> PathBuf {
-    static DEPS: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-    DEPS.get_or_init(|| {
-        let exe = std::env::current_exe().expect("test binary path");
-        let beside = exe.parent().expect("deps directory").to_path_buf();
-        if beside.file_name().is_some_and(|name| name == "out")
-            && let Some(profile) = beside.ancestors().nth(4)
-        {
-            return gathered_deps(profile);
-        }
-        beside
-    })
-    .clone()
-}
-
-/// **One `deps` directory where Cargo's newer layout has none**: it keeps a
-/// crate's files in `<profile>/build/<crate>/<hash>/out`, and the test binary
-/// stands in one of those, with none of its dependencies beside it (#2116, the
-/// `nikaia_std` rlib was found in no directory). Each rlib, rmeta and dynamic
-/// library of an `out` directory is linked into `<profile>/deps`, where rustc
-/// finds them by `-L dependency=`.
-fn gathered_deps(profile: &Path) -> PathBuf {
-    let deps = profile.join("deps");
-    std::fs::create_dir_all(&deps).expect("a deps directory");
-    let crates = std::fs::read_dir(profile.join("build")).expect("the build directory");
-    for krate in crates.filter_map(|entry| entry.ok()) {
-        let Ok(hashes) = std::fs::read_dir(krate.path()) else {
-            continue;
-        };
-        for hash in hashes.filter_map(|entry| entry.ok()) {
-            let Ok(files) = std::fs::read_dir(hash.path().join("out")) else {
-                continue;
-            };
-            for file in files.filter_map(|entry| entry.ok()) {
-                let path = file.path();
-                let wanted = path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| {
-                        matches!(extension, "rlib" | "rmeta" | "so" | "dylib")
-                    });
-                let name = file.file_name();
-                if wanted && !deps.join(&name).exists() {
-                    // Another test binary may link the same name first.
-                    let _ = std::os::unix::fs::symlink(&path, deps.join(&name));
-                }
-            }
-        }
-    }
-    deps
+    std::env::current_exe()
+        .expect("test binary path")
+        .parent()
+        .expect("deps directory")
+        .to_path_buf()
 }
 
 /// The newest rlib of a crate. Used for the anchor only.
