@@ -77,12 +77,22 @@ fn an_offered_number_name(name: ref String) -> bool sync {
 /// groups exactly one element that repeats a rule of the grammar whose type is
 /// the entry's (`item*`, `item+`, a counted repeat, `list(item, sep)`). What
 /// stands around it is matched and dropped, so nothing is built from the
-/// items and each can be handed over as it is parsed.
-fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> CheckFinding? {
+/// items and each can be handed over as it is parsed. An entry whose items
+/// are handed over by `emit` in the rules it reaches (`emitted`, amended
+/// 2026-11-18, #2061) needs neither the one alternative nor the repetition.
+fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String], emitted: bool) -> CheckFinding? {
     let entry = world.words.resolve(rule.name).clone()
     let wanted: Ty = results[entry]?.clone() ?? Ty::Unknown
     if wanted.is_unknown() {
         return grammar_stream_refusal(entry, rule.span, "it names no item type", f"Write the type of one item after the arrow: `@stream entry rule {entry} -> Item = item*`.")
+    }
+    if emitted {
+        for alt in rule.alts {
+            if alt.action != null {
+                return grammar_stream_refusal(entry, rule.span, "it has an action", "Leave the action out: the items are handed over by `emit` in the rules below it, so the entry builds nothing.")
+            }
+        }
+        return null
     }
     if rule.alts.len() != 1 {
         return grammar_stream_refusal(entry, rule.span, f"it has {rule.alts.len()} alternatives", "Put the choice into the item's rule, and leave the entry one repetition: `item*`.")
@@ -641,4 +651,395 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1171", span, f"Grammar `{grammar_name}` has no rule called `{called}`.", ["A name called with values is a rule of the grammar; the built-ins that take patterns are Part II 10.8's."], "Declare the rule, or call one the grammar has."))
     }
+}
+
+/// **The rules a pattern calls**: a rule of the grammar referred to, called
+/// with values or folded, through every element that holds a pattern.
+fn grammar_called_rules(world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String], mut out: collections::BTreeSet[String]) sync {
+    match pattern {
+        Pattern::Seq(parts) => {
+            for part in parts {
+                grammar_called_rules(world, part.node, rules, out)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                grammar_called_rules(world, part.node, rules, out)
+            }
+        },
+        Pattern::Bind { pat, .. } => grammar_called_rules(world, pat.node, rules, out),
+        Pattern::Repeat { pat, .. } => grammar_called_rules(world, pat.node, rules, out),
+        Pattern::Counted { pat, .. } => grammar_called_rules(world, pat.node, rules, out),
+        Pattern::Group(inner) => grammar_called_rules(world, inner.node, rules, out),
+        Pattern::Ref { name, args, .. } => {
+            let called = world.words.resolve(name).clone()
+            if rules.contains(called) {
+                out.insert(called)
+            }
+            for arg in args {
+                grammar_called_rules(world, arg.node, rules, out)
+            }
+        },
+        Pattern::Call { name, .. } => {
+            let called = world.words.resolve(name).clone()
+            if rules.contains(called) {
+                out.insert(called)
+            }
+        },
+        Pattern::Fold(spec) => {
+            let called = world.words.resolve(spec.rule).clone()
+            if rules.contains(called) {
+                out.insert(called)
+            }
+        },
+        Pattern::Choose { arms, .. } => {
+            for arm in arms {
+                for alt in arm.alts {
+                    grammar_called_rules(world, alt.pattern.node, rules, out)
+                }
+            }
+        },
+        Pattern::Members { key, sep, .. } => {
+            grammar_called_rules(world, key.node, rules, out)
+            grammar_called_rules(world, sep.node, rules, out)
+        },
+        else => {},
+    }
+}
+
+/// **The rules each `@stream` entry reaches** (ADR-grammar-2 D7, amended
+/// 2026-11-18, #2061), the entry with them: a rule's name and the item type
+/// of the first entry, in the grammar's order, that reaches it.
+fn grammar_streamed_rules(world: ref CheckWorld, gram: ref GrammarDef, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, Ty] sync {
+    let mut out: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    for rule in gram.rules {
+        if rule.stream && rule.is_entry {
+            let entry = world.words.resolve(rule.name).clone()
+            let item: Ty = results[entry]?.clone() ?? Ty::Unknown
+            for reached in grammar_reached_from(world, gram, entry, rules) {
+                if !out.contains_key(reached) {
+                    out.insert(reached.clone(), item.clone())
+                }
+            }
+        }
+    }
+    return out
+}
+
+/// The rules reached from `start`, `start` among them.
+fn grammar_reached_from(world: ref CheckWorld, gram: ref GrammarDef, start: ref String, rules: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] sync {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut todo: Vec[String] = [start.clone()]
+    while todo.len() > 0 {
+        let next = todo.pop() ?? break
+        if seen.contains(next) {
+            continue
+        }
+        seen.insert(next.clone())
+        for rule in gram.rules {
+            if world.words.resolve(rule.name) == next {
+                let mut called: collections::BTreeSet[String] = collections::BTreeSet()
+                for alt in rule.alts {
+                    grammar_called_rules(world, alt.pattern.node, rules, called)
+                }
+                for one in called {
+                    if !seen.contains(one) {
+                        todo.push(one.clone())
+                    }
+                }
+            }
+        }
+    }
+    return seen
+}
+
+/// The spans of the `emit` statements in a block, through the blocks nested
+/// in its statements.
+fn grammar_emits_in(block: ref Block, mut out: Vec[Span]) sync {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Emit(_) => out.push(stmt.span.clone()),
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            grammar_emits_in(inner, out)
+        }
+    }
+}
+
+/// Whether one of a rule's actions holds an `emit`.
+fn grammar_rule_emits(rule: ref GrammarRule) -> bool sync {
+    for alt in rule.alts {
+        let action = alt.action?.clone() ?? continue
+        let mut found: Vec[Span] = []
+        grammar_emits_in(action, found)
+        if found.len() > 0 {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether some rule `entry` reaches hands over its items with `emit`: then
+/// the entry states no repetition of its own (`NK1349` asks none).
+fn grammar_entry_emits(world: ref CheckWorld, gram: ref GrammarDef, entry: ref String, rules: ref collections::BTreeSet[String]) -> bool sync {
+    let reached = grammar_reached_from(world, gram, entry, rules)
+    for rule in gram.rules {
+        if reached.contains(world.words.resolve(rule.name)) && grammar_rule_emits(rule) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **What a pattern does to an `emit` run inside a call it holds**: the call
+/// is not in it (`Absent`), a choice it holds is tried after the call ran
+/// (`Undone`, with that choice said), or neither, and whether a failure at or
+/// after the call can leave the pattern (`Passed`).
+enum GrammarUndo {
+    Absent,
+    Undone(String),
+    Passed(bool),
+}
+
+/// Whether a pattern can fail: a `*` or `?` repetition, a cut, and what holds
+/// only those cannot; anything else may.
+fn grammar_can_fail(pattern: ref Pattern) -> bool sync {
+    return match pattern {
+        Pattern::Repeat { rep, .. } => rep != Repeat::Star && rep != Repeat::Optional,
+        Pattern::Cut => false,
+        Pattern::Group(inner) => grammar_can_fail(inner.node),
+        Pattern::Bind { pat, .. } => grammar_can_fail(pat.node),
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { grammar_can_fail(part.node) }),
+        Pattern::Choice(parts) => parts.iter().all(fn(part) { grammar_can_fail(part.node) }),
+        else => true,
+    }
+}
+
+/// The text a pattern is written as, for a message: its first characters.
+fn grammar_undo_said(world: ref CheckWorld, rule: ref String, what: ref String) -> String sync {
+    return f"{what} in rule `{rule}`"
+}
+
+/// **The calls of `target` in a pattern, and what stands around them**
+/// (ADR-grammar-2 D7, amended 2026-11-18): `failing` says whether the call
+/// itself fails after the `emit` ran (the rule it is in gave up after it).
+/// A sequence lets a failure out unless a cut stands before the call; a
+/// choice that has an option left, a repetition that may stop short and a
+/// lookahead undo what ran inside them.
+fn grammar_undo_in(world: ref CheckWorld, pattern: ref Pattern, target: ref String, failing: bool, rule: ref String) -> GrammarUndo sync {
+    match pattern {
+        Pattern::Seq(parts) => {
+            let mut found = false
+            let mut out = false
+            let mut cut = false
+            for i in 0..<parts.len() {
+                match parts[i].node {
+                    Pattern::Cut => { cut = true },
+                    else => {},
+                }
+                match grammar_undo_in(world, parts[i].node, target, failing, rule) {
+                    GrammarUndo::Absent => {},
+                    GrammarUndo::Undone(said) => return GrammarUndo::Undone(said),
+                    GrammarUndo::Passed(inner) => {
+                        found = true
+                        if !cut {
+                            let mut after = inner
+                            let mut j = i + 1
+                            while j < parts.len() {
+                                match parts[j].node {
+                                    Pattern::Cut => break,
+                                    else => {},
+                                }
+                                if grammar_can_fail(parts[j].node) {
+                                    after = true
+                                }
+                                j += 1
+                            }
+                            out = out || after
+                        }
+                    },
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent }
+        },
+        Pattern::Choice(options) => {
+            let mut found = false
+            let mut out = false
+            for k in 0..<options.len() {
+                match grammar_undo_in(world, options[k].node, target, failing, rule) {
+                    GrammarUndo::Absent => {},
+                    GrammarUndo::Undone(said) => return GrammarUndo::Undone(said),
+                    GrammarUndo::Passed(inner) => {
+                        if inner && k + 1 < options.len() {
+                            return GrammarUndo::Undone(grammar_undo_said(world, rule, f"option {k + 2} of a choice"))
+                        }
+                        found = true
+                        out = out || inner
+                    },
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent }
+        },
+        Pattern::Group(inner) => return grammar_undo_in(world, inner.node, target, failing, rule),
+        Pattern::Bind { pat, .. } => return grammar_undo_in(world, pat.node, target, failing, rule),
+        Pattern::Repeat { pat, rep } => {
+            let inner = grammar_undo_in(world, pat.node, target, failing, rule)
+            return match inner {
+                GrammarUndo::Passed(out) => match rep {
+                    Repeat::Exactly(_) => GrammarUndo::Passed(out),
+                    else => if out { GrammarUndo::Undone(grammar_undo_said(world, rule, "the end of a repetition")) } else { GrammarUndo::Passed(false) },
+                },
+                else => inner,
+            }
+        },
+        Pattern::Counted { pat, .. } => return grammar_undo_repeated(world, grammar_undo_in(world, pat.node, target, failing, rule), rule),
+        Pattern::Members { key, sep, .. } => {
+            let keyed = grammar_undo_repeated(world, grammar_undo_in(world, key.node, target, failing, rule), rule)
+            return match keyed {
+                GrammarUndo::Absent => grammar_undo_repeated(world, grammar_undo_in(world, sep.node, target, failing, rule), rule),
+                else => keyed,
+            }
+        },
+        Pattern::Fold(spec) => {
+            if world.words.resolve(spec.rule) != target {
+                return GrammarUndo::Absent
+            }
+            return grammar_undo_repeated(world, GrammarUndo::Passed(failing), rule)
+        },
+        Pattern::Call { name, .. } => return if world.words.resolve(name) == target { GrammarUndo::Passed(failing) } else { GrammarUndo::Absent },
+        Pattern::Ref { name, args, .. } => {
+            let called = world.words.resolve(name).clone()
+            if called == target {
+                return GrammarUndo::Passed(failing)
+            }
+            let mut found = false
+            let mut out = false
+            for arg in args {
+                match grammar_undo_in(world, arg.node, target, failing, rule) {
+                    GrammarUndo::Absent => {},
+                    GrammarUndo::Undone(said) => return GrammarUndo::Undone(said),
+                    GrammarUndo::Passed(inner) => {
+                        found = true
+                        out = out || inner
+                    },
+                }
+            }
+            if !found {
+                return GrammarUndo::Absent
+            }
+            // A lookahead goes back to where it started, whatever it
+            // matched; a list is a repetition.
+            if called == "peek" || called == "not" {
+                return GrammarUndo::Undone(grammar_undo_said(world, rule, f"the lookahead `{called}(..)`"))
+            }
+            if called == "list" {
+                return grammar_undo_repeated(world, GrammarUndo::Passed(out), rule)
+            }
+            return GrammarUndo::Passed(out)
+        },
+        Pattern::Choose { arms, .. } => {
+            let mut found = false
+            let mut out = false
+            for arm in arms {
+                for k in 0..<arm.alts.len() {
+                    match grammar_undo_in(world, arm.alts[k].pattern.node, target, failing, rule) {
+                        GrammarUndo::Absent => {},
+                        GrammarUndo::Undone(said) => return GrammarUndo::Undone(said),
+                        GrammarUndo::Passed(inner) => {
+                            if inner && k + 1 < arm.alts.len() {
+                                return GrammarUndo::Undone(grammar_undo_said(world, rule, f"alternative {k + 2} of a `choose` arm"))
+                            }
+                            found = true
+                            out = out || inner
+                        },
+                    }
+                }
+            }
+            return if found { GrammarUndo::Passed(out) } else { GrammarUndo::Absent }
+        },
+        else => return GrammarUndo::Absent,
+    }
+}
+
+/// A repetition that may stop short, around what a call did: undone where a
+/// failure leaves the item.
+fn grammar_undo_repeated(world: ref CheckWorld, inner: GrammarUndo, rule: ref String) -> GrammarUndo sync {
+    return match inner {
+        GrammarUndo::Passed(out) => if out { GrammarUndo::Undone(grammar_undo_said(world, rule, "the end of a repetition")) } else { GrammarUndo::Passed(false) },
+        else => inner,
+    }
+}
+
+/// **What could undo an `emit` in rule `target`'s action**, from the rules
+/// that call it up to the `@stream` entries (ADR-grammar-2 D7, amended
+/// 2026-11-18): the first choice that is still tried after the call has
+/// run, or `null` where every way up is committed or ends the parse.
+/// `failing` says whether `target` gives up after the `emit`; `seen` holds
+/// the rules asked already, by failing or not.
+fn grammar_undone_from(world: ref CheckWorld, gram: ref GrammarDef, target: ref String, failing: bool, streamed: ref collections::BTreeMap[String, Ty], mut seen: collections::BTreeSet[String]) -> String? sync {
+    let key = f"{target}/{failing}"
+    if seen.contains(key) {
+        return null
+    }
+    seen.insert(key)
+    for rule in gram.rules {
+        let name = world.words.resolve(rule.name).clone()
+        if !streamed.contains_key(name) {
+            continue
+        }
+        let mut found = false
+        let mut out = false
+        for j in 0..<rule.alts.len() {
+            match grammar_undo_in(world, rule.alts[j].pattern.node, target, failing, name) {
+                GrammarUndo::Absent => {},
+                GrammarUndo::Undone(said) => return said,
+                GrammarUndo::Passed(inner) => {
+                    if inner && j + 1 < rule.alts.len() {
+                        return grammar_undo_said(world, name, f"alternative {j + 2}")
+                    }
+                    found = true
+                    out = out || inner
+                },
+            }
+        }
+        if found && !(rule.stream && rule.is_entry) {
+            match grammar_undone_from(world, gram, name, out, streamed, seen) {
+                said => return said,
+                null => {},
+            }
+        }
+    }
+    return null
+}
+
+/// **`NK1370`: an `emit` the parse could still undo** (ADR-grammar-2 D7,
+/// amended 2026-11-18, #2061): one finding per `emit` in the action of a
+/// rule a `@stream` entry reaches, where a choice around the rule can still
+/// be tried after the action ran. An alternative of the rule itself after
+/// the one whose action emits is no such choice: the action runs once its
+/// pattern has matched, and the rule does not try another after it.
+fn grammar_emits_undone(world: ref CheckWorld, gram: ref GrammarDef, streamed: ref collections::BTreeMap[String, Ty]) -> Vec[CheckFinding] sync {
+    let mut out: Vec[CheckFinding] = []
+    for rule in gram.rules {
+        let name = world.words.resolve(rule.name).clone()
+        if !streamed.contains_key(name) {
+            continue
+        }
+        let mut emits: Vec[Span] = []
+        for alt in rule.alts {
+            let action = alt.action?.clone() ?? continue
+            grammar_emits_in(action, emits)
+        }
+        if emits.len() == 0 {
+            continue
+        }
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        let undone = grammar_undone_from(world, gram, name, false, streamed, seen) ?? continue
+        for at in emits {
+            let notes: Vec[String] = [f"The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `{name}` fails, the parse goes back and tries {undone}, and the item is already handed over. The compiler does not hold items back to hide that."]
+            out.push(check_refusal("NK1370", at, f"This `emit` in rule `{name}` could be undone: {undone} can still be tried after it runs.", notes, "Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`."))
+        }
+    }
+    return out
 }

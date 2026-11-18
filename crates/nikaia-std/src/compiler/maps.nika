@@ -552,6 +552,7 @@ impl MpBody {
                     self.expr(e)
                 }
             },
+            Stmt::Emit(e) => self.expr(e),
             Stmt::Break => {},
             Stmt::Continue => {},
             Stmt::Comptime { .. } => self.doubt(),

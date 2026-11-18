@@ -397,6 +397,7 @@ impl<'a> MpBody<'a> {
             },
             Stmt::Return(value) => { self.returned_maybe((value).as_ref()); },
             Stmt::Expr(e) => { if is_the_result { self.returned(e); } else { self.expr(e); } },
+            Stmt::Emit(e) => { self.expr(e); },
             Stmt::Break => { },
             Stmt::Continue => { },
             Stmt::Comptime { .. } => { self.doubt(); },

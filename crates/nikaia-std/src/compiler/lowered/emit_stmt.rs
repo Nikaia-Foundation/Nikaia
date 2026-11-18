@@ -384,6 +384,7 @@ impl EmitState {
                 } else if here.can_throw { out.push("return Ok(());"); } else { out.push("return;"); }
             },
             Stmt::Expr(expr) => { self.emit_stmt_expr(world, walk, out, host, expr, span, depth, &tail, here, scope)?; },
+            Stmt::Emit(_) => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `emit` yet: the grammar engine does not yet hand a `@stream` entry's sink to the actions of the rules below it."), at: Some(at) }, &"emit_stmt_a_stmt")); },
         }
         Ok(())
     }

@@ -134,6 +134,7 @@ pub(crate) fn blocks_of_stmt(stmt: &Stmt) -> Vec<&Block> {
         Stmt::Let { value, .. } => { return blocks_of_expr(value); },
         Stmt::Comptime { value, .. } => { return blocks_of_expr(value); },
         Stmt::Expr(value) => { return blocks_of_expr(value); },
+        Stmt::Emit(value) => { return blocks_of_expr(value); },
         Stmt::Assign { target, value, .. } => {
             for block in blocks_of_expr(target) { out.push(block); }
             for block in blocks_of_expr(value) { out.push(block); }

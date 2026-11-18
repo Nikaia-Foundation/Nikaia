@@ -1,0 +1,25 @@
+// `emit` hands an item to the walk of a `@stream` entry, so only the action
+// of a rule such an entry reaches may hold one (ADR-grammar-2 D7, amended
+// 2026-11-18, #2061): each `emit` here is NK1371.
+
+struct Item {
+	word: String,
+}
+
+grammar NotStreamed {
+	entry rule items -> Vec[Item] = all:item* -> { all.clone() }
+	rule item -> Item = w:until(";") ";" -> {
+		emit Item { word: w.clone() }
+		Item { word: w.clone() }
+	}
+}
+
+grammar Streamed {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+	rule apart = w:until(";") ";" -> { emit Item { word: w.clone() } }
+}
+
+fn main() {
+	emit Item { word: "loose" }
+}

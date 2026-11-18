@@ -2512,36 +2512,63 @@ fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut 
 /// the loop changes (`changed`) that holds where the loop is entered is
 /// given again at the head and past the loop (`rules_loop_give`) and asked
 /// for at each end of a turn and each `break` (`rules_turn_end`): it holds
-/// at every head, by induction. Asked before the head forgets; the indexes
-/// of the rules kept.
-fn rules_loop_entry(mut walk: BoundsWalk, facts: ref BoundsFacts, changed: ref BoundsChanged, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
-    let mut kept: Vec[i64] = []
+/// at every head, by induction. So for the value a builder builds
+/// (`rule_built`, #2063), which a method of its type called in the loop
+/// asks the rules of. Asked before the head forgets; the values and the
+/// indexes of the rules kept.
+fn rules_loop_entry(mut walk: BoundsWalk, facts: ref BoundsFacts, changed: ref BoundsChanged, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[(String, i64)] {
+    let mut kept: Vec[(String, i64)] = []
     if !walk.checking {
         return kept
     }
-    let owner = walk.rule_roots.get("self")?.clone() ?? return kept
-    for (at, rule) in walk.rules.clone().iter().enumerate() {
-        if rule.owner != owner || walk.rule_failed.contains(at) || !rules_kept_at_turns(rule.kind) {
-            continue
-        }
-        if !rules_writes(changed, f"self.{rule.a}") && (rule.b.is_empty() || !rules_writes(changed, f"self.{rule.b}")) {
-            continue
-        }
-        if rules_holds_here(walk, facts, rule, ask) {
-            kept.push(at)
+    for root in rules_loop_roots(walk) {
+        let owner = walk.rule_roots.get(root)?.clone() ?? continue
+        for (at, rule) in walk.rules.clone().iter().enumerate() {
+            if rule.owner != owner || walk.rule_failed.contains(at) || !rules_kept_at_turns(rule.kind) {
+                continue
+            }
+            if !rules_writes(changed, f"{root}.{rule.a}") && (rule.b.is_empty() || !rules_writes(changed, f"{root}.{rule.b}")) {
+                continue
+            }
+            if rules_holds_here(walk, facts, rule, root, ask) {
+                kept.push((root.clone(), at))
+            }
         }
     }
     return kept
 }
 
-/// The rules `kept` (`rules_loop_entry`) given of `self` after a loop's
-/// head forgot what `changed` changes.
-fn rules_loop_give(mut walk: BoundsWalk, mut facts: BoundsFacts, kept: ref Vec[i64], changed: ref BoundsChanged) {
-    if kept.is_empty() {
-        return
+/// The values whose rules a loop's head is given again
+/// (`rules_loop_entry`): `self` and the value a builder builds.
+fn rules_loop_roots(walk: ref BoundsWalk) -> Vec[String] {
+    let mut roots: Vec[String] = []
+    if walk.rule_roots.contains_key("self") {
+        roots.push("self")
     }
-    let owner = walk.rule_roots.get("self")?.clone() ?? return
-    rules_give(walk, facts, "self", owner, false, false, changed, kept)
+    for built in walk.rule_built {
+        if built != "self" && walk.rule_roots.contains_key(built) {
+            roots.push(built.clone())
+        }
+    }
+    return roots
+}
+
+/// The rules `kept` (`rules_loop_entry`) given of their values after a
+/// loop's head forgot what `changed` changes.
+fn rules_loop_give(mut walk: BoundsWalk, mut facts: BoundsFacts, kept: ref Vec[(String, i64)], changed: ref BoundsChanged) {
+    for root in rules_loop_roots(walk) {
+        let mut only: Vec[i64] = []
+        for (of, at) in kept {
+            if of == root {
+                only.push(at)
+            }
+        }
+        if only.is_empty() {
+            continue
+        }
+        let owner = walk.rule_roots.get(root)?.clone() ?? continue
+        rules_give(walk, facts, root, owner, false, false, changed, only)
+    }
 }
 
 /// **At the end of a turn or a `break`** of the innermost loop: each rule
@@ -2551,9 +2578,9 @@ fn rules_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, ask: fn(ref logi
         return
     }
     let kept = walk.rule_loops[walk.rule_loops.len() - 1].clone()
-    for at in kept {
+    for (root, at) in kept {
         let rule = walk.rules[at].clone()
-        if !walk.rule_failed.contains(at) && !rules_holds_here(walk, facts, rule, ask) {
+        if !walk.rule_failed.contains(at) && !rules_holds_here(walk, facts, rule, root, ask) {
             walk.rule_failed.insert(at)
         }
     }
@@ -2564,15 +2591,15 @@ fn rules_kept_at_turns(kind: ref String) -> bool {
     return kind == "length" || kind == "capped" || rules_of_a_field(kind)
 }
 
-/// Whether a rule of a kind `rules_kept_at_turns` names holds of `self` here.
-fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+/// Whether a rule of a kind `rules_kept_at_turns` names holds of `root` here.
+fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     if rule.kind == "length" {
-        return rules_same_length(walk, facts, rule, "self", ask)
+        return rules_same_length(walk, facts, rule, root, ask)
     }
     if rule.kind == "capped" {
-        return rules_capped_holds(walk, facts, rule, "self", ask)
+        return rules_capped_holds(walk, facts, rule, root, ask)
     }
-    return rules_field_holds(walk, facts, rule, "self", ask)
+    return rules_field_holds(walk, facts, rule, root, ask)
 }
 
 /// **A call in a checked body** (`receiver` a path, or nothing for a free

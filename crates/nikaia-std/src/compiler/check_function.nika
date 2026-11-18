@@ -312,13 +312,22 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             state.a_name_the_page_does_not_have(world, alt.pattern)
         }
     }
+    // The rules a `@stream` entry reaches may hand over its items with
+    // `emit` (ADR-grammar-2 D7, amended 2026-11-18, #2061).
+    let streamed = grammar_streamed_rules(world, gram, state.rule_results, rules)
+    for refused in grammar_emits_undone(world, gram, streamed) {
+        state.findings.push(refused)
+    }
     for rule in gram.rules {
         if rule.stream {
-            match grammar_stream_refused(world, rule, state.rule_results, rules) {
+            let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), rules)
+            match grammar_stream_refused(world, rule, state.rule_results, rules, emitted) {
                 refused => state.findings.push(refused),
                 null => {},
             }
         }
+        let outer_emitting: Ty? = state.emitting?.clone()
+        state.emitting = streamed[world.words.resolve(rule.name)]?.clone()
         let mut expected: Ty? = null
         let written: Type? = rule.ret_type?.clone()
         if written != null {
@@ -359,6 +368,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             }
         }
         state.current = outer_current
+        state.emitting = outer_emitting
     }
 }
 

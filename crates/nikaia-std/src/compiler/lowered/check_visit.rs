@@ -109,6 +109,7 @@ pub(crate) fn check_visit_stmt(stmt: &Stmt) -> Vec<&Expr> {
         Stmt::Break => { },
         Stmt::Continue => { },
         Stmt::Expr(inner) => { out.extend(check_visit_preorder(inner)); },
+        Stmt::Emit(inner) => { out.extend(check_visit_preorder(inner)); },
     }
     out
 }
@@ -157,6 +158,7 @@ pub(crate) fn check_visit_stmt_blocks(stmt: &Stmt) -> Vec<&Block> {
         Stmt::Let { value, .. } => { out.extend(check_visit_expr_blocks(value)); },
         Stmt::Comptime { value, .. } => { out.extend(check_visit_expr_blocks(value)); },
         Stmt::Expr(value) => { out.extend(check_visit_expr_blocks(value)); },
+        Stmt::Emit(value) => { out.extend(check_visit_expr_blocks(value)); },
         Stmt::Assign { target, value, .. } => {
             out.extend(check_visit_expr_blocks(target));
             out.extend(check_visit_expr_blocks(value));

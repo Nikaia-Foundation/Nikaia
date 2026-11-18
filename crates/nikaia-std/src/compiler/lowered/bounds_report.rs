@@ -279,6 +279,7 @@ pub(crate) fn bounds_report_roots(stmt: &Stmt) -> Vec<&Expr> {
         Stmt::Break => { },
         Stmt::Continue => { },
         Stmt::Expr(inner) => { out.push(inner); },
+        Stmt::Emit(inner) => { out.push(inner); },
     }
     out
 }

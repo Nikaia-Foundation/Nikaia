@@ -151,7 +151,7 @@ pub(crate) struct BoundsWalk {
     pub(crate) checking: bool,
     pub(crate) checked_results: collections::BTreeSet<i64>,
     pub(crate) rule_failed: collections::BTreeSet<i64>,
-    pub(crate) rule_loops: Vec<Vec<i64>>,
+    pub(crate) rule_loops: Vec<Vec<(String, i64)>>,
     pub(crate) rule_built: collections::BTreeSet<String>,
     pub(crate) rule_built_literal: i64,
     pub(crate) return_params: Vec<String>,
@@ -2995,6 +2995,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
             return true;
         },
         Stmt::Expr(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, &mut &mut *ask),
+        Stmt::Emit(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, &mut &mut *ask),
     }
 }
 
