@@ -349,7 +349,19 @@ impl EmitState {
                 } else {
                     out.push("nikaia_std::range::span(")
                 }
-                self.emit_expr(world, walk, out, host, start, depth, flow, scope)
+                // **Two literal bounds are an `i64` range** (ADR-285 D1): the
+                // start says so (`1i64`), since a kept range is converted per
+                // integer type (`index::At`) and Rust cannot pick one (#2082).
+                let literal_start = match start {
+                    Expr::LitInt { .. } => true,
+                    else => false,
+                }
+                let literal_end = match end {
+                    Expr::LitInt { .. } => true,
+                    else => false,
+                }
+                let start_flow = if literal_start && literal_end { flow.widened() } else { flow }
+                self.emit_expr(world, walk, out, host, start, depth, start_flow, scope)
                 out.push(", ")
                 self.emit_expr(world, walk, out, host, end, depth, flow, scope)
                 out.push(")")
