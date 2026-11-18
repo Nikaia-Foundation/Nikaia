@@ -3270,6 +3270,37 @@ fn main() throws {
 }
 ```
 
+### 6.10. Naming the Calling Thread: `std::thread`
+
+A test that asks whether two calls ran on the same thread, as a library's
+kept threads are meant to (ADR-284 D9), compares the threads' names
+([ADR-401](adr/adr-401.md)):
+
+* `thread::id() -> thread::Id` names the thread that calls it. Two calls on
+  the same thread give equal ids; two different threads never do (D1).
+* A `thread::Id` is compared with `==` and `!=` and is a key of a map or a
+  member of a set. It has no arithmetic, no order and no conversion to a
+  number, and it is neither the operating system's thread id nor an address:
+  a thread takes it from a counter on its first call and keeps it for its
+  life, and no other thread ever gets it, even after the first one ended (D2).
+* It names a **thread, not a task**: a task may be resumed on another thread
+  than the one it began on, so an id read before a pause may differ from one
+  read after it, and state kept by thread id breaks when a task moves (D3).
+  Concurrency stays with tasks (Part II); `std::thread` holds nothing else.
+
+```nika
+use std::collections
+use std::thread
+
+fn main() throws {
+    let first = thread::id()
+    let mut names: collections::HashMap[thread::Id, String] = collections::HashMap()
+    names.insert(first, "main")
+    println(thread::id() == first)              // true: the same thread
+    println(names.get(thread::id()) ?? "none")  // main
+}
+```
+
 ---
 
 ## Chapter 7: Error Handling

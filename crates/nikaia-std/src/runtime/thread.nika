@@ -1,0 +1,19 @@
+// crates/nikaia-std/src/runtime/thread.nika
+//
+// **The name of a thread** ([ADR-401](../../../../docs/specification/adr/adr-401.md)):
+// `std::thread::Id`, written in Nikaia. `src/thread.rs` re-exports it as
+// `nikaia_std::thread::Id` and keeps what Nikaia has no word for: the
+// process-wide counter and the per-thread slot it fills on a thread's first
+// call to `thread::id()` (D2). `std.contracts` writes the type's entry by
+// hand: `==`, `!=` and a hash, no order and no number (D1).
+
+/// The name of a thread: a number from a counter no other thread got, kept
+/// private, so a program compares and hashes it and does nothing else.
+pub struct Id {
+    number: i64,
+}
+
+/// The id holding `number`, which `thread.rs` took from its counter.
+pub fn thread_numbered(number: i64) -> Id sync {
+    return Id { number: number }
+}
