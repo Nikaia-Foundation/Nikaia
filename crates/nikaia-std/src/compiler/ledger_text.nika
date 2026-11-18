@@ -199,6 +199,12 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     if contract.keeps.len() > 0 {
         out.push_str(f"keeps = [{quoted_all(contract.keeps)}]\n")
     }
+    // **The parameters of code it runs from tasks at once** (ADR-views-3
+    // D17): a caller in another package refuses a lambda that changes what
+    // it captures there, and lends every other one `&mut`.
+    if contract.at_once.len() > 0 {
+        out.push_str(f"at_once = [{quoted_all(contract.at_once)}]\n")
+    }
     // Beside `keeps`: the two together are what a caller has to know before
     // it may hand a name over rather than lend it (ADR-094 D3).
     if contract.mutates && !mutates_said {

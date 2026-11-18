@@ -87,7 +87,7 @@ pub(crate) fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckStat
         state.findings.push(check_refusal("NK1166", &default.span, format!("`{}` holds `{}`, but its default is {}.", name, wanted, said), vec![], Some(format!("Give `{}` a default that is a `{}`.", name, wanted))));
         return;
     }
-    state.expect_type(world, &found, &want, &default.span, "const", &|found_text, wanted_text| { format!("`{}` holds `{}`, but its default is `{}`.", name, wanted_text, found_text) });
+    state.expect_type(world, &found, &want, &default.span, "const", &mut |found_text, wanted_text| { format!("`{}` holds `{}`, but its default is `{}`.", name, wanted_text, found_text) });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -123,7 +123,7 @@ pub(crate) fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState
             state.a_constant_that_owns_memory(name, &declared, &computed, "a default", span);
             return;
         }
-        let owned = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
+        let owned = unwritable_in(&state, world, &computed, &mut |of, variant| { check_walked_payload_of(world, of, variant) });
         if owned.len() == 2 {
             state.a_field_that_owns_memory(name, unsafe { nikaia_std::proven::read(&owned, (0) as usize) }, unsafe { nikaia_std::proven::read(&owned, (1) as usize) }, "a default", span);
             return;
@@ -135,7 +135,7 @@ pub(crate) fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        if literal_of(&held, &|number| { host.float_text(number) }).is_some() { return; }
+        if literal_of(&held, &mut |number| { host.float_text(number) }).is_some() { return; }
         message = format!("The default of `{}` is a list of something other than numbers or `bool`s, or a list it would own, and a default of that shape is not built yet.", name);
     }
     let (note, help) = match kind {

@@ -211,7 +211,7 @@ fn keeping_statement(
                 library: library_methods,
             },
             resolved,
-            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         ) else {
             continue;
         };

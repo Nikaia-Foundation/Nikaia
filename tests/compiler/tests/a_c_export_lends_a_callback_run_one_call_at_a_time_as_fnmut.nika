@@ -1,0 +1,32 @@
+// A `pub extern fn` of a C library whose body runs its code parameter one call
+// at a time lowers it to `&mut impl FnMut` (ADR-views-3 D17), so the C export
+// wrapper binds the C callback `let mut` and lends it `&mut` (#2076). Before,
+// the wrapper lent `&` and the library reached rustc as NK1343. The C caller
+// counts the calls through its context.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"steps\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub extern fn each_up_to(n: i64, each: fn(i64) -> bool sync) -> i64 sync {\n    let mut at = 0\n    while at < n {\n        if !each(at) {\n            return at\n        }\n        at = at + 1\n    }\n    return at\n}\n")
+    fs::write(f"{tmp}/use.c", fs::Root::Anywhere, "#include <stdio.h>\n#include \"steps.h\"\n\nstatic bool seen(int64_t at, void *ctx) {\n    int64_t *sum = ctx;\n    *sum += at;\n    return at < 3;\n}\n\nint main(void) {\n    int64_t sum = 0;\n    int64_t out = 0;\n    int status = steps_each_up_to(10, seen, &sum, &out);\n    printf(\"status %d, stopped at %lld, sum %lld\\n\", status, (long long) out, (long long) sum);\n    return 0;\n}\n")
+    let built = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"build: exit {built.code}")
+    if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+    let lib = f"{tmp}/target/nikaia/c-library"
+    let cc = process::run("cc", ["-I", lib.clone(), "use.c", "-L", lib.clone(), "-lsteps", "-o", "use"]; dir: tmp.clone())
+    println(f"cc: exit {cc.code}")
+    if cc.code != 0 { println(cc.stderr.trim().replace(tmp, "TMP")) }
+    let ran = process::run(f"{tmp}/use", []; dir: tmp.clone(), env: [("LD_LIBRARY_PATH", lib)])
+    print(ran.stdout)
+    process::run("rm", ["-rf", tmp])
+}

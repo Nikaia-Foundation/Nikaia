@@ -174,7 +174,7 @@ impl Settings {
     ) -> Result<Settings> {
         Settings::of(
             project_settings::project_settings_resolve(
-                &|key, default| manifest.setting(key, None, default).to_text(),
+                &mut |key, default| manifest.setting(key, None, default).to_text(),
                 manifest.package_name(),
                 target.map(str::to_text),
                 user_parallelism.map(str::to_text),
@@ -1986,7 +1986,7 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
         return Ok(());
     };
     block_on(project_write::project_write_proofs(
-        root, book, locked, &whole,
+        root, book, locked, &mut whole,
     ))
     .map_err(write_refusal)
 }
@@ -2019,7 +2019,7 @@ fn written(refusal: ProjectWriteRefusal) -> anyhow::Error {
 /// difference is a change in a contract and never in the formatting.
 pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
     block_on(project_write::project_write_ledger(
-        path, ledger, locked, &whole,
+        path, ledger, locked, &mut whole,
     ))
     .map_err(
         |error| match nikaia_std::error::holds::<ProjectWriteRefusal>(&*error) {

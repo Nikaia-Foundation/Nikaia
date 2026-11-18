@@ -647,10 +647,14 @@ impl EmitState {
         let changing_code = self.facts.changing_code_args.get(node) ?? 0
         if changing_code == 3 {
             out.push("&mut &*")
-        } else if changing_code == 4 {
+        } else if changing_code == 4 || changing_code == 6 {
+            // A function named, or kept code, is written as a lambda, which
+            // Rust types from the parameter only when nothing stands between
+            // them.
             out.push("&mut ")
+            lend = false
         }
-        let change = self.facts.mut_args.contains(node) || changing_code == 1 || changing_code == 2 || changing_code == 3
+        let change = self.facts.mut_args.contains(node) || changing_code == 1 || changing_code == 2 || changing_code == 3 || changing_code == 5
         // A handle put into a variant (`stored_handles`, #1212) likewise.
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
@@ -757,6 +761,11 @@ impl EmitState {
         if pointer == 0 {
             if changing_code == 3 {
                 // `&mut &*` is written above.
+            } else if changing_code == 2 && walk.dyn_code && self.emit_arg_dyn_code_handed_on(world, walk.keep_function, arg) {
+                // A `dyn FnMut` parameter (a function on a call cycle, #1023)
+                // lent on: `&mut &mut *f` is sized, so it fits a parameter
+                // written `impl FnMut` as well as one written `dyn FnMut`.
+                out.push("&mut &mut *")
             } else if changing_code == 2 || (change && self.facts.reborrowed_args.contains(node)) {
                 out.push("&mut *")
             } else if change {
@@ -990,8 +999,9 @@ impl EmitState {
             let joined = names.join(", ")
             // **One `&` only** (ADR-views-3 D2, #1254): behind two, Rust no
             // longer reads the closure's signature off the `AsyncFn` bound,
-            // and a lent parameter's lifetime is then not general enough.
-            if !out.buf.ends_with("&") {
+            // and a lent parameter's lifetime is then not general enough. The
+            // `&mut ` of code that changes what it captures is that one.
+            if !out.buf.ends_with("&") && !out.buf.ends_with("&mut ") {
                 out.push("&")
             }
             out.push(f"async |{joined}| (*")

@@ -129,7 +129,7 @@ pub(crate) fn bm_most(rep: &Repeat) -> Option<i64> {
     }
 }
 
-pub(crate) fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_ensured(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;
@@ -159,7 +159,7 @@ pub(crate) fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections:
     out
 }
 
-pub(crate) fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_collected(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;
@@ -191,7 +191,7 @@ pub(crate) fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collection
     out
 }
 
-pub(crate) fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_required(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     for ledger in ledgers.iter() {
@@ -226,7 +226,7 @@ pub(crate) fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections
     out
 }
 
-pub(crate) fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_each(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;

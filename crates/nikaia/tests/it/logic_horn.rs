@@ -94,7 +94,7 @@ fn a_true_invariant_passes_all_three_queries() {
     let mut arena = TermArena::empty();
     let problem = section_one(&mut arena);
     let inv = invariant(&mut arena, "true");
-    let verdict = lg_loop_check(&mut arena, &problem, inv, &lg_proved);
+    let verdict = lg_loop_check(&mut arena, &problem, inv, &mut lg_proved);
     assert!(verdict.proved(), "{verdict:?}");
 }
 
@@ -103,7 +103,7 @@ fn an_invariant_a_turn_does_not_keep_fails() {
     let mut arena = TermArena::empty();
     let problem = section_one(&mut arena);
     let inv = invariant(&mut arena, "not kept");
-    let verdict = lg_loop_check(&mut arena, &problem, inv, &lg_proved);
+    let verdict = lg_loop_check(&mut arena, &problem, inv, &mut lg_proved);
     assert!(verdict.holds_at_entry, "{verdict:?}");
     assert!(!verdict.kept_by_a_turn, "{verdict:?}");
     assert!(!verdict.proved());
@@ -114,7 +114,7 @@ fn an_invariant_too_weak_for_the_goal_fails() {
     let mut arena = TermArena::empty();
     let problem = section_one(&mut arena);
     let inv = invariant(&mut arena, "too weak");
-    let verdict = lg_loop_check(&mut arena, &problem, inv, &lg_proved);
+    let verdict = lg_loop_check(&mut arena, &problem, inv, &mut lg_proved);
     assert!(
         verdict.holds_at_entry && verdict.kept_by_a_turn,
         "{verdict:?}"

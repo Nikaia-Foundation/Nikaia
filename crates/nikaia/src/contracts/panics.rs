@@ -85,7 +85,7 @@ pub fn infer(
         nika::unit_panics(
             &parsed.program,
             &parsed.interner,
-            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
             facts,
             own,
             library,

@@ -49,8 +49,8 @@ pub(crate) fn sub_program(
     bound: &str,
     value: &Expr,
     ty: &Ty,
-    known: &dyn Fn(&str) -> Option<Value>,
-    typed: &dyn Fn(&str) -> Option<Ty>,
+    known: &mut dyn FnMut(&str) -> Option<Value>,
+    typed: &mut dyn FnMut(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
     let mut kept = parsed.keeping(|item| tree::comptime_keeps(item, &parsed.interner));
     let interner = &kept.interner;
@@ -61,9 +61,9 @@ pub(crate) fn sub_program(
         bound,
         value,
         ty,
-        &known,
-        &typed,
-        &|text: &str| interner.intern_string(text),
+        &mut &mut *known,
+        &mut &mut *typed,
+        &mut |text: &str| interner.intern_string(text),
     );
     built.then_some(kept)
 }
@@ -74,8 +74,8 @@ pub(crate) fn sub_program(
 pub(crate) fn unit_without_its_constants(
     parsed: &Parsed,
     bound: &str,
-    known: &dyn Fn(&str) -> Option<Value>,
-    typed: &dyn Fn(&str) -> Option<Ty>,
+    known: &mut dyn FnMut(&str) -> Option<Value>,
+    typed: &mut dyn FnMut(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
     let mut kept = parsed.keeping(|item| tree::comptime_keeps(item, &parsed.interner));
     let interner = &kept.interner;
@@ -84,9 +84,9 @@ pub(crate) fn unit_without_its_constants(
         &parsed.program.items,
         &parsed.interner,
         bound,
-        &known,
-        &typed,
-        &|text: &str| interner.intern_string(text),
+        &mut &mut *known,
+        &mut &mut *typed,
+        &mut |text: &str| interner.intern_string(text),
     );
     carried.then_some(kept)
 }
@@ -100,7 +100,7 @@ pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) ->
     // `borrow_mut()` then panics.
     let count = units.len() as i64;
     let units = RefCell::new(units);
-    tree::comptime_readers_dropped(count, absent, &|at: i64, gone: &BTreeSet<String>| {
+    tree::comptime_readers_dropped(count, absent, &mut |at: i64, gone: &BTreeSet<String>| {
         drop_readers(&mut units.borrow_mut()[at as usize], gone)
     })
 }
@@ -241,7 +241,7 @@ pub(crate) fn without_foreign(parsed: &Parsed, ledger: &crate::contracts::Ledger
             .is_none_or(|contract| crate::build_time::may_not_run(contract).is_none())
     };
     let mut kept = parsed.keeping(|_| true);
-    tree::comptime_without_foreign(&mut kept.program.items, &parsed.interner, &runs);
+    tree::comptime_without_foreign(&mut kept.program.items, &parsed.interner, &mut &runs);
     kept
 }
 
@@ -308,7 +308,15 @@ pub(crate) fn compute(
                 bounds,
                 program: std::cell::OnceCell::new(),
             };
-            tree::comptime_computed(&host, here as i64, bound, value, ty, known, typed)
+            tree::comptime_computed(
+                &host,
+                here as i64,
+                bound,
+                value,
+                ty,
+                &mut &known,
+                &mut &typed,
+            )
         })
     })
 }
@@ -395,8 +403,8 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         bound: &str,
         value: &Expr,
         ty: &Ty,
-        known: &impl Fn(&str) -> Option<Value>,
-        typed: &impl Fn(&str) -> Option<Ty>,
+        known: &mut impl FnMut(&str) -> Option<Value>,
+        typed: &mut impl FnMut(&str) -> Option<Ty>,
     ) -> Option<i64> {
         self.made(sub_program(
             self.files[here as usize],
@@ -412,8 +420,8 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         &self,
         at: i64,
         bound: &str,
-        known: &impl Fn(&str) -> Option<Value>,
-        typed: &impl Fn(&str) -> Option<Ty>,
+        known: &mut impl FnMut(&str) -> Option<Value>,
+        typed: &mut impl FnMut(&str) -> Option<Ty>,
     ) -> Option<i64> {
         self.made(unit_without_its_constants(
             self.files[at as usize],
@@ -574,10 +582,11 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         &self,
         at: i64,
         value: &Expr,
-        known: &impl Fn(&str) -> Option<Value>,
+        known: &mut impl FnMut(&str) -> Option<Value>,
     ) -> Option<Value> {
         let reads = crate::assets::Reads::none();
-        let so_far = |name: &str| known(name);
+        let known = std::cell::RefCell::new(known);
+        let so_far = |name: &str| (known.borrow_mut())(name);
         crate::build_time::BuildTime::new(self.files[at as usize], self.files, &reads, &so_far)
             .evaluate(value)
             .ok()

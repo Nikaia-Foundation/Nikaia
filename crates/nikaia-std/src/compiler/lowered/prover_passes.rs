@@ -14,7 +14,7 @@ pub struct ProverAnswers {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProverAnswers {
+pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProverAnswers {
     let readers = prover_readers(program, words);
     walk.state.value_readers = prover_value_readers(&readers, own, library);
     walk.state.readers = prover_length_keepers(program, &readers, words);
@@ -28,7 +28,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.state.candidates.clear();
         walk.state.unwritten.clear();
         walk.state.unstated.clear();
-        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        prover_bodies(walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         preconditions = walk.state.preconditions.copy_owned();
         unwritten = walk.state.unwritten.copy_owned();
         if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) { break; }
@@ -47,11 +47,11 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.findings = vec![];
         walk.outside.clear();
         walk.state.broken.clear();
-        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        prover_bodies(walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         settled = walk.state.broken.is_empty();
         if !settled { strike_broken(&mut walk.state); }
     }
-    let answers = ProverAnswers { entries: checked_entries(&walk, escape), published: published_contracts(&walk) };
+    let answers = ProverAnswers { entries: checked_entries(&walk, &mut *escape), published: published_contracts(&walk) };
     count_checked_calls(walk);
     hold_unreached(walk, program, words);
     answers
@@ -93,7 +93,7 @@ pub(crate) fn precondition_texts(arena: &logic::TermArena, m: &collections::BTre
     out
 }
 
-pub(crate) fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> String) -> collections::BTreeMap<String, Vec<PreconditionCheck>> {
+pub(crate) fn checked_entries(walk: &ProverWalk, escape: &mut impl FnMut(&str) -> String) -> collections::BTreeMap<String, Vec<PreconditionCheck>> {
     let mut entries: collections::BTreeMap<String, Vec<PreconditionCheck>> = collections::BTreeMap::new();
     for (function, pre) in walk.state.preconditions.iter() {
         let mut checks: Vec<PreconditionCheck> = vec![];
@@ -101,8 +101,8 @@ pub(crate) fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> Strin
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(claim.term, &mut read);
             let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((nikaia_std::block::Text::from(name.to_string()), rust_of_name(name, escape))); }
-            checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
+            for name in read.iter() { operands.push((nikaia_std::block::Text::from(name.to_string()), rust_of_name(name, &mut *escape))); }
+            checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, &mut *escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
         }
         entries.insert(nikaia_std::block::Text::from(function.to_string()), checks);
     }
@@ -141,7 +141,7 @@ pub(crate) fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<St
     out
 }
 
-pub(crate) fn ledger_term_text(arena: &logic::TermArena, id: i64) -> String { logic::term_ledger_text(id, &|at| { arena.at(at) }) }
+pub(crate) fn ledger_term_text(arena: &logic::TermArena, id: i64) -> String { logic::term_ledger_text(id, &mut |at| { arena.at(at) }) }
 
 pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
     let mut checked: collections::BTreeMap<String, i64> = collections::BTreeMap::new();

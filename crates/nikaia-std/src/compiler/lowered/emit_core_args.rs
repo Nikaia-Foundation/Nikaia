@@ -443,8 +443,11 @@ impl EmitState {
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
         if lent_path && !emit_arg_names_a_place(arg) { lend = false; }
         let changing_code = nikaia_std::index::or(self.facts.changing_code_args.get(&node), || 0);
-        if changing_code == 3 { out.push("&mut &*"); } else if changing_code == 4 { out.push("&mut "); }
-        let change = self.facts.mut_args.contains(&node) || changing_code == 1 || changing_code == 2 || changing_code == 3;
+        if changing_code == 3 { out.push("&mut &*"); } else if changing_code == 4 || changing_code == 6 {
+            out.push("&mut ");
+            lend = false;
+        }
+        let change = self.facts.mut_args.contains(&node) || changing_code == 1 || changing_code == 2 || changing_code == 3 || changing_code == 5;
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(&node);
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
         let mut pointer: i64 = 0;
@@ -502,7 +505,7 @@ impl EmitState {
         let mut kept_here = false;
         let mut lent_whole = false;
         if pointer == 0 {
-            if changing_code == 3 { } else if changing_code == 2 || change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
+            if changing_code == 3 { } else if changing_code == 2 && walk.dyn_code && self.emit_arg_dyn_code_handed_on(world, &walk.keep_function, arg) { out.push("&mut &mut *"); } else if changing_code == 2 || change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
                     if self.facts.lent_text_views.contains(&node) { out.push("&"); }
@@ -610,7 +613,7 @@ impl EmitState {
             let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = nikaia_std::block::Text::from(names.join(", "));
-            if !out.buf.ends_with('&') { out.push("&"); }
+            if !out.buf.ends_with('&') && !out.buf.ends_with("&mut ") { out.push("&"); }
             out.push(&format!("async |{}| (*", joined));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(")({}).await", joined));

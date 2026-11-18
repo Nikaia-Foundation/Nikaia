@@ -86,5 +86,5 @@ pub fn parsed_kept_function_text(func: &Expr, words: &winnow_grammar::InternerCo
     }
 }
 
-pub fn parsed_kept_items(items: &[Spanned<Item>], keep: &impl Fn(&Item) -> bool) -> Vec<Spanned<Item>> { items.iter().filter(|&item| { keep(&item.node) }).map(|item| { item.clone() }).collect::<Vec<_>>() }
+pub fn parsed_kept_items(items: &[Spanned<Item>], keep: &mut impl FnMut(&Item) -> bool) -> Vec<Spanned<Item>> { items.iter().filter(|&item| { keep(&item.node) }).map(|item| { item.clone() }).collect::<Vec<_>>() }
 

@@ -324,7 +324,7 @@ impl TermArena {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn text(&self, id: i64) -> String { term_text(id, &|at| { self.at(at) }) }
+    pub fn text(&self, id: i64) -> String { term_text(id, &mut |at| { self.at(at) }) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn adopt(&mut self, nodes: &[SolverTerm]) -> i64 {

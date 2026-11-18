@@ -104,6 +104,13 @@ fn cx_lent(contracts: ref Ledger, key: ref String, position: i64) -> bool {
     return lends_in(contract, position, copying)
 }
 
+/// Whether the function the ledger knows by `key` runs its parameter of code
+/// `param` from tasks at once (ADR-views-3 D17, the ledger's `at_once`).
+fn cx_code_at_once(contracts: ref Ledger, key: ref String, param: ref String) -> bool {
+    let contract = contracts.functions[key] ?? return false
+    return contract.at_once.contains(param)
+}
+
 /// The names of the errors an entry point throws.
 fn cx_fails_with(contracts: ref Ledger, key: ref String) -> Vec[String] {
     let contract = contracts.functions[key] ?? return []
@@ -878,8 +885,17 @@ fn cx_parameter(ctx: ref CxCtx, contracts: ref Ledger, key: ref String, position
             params.rust_params.push(f"{local}: Option<extern \"C\" fn({rust_args.join(", ")}){rust_result}>, {local}_ctx: *mut std::ffi::c_void")
             params.c_params.push(f"{c_result} (*{param})({c_args.join(", ")}), void *{param}_ctx")
             passed.push(f"{local}_ctx")
-            params.checks.push_str(f"    let Some({local}) = {local} else {{ return -1; }};\n    let {local} = move |{closure_params.join(", ")}|{rust_result} {{ {local}({passed.join(", ")}) }};\n")
-            params.call_args.push(f"&{local}")
+            // **Lent to change what it captures unless the function runs it
+            // from tasks at once** (ADR-views-3 D17), as its declaration was
+            // lowered: `&mut impl FnMut`, else `&impl Fn`.
+            let mut binding: String = ""
+            let mut lend: String = "&"
+            if !cx_code_at_once(contracts, key, param) {
+                binding = "mut "
+                lend = "&mut "
+            }
+            params.checks.push_str(f"    let Some({local}) = {local} else {{ return -1; }};\n    let {binding}{local} = move |{closure_params.join(", ")}|{rust_result} {{ {local}({passed.join(", ")}) }};\n")
+            params.call_args.push(f"{lend}{local}")
         },
         CxIn::Records { record, whole } => {
             let ty = ctx.records[record].name.clone()

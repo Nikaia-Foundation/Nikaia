@@ -211,7 +211,7 @@ fn join(
             &file.interner,
             library,
             &unit.facts.method_callees,
-            &|expr: &crate::ast::Expr| crate::emit::literal_expressions(file, expr),
+            &mut |expr: &crate::ast::Expr| crate::emit::literal_expressions(file, expr),
         );
         for call in calls.iter().filter(|call| call.method) {
             let Some((key, contract)) = library.lookup(&call.source) else {

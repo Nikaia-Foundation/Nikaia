@@ -83,9 +83,9 @@ pub(crate) fn whole_type(ty: Option<&Type>, words: &winnow_grammar::InternerCont
     t.generics.is_empty() && is_whole_number(words.resolve(t.name))
 }
 
-pub(crate) fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unaliased: &impl Fn(&str) -> String) -> bool {
+pub(crate) fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unaliased: &mut impl FnMut(&str) -> String) -> bool {
     if !in_throwing { return false; }
-    let name = match thrower_named(call, words, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let name = match thrower_named(call, words, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => return true };
     let function = free_function(program, words, &name);
     if function.is_some() {
         let found = match function { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -106,7 +106,7 @@ pub(crate) fn fails_by_the_program(fails_with: &[String]) -> bool {
     false
 }
 
-pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> Option<String> {
+pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String) -> Option<String> {
     match call {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
@@ -125,7 +125,7 @@ pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext
     }
 }
 
-pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -151,68 +151,68 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
         },
         _ => { },
     }
-    for hole in holes_of(expr) { if from_outside(&hole, tainted, words, library, state, holes_of) { return true; } }
+    for hole in holes_of(expr) { if from_outside(&hole, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
     match expr {
-        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); from_outside(func, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, &holes_of) || config_from_outside(config, tainted, words, library, state, &holes_of) },
-        Expr::MethodCall { receiver, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); from_outside(receiver, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, &holes_of) || config_from_outside(config, tainted, words, library, state, &holes_of) },
-        Expr::SafeMethod { receiver, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); from_outside(receiver, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, &holes_of) || config_from_outside(config, tainted, words, library, state, &holes_of) },
-        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); from_outside(lhs, tainted, words, library, state, holes_of) || from_outside(rhs, tainted, words, library, state, holes_of) },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, holes_of) },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, holes_of) },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, holes_of) },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, holes_of) },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, holes_of) },
-        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; outside_field(base, name, words, state).is_some() || from_outside(base, tainted, words, library, state, holes_of) },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); from_outside(base, tainted, words, library, state, holes_of) },
-        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); from_outside(base, tainted, words, library, state, holes_of) || from_outside(index, tainted, words, library, state, holes_of) },
-        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); from_outside(start, tainted, words, library, state, holes_of) || from_outside(end, tainted, words, library, state, holes_of) },
-        Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, state, &holes_of),
-        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); from_outside(value, tainted, words, library, state, holes_of) || from_outside(fallback, tainted, words, library, state, holes_of) },
-        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, holes_of) },
-        Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); from_outside(cond, tainted, words, library, state, holes_of) },
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); from_outside(func, tainted, words, library, state, &mut &mut *holes_of) || any_from_outside(args, tainted, words, library, state, &mut &mut *holes_of) || config_from_outside(config, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::MethodCall { receiver, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); from_outside(receiver, tainted, words, library, state, &mut &mut *holes_of) || any_from_outside(args, tainted, words, library, state, &mut &mut *holes_of) || config_from_outside(config, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::SafeMethod { receiver, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); from_outside(receiver, tainted, words, library, state, &mut &mut *holes_of) || any_from_outside(args, tainted, words, library, state, &mut &mut *holes_of) || config_from_outside(config, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); from_outside(lhs, tainted, words, library, state, &mut &mut *holes_of) || from_outside(rhs, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; outside_field(base, name, words, state).is_some() || from_outside(base, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); from_outside(base, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); from_outside(base, tainted, words, library, state, &mut &mut *holes_of) || from_outside(index, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); from_outside(start, tainted, words, library, state, &mut &mut *holes_of) || from_outside(end, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, state, &mut &mut *holes_of),
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); from_outside(value, tainted, words, library, state, &mut &mut *holes_of) || from_outside(fallback, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); from_outside(cond, tainted, words, library, state, &mut &mut *holes_of) },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            if from_outside(value, tainted, words, library, state, holes_of) { return true; }
-            for arm in arms.iter() { if maybe_from_outside((arm.guard).as_ref(), tainted, words, library, state, &holes_of) || from_outside(&arm.body, tainted, words, library, state, holes_of) { return true; } }
+            if from_outside(value, tainted, words, library, state, &mut &mut *holes_of) { return true; }
+            for arm in arms.iter() { if maybe_from_outside((arm.guard).as_ref(), tainted, words, library, state, &mut &mut *holes_of) || from_outside(&arm.body, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
             false
         },
         Expr::StructLit { fields, .. } => {
-            for field in fields.iter() { if maybe_from_outside((field.value).as_ref(), tainted, words, library, state, &holes_of) { return true; } }
+            for field in fields.iter() { if maybe_from_outside((field.value).as_ref(), tainted, words, library, state, &mut &mut *holes_of) { return true; } }
             false
         },
-        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); from_outside(value, tainted, words, library, state, holes_of) || from_outside(count, tainted, words, library, state, holes_of) },
-        Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, state, &holes_of),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); from_outside(value, tainted, words, library, state, &mut &mut *holes_of) || from_outside(count, tainted, words, library, state, &mut &mut *holes_of) },
+        Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, state, &mut &mut *holes_of),
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
-            if from_outside(base, tainted, words, library, state, holes_of) { return true; }
-            for field in fields.iter() { if maybe_from_outside((field.value).as_ref(), tainted, words, library, state, &holes_of) { return true; } }
+            if from_outside(base, tainted, words, library, state, &mut &mut *holes_of) { return true; }
+            for field in fields.iter() { if maybe_from_outside((field.value).as_ref(), tainted, words, library, state, &mut &mut *holes_of) { return true; } }
             false
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_from_outside((value).as_ref(), tainted, words, library, state, &holes_of) },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_from_outside((value).as_ref(), tainted, words, library, state, &mut &mut *holes_of) },
         Expr::Select(arms, _) => {
-            for arm in arms.iter() { if from_outside(&arm.value, tainted, words, library, state, holes_of) { return true; } }
+            for arm in arms.iter() { if from_outside(&arm.value, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
             false
         },
         _ => false,
     }
 }
 
-pub(crate) fn maybe_from_outside(expr: Option<&Expr>, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn maybe_from_outside(expr: Option<&Expr>, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
     let present = match expr { Some(__nikaia_value) => __nikaia_value, None => return false };
-    from_outside(present, tainted, words, library, state, &holes_of)
+    from_outside(present, tainted, words, library, state, &mut &mut *holes_of)
 }
 
-pub(crate) fn any_from_outside(exprs: &[Expr], tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
-    for e in exprs.iter() { if from_outside(e, tainted, words, library, state, &holes_of) { return true; } }
+pub(crate) fn any_from_outside(exprs: &[Expr], tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    for e in exprs.iter() { if from_outside(e, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
     false
 }
 
-pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
-    for c in config.iter() { if from_outside(&c.value, tainted, words, library, state, &holes_of) { return true; } }
+pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    for c in config.iter() { if from_outside(&c.value, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
     false
 }
 
-pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
+pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -238,7 +238,7 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
                     };
                 }
             }
-            return outside_source_in(args, tainted, sources, words, library, state, &holes_of);
+            return outside_source_in(args, tainted, sources, words, library, state, &mut &mut *holes_of);
         },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -251,7 +251,7 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
                     None => None,
                 };
             }
-            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, state, holes_of), || outside_source_in(args, tainted, sources, words, library, state, &holes_of));
+            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source_in(args, tainted, sources, words, library, state, &mut &mut *holes_of));
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -264,17 +264,17 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
                     None => None,
                 };
             }
-            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, state, holes_of), || outside_source_in(args, tainted, sources, words, library, state, &holes_of));
+            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source_in(args, tainted, sources, words, library, state, &mut &mut *holes_of));
         },
-        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return nikaia_std::index::or_maybe(outside_source(lhs, tainted, sources, words, library, state, holes_of), || outside_source(rhs, tainted, sources, words, library, state, holes_of)); },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, holes_of); },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return outside_source(inner, tainted, sources, words, library, state, holes_of); },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, holes_of); },
-        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; return nikaia_std::index::or_maybe(outside_field(base, name, words, state), || outside_source(base, tainted, sources, words, library, state, holes_of)); },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return outside_source(base, tainted, sources, words, library, state, holes_of); },
-        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return nikaia_std::index::or_maybe(outside_source(index, tainted, sources, words, library, state, holes_of), || outside_source(base, tainted, sources, words, library, state, holes_of)); },
-        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return nikaia_std::index::or_maybe(outside_source(value, tainted, sources, words, library, state, holes_of), || outside_source(fallback, tainted, sources, words, library, state, holes_of)); },
-        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, holes_of); },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return nikaia_std::index::or_maybe(outside_source(lhs, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source(rhs, tainted, sources, words, library, state, &mut &mut *holes_of)); },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return outside_source(inner, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; return nikaia_std::index::or_maybe(outside_field(base, name, words, state), || outside_source(base, tainted, sources, words, library, state, &mut &mut *holes_of)); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return outside_source(base, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return nikaia_std::index::or_maybe(outside_source(index, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source(base, tainted, sources, words, library, state, &mut &mut *holes_of)); },
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return nikaia_std::index::or_maybe(outside_source(value, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source(fallback, tainted, sources, words, library, state, &mut &mut *holes_of)); },
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, &mut &mut *holes_of); },
         Expr::StructLit { fields, .. } => {
             for field in fields.iter() {
                 let named = words.resolve(field.name);
@@ -286,7 +286,7 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
                         }, || nikaia_std::block::Text::from(named.to_string()).into())),
                         false => None,
                     },
-                    Some(given) => outside_source(given, tainted, sources, words, library, state, holes_of),
+                    Some(given) => outside_source(given, tainted, sources, words, library, state, &mut &mut *holes_of),
                 };
                 if found.is_some() { return std::convert::identity(found); }
             }
@@ -294,12 +294,12 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
         },
         _ => { },
     }
-    outside_source_in(&holes_of(expr), tainted, sources, words, library, state, &holes_of)
+    outside_source_in(&holes_of(expr), tainted, sources, words, library, state, &mut &mut *holes_of)
 }
 
-pub(crate) fn outside_source_in(exprs: &[Expr], tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
+pub(crate) fn outside_source_in(exprs: &[Expr], tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<String> {
     for e in exprs.iter() {
-        let found = outside_source(e, tainted, sources, words, library, state, &holes_of);
+        let found = outside_source(e, tainted, sources, words, library, state, &mut &mut *holes_of);
         if found.is_some() { return std::convert::identity(found); }
     }
     None
@@ -359,14 +359,14 @@ impl ProverOutside {
     pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new() } }
 }
 
-pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> ProverOutside {
+pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> ProverOutside {
     let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned() };
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { prover_outside_function(&mut found, item, None, words, library, state, holes_of); },
+            Item::Fn { .. } => { prover_outside_function(&mut found, item, None, words, library, state, &mut *holes_of); },
             Item::Impl { methods, target, .. } => {
                 let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
-                for method in methods.iter() { prover_outside_function(&mut found, method, Some(&nikaia_std::block::Text::from(owner.to_string())), words, library, state, holes_of); }
+                for method in methods.iter() { prover_outside_function(&mut found, method, Some(&nikaia_std::block::Text::from(owner.to_string())), words, library, state, &mut *holes_of); }
             },
             _ => { },
         }
@@ -374,7 +374,7 @@ pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::Interner
     found
 }
 
-pub(crate) fn prover_outside_function(found: &mut ProverOutside, item: &Spanned<Item>, owner: Option<&str>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) {
+pub(crate) fn prover_outside_function(found: &mut ProverOutside, item: &Spanned<Item>, owner: Option<&str>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
     match &item.node {
         Item::Fn { name, body, ret_type, .. } => {
             let name = *name;
@@ -383,20 +383,20 @@ pub(crate) fn prover_outside_function(found: &mut ProverOutside, item: &Spanned<
             let key = if owner.is_some() { format!("{}::{}", nikaia_std::index::or(owner, || ""), plain) } else { nikaia_std::block::Text::from(plain.to_string()) };
             let mut tainted: collections::BTreeSet<String> = collections::BTreeSet::new();
             let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-            for _ in 0..2 { prover_outside_block(found, body, &key, ret_type.is_some(), &mut tainted, &mut sources, words, library, state, holes_of); }
+            for _ in 0..2 { prover_outside_block(found, body, &key, ret_type.is_some(), &mut tainted, &mut sources, words, library, state, &mut *holes_of); }
         },
         _ => { },
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key: &str, tail: bool, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) {
+pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key: &str, tail: bool, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) {
     let last = unsafe { nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1) };
     for (at, stmt) in block.stmts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
-                if from_outside(value, &tainted, words, library, state, &holes_of) {
-                    let source: String = nikaia_std::index::or(outside_source(value, &tainted, &sources, words, library, state, &holes_of), || "".into());
+                if from_outside(value, &tainted, words, library, state, &mut &mut *holes_of) {
+                    let source: String = nikaia_std::index::or(outside_source(value, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
                     for name in names.iter() {
                         let name = *name;
                         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -409,9 +409,9 @@ pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
-                        if from_outside(value, &tainted, words, library, state, &holes_of) {
+                        if from_outside(value, &tainted, words, library, state, &mut &mut *holes_of) {
                             let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
-                            let source = outside_source(value, &tainted, &sources, words, library, state, &holes_of);
+                            let source = outside_source(value, &tainted, &sources, words, library, state, &mut &mut *holes_of);
                             if source.is_some() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
                             tainted.insert(n);
                         }
@@ -420,8 +420,8 @@ pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key
                 }
             },
             Stmt::For { bindings, iter, .. } => {
-                if from_outside(iter, &tainted, words, library, state, &holes_of) {
-                    let source: String = nikaia_std::index::or(outside_source(iter, &tainted, &sources, words, library, state, &holes_of), || "".into());
+                if from_outside(iter, &tainted, words, library, state, &mut &mut *holes_of) {
+                    let source: String = nikaia_std::index::or(outside_source(iter, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
                     for name in bindings.iter() {
                         let name = *name;
                         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -432,44 +432,44 @@ pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key
             },
             Stmt::Return(value) => {
                 let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
-                prover_outside_result(found, returned, key, &tainted, &sources, words, library, state, &holes_of);
+                prover_outside_result(found, returned, key, &tainted, &sources, words, library, state, &mut &mut *holes_of);
             },
-            Stmt::Expr(inner) => { if tail && at == last { prover_outside_tail(found, inner, key, tainted, sources, words, library, state, &holes_of); } },
+            Stmt::Expr(inner) => { if tail && at == last { prover_outside_tail(found, inner, key, tainted, sources, words, library, state, &mut &mut *holes_of); } },
             _ => { },
         }
-        for expr in check_visit_stmt(&stmt.node) { prover_outside_expr(found, expr, key, &tainted, &sources, words, library, state, &holes_of); }
-        for inner in check_visit_stmt_blocks(&stmt.node) { prover_outside_block(found, inner, key, false, tainted, sources, words, library, state, holes_of); }
+        for expr in check_visit_stmt(&stmt.node) { prover_outside_expr(found, expr, key, &tainted, &sources, words, library, state, &mut &mut *holes_of); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { prover_outside_block(found, inner, key, false, tainted, sources, words, library, state, &mut &mut *holes_of); }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_outside_tail(found: &mut ProverOutside, expr: &Expr, key: &str, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) {
+pub(crate) fn prover_outside_tail(found: &mut ProverOutside, expr: &Expr, key: &str, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) {
     match expr {
         Expr::If { then_branch, else_branch, .. } => {
-            prover_outside_block(found, then_branch, key, true, tainted, sources, words, library, state, &holes_of);
+            prover_outside_block(found, then_branch, key, true, tainted, sources, words, library, state, &mut &mut *holes_of);
             let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
-            prover_outside_block(found, other, key, true, tainted, sources, words, library, state, &holes_of);
+            prover_outside_block(found, other, key, true, tainted, sources, words, library, state, &mut &mut *holes_of);
         },
-        Expr::Block(block, _) => { prover_outside_block(found, block, key, true, tainted, sources, words, library, state, &holes_of); },
-        Expr::Match { arms, .. } => { for arm in arms.iter() { prover_outside_tail(found, &arm.body, key, tainted, sources, words, library, state, holes_of); } },
-        _ => { prover_outside_result(found, expr, key, &tainted, &sources, words, library, state, &holes_of); },
+        Expr::Block(block, _) => { prover_outside_block(found, block, key, true, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { prover_outside_tail(found, &arm.body, key, tainted, sources, words, library, state, &mut &mut *holes_of); } },
+        _ => { prover_outside_result(found, expr, key, &tainted, &sources, words, library, state, &mut &mut *holes_of); },
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_outside_result(found: &mut ProverOutside, value: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) {
-    if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, holes_of) { return; }
-    let source = nikaia_std::index::or(outside_source(value, tainted, sources, words, library, state, holes_of), || nikaia_std::block::Text::from(key.to_string()).into());
+pub(crate) fn prover_outside_result(found: &mut ProverOutside, value: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
+    if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, &mut *holes_of) { return; }
+    let source = nikaia_std::index::or(outside_source(value, tainted, sources, words, library, state, &mut *holes_of), || nikaia_std::block::Text::from(key.to_string()).into());
     found.results.insert(nikaia_std::block::Text::from(key.to_string()), source);
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_outside_expr(found: &mut ProverOutside, expr: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) {
+pub(crate) fn prover_outside_expr(found: &mut ProverOutside, expr: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
     match expr {
         Expr::Return(value, _) => {
             let value = nikaia_std::boxed::open(value);
             let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-            prover_outside_result(found, returned, key, tainted, sources, words, library, state, holes_of);
+            prover_outside_result(found, returned, key, tainted, sources, words, library, state, &mut *holes_of);
         },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
@@ -488,8 +488,8 @@ pub(crate) fn prover_outside_expr(found: &mut ProverOutside, expr: &Expr, key: &
                         }
                     },
                     Some(given) => {
-                        if from_outside(given, tainted, words, library, state, holes_of) {
-                            let source = nikaia_std::index::or(outside_source(given, tainted, sources, words, library, state, holes_of), || nikaia_std::block::Text::from(at.to_string()).into());
+                        if from_outside(given, tainted, words, library, state, &mut *holes_of) {
+                            let source = nikaia_std::index::or(outside_source(given, tainted, sources, words, library, state, &mut *holes_of), || nikaia_std::block::Text::from(at.to_string()).into());
                             found.fields.insert(nikaia_std::block::Text::from(at.to_string()), source);
                         }
                     },

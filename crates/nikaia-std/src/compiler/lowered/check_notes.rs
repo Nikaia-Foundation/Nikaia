@@ -145,7 +145,7 @@ impl CheckState {
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
                 if *op == BinaryOp::Shl || *op == BinaryOp::Shr {
-                    let literal = checked_constant(&constant_of(lhs, &|name| { Folded::Nothing }));
+                    let literal = checked_constant(&constant_of(lhs, &mut |name| { Folded::Nothing }));
                     if literal.is_some() {
                         let count = self.constant_of(world, rhs);
                         if count.is_some() {

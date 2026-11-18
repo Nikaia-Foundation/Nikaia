@@ -5,40 +5,40 @@
 #[allow(unused_imports)]
 use logic::{SvTh as _};
 
-pub(crate) fn rust_of(id: i64, term_of: &dyn Fn(i64) -> logic::SolverTerm, escape: &dyn Fn(&str) -> String) -> String {
+pub(crate) fn rust_of(id: i64, term_of: &mut dyn FnMut(i64) -> logic::SolverTerm, escape: &mut dyn FnMut(&str) -> String) -> String {
     match term_of(id) {
         logic::SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
         logic::SolverTerm::Int(n) => format!("({}i128)", n),
-        logic::SolverTerm::Var(ref name) => rust_of_name(name, &escape),
-        logic::SolverTerm::Neg(a) => format!("(-{})", rust_of(a, term_of, escape)),
-        logic::SolverTerm::Not(a) => format!("(!{})", rust_of(a, term_of, escape)),
-        logic::SolverTerm::Add(a, b) => format!("({} + {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Sub(a, b) => format!("({} - {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Mul(a, b) => format!("({} * {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Quot(a, k) => format!("({} / ({}i128))", rust_of(a, term_of, escape), k),
-        logic::SolverTerm::Le(a, b) => format!("({} <= {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Lt(a, b) => format!("({} < {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Ge(a, b) => format!("({} >= {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Gt(a, b) => format!("({} > {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Eq(a, b) => format!("({} == {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::Ne(a, b) => format!("({} != {})", rust_of(a, term_of, escape), rust_of(b, term_of, escape)),
-        logic::SolverTerm::And(ref parts) => rust_joined(" && ", parts, "true", &term_of, &escape),
-        logic::SolverTerm::Or(ref parts) => rust_joined(" || ", parts, "false", &term_of, &escape),
+        logic::SolverTerm::Var(ref name) => rust_of_name(name, &mut &mut *escape),
+        logic::SolverTerm::Neg(a) => format!("(-{})", rust_of(a, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Not(a) => format!("(!{})", rust_of(a, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Add(a, b) => format!("({} + {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Sub(a, b) => format!("({} - {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Mul(a, b) => format!("({} * {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Quot(a, k) => format!("({} / ({}i128))", rust_of(a, &mut &mut *term_of, &mut &mut *escape), k),
+        logic::SolverTerm::Le(a, b) => format!("({} <= {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Lt(a, b) => format!("({} < {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Ge(a, b) => format!("({} >= {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Gt(a, b) => format!("({} > {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Eq(a, b) => format!("({} == {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::Ne(a, b) => format!("({} != {})", rust_of(a, &mut &mut *term_of, &mut &mut *escape), rust_of(b, &mut &mut *term_of, &mut &mut *escape)),
+        logic::SolverTerm::And(ref parts) => rust_joined(" && ", parts, "true", &mut &mut *term_of, &mut &mut *escape),
+        logic::SolverTerm::Or(ref parts) => rust_joined(" || ", parts, "false", &mut &mut *term_of, &mut &mut *escape),
         _ => String::from(""),
     }
 }
 
-pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &dyn Fn(i64) -> logic::SolverTerm, escape: &dyn Fn(&str) -> String) -> String {
+pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &mut dyn FnMut(i64) -> logic::SolverTerm, escape: &mut dyn FnMut(&str) -> String) -> String {
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
-        written.push(rust_of(part, &term_of, &escape));
+        written.push(rust_of(part, &mut &mut *term_of, &mut &mut *escape));
     }
     format!("({})", nikaia_std::block::Text::from(written.join(op)))
 }
 
-pub(crate) fn rust_of_name(name: &str, escape: &impl Fn(&str) -> String) -> String {
+pub(crate) fn rust_of_name(name: &str, escape: &mut impl FnMut(&str) -> String) -> String {
     if name.ends_with(".len()") {
         let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
         let mut base: String = String::from("");

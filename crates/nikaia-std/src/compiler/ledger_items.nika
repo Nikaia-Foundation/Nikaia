@@ -587,6 +587,11 @@ pub struct LedgerDerives {
     pub equates: collections::BTreeSet[String],
     pub hashes: collections::BTreeSet[String],
     pub copies: collections::BTreeSet[String],
+    /// **The parameters of code each unit's check found run from tasks at
+    /// once**, `function::parameter`, and the code each hands on, `(from,
+    /// to)` (ADR-views-3 D17): what `at_once` follows across the package.
+    pub code_at_once: collections::BTreeSet[String],
+    pub code_hands: collections::BTreeSet[(String, String)],
 }
 
 /// **The derive answers, written into the package's ledger** (ADR-010 D11,
@@ -609,6 +614,35 @@ fn ledger_derives(mut ledger: Ledger, derives: ref LedgerDerives) {
         }
         if derives.copies.contains(name) {
             contract.copies = true
+        }
+    }
+}
+
+/// **Which parameters of code each function runs from tasks at once**
+/// (ADR-views-3 D17), into its entry's `at_once`: what each unit's check
+/// found, and a parameter handed on to such a parameter of a function in
+/// another file, followed until nothing more is added. A caller in another
+/// file or package reads it: it lends every other parameter of code `&mut`,
+/// and refuses a lambda that changes what it captures here (`NK2104`).
+fn ledger_code_at_once(mut ledger: Ledger, derives: ref LedgerDerives) {
+    let mut at_once: collections::BTreeSet[String] = derives.code_at_once.clone()
+    let mut grew = true
+    while grew {
+        grew = false
+        for (from, to) in derives.code_hands {
+            if at_once.contains(to) && !at_once.contains(from) {
+                at_once.insert(from.clone())
+                grew = true
+            }
+        }
+    }
+    for one in at_once {
+        let at = one.rfind("::") ?? continue
+        let key = one[0..<at]
+        let param = one[at + 2..]
+        let mut contract = ledger.functions.get(key) ?? continue
+        if !contract.at_once.contains(param) {
+            contract.at_once.push(param.clone())
         }
     }
 }
@@ -667,7 +701,9 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // there too, so the method calls the walks below read are the package's.
     host.check_units(ledger)
     ledger_untrusted_results(ledger, host.outside_results())
-    ledger_derives(ledger, host.derives())
+    let derives = host.derives()
+    ledger_derives(ledger, derives)
+    ledger_code_at_once(ledger, derives)
     host.infer_sync(ledger)
     // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
     // which it is only given for.

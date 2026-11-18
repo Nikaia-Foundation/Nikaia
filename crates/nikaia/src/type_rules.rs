@@ -27,8 +27,8 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     let spans = parsed.expr_spans.clone();
     let refusal = tr::tr_expand(
         &interner,
-        &|s| interner.intern_string(s),
-        &renew,
+        &mut |s| interner.intern_string(s),
+        &mut renew,
         &mut parsed.program.items,
         &spans,
     );
@@ -84,7 +84,7 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
     let declared: Vec<BTreeMap<String, TrDeclared>> = files
         .iter()
         .map(|(file, source)| {
-            tr::tr_declared_rules(&file.interner, &file.program.items, &|span| {
+            tr::tr_declared_rules(&file.interner, &file.program.items, &mut |span| {
                 source
                     .get(span.start as usize..span.end as usize)
                     .unwrap_or_default()
@@ -140,8 +140,8 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
         let spans = file.expr_spans.clone();
         tr::tr_check_literals_in(
             &interner,
-            &|s| interner.intern_string(s),
-            &renew,
+            &mut |s| interner.intern_string(s),
+            &mut renew,
             &ruled,
             &spans,
             &mut file.program.items,
@@ -154,8 +154,8 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
         let interner = file.interner.clone();
         tr::tr_drop_given(
             &interner,
-            &|s| interner.intern_string(s),
-            &renew,
+            &mut |s| interner.intern_string(s),
+            &mut renew,
             &changed,
             &mut file.program.items,
         );

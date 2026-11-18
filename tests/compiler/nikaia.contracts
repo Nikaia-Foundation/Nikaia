@@ -9,6 +9,14 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."ListBesideMaker::list_beside_made"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed"]
+signature = "(ref self, a: String) -> Vec[String]"
+
 [fn."MutLentColumns::diff"]
 pub = true
 sync = "inferred"
@@ -75,6 +83,33 @@ signature = "(ref self) -> String"
 pub = true
 keeps = ["text"]
 signature = "(ref self, text: String) -> i64"
+
+[fn."code_beside_each"]
+pub = true
+locks = "?"
+signature = "(xs: Vec[i64], f: fn(i64))"
+
+[fn."code_beside_each_at_once"]
+pub = true
+sync = "inferred"
+at_once = ["f"]
+panics = true
+touches = []
+signature = "(xs: Vec[i64], f: fn(i64) sync)"
+
+[fn."code_beside_hands_on"]
+pub = true
+sync = "inferred"
+at_once = ["g"]
+panics = true
+touches = []
+signature = "(xs: Vec[i64], g: fn(i64) sync)"
+
+[fn."code_beside_sum"]
+pub = true
+locks = "?"
+panics = true
+signature = "(xs: Vec[i64]) -> i64"
 
 [fn."copy_places"]
 sync = "inferred"
@@ -155,6 +190,69 @@ panics = false
 touches = []
 views = ["ty: borrowed"]
 signature = "(ty: ref KeepsBesideType) -> KeepsBesidePointer?"
+
+[fn."list_beside_by_method"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(m: ListBesideMaker, a: String) -> ref String"
+
+[fn."list_beside_first"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(a: String) -> ref String"
+
+[fn."list_beside_grown"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(a: String) -> ref String"
+
+[fn."list_beside_hidden"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed"]
+signature = "(a: String) -> Vec[String]"
+
+[fn."list_beside_last"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(a: String) -> ref String"
+
+[fn."list_beside_private"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(a: String) -> ref String"
+
+[fn."list_beside_through_a_let"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "<result>: tethered"]
+signature = "(a: String) -> ref String"
+
+[fn."list_beside_words"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed"]
+signature = "(a: String) -> Vec[String]"
 
 [fn."main"]
 sync = "inferred"
@@ -369,6 +467,13 @@ copies = true
 [type."KeepsBesideType"]
 pub = true
 fields = ["pub name: String", "pub is_slice: bool", "pub is_mut: bool"]
+compares = true
+equates = true
+hashes = true
+
+[type."ListBesideMaker"]
+pub = true
+fields = ["pub tag: String"]
 compares = true
 equates = true
 hashes = true

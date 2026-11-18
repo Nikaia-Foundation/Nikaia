@@ -715,7 +715,7 @@ pub(crate) fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &C
         if by_use.is_some() { found = nikaia_std::index::or(by_use, || Ty::Unknown); }
     }
     if refused { return; }
-    state.expect_kept_asked(world, &found, &expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|was, wanted| { format!("You're returning `{}`, but the function is declared to return `{}`.", was, wanted) });
+    state.expect_kept_asked(world, &found, &expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", &mut |was, wanted| { format!("You're returning `{}`, but the function is declared to return `{}`.", was, wanted) });
 }
 
 pub(crate) fn check_core_a_number_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }

@@ -619,7 +619,15 @@ impl EmitState {
         // **A mutable view of an entry is the `&mut` itself** (#816): the
         // binding is never reassigned, so it takes no `mut`.
         let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(node_key(value))
-        let mut_word = if mutable && !unmuted { "mut " } else { "" }
+        let mut mut_word = if mutable && !unmuted { "mut " } else { "" }
+        // **A lambda a `let` binds is lent `&mut`** to a parameter of code
+        // run one call at a time (ADR-views-3 D17), so Rust's binding is
+        // changeable; one never lent so is no warning.
+        let bound_lambda = names.len() == 1 && shape.len() == 0 && emit_arg_is_closure(value)
+        let lambda_muted = bound_lambda && mut_word == ""
+        if lambda_muted {
+            mut_word = "mut "
+        }
         // **A tuple of names is Rust's own tuple pattern** (ADR-291): there is
         // no count to look up and no annotation to write, because a hull's count
         // is decided per value and a destructure names none.
@@ -699,7 +707,7 @@ impl EmitState {
         let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         // **A list of views bound again** (#490, `view_list_rebinds`) may
         // change nothing before it is.
-        if mut_word != "" && self.facts.view_list_rebound.contains(at) {
+        if (mut_word != "" && self.facts.view_list_rebound.contains(at)) || lambda_muted {
             out.push("#[allow(unused_mut)] ")
         }
         out.push(f"let {mut_word}{local}{annotation} = ")

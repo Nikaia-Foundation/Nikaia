@@ -52,7 +52,7 @@ impl Book {
     pub fn write(&self, root: &Path) -> std::io::Result<()> {
         let whole =
             |path: &Path, text: &str| crate::comptime_run::write_if_changed(path, text).err();
-        match answers::proofs_book_write(&self.0, root, &whole) {
+        match answers::proofs_book_write(&self.0, root, &mut &whole) {
             None => Ok(()),
             Some(failed) => Err(std::io::Error::other(failed)),
         }

@@ -12,7 +12,7 @@ pub enum SolverAnswer {
     NotProved,
 }
 
-pub(crate) fn refuting_values(arena: &mut logic::TermArena, facts: &[i64], claim: i64, ask: &impl Fn(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
+pub(crate) fn refuting_values(arena: &mut logic::TermArena, facts: &[i64], claim: i64, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
     let negation = arena.not(claim);
     match ask(&arena, facts, negation) {
         SolverAnswer::Proved => { },
@@ -25,7 +25,7 @@ pub(crate) fn refuting_values(arena: &mut logic::TermArena, facts: &[i64], claim
     Some(values_of(&names, &values))
 }
 
-pub(crate) fn breaking_values(arena: &mut logic::TermArena, scope: &ProverScope, claim: i64, model: &impl Fn(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
+pub(crate) fn breaking_values(arena: &mut logic::TermArena, scope: &ProverScope, claim: i64, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
     let names = match scope.pinned_names(&arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let values = match model(&arena, &scope.facts, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let shown = values_of(&names, &values);

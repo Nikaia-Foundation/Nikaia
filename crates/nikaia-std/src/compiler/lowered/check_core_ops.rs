@@ -746,7 +746,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
         if check_core_ops_a_number_written(fallback) {
             let held = inner.shown();
             state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.")], Some(format!("Write a `{}` as the fallback.", held))));
-        } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
+        } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &mut |found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
     }
     if nullable && !from_a_map && !state.jumps(world, fallback) {
         let held_kind = check_core_ops_kind(&inner);
@@ -766,7 +766,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
                 let mut given: &'static str = "an integer";
                 if written == "float" { given = "a float"; }
                 state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).")], Some(format!("Write a `{}` as the fallback.", held))));
-            } else if written == "" && !inner.is_a_view() && !other.is_a_view() { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
+            } else if written == "" && !inner.is_a_view() && !other.is_a_view() { state.expect_type(world, &other, &inner, span, "let", &mut |found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
         }
     }
     let lends = place && state.a_coalesce_that_may_lend(world, &left, fallback, &other).is_some();

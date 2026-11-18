@@ -62,7 +62,7 @@ pub(crate) fn prove_whole(below: &str) -> bool { nikaia_std::list::contains(&vec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, comptimes: &ProveComptimes, run: &Option<nikaia_std::func::Kept<dyn Fn(&Expr, &str, &[i64]) -> ProveClaimRun + '_>>, asked_so_far: &impl Fn() -> ProofsSoFar, invariants_here: &impl Fn() -> collections::BTreeMap<i64, String>, ask_again_from: &impl Fn(&ProofsSoFar), record: &impl Fn(&collections::BTreeMap<i64, String>), searched: &impl Fn(&ProverState), counted: &impl Fn(&ProverState), ask: &impl Fn(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProveWalked {
+pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, comptimes: &ProveComptimes, run: &Option<nikaia_std::func::Kept<dyn Fn(&Expr, &str, &[i64]) -> ProveClaimRun + '_>>, asked_so_far: &mut impl FnMut() -> ProofsSoFar, invariants_here: &mut impl FnMut() -> collections::BTreeMap<i64, String>, ask_again_from: &mut impl FnMut(&ProofsSoFar), record: &mut impl FnMut(&collections::BTreeMap<i64, String>), searched: &mut impl FnMut(&ProverState), counted: &mut impl FnMut(&ProverState), ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProveWalked {
     let mut pinned = comptimes.by_name.copy_owned();
     let mut not_run: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut stopped: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -71,13 +71,13 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
     loop {
         let before = asked_so_far();
         let mut recorded = invariants_here();
-        let mut walked = prove_walked(program, words, own, library, claims, prove_state(&pinned, comptimes, &not_run, &stopped, &recorded), ask, model, escape, holes_of, unaliased, written_of, condition);
+        let mut walked = prove_walked(program, words, own, library, claims, prove_state(&pinned, comptimes, &not_run, &stopped, &recorded), &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         searched(&walked.walk.state);
         for _ in 0..2 {
             if walked.walk.state.loops_used == recorded { break; }
             ask_again_from(&before);
             recorded = walked.walk.state.loops_used.copy_owned();
-            walked = prove_walked(program, words, own, library, claims, prove_state(&pinned, comptimes, &not_run, &stopped, &recorded), ask, model, escape, holes_of, unaliased, written_of, condition);
+            walked = prove_walked(program, words, own, library, claims, prove_state(&pinned, comptimes, &not_run, &stopped, &recorded), &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
             searched(&walked.walk.state);
         }
         record(&walked.walk.state.loops_used);
@@ -131,9 +131,9 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prove_walked(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, state: ProverState, ask: &impl Fn(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProveWalked {
+pub(crate) fn prove_walked(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, state: ProverState, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProveWalked {
     let mut walk = ProverWalk { state, arena: logic::TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.copy_owned(), std_claims: collections::BTreeMap::new(), outside: collections::BTreeMap::new() };
-    let answers = prover_passes(&mut walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    let answers = prover_passes(&mut walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
     ProveWalked { walk, answers, summaries: collections::BTreeMap::new() }
 }
 
@@ -167,7 +167,7 @@ pub fn prove_model(held: &logic::TermArena, facts: &[i64], goal: i64, asked: Pro
     if logic::lg_verify_model(held, facts, goal, &model) { Some(model.values) } else { None }
 }
 
-pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeSet<String>, ask: &impl Fn(&logic::TermArena, &[i64], i64) -> SolverAnswer, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> bool {
+pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeSet<String>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> bool {
     if to.iter().all(|c| { nikaia_std::list::contains(&from, &c) }) { return true; }
     let mut arena = logic::TermArena::empty();
     let mut facts: Vec<i64> = vec![];
@@ -196,13 +196,13 @@ pub fn prove_with_published(own: &Ledger, published: &collections::BTreeMap<Stri
     ledger
 }
 
-pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> ProverOutside {
+pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> ProverOutside {
     let mut state = ProverState::fresh();
     state.method_callees = method_callees.copy_owned();
     state.field_owners = field_owners.copy_owned();
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     for _ in 0..bound {
-        let found = prover_outside(program, words, library, &state, holes_of);
+        let found = prover_outside(program, words, library, &state, &mut *holes_of);
         let settled = (found.results.len() as i64) == state.outside.results.len() as i64 && (found.fields.len() as i64) == state.outside.fields.len() as i64;
         state.outside = found;
         if settled { break; }

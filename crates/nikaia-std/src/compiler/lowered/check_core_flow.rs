@@ -1499,7 +1499,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
                 match answers {
                     Ty::Named { ref name, ref args, .. } => {
                         if (name == "TaskHandle" || name == CHILD_HANDLE) && args.len() == 1 {
-                            if !state.block_leaves(world, handler) && !(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() && value.text() != "()" && !value.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { state.expect_type(world, &value.owned(), unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span, "catch", &|found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
+                            if !state.block_leaves(world, handler) && !(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() && value.text() != "()" && !value.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { state.expect_type(world, &value.owned(), unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span, "catch", &mut |found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
                             return answers;
                         }
                     },
@@ -1520,7 +1520,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         }
         return answers;
     }
-    if !answers.is_unknown() && value.text() != "()" { state.expect_type(world, &value.owned(), &answers, span, "catch", &|found, wanted| { format!("This `catch` hands back `{}`, but the value it guards is `{}`.", found, wanted) }); }
+    if !answers.is_unknown() && value.text() != "()" { state.expect_type(world, &value.owned(), &answers, span, "catch", &mut |found, wanted| { format!("This `catch` hands back `{}`, but the value it guards is `{}`.", found, wanted) }); }
     Ty::Unknown
 }
 

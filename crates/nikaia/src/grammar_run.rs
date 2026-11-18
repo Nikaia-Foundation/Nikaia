@@ -391,7 +391,7 @@ impl nikaia_std::compiler::grammar_run::GrammarDriverHost for Driver<'_> {
 /// payload loop met an `O`. A separator between two words has to be skipped by
 /// whoever reads the second one.
 pub fn decode(text: &str) -> Result<crate::build_time::Value, Wall> {
-    match nikaia_std::compiler::grammar_decode::gr_decode(text, &crate::build_time::char_of) {
+    match nikaia_std::compiler::grammar_decode::gr_decode(text, &mut crate::build_time::char_of) {
         nikaia_std::compiler::grammar_decode::GrDecoded::Value(value) => Ok(value),
         nikaia_std::compiler::grammar_decode::GrDecoded::Unreadable(detail) => {
             Err(Wall::Unreadable { detail })

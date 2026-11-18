@@ -93,11 +93,11 @@ pub(crate) fn declares_text(names: &winnow_grammar::InternerContext, ty: Option<
     names.resolve(written.name) == "String" && written.generics.is_empty() && !written.is_view && !written.is_nullable
 }
 
-pub fn makes_a_buffer(expr: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &dyn Fn(&str) -> String) -> Buffer {
+pub fn makes_a_buffer(expr: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &mut dyn FnMut(&str) -> String) -> Buffer {
     match expr {
         Expr::MethodCall { method, receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; a_method_buffer(asked.names.resolve(method), receiver) },
-        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); a_call_buffer(func, asked, &unaliased) },
-        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); makes_a_buffer(expr, asked, unaliased) },
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); a_call_buffer(func, asked, &mut &mut *unaliased) },
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); makes_a_buffer(expr, asked, &mut &mut *unaliased) },
         Expr::LitInterpolated { .. } => Buffer::Named(String::from("String")),
         _ => Buffer::None,
     }
@@ -124,7 +124,7 @@ pub(crate) fn a_method_buffer(method: &str, receiver: &Expr) -> Buffer {
     Buffer::None
 }
 
-pub(crate) fn a_call_buffer(func: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
+pub(crate) fn a_call_buffer(func: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &mut impl FnMut(&str) -> String) -> Buffer {
     let name = match func {
         Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(asked.names.resolve(name).to_string()) },
         Expr::Path(segments, _) => unaliased(&joined_segments(segments, asked.names)),

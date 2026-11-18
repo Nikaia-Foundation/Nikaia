@@ -49,21 +49,21 @@ pub(crate) fn loop_head_name(name: &str, start: i64) -> String { format!("{}#{}"
 pub(crate) fn loop_after_name(name: &str, start: i64) -> String { format!("{}${}", name, start) }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_record(arena: &mut logic::TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, cond: &Expr, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
-    let condition = claim_term(cond, words, &|name| { ints.contains(name) }, pinned, &mut arena.nodes);
-    loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
+pub(crate) fn loop_record(arena: &mut logic::TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &mut impl FnMut(&str) -> Option<i64>, cond: &Expr, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &mut impl FnMut(&Expr) -> bool, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+    let condition = claim_term(cond, words, &mut |name| { ints.contains(name) }, &mut *pinned, &mut arena.nodes);
+    loop_record_of(arena, start, state, facts, ints, &mut *pinned, condition, "", -1, body, words, claims, &mut *throwing, &mut *holes_of)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_record_range(arena: &mut logic::TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, counter: &str, low: i64, high: i64, inclusive: bool, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+pub(crate) fn loop_record_range(arena: &mut logic::TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &mut impl FnMut(&str) -> Option<i64>, counter: &str, low: i64, high: i64, inclusive: bool, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &mut impl FnMut(&Expr) -> bool, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
     let here = arena.var(counter);
     let mut condition = arena.lt(here, high);
     if inclusive { condition = arena.le(here, high); }
-    loop_record_of(arena, start, state, facts, ints, pinned, Some(condition), counter, low, body, words, claims, throwing, holes_of)
+    loop_record_of(arena, start, state, facts, ints, &mut *pinned, Some(condition), counter, low, body, words, claims, &mut *throwing, &mut *holes_of)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_record_of(arena: &mut logic::TermArena, start: i64, outer: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, condition: Option<i64>, counter: &str, low: i64, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+pub(crate) fn loop_record_of(arena: &mut logic::TermArena, start: i64, outer: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &mut impl FnMut(&str) -> Option<i64>, condition: Option<i64>, counter: &str, low: i64, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &mut impl FnMut(&Expr) -> bool, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
     let mut state = outer.copy_owned();
     if counter != "" { state.push(nikaia_std::block::Text::from(counter.to_string())); }
     let mut before: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -91,7 +91,7 @@ pub(crate) fn loop_record_of(arena: &mut logic::TermArena, start: i64, outer: &[
     }
     let first = LoopPath { constraints: vec![], values: head, unread: collections::BTreeSet::new(), asserted: vec![] };
     let mut ends: Vec<LoopEnd> = vec![];
-    let live = match loop_block(arena, body, &vec![first], &mut ends, &state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let live = match loop_block(arena, body, &vec![first], &mut ends, &state, ints, &mut *pinned, words, claims, &mut *throwing, &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for path in live.iter() { ends.push(LoopEnd { kind: String::from("turn"), path: path.clone() }); }
     if counter != "" {
         let one = arena.int(1);
@@ -195,17 +195,17 @@ pub(crate) fn loop_constant_step(arena: &mut logic::TermArena, name: &str, value
     Some(a)
 }
 
-pub(crate) fn loop_read(arena: &mut logic::TermArena, expr: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claim: bool) -> Option<i64> {
+pub(crate) fn loop_read(arena: &mut logic::TermArena, expr: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &mut impl FnMut(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claim: bool) -> Option<i64> {
     let mut term: Option<i64> = None;
-    if claim { term = claim_term(expr, words, &|name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, pinned, &mut arena.nodes); } else { term = lin_term(expr, words, &|name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, pinned, &mut arena.nodes); }
+    if claim { term = claim_term(expr, words, &mut |name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, &mut *pinned, &mut arena.nodes); } else { term = lin_term(expr, words, &mut |name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, &mut *pinned, &mut arena.nodes); }
     let t = match term { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(arena.substitute(t, &path.values))
 }
 
-pub(crate) fn loop_value(arena: &mut logic::TermArena, expr: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext) -> Option<i64> {
+pub(crate) fn loop_value(arena: &mut logic::TermArena, expr: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &mut impl FnMut(&str) -> Option<i64>, words: &winnow_grammar::InternerContext) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(arena.int(if b { 1 } else { 0 })) },
-        _ => loop_read(arena, expr, path, ints, pinned, words, false),
+        _ => loop_read(arena, expr, path, ints, &mut *pinned, words, false),
     }
 }
 
@@ -236,7 +236,7 @@ pub(crate) fn loop_forget(arena: &mut logic::TermArena, path: &mut LoopPath, nam
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[LoopPath], ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<Vec<LoopPath>> {
+pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[LoopPath], ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &mut dyn FnMut(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &mut dyn FnMut(&Expr) -> bool, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<Vec<LoopPath>> {
     let mut live = first.copy_owned();
     for stmt in block.stmts.iter() {
         let mut next: Vec<LoopPath> = vec![];
@@ -267,10 +267,10 @@ pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[L
                 Stmt::Continue => { ended = String::from("turn"); },
                 Stmt::Return(_) => { ended = String::from("return"); },
                 Stmt::Let { names, ty, value, .. } => {
-                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &mut &mut *throwing, &mut &mut *holes_of, true) { return None; }
                     for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                     let mut term: Option<i64> = None;
-                    if names.len() == 1 { term = loop_value(arena, value, &p, ints, &pinned, words); }
+                    if names.len() == 1 { term = loop_value(arena, value, &p, ints, &mut &mut *pinned, words); }
                     for name in names.iter() {
                         let name = *name;
                         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -289,13 +289,13 @@ pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[L
                     }
                 },
                 Stmt::Assign { target, op, value } => {
-                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &mut &mut *throwing, &mut &mut *holes_of, true) { return None; }
                     let name = match target {
                         Expr::Variable(s, _) => { let s = *s; nikaia_std::block::Text::from(words.resolve(s).to_string()) },
                         _ => String::from(""),
                     };
                     if name != "" && p.values.contains_key(&name) {
-                        let read = loop_value(arena, value, &p, ints, &pinned, words);
+                        let read = loop_value(arena, value, &p, ints, &mut &mut *pinned, words);
                         let old = nikaia_std::index::or(*nikaia_std::index::get(&p.values, &name), || arena.var(&name).into());
                         let mut updated: Option<i64> = None;
                         if read.is_some() {
@@ -312,14 +312,14 @@ pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[L
                     }
                 },
                 Stmt::Expr(expr) => {
-                    let handled = match loop_expr_stmt(arena, expr, &stmt.span, &p, &mut next, ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let handled = match loop_expr_stmt(arena, expr, &stmt.span, &p, &mut next, ends, state, ints, &mut &mut *pinned, words, claims, &mut &mut *throwing, &mut &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     if handled { keep = false; } else {
-                        if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
+                        if leaves_stmt(&stmt.node, &mut &mut *throwing, &mut &mut *holes_of, true) { return None; }
                         for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                     }
                 },
                 _ => {
-                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &mut &mut *throwing, &mut &mut *holes_of, true) { return None; }
                     for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                 },
             }
@@ -340,48 +340,48 @@ pub(crate) fn loop_block(arena: &mut logic::TermArena, block: &Block, first: &[L
     Some(live)
 }
 
-pub(crate) fn loop_read_parts(arena: &mut logic::TermArena, cond: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, holds: bool) -> Vec<i64> {
+pub(crate) fn loop_read_parts(arena: &mut logic::TermArena, cond: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &mut dyn FnMut(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, holds: bool) -> Vec<i64> {
     match cond {
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            if *op == UnaryOp::Not { return loop_read_parts(arena, expr, path, ints, pinned, words, !holds); }
+            if *op == UnaryOp::Not { return loop_read_parts(arena, expr, path, ints, &mut &mut *pinned, words, !holds); }
         },
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
-                let mut parts = loop_read_parts(arena, lhs, path, ints, pinned, words, holds);
-                parts.extend(loop_read_parts(arena, rhs, path, ints, pinned, words, holds));
+                let mut parts = loop_read_parts(arena, lhs, path, ints, &mut &mut *pinned, words, holds);
+                parts.extend(loop_read_parts(arena, rhs, path, ints, &mut &mut *pinned, words, holds));
                 return parts;
             }
         },
         _ => { },
     }
-    let c = match loop_read(arena, cond, path, ints, &pinned, words, true) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let c = match loop_read(arena, cond, path, ints, &mut &mut *pinned, words, true) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     vec![if holds { c } else { arena.not(c) }]
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_expr_stmt(arena: &mut logic::TermArena, expr: &Expr, span: &Span, path: &LoopPath, next: &mut Vec<LoopPath>, ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<bool> {
+pub(crate) fn loop_expr_stmt(arena: &mut logic::TermArena, expr: &Expr, span: &Span, path: &LoopPath, next: &mut Vec<LoopPath>, ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &mut dyn FnMut(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &mut dyn FnMut(&Expr) -> bool, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<bool> {
     match expr {
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            let c = loop_read(arena, cond, path, ints, &pinned, words, true);
+            let c = loop_read(arena, cond, path, ints, &mut &mut *pinned, words, true);
             let mut yes = path.clone();
             let mut no = path.clone();
             if c.is_some() {
                 yes.constraints.push(nikaia_std::index::or(c, || 0));
                 no.constraints.push(arena.not(nikaia_std::index::or(c, || 0)));
             } else {
-                yes.constraints.extend(loop_read_parts(arena, cond, path, ints, &pinned, words, true));
-                no.constraints.extend(loop_read_parts(arena, cond, path, ints, &pinned, words, false));
+                yes.constraints.extend(loop_read_parts(arena, cond, path, ints, &mut &mut *pinned, words, true));
+                no.constraints.extend(loop_read_parts(arena, cond, path, ints, &mut &mut *pinned, words, false));
             }
-            let after_yes = match loop_block(arena, then_branch, &vec![yes], ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let after_yes = match loop_block(arena, then_branch, &vec![yes], ends, state, ints, &mut &mut *pinned, words, claims, &mut &mut *throwing, &mut &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             next.extend(after_yes);
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => {
                 next.push(no);
                 return Some(true);
             } };
-            let after_no = match loop_block(arena, otherwise, &vec![no], ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let after_no = match loop_block(arena, otherwise, &vec![no], ends, state, ints, &mut &mut *pinned, words, claims, &mut &mut *throwing, &mut &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             next.extend(after_no);
             return Some(true);
         },
@@ -393,7 +393,7 @@ pub(crate) fn loop_expr_stmt(arena: &mut logic::TermArena, expr: &Expr, span: &S
             let func = nikaia_std::boxed::open(func);
             if prover_an_assert_call(func, args, &span, claims) {
                 let mut p = path.clone();
-                let c = loop_read(arena, nikaia_std::index::get(&args, 0), &p, ints, &pinned, words, true);
+                let c = loop_read(arena, nikaia_std::index::get(&args, 0), &p, ints, &mut &mut *pinned, words, true);
                 if c.is_some() {
                     p.constraints.push(nikaia_std::index::or(c, || 0));
                     p.asserted.push(nikaia_std::index::or(c, || 0));
@@ -409,7 +409,7 @@ pub(crate) fn loop_expr_stmt(arena: &mut logic::TermArena, expr: &Expr, span: &S
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn loop_candidates(arena: &mut logic::TermArena, record: &LoopRecord, proved: &impl Fn(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
+pub(crate) fn loop_candidates(arena: &mut logic::TermArena, record: &LoopRecord, proved: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
     let mut found: Vec<(i64, String)> = vec![];
     let start = record.start;
     let mut steady: Vec<(String, i64)> = vec![];
@@ -514,7 +514,7 @@ pub(crate) fn loop_candidates(arena: &mut logic::TermArena, record: &LoopRecord,
     }
     found.extend(loop_octagons(arena, record));
     found.extend(loop_flagged(arena, record));
-    found.extend(loop_unrolled(arena, record, &steady, proved, asked));
+    found.extend(loop_unrolled(arena, record, &steady, &mut *proved, asked));
     found
 }
 
@@ -562,7 +562,7 @@ pub(crate) fn loop_flagged(arena: &mut logic::TermArena, record: &LoopRecord) ->
             let mut facts: Vec<Form> = vec![];
             for atom in said.iter() {
                 let atom = nikaia_std::num::value(atom);
-                atoms(atom, &|at| { arena.at(at) }, &mut facts);
+                atoms(atom, &mut |at| { arena.at(at) }, &mut facts);
             }
             let projected = loop_projected(&facts, &state, &directions);
             let mut here: collections::BTreeMap<String, Form> = collections::BTreeMap::new();
@@ -746,7 +746,7 @@ pub(crate) fn loop_unrolled_origin() -> String { String::from("turn-indexed inte
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn loop_unrolled(arena: &mut logic::TermArena, record: &LoopRecord, steady: &[(String, i64)], proved: &impl Fn(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
+pub(crate) fn loop_unrolled(arena: &mut logic::TermArena, record: &LoopRecord, steady: &[(String, i64)], proved: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
     let mut found: Vec<(i64, String)> = vec![];
     let c = match record.problem.condition { Some(__nikaia_value) => __nikaia_value, None => return found };
     let start = record.start;
@@ -812,7 +812,7 @@ pub(crate) fn loop_unrolled(arena: &mut logic::TermArena, record: &LoopRecord, s
                 let hi_term = arena.int(hi);
                 facts.push(arena.ge(here, lo_term));
                 facts.push(arena.le(here, hi_term));
-                let range = candidate(value, &facts, &|at| { arena.at(at) });
+                let range = candidate(value, &facts, &mut |at| { arena.at(at) });
                 if range.lo.is_none() || range.hi.is_none() {
                     open = true;
                     break;
@@ -959,10 +959,10 @@ pub(crate) fn loop_known_value(arena: &logic::TermArena, facts: &[i64], name: &s
     None
 }
 
-pub(crate) fn loop_found(arena: &mut logic::TermArena, record: &LoopRecord, proved: &impl Fn(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
+pub(crate) fn loop_found(arena: &mut logic::TermArena, record: &LoopRecord, proved: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
     let mut kept: Vec<(i64, String)> = vec![];
     let mut most_rounds: i64 = 4;
-    for (term, origin) in loop_candidates(arena, record, proved, asked) {
+    for (term, origin) in loop_candidates(arena, record, &mut *proved, asked) {
         if origin == loop_unrolled_origin() { most_rounds = unsafe { nikaia_std::proven::add::<i64>(4, loop_turns_most()) }; }
         let query = logic::lg_loop_entry_query(&record.problem, term);
         asked.push(1);
@@ -996,7 +996,7 @@ pub(crate) fn loop_found(arena: &mut logic::TermArena, record: &LoopRecord, prov
         all.push(term);
     }
     let invariant = arena.and(all);
-    let verdict = logic::lg_loop_check(arena, &record.problem, invariant, &|on, given, goal| { loop_proved_each(on, given, goal, proved) });
+    let verdict = logic::lg_loop_check(arena, &record.problem, invariant, &mut |on, given, goal| { loop_proved_each(on, given, goal, &mut *proved) });
     asked.push(2);
     if !verdict.proved() { return None; }
     Some(LoopFound { parts: kept })
@@ -1004,7 +1004,7 @@ pub(crate) fn loop_found(arena: &mut logic::TermArena, record: &LoopRecord, prov
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn loop_proved_each(arena: &logic::TermArena, facts: &[i64], goal: i64, proved: &impl Fn(&logic::TermArena, &[i64], i64) -> bool) -> bool {
+pub(crate) fn loop_proved_each(arena: &logic::TermArena, facts: &[i64], goal: i64, proved: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) -> bool {
     match arena.at(goal) {
         logic::SolverTerm::And(ref parts) => {
             for part in parts.iter() {
@@ -1106,7 +1106,7 @@ pub(crate) fn loop_open_text(records: &[LoopRecord]) -> String {
 }
 
 pub(crate) fn loop_raise(arena: &logic::TermArena, value: i64, flag: &str) -> i64 {
-    let read = linear_form(value, &|at| { arena.at(at) });
+    let read = linear_form(value, &mut |at| { arena.at(at) });
     if read.is_none() { return -1; }
     let form = nikaia_std::index::or(read, || Form { vars: collections::BTreeMap::new(), k: 0 });
     if form.vars.is_empty() { return 1; }
@@ -1301,7 +1301,7 @@ pub(crate) fn loop_built(arena: &mut logic::TermArena, op: &str, args: Vec<i64>)
     None
 }
 
-pub(crate) fn loop_recorded(arena: &mut logic::TermArena, record: &LoopRecord, recorded: &str, proved: &impl Fn(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
+pub(crate) fn loop_recorded(arena: &mut logic::TermArena, record: &LoopRecord, recorded: &str, proved: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
     let mut parts: Vec<(i64, String)> = vec![];
     let mut all: Vec<i64> = vec![];
     for part in recorded.split(';') {
@@ -1314,7 +1314,7 @@ pub(crate) fn loop_recorded(arena: &mut logic::TermArena, record: &LoopRecord, r
     }
     if parts.is_empty() { return None; }
     let invariant = arena.and(all);
-    let verdict = logic::lg_loop_check(arena, &record.problem, invariant, &|on, given, goal| { loop_proved_each(on, given, goal, proved) });
+    let verdict = logic::lg_loop_check(arena, &record.problem, invariant, &mut |on, given, goal| { loop_proved_each(on, given, goal, &mut *proved) });
     asked.push(2);
     if !verdict.proved() { return None; }
     Some(LoopFound { parts })

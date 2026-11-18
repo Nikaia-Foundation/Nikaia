@@ -5,14 +5,14 @@
 #[allow(unused_imports)]
 use logic::{SvTh as _};
 
-pub(crate) fn value_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
+pub(crate) fn value_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mut impl FnMut(&str) -> bool, pinned: &mut impl FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(built(logic::SolverTerm::Int(if b { 1 } else { 0 }), out)) },
-        _ => lin_term(expr, words, var, pinned, out),
+        _ => lin_term(expr, words, &mut *var, &mut *pinned, out),
     }
 }
 
-pub(crate) fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn Fn(&str) -> bool, pinned: &dyn Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
+pub(crate) fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mut dyn FnMut(&str) -> bool, pinned: &mut dyn FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitInt { value, negative, .. } => {
             let negative = *negative; let value = *value;
@@ -33,7 +33,7 @@ pub(crate) fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var
             if !args.is_empty() || words.resolve(method) != "len" { return None; }
             let counted = text_literal_length(receiver);
             if counted.is_some() { return Some(built(logic::SolverTerm::Int(nikaia_std::index::or(counted, || 0)), out)); }
-            let length = match length_path(receiver, words, &var) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let length = match length_path(receiver, words, &mut &mut *var) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(logic::SolverTerm::Var(length), out))
         },
         Expr::Field { .. } => {
@@ -56,18 +56,18 @@ pub(crate) fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Neg { return None; }
-            let a = match lin_term(expr, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let a = match lin_term(expr, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(logic::SolverTerm::Neg(a), out))
         },
         Expr::Cast { expr, ty, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if !ty.generics.is_empty() || !is_whole_number(words.resolve(ty.name)) { return None; }
-            lin_term(expr, words, var, pinned, out)
+            lin_term(expr, words, &mut &mut *var, &mut &mut *pinned, out)
         },
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            let l = match lin_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let r = match lin_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let l = match lin_term(lhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let r = match lin_term(rhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             match op {
                 BinaryOp::Add => Some(built(logic::SolverTerm::Add(l, r), out)),
                 BinaryOp::Sub => Some(built(logic::SolverTerm::Sub(l, r), out)),
@@ -124,7 +124,7 @@ pub(crate) fn text_literal_length(expr: &Expr) -> Option<i64> {
     Some(unsafe { nikaia_std::proven::sub::<i64>(text.len() as i64, escapes) })
 }
 
-pub(crate) fn length_path(list: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn length_path(list: &Expr, words: &winnow_grammar::InternerContext, var: &mut impl FnMut(&str) -> bool) -> Option<String> {
     let path = match path_of(list, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let length = format!("{}.len()", path);
     if var(&length) { return Some(length); }
@@ -170,7 +170,7 @@ pub(crate) fn divisor_name(divisor: &Expr) -> String { format!("divisor@{}", nod
 
 pub(crate) fn call_result_name(call: &Expr) -> String { format!("result@{}", node_key(call)) }
 
-pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn Fn(&str) -> bool, pinned: &dyn Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
+pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mut dyn FnMut(&str) -> bool, pinned: &mut dyn FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(built(logic::SolverTerm::Bool(b), out)) },
         Expr::Variable(name, _) => {
@@ -184,7 +184,7 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dy
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !args.is_empty() || words.resolve(method) != "is_empty" { return None; }
-            let length = match length_path(receiver, words, &var) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let length = match length_path(receiver, words, &mut &mut *var) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let counted = built(logic::SolverTerm::Var(length), out);
             let zero = built(logic::SolverTerm::Int(0), out);
             Some(built(logic::SolverTerm::Eq(counted, zero), out))
@@ -192,64 +192,64 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dy
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Not { return None; }
-            let a = match claim_term(expr, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let a = match claim_term(expr, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(logic::SolverTerm::Not(a), out))
         },
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); match op {
             BinaryOp::And => {
-                let l = match claim_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let r = match claim_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let l = match claim_term(lhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let r = match claim_term(rhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 Some(built(logic::SolverTerm::And(vec![l, r]), out))
             },
             BinaryOp::Or => {
-                let l = match claim_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let r = match claim_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let l = match claim_term(lhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let r = match claim_term(rhs, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 Some(built(logic::SolverTerm::Or(vec![l, r]), out))
             },
-            BinaryOp::Lt => compared(op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Le => compared(op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Gt => compared(op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Ge => compared(op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Eq => compared(op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Ne => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Lt => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
+            BinaryOp::Le => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
+            BinaryOp::Gt => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
+            BinaryOp::Ge => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
+            BinaryOp::Eq => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
+            BinaryOp::Ne => compared(op, lhs, rhs, words, &mut &mut *var, &mut &mut *pinned, out),
             _ => None,
         } },
         _ => None,
     }
 }
 
-pub(crate) fn claim_parts(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Vec<i64> {
+pub(crate) fn claim_parts(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &mut impl FnMut(&str) -> bool, pinned: &mut impl FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Vec<i64> {
     let mut parts: Vec<i64> = vec![];
-    claim_parts_into(expr, holds, words, var, pinned, out, &mut parts);
+    claim_parts_into(expr, holds, words, &mut *var, &mut *pinned, out, &mut parts);
     parts
 }
 
-pub(crate) fn claim_parts_into(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &dyn Fn(&str) -> bool, pinned: &dyn Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>, parts: &mut Vec<i64>) {
+pub(crate) fn claim_parts_into(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &mut dyn FnMut(&str) -> bool, pinned: &mut dyn FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>, parts: &mut Vec<i64>) {
     match expr {
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op == UnaryOp::Not {
-                claim_parts_into(expr, !holds, words, var, pinned, out, parts);
+                claim_parts_into(expr, !holds, words, &mut &mut *var, &mut &mut *pinned, out, parts);
                 return;
             }
         },
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
-                claim_parts_into(lhs, holds, words, var, pinned, out, parts);
-                claim_parts_into(rhs, holds, words, var, pinned, out, parts);
+                claim_parts_into(lhs, holds, words, &mut &mut *var, &mut &mut *pinned, out, parts);
+                claim_parts_into(rhs, holds, words, &mut &mut *var, &mut &mut *pinned, out, parts);
                 return;
             }
         },
         _ => { },
     }
-    let part = match claim_term(expr, words, &var, &pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let part = match claim_term(expr, words, &mut &mut *var, &mut &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return };
     if holds { parts.push(part); } else { parts.push(built(logic::SolverTerm::Not(part), out)); }
 }
 
-pub(crate) fn compared(op: &BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
-    let a = match lin_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let b = match lin_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+pub(crate) fn compared(op: &BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &mut impl FnMut(&str) -> bool, pinned: &mut impl FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
+    let a = match lin_term(lhs, words, &mut *var, &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let b = match lin_term(rhs, words, &mut *var, &mut *pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(match op {
         BinaryOp::Lt => built(logic::SolverTerm::Lt(a, b), out),
         BinaryOp::Le => built(logic::SolverTerm::Le(a, b), out),
@@ -312,7 +312,7 @@ pub(crate) fn literal_value(value: u64, negative: bool) -> Option<i64> {
 
 pub(crate) fn nothing_pinned(name: &str) -> Option<i64> { None }
 
-pub(crate) fn folded_whole(expr: &Expr, words: &winnow_grammar::InternerContext, pinned: &dyn Fn(&str) -> Option<i64>) -> Option<i64> {
+pub(crate) fn folded_whole(expr: &Expr, words: &winnow_grammar::InternerContext, pinned: &mut dyn FnMut(&str) -> Option<i64>) -> Option<i64> {
     match expr {
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; literal_value(value, negative) },
         Expr::Variable(name, _) => { let name = *name; pinned(words.resolve(name)) },
@@ -320,13 +320,13 @@ pub(crate) fn folded_whole(expr: &Expr, words: &winnow_grammar::InternerContext,
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Neg { return None; }
-            let v = match folded_whole(expr, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let v = match folded_whole(expr, words, &mut &mut *pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
             v.checked_neg()
         },
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            let x = match folded_whole(lhs, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let y = match folded_whole(rhs, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let x = match folded_whole(lhs, words, &mut &mut *pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let y = match folded_whole(rhs, words, &mut &mut *pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
             match op {
                 BinaryOp::Add => x.checked_add(y),
                 BinaryOp::Sub => x.checked_sub(y),
