@@ -2243,7 +2243,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                     && std::io::IsTerminal::is_terminal(&std::io::stdout()),
                 settings.build.prove_through_loops,
             ),
-            "bounds" => crate::bounds_report::report(
+            "bounds" => crate::bounds_report::report_built(
                 &unit.parsed,
                 &program
                     .units
@@ -2252,6 +2252,12 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                     .filter(|(k, u)| *k != at as usize && u.package == unit.package)
                     .map(|(_, u)| &u.parsed)
                     .collect::<Vec<_>>(),
+                &program
+                    .units
+                    .iter()
+                    .map(|unit| &unit.parsed)
+                    .collect::<Vec<_>>(),
+                self.reads,
                 &unit.source,
                 &unit.path.display().to_text(),
                 &program.contracts,

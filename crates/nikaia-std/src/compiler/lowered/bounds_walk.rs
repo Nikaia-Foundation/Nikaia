@@ -34,6 +34,7 @@ pub struct BoundsContext {
     pub through_loops: bool,
     pub trace: Vec<i64>,
     pub decided: collections::BTreeMap<String, bool>,
+    pub computed: collections::BTreeMap<String, i64>,
     pub list_indices: collections::BTreeSet<i64>,
     pub text_bytes: collections::BTreeSet<i64>,
     pub text_scalars: collections::BTreeSet<i64>,
@@ -351,7 +352,8 @@ pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collection
                     Expr::LitInt { value: digits, negative, .. } => { let digits = *digits; let negative = *negative; integer_as_count(&integer(digits, negative)) },
                     _ => None,
                 };
-                if whole && n.is_some() && !shape.bound.contains(text) && !shape.constants.contains_key(text) { shape.constants.insert(nikaia_std::block::Text::from(text.to_string()), nikaia_std::index::or(n, || 0)); }
+                let known = nikaia_std::index::or_maybe(n, || (*nikaia_std::index::get(&context.computed, text)).copied());
+                if whole && known.is_some() && !shape.bound.contains(text) && !shape.constants.contains_key(text) { shape.constants.insert(nikaia_std::block::Text::from(text.to_string()), nikaia_std::index::or(known, || 0)); }
             },
             _ => { },
         }
