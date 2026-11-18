@@ -1494,6 +1494,8 @@ impl CheckState {
     fn a_change_noted(ref mut self, name: ref String) sync {
         self.changed.push(name.clone())
         self.flow.changes_seen.push((name.clone(), self.reads_on_paths.len() as i64))
+        let bound = self.binding(name)?.id ?? -1
+        self.flow.changes_bound.push((name.clone(), bound))
     }
 
     /// **The place clones only read**, said where the body ends: not handed

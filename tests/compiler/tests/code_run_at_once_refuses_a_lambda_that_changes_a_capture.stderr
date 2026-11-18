@@ -1,0 +1,10 @@
+error[NK2104]: This lambda changes `total`, but `each` runs `f` from tasks that run at once.
+  --> tests/code_run_at_once_refuses_a_lambda_that_changes_a_capture.nika:7:18
+   |
+ 7 |     each([1, 2], fn(v) { total = total + v })
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Each of those tasks would change `total` at the same time.
+   = note: Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2).
+   = help: Return a value from the lambda and combine the results afterwards, or keep `total` in a `SharedMut` and change it through `update`.
+1 branch that cannot run beside the others

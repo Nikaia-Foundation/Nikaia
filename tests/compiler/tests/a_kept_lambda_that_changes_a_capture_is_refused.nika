@@ -1,0 +1,16 @@
+// A lambda kept in a struct field that changes a binding it captures from the
+// function around it is refused (Part I 5.4 C, #2047): the change would reach
+// only the lambda's own copy, and the program printed 0 where it says 3.
+struct H { f: fn(i64) }
+
+fn call(h: H) {
+    h.f(1)
+    h.f(2)
+}
+
+fn main() throws {
+    let mut total = 0
+    let h = H { f: fn(v) { total = total + v } }
+    call(h)
+    println(total)
+}

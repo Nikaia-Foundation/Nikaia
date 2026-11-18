@@ -711,7 +711,8 @@ impl EmitState {
                 // own; an absent entry keeps (fail closed).
                 let held = walk.code_parameter_runs
                 let inside = walk.in_parameter
-                walk.code_parameter_runs = self.own_contracts.functions.contains_key(key) && !self.emit_fn_keeps(key, emit_text(world, arg.name))
+                let walk_runs = self.own_contracts.functions.contains_key(key) && !self.emit_fn_keeps(key, emit_text(world, arg.name))
+                walk.code_parameter_runs = walk_runs
                 walk.in_parameter = true
                 written = self.emit_item_ty(world, walk, host, arg.ty, EmitLifetimes::Elided)
                 walk.in_parameter = inside
@@ -719,6 +720,12 @@ impl EmitState {
                 // **A run callback is lent, as the impl's is** (`lends_in_own`).
                 if self.emit_fn_lends(world, key, at) {
                     reference = "&"
+                }
+                // **And lent to change what it captures where the impls'
+                // is** (ADR-views-3 D17): `&mut impl FnMut`.
+                if walk_runs && reference == "&" && !arg.ty.is_nullable && self.facts.changing_code.contains(f"{key}::{emit_text(world, arg.name)}") {
+                    written = emit_fn_code_that_changes(written)
+                    reference = "&mut "
                 }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, key, at) {
                 // **A by-value data parameter the column runs is lent**

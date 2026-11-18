@@ -1342,6 +1342,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
     state.call_keepers.clear()
+    if world.own.functions.contains_key(key) {
+        check_core_call_code_args(state, world, callee, key, args, span)
+    }
     if keyed && args.len() == 1 && found.len() == 1 {
         check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)
     }

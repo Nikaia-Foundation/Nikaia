@@ -442,7 +442,9 @@ impl EmitState {
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
         if lent_path && !emit_arg_names_a_place(arg) { lend = false; }
-        let change = self.facts.mut_args.contains(&node);
+        let changing_code = nikaia_std::index::or(self.facts.changing_code_args.get(&node), || 0);
+        if changing_code == 3 { out.push("&mut &*"); } else if changing_code == 4 { out.push("&mut "); }
+        let change = self.facts.mut_args.contains(&node) || changing_code == 1 || changing_code == 2 || changing_code == 3;
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(&node);
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
         let mut pointer: i64 = 0;
@@ -500,7 +502,7 @@ impl EmitState {
         let mut kept_here = false;
         let mut lent_whole = false;
         if pointer == 0 {
-            if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
+            if changing_code == 3 { } else if changing_code == 2 || change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
                     if self.facts.lent_text_views.contains(&node) { out.push("&"); }
@@ -567,7 +569,12 @@ impl EmitState {
                 if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| std::boxed::Box::pin(async move ", joined)); }
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.copy_owned();
                 changed.extend(mutable.iter().cloned());
-                let inner = EmitScope { changed: changed, ..EmitScope::plain() };
+                let mut awaited: Vec<winnow_grammar::Symbol> = vec![];
+                for name in scope.awaited.iter() {
+                    let name = *name;
+                    if !params.contains(&name) { awaited.push(name.copy_owned()); }
+                }
+                let inner = EmitScope { changed: changed, awaited: awaited, ..EmitScope::plain() };
                 let valueless = self.facts.valueless_lambdas.contains(&node_key(arg));
                 let leaves = emit_a_body_that_leaves(world, body);
                 if self.facts.failing_lambdas.contains(&node_key(arg)) {

@@ -1,0 +1,21 @@
+// A kept lambda that only reads what it captures runs (Part I 5.4 C, #2047),
+// and so does one that changes a local of its own.
+struct H { f: fn(i64) -> i64 }
+
+fn call(h: H) -> i64 {
+    return h.f(1) + h.f(2)
+}
+
+fn main() throws {
+    let total = 10
+    let reads = H { f: fn(v) { total + v } }
+    println(call(reads))
+    let own = H { f: fn(v) {
+        let mut sum = total
+        sum = sum + v
+        sum += v
+        sum
+    } }
+    println(call(own))
+    println(total)
+}
