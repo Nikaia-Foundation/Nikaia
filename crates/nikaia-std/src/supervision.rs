@@ -460,6 +460,11 @@ impl Restart for Backoff {
     }
 }
 
+// Kept as Rust (#2082): `Backoff` is the policy the emitter writes where a
+// child names none (`emit_core_args.nika`); no program can name it or call
+// its `decide`, and through `supervisor::run` its numbers show only after
+// 60 s of uptime or 300 s of crashes. The supervisor's own restarts are
+// `tests/language/src/supervision.nika`.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,80 +538,5 @@ mod tests {
             policy.decide(failure(4, Duration::ZERO, Duration::from_secs(401))),
             Next::Delay(_)
         ));
-    }
-
-    /// One policy, asked for every child, as `run` asks each child's own.
-    fn asking(policy: Backoff) -> impl Fn(usize, Failures) -> Next {
-        let held = std::cell::RefCell::new(policy);
-        move |_, history| held.borrow_mut().decide(history)
-    }
-
-    fn crashing(times: usize) -> impl Fn(usize) -> TaskHandle<Ended> {
-        let left = std::rc::Rc::new(std::cell::Cell::new(times));
-        move |_| {
-            let left = left.clone();
-            TaskHandle::start(async move {
-                match left.get() {
-                    0 => None,
-                    n => {
-                        left.set(n - 1);
-                        Some(("it broke".to_string(), None))
-                    }
-                }
-            })
-        }
-    }
-
-    fn quick() -> Backoff {
-        Backoff {
-            first_delay: Duration::from_millis(1),
-            ceiling: Duration::from_millis(2),
-            ..Backoff::default()
-        }
-    }
-
-    /// A transient child that fails twice and then ends normally is restarted
-    /// twice, and the supervisor then has nothing left to run.
-    #[test]
-    fn a_transient_child_is_restarted_until_it_ends_normally() {
-        let outcome = crate::rt::exec::block_on(supervise(
-            &[Kind::Transient],
-            Strategy::OneForOne,
-            crashing(2),
-            asking(quick()),
-        ));
-        assert_eq!(outcome, Ok(()));
-    }
-
-    /// A policy that gives up makes `run` throw what the last crash said.
-    #[test]
-    fn a_policy_that_gives_up_escalates() {
-        let outcome = crate::rt::exec::block_on(supervise(
-            &[Kind::Transient],
-            Strategy::OneForOne,
-            crashing(usize::MAX),
-            asking(Backoff {
-                give_up_after: Duration::ZERO,
-                ..quick()
-            }),
-        ));
-        assert_eq!(
-            outcome,
-            Err(Stopped::Escalated(Escalated {
-                message: "it broke".to_string(),
-            }))
-        );
-    }
-
-    /// A temporary child is not restarted.
-    #[test]
-    fn a_temporary_child_is_not_restarted() {
-        let outcome = crate::rt::exec::block_on(supervise(
-            &[Kind::Temporary],
-            Strategy::OneForOne,
-            crashing(1),
-            asking(quick()),
-        ));
-        assert_eq!(outcome, Ok(()));
     }
 }
