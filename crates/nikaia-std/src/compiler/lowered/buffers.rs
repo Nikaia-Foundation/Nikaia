@@ -2040,7 +2040,20 @@ pub(crate) fn untethered_called_list(value: &Expr, ask: &BufferAsk<'_, '_, '_, '
             _ => { },
         }
     }
-    false
+    let contract = match *nikaia_std::index::get(&ask.own.functions, &called) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    untethered_owned_list_ty(result)
+}
+
+pub(crate) fn untethered_owned_list_ty(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.len() == 1 && is_a_container_name(name) && match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+            Ty::Named { name: element, args: inner, view: lent } => { let lent = *lent; !lent && inner.is_empty() && last_segment(element) == "String" },
+            _ => false,
+        } },
+        _ => false,
+    }
 }
 
 pub(crate) fn untethered_method_list(method: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, sure: bool) -> bool {
@@ -2065,6 +2078,19 @@ pub(crate) fn untethered_method_list(method: &str, ask: &BufferAsk<'_, '_, '_, '
                 }
             },
             _ => { },
+        }
+    }
+    if found.is_empty() {
+        for key in method_keys(ask.own_methods, method) {
+            let contract = match *nikaia_std::index::get(&ask.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" {
+                let owned = match &signature.result {
+                    None => false,
+                    Some(returned) => untethered_owned_list_ty(returned),
+                };
+                found.push(owned);
+            }
         }
     }
     if sure { return found.len() == 1 && *unsafe { nikaia_std::proven::read(&found, (0) as usize) }; }

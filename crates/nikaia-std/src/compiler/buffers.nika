@@ -2752,7 +2752,7 @@ fn untethered_a_read(value: ref Expr) -> bool {
 
 // A list whose elements are text of its own: declared so, a list literal of
 // text made there (`own_text_items_written` in `text_tiers.nika`), or the
-// call of a function of this unit declared to hand back such a list. Not one
+// call of a function of this unit or package declared to hand back such a list. Not one
 // of literals only, whose elements stay `&'static str`, nor one whose
 // elements the text pass made views.
 fn untethered_owned_items(value: ref Expr, ty: ref Type?, ask: ref BufferAsk) -> bool {
@@ -2792,11 +2792,29 @@ fn untethered_called_list(value: ref Expr, ask: ref BufferAsk, sure: bool) -> bo
             else => {}
         }
     }
-    return false
+    // **One another file of the package declares** (#1510), read off the
+    // package's ledger, as `tier_beside_lists` in `text_tiers.nika` reads it
+    // off the files: its items stay `String`, published to the callers beside.
+    let contract = ask.own.functions[called] ?? return false
+    let signature = contract.signature ?? return false
+    let result = signature.result ?? return false
+    return untethered_owned_list_ty(result)
 }
 
-// A method of this unit named `method`, declared to hand back a list of text
-// of its own (#1481); with `sure`, the only one of that name.
+// A list type of text of its own, as a ledger holds it: `Vec[String]`.
+fn untethered_owned_list_ty(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 1 && is_a_container_name(name) && match args[0] {
+            Ty::Named { name: element, args: inner, view: lent } => !lent && inner.len() == 0 && last_segment(element) == "String",
+            else => false,
+        },
+        else => false,
+    }
+}
+
+// A method of this unit named `method`, else of the package (#1510), declared
+// to hand back a list of text of its own (#1481); with `sure`, the only one of
+// that name.
 fn untethered_method_list(method: ref String, ask: ref BufferAsk, sure: bool) -> bool {
     let mut found: Vec[bool] = []
     for item in ask.items {
@@ -2818,6 +2836,21 @@ fn untethered_method_list(method: ref String, ask: ref BufferAsk, sure: bool) ->
                 }
             }
             else => {}
+        }
+    }
+    // **None of this unit: the package's** (#1510), read off its ledger, as
+    // `tier_beside_lists` in `text_tiers.nika` reads them off the files.
+    if found.len() == 0 {
+        for key in method_keys(ask.own_methods, method) {
+            let contract = ask.own.functions[key] ?? continue
+            let signature = contract.signature ?? continue
+            if signature.params.len() > 0 && signature.params[0].0 == "self" {
+                let owned = match signature.result {
+                    null => false,
+                    returned => untethered_owned_list_ty(returned),
+                }
+                found.push(owned)
+            }
         }
     }
     if sure {
