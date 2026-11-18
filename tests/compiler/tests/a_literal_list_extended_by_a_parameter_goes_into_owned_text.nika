@@ -1,0 +1,26 @@
+// #2059: an untyped list of text literals extended by a `Vec[String]`
+// parameter and handed to a call of `std` asking `Vec[String]` lowered as a
+// list of `EitherText` (NK1343, rustc: `List<EitherText>` where `List<Text>`
+// was wanted) when every caller handed the parameter literals. `extend` links
+// the two lists (ADR-collections-1 D3, D6), so they are one type below, here
+// text of its own, as with `let mut args: Vec[String] = [..]`.
+use std::process
+
+fn go(flags: Vec[String]) throws {
+	let mut args = ["-n", "x"]
+	args.extend(flags)
+	let out = process::run("echo", args)
+	println(out.stdout)
+}
+
+fn copied(flags: Vec[String]) throws {
+	let mut args = ["-n", "z"]
+	args.extend(flags.clone())
+	let out = process::run("echo", args)
+	println(f"{out.stdout} {flags.len()}")
+}
+
+fn main() throws {
+	go(["y"])
+	copied(["w", "v"])
+}
