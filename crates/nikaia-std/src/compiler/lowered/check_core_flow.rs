@@ -1257,7 +1257,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let over = check_core_flow_caught(&state, world, &on, value);
     state.a_match_over_several_error_types(world, &over, value, arms, span);
     let over_error = subject == "error";
-    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
+    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) && !state.a_pattern_naming_nothing(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
     let copied = match on {

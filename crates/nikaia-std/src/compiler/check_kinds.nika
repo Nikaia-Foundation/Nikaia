@@ -480,6 +480,77 @@ impl CheckState {
         return some_seen || none_seen
     }
 
+    /// **`NK1117`: a pattern `name(…)` whose one-word name nothing declares**
+    /// (#2033). A variant's pattern names its enum, `Message::Write(text)`,
+    /// and a one-variant enum's short form, `Exit(c)`, is rewritten to that
+    /// before the check (ADR-347); a bare name binds (Part I 3.4). So
+    /// `some(_)`, `foo(_)` is no pattern of a value of a certain type, which
+    /// the backend would only refuse later. Asked where the subject's type is
+    /// certain, so a `match` on a kind keeps its `Maybe(A)` (ADR-330 D4).
+    fn a_pattern_naming_nothing(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
+        let nullable = match on {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        let certain = nullable || match on {
+            Ty::Tuple(_) => true,
+            else => self.kind_of_the_matched(on) != null,
+        }
+        if !certain {
+            return false
+        }
+        for arm in arms {
+            let name = self.kind_an_undeclared_call(world, arm.pattern) ?? continue
+            let written = written_expression(world.words, value)
+            let mut help: String = f"Write the variant with its enum, `Type::{name}(…)`, or a name alone to bind the value."
+            if nullable {
+                help = "Over a `T?`, a name alone binds the `T`: write `x => …`, with `null => …` beside it."
+            }
+            self.findings.push(check_refusal("NK1117", span, f"Nothing declares `{name}`, so `{name}(…)` is no pattern of `{written}`.", ["A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there."], help))
+            return true
+        }
+        return false
+    }
+
+    /// The first one-word name in `pattern` written as `name(…)` that names no
+    /// enum or struct of the program, at any depth.
+    fn kind_an_undeclared_call(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if path.len() == 1 {
+                    let name = world.words.resolve(path[0]).clone()
+                    if !self.enums.contains_key(name) && !self.structs.contains_key(name) {
+                        return name
+                    }
+                }
+                for part in parts {
+                    let found = self.kind_an_undeclared_call(world, part)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            MatchPattern::Named { fields, .. } => {
+                for field in fields {
+                    let found = self.kind_an_undeclared_call(world, field.pat)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    let found = self.kind_an_undeclared_call(world, alternative)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            else => {},
+        }
+        return null
+    }
+
     /// **`NK1205`: a variant or a literal matched on a `T?`** (issue #180,
     /// #704): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
