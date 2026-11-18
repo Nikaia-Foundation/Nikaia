@@ -1,6 +1,7 @@
 // The solver's regression set (`tests/solver/regress`, #1961): files of the
 // SMT-LIB set (`tests/solver/SOURCES.md`) a fix brought within the limit,
-// run under a 10 s wall-clock limit, so a slowdown back to the old cost
+// run under a 30 s wall-clock limit (10 s timed out the two SMPT files on the
+// arm64 CI runner, which takes about 2.5 times the rod's time), so a slowdown back to the old cost
 // shows as `unknown` in the diff. QF_LIA bofill-scheduling
 // SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
@@ -51,7 +52,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"]
+	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--timeout", "30", "tests/solver/regress"]
 	let out = process::run(nikaia, all.clone(); dir: repo)
 	println(out.stdout.trim())
 	// A failed inner run names its cause in the diff (#1305).
