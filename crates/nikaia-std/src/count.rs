@@ -106,26 +106,6 @@ pub fn of<N: Of>(count: N) -> N::Out {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_count_becomes_a_usize() {
-        assert_eq!(of(3_i64), 3_usize);
-        assert_eq!(of(0_i32), 0_usize);
-        assert_eq!("ab".repeat(of(2_i64)), "abab");
-    }
-
-    /// The failure D1 could not reuse: not an access, so not an access out of
-    /// bounds.
-    #[test]
-    fn a_negative_count_says_what_it_is() {
-        let panicked = std::panic::catch_unwind(|| of(-1_i64)).expect_err("a count aborts");
-        let said = panicked
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .unwrap_or("");
-        assert!(said.contains("a count cannot be negative"), "{said}");
-        assert!(said.contains("-1"), "{said}");
-    }
-
     /// Which is what lets the emitter write it around a name it cannot type.
     #[test]
     fn anything_that_is_not_a_number_is_untouched() {

@@ -1,0 +1,45 @@
+// What `target::has` answers for each named x86-64 level in a `comptime`,
+// where the build passes the level to the build-time run (ADR-371 D6): the
+// level table of `runtime/target.nika`, read through `target.rs`'s
+// `at_level`. Moved from the `nikaia-std` unit test `target::tests::levels`
+// (#2082). The levels are x86-64's: on another host the compiler refuses each
+// as "not a CPU level" (checked here), and the table is printed as expected.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"levels\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "use std::target\n\ncomptime CRC: bool = target::has(target::Instruction::Crc32c)\ncomptime BMI: bool = target::has(target::Instruction::Bmi2)\ncomptime AVX: bool = target::has(target::Instruction::Avx2)\n\nfn main() throws {\n    println(f\"crc32c {CRC}, bmi2 {BMI}, avx2 {AVX}\")\n}\n")
+    let arch = process::run("uname", ["-m"]).stdout.trim().clone()
+    let expected = [
+        ("x86-64", "crc32c false, bmi2 false, avx2 false"),
+        ("x86-64-v2", "crc32c true, bmi2 false, avx2 false"),
+        ("x86-64-v3", "crc32c true, bmi2 true, avx2 true"),
+        ("x86-64-v4", "crc32c true, bmi2 true, avx2 true"),
+    ]
+    for (level, line) in expected {
+        let out = process::run(nikaia, ["run", f"--cpu={level}"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+        if arch == "x86_64" {
+            print(f"{level}: {out.stdout}")
+            if out.code != 0 {
+                println(f"exit {out.code}: {out.stderr}")
+            }
+        } else {
+            if out.code == 1 && out.stderr.contains("is not a CPU level of") {
+                println(f"{level}: {line}")
+            } else {
+                println(f"{level}: exit {out.code}: {out.stderr}")
+            }
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

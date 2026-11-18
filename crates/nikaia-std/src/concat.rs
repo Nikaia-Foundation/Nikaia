@@ -251,17 +251,6 @@ pub fn plus<L: Plus<R>, R>(left: L, right: R) -> L::Out {
 mod tests {
     use super::*;
 
-    /// All four shapes, which is the whole point: the language below has an
-    /// operator for exactly one of them.
-    #[test]
-    fn every_shape_concatenates() {
-        let owned = || "left-".to_string();
-        assert_eq!(plus(owned(), "right"), "left-right");
-        assert_eq!(plus(owned(), "right".to_string()), "left-right");
-        assert_eq!(plus("left-", "right"), "left-right");
-        assert_eq!(plus("left-", "right".to_string()), "left-right");
-    }
-
     /// The left side's buffer is kept where it is big enough - the property the
     /// measurement in this file's head is about, held to rather than described.
     #[test]

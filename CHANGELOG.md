@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1433] — 2026-11-18
+
+**Builders' changes (#2020, #2023)**
+- The solvers and the logic layer are the package logic: packages/logic, used by the compiler and by any program with logic = { path = ... } (lg_smtlib_read, lg_check, lg_verify); scripts/solver.nika builds its rod from there.
+- An assert in the fallback block of a ?? inside a test is checked by the test under nikaia test, not refused NK1300.
+- CI builds the solver program once per shard before the tests, so `solver_sample` no longer overruns its 300 s at `user-parallelism = no`.
+- `nikaia test --std` runs the test blocks of the compiler's own .nika files, compiled into nikaia without a cfg(test) build (#2082)
+
 ## [0.0.1432] — 2026-11-18
 
 **Builders' changes (#1510, #2046, #2076)**

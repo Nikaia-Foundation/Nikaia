@@ -63,18 +63,3 @@ fn on_this_machine(i: Instruction) -> bool {
     let _ = i;
     false
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn levels() {
-        assert!(!at_level("", Instruction::Crc32c));
-        assert!(!at_level("x86-64", Instruction::Crc32c));
-        assert!(at_level("x86-64-v2", Instruction::Crc32c));
-        assert!(!at_level("x86-64-v2", Instruction::Avx2));
-        assert!(at_level("x86-64-v3", Instruction::Bmi2));
-        assert!(at_level("x86-64-v4", Instruction::Avx2));
-    }
-}
