@@ -69,6 +69,16 @@ impl CheckState {
             sums.insert(head, receivers)
         }
         self.flow.open_sums.clear()
+        // **A `widening_mul` on it is the type's** (#1555): the halves are
+        // written by the receiver's width.
+        let mut wides: collections::BTreeMap[i64, Vec[i64]] = collections::BTreeMap()
+        for (call, number) in self.flow.open_wides {
+            let head = self.open_root(number)
+            let mut calls: Vec[i64] = wides[head]?.clone() ?? []
+            calls.push(call)
+            wides.insert(head, calls)
+        }
+        self.flow.open_wides.clear()
         self.flow.open_numbers.clear()
         for (head_at, members) in groups {
             let mut head = members[0].1.clone()
@@ -223,6 +233,9 @@ impl CheckState {
                     for receiver in sums[head_at]?.clone() ?? [] {
                         self.facts.summed.insert(receiver, ty.clone())
                     }
+                }
+                for call in wides[head_at]?.clone() ?? [] {
+                    self.facts.std_receivers.insert(call, ty.clone())
                 }
                 for member in members {
                     // A list's elements: the list is written with the type

@@ -1,0 +1,26 @@
+// crates/nikaia-std/src/runtime/cli.nika
+//
+// **The article before a type name in a command-line message** (#651),
+// written in Nikaia: `src/cli.rs` calls `an` where a word of the command line
+// is missing or is not a value of its parameter's type. The parser, `usage`
+// and `help` stay in Rust: they read the `&'static Interface` the lowering
+// writes.
+
+/// `an \`int\``, `a \`String\``, chosen by how the type is said: a letter
+/// before a width is said as its name (`an \`i64\``, `an \`f64\``, `a
+/// \`u8\``), a word as a word (`an \`int\``, `a \`bool\``, `a \`usize\``).
+pub fn an(ty: String) -> String sync {
+    let two: Vec[scalar] = ty.scalars.take(2).collect()
+    let spelled = two.len() > 1 && two[1].is_ascii_digit()
+    let vowel_sound = if two.len() == 0 {
+        false
+    } else if spelled {
+        // The letters whose name starts with a vowel sound.
+        "aefhilmnorsx".contains(two[0].to_ascii_lowercase())
+    } else {
+        // `u` is said `you` in the words a word can be (`usize`).
+        "aeio".contains(two[0].to_ascii_lowercase())
+    }
+    let article = if vowel_sound { "an" } else { "a" }
+    return f"{article} `{ty}`"
+}

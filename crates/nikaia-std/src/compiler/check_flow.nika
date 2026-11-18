@@ -352,6 +352,10 @@ pub struct CheckFlow {
     /// **A `sum` of an open number's items** (#1485): the receiver and the
     /// entry of `open_numbers`; the call names the type the number gets.
     pub open_sums: collections::BTreeMap[i64, i64],
+    /// **A `widening_mul` on an open number** (#1555): the call and the
+    /// entry of `open_numbers`; the emitter needs the type the number gets,
+    /// since the halves' types follow from it.
+    pub open_wides: collections::BTreeMap[i64, i64],
     /// **A walk whose items are an open number** (ADR-285 D34, #594), by the
     /// call that makes it, and the entry of `open_numbers` it names.
     pub open_walks: collections::BTreeMap[i64, i64],
@@ -590,6 +594,7 @@ impl CheckFlow {
             open_map_parts: collections::BTreeMap(),
             open_literal_lists: collections::BTreeSet(),
             open_sums: collections::BTreeMap(),
+            open_wides: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
             open_items: collections::BTreeMap(),
             open_params: collections::BTreeMap(),
