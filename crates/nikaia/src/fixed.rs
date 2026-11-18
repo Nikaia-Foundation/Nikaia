@@ -35,18 +35,6 @@ pub struct Table {
     pub order: Vec<usize>,
 }
 
-/// The same hash `nikaia_std::fixed` computes, over the same bytes.
-///
-/// **Written in Nikaia** (0.0.250): `nikaia-std/src/compiler/fixed.nika`, the
-/// program [ADR-285](../../../docs/specification/adr/adr-285.md) was decided
-/// for. It is still two implementations of one function - that one and the
-/// lookup `nikaia_std::fixed` runs - and what holds them together is not care
-/// but `crates/nikaia/tests/fixed_map.rs`, which **runs** a program over both
-/// table shapes.
-pub fn fnv(key: &str, seed: u64) -> u64 {
-    nikaia_std::compiler::fixed::fnv(key, seed)
-}
-
 /// Build the table for these keys, in the order they were written - CHD from
 /// twelve keys, the keys as written under that
 /// (`nikaia-std/src/compiler/fixed.nika`, which says how).

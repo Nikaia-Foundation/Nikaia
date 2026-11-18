@@ -1,0 +1,54 @@
+== index
+error[NK1313]: `xs[i]` is not proved in bounds, and this package refuses a check the compiler does not prove.
+  --> src/main.nika:3:2
+   |
+ 3 | 	println(f"{xs[i]}")
+   |  ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The walk does not prove it: a parameter no precondition bounds, of a function no body of the package calls: an `assert` at the top of the function makes it one (ADR-269 D5).
+   = note: `unproved-checks = "error"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason.
+   = help: Check it where the value arrives, with a guard the program handles: `return if i < 0 || i >= xs.len()`, or a `throw` there. After that line, the read is proved and costs nothing.
+1 type error
+exit 1
+== guarded
+Checked src/main.nika
+exit 0
+== sum
+error[NK1313]: `a + b` is not proved inside its type, and this package refuses a check the compiler does not prove.
+  --> src/main.nika:2:12
+   |
+ 2 | 	let c = a + b
+   |            ^^^
+   |
+   = note: The walk does not prove it: a parameter no precondition bounds, of a function no body of the package calls: an `assert` at the top of the function makes it one (ADR-269 D5).
+   = note: `unproved-checks = "error"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason.
+   = help: Bound the operands where they arrive, with a guard the program handles: `return if a > LIMIT || a < -LIMIT`, and the same for `b`, or a `throw` there. After that, the operation is proved.
+1 type error
+exit 1
+== divide
+error[NK1313]: `a / b` is not proved to divide by a value other than zero, and this package refuses a check the compiler does not prove.
+  --> src/main.nika:2:12
+   |
+ 2 | 	let c = a / b
+   |            ^^^
+   |
+   = note: The walk does not prove it: a parameter no precondition bounds, of a function no body of the package calls: an `assert` at the top of the function makes it one (ADR-269 D5).
+   = note: `unproved-checks = "error"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason.
+   = help: Check the divisor where it arrives, with a guard the program handles: `return if b == 0`, or a `throw` there. After that line, the division is proved.
+1 type error
+exit 1
+== allow
+Checked src/main.nika
+exit 0
+== flag
+error[NK1313]: `a + b` is not proved inside its type, and this package refuses a check the compiler does not prove.
+  --> src/main.nika:2:12
+   |
+ 2 | 	let c = a + b
+   |            ^^^
+   |
+   = note: The walk does not prove it: a parameter no precondition bounds, of a function no body of the package calls: an `assert` at the top of the function makes it one (ADR-269 D5).
+   = note: `unproved-checks = "error"` refuses every index, overflow and division the compiler does not prove; `nikaia check --bounds` lists each with its reason.
+   = help: Bound the operands where they arrive, with a guard the program handles: `return if a > LIMIT || a < -LIMIT`, and the same for `b`, or a `throw` there. After that, the operation is proved.
+1 type error
+exit 1

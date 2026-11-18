@@ -213,6 +213,9 @@ pub trait SvTh {
 	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] sync
 	/// `shared()`: the equalities a theory shares with others (D13).
 	fn shared(ref self) -> Vec[u32] sync
+	/// `pivots()`: the simplex pivots run so far, never falling; the
+	/// search's budget counts their growth across a check (#2048).
+	fn pivots(ref self) -> i64 sync
 }
 
 impl SvTh for SvTheory {
@@ -382,6 +385,11 @@ impl SvTh for SvTheory {
 	/// none while it is the only one.
 	fn shared(ref self) -> Vec[u32] {
 		return []
+	}
+
+	/// `pivots()`: none, Fourier-Motzkin does not pivot.
+	fn pivots(ref self) -> i64 {
+		return 0
 	}
 }
 

@@ -712,6 +712,7 @@ impl SvTh for SvSimplex {
     fn model(&self) -> collections::BTreeMap<String, i64> { self.found.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { self.found_real.copy_owned() }
     fn shared(&self) -> Vec<u32> { vec![] }
+    fn pivots(&self) -> i64 { self.pivots }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1354,7 +1355,7 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
         let name = *name;
         out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_real_test_each(&format!("{}.smt2", name), text)));
     }
-    let expected = vec!["half.smt2: refuted, model x = 1/2 checked", "  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0", "half-int.smt2: proved, log of 4 steps checked", "  rod: simplex proved 1/interval; new-fm proved 1/interval; both proved 1/interval; fm proved 1", "inside.smt2: refuted, model x = 1/2 checked", "  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0", "empty.smt2: proved, log of 4 steps checked", "  rod: simplex proved 0; new-fm unknown (theory) 0; both proved 0; fm unknown (theory) 0", "mixed.smt2: refuted, model n = 1, x = 1/3 checked", "  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0"];
+    let expected = vec!["half.smt2: refuted, model x = 1/2 checked", "  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0", "half-int.smt2: proved, log of 4 steps checked", "  rod: simplex proved 1/interval; new-fm proved 1/interval; both proved 1/interval; fm proved 1", "inside.smt2: refuted, model x = 1/2 checked", "  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0", "empty.smt2: proved, log of 4 steps checked", "  rod: simplex proved 0; new-fm unknown (theory) 0; both proved 0; fm unknown (theory) 0", "mixed.smt2: refuted, model n = 1, x = 1/3 checked", "  rod: simplex refuted 6; new-fm unknown (theory) 0; both refuted 6; fm unknown (theory) 0"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }

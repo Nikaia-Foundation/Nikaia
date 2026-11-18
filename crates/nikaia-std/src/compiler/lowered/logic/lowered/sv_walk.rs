@@ -350,7 +350,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
         let name = *name;
         out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_walk_test_each(&format!("{}.smt2", name), text)));
     }
-    let expected = vec!["problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk", "equation.smt2: walk found true in 11 moves, same again true, a model; refuted 7", "unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval", "real.smt2: walk found false in 0 moves, same again true, no model; refuted 2"];
+    let expected = vec!["problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk", "equation.smt2: walk found true in 11 moves, same again true, a model; refuted 15", "unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval", "real.smt2: walk found false in 0 moves, same again true, no model; refuted 2"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }
