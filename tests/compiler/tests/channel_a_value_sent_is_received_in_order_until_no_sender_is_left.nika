@@ -1,0 +1,24 @@
+// A value sent on a channel is the value received, values come out in the
+// order they were sent in, and once no sender is left a receive hands back
+// nothing (Part II 12, `std::channel`). Moved from the `nikaia-std` unit
+// tests `channel::tests::*` (#2082); the refused capacity of nothing is
+// `channel_a_capacity_of_nothing_stops_the_program`.
+use std::channel
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[i64](4)
+    tx.send(7)
+    println(rx.recv() ?? -1)
+    spawn fn {
+        for n in 1..3 {
+            tx.send(n)
+        }
+    }
+    let mut seen: Vec[i64] = []
+    while true {
+        let n = rx.recv() ?? break
+        seen.push(n)
+    }
+    println(f"[{seen.iter().join(", ")}]")
+    println(rx.recv() ?? -1)
+}
