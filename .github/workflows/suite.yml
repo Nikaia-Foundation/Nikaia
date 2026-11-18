@@ -413,8 +413,8 @@ jobs:
           # comptime bundles a second time, in `~/.cache/nikaia`, beside the
           # ones the other tests build in this directory (#1600).
           export NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
           run_it() { (cd "$itdir" && "$it" --exact "$@"); }
           case "$SHARD" in
@@ -569,8 +569,8 @@ jobs:
           set -o pipefail
           mkdir -p "$NIKAIA_DUMP_ACCEPTED"
           echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
 
       - name: Name the sweep's failures
