@@ -162,6 +162,11 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn open_numbers_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Vec<i64> {
         let mut out: Vec<i64> = vec![];
+        let placed: Option<i64> = (*nikaia_std::index::get(&self.flow.open_receivers, &(id_of(expr) as i64))).copied();
+        if placed.is_some() {
+            out.push(self.open_root(nikaia_std::index::or(placed, || 0)));
+            return out;
+        }
         match expr {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -430,6 +435,17 @@ impl CheckState {
         entry.typed = true;
         self.flow.open_numbers.insert(head, entry);
         true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn open_receiver_placed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: &Ty, span: &Span) {
+        if !on.is_unknown() || a_lit_int(receiver) || !self.number_shaped(world, receiver) { return; }
+        if !self.open_numbers_in(world, receiver).is_empty() { return; }
+        let at = -(id_of(receiver) as i64) - 1;
+        self.flow.open_numbers.insert(at, CheckOpenNumber { name: written_expression(world.words, receiver), element: false, levels: 0, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
+        self.flow.open_literal_lists.insert(at);
+        self.flow.open_receivers.insert(id_of(receiver) as i64, at);
+        self.open_number_given(world, at, receiver, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
