@@ -1,0 +1,23 @@
+// HTML escaping (moved from html.rs's unit tests, #2082): each of the five
+// characters that change the meaning, the ampersand first, text that is not
+// ASCII passing through whole, escapes at either end and doubled, and escaping
+// twice showing. In a template the type decides (ADR-017 D2): text is
+// escaped, `html::Raw` is not, a view of text renders as the text, a number
+// writes itself.
+use std::html
+
+fn show(markup: html::Raw, view: String, n: i64, yes: bool, x: f64) -> String {
+    return dsl html {
+        <p>{view}|{markup}|{n}|{yes}|{x}</p>
+    } eod
+}
+
+fn main() throws {
+    for t in ["&", "<", ">", "\"", "'", "Additional fortune added at request time.", "<b>", "&lt;", "Ünïcödé — 日本語 — 🎉", "日<本>語", "a & 日", "<a", "a<", "<<", "<", "a<b<c", "", "<script>alert(\"x\")</script>"] {
+        println(f"[{t}] -> [{html::escape(t)}]")
+    }
+    println(f"twice: {html::escape(html::escape("<b>"))}")
+    let owned = "a&b"
+    println(show(html::Raw("<b>x</b>"), owned, 42, true, -1.5))
+    println(show(html::Raw("<i>"), "a<b", -1, false, 0.25))
+}
