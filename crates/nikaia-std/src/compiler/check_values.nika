@@ -10,7 +10,7 @@ impl CheckState {
     /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.1, the reading):
     /// a `winnow_grammar::Symbol` handed on is still there to hand on again.
     fn takes_away(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
-        return moves_away(ty) && !a_ledger_copies(ty, [world.library]) && !self.a_package_copy(world, ty)
+        return moves_away(ty) && !a_ledger_copies(ty, [world.library]) && !self.a_dependency_copy(world, ty) && !self.a_package_copy(world, ty)
     }
 
     /// **A type this package declares that copies**, nullable or in a tuple
@@ -38,9 +38,22 @@ impl CheckState {
     }
 
     /// Whether handing a value of this type out takes nothing away, by the
-    /// language or by `std`'s ledger.
+    /// language, by `std`'s ledger or by a dependency's.
     pub fn copied(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
-        return copies_plainly(ty) || a_ledger_copies(ty, [world.library])
+        return copies_plainly(ty) || a_ledger_copies(ty, [world.library]) || self.a_dependency_copy(world, ty)
+    }
+
+    /// **A type of another package that copies**: its ledger records the
+    /// types the package derives `Copy` for (ADR-294 D9.1, #2031), and a
+    /// consumer copies them as the package does. Only a type this package
+    /// does not declare: `own` is this package's ledger too, and its own
+    /// types are answered by `copies_in_the_package` where they copy.
+    fn a_dependency_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+        return match ty {
+            Ty::Named { name, .. } => !self.structs.contains_key(name) && !self.enums.contains_key(name) && !world.parts_beside.contains_key(name) && a_ledger_copies(ty, [world.own]),
+            Ty::Nullable(inner) => self.a_dependency_copy(world, inner),
+            else => false,
+        }
     }
 
     /// **A type no number can be**: text, a `bool`, a `char`, a tuple, a

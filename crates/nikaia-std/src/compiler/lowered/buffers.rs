@@ -507,6 +507,7 @@ pub(crate) fn tails_made_here(names: &[winnow_grammar::Symbol], value: &Expr, at
     let mut made: Option<String> = None;
     for tail in tails.iter() {
         if is_the_buffer(tail, ask, walk) { continue; }
+        if a_text_literal(tail) { continue; }
         let inner = match tail {
             Expr::If { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
             Expr::Match { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
@@ -522,6 +523,8 @@ pub(crate) fn tails_made_here(names: &[winnow_grammar::Symbol], value: &Expr, at
     }
     made
 }
+
+pub(crate) fn a_text_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
 
 pub(crate) fn ending_of(block: &Block) -> Option<Expr> {
     if block.stmts.is_empty() { return None; }

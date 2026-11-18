@@ -233,11 +233,24 @@ fn gate_push_new(mut list: Vec[String], item: String) {
 
 // `nikaia test --both-settings` on the named tests, in a copy of the
 // tests/compiler package that holds only them (`nikaia test` has no filter).
-// The copy sits two levels below the root, as tests/compiler does, so a test
-// that finds the repository from its directory finds it from there too.
+// The copy is a slot of target/gate-tests (scripts/slot.nika): a fixed place,
+// so the programs it builds hit ADR-021 D14's rustc store (#2015), and a gate
+// run beside this one takes another slot. It sits two levels below the root, as
+// tests/compiler does, so a test that finds the repository from its directory
+// finds it from there too. The copy is made and tested by this script run
+// again, `--test-in <slot> NAME...`, under the slot's lock.
 fn gate_test_some(names: Vec[String]) -> String throws {
-    process::run("mkdir", ["-p", "target"])
-    let dir = process::run("mktemp", ["-d", "target/gate-tests-XXXXXX"]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? "target/fast/nikaia"
+    let main = env::current_main()?.display() ?? "scripts/gate.nika"
+    let mut args: Vec[String] = ["run", "scripts/slot.nika", "--", "target/gate-tests", exe.clone(), "run", main, "--", "--test-in", "{slot}"]
+    for name in names { args.push(name.clone()) }
+    return gate_run(exe, args)
+}
+
+// `--test-in DIR NAME...`: copies the tests/compiler package with only the
+// named tests into DIR, an empty slot, and runs `nikaia test --both-settings`
+// there, its output this run's own; ends with its exit code.
+fn gate_test_in(dir: String, names: Vec[String]) throws {
     process::run("mkdir", ["-p", f"{dir}/tests"])
     process::run("cp", ["-r", "tests/compiler/src", "tests/compiler/nikaia.toml", dir.clone()])
     for ledger in ["nikaia.contracts", "nikaia.derived", "nikaia.proofs"] {
@@ -249,9 +262,12 @@ fn gate_test_some(names: Vec[String]) -> String throws {
             if fs::exists(from.clone(), fs::Root::Anywhere) { process::run("cp", ["-r", from, f"{dir}/tests/"]) }
         }
     }
-    let result = gate_run("target/fast/nikaia", ["test", "--both-settings", "--project", dir.clone()])
-    process::run("rm", ["-rf", dir])
-    return result
+    let ran = process::run(
+        "target/fast/nikaia",
+        ["test", "--both-settings", "--project", dir]; stdout: process::Stream::Inherited,
+        stderr: process::Stream::Inherited,
+    )
+    process::exit(ran.code)
 }
 
 fn gate_test(dry: bool, whole: bool, names: Vec[String]) -> String throws {
@@ -434,6 +450,16 @@ fn main() throws {
     let mut shard: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
+    if args.len() >= 3 && args[1] == "--test-in" {
+        let mut names: Vec[String] = []
+        let mut k = 3
+        while k < args.len() {
+            names.push(args[k].clone())
+            k += 1
+        }
+        gate_test_in(args[2].clone(), names)
+        return
+    }
     for a in args.clone() {
         if a == "--full" || a == "--all" || a == "--files" || a == "--tests" || a == "--dry-run" || a == "--keep-going" || a == "--base" {
             gate_full(args)

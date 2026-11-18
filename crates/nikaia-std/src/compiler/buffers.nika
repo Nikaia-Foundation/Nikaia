@@ -690,6 +690,14 @@ fn tails_made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, at: 
         if is_the_buffer(tail, ask, walk) {
             continue
         }
+        // **A literal beside text made here is text of its own too**: the
+        // tier joins it to the other tails, and it is lowered as a copy
+        // (`String::from("")`), so `let next = if c { f"{xs[k]}" } else
+        // { "" }` binds this frame's buffer, and a view of it that outlives
+        // the loop lives in the keep.
+        if a_text_literal(tail) {
+            continue
+        }
         let inner = match tail {
             Expr::If { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
             Expr::Match { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
@@ -706,6 +714,14 @@ fn tails_made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, at: 
         made = ty
     }
     return made
+}
+
+// Whether an expression is a text literal, `"…"`.
+fn a_text_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
 }
 
 // The expression a block ends with, where it ends with one.

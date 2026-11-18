@@ -984,101 +984,185 @@ signature = "(ds: ref Vec[Dir]) -> bool"
 
 [type."Allowed"]
 fields = ["multiline: bool", "plain: bool", "single: bool", "block: bool"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Anchored"]
 fields = ["node: Node?", "nodes: i64"]
+compares = true
+equates = true
+hashes = true
 tethered = ["node"]
 
 [type."Chomp"]
 variants = ["Clip", "Strip", "Keep"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."ConvertError"]
 pub = true
 fields = ["pub message: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Ctx"]
 variants = ["BlockIn", "BlockOut"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Dir"]
 fields = ["name: ref String", "handle: ref String", "prefix: ref String"]
+compares = true
+equates = true
+hashes = true
 tethered = ["name", "handle", "prefix"]
 
 [type."Document"]
 pub = true
 fields = ["pub root: Node", "pub start: bool", "pub end: bool", "directives: Vec[Dir]"]
+compares = true
+equates = true
+hashes = true
 tethered = ["root", "directives"]
 
 [type."Documents"]
 pub = true
 fields = ["pub documents: Vec[Document]", "pub error: Error?"]
+compares = true
+equates = true
+hashes = true
 tethered = ["documents"]
 
 [type."Entry"]
 pub = true
 fields = ["pub key: Node", "pub value: Node"]
+compares = true
+equates = true
+hashes = true
 tethered = ["key", "value"]
 
 [type."Error"]
 pub = true
 fields = ["pub kind: ErrorKind", "pub message: String", "pub line: i64", "pub column: i64", "pub offset: i64", "pub tag: String", "pub text: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."ErrorKind"]
 pub = true
 variants = ["Syntax", "Reserved", "NoContent", "DepthLimit", "SizeLimit", "InvalidTagged", "UnknownAnchor", "RecursiveAlias", "AliasLimit", "DuplicateKey", "Merge"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Event"]
 pub = true
 fields = ["pub kind: EventKind", "pub start: u32", "pub end: u32", "pub explicit: bool", "pub flow: bool", "pub anchor: ref String?", "pub tag: String?", "pub style: Style", "pub value: ref String", "pub text: String?"]
+compares = true
+equates = true
+hashes = true
 tethered = ["anchor", "value"]
 
 [type."EventKind"]
 pub = true
 variants = ["StreamStart", "StreamEnd", "DocumentStart", "DocumentEnd", "SequenceStart", "SequenceEnd", "MappingStart", "MappingEnd", "Scalar", "Alias"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Head"]
 fields = ["indent: i64", "chomp: Chomp"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Kind"]
 variants = ["Null", "True", "False", "Int", "Float", "Str"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Limits"]
 pub = true
 fields = ["pub depth: i64", "pub alias_nodes: i64", "pub bytes: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Loader"]
 fields = ["anchors: collections::HashMap[ref String, Anchored]", "made: i64", "expanded: i64", "limit: i64", "alias_nodes: i64", "directives: Vec[Dir]"]
+compares = true
+equates = true
 tethered = ["anchors", "directives"]
 
 [type."Next"]
 fields = ["ended: bool", "doc: Document"]
+compares = true
+equates = true
+hashes = true
 tethered = ["doc"]
 
 [type."Node"]
 pub = true
 fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "tag: String?", "pub flow: bool", "pub raw: ref String", "pub style: Style", "pub value: Value"]
+compares = true
+equates = true
+hashes = true
 tethered = ["anchor", "tag", "raw", "value"]
 
 [type."Props"]
 fields = ["start: u32", "end: u32", "anchor: ref String?", "tag: ref String?"]
+compares = true
+equates = true
+hashes = true
 tethered = ["anchor", "tag"]
 
 [type."Scalar"]
 pub = true
 fields = ["pub raw: ref String", "value: String", "pub style: Style", "indent: i64", "chomp: Chomp"]
+compares = true
+equates = true
+hashes = true
 tethered = ["raw", "value"]
 
 [type."Style"]
 pub = true
 variants = ["Plain", "Single", "Double", "Literal", "Folded"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."TagKind"]
 variants = ["Untagged", "NonSpecific", "Null", "Bool", "Int", "Float", "Str", "Seq", "Map", "Other"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Value"]
 pub = true
 variants = ["Null", "Bool(bool)", "Int(ref String)", "Float(ref String)", "Str(Scalar)", "Seq(Vec[Node])", "Map(Vec[Entry])", "Alias(ref String)"]
+compares = true
+equates = true
+hashes = true
 tethered = ["Int", "Float", "Str", "Seq", "Map", "Alias"]
 
 [type."Writer"]
 pub = true
 fields = ["out: String", "column: i64", "indent: i64", "indents: Vec[i64]", "whitespace: bool", "indention: bool", "open_ended: i64", "first: bool"]
+compares = true
+equates = true
+hashes = true
