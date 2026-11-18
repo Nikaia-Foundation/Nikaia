@@ -67,7 +67,10 @@ pub(crate) struct SvSmtReader {
     pub(crate) made: collections::BTreeMap<String, i64>,
     pub(crate) nl: Vec<SvNl>,
     pub(crate) nl_names: collections::BTreeMap<String, String>,
+    pub(crate) depth: i64,
 }
+
+pub(crate) fn sv_nesting_limit() -> i64 { 1200 }
 
 pub(crate) fn sv_lin_constant(r: SvRat) -> SvLin { SvLin { terms: collections::BTreeMap::new(), c: r } }
 
@@ -225,7 +228,8 @@ impl SvSmtReader {
             let n = match text::parse_i64(a) { Some(__nikaia_value) => __nikaia_value, None => return SvGot::Failed(SvReadWhy::Overflow(format!("the numeral {}", a))) };
             return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))));
         }
-        if a.contains('.') { return sv_decimal(a); }
+        let first = nikaia_std::index::or(a.chars().nth(0), || ' '.into());
+        if a.contains('.') && first >= '0' && first <= '9' { return sv_decimal(a); }
         match sv_ratio(a) {
             None => { },
             Some(ref got) => { return got.clone(); },
@@ -241,10 +245,14 @@ impl SvSmtReader {
         false
     }
     pub(crate) fn term(&mut self, sexp: &LgSexp) -> SvGot {
-        match sexp {
+        if self.depth >= sv_nesting_limit() { return SvGot::Failed(SvReadWhy::Unsupported(format!("terms nested more than {} deep", sv_nesting_limit()))); }
+        self.depth = unsafe { nikaia_std::proven::add::<i64>(self.depth, 1) };
+        let got = match sexp {
             LgSexp::Atom(a) => self.atom(a),
             LgSexp::List(items) => self.application(sexp, items),
-        }
+        };
+        self.depth -= 1;
+        got
     }
     pub(crate) fn formula(&mut self, sexp: &LgSexp) -> SvGot {
         let got = self.term(sexp);
@@ -283,6 +291,15 @@ impl SvSmtReader {
         let key = format!("{} {}/{} {}/{} {}", rel, k.num, k.den, c.num, c.den, name);
         let known: i64 = nikaia_std::index::or(self.folds.get(&key), || -1);
         if known >= 0 { return Some(known); }
+        if known == -2 || self.depth >= sv_nesting_limit() { return None; }
+        self.depth = unsafe { nikaia_std::proven::add::<i64>(self.depth, 1) };
+        let made: i64 = nikaia_std::index::or(self.fold_new(rel, name, &k, c), || -2);
+        self.depth -= 1;
+        self.folds.insert(key, made);
+        if made < 0 { return None; }
+        Some(made)
+    }
+    pub(crate) fn fold_new(&mut self, rel: &str, name: &str, k: &SvRat, c: SvRat) -> Option<i64> {
         let ite = match self.ites.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None }.clone();
         let at = sv_lin_constant(c);
         let zero = sv_lin_constant(sv_int(0));
@@ -298,9 +315,7 @@ impl SvSmtReader {
             SvGot::Val(SvVal::Formula(id)) => id,
             _ => { return None; },
         };
-        let made = self.choice(ite.c, then, otherwise);
-        self.folds.insert(key, made);
-        Some(made)
+        Some(self.choice(ite.c, then, otherwise))
     }
     pub(crate) fn compare_atom(&mut self, rel: &str, d: &SvLin) -> SvGot {
         let mut key = format!("{} {}/{}", rel, d.c.num, d.c.den);
@@ -608,7 +623,11 @@ impl SvSmtReader {
             None => { },
             Some(ref why) => { return SvGot::Failed(why.clone()); },
         }
-        let fun_name = lg_unquoted(&op);
+        self.operation(sexp, &op, &args)
+    }
+    #[inline(never)]
+    pub(crate) fn operation(&mut self, sexp: &LgSexp, op: &str, args: &[SvVal]) -> SvGot {
+        let fun_name = lg_unquoted(op);
         match self.funs.get(&fun_name) {
             None => { },
             Some(fun) => { return self.apply_fun(sexp, &fun.clone(), &args); },
@@ -725,7 +744,7 @@ impl SvSmtReader {
             if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
                 let mut links: Vec<i64> = vec![];
                 for at in 0..unsafe { nikaia_std::proven::sub::<i64>(n, 1) } {
-                    match self.compare(&op, nikaia_std::index::get(&lins, nikaia_std::index::at(at)), nikaia_std::index::get(&lins, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) }))) {
+                    match self.compare(op, nikaia_std::index::get(&lins, nikaia_std::index::at(at)), nikaia_std::index::get(&lins, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) }))) {
                         SvGot::Val(SvVal::Formula(id)) => { links.push(id); },
                         SvGot::Val(_) => { },
                         SvGot::Failed(ref why) => { return SvGot::Failed(why.clone()); },
@@ -830,7 +849,7 @@ pub enum SvSmtRead {
     Failed(SvReadWhy),
 }
 
-pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
+pub(crate) fn sv_smtlib_script(source: &str) -> SvSmtRead {
     let commands = match lg_parse(source) {
         LgParsedSexps::Done(ref read) => read.copy_owned(),
         LgParsedSexps::Failed(ref why) => {
@@ -849,7 +868,7 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
         }
     }
     if queries > 1 { return SvSmtRead::Failed(SvReadWhy::Unsupported(format!("{} check-sat commands: a query is self-contained (ADR-270 D3)", queries))); }
-    #[allow(unused_mut)] let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new() };
+    #[allow(unused_mut)] let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new(), depth: 0 };
     let mut stack: Vec<Vec<i64>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut asserted = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut reader = reader;
     for command in commands.iter() {

@@ -9,7 +9,7 @@ pub fn aliases_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerConte
                 let alias = *alias;
                 if path.len() == 1 && alias.is_some() {
                     let package = *unsafe { nikaia_std::proven::read(&path, (0) as usize) };
-                    let name = nikaia_std::index::or(alias, || package.into());
+                    let name = nikaia_std::index::or(alias, || package);
                     out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), nikaia_std::block::Text::from(words.resolve(package).to_string()));
                 }
             },

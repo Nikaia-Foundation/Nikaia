@@ -1,0 +1,8 @@
+error[NK1103]: This value is a `Seen[String]` whose items are views, but the `let` declares `i64`.
+  --> tests/a_door_result_mismatch_names_no_seen_ref.nika:9:17
+   |
+ 9 | 	let got: i64 = m.access fn(open) { open.t }
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: Make it an `i64`.
+1 type error

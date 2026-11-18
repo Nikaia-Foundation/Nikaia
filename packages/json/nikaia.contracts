@@ -23,7 +23,7 @@ signature = "(ref self) -> String"
 
 [fn."as_f64"]
 pub = true
-sync = "inferred"
+sync = true
 throws = ["ConvertError"]
 panics = false
 touches = []
@@ -31,7 +31,7 @@ signature = "(v: Value) -> f64"
 
 [fn."as_i64"]
 pub = true
-sync = "inferred"
+sync = true
 throws = ["ConvertError"]
 panics = true
 touches = []
@@ -39,7 +39,7 @@ signature = "(v: Value) -> i64"
 
 [fn."as_u64"]
 pub = true
-sync = "inferred"
+sync = true
 throws = ["ConvertError"]
 panics = true
 touches = []
@@ -112,7 +112,7 @@ signature = "(v: Value, asked: String) -> String"
 
 [fn."parse"]
 pub = true
-sync = "inferred"
+sync = true
 throws = ["Error"]
 panics = true
 touches = []
@@ -135,7 +135,7 @@ signature = "(mut r: Reader, path: String) -> String"
 
 [fn."to_string"]
 pub = true
-sync = "inferred"
+sync = true
 panics = false
 places = true
 touches = []
@@ -180,18 +180,33 @@ signature = "(text: String) -> String?"
 [type."ConvertError"]
 pub = true
 fields = ["pub message: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Error"]
 pub = true
 fields = ["pub message: String", "pub line: i64", "pub column: i64", "pub path: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Member"]
 pub = true
 fields = ["pub key: String", "pub value: Value"]
+compares = true
+equates = true
+hashes = true
 
 [type."Reader"]
 fields = ["cs: Vec[scalar]", "pos: i64"]
+compares = true
+equates = true
+hashes = true
 
 [type."Value"]
 pub = true
 variants = ["Null", "Bool(bool)", "Number(String)", "Str(String)", "Array(Vec[Value])", "Object(Vec[Member])"]
+compares = true
+equates = true
+hashes = true

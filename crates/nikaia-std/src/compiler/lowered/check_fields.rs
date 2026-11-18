@@ -30,7 +30,7 @@ pub(crate) fn viewed_nullable(plain: &Ty) -> Ty { Ty::Nullable(std::boxed::Box::
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_safe_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Ty, base: &Expr, field: &str, expr: &Expr, span: &Span) -> Ty {
+    pub(crate) fn a_safe_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Ty, base: &Expr, field: &str, expr: &Expr, span: &Span) -> Ty {
         let ty = named_or_empty(inner);
         if ty.is_empty() { return Ty::Unknown; }
         if self.facts.boxed_members.contains_key(&ty) {
@@ -53,7 +53,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_safe_reach(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, held_ty: &Ty, viewed: bool) -> Ty {
+    pub(crate) fn a_safe_reach(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, held_ty: &Ty, viewed: bool) -> Ty {
         let place = viewed || roots_in_a_binding(base) || shapes_lends_from_a_binding(world, base);
         let key = fact_key(base);
         match held_ty {
@@ -84,7 +84,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn reaches_through_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, member: &str, method: bool, reach: &Expr, span: &Span) {
+    pub(crate) fn reaches_through_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, member: &str, method: bool, reach: &Expr, span: &Span) {
         if on.is_unknown() { return; }
         let mut what: &'static str = "field";
         let mut plain: String = format!(".{}", member);
@@ -104,11 +104,11 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach));
         let note = format!("`?.` is for a value that may be missing: it reaches the {} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{}`.", what, plain);
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.text()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![], edit: None });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.shown()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_to_fall_back_from(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, left: &Ty, coalesce: &Expr, span: &Span) -> bool {
+    pub(crate) fn nothing_to_fall_back_from(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, left: &Ty, coalesce: &Expr, span: &Span) -> bool {
         let seen = left.unseen();
         let never_absent = match seen {
             Ty::Named { ref name, .. } => type_last_segment(name) != "Option",
@@ -129,13 +129,13 @@ impl CheckState {
             self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }))));
             return false;
         }
-        let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
+        let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.shown());
         self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1216"), message, notes: vec![note], help: Some(String::from("Remove `??` and what follows it.")), labels: vec![], edit: None });
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fallback_that_owns_what_the_left_side_views(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, viewed: &Ty, fallback: &Ty, written: &Expr, span: &Span) {
+    pub(crate) fn a_fallback_that_owns_what_the_left_side_views(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, viewed: &Ty, fallback: &Ty, written: &Expr, span: &Span) {
         if !viewed.is_a_view() || fallback.is_a_view() { return; }
         let mut names_a_copy = false;
         match written {
@@ -150,9 +150,9 @@ impl CheckState {
         if names_a_copy { owned = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let a_name = matches!(owned, Ty::Named { .. });
         if !a_name || !moves(&owned) || !self.takes_away(world, &owned) { return; }
-        let message = format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text());
+        let message = spoken_in(&format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text()), viewed, Some(&owned));
         let notes: Vec<String> = vec![String::from("A view and the value it points into are different types, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back, so it can't make the two agree on its own.")];
-        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text()); #[allow(clippy::redundant_locals)] let notes = notes;
+        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.shown()); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
 }
@@ -195,7 +195,7 @@ pub(crate) fn a_map_name(name: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+    pub(crate) fn a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -223,7 +223,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_mut_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    pub(crate) fn a_mut_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -240,7 +240,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+    pub(crate) fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
         !lent
     }
@@ -272,14 +272,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
+    pub(crate) fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
         if found.is_a_view() || !want.is_a_view() || want.text() != format!("ref {}", found.text()) { return false; }
         let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
         lent || check_fields_holds_text(world, found, &vec![])
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn comptimes_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &str) {
+    pub(crate) fn comptimes_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &str) {
         match expr {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -308,14 +308,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_holds_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+    pub(crate) fn a_field_holds_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
         let fields = self.fields_seen(world, owner);
         for each in fields.iter() { if each.name == field { return check_core_stmt_holds_code(&each.ty); } }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_seen(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<FieldContract> {
+    pub(crate) fn fields_seen(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<FieldContract> {
         if self.structs.contains_key(name) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -337,7 +337,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty, span: &Span) {
+pub(crate) fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty, span: &Span) {
     match target {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);

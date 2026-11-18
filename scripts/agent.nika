@@ -19,8 +19,9 @@
 // DIR/RED (empty again after a green one); a second red in a row escalates. After
 // the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
 // run's transcript under ~/.claude/projects) to the Runs table of
-// docs/tokenspeed.md, once per agent id; it does not commit the file, the
-// supervisor's commit takes it. Before any escalation it resumes the run's
+// docs/tokenspeed.md, once per agent id; it does not commit the file: the
+// release after the driver's push does, or under `--no-bump` the driver's
+// `release.nika --rows`. Before any escalation it resumes the run's
 // session once and writes its answer to what held it up to BRIEF.debrief.md
 // (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
 // These files are untracked working files (#1252); scripts/drive.nika, which
@@ -158,7 +159,7 @@ fn agent_live(record: String) -> String throws {
 fn agent_debrief_args(session: String, model: String, effort: String) -> Vec[String] {
     let mut v: Vec[String] = []
     v.push("-p")
-    v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most; (5) what the issue lacked that would have helped (a fact, a probe, a file, an ADR, a ruled-out path), each item judged by docs/issues.md as `broke I<n>` (a rule asks for it, the issue lacks it), `rules-gap` (no rule asks for it) or `wrong I<n>` (the issue has it, but false); `complete` if nothing; (6) a trap the next builder will meet too, one line each as `Fact: <section of docs/builder-facts-lookup.md, or Core for a trap of every run> | <the line, one sentence>`, or `Fact: none`.")
+    v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most; (5) what the issue lacked that would have helped (a fact, a probe, a file, an ADR, a ruled-out path), each item judged by docs/issues.md as `broke I<n>` (a rule asks for it, the issue lacks it), `rules-gap` (no rule asks for it), `wrong I<n>` (the issue has it, but false) or `knowledge: <section of docs/builder-facts-lookup.md, or Core> | <the fact, one sentence>` (something you had to find out that no rule asks an issue to hold; it becomes a facts line, not an issue); `complete` if nothing; (6) a trap the next builder will meet too, one line each as `Fact: <section of docs/builder-facts-lookup.md, or Core for a trap of every run> | <the line, one sentence>`, or `Fact: none`.")
     v.push("--resume")
     v.push(session)
     v.push("--max-turns")
@@ -309,14 +310,58 @@ fn agent_facts_unknown(body: String, facts: String) -> String {
     return ""
 }
 
+// The `###` sections of `facts` whose `Paths:` line (the first line under the
+// heading that starts with it: fragments and words, comma-separated, in
+// backticks or bare) has a fragment occurring in `text`, in any case: at most
+// three, those with the most fragments found first, then in file order
+// (#2002: briefs rendered from issues name no `Facts:` line).
+fn agent_fact_matches(text: String, facts: String) -> Vec[String] {
+    let low = text.to_lowercase()
+    let mut names: Vec[String] = []
+    let mut hits: Vec[i64] = []
+    let mut heading: String = ""
+    for line in facts.split("\n") {
+        if line.starts_with("#") {
+            heading = ""
+            if line.starts_with("### ") { heading = (line.strip_prefix("### ") ?? "").trim().split(" (").collect()[0].trim().clone() }
+        } else if heading != "" && line.trim().starts_with("Paths:") {
+            let mut n = 0
+            for raw in (line.trim().strip_prefix("Paths:") ?? "").split(",") {
+                let frag = raw.replace("`", "").trim().to_lowercase()
+                if frag != "" && low.contains(frag) { n += 1 }
+            }
+            if n > 0 {
+                names.push(heading.clone())
+                hits.push(n)
+            }
+            heading = ""
+        }
+    }
+    let mut out: Vec[String] = []
+    while out.len() < 3 {
+        let mut best = -1
+        for i in 0..<names.len() {
+            if hits[i] > 0 && (best < 0 || hits[i] > hits[best]) { best = i }
+        }
+        if best < 0 { break }
+        out.push(names[best].clone())
+        hits[best] = 0
+    }
+    return out
+}
+
 // The text of the sections the brief names, each down to the next heading of
 // its level or above, under one heading for the prompt. The section `Core`,
-// when the file has one, comes first for every brief; "" without either.
-fn agent_facts(body: String, facts: String) -> String {
+// when the file has one, comes first for every brief; "" without either. A
+// brief that names none gets the sections agent_fact_matches finds in its
+// text and `issues` (the issues inlined into its prompt).
+fn agent_facts(body: String, facts: String, issues: String) -> String {
     let lines = facts.split("\n").collect()
     let mut names: Vec[String] = []
     for line in lines { if agent_fact_level(line, "Core") == 2 { names.push("Core") } }
-    for name in agent_fact_names(body) { if name != "Core" { names.push(name) } }
+    let mut named = agent_fact_names(body.clone())
+    if named.len() == 0 { named = agent_fact_matches(body + "\n" + issues, facts.clone()) }
+    for name in named { if name != "Core" { names.push(name.clone()) } }
     if names.len() == 0 { return "" }
     let mut out: Vec[String] = ["", "", "# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)"]
     for name in names {
@@ -353,7 +398,7 @@ fn agent_issue_numbers(body: String) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut digits: String = ""
     let mut after_hash = listed != ""
-    for c in (source + " ").chars() {
+    for c in (source + " ").scalars {
         if c.is_ascii_digit() && after_hash {
             digits = digits + c.to_string()
         } else {
@@ -477,9 +522,10 @@ fn main() throws {
         }
         agent_escalate(dir.clone(), f"unknown Facts heading in {abs}: {unknown}")
     }
-    claude_args[1] = claude_args[1].clone() + agent_facts(text.clone(), facts)
-    // The issues the brief names go into its prompt too.
-    claude_args[1] = claude_args[1].clone() + agent_issues(text.clone(), "Nikaia-Foundation/Nikaia")
+    // The issues the brief names go into its prompt too, after the facts, which
+    // are chosen from them where the brief names no `Facts:` sections.
+    let issues = agent_issues(text.clone(), "Nikaia-Foundation/Nikaia")
+    claude_args[1] = claude_args[1].clone() + agent_facts(text.clone(), facts, issues.clone()) + issues
     let record = f"{abs}.session"
     let sum = process::run("cksum", [abs.clone()]).stdout.trim().split(" ").collect()[0].clone()
     let mut resumed = agent_resumable(abs.clone(), agent_read(record.clone()), sum.clone())
@@ -522,7 +568,7 @@ fn main() throws {
         fs::write(record.clone(), fs::Root::Anywhere, f"{wanted} {sum}\n")
         out = process::run(claude.clone(), claude_args; within: 150.minutes())
     }
-    let json = out.stdout.clone()
+    let json = out.stdout
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
     let session = agent_json(json.clone(), "session_id")
@@ -538,7 +584,7 @@ fn main() throws {
         let t = agent_int(json.clone(), "input_tokens") + agent_int(json.clone(), "output_tokens") + agent_int(json.clone(), "cache_creation_input_tokens") + agent_int(json.clone(), "cache_read_input_tokens")
         usage = [f"{t}", f"{agent_int(json.clone(), "num_turns")}", f"{agent_int(json.clone(), "cache_read_input_tokens")}", f"{agent_int(json.clone(), "cache_creation_input_tokens")}", f"{agent_int(json.clone(), "output_tokens")}"]
     }
-    let turns = usage[1].clone()
+    let turns = usage[1]
     let reason = agent_json(json.clone(), "terminal_reason")
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let report = agent_report(abs.clone())
@@ -585,7 +631,9 @@ fn main() throws {
         if before != "" { agent_escalate(dir, f"two red gates in a row: {before} / {abs}: {gate}") }
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
-    // id. This only writes the file; the supervisor's commit takes it.
+    // id. This only writes the file; the release commit after the driver's push
+    // takes it (`release_bump` in scripts/release.nika, #1886), under
+    // `--no-bump` a commit of the rows alone (`release.nika --rows`).
     if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
         let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript]).stdout.trim().clone()
         if row.starts_with("| ") {

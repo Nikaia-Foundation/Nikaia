@@ -65,7 +65,7 @@ pub fn literal_length(segments: &[Segment]) -> i64 {
 }
 
 pub fn split(body: &str) -> Result<Vec<Segment>, nikaia_std::error::Thrown<Refused>> {
-    let mut splitter = Splitter { c: nikaia_std::list::chars(body.chars()), at: 0, scan: Scan { state: ScanState::Text, tail: vec![], attribute: String::from("") } };
+    let mut splitter = Splitter { c: nikaia_std::list::scalars(body.chars()), at: 0, scan: Scan { state: ScanState::Text, tail: vec![], attribute: String::from("") } };
     let segments = splitter.until(false)?;
     if splitter.at < splitter.c.len() as i64 { return Err(nikaia_std::error::throwing(Refused::Because(String::from("`</for>` without a `<for …>` before it")), &"split")); }
     Ok(segments)
@@ -140,13 +140,13 @@ impl Splitter {
                     return Err(nikaia_std::error::throwing(Refused::Because(format!("unclosed `{{` in the template, at character {}", at)), &"until"));
                 }
                 let mut expr: String = String::from("");
-                for k in unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }..close { expr.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
+                for k in unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }..close { expr.push(*unsafe { nikaia_std::proven::read(&self.c, (k) as usize) }); }
                 if !text.is_empty() {
                     segments.push(Segment::Text(text));
                     text = String::from("");
                 }
                 segments.push(Segment::Hole { expr: nikaia_std::block::Text::from(expr.trim().to_string()), at: position });
-                self.at = close + 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(close, 1) };
             } else {
                 self.scan.feed(c);
                 text.push(c);

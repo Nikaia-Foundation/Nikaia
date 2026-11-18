@@ -37,6 +37,10 @@ node_modules/
 # (#534): its builds are reused from one run to the next.
 /examples/*/target/
 /examples/*/nikaia.lock
+# The yaml bench's programs check in a package each (#1974); a check or a run
+# in place leaves its build and lockfile there.
+/benches/yaml/*/target/
+/benches/yaml/*/nikaia.lock
 /benches/*.rs
 /benches/nikaia.contracts
 /benches/nikaia.derived

@@ -191,7 +191,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -435,8 +435,8 @@ impl EmitState {
                         ty.either = false;
                     }
                     let lifted = is_source && shared && !source_nested;
-                    let mut reference: &'static str = "";
-                    if changes { if lifted { reference = "&'r mut "; } else if is_source && source_kept { reference = "&'k mut "; } else { reference = "&mut "; } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = "&'a "; } else if lifted { reference = "&'r "; } else if is_source && source_kept { reference = "&'k "; } else { reference = "&"; } }
+                    let mut reference: String = String::from("");
+                    if changes { if lifted { reference = String::from("&'r mut "); } else if is_source && source_kept { reference = String::from("&'k mut "); } else { reference = String::from("&mut "); } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = String::from("&'a "); } else if lifted { reference = String::from("&'r "); } else if is_source && source_kept { reference = String::from("&'k "); } else { reference = String::from("&"); } }
                     let read_only = changes || self.emit_fn_lends(world, &key, at);
                     let mut how = self.emit_how(&sig, each.name, &pname, ty.is_view, read_only);
                     if ty.is_view && self.emit_store_nested(world, &args, &stores, each) { how = EmitLifetimes::Inner; }
@@ -461,6 +461,10 @@ impl EmitState {
                         if on_a_cycle && runs && reference.starts_with('&') && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
                             let bound = nikaia_std::block::Text::from(nikaia_std::index::or(spelled.strip_prefix("impl "), || "").to_string());
                             spelled = format!("dyn {}", bound);
+                        }
+                        if runs && (*ty.code).is_some() && !ty.is_nullable && reference.starts_with('&') && !reference.contains("mut") && self.facts.changing_code.contains(&format!("{}::{}", key, pname)) {
+                            spelled = emit_fn_code_that_changes(&spelled);
+                            reference = format!("{}mut ", reference);
                         }
                         walk.in_parameter = inside;
                         walk.code_parameter_runs = held;
@@ -623,7 +627,7 @@ impl EmitState {
                     }
                 }
                 let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-                if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
+                if throws_ { ret = format!(" -> {}<{}, {}>", self.rust_result(), returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
                 let weighed = self.facts.weighed_of(&key);
                 if !a_copy && !weighed.is_empty() {
@@ -892,5 +896,19 @@ pub(crate) fn emit_holds_a_ref_of_a_type(world: &EmitWorld<'_, '_, '_, '_>, ty: 
     if ty.is_view && emit_text(world, ty.name) != "String" { return true; }
     for inner in ty.generics.iter() { if emit_holds_a_ref_of_a_type(world, inner) { return true; } }
     false
+}
+
+pub(crate) fn emit_fn_code_that_changes(spelled: &str) -> String {
+    let async_at = nikaia_std::search::find(&spelled, &"AsyncFn(", 0);
+    if async_at.is_some() {
+        let at = nikaia_std::index::or(async_at, || 0);
+        let before = nikaia_std::index::get(&spelled, nikaia_std::index::at(0..at));
+        let after = nikaia_std::index::get(&spelled, nikaia_std::index::at(at + "AsyncFn(".len() as i64..));
+        return format!("{}AsyncFnMut({}", before, after);
+    }
+    let at = match nikaia_std::search::find(&spelled, &"Fn(", 0) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(spelled.to_string()) };
+    let before = nikaia_std::index::get(&spelled, nikaia_std::index::at(0..at));
+    let after = nikaia_std::index::get(&spelled, nikaia_std::index::at(at + "Fn(".len() as i64..));
+    format!("{}FnMut({}", before, after)
 }
 

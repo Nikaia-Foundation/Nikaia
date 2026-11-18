@@ -10,7 +10,7 @@
 use std::collections
 
 /// Every `extern` function's parameter types, by name.
-pub fn foreign_params(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Vec[Type]] {
+fn foreign_params(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Vec[Type]] {
     let mut out: collections::BTreeMap[String, Vec[Type]] = collections::BTreeMap()
     for item in items {
         match item.node {
@@ -46,7 +46,7 @@ pub fn opaque_handles(words: ref winnow_grammar::InternerContext, items: ref Vec
 }
 
 /// Every `extern` function's result type, by name.
-pub fn foreign_results(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Type] {
+fn foreign_results(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Type] {
     let mut out: collections::BTreeMap[String, Type] = collections::BTreeMap()
     for item in items {
         match item.node {
@@ -64,7 +64,7 @@ pub fn foreign_results(words: ref winnow_grammar::InternerContext, items: ref Ve
 
 /// The traits an `impl` names through a path (`io::Write`), which the unit
 /// does not declare.
-pub fn foreign_traits(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+fn foreign_traits(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for item in items {
         match item.node {
@@ -82,7 +82,7 @@ pub fn foreign_traits(words: ref winnow_grammar::InternerContext, items: ref Vec
 }
 
 /// The types a unit declares an `impl Error` for.
-pub fn declared_errors(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+fn declared_errors(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for item in items {
         match item.node {
@@ -102,7 +102,7 @@ pub fn declared_errors(words: ref winnow_grammar::InternerContext, items: ref Ve
 /// it: a `catch` matches on the **members'** variants (ADR-023 D4), so the name
 /// exists only in the generated file, spelled so that nothing a program
 /// declares collides with it.
-pub fn sum_name(members: ref Vec[String]) -> String {
+fn sum_name(members: ref Vec[String]) -> String {
     let mut spelled: Vec[String] = []
     for member in members {
         spelled.push(member.replace("::", "_"))
@@ -111,17 +111,17 @@ pub fn sum_name(members: ref Vec[String]) -> String {
 }
 
 /// The variant of that sum type a member is.
-pub fn sum_variant(member: ref String) -> String {
+fn sum_variant(member: ref String) -> String {
     return member.replace("::", "_")
 }
 
 /// The key a variant's field has in the tables that name it.
-pub fn variant_slot(owner: ref String, variant: ref String, at: i64) -> String {
+fn variant_slot(owner: ref String, variant: ref String, at: i64) -> String {
     return f"{owner}.{variant}#{at}"
 }
 
 /// A name with its package, `package::target`, or the target alone.
-pub fn dsl_name(words: ref winnow_grammar::InternerContext, package: winnow_grammar::Symbol?, target: winnow_grammar::Symbol) -> String {
+fn dsl_name(words: ref winnow_grammar::InternerContext, package: winnow_grammar::Symbol?, target: winnow_grammar::Symbol) -> String {
     let held = package ?? return words.resolve(target).clone()
     return f"{words.resolve(held)}::{words.resolve(target)}"
 }
@@ -129,7 +129,7 @@ pub fn dsl_name(words: ref winnow_grammar::InternerContext, package: winnow_gram
 /// What an error name is: 0 where it is nothing the emitter can name, 1 where
 /// the unit declares an `impl Error` for it, 2 where a ledger describes the
 /// type (ADR-280 D9). The unnamed error is no name.
-pub fn error_kind(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String) -> i64 {
+fn error_kind(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String) -> i64 {
     if name == "?" {
         return 0
     }
@@ -145,7 +145,7 @@ pub fn error_kind(declared: ref collections::BTreeSet[String], library: ref Ledg
 /// The type a member of a generated error sum is held as: in the envelope
 /// where it is a name (`kind` as `error_kind` gives it, or 1 for an error a
 /// dependency declares, #1418), as it is written where not.
-pub fn sum_member_type(kind: i64, name: ref String, params: ref String, is_std: bool) -> String {
+fn sum_member_type(kind: i64, name: ref String, params: ref String, is_std: bool) -> String {
     if kind == 0 {
         return name.clone()
     }
@@ -160,7 +160,7 @@ pub fn sum_member_type(kind: i64, name: ref String, params: ref String, is_std: 
 /// `io::IoError`, reached through a callee in a file that has no `use
 /// std::io`, is written `nikaia_std::io::IoError` there. A program has the
 /// prelude, and its path stays as the ledger names it.
-pub fn library_error_path(name: ref String, is_std: bool) -> String {
+fn library_error_path(name: ref String, is_std: bool) -> String {
     if is_std && name.contains("::") && !name.starts_with("nikaia_std::") {
         return f"nikaia_std::{name}"
     }
@@ -172,7 +172,7 @@ pub fn library_error_path(name: ref String, is_std: bool) -> String {
 ///
 /// **A bare name of an error type the program declares** is that type
 /// (ADR-357 D1, #673): `Bad =>` over a `match error` takes the `Bad`s.
-pub fn member_of(words: ref winnow_grammar::InternerContext, declared: ref collections::BTreeSet[String], library: ref Ledger, pattern: ref MatchPattern) -> String? {
+fn member_of(words: ref winnow_grammar::InternerContext, declared: ref collections::BTreeSet[String], library: ref Ledger, pattern: ref MatchPattern) -> String? {
     let path = match_path(pattern) ?? return null
     if path.len() == 1 {
         let bare = words.resolve(path[0]).clone()

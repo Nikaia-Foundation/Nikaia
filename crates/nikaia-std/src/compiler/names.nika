@@ -252,7 +252,7 @@ fn a_symbol(name: winnow_grammar::Symbol?, words: ref winnow_grammar::InternerCo
 // walking. Over-approximate by construction, which is the safe direction.
 fn words_of(text: ref String, mut out: collections::BTreeSet[String]) {
     let mut word: String = ""
-    for c in text.chars() {
+    for c in text.scalars {
         if c.is_alphanumeric() || c == '_' {
             word.push(c)
         } else {

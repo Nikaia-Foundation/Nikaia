@@ -85,7 +85,7 @@ fn emit_default_ws() -> String {
 fn emit_same_line_function(name: ref String) -> String {
     let mut out: Vec[String] = []
     out.push("#[allow(non_snake_case, dead_code)]\n")
-    out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>\n")
+    out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n")
     out.push("where\n")
     out.push("    B: ::winnow_grammar::rt::Slice,\n")
     out.push("    S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n")
@@ -275,7 +275,7 @@ impl EmitState {
     /// A grammar, and where a call enters it with a `Bytes`, its copy over
     /// bytes after it (ADR-366 D1): the backend reads one input per grammar
     /// (winnow-grammar ADR 25).
-    pub fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
+    fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
         let name = emit_text(world, def.name)
         self.emit_grammar_over(world, walk, out, host, def, name, false)
         if self.facts.bytes_grammars.contains(name) {
@@ -330,7 +330,7 @@ impl EmitState {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
         let item = host.ty_named(walk, ty)
-        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
         out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
@@ -355,14 +355,16 @@ impl EmitState {
         for i in 0..<rule.args.len() {
             let value_ty = host.ty_named(walk, rule.args[i].ty)
             params.push_str(f", __wg_value{i}: {value_ty}")
-            handed.push_str(f"__wg_value{i}, ")
+            // A lent value is lent from the thread's own (ADR-grammar-1 D6).
+            let lent = if self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}") { "&" } else { "" }
+            handed.push_str(f"{lent}__wg_value{i}, ")
         }
         for j in 0..<rule.config.len() {
             let option_ty = host.ty_named(walk, rule.config[j].ty)
             params.push_str(f", __wg_given{j}: ::std::option::Option<{option_ty}>")
             handed.push_str(f"__wg_option{j}, ")
         }
-        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
         for j in 0..<rule.config.len() {
             out.push(f"let __wg_option{j} = match __wg_given{j} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ")
             self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
@@ -438,10 +440,21 @@ impl EmitState {
             names.insert(emit_text(world, rule.name))
         }
         walk.grammar_rules = names
+        // **A lent value is a view here** (ADR-grammar-1 D6): the rule takes
+        // a reference and a call hands one, so nothing is cloned per call.
+        // The facts name the grammar as written, not its copy over bytes.
+        let source = emit_text(world, def.name)
         let mut valued: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
         for rule in def.rules {
             if rule.args.len() > 0 || rule.config.len() > 0 {
-                valued.insert(emit_text(world, rule.name), rule.clone())
+                let mut taken = rule.clone()
+                let rule_name = emit_text(world, rule.name)
+                for i in 0..<taken.args.len() {
+                    if self.facts.lent_rule_values.contains(f"{source}::{rule_name}::{emit_text(world, taken.args[i].name)}") {
+                        taken.args[i].ty.is_view = true
+                    }
+                }
+                valued.insert(rule_name.clone(), taken)
             }
         }
         walk.grammar_values = valued
@@ -588,8 +601,20 @@ impl EmitState {
         // **The values a rule takes** (ADR-grammar-1 D2), its options after
         // its parameters: the engine takes them by position.
         let mut values: Vec[String] = []
-        for arg in rule.args {
-            values.push(f"{emit_text(world, arg.name)}: {host.ty_named(walk, arg.ty)}")
+        let taken: GrammarRule = walk.grammar_values.get(emit_text(world, rule.name))?.clone() ?? rule.clone()
+        for arg in taken.args {
+            // **A lent value is a reference of the call's own lifetime**
+            // (ADR-grammar-1 D6): one the caller made for the call, `Two([])`,
+            // lives as long as the call does, not as long as the input.
+            let mut owned = arg.ty.clone()
+            owned.is_view = false
+            let mut written = host.ty_named(walk, owned)
+            if arg.ty.is_view && written == "String" {
+                written = "&str"
+            } else if arg.ty.is_view {
+                written = f"&{written}"
+            }
+            values.push(f"{emit_text(world, arg.name)}: {written}")
         }
         for option in rule.config {
             values.push(f"{emit_text(world, option.name)}: {host.ty_named(walk, option.ty)}")
@@ -809,7 +834,7 @@ fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarR
 
 /// The function beside grammar `book` another package walks its `@stream`
 /// entry `rule` with; `emit_call_grammar` in `emit_core_calls.nika` calls it.
-pub fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
+fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
     return f"__nikaia_walk_{book}__{rule}"
 }
 
@@ -940,7 +965,7 @@ impl EmitState {
                 let mut names: Vec[String] = []
                 let mut nothing: Vec[String] = []
                 for field in fields {
-                    slots.push(f"Option<Option<{host.ty_named(walk, field.ty)}>>")
+                    slots.push(f"{self.rust_option()}<{self.rust_option()}<{host.ty_named(walk, field.ty)}>>")
                     names.push(rust_string(emit_text(world, field.name)))
                     nothing.push("None")
                 }
@@ -997,7 +1022,7 @@ impl EmitState {
                 self.emit_members_part(world, walk, out, host, key)
                 out.push(f" => p:{rule}_value(i = ::nikaia_std::grammar::member_index(&k, &[{names.join(", ")}]))\n")
                 out.push(f"            -> {{ match p {{ Some(p) => p, None => {fail}::nikaia_std::grammar::member_unknown(&k)))) }} }}\n")
-                out.push(f"\n        rule {rule}_value(i: usize) -> Option<{piece}> =\n")
+                out.push(f"\n        rule {rule}_value(i: usize) -> {self.rust_option()}<{piece}> =\n")
                 let mut separator = "  "
                 for i in 0..<fields.len() {
                     match on_null {

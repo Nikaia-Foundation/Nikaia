@@ -484,7 +484,7 @@ pub struct Contribution {
 }
 
 /// What a function's body throws itself, and whom in this package it calls.
-pub fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> Thrown {
+fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> Thrown {
     let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
     thrown_in_block(body, names, holes_of, contribution_of, false, out)
     return out
@@ -802,7 +802,7 @@ fn passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext, hol
 /// **Whether a handler passes what it caught on**, read from the tree alone:
 /// `throw error` anywhere in it, its nested blocks included (ADR-280 D10). The
 /// checker asks it before the guarded half is walked (#725).
-pub fn throws_handler_passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext) -> bool {
+fn throws_handler_passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext) -> bool {
     for stmt in handler.stmts {
         for expr in check_visit_stmt(stmt.node) {
             if the_caught_error(expr, names) {
@@ -820,7 +820,7 @@ pub fn throws_handler_passes_on(handler: ref Block, names: ref winnow_grammar::I
 
 /// **The fatal types a handler takes** (ADR-345 D2): those whose variant a
 /// `match` arm over `error` names, at the handler's top level.
-pub fn fatal_named(handler: ref Block, names: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn fatal_named(handler: ref Block, names: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for stmt in handler.stmts {
         match stmt.node {

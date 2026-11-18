@@ -1,0 +1,37 @@
+before: Checked TMP/main.nika
+warning[NK1350]: This `.clone()` is the last use of `x`: it copies `x` only to drop it.
+   --> TMP/main.nika:11:13
+    |
+ 11 |     println(x.clone().len())
+    |             ^^^^^^^^^
+    |
+    = note: Nothing reads `x` after it, so it can be handed over itself.
+    = help: Hand `x` itself: write `x` for `x.clone()`.
+warning[NK1350]: `p` is a `P`, which copies by itself: `.clone()` makes nothing new.
+   --> TMP/main.nika:13:13
+    |
+ 13 |     println(p.clone().x + p.y)
+    |             ^^^^^^^^^
+    |
+    = note: A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).
+    = help: Delete `.clone()`.
+fix: TMP/main.nika:11: NK1350: deleted `.clone()`
+TMP/main.nika:13: NK1350: deleted `.clone()`
+struct P { x: i64, y: i64 }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn main() throws {
+    let x = make()
+    println(x.len())
+    let p = P { x: 1, y: 2 }
+    println(p.x + p.y)
+}
+check: Checked TMP/main.nika
+same output: true
+3
+3

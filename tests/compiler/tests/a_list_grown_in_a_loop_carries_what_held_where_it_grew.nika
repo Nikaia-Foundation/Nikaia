@@ -1,0 +1,28 @@
+/// A list that grows inside a loop is a flag (ADR-361 D15, #1848): `at`
+/// gains an element only under `i < args.len()`, and `i` starts at 0 and
+/// only grows, so past the loop a non-empty `at` gives `args.len() >= 1`,
+/// the precondition of `need`.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn f(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f([1], 2))
+	println(f([], 2))
+}

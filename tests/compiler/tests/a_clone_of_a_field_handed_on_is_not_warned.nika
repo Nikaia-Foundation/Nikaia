@@ -1,0 +1,41 @@
+// **No `NK1350` on a field or an element copied into a `let` that is not
+// only read** (#1988): handed to an owning parameter, returned, pushed, or
+// read after the place's root was changed.
+struct Side { set: bool, src: String }
+struct T { lower: Vec[Side], rows: Vec[Vec[i64]], kept: Vec[Side] }
+
+fn keep_it(s: Side) -> i64 {
+	let mut all: Vec[Side] = []
+	all.push(s)
+	return all.len() as i64
+}
+
+impl T {
+	// handed to an owning parameter
+	fn owned(ref self, v: i64) -> i64 {
+		let lo = self.lower[v].clone()
+		return keep_it(lo)
+	}
+	// returned
+	fn returned(ref self, v: i64) -> Side {
+		let lo = self.lower[v].clone()
+		return lo
+	}
+	// pushed
+	fn pushed(ref mut self, v: i64) -> i64 {
+		let lo = self.lower[v].clone()
+		self.kept.push(lo)
+		return self.kept.len() as i64
+	}
+	// the root written between the `let` and the last read
+	fn written(ref mut self, v: i64) -> bool {
+		let lo = self.lower[v].clone()
+		self.lower[v] = Side { set: false, src: f"b{2}" }
+		return lo.set
+	}
+}
+
+fn main() throws {
+	let mut t = T { lower: [Side { set: true, src: f"a{1}" }], rows: [[1, 2]], kept: [] }
+	println(f"{t.owned(0)} {t.returned(0).set} {t.pushed(0)} {t.written(0)}")
+}

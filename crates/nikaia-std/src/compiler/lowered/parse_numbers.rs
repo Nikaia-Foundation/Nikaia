@@ -67,7 +67,7 @@ pub(crate) fn upper_exponent(c: &[scalar], from: i64) -> i64 {
 }
 
 pub fn float_end(text: &str) -> Option<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let scale = scale_at(&c, 0);
     if scale.is_some() {
         let found = match scale { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -79,7 +79,7 @@ pub fn float_end(text: &str) -> Option<String> {
 }
 
 pub(crate) fn times(digits: &str, by: u64) -> String {
-    let d: Vec<scalar> = nikaia_std::list::chars(digits.chars());
+    let d: Vec<scalar> = nikaia_std::list::scalars(digits.chars());
     let mut out: Vec<u64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut carry: u64 = 0u64;
     let mut k = d.len() as i64;
@@ -106,14 +106,14 @@ pub(crate) fn times(digits: &str, by: u64) -> String {
 
 pub(crate) fn past(digits: &str, limit: &str) -> bool {
     if (digits.len() as i64) != limit.len() as i64 { return (digits.len() as i64) > limit.len() as i64; }
-    let a: Vec<scalar> = nikaia_std::list::chars(digits.chars());
-    let b: Vec<scalar> = nikaia_std::list::chars(limit.chars());
+    let a: Vec<scalar> = nikaia_std::list::scalars(digits.chars());
+    let b: Vec<scalar> = nikaia_std::list::scalars(limit.chars());
     for k in 0..a.len() as i64 { if *unsafe { nikaia_std::proven::read(&a, (k) as usize) } != *nikaia_std::index::get(&b, (k) as usize) { return *unsafe { nikaia_std::proven::read(&a, (k) as usize) } > *unsafe { nikaia_std::proven::read(&b, (k) as usize) }; } }
     false
 }
 
 pub(crate) fn without_leading_zeros(digits: &str) -> String {
-    let d: Vec<scalar> = nikaia_std::list::chars(digits.chars());
+    let d: Vec<scalar> = nikaia_std::list::scalars(digits.chars());
     let mut at: i64 = 0;
     while at + 1 < d.len() as i64 && *unsafe { nikaia_std::proven::read(&d, (at) as usize) } == '0' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
     slice(&d, at, d.len() as i64)
@@ -128,7 +128,7 @@ pub(crate) fn magnitude_of(digits: &str) -> u64 {
 pub(crate) fn too_big() -> String { String::from("this number is too big: the largest integer types are `u64` and `i64`") }
 
 pub fn number_at(text: &str, signed: bool) -> Number {
-    let all: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let all: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut c: Vec<scalar> = vec![];
     let mut first: i64 = 0;
     if signed {

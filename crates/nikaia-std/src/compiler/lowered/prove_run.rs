@@ -28,6 +28,7 @@ pub struct ProveComptimes {
 pub struct ProveWalked {
     pub walk: ProverWalk,
     pub answers: ProverAnswers,
+    pub summaries: collections::BTreeMap<String, Ensured>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -78,8 +79,11 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
         record(&walked.walk.state.loops_used);
         counted(&walked.walk.state);
         round += 1;
-        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(|call| { nikaia_std::block::Text::from(call.to_string()) }).collect::<Vec<_>>();
-        if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run.is_none() { return walked; }
+        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(nikaia_std::index::as_text(&call)) && !not_run.contains_key(nikaia_std::index::as_text(&call)) && !stopped.contains_key(nikaia_std::index::as_text(&call)) }).map(|call| { nikaia_std::block::Text::from(call.to_string()) }).collect::<Vec<_>>();
+        if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run.is_none() {
+            walked.summaries = prove_summaries(&walked.walk, program, words);
+            return walked;
+        }
         for call in wanted.iter() {
             let site = match walked.walk.state.call_sites.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let called = match walked.walk.state.call_args.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -126,7 +130,21 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
 pub(crate) fn prove_walked(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, state: ProverState, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
     let mut walk = ProverWalk { state, arena: TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.copy_owned(), std_claims: collections::BTreeMap::new(), outside: collections::BTreeMap::new() };
     let answers = prover_passes(&mut walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    ProveWalked { walk, answers }
+    ProveWalked { walk, answers, summaries: collections::BTreeMap::new() }
+}
+
+pub(crate) fn prove_summaries(walk: &ProverWalk, program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, Ensured> {
+    let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
+    for (key, exits) in walk.state.summaries.iter() {
+        let function = match prover_summed_function(program, words, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !function.options.is_empty() || exits.is_empty() { continue; }
+        let mut chars: Vec<bool> = vec![];
+        for _ in function.params.iter() { chars.push(false); }
+        let mut conditions: Vec<Vec<SolverTerm>> = vec![];
+        for exit in exits.iter() { conditions.push(walk.arena.nodes_of(exit.term)); }
+        out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params: function.params.copy_owned(), chars, options: vec![], conditions });
+    }
+    out
 }
 
 pub fn prove_answer(asked: ProofsAsked) -> SolverAnswer {

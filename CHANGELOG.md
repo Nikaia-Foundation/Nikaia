@@ -8,6 +8,248 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1430] — 2026-11-18
+
+**Builders' changes (#2011, #2048)**
+- The solver counts only theory checks that did work toward its case budget: a partial check that pivots or ends in a conflict, and every final check. QF_LIA c_inference 30_30_86_7 is now refuted; the prover's figure is unchanged.
+- The solver's search budget counts theory checks: each check costs one case and two more for each simplex pivot, so the c_inference files end unknown (cases) within 30 s instead of timing out (#2048).
+
+## [0.0.1429] — 2026-11-18
+
+**Builders' changes (#2033, #2034)**
+- A `match` pattern `name(…)` whose one-word name nothing declares (`some(_)` over a `T?`) is refused with NK1117 instead of failing in rustc (NK1343).
+- Self-hosting: which launcher variables (NIKAIA_EXE, NIKAIA_MAIN) a program does not see is decided in runtime/env.nika; `env::pairs()` is now the bare OS list.
+
+## [0.0.1428] — 2026-11-18
+
+**Builders' changes (#1553, #2008, #2022, #2045, #2047)**
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding. A lambda that runs a pausing code parameter now waits for that call.
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding.
+- Driver: a green batch whose push is rejected because develop moved is merged with origin/develop, short-checked and pushed in up to three rounds (`MERGE <sha8> round <k>`) instead of running the full suite again after the second rejection.
+- Driver: a lane with a long queue pushes after each block of builders; a builder that fits the time left starts after long merges - In single-lane mode the driver starts the suite after every block of builders (focus.txt's `block`, else 2), not only at BATCH DONE, which a refilled queue never reached, and builders go on while it runs. The time check before a builder counts the median of the lane's last nine runs, not the longest, and is made again after the merge.
+- A trait method's code parameter, called one call at a time, now takes a lambda that changes a binding it captures (`s.each(fn(v) { total = total + v })`): the trait and every impl of it in the file lower the parameter alike, so a call on the type or through a bound compiles.
+- A lambda kept in a field, a `let`, a result, an element or a `keep` parameter that changes a binding it captures from the function around it is now refused with NK2101, naming the binding; it changed only its own copy, and `struct H { f: fn(i64) }` with `fn(v) { total = total + v }` printed 0.
+
+## [0.0.1427] — 2026-11-18
+
+**Builders' changes (#2005, #2015, #2031)**
+- The compiler checks its own package faster: deciding which types derive Copy now asks for a type's cleanup only once its parts copy (61 G instructions less per lowering of the tools package).
+- Added: a nightly z3 workflow checks every stated solver status and fuzzes the solver with mutated queries against a pinned z3 (`scripts/solver.nika oracle`, `fuzz N SEED --size S --rlimit R`)
+- Fixed: a list literal of tuples with a text part no longer draws NK1343 when tuples of another tier are pushed into it
+- A program build reuses rustc's output when its emitted Rust did not change: a crate whose Rust, rustc arguments, --extern files and rustc version match an earlier build is not compiled again (ADR-021 D14).
+- Tools build in a fixed slot: pre-push, gate, the solver, java_binding and the yaml facade test build their private copy in a locked, numbered slot (target/<tool>/<n>, the solver in the user cache) instead of a fresh temp dir, so their builds hit ADR-021 D14's rustc store; new scripts/slot.nika.
+- A package's types compare, hash and copy in the program that uses it: `==` on a `lib::Point` or an enum holding one, a `HashSet[lib::Point]`, a copy of a `lib::Point` and a dependency type with its own `impl Eq` are no longer refused (NK1188, NK1260, NK2105); a package's `nikaia.contracts` now records `compares`, `equates`, `hashes` and `copies` for its own types.
+
+## [0.0.1426] — 2026-11-17
+
+**Builders' changes (#2024, #2025)**
+- `text::parse_f64`'s shape check (ADR-285 D35) is now written in Nikaia, in std's runtime package; Rust keeps only the correctly rounding conversion.
+- Self-hosting: `text::Form` is declared in Nikaia (`runtime/text_normal.nika`); Rust keeps only `normalized`.
+
+## [0.0.1425] — 2026-11-17
+
+**Builders' changes (#1996, #1997, #1999, #2007)**
+- Calls through function values check their arguments: a call through a `let`, a parameter or a field holding code now refuses an argument of the wrong type (NK1102) or a wrong count (NK1101), as a named call does, and wraps a plain value handed to a `T?` parameter.
+- A let over a field or an element of a local is a view whatever its type: handing it to a keeper, or returning it, is refused with a .clone() help (NK1102, NK1104) instead of an internal error (NK1343)
+- A `??` with a variant fallback over a part a `match` arm binds out of a box, handed to something that keeps it, takes the part instead of lending it, which rustc refused (NK1343).
+- The "It's declared as" note writes `keep` where the callee keeps a parameter, and a function type taken from a declaration (a written type with names, a named function, a lambda) prints with its parameter names, so a view result reads `fn(s: String) -> String from s` instead of "whose result is a view of its argument" (#1528 decision 2). A tools file can now write `impl Hash`.
+- The "It's declared as" note of NK1101, NK1102 and NK1115 writes `keep` before a parameter the callee keeps, as a views-3 signature marks it (ADR-views-3 D2).
+- A `tools/*.nika` or std package file can write `impl Hash`: the lowered package's index brings the prelude's `Hasher` into scope, where rustc found none before.
+
+## [0.0.1424] — 2026-11-17
+
+**Builders' changes (#1975)**
+- A list built from a std sequence only to be counted (`.collect().len()`) or walked once by a `for` is warned (NK1354), and `nikaia fix` writes `.count()` or deletes the `.collect()`.
+
+## [0.0.1423] — 2026-11-17
+
+**Builders' changes (#1338, #1848, #1904, #1957, #1959, #1961, #1987, #1988)**
+- `scripts/solver.nika` fetches a 1097-file SMT-LIB set (QF_LIA, QF_LRA) from GitHub at fixed commits, runs a 50-file sample of it in CI, and compares ours with z3 and cvc5 (solved, wrong, PAR-2, memory, instructions); the result is in docs/solver-workload.md.
+- The solver's SMT-LIB reader takes symbols that hold a `.` (`main_~i.4`), which it refused as unreadable.
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type.
+- Bounds: an index past a loop that grew a list or raised a flag under a length guard (`if at.len() == 0 { return }` then `args[0]`) is proved, also when the guard has a part that is a call (`i < args.len() && f(i)`) (ADR-361 D15, #1848)
+- The bounds walk reads the prover's result summaries (ADR-359 D14): past `if kind(t) == 0 { return }` where `kind` returns 0 on `t.len() != 1`, `t[0]` is proved, for a free function and a type's own method; an exit that reads a field or an element no longer drops a function's summary.
+- The solver's program builds in about half the time when cold: it is built as a package of its files, and rustc's lints on it are capped.
+- solver: the exact equality elimination no longer compares every pair of bounds each round, so the SMPT family's equality-heavy queries finish (RwMutex-PT-r0010w0020-RF-00 10.4 s -> 2.1 s; 309 of 371 solved, was 293)
+- solver: the preprocessing's refutation no longer repeats a hint for a unit literal given twice, which got the proof log rejected (SMPT ERK-PT-000100-RF-00)
+- The solver's SMT-LIB reader answers or refuses a script nested deeper than its stack, instead of crashing: nec-smt/large-int_from_list-prp-53-48 is proved.
+- The solver's regression set tests/solver/regress pins QF_LIA bofill-scheduling SMT_real_LIA-ex2360_2400_100, proved in about 2 s since the faster equality elimination (was about 25 s).
+- The solver no longer copies the rows, forms and clauses it only reads; pivot eliminates in place (0.3 % fewer instructions on the CI sample).
+- NK1350 now also warns on a field or list element copied into a `let` that is only read while nothing writes the place's root (`let lo = self.lower[v].clone()`); the help deletes `.clone()`.
+
+## [0.0.1422] — 2026-11-17
+
+**chars() on text is an error, std has no chars (#1974 steps 5-6)**
+- `chars()` on text is now an error (NK1353) whose `.scalars` edit `nikaia fix` still makes, and std no longer has `String::chars` or `str::chars`.
+
+## [0.0.1421] — 2026-11-17
+
+**Merge origin/develop into develop (y10 sweep for #1974; lowered digest written by lower-std)**
+- `nikaia fix` checks each program once (minutes per compiler file before, about three minutes for the whole compiler now) and its test blocks too, and the repository reads text through `.scalars` instead of `chars()`.
+
+## [0.0.1420] — 2026-11-17
+
+**Builders' changes (#1992, #1992`, #1528, #1532, #1537, #1990)**
+- Messages print types as the source writes them: no `ref T`; a view is said in words ("a view of a `String`", "a `Vec[String]` whose items are views", "a `String` of its own"), a declared view result as `Vec[String] from self`, a function type with `keep`/`mut` on its parameters (ADR-views-3 D4, D10; #1528)
+- A `keep` parameter holds text of its own: the text tiers no longer lower it to a view, so a list element or `for` binding that only views its text is refused at the call with a `.clone()` help (ADR-views-3 D5).
+- D9 follows a view a std method hands back. A text moved into a literal while a view `trim`, `split`, `lines` and the like made of it is still read is lent, or refused with NK2305 where the field is changed, instead of failing in rustc as NK1343; read off the methods' ledger entries.
+- The ownership matrix has no open cell: the four `fn_field` cells keep through a `fn(keep a: String)` field (Part I 5.4 C), and tests pin #1990's probe and the D2-for-options-and-function-types probe of #1346.
+- A call through a function value, a function-typed parameter or field whose type marks a parameter `keep` now hands the argument over as a named function does: a later use is NK2105 and a view is NK1102 with a `.clone()` help, where both reached rustc as NK1343 (Part I 5.4 C, ADR-293 D29, ADR-views-3 D5).
+
+## [0.0.1419] — 2026-11-17
+
+**Builders' changes (#1848, #1904, #1949, #1957, #1987, #1988)**
+- Bounds: an index past a loop that grew a list or raised a flag under a length guard (`if at.len() == 0 { return }` then `args[0]`) is proved, also when the guard has a part that is a call (`i < args.len() && f(i)`) (ADR-361 D15, #1848).
+- The bounds walk reads the prover's result summaries (ADR-359 D14): past `if kind(t) == 0 { return }` where `kind` returns 0 on `t.len() != 1`, `t[0]` is proved, for a free function and a type's own method; an exit that reads a field or an element no longer drops a function's summary (#1904).
+- The solver's program builds in about half the time when cold (301 s -> 158 s): it is built as a package of its files, and rustc's lints on it are capped (the fix for #1949, partial).
+- Solver: the exact equality elimination no longer compares every pair of bounds each round, so the SMPT family's equality-heavy queries finish (RwMutex-PT-r0010w0020-RF-00 10.4 s -> 2.1 s; 309 of 371 solved, was 293); the preprocessing's refutation hints each unit literal once (#1957).
+- The solver no longer copies the rows, forms and clauses it only reads; pivot eliminates in place (0.3 % fewer instructions on the CI sample) (#1987).
+- NK1350 now also warns on a field or list element copied into a `let` that is only read while nothing writes the place's root (`let lo = self.lower[v].clone()`); the help deletes `.clone()` (#1988).
+
+## [0.0.1418] — 2026-11-17
+
+**Builders' changes (#1976, #1977, #1981)**
+- Toolchain packages are packages: crates/nikaia-std/src/compiler/ and runtime/ carry a nikaia.toml, its new `within = "std"` and `described` keys replace lower-std's path-based rules and dependencies.toml, and `nikaia check`/`fix` on any compiler file now check it with its whole package (#1976).
+- Diagnostics: a warning on an inner step of a chain (`s.chars().count()`, `x.clone().len()`) points at that step, and `nikaia fix` writes its edit (#1977).
+- yaml reads its input in place - the scalar readers walk bytes and scalars as views, copy each run once as a slice and build no Vec[String] or Vec[scalar]: large input 14 % fewer instructions for the events, 16 % for a tree (#1981)
+
+## [0.0.1417] — 2026-11-17
+
+**Builders' changes (#1338, #1810)**
+- `scripts/solver.nika` fetches a 1097-file SMT-LIB set (QF_LIA, QF_LRA) from GitHub at fixed commits, runs a 50-file sample of it in CI, and compares ours with z3 and cvc5 (solved, wrong, PAR-2, memory, instructions); the result is in docs/solver-workload.md (#1338).
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type (#1810).
+
+## [0.0.1416] — 2026-11-17
+
+**Builders' changes (#1582, #1584, #1591, #1600, #1610, #1657, #1672, #1694, #1705, #1750, #1915, #1919, #1956)**
+- A failed test batch leaves out the programs rustc names instead of splitting in halves (#1582).
+- Test batches lower as modules on every core: the emitter writes a program as a module of the batch crate instead of the batch editing its text, and a dependency is checked once per batch (#1582).
+- nikaia run: a program starts when the run bundle's record was written under a toolchain that is gone since (#1584)
+- Stale ledgers caught: the driver rebuilds every committed ledger of examples/ and packages/ on a clean target before each push and on merges (scripts/ledgers.nika), CI fails a stale one under --locked.
+- Internal: the compiler written in Nikaia moved from crates/nikaia-std/src/tools/ to crates/nikaia-std/src/compiler/ (generated Rust in compiler/lowered/); the Rust module is still nikaia_std::tools.
+- Compiler identity follows the compiled lowered code: lower-std writes LOWERED_DIGEST into lowered.rs, and the cache identity takes it instead of build.rs re-reading lowered/ (which another lower-std could rewrite mid-build); the orchestrator's sources join the fingerprint.
+- `nikaia check --rustc` of a source without `fn main` is refused with NK1351 like `run`, and a package built as a rust-library is checked as its lib crate, where rustc used to refuse both as the internal NK1343.
+- The compiler's Rust module is nikaia_std::compiler: renamed from nikaia_std::tools to match its directory (with lower_compiler, SYSROOT_COMPILER); use std::compiler now gets NK1186's toolchain note; no .pyc files tracked.
+- Driver: a test shows that the ledger refresh before a suite answers for the committed tree, even with another lane's uncommitted compiler sources in the checkout (#1665); new `drive.nika --ledgers BUILD`.
+- nikaia test: a test program that runs past its time limit (NIKAIA_TEST_TIME_LIMIT, 300 s by default) is killed with every process it started and fails with "timed out after N s"; the run goes on with the next test.
+- The driver accepts a done or partial report itself when the builder needs nothing (green gate, `Needs: none`, `Owner: none`), releases it with a version raise and lists partials in `DIR/review.txt` for the supervisor.
+- Faster cold builds of programs with build-time blocks: `nikaia-std` now compiles once (it was twice), because the bundles and grammar parsers are built in the program's own target tree before its Cargo build.
+- A build with nothing changed no longer starts Cargo: `nikaia build`/`nikaia test` keep a record of Cargo's inputs and skip the call when nothing changed, and test programs are built in places kept from one run to the next (#1750). Known limit: an edited ~/.cargo/config.toml is not detected.
+- lower-std re-lowers only the files that name what changed: a `pub fn` added to check_members.nika re-lowers 1 file instead of 296, in 120.6 s of lower-std CPU instead of 343.5 s (0.35x); a body change still re-lowers 1 file (103.7 s before, 120.1 s now); a ledger change that spreads to the callers (`panic` in mem_member_under) still re-lowers all 296 (346.0 s before, 375.6 s now); a cold run takes 380 s instead of 340 s, about 10 % for the keys; the cached output is byte-identical to a cold lowering in each case
+- solver_run test: the measuring rod is built once per key, so concurrent runs of it wait for that build instead of each building it again (#1915)
+- nikaia test caps a test program's processes and threads (NIKAIA_TEST_PROCESS_LIMIT, default 4096; the test fails and names the cap) and ends the program's whole process group when the runner ends, kill -9 included, so a fork storm can no longer fill the machine's PID space.
+- nikaia test builds the program std once before the first test program runs, where a test program can start `nikaia`, so no program's time limit includes that build (#1955)
+- CI keeps the program `std` rlib tree between runs in the compiler shards: a push that leaves std's sources alone builds no std crate there (#1956).
+
+## [0.0.1415] — 2026-11-16
+
+**Builders' changes (#1943)**
+- Bounds: a field another file writes through a list item, a clone() or a for binding of another type no longer takes a found rule away (sv_simplex `self.values[s]` proved).
+
+## [0.0.1414] — 2026-11-16
+
+**Builders' changes (#1930)**
+- Bounds: a field another file writes on a local of another type (bound to a call, a literal or a declared type) no longer drops a struct rule over a field of that name (ADR-369 D4).
+
+## [0.0.1413] — 2026-11-16
+
+**Builders' changes (#1916, #1918)**
+- Drivers sharing a checkout merge origin/develop one at a time (a merge lock, waits for git's index.lock and MERGE_HEAD) and re-lower the merge from the committed tree with a compiler built from it, so another agent's uncommitted `.nika` or freshly built binary no longer breaks the merge (#1916).
+- commit.nika --dry-run lists the hunks of each listed source and writes Reviewed: into the report, and the commit refuses when a listed file changed since; lower_mine.nika --write writes only the lowered files of the .nika files given
+
+## [0.0.1412] — 2026-11-16
+
+**Builders' changes (#1755, #1756, #1757, #1758, #1870, #1871, #1872, #1878, #1888, #1894, #1925)**
+- Bounds: a function that returns a list or a struct with list fields gives its caller found facts: `let p = mk(n)` with `P { a: vec_of(n), b: vec_of(n) }` proves `p.b[i]` for `i < p.a.len()`; `m?.get(k)?.clone()` copies the value instead of keeping `m` borrowed (ADR-306 D23, #1756).
+- Bounds: a function found to return -1 or a position below a list's length gives its caller `r < xs.len()`, so `if r >= 0 { xs[r] }` is proved (ADR-306 D23, D31, #1757).
+- Bounds: what a function returning `i64?` is found to hand back holds of the value a caller unwraps with `?? return`, `?? d`, a `match` arm or a `let` narrowed by `!= null` (ADR-306 D23, #1758).
+- Bounds: a found rule over pub fields holds when every writer is in the build; a found rule no longer holds over a private field another file of the package clears, pushes to, sorts or hands on (that read was lowered without its check); an `if` or `match` whose branches all grow a list keeps the facts over its length (ADR-306 D22, ADR-369 D4, #1755).
+- Bounds: a found struct rule survives a loop whose body calls a method of the type that grows its lists, so `self.row_of[s]` after `let s = self.new_var(-1)` is proved (part of #1925; the rest is #1930).
+- Bounds: a struct literal that gives both lists of a length rule by clones or field paths of another value's lists keeps the rule (#1888).
+- A lambda that hands back a part of its borrowed item (`rows.sort_by_key fn (row) { row.name }`) is refused with NK1131 and a `.clone()` hint, a view as `sort_by_key`'s key with NK1104, instead of an internal error (#1872).
+- A view of a field or element of a call's result (`f().out.split(" ")`) or of a file name's text, kept in a `let`, no longer fails as an internal compiler error (#1894).
+- A cut of a `Vec[u8]` compared with `Bytes` compiles and compares the bytes instead of an internal error (#1871); a cut of a text's own bytes read back as text checks only its two ends (#1870).
+- Faster list building: a block's `List::push` inlines only the store, its growth runs out of line as Rust's `Vec::push` does (reverse-complement: 10 instructions a byte instead of 14, #1878).
+
+## [0.0.1411] — 2026-11-16
+
+**Builders' changes (#1812, #1844, #1905, #1907)**
+- Seen[T] can be written at a field or a parameter; a mismatch's help never suggests `Seen[ref T]`; `--sharing` names where a `let`, a tuple or a variant duplicates or moves a handle
+- examples/report refuses a stock file whose counts add up past an i64, with a message naming the file, instead of stopping with an overflow (#1812).
+- nikaia run counts what std builds inside a task — a set, map or other std collection a task builds under `nikaia run` now counts against its memory budget (ADR-327 D9) as under Cargo builds; before, the dynamically linked std allocated it uncounted and a sent set left a debt in the count (#1844).
+- Result summaries reach further (ADR-359 D14): a callee's precondition at a call is asked with the summaries of the calls it reads, a summary carries a list parameter's length, keeps the exits it can read, and exists for a method that is not a trait's.
+- A field that does not copy, handed out as a lambda's or a door block's last value (`m.access fn(open) { open.t }`, `map(fn(x) { x.t })`), is refused by the checker (NK1131, help `open.t.clone()`) instead of an internal compiler error.
+- A test program can pin its `nikaia check --sharing` report in `NAME.sharing`, compared and blessed like `NAME.bounds`
+
+## [0.0.1410] — 2026-11-16
+
+**Builders' changes (#1550, #1920)**
+- A grammar rule written without its action is now refused as "This rule's body ends without an action" at the next rule, instead of a misleading error about `->` in a pattern.
+- Bounds: a whole-number field of a call's struct result (`let e = error_of(...); e.offset - 1`) carries what the callee is found to return in it at every return that builds the struct as a literal, for functions and methods (ADR-306 D35). A method call with no argument now reads its found range too.
+
+## [0.0.1409] — 2026-11-16
+
+**Builders' changes (#1843, #1853, #1857, #1862, #1866, #1874, #1881, #1883, #1885, #1886, #1887, #1895, #1896, #, #1903)**
+- docs/issues.md: an issue's Done when asks for a Found line per finding, not for issue numbers the run cannot know; a file a preceding issue will create is named as that issue's output.
+- docs/issues.md: I4 asks an issue item that rests on a part another issue builds (a harness, a README) to name that part's own issue, or to say the builder makes it
+- The driver drops a brief that ended blocked on an issue it filed from that run's Found (or one the report names) instead of cutting the batch, and labels the issue blocked until that issue is closed.
+- Driver: when git puts the agents' uncommitted files back after a merge and that conflicts, a lowered file now takes HEAD's copy with nothing left staged, and a conflict in a source escalates
+- Changed: `scripts/probe.nika` warns in a first `note:` line when `target/fast/nikaia` is older than a compiler source in the tree, so a probe on a binary that predates HEAD is not read as a defect.
+- benches/game: Nikaia programs are counted with `io-method = "blocking"`, so a program that reads standard input no longer hangs under valgrind 3.22; docs/measuring.md says so for programs counted by hand
+- A text a function makes and hands to `strip_prefix`, `strip_suffix` or `trim_start_matches`, whose result it returns, no longer fails with an internal error.
+- The driver no longer holds a re-queued issue by an issue its earlier report only cited in `Found:`, by the issue it is `Part of`, or by numbers inside quoted text (backticks, fenced or `<details>` blocks).
+- scripts/pre-push.nika: the page-examples step runs the repository's own built compiler, so it no longer needs `nikaia` on PATH
+- The driver starts a builder or QA only where the lane's longest recent run still fits before the 2 h end of its task, and a builder run cut off after writing its report gets its follow-up (posted run, labels, Found filing, suite) at the next start.
+- The release commit after a driver push now carries the rows the agents added to docs/tokenspeed.md, and leaves the file out when anything else in it changed.
+- Driver: the ESCALATE and WAKE lines at a stop now say what to do with the issues (file or decide the waiting ones, block an issue on what a blocked run found), not "write the next briefs".
+- Driver: at a red suite or CI the ESCALATE and WAKE lines ask for the fix-forward as a `ready` issue queued first in batch.txt, and a missing brief for an issue's `#N` line, not a hand-written brief.
+- The release no longer stops while another lane has an uncommitted paragraph in a specification part: it commits only that part's version and date lines and leaves the paragraph in the working tree.
+- The driver no longer holds an issue by a `#N` inside double-quoted text, such as a quoted driver comment.
+
+## [0.0.1408] — 2026-11-16
+
+**prover: a list grown and a bool raised in a loop are flags; what held where they rose is kept, the loop's names projected out (ADR-361 D15)**
+- Prover: a list a loop grows and a flag it raises carry what held where they rose (ADR-361 D15): past `while … { if i < args.len() as i64 { at.push(i) } … }`, a non-empty `at` proves `args.len() >= 1`, also as a call's precondition.
+
+## [0.0.1407] — 2026-11-16
+
+**Builders' changes (#1690, #1702, #1861, #1864, #1865)**
+- Loops: a name a loop sets to `e % m` (m a constant) is known to lie in 0..<m where e is never negative, so a linear-congruential generator's step is proved (#1690).
+- Bounds: a list that one branch of an `if` or one arm of a `match` empties (`ks = []`) keeps `ks.len() == 0 || ks.len() == r.ks.len()` past the join, so a struct's list-length rule survives `let cols = if ks.len() == 0 { [] } else { r.cols.clone() }`; a `match` keeps what all its arms prove of the names they change (#1702).
+- Builds: a `.nika` file added to a package is seen by the next build; `nikaia test` used the library built before it and rustc refused calls into the new file (NK1343) (#1861).
+- Faster text building: a block's `Text::push` of an ASCII character is inlined into the loop that calls it on every target, its wide-character and growth paths out of line (a fasta-like loop counts 16 % fewer instructions) (#1864).
+- NK1117 no longer tells you to write `use std::Bytes` (which NK1156 then refused) for a call on a prelude type such as `Bytes::from`: a capitalized prefix is a type, and types need no `use` (#1865).
+
+## [0.0.1406] — 2026-11-16
+
+**Builders' changes (#1554, #1638, #1751, #1811)**
+- Memory budgets: a map sent between tasks now weighs its whole table, and starting tasks no longer charges the runtime's bookkeeping to the task that starts them (#1554).
+- A program can declare its own `Box` type: the compiler's generated code names Rust's box `std::boxed::Box` (#1638).
+- A value put into `SharedMut(…)` or `Locked(…)` counts against the shared value from its creation, not against the task that made it, so a task that creates and drops shared values no longer runs over its memory budget (ADR-327 D9).
+- The bounds walk knows that an HTTP head's `size()` is at least 4 and its `length()` and a buffer's `len()` are never negative, and reads a ledger's `ensures` for a `len()` of a type that is no list, so `buffer.len() - head.size()` is proved.
+
+## [0.0.1405] — 2026-11-16
+
+**Builders' changes (#1820, #1821, #1822, #1823, #1827, #1837)**
+- Driver: a merge git refuses names git's own message, a generated file in the way is moved aside and the merge retried, a conflict names only its sources; an Exit boxed in a sum now ends main with its code (the driver's restart no longer exits 1 with "Error:").
+- The driver's WAKE lines name their kind, the one file to read and the action, and the driver runs the release itself after each push.
+- Driver: an issue filed from a Found first runs its probe on today's develop, and a builder's Found is probed with a binary built from HEAD
+- Driver: the proof figure is measured after each push, beside the next batch, and logged to docs/briefs/<lane>/proved.log; a fall of more than 0.2 points wakes the session with the commit range.
+- The driver holds back an issue whose last run ended partial naming an open `#N` under `Needs:`, and keeps an `Issue:` answer whole when its prose holds a `;`.
+- Driver: a report's `Issue: fits docs/issues.md` (any case) counts as nothing missing and files no improvement issue.
+
+## [0.0.1404] — 2026-11-16
+
+**Builders' changes (#1805, #1808, #1832, #1836, #1839, #1841, #1842, #1846, #1863)**
+- Bounds: compiler functions no other package or Rust host calls are private, so the walk derives their preconditions; a private function another file calls keeps its published text tier (part of #1831).
+- Bounds: derived preconditions also over field paths of a parameter, non-zero divisors, non-empty lists and non-overflowing steps (ADR-391 D1 widened, #1832).
+- Bounds: --bounds names the gate of a parameter no precondition bounds, and the walk visits a range's ends (#1863).
+- Bounds: a capped bound stands past a loop that shortens the list only through methods of its own value (#1808).
+- A match on a part bound out of a lent parameter binds through the reference, without ref (#1805); a text item a walk lends is looked up as the str it holds.
+- Emitter: a function value failing in a sum hands each member on to its caller's channel (#1836); a program's own Result or Option no longer hides the prelude's (#1846).
+- Coalesce: m[k] ?? name over a map of a word takes the fallback as it is (#1841); a simd vector or time::Duration read out of a map with ?? is a copy (#1842).
+- nikaia run: the run bundle's fingerprint also walks std's path dependencies, so an edit there rebuilds the runtime (#1839).
+
 ## [0.0.1403] — 2026-11-16
 
 **Builders' changes (#1613, #1614, #1615, #1806)**

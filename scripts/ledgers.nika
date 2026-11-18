@@ -26,8 +26,13 @@
 // `--locked` and copies every ledger file that changed and is not ignored
 // back into this checkout, printing `refreshed PATH` for each, `failed DIR`
 // for a build that failed (exit 1); it stages and commits nothing (the
-// driver does, drive_ledgers). `nikaia.lock` is neither checked nor copied:
-// it records the hash of the compiler binary, which differs with every build.
+// driver does, drive_ledgers). A tracked `nikaia.lock` is a ledger too: it
+// records the toolchain, the units' source hashes and the resolved
+// dependencies, never the compiler's identity (ADR-021 D2, D3, #1945), so it
+// changes only when those do. `--check` compares the lock the build wrote
+// with the one copied in (stale when they differ, the toolchain line apart), and `--refresh` copies it
+// back; a git-ignored lock is never copied in, so it is neither checked nor
+// refreshed.
 // `--list` prints each directory and the command it is built with. NIKAIA is
 // the compiler (default `target/fast/nikaia`).
 
@@ -36,179 +41,209 @@ use std::fs
 use std::process
 
 fn ledgers_names() -> Vec[String] {
-    return ["nikaia.contracts", "nikaia.derived", "nikaia.proofs"]
+	return ["nikaia.contracts", "nikaia.derived", "nikaia.proofs", "nikaia.lock"]
+}
+
+// Keeps the `nikaia.lock` of TMP/DIR as it was copied in, under
+// TMP/committed, before a build rewrites it; a directory without one (its
+// lock is git-ignored, or there is none) keeps nothing.
+fn ledgers_keep_lock(tmp: String, dir: String) throws {
+	let lock = f"{tmp}/{dir}/nikaia.lock"
+	if !fs::exists(lock.clone(), fs::Root::Anywhere) { return }
+	process::run("mkdir", ["-p", f"{tmp}/committed/{dir}"])
+	process::run("cp", [lock, f"{tmp}/committed/{dir}/nikaia.lock"])
+}
+
+// Whether the build left the kept `nikaia.lock` of TMP/DIR as it was: true
+// for a directory that kept none. The difference, when there is one. The
+// `toolchain` line is left out of the comparison: `rust-toolchain.toml` names
+// the floating `stable` (ADR-001 D1), so the runner's rustc moves without any
+// change of ours; the line is rewritten with the next real change.
+fn ledgers_lock_current(tmp: String, dir: String) -> (bool, String) throws {
+	let kept = f"{tmp}/committed/{dir}/nikaia.lock"
+	if !fs::exists(kept.clone(), fs::Root::Anywhere) { return (true, "") }
+	let diff = process::run("diff", ["-u", "-I", "^toolchain = ", kept, f"{tmp}/{dir}/nikaia.lock"])
+	return (diff.ok, diff.stdout)
 }
 
 // The flags a directory needs that its manifest cannot say: `--cpu` has no
 // key in `nikaia.toml` (ADR-002 D6), and crate-ledger's two functions exist
 // only from `x86-64-v3` on (#788).
 fn ledgers_flags(dir: String) -> Vec[String] {
-    if dir == "examples/crate-ledger" { return ["--cpu=x86-64-v3"] }
-    return []
+	if dir == "examples/crate-ledger" { return ["--cpu=x86-64-v3"] }
+	return []
 }
 
 // The ledger directories of the copy at TMP, sorted, so `examples/http` is
 // built after `examples/hello-http`, which writes the dependency's ledger too.
 fn ledgers_dirs(tmp: String) -> Vec[String] throws {
-    let found = process::run(
-        "sh",
-        [
-            "-c",
-            f"cd '{tmp}' && ls -d examples/*/nikaia.contracts examples/*/nikaia.derived examples/*/nikaia.proofs packages/*/nikaia.contracts packages/*/nikaia.derived packages/*/nikaia.proofs tests/page-examples/nikaia.contracts tests/page-examples/nikaia.derived tests/page-examples/nikaia.proofs 2>/dev/null | xargs -n1 dirname | sort -u",
-        ],
-    ).stdout
-    let mut dirs: Vec[String] = []
-    for line in found.split("\n") {
-        let d = line.trim().clone()
-        if d != "" { dirs.push(d) }
-    }
-    return dirs
+	let found = process::run(
+		"sh",
+		[
+			"-c",
+			f"cd '{tmp}' && ls -d examples/*/nikaia.contracts examples/*/nikaia.derived examples/*/nikaia.proofs packages/*/nikaia.contracts packages/*/nikaia.derived packages/*/nikaia.proofs tests/page-examples/nikaia.contracts tests/page-examples/nikaia.derived tests/page-examples/nikaia.proofs 2>/dev/null | xargs -n1 dirname | sort -u",
+		],
+	).stdout
+	let mut dirs: Vec[String] = []
+	for line in found.split("\n") {
+		let d = line.trim().clone()
+		if d != "" { dirs.push(d) }
+	}
+	return dirs
 }
 
 // The command line of DIR, `--locked` when LOCKED.
 fn ledgers_command(dir: String, locked: bool) -> Vec[String] throws {
-    let mut args: Vec[String] = ["build"]
-    for f in ledgers_flags(dir) { args.push(f) }
-    if locked { args.push("--locked") }
-    return args
+	let mut args: Vec[String] = ["build"]
+	for f in ledgers_flags(dir) { args.push(f) }
+	if locked { args.push("--locked") }
+	return args
 }
 
 // Copies the ledger directories of TREE ("" for the working tree) into a new
 // temporary directory and returns it.
 fn ledgers_copy(tree: String) -> String throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let roots = "examples packages tests/page-examples"
-    let copied = if tree == "" {
-        process::run(
-            "sh",
-            [
-                "-c",
-                f"git ls-files -co --exclude-standard -- {roots} | tar --ignore-failed-read -T - -cf - 2>/dev/null | tar -xf - -C '{tmp}'",
-            ],
-        )
-    } else {
-        process::run("sh", ["-c", f"git archive '{tree}' -- {roots} | tar -xf - -C '{tmp}'"])
-    }
-    if !copied.ok {
-        eprintln(f"copying the ledger directories failed: {copied.stderr.trim()}")
-        process::exit(2)
-    }
-    let here = process::run("pwd", []).stdout.trim().clone()
-    process::run("ln", ["-s", f"{here}/crates", f"{tmp}/crates"])
-    return tmp
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let roots = "examples packages tests/page-examples"
+	let copied = if tree == "" {
+		process::run(
+			"sh",
+			[
+				"-c",
+				f"git ls-files -co --exclude-standard -- {roots} | tar --ignore-failed-read -T - -cf - 2>/dev/null | tar -xf - -C '{tmp}'",
+			],
+		)
+	} else {
+		process::run("sh", ["-c", f"git archive '{tree}' -- {roots} | tar -xf - -C '{tmp}'"])
+	}
+	if !copied.ok {
+		eprintln(f"copying the ledger directories failed: {copied.stderr.trim()}")
+		process::exit(2)
+	}
+	let here = process::run("pwd", []).stdout.trim().clone()
+	process::run("ln", ["-s", f"{here}/crates", f"{tmp}/crates"])
+	return tmp
 }
 
 // Runs NIKAIA with ARGS in TMP/DIR; the output, and whether it succeeded.
 fn ledgers_build(
-    nikaia: String,
-    tmp: String,
-    dir: String,
-    args: Vec[String],
+	nikaia: String,
+	tmp: String,
+	dir: String,
+	args: Vec[String],
 ) -> (String, bool) throws {
-    let mut line = f"cd '{tmp}/{dir}' && env -u CARGO_TARGET_DIR RUST_BACKTRACE=0 NIKAIA_CACHE_DIR='{tmp}/cache' '{nikaia}'"
-    for a in args { line = line + f" '{a}'" }
-    let out = process::run("sh", ["-c", line + " 2>&1"])
-    return (out.stdout, out.ok)
+	let mut line = f"cd '{tmp}/{dir}' && env -u CARGO_TARGET_DIR RUST_BACKTRACE=0 NIKAIA_CACHE_DIR='{tmp}/cache' '{nikaia}'"
+	for a in args { line = line + f" '{a}'" }
+	let out = process::run("sh", ["-c", line + " 2>&1"])
+	return (out.stdout, out.ok)
 }
 
 fn ledgers_head(body: String, n: i64) -> String {
-    let mut out: Vec[String] = []
-    for line in body.split("\n") {
-        if out.len() == n { break }
-        out.push(line.clone())
-    }
-    return out.join("\n")
+	let mut out: Vec[String] = []
+	for line in body.split("\n") {
+		if out.len() == n { break }
+		out.push(line.clone())
+	}
+	return out.join("\n")
 }
 
 fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
-    let mut green = true
-    for dir in ledgers_dirs(tmp.clone()) {
-        let (out, ok) = ledgers_build(
-            nikaia.clone(),
-            tmp.clone(),
-            dir.clone(),
-            ledgers_command(dir.clone(), true),
-        )
-        if ok {
-            println(f"{dir}: ledger current")
-            continue
-        }
-        green = false
-        if out.contains("--locked") {
-            println(f"{dir}: ledger stale")
-        } else {
-            println(f"{dir}: build failed")
-        }
-        println(ledgers_head(out, 40))
-    }
-    return green
+	let mut green = true
+	let dirs = ledgers_dirs(tmp.clone())
+	for dir in dirs { ledgers_keep_lock(tmp.clone(), dir.clone()) }
+	for dir in dirs {
+		let (out, ok) = ledgers_build(
+			nikaia.clone(),
+			tmp.clone(),
+			dir.clone(),
+			ledgers_command(dir.clone(), true),
+		)
+		let (lock_current, lock_diff) = ledgers_lock_current(tmp.clone(), dir.clone())
+		if ok && lock_current {
+			println(f"{dir}: ledger current")
+			continue
+		}
+		green = false
+		if ok {
+			println(f"{dir}: ledger stale")
+			println(ledgers_head(lock_diff, 40))
+			continue
+		}
+		if out.contains("--locked") {
+			println(f"{dir}: ledger stale")
+		} else {
+			println(f"{dir}: build failed")
+		}
+		println(ledgers_head(out, 40))
+	}
+	return green
 }
 
 fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
-    let mut green = true
-    for dir in ledgers_dirs(tmp.clone()) {
-        let (out, ok) = ledgers_build(
-            nikaia.clone(),
-            tmp.clone(),
-            dir.clone(),
-            ledgers_command(dir.clone(), false),
-        )
-        if !ok {
-            green = false
-            println(f"failed {dir}")
-            println(ledgers_head(out, 40))
-        }
-    }
-    for dir in ledgers_dirs(tmp.clone()) {
-        for name in ledgers_names() {
-            let path = f"{dir}/{name}"
-            let built = f"{tmp}/{path}"
-            if !fs::exists(built.clone(), fs::Root::Anywhere) { continue }
-            if process::run("git", ["check-ignore", "-q", path.clone()]).ok { continue }
-            if process::run("cmp", ["-s", built.clone(), path.clone()]).ok { continue }
-            process::run("cp", [built, path.clone()])
-            println(f"refreshed {path}")
-        }
-    }
-    return green
+	let mut green = true
+	for dir in ledgers_dirs(tmp.clone()) {
+		let (out, ok) = ledgers_build(
+			nikaia.clone(),
+			tmp.clone(),
+			dir.clone(),
+			ledgers_command(dir.clone(), false),
+		)
+		if !ok {
+			green = false
+			println(f"failed {dir}")
+			println(ledgers_head(out, 40))
+		}
+	}
+	for dir in ledgers_dirs(tmp.clone()) {
+		for name in ledgers_names() {
+			let path = f"{dir}/{name}"
+			let built = f"{tmp}/{path}"
+			if !fs::exists(built.clone(), fs::Root::Anywhere) { continue }
+			if process::run("git", ["check-ignore", "-q", path.clone()]).ok { continue }
+			if process::run("cmp", ["-s", built.clone(), path.clone()]).ok { continue }
+			process::run("cp", [built, path.clone()])
+			println(f"refreshed {path}")
+		}
+	}
+	return green
 }
 
 fn main() throws {
-    let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
-    let mut mode: String = ""
-    let mut tree: String = ""
-    let mut nikaia: String = "target/fast/nikaia"
-    let mut i = 1
-    while i < args.len() {
-        if args[i] == "--tree" && i + 1 < args.len() {
-            tree = args[i + 1].clone()
-            i += 1
-        } else if args[i] == "--exe" && i + 1 < args.len() {
-            nikaia = args[i + 1].clone()
-            i += 1
-        } else {
-            mode = args[i].clone()
-        }
-        i += 1
-    }
-    if mode != "--check" && mode != "--refresh" && mode != "--list" {
-        println("usage: nikaia run scripts/ledgers.nika -- --check|--refresh|--list [--tree TREE] [--exe NIKAIA]")
-        process::exit(2)
-    }
-    let exe = process::run("realpath", [nikaia]).stdout.trim().clone()
-    let tmp = ledgers_copy(tree)
-    let mut green = true
-    if mode == "--list" {
-        for dir in ledgers_dirs(tmp.clone()) {
-            let line = ledgers_command(dir.clone(), true).join(" ")
-            println(f"{dir}: nikaia {line}")
-        }
-    } else if mode == "--check" {
-        green = ledgers_check(exe, tmp.clone())
-    } else {
-        green = ledgers_refresh(exe, tmp.clone())
-    }
-    process::run("rm", ["-rf", tmp])
-    if !green { process::exit(1) }
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut mode: String = ""
+	let mut tree: String = ""
+	let mut nikaia: String = "target/fast/nikaia"
+	let mut i = 1
+	while i < args.len() {
+		if args[i] == "--tree" && i + 1 < args.len() {
+			tree = args[i + 1].clone()
+			i += 1
+		} else if args[i] == "--exe" && i + 1 < args.len() {
+			nikaia = args[i + 1].clone()
+			i += 1
+		} else {
+			mode = args[i].clone()
+		}
+		i += 1
+	}
+	if mode != "--check" && mode != "--refresh" && mode != "--list" {
+		println("usage: nikaia run scripts/ledgers.nika -- --check|--refresh|--list [--tree TREE] [--exe NIKAIA]")
+		process::exit(2)
+	}
+	let exe = process::run("realpath", [nikaia]).stdout.trim().clone()
+	let tmp = ledgers_copy(tree)
+	let mut green = true
+	if mode == "--list" {
+		for dir in ledgers_dirs(tmp.clone()) {
+			let line = ledgers_command(dir.clone(), true).join(" ")
+			println(f"{dir}: nikaia {line}")
+		}
+	} else if mode == "--check" {
+		green = ledgers_check(exe, tmp.clone())
+	} else {
+		green = ledgers_refresh(exe, tmp.clone())
+	}
+	process::run("rm", ["-rf", tmp])
+	if !green { process::exit(1) }
 }

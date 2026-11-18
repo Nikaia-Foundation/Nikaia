@@ -802,7 +802,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         let canon = *nikaia_std::index::get(&first, &k);
         if canon.is_none() { first.insert(k, at); } else {
             let c = nikaia_std::index::or(canon, || 0);
-            let old = nikaia_std::index::get(&positions, nikaia_std::index::at(c)).within;
+            let old = unsafe { nikaia_std::proven::read(&positions, (c) as usize) }.within;
             let new = unsafe { nikaia_std::proven::read(&positions, (at) as usize) }.within;
             if old.is_none() && new.is_some() { first.insert(k, at); } else if old.is_some() && new.is_some() && old.unwrap() != new.unwrap() { conflict = true; }
         }

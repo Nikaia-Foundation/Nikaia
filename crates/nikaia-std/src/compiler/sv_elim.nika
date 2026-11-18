@@ -38,6 +38,16 @@ fn sv_opposite(r: ref SvRow, s: ref SvRow) -> bool {
 	return true
 }
 
+/// A signature of `r`'s columns: rows with the same columns have the same
+/// one, so only rows sharing it can be opposite (#1957).
+fn sv_cols_key(r: ref SvRow) -> i64 {
+	let mut s: i64 = 0
+	for c in r.cols {
+		s = (s * 31 + (c as i64)) % 1000000007
+	}
+	return s * 64 + (if r.cols.len() < 63 { r.cols.len() } else { 63 })
+}
+
 /// `h` divided by the gcd of its coefficients and constant, then by that of
 /// its coefficients with the constant rounded up; each a step where it
 /// changes the bound.
@@ -59,9 +69,31 @@ fn sv_tidy(h: SvHeld, mut book: SvBook) -> SvHeld? {
 	return SvHeld { row: row, src: src }
 }
 
+/// For each column, how many bounds of `held` hold it (a coefficient other
+/// than 0), indexed by the column: counted once per round, so choosing a
+/// unit column does not scan `held` again for each candidate (#1957).
+fn sv_column_uses(held: ref Vec[SvHeld]) -> Vec[i64] {
+	let mut uses: Vec[i64] = []
+	for h in held {
+		let mut i = 0
+		while i < h.row.cols.len() {
+			if h.row.ks[i] != 0 {
+				let c = h.row.cols[i] as i64
+				while uses.len() <= c {
+					uses.push(0)
+				}
+				uses[c] += 1
+			}
+			i += 1
+		}
+	}
+	return uses
+}
+
 /// The column of `r` with a coefficient `±1` that most other bounds of
-/// `held` hold, the lowest on a tie; `null` where none has one.
-fn sv_unit_column(r: ref SvRow, held: ref Vec[SvHeld]) -> u32? {
+/// `held` hold (`uses`, by `sv_column_uses`), the lowest on a tie; `null`
+/// where none has one.
+fn sv_unit_column(r: ref SvRow, uses: ref Vec[i64]) -> u32? {
 	let mut best: u32? = null
 	let mut best_uses = -1
 	let mut i = 0
@@ -69,15 +101,11 @@ fn sv_unit_column(r: ref SvRow, held: ref Vec[SvHeld]) -> u32? {
 		let k = r.ks[i]
 		if k == 1 || k == -1 {
 			let c = r.cols[i]
-			let mut uses = 0
-			for h in held {
-				if sv_row_coef(h.row, c) != 0 {
-					uses += 1
-				}
-			}
-			if uses > best_uses {
+			let at = c as i64
+			let n = if at < uses.len() { uses[at] } else { 0 }
+			if n > best_uses {
 				best = c
-				best_uses = uses
+				best_uses = n
 			}
 		}
 		i += 1
@@ -156,7 +184,7 @@ fn sv_mod_hat(a: i64, m: i64) -> i64 {
 fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32? {
 	let mut low = lo
 	let mut high = hi
-	let r = held[lo].row.clone()
+	let r = held[lo].row
 	let mut k = 0
 	let mut i = 1
 	while i < r.ks.len() {
@@ -169,8 +197,9 @@ fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32
 		low = hi
 		high = lo
 	}
-	let row = held[low].row.clone()
+	let row = held[low].row
 	let m = row.ks[k].checked_add(1) ?? return null
+	let col = row.cols[k]
 	let mut terms: Vec[SvTerm] = []
 	for j in 0..<row.cols.len() {
 		let h = sv_mod_hat(row.ks[j], m)
@@ -191,7 +220,7 @@ fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32
 		let made = (book.bounds.get(id) ?? return null).row.clone()
 		held.push(SvHeld { row: made, src: SvSrc::Fact(id) })
 	}
-	return row.cols[k]
+	return col
 }
 
 /// The products `N_u·N_v` and `N_v·N_v` of two columns' vectors over the
@@ -317,6 +346,22 @@ fn sv_eliminate(
 			}
 		}
 		held = kept
+		let uses = sv_column_uses(held)
+		// Each row's next row with the same column signature, -1 after the
+		// last: the pairs `i < j` below visit only those, in the order of
+		// a scan of every pair (#1957).
+		let mut next: Vec[i64] = []
+		let mut first: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+		for _ in held {
+			next.push(-1)
+		}
+		let mut at = held.len()
+		while at > 0 {
+			at -= 1
+			let key = sv_cols_key(held[at].row)
+			next[at] = first.get(key) ?? -1
+			first.insert(key, at)
+		}
 		// The equality to solve: `lo` and `hi`, opposite rows whose
 		// constants cancel; opposite rows whose constants sum above zero
 		// refute at once.
@@ -325,8 +370,8 @@ fn sv_eliminate(
 		let mut best = 0
 		let mut i = 0
 		while i < held.len() {
-			let mut j = i + 1
-			while j < held.len() {
+			let mut j = next[i]
+			while j >= 0 {
 				if sv_opposite(held[i].row, held[j].row) {
 					let sum = held[i].row.constant.checked_add(held[j].row.constant)
 						?? return SvChecked::Unknown(LgUnknown::Overflow)
@@ -340,7 +385,7 @@ fn sv_eliminate(
 						known = known || sv_row_same(s, held[i].row)
 					}
 					if sum == 0 && !known {
-						let unit = sv_unit_column(held[i].row, held) != null
+						let unit = sv_unit_column(held[i].row, uses) != null
 						// A unit coefficient first, then the fewest columns: an
 						// equality just extended has fewer columns than its `S`,
 						// and chosen again it would be extended for ever (#1283).
@@ -352,7 +397,7 @@ fn sv_eliminate(
 						}
 					}
 				}
-				j += 1
+				j = next[j]
 			}
 			i += 1
 		}
@@ -363,7 +408,7 @@ fn sv_eliminate(
 			}
 			break
 		}
-		let column = sv_unit_column(held[lo].row, held)
+		let column = sv_unit_column(held[lo].row, uses)
 		if column == null {
 			let at = held.len()
 			let eq = held[lo].row.clone()
@@ -605,7 +650,7 @@ fn sv_omega_test_holds(atoms: ref Vec[SvAtom], names: ref Vec[String], values: r
 		let mut sum = a.row.constant
 		let mut i = 0
 		while i < a.row.cols.len() {
-			let name = names[a.row.cols[i] as i64].clone()
+			let name = names[a.row.cols[i] as i64]
 			let v = values.get(name) ?? return false
 			sum = sum + a.row.ks[i] * v
 			i += 1

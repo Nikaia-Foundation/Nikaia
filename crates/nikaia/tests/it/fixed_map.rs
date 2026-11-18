@@ -138,27 +138,6 @@ fn a_key_that_is_not_text_is_refused_once() {
     assert_eq!(codes, vec!["NK1170"]);
 }
 
-/// **The two hash implementations agree**, checked where they live rather than
-/// through a program.
-///
-/// This is the weaker test of the pair and it is here for the message it gives
-/// when it fails: the running tests in `fixed_map.nika` say *the table answered wrongly*,
-/// and this one says *the two `fnv`s disagree*, which is the first thing to
-/// look at. It proves nothing on its own — both could be wrong together — which
-/// is why it is not the only test.
-#[test]
-fn the_compiler_and_the_library_hash_the_same_bytes() {
-    for key in ["", "a", "get", "november", "a longer key with spaces", "ü"] {
-        for seed in [0u64, 1, 7, 199] {
-            assert_eq!(
-                nikaia::fixed::fnv(key, seed),
-                nikaia_std::fixed::fnv(key, seed),
-                "`{key}` at seed {seed}"
-            );
-        }
-    }
-}
-
 /// **The threshold is where the measurement put it**
 /// ([ADR-311](../../../docs/specification/adr/adr-311.md) D10).
 ///

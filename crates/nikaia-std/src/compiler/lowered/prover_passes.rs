@@ -70,7 +70,7 @@ pub(crate) fn strike_broken(state: &mut ProverState) {
     while k > 0 {
         k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
         let (function, index) = unsafe { nikaia_std::proven::read(&broken, (k) as usize) }; let index = nikaia_std::num::value(index);
-        let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut posts = match state.postconditions.remove(nikaia_std::index::as_text(&function)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         posts.remove(nikaia_std::count::of(index));
         state.postconditions.insert(nikaia_std::block::Text::from(function.to_string()), posts);
     }

@@ -311,11 +311,11 @@ pub(crate) fn sv_value(value: &[i64], l: u32) -> i64 {
     if l % 2u32 == 0u32 { v } else { -v }
 }
 
-pub(crate) fn sv_rel_text(rel: &SvRel) -> &'static str {
+pub(crate) fn sv_rel_text(rel: &SvRel) -> String {
     match rel {
-        SvRel::Le => "<=",
-        SvRel::Lt => "<",
-        SvRel::Eq => "=",
+        SvRel::Le => String::from("<="),
+        SvRel::Lt => String::from("<"),
+        SvRel::Eq => String::from("="),
     }
 }
 

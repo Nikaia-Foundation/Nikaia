@@ -90,16 +90,20 @@ pub fn refine(parsed: &mut Parsed) {
         &BesideFields {
             fields: BTreeMap::new(),
             fills,
+            calls: BTreeSet::new(),
         },
     );
 }
 
 /// What a package's files read of each other: the published fields of the
 /// published structs, as written (`tier_beside_fields`), and what the struct
-/// literals of all of them put into each field (`tier_slice_fills`, #1272).
+/// literals of all of them put into each field (`tier_slice_fills`, #1272),
+/// and the functions one file declares and another calls
+/// (`tier_beside_calls`, #1831).
 pub struct BesideFields {
     pub fields: BTreeMap<String, Vec<nikaia_std::compiler::ty::FieldContract>>,
     pub fills: SliceFills,
+    pub calls: BTreeSet<String>,
 }
 
 /// **One package's files, each decided against the published fields of all
@@ -125,6 +129,7 @@ pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
     BesideFields {
         fields: nikaia_std::compiler::text_tiers::tier_beside_fields(&views),
         fills: nikaia_std::compiler::text_tiers::tier_slice_fills(&views),
+        calls: nikaia_std::compiler::text_tiers::tier_beside_calls(&views),
     }
 }
 
@@ -145,6 +150,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
         library,
         methods,
         beside: &beside.fields,
+        beside_calls: &beside.calls,
     };
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();

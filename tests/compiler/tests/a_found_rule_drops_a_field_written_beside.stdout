@@ -1,0 +1,2 @@
+14  self.cols[self.n - 1]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+39  self.rows[self.m - 1]  proved

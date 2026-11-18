@@ -13,10 +13,10 @@ pub(crate) fn check_finding_of(found: &Finding) -> CheckFinding {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_root(&self, start: i64) -> i64 {
+    pub(crate) fn open_root(&self, start: i64) -> i64 {
         let mut at = start;
         while self.flow.open_numbers.contains_key(&at) {
-            let joined = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_numbers, &at)).as_ref().map(|__nikaia_it| __nikaia_it.joined), || at.into());
+            let joined = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_numbers, &at)).as_ref().map(|__nikaia_it| __nikaia_it.joined), || at);
             if joined == at { break; }
             at = joined;
         }
@@ -34,7 +34,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn numbers_typed_by_their_uses(&mut self) {
+    pub(crate) fn numbers_typed_by_their_uses(&mut self) {
         self.chars_typed_by_their_uses();
         if self.flow.open_numbers.is_empty() { return; }
         let mut groups: collections::BTreeMap<i64, Vec<(i64, CheckOpenNumber)>> = collections::BTreeMap::new();

@@ -319,6 +319,26 @@ panics = false
 touches = []
 signature = "(theory: String) -> String"
 
+[fn."tier_private_name"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> String"
+
+[fn."tier_private_names"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> Vec[String]"
+
+[fn."tier_private_note"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["found: borrowed"]
+signature = "(found: String) -> String?"
+
 [fn."trait_keep_beside_send"]
 pub = true
 locks = "?"
@@ -334,69 +354,124 @@ signature = "[S: TraitKeepBesideSink](mut sink: S, text: String) -> i64"
 [type."Branching"]
 pub = true
 variants = ["Leaf(i64)", "Fork { left: Branching, right: Branching, id: i64 }"]
+compares = true
+equates = true
+hashes = true
 
 [type."KeepsBesidePointer"]
 pub = true
 variants = ["Run { mutable: bool }", "Plain"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."KeepsBesideType"]
 pub = true
 fields = ["pub name: String", "pub is_slice: bool", "pub is_mut: bool"]
+compares = true
+equates = true
+hashes = true
 
 [type."MutLentColumns"]
 pub = true
 fields = ["pub vars: MutLentVars"]
+compares = true
+equates = true
+hashes = true
 
 [type."MutLentVars"]
 pub = true
 fields = ["pub names: Vec[String]"]
+compares = true
+equates = true
+hashes = true
 
 [type."NamedLikeHolder"]
 pub = true
 fields = ["pub n: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."NamedLikeItem"]
 pub = true
 fields = ["pub name: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."NamedLikeState"]
 pub = true
 fields = ["pub count: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Nest"]
 pub = true
 fields = ["pub depth: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."OptionBeside"]
 pub = true
 fields = ["pub name: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."PackageTraitHolder"]
 pub = true
 fields = ["pub name: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."Places"]
 pub = true
 fields = ["pub a: ref String?", "pub b: ref String?", "pub value: PlacesValue"]
+compares = true
+equates = true
+hashes = true
 tethered = ["a", "b", "value"]
 
 [type."PlacesValue"]
 pub = true
 variants = ["Bool(bool)", "Str(ref String)"]
+compares = true
+equates = true
+hashes = true
 tethered = ["Str"]
 
 [type."Shelf"]
 pub = true
 fields = ["pub entries: collections::BTreeMap[String, Shelved]"]
+compares = true
+equates = true
+hashes = true
 
 [type."Shelved"]
 pub = true
 fields = ["pub n: i64", "pub s: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."SliceTail"]
 pub = true
 fields = ["pub xs: ref Array[i64]"]
+compares = true
+equates = true
+hashes = true
 tethered = ["xs"]
 
 [type."TierBesideParams"]
 fields = ["theory: String"]
+compares = true
+equates = true
+hashes = true

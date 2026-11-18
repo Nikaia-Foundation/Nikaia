@@ -1,0 +1,13 @@
+/// Private functions whose text result only literals reach, called only from
+/// `src/tier_private_beside_caller.nika`: their results stay text of their own
+/// there, as a `pub` one's do (ADR-282 D22, #1831).
+fn tier_private_name() -> String {
+	return "result"
+}
+
+fn tier_private_note(found: String) -> String? {
+	if found != "&" {
+		return null
+	}
+	return "a note"
+}

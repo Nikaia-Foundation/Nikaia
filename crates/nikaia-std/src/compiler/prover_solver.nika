@@ -26,7 +26,7 @@ pub enum SolverAnswer {
 /// values for the claim's names. A model alone would not do: the facts are
 /// true but not all that is true, so a value they allow need not be one the
 /// program reaches. Nothing where either is missing.
-pub fn refuting_values(mut arena: TermArena, facts: ref Vec[i64], claim: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
+fn refuting_values(mut arena: TermArena, facts: ref Vec[i64], claim: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
     let negation = arena.not(claim)
     match ask(arena, facts, negation) {
         SolverAnswer::Proved => {},
@@ -46,7 +46,7 @@ pub fn refuting_values(mut arena: TermArena, facts: ref Vec[i64], claim: i64, as
 /// Then the model is a state the program reaches, unless it stops or leaves
 /// before. Every name the state is made of is given, so that a loop's counter
 /// is shown beside what was computed from it. Nothing everywhere else.
-pub fn breaking_values(mut arena: TermArena, scope: ref ProverScope, claim: i64, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
+fn breaking_values(mut arena: TermArena, scope: ref ProverScope, claim: i64, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
     let names = scope.pinned_names(arena, claim) ?? return null
     let values = model(arena, scope.facts, claim) ?? return null
     let shown = values_of(names, values)

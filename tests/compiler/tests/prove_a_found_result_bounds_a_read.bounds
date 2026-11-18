@@ -1,5 +1,5 @@
 bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 operations, 1 proved
-    10  parent[x]     checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    10  parent[x]     checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
     20  parent[ra]    proved
     20  parent[rb]    proved
     26  xs[k]         proved

@@ -170,7 +170,7 @@ fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: 
 
 /// Where `join`'s `on_timeout:` stands among the options, or -1: only beside
 /// a `within:` (ADR-async-5 D17).
-pub fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
+fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
     if method != "join" || witness < 0 {
         return -1
     }
@@ -214,7 +214,7 @@ fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) 
 }
 
 /// **A length `std` counts**: of a list, a run, text, a `Bytes` or a map.
-pub fn check_core_method_counted(on: ref Ty) -> bool {
+fn check_core_method_counted(on: ref Ty) -> bool {
     return match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name)
@@ -377,7 +377,7 @@ fn check_core_method_task_handle(ty: ref Ty) -> bool {
 }
 
 /// `net::Connection`, whose `read(within: d)` waits at most `d` (ADR-326 D8).
-pub fn check_core_method_connection(ty: ref Ty) -> bool {
+fn check_core_method_connection(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == "net::Connection",
         else => false,
@@ -492,6 +492,19 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
     }
 }
 
+/// Whether a `collect` walks a `std` sequence that neither pauses, throws,
+/// runs in parallel nor ends at a deadline, into a list (`NK1354`, #1975).
+fn check_core_method_collects_a_list(on: ref Ty, value: ref Ty) -> bool {
+    let plain = match on {
+        Ty::Seq { pauses, can_throw, parallel, shape, .. } => !pauses && !can_throw && !parallel && !shape.timed,
+        else => false,
+    }
+    return plain && match value {
+        Ty::Named { name, args, view } => !view && args.len() == 1 && (type_last_segment(name) == "Vec" || type_last_segment(name) == "List"),
+        else => false,
+    }
+}
+
 /// The half after the receiver is typed and the witness has joined the
 /// arguments (`args`), with the door's flags set around the call.
 /// The number type a sequence's `sum` hands back, or `""` where the call is
@@ -524,6 +537,14 @@ fn check_core_method_views_of_text(on: ref Ty) -> bool {
             let base = type_last_segment(name)
             (base == "Vec" || base == "List") && args.len() == 1 && args[0].is_a_view() && is_text_type(args[0])
         },
+        else => false,
+    }
+}
+
+/// Whether `on` is text, `String` or `str`, owned or a view.
+fn check_core_method_text_receiver(on: ref Ty) -> bool {
+    return match on {
+        Ty::Named { name, args, .. } => args.len() == 0 && (name == "String" || name == "str"),
         else => false,
     }
 }
@@ -647,7 +668,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && pattern_at >= 0 && pattern_at < args.len() {
         match args[pattern_at] {
             Expr::LitStr { text: written, .. } => {
-                let scalars: Vec[scalar] = written.chars().collect()
+                let scalars: Vec[scalar] = written.scalars.collect()
                 if scalars.len() == 1 {
                     let literal = check_core_method_char_literal(scalars[0])
                     if literal != "" {
@@ -717,6 +738,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.text_walk = false
     if name == "collect" && args.len() == 0 && check_core_method_text_views(value) && state.check_core_method_from_text_slots(receiver) {
         state.facts.text_slot_collects.insert(id_of(receiver) as i64)
+    }
+    // **A `std` sequence collected into a list** (`NK1354`, #1975): a type's
+    // own `collect`, and one into a set or a map, is not.
+    if name == "collect" && args.len() == 0 && check_core_method_collects_a_list(on, value) {
+        state.flow.listed_collects.insert(id_of(expr) as i64)
     }
     // **What a sequence's `sum` hands back is named** (#1007): the
     // language below infers no type for it where nothing annotates it.
@@ -862,7 +888,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                 for arg in args {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Ty? = Ty::Fn { params: [unviewed_type(item)], result: null, is_sync: true, can_throw: false }
+                            let handed: Ty? = Ty::Fn { params: [unviewed_type(item)], result: null, is_sync: true, can_throw: false, spelled: CodeNames::none() }
                             check_core_ops_a_pair_split(state, world, handed, params, span)
                             check_core_ops_none_named(state, handed, params, span)
                         },
@@ -877,7 +903,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                 for arg in args {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Ty? = Ty::Fn { params: [unviewed_type(items[0])], result: null, is_sync: true, can_throw: false }
+                            let handed: Ty? = Ty::Fn { params: [unviewed_type(items[0])], result: null, is_sync: true, can_throw: false, spelled: CodeNames::none() }
                             check_core_ops_none_named(state, handed, params, span)
                         },
                         else => {}
@@ -992,7 +1018,7 @@ fn check_core_method_one_item(name: ref String) -> bool {
 
 /// **`x.m(…)` and `x?.m(…)`**: the arm `MethodCall | SafeMethod`. `safe` is
 /// `?.`; `expr` is the whole call.
-pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     // **Code put into a container meets what it holds** (ADR-351 D3): the
     // value a `push` or an `insert` adds, and what an `extend` or an `append`
@@ -1052,7 +1078,7 @@ fn check_core_method_deadline(state: ref CheckState, world: ref CheckWorld, rece
 }
 
 // A `let mut` name of code handed to a method: its place cannot be named.
-pub fn check_core_method_code_lent(mut state: CheckState, world: ref CheckWorld, arg: ref Expr) sync {
+fn check_core_method_code_lent(mut state: CheckState, world: ref CheckWorld, arg: ref Expr) sync {
     match arg {
         Expr::Variable(bound, _) => {
             let named: String = f"{world.words.resolve(bound)}"
@@ -1315,6 +1341,14 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
             return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within, on_timeout)", span)
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within)", span)
+    }
+    // **`chars()` names no unit** (`NK1353`, ADR-320, #1974): text is read
+    // through `.bytes`, `.scalars` or `.graphemes`, and `std` has no `chars`.
+    // The refusal carries the edit to `.scalars`, and the call is typed as
+    // that view, so that what follows it is checked as it will be.
+    if name == "chars" && args.len() == 0 && config.len() == 0 && check_core_method_text_receiver(on) {
+        state.a_chars_call(world, expr, receiver, span)
+        return Ty::Seq { item: check_core_method_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } }
     }
     // **A method on a view of a `String` slot is `String`'s** (#1388): the
     // view is the one text view, but `u.push_str(x)` writes through it.

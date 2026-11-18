@@ -53,7 +53,7 @@ impl CheckState {
     /// **Two sides of one operation of different number types** (Part I 2.2): the
     /// type it is computed in where one holds both (each narrower side is
     /// wrapped to widen), or nothing, and then `NK1199` for a mix no type holds.
-    pub fn two_number_types(ref mut self, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> String? sync {
+    fn two_number_types(ref mut self, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> String? sync {
         if op == BinaryOp::Shl || op == BinaryOp::Shr {
             return null
         }
@@ -106,7 +106,7 @@ impl CheckState {
     /// over an `f64` `x`. A number takes its type among the integer types,
     /// so a literal or a number nothing typed meets a float as an integer
     /// does: `NK1199`. `true` where it was refused.
-    pub fn an_integer_beside_a_float(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> bool sync {
+    fn an_integer_beside_a_float(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> bool sync {
         let l = value_of_a_copy(left.unseen())
         let r = value_of_a_copy(right.unseen())
         let mut float: String = ""
@@ -129,7 +129,7 @@ impl CheckState {
     /// narrower than the type both go to is wrapped to widen; where none holds
     /// both, they go to `i64` and the comparison says whether the left is the
     /// `u64` one.
-    pub fn two_integer_types_compared(ref mut self, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
+    fn two_integer_types_compared(ref mut self, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
         if is_a_literal(lhs) || is_a_literal(rhs) {
             return
         }
@@ -161,7 +161,7 @@ impl CheckState {
     /// widened where `x`'s type is the common one; where the common type is
     /// wider than `x`'s, the result does not fit `x` (`NK1105`); where there is
     /// none, it is the operator's `NK1199`.
-    pub fn a_compound_over_two_integer_types(ref mut self, world: ref CheckWorld, op: BinaryOp, target: ref Expr, into: ref Ty, value: ref Expr, found: ref Ty, span: ref Span) sync {
+    fn a_compound_over_two_integer_types(ref mut self, world: ref CheckWorld, op: BinaryOp, target: ref Expr, into: ref Ty, value: ref Expr, found: ref Ty, span: ref Span) sync {
         let x = an_integer_named(into) ?? return
         let v = an_integer_named(found) ?? return
         if x == v || is_a_literal(value) {
@@ -189,7 +189,7 @@ impl CheckState {
     /// **The operands of a computation widen to the type it is computed in**
     /// (ADR-285 D32): an arithmetic operation names the type, each side is
     /// wrapped. True where `value` is one.
-    pub fn widen_operands(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, within: ref Span) -> bool sync {
+    fn widen_operands(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, within: ref Span) -> bool sync {
         match value {
             Expr::Binary { op, lhs, rhs, span, .. } => {
                 if op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem {
@@ -235,7 +235,7 @@ impl CheckState {
 
     /// **A list literal whose elements widen to the list's element type**
     /// (ADR-285 D32): `[a, b]` of `u32`s where a `Vec[i64]` is wanted.
-    pub fn widened_elements(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+    fn widened_elements(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
         let from = match found {
             Ty::Named { name, .. } => name.clone(),
             else => return null,
@@ -269,7 +269,7 @@ impl CheckState {
     /// **A list literal where an `Array[T, N]` is wanted** (ADR-152 D4), and
     /// the array it is: `NK1157` where the length is wrong. It descends with the
     /// literal, so a `Vec` of arrays is walked through.
-    pub fn array_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+    fn array_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
         if !is_a_list_literal(value) {
             return null
         }
@@ -339,7 +339,7 @@ impl CheckState {
     /// a set or text, which the language below's own `collect` builds when
     /// nothing overrides the type it reads off the place; and any of these or a
     /// list as `C[T]?` from items of `T?` (#1161).
-    pub fn collect_by_use(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+    fn collect_by_use(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
         let receiver = collect_receiver(value)
         if receiver.len() != 1 || !a_collect_call(world, value) {
             return null
@@ -396,7 +396,7 @@ impl CheckState {
 /// **A `collect` of `T?` items into a declared `C[T]?`** (ADR-293 D25,
 /// #1161): the whole is the option, built by the language below's `collect`,
 /// so it takes no `Some` around it.
-pub fn a_collect_into_an_option(world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> bool sync {
+fn a_collect_into_an_option(world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> bool sync {
     if !a_collect_call(world, value) {
         return false
     }
@@ -434,7 +434,7 @@ fn collect_receiver(value: ref Expr) -> Vec[ref Expr] sync {
     }
 }
 
-pub fn is_a_list_literal(value: ref Expr) -> bool sync {
+fn is_a_list_literal(value: ref Expr) -> bool sync {
     return match value {
         Expr::ListLit { .. } => true,
         Expr::ListRepeat { .. } => true,

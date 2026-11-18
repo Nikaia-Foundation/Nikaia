@@ -20,7 +20,7 @@ pub(crate) fn emit_ends_in_a_jump(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt
     }
 }
 
-pub fn emit_a_body_that_leaves(world: &EmitWorld<'_, '_, '_, '_>, body: &Block) -> bool {
+pub(crate) fn emit_a_body_that_leaves(world: &EmitWorld<'_, '_, '_, '_>, body: &Block) -> bool {
     let count = body.stmts.len() as i64;
     if count == 0 { return false; }
     emit_ends_in_a_jump(world, &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node)
@@ -60,7 +60,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         walk.keep_function = nikaia_std::block::Text::from(key.to_string());
         walk.kept_names.clear();
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();

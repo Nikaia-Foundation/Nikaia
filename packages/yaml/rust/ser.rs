@@ -112,16 +112,9 @@ where
 
     /// Unwrap the underlying `io::Write` object from the `Serializer`.
     pub fn into_inner(mut self) -> Result<W> {
-        let end = self.out.end();
-        self.put(&end)?;
+        put(&mut self.writer, self.out.end())?;
         self.flush()?;
         Ok(self.writer)
-    }
-
-    fn put(&mut self, text: &str) -> Result<()> {
-        self.writer
-            .write_all(text.as_bytes())
-            .map_err(|err| error::new(ErrorImpl::Io(err)))
     }
 
     fn emit_scalar(&mut self, item: Item) -> Result<()> {
@@ -205,8 +198,7 @@ where
         if self.depth == 0
             && let Some(root) = self.root.take()
         {
-            let text = self.out.document(&native_node(&root));
-            self.put(&text)?;
+            put(&mut self.writer, self.out.document(&native_node(&root)))?;
         }
         Ok(())
     }
@@ -698,4 +690,12 @@ where
     let mut vec = Vec::with_capacity(128);
     to_writer(&mut vec, value)?;
     String::from_utf8(vec).map_err(|err| error::new(ErrorImpl::Message(err.to_string(), None)))
+}
+
+/// Writes `text` to `writer`; a free function, so that the text may be a
+/// view of the serializer's native writer while its `io::Write` is borrowed.
+fn put<W: io::Write>(writer: &mut W, text: &str) -> Result<()> {
+    writer
+        .write_all(text.as_bytes())
+        .map_err(|err| error::new(ErrorImpl::Io(err)))
 }

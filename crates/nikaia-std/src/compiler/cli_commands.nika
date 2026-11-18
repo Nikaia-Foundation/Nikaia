@@ -209,8 +209,8 @@ pub fn cli_commands_lowered_std(std_dir: ref fs::Path, changed: ref Vec[fs::Path
 /// **The refusal of `nikaia bind LANGUAGE`** where no binding for it is
 /// built (ADR-284 D26, D28), or null.
 pub fn cli_commands_bind_refusal(language: String) -> String? sync {
-    if language == "python" || language == "node" {
+    if language == "python" || language == "node" || language == "java" {
         return null
     }
-    return f"`nikaia bind {language}` is not built: `python` and `node` are (ADR-284 D26, D28). JavaScript in a browser is served by the WebAssembly build, which is not built yet."
+    return f"`nikaia bind {language}` is not built: `python`, `node` and `java` are (ADR-284 D26, D28, D34). JavaScript in a browser is served by the WebAssembly build, which is not built yet."
 }

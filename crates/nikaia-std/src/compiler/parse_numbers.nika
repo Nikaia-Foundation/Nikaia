@@ -126,7 +126,7 @@ fn upper_exponent(c: ref Array[scalar], from: i64) -> i64 {
 /// number, and an exponent written `E`. The refusal's words, or `null` when
 /// neither is there.
 pub fn float_end(text: ref String) -> String? {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let scale = scale_at(c, 0)
     if scale != null {
         let found = scale ?? return null
@@ -142,7 +142,7 @@ pub fn float_end(text: ref String) -> String? {
 /// A number's magnitude times a small factor, in decimal, so a product past
 /// every integer type can still be said.
 fn times(digits: ref String, by: u64) -> String {
-    let d: Vec[scalar] = digits.chars().collect()
+    let d: Vec[scalar] = digits.scalars.collect()
     let mut out: Vec[u64] = []
     let mut carry: u64 = 0
     let mut k = d.len()
@@ -176,8 +176,8 @@ fn past(digits: ref String, limit: ref String) -> bool {
     if digits.len() != limit.len() {
         return digits.len() > limit.len()
     }
-    let a: Vec[scalar] = digits.chars().collect()
-    let b: Vec[scalar] = limit.chars().collect()
+    let a: Vec[scalar] = digits.scalars.collect()
+    let b: Vec[scalar] = limit.scalars.collect()
     for k in 0..<a.len() {
         if a[k] != b[k] {
             return a[k] > b[k]
@@ -187,7 +187,7 @@ fn past(digits: ref String, limit: ref String) -> bool {
 }
 
 fn without_leading_zeros(digits: ref String) -> String {
-    let d: Vec[scalar] = digits.chars().collect()
+    let d: Vec[scalar] = digits.scalars.collect()
     let mut at = 0
     while at + 1 < d.len() && d[at] == '0' {
         at += 1
@@ -197,7 +197,7 @@ fn without_leading_zeros(digits: ref String) -> String {
 
 fn magnitude_of(digits: ref String) -> u64 {
     let mut n: u64 = 0
-    for ch in digits.chars() {
+    for ch in digits.scalars {
         n = n * 10 + (digit_of(ch, 10) as u64)
     }
     return n
@@ -214,7 +214,7 @@ fn too_big() -> String {
 /// not in the value (D3); the radix is a spelling (D2); a scale spells the
 /// value (ADR-322); a refusal carries the caret to the character that is wrong.
 pub fn number_at(text: ref String, signed: bool) -> Number {
-    let all: Vec[scalar] = text.chars().collect()
+    let all: Vec[scalar] = text.scalars.collect()
     let mut c: Vec[scalar] = []
     let mut first = 0
     if signed {
@@ -353,7 +353,7 @@ pub fn number_at(text: ref String, signed: bool) -> Number {
         } else {
             let mut n: u64 = 0
             let mut fits = true
-            for ch in value.chars() {
+            for ch in value.scalars {
                 let d = digit_of(ch, radix) as u64
                 let times_radix = n.checked_mul(radix as u64)
                 if times_radix == null {

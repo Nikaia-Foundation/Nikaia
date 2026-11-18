@@ -1,0 +1,8 @@
+built: 0, a compiler line: false
+built again: 0, the same bytes: true
+one source byte changed: 0
+< source = HASH
+> source = HASH
+an old lock has one: true
+built over it: 0, a compiler line: false
+otherwise as before: true

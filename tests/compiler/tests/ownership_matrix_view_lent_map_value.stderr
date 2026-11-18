@@ -1,4 +1,4 @@
-error[NK1102]: `collections::HashMap::insert` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `collections::HashMap::insert` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_lent_map_value.nika:20:19
     |
  20 |     m.insert("k", s)

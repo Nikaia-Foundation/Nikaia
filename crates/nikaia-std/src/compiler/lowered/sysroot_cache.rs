@@ -112,29 +112,188 @@ pub(crate) fn sysroot_ended(read: &mut Vec<u8>, text: &str) {
     read.push(0);
 }
 
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn sysroot_interface<H: SysrootHost>(compiler: &str, salt: &str, setting: &str, own: &str, names: &[String], bodiless: &[String], host: &H) -> String {
-    let mut read: Vec<u8> = vec![];
-    sysroot_part(&mut read, "nikaia-lower-file-v1");
-    sysroot_part(&mut read, compiler);
-    sysroot_part(&mut read, salt);
-    sysroot_part(&mut read, setting);
-    sysroot_part(&mut read, own);
-    for at in 0..names.len() as i64 {
-        sysroot_part(&mut read, unsafe { nikaia_std::proven::read(&names, (at) as usize) });
-        sysroot_part(&mut read, nikaia_std::index::get(&bodiless, (at) as usize));
-    }
-    hash::sha256_hex(&read)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SysrootDeclared {
+    pub names: Vec<String>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SysrootNames {
+    pub whole: String,
+    pub declared: Vec<SysrootDeclared>,
+    pub words: Vec<Vec<String>>,
+    pub by_name: collections::BTreeMap<String, Vec<i64>>,
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str, host: &H) -> String {
+pub fn sysroot_words(text: &str) -> Vec<String> {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let n = text.as_bytes().len() as i64;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    while at < n {
+        let b = *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(at)) as i64;
+        if sysroot_package_word_byte(b) && !(b >= 48 && b <= 57) {
+            let start: i64 = at;
+            while at < n && sysroot_package_word_byte(*nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(at)) as i64) { at += 1; }
+            let word = nikaia_std::block::Text::from(sysroot_package_slice(text, start, at).to_string());
+            if seen.insert(nikaia_std::block::Text::from(word.to_string())) { out.push(word); }
+        } else if b >= 48 && b <= 57 { while at < n && sysroot_package_word_byte(*nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(at)) as i64) { at += 1; } } else { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn sysroot_declared_text(source: &str, start: i64, end: i64, cut: &[(i64, i64)]) -> String {
+    let mut kept: String = String::from("");
+    let mut at = start;
+    for (a, b) in cut.iter() {
+        let a = nikaia_std::num::value(a);let b = nikaia_std::num::value(b);
+        if a < at || b > end { return nikaia_std::block::Text::from(sysroot_package_slice(source, start, end).to_string()); }
+        kept.push_str(sysroot_package_slice(source, at, a));
+        at = b;
+    }
+    kept.push_str(sysroot_package_slice(source, at, end));
+    let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
+    nikaia_std::block::Text::from(lines.join(""))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn sysroot_declared(source: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> (Vec<SysrootDeclared>, String) {
+    let mut out: Vec<SysrootDeclared> = vec![];
+    let mut whole: String = String::from("");
+    for item in unit.items.iter() {
+        let names = match &item.node {
+            Item::Test { .. } | Item::Bench { .. } => continue,
+            _ => sysroot_item_names(item, unit),
+        };
+        let mut cut: Vec<(i64, i64)> = vec![];
+        sysroot_package_bodies(item, &mut cut);
+        cut.sort();
+        let text = sysroot_declared_text(source, item.span.start as i64, item.span.end as i64, &cut); #[allow(clippy::redundant_locals)] let names = names;
+        if !names.is_empty() { out.push(SysrootDeclared { names, text }); } else {
+            whole.push_str(&text);
+            whole.push_str("\n");
+        }
+    }
+    (out, whole)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn sysroot_item_names(item: &Spanned<Item>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<String> {
+    let mut names: Vec<String> = vec![];
+    match &item.node {
+        Item::Fn { name, .. } => { let name = *name; names.push(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => return names })); },
+        Item::Struct { name, .. } => { let name = *name; names.push(unit.text(name)); },
+        Item::Comptime { name, .. } => { let name = *name; names.push(unit.text(name)); },
+        Item::Grammar(def) => { names.push(unit.text(def.name)); },
+        Item::Enum { name, variants, .. } => {
+            let name = *name;
+            names.push(unit.text(name));
+            for variant in variants.iter() { names.push(unit.text(variant.name)); }
+        },
+        Item::Trait { name, methods, .. } => {
+            let name = *name;
+            names.push(unit.text(name));
+            for method in methods.iter() { names.push(unit.text(method.node.name)); }
+        },
+        Item::Impl { trait_name: None, methods, .. } => {
+            for method in methods.iter() {
+                let said = sysroot_item_names(method, unit);
+                if said.is_empty() { return vec![]; }
+                for one in said.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
+            }
+        },
+        Item::Extern { declarations, opaque, .. } => {
+            for declaration in declarations.iter() { names.push(unit.text(declaration.node.name)); }
+            for one in opaque.iter() { names.push(unit.text(one.node.name)); }
+        },
+        _ => { return vec![]; },
+    }
+    names
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn sysroot_row(rows: &mut Vec<SysrootDeclared>, key: &str, more: &[String], text: String) {
+    let mut names = sysroot_words(key);
+    for one in more.iter() { for word in sysroot_words(one) { names.push(word); } }
+    rows.push(SysrootDeclared { names, text });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn sysroot_names(compiler: &str, salt: &str, setting: &str, names: &[String], declared: &[Vec<SysrootDeclared>], wholes: &[String], own: &Ledger, graphs: &EmitReachGraphs, fields: &collections::BTreeMap<String, Vec<FieldContract>>, fills: &SliceFills, calls: &collections::BTreeSet<String>) -> SysrootNames {
     let mut read: Vec<u8> = vec![];
-    for b in interface.bytes() { read.push(b); }
+    sysroot_part(&mut read, "nikaia-lower-file-v2");
+    sysroot_part(&mut read, compiler);
+    sysroot_part(&mut read, salt);
+    sysroot_part(&mut read, setting);
+    sysroot_part(&mut read, &format!("{} {} {} {:?}", own.version, own.toolchain, own.inference, own.sources));
+    sysroot_part(&mut read, &format!("{:?}", own.traits));
+    sysroot_part(&mut read, &format!("{:?}", own.implementations));
+    for at in 0..names.len() as i64 {
+        sysroot_part(&mut read, unsafe { nikaia_std::proven::read(&names, (at) as usize) });
+        sysroot_part(&mut read, nikaia_std::index::get(&wholes, nikaia_std::index::at(at)));
+    }
+    let mut all: Vec<SysrootDeclared> = vec![];
+    for file in declared.iter() { for one in file.iter() { all.push(one.clone()); } }
+    let none: Vec<String> = vec![];
+    for (key, row) in own.functions.iter() { sysroot_row(&mut all, key, &none, format!("function {} {:?}", key, row)); }
+    for (key, row) in own.types.iter() { sysroot_row(&mut all, key, &none, format!("type {} {:?}", key, row)); }
+    for (key, row) in own.code_locks.iter() { sysroot_row(&mut all, key, &none, format!("code lock {} {:?}", key, row)); }
+    for (key, row) in own.code_throws.iter() { sysroot_row(&mut all, key, row, format!("code throws {} {:?}", key, row)); }
+    for (key, row) in graphs.pausing_reach.iter() {
+        let more: Vec<String> = row.iter().cloned().collect::<Vec<_>>();
+        sysroot_row(&mut all, key, &more, format!("pausing reach {} {:?}", key, row));
+    }
+    for (key, row) in graphs.code_cycle_graph.iter() {
+        let more: Vec<String> = row.iter().cloned().collect::<Vec<_>>();
+        sysroot_row(&mut all, key, &more, format!("code cycle {} {:?}", key, row));
+    }
+    for (key, row) in fields.iter() { sysroot_row(&mut all, key, &none, format!("fields beside {} {:?}", key, row)); }
+    for (key, row) in fills.filled.iter() { sysroot_row(&mut all, key, &none, format!("filled {} {}", key, row)); }
+    for (key, row) in fills.pieces.iter() { sysroot_row(&mut all, key, &none, format!("pieces {} {}", key, row)); }
+    for key in calls.iter() { sysroot_row(&mut all, key, &none, format!("called beside {}", key)); }
+    let mut words: Vec<Vec<String>> = vec![];
+    let mut by_name: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
+    for at in 0..all.len() as i64 {
+        words.push(sysroot_words(&unsafe { nikaia_std::proven::read(&all, (at) as usize) }.text));
+        for name in unsafe { nikaia_std::proven::read(&all, (at) as usize) }.names.iter() { by_name.entry(nikaia_std::block::Text::from(name.to_string())).or_default().push(at); }
+    }
+    SysrootNames { whole: hash::sha256_hex(&read), declared: all, words, by_name }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn sysroot_named_key(names: &SysrootNames, name: &str, text: &str, only_tests: &str) -> String {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut reached: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let mut work: Vec<String> = sysroot_words(text);
+    while !work.is_empty() {
+        let word = match work.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if !seen.insert(nikaia_std::block::Text::from(word.to_string())) { continue; }
+        let found = match names.by_name.get(&word) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for at in found.iter() {
+            let at = nikaia_std::num::value(at);
+            if reached.insert(at) { for next in (*nikaia_std::index::get(&names.words, nikaia_std::index::at(at))).iter() { if !seen.contains(next) { work.push(nikaia_std::block::Text::from(next.to_string())); } } }
+        }
+    }
+    let mut read: Vec<u8> = vec![];
+    sysroot_part(&mut read, &names.whole);
     sysroot_part(&mut read, name);
-    for b in text.bytes() { read.push(b); }
+    sysroot_part(&mut read, text);
+    sysroot_part(&mut read, only_tests);
+    for at in reached.iter() {
+        let at = nikaia_std::num::value(at);
+        sysroot_part(&mut read, &nikaia_std::index::get(&names.declared, nikaia_std::index::at(at)).text);
+    }
     hash::sha256_hex(&read)
 }
 

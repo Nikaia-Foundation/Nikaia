@@ -1,0 +1,9 @@
+error[NK1117]: Nothing declares `line`, so `line(…)` is no pattern of `(s, 1)`.
+   --> tests/a_call_pattern_nothing_declares_is_refused.nika:10:5
+    |
+ 10 |     let said = match (s, 1) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there.
+    = help: Write the variant with its enum, `Type::line(…)`, or a name alone to bind the value.
+1 type error

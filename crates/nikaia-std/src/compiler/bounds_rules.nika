@@ -48,6 +48,23 @@ pub struct BoundsRule {
     pub times: i64,
 }
 
+/// The last segment of a type's name: `BTreeMap` of `collections::BTreeMap`.
+fn rules_last_name(name: ref String) -> String {
+    return (name.split("::").last() ?? "").clone()
+}
+
+/// A field a file beside changes (`BoundsBeside.changed`), with a local
+/// bound to a call `f().field` named by the type `f` returns, or by the
+/// field alone where `returns` does not know `f` (#1930).
+fn rules_changed_name(name: ref String, returns: ref collections::BTreeMap[String, String]) -> String {
+    let parts: Vec[ref String] = name.split("().").collect()
+    if parts.len() != 2 {
+        return name.clone()
+    }
+    let ty = returns.get(parts[0]) ?? return parts[1].clone()
+    return f"{ty}.{parts[1]}"
+}
+
 /// The most rounds a type's candidates are checked: each drops at least
 /// one, so this bounds only a type with many.
 fn rules_rounds() -> i64 {
@@ -58,7 +75,43 @@ fn rules_rounds() -> i64 {
 
 /// **Every candidate of the program**, read with the frames `context`
 /// holds.
-pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> Vec[BoundsRule] {
+fn rules_candidates(
+    program: ref Program,
+    beside: ref Vec[ref BoundsBeside],
+    context: ref BoundsContext,
+    words: ref winnow_grammar::InternerContext,
+) -> Vec[BoundsRule] {
+    // **A `pub` field is a candidate where every write to it is in the
+    // build** (ADR-306 D22): its type is not `pub`, or the package is a
+    // program no other package imports. A field, `pub` or not, is a
+    // candidate only where no file beside writes, empties or reorders it, or
+    // hands it on (`BoundsBeside.changed`, #1755).
+    let mut a_program = false
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let named = name ?? continue
+                a_program = a_program || words.resolve(named) == "main"
+            },
+            else => {},
+        }
+    }
+    // A field written through a local bound to a call (`f().field`) is
+    // named with the type `f` declares as its result, in whichever file of
+    // the package `f` is; bare where none is known (#1930).
+    let mut returns = fields_returns(program, words)
+    for other in beside {
+        for (f, ty) in other.returns {
+            returns.insert(f.clone(), ty.clone())
+        }
+    }
+    let mut lost: collections::BTreeSet[String] = collections::BTreeSet()
+    for other in beside {
+        a_program = a_program || other.has_main
+        for name in other.changed {
+            lost.insert(rules_changed_name(name, returns))
+        }
+    }
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving
     // a field out builds.
@@ -70,18 +123,27 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
     // The private whole-number fields of each such struct, the candidates
     // of `cap` and `floor` (#1642).
     let mut scalars: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    // The type of each field of each such struct, by its last name: what a
+    // `mut` parameter of a method may be handed out of another value.
+    let mut held: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for item in program.items {
         match item.node {
-            Item::Struct { name, generics, fields, is_extern, .. } => {
+            Item::Struct { name, generics, fields, is_extern, is_public, .. } => {
                 if !generics.is_empty() || is_extern {
                     continue
                 }
                 let owner = words.resolve(name).clone()
                 let mut found: Vec[String] = []
                 let mut numbers: Vec[String] = []
+                let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+                for field in fields {
+                    types.insert(rules_last_name(words.resolve(field.ty.name)))
+                }
+                held.insert(owner.clone(), types)
                 for field in fields {
                     let ty = words.resolve(field.ty.name)
-                    if !field.is_public && field.ty.generics.is_empty() && is_whole_number(ty) {
+                    let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(f"{owner}.{words.resolve(field.name)}") && (!field.is_public || !is_public || a_program)
+                    if seen && field.ty.generics.is_empty() && is_whole_number(ty) {
                         let f = words.resolve(field.name).clone()
                         if field.default != null {
                             defaults.insert(f"{owner}.{f}", rules_scalar_shape(field.default?.value))
@@ -89,7 +151,7 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                         numbers.push(f)
                         continue
                     }
-                    if field.is_public || field.ty.generics.len() != 1 || (ty != "Vec" && ty != "List") {
+                    if !seen || field.ty.generics.len() != 1 || (ty != "Vec" && ty != "List") {
                         continue
                     }
                     let f = words.resolve(field.name).clone()
@@ -149,14 +211,20 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 }
                 for method in methods {
                     match method.node {
-                        Item::Fn { name, receiver, args, ret_type, .. } => {
+                        Item::Fn { name, generics, receiver, args, ret_type, .. } => {
                             let written = name ?? continue
                             let m = words.resolve(written).clone()
                             quiet.around.frames.insert(f"{owner}::{m}", nothing_changed())
                             // A method that takes a parameter `mut` may be
-                            // handed a field of another value of the type.
-                            if args.iter().any(fn(a) { a.mutable }) {
-                                dropped.insert(f"{owner}.")
+                            // handed a field of another value of the type:
+                            // one of a field's type, the type itself or a
+                            // type parameter.
+                            let types = held.get(owner)?.clone() ?? collections::BTreeSet()
+                            for a in args {
+                                let last = rules_last_name(words.resolve(a.ty.name))
+                                if a.mutable && (!generics.is_empty() || last == owner || types.contains(last)) {
+                                    dropped.insert(f"{owner}.")
+                                }
                             }
                             let ty = ret_type ?? continue
                             if receiver != null && ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)) {
@@ -1094,15 +1162,33 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
 }
 
 /// **The name a literal gives a list field by** (#1652): the local or
-/// parameter of `Row { cols: cols }` and of `Row { cols }`; null for any
-/// other value, `self` too.
+/// parameter of `Row { cols: cols }` and of `Row { cols }`, the field path
+/// of `Row { cols: r.cols }`, each also through a `.clone()`, which keeps
+/// its length (`Row { cols: r.cols.clone() }`, #1888); null for any other
+/// value, a path from `self` too.
 fn rules_named_list(value: ref Expr?, field: ref String, words: ref winnow_grammar::InternerContext) -> String? {
     let given = value ?? return field.clone()
+    return rules_list_path(given, words)
+}
+
+/// The written path of a local, a parameter or a field of one, seen
+/// through `.clone()`; null for any other value and for `self`.
+fn rules_list_path(given: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     match given {
         Expr::Variable(name, _) => {
             let written = words.resolve(name)
             if written != "self" {
                 return written.clone()
+            }
+        },
+        Expr::Field { base, .. } => {
+            if rules_list_path(base, words) != null {
+                return written_expression(words, given)
+            }
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "clone" && args.is_empty() {
+                return rules_list_path(receiver, words)
             }
         },
         else => {},
@@ -1599,10 +1685,10 @@ fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts, args: ref Vec[FnArg
         // what holds of its elements holds from its literal on, each write
         // checked where it stands (ADR-306 D22).
         if walk.shape.bound.contains(root) && !args.iter().any(fn(arg) { words.resolve(arg.name) == root }) {
-            rules_give(walk, BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }, root, owner, true, true, nothing_changed())
+            rules_give(walk, BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }, root, owner, true, true, nothing_changed(), [])
             continue
         }
-        rules_give(walk, facts, root, owner, true, true, nothing_changed())
+        rules_give(walk, facts, root, owner, true, true, nothing_changed(), [])
     }
 }
 
@@ -1610,11 +1696,15 @@ fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts, args: ref Vec[FnArg
 ///
 /// Where `every` is false, only the rules of a field `written` names: what
 /// the walk knew of the others still holds, and the cap of facts keeps it.
-fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, owner: ref String, elements: bool, every: bool, written: ref BoundsChanged) {
+/// Where `only` is not empty, only the rules at those indexes.
+fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, owner: ref String, elements: bool, every: bool, written: ref BoundsChanged, only: ref Vec[i64]) {
     // Each length's floor once.
     let mut floored: collections::BTreeSet[String] = collections::BTreeSet()
-    for rule in walk.rules.clone() {
+    for (at, rule) in walk.rules.clone().iter().enumerate() {
         if rule.owner != owner {
+            continue
+        }
+        if !only.is_empty() && !only.iter().any(fn(k) { k == at }) {
             continue
         }
         if !every && !rules_writes(written, f"{root}.{rule.a}") && (rule.b.is_empty() || !rules_writes(written, f"{root}.{rule.b}")) {
@@ -1770,11 +1860,13 @@ fn rules_standing(walk: ref BoundsWalk, facts: ref BoundsFacts, fact: i64) -> bo
 
 /// **The markers of `capped` bounds against `name`'s length that a loop or
 /// a branch keeps** (#1785): `cap#k <= len` stays true where `changed`
-/// only adds to the list (no `falls`), so the bound stands past it, even
-/// where a counted loop named the length it was reached with instead.
+/// only adds to the list, or shortens it only through methods of its own
+/// value, each of which keeps the rule (no `bare_falls`, #1808), so the
+/// bound stands past it, even where a counted loop named the length it was
+/// reached with instead.
 fn rules_capped_grown(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, changed: ref BoundsChanged) -> Vec[i64] {
     let mut out: Vec[i64] = []
-    if changed.falls.contains(name) || changed.values.contains(name) {
+    if changed.bare_falls.contains(name) || changed.values.contains(name) {
         return out
     }
     let length = length_of(name)
@@ -2404,6 +2496,75 @@ fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut 
     bounding_push(walk, facts, high)
 }
 
+/// **The rules of `self` across a loop of a checked body** (#1925): the
+/// head forgets the lengths the loop changes, so a call of a method of the
+/// type in its body found the `length` rules broken. Each rule of a field
+/// the loop changes (`changed`) that holds where the loop is entered is
+/// given again at the head and past the loop (`rules_loop_give`) and asked
+/// for at each end of a turn and each `break` (`rules_turn_end`): it holds
+/// at every head, by induction. Asked before the head forgets; the indexes
+/// of the rules kept.
+fn rules_loop_entry(mut walk: BoundsWalk, facts: ref BoundsFacts, changed: ref BoundsChanged, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
+    let mut kept: Vec[i64] = []
+    if !walk.checking {
+        return kept
+    }
+    let owner = walk.rule_roots.get("self")?.clone() ?? return kept
+    for (at, rule) in walk.rules.clone().iter().enumerate() {
+        if rule.owner != owner || walk.rule_failed.contains(at) || !rules_kept_at_turns(rule.kind) {
+            continue
+        }
+        if !rules_writes(changed, f"self.{rule.a}") && (rule.b.is_empty() || !rules_writes(changed, f"self.{rule.b}")) {
+            continue
+        }
+        if rules_holds_here(walk, facts, rule, ask) {
+            kept.push(at)
+        }
+    }
+    return kept
+}
+
+/// The rules `kept` (`rules_loop_entry`) given of `self` after a loop's
+/// head forgot what `changed` changes.
+fn rules_loop_give(mut walk: BoundsWalk, mut facts: BoundsFacts, kept: ref Vec[i64], changed: ref BoundsChanged) {
+    if kept.is_empty() {
+        return
+    }
+    let owner = walk.rule_roots.get("self")?.clone() ?? return
+    rules_give(walk, facts, "self", owner, false, false, changed, kept)
+}
+
+/// **At the end of a turn or a `break`** of the innermost loop: each rule
+/// its head was given (`rule_loops`) must hold, or it fails.
+fn rules_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if !walk.checking || walk.rule_loops.is_empty() {
+        return
+    }
+    let kept = walk.rule_loops[walk.rule_loops.len() - 1].clone()
+    for at in kept {
+        let rule = walk.rules[at].clone()
+        if !walk.rule_failed.contains(at) && !rules_holds_here(walk, facts, rule, ask) {
+            walk.rule_failed.insert(at)
+        }
+    }
+}
+
+/// The kinds of rule a loop's head is given again (`rules_loop_entry`).
+fn rules_kept_at_turns(kind: ref String) -> bool {
+    return kind == "length" || kind == "capped" || rules_of_a_field(kind)
+}
+
+/// Whether a rule of a kind `rules_kept_at_turns` names holds of `self` here.
+fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    if rule.kind == "length" {
+        return rules_same_length(walk, facts, rule, "self", ask)
+    }
+    if rule.kind == "capped" {
+        return rules_capped_holds(walk, facts, rule, "self", ask)
+    }
+    return rules_field_holds(walk, facts, rule, "self", ask)
+}
+
 /// **A call in a checked body** (`receiver` a path, or nothing for a free
 /// function), before it runs: a method of the type on `self` must find
 /// every `length` rule holding; a `std` method on a field must keep the
@@ -2638,5 +2799,5 @@ fn rules_after_call(mut walk: BoundsWalk, mut facts: BoundsFacts, call: ref Expr
     if (context.std_receivers.get(node_key(call)) ?? "") != owner {
         return
     }
-    rules_give(walk, facts, on, owner, false, every, written)
+    rules_give(walk, facts, on, owner, false, every, written, [])
 }

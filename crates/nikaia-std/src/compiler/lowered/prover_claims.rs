@@ -23,6 +23,7 @@ pub struct OutsideIndex {
     pub guard: String,
     pub operation: bool,
     pub stated: bool,
+    pub within: String,
     pub site: i64,
 }
 
@@ -42,7 +43,7 @@ impl PreClaim {
         let origin = match claim_text_of((self.origin).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return format!("precondition of `{}`: `{}`, from `assert({})`", function, computed, self.written) };
         format!("precondition of `{}`: `{}`, from `assert({})` in `{}`", function, computed, self.written, origin)
     }
-    pub fn carried_from(&self, site: &CarriedFrom) -> bool {
+    pub(crate) fn carried_from(&self, site: &CarriedFrom) -> bool {
         let mine = match carried_site_of((self.site).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return false };
         mine == *site
     }
@@ -112,7 +113,7 @@ pub struct ForeignShape {
     pub whole_result: bool,
 }
 
-pub fn foreign_shape(contract: &FnContract) -> ForeignShape {
+pub(crate) fn foreign_shape(contract: &FnContract) -> ForeignShape {
     let mut shape = ForeignShape { params: vec![], names: collections::BTreeSet::new(), whole_result: false };
     shape.names.insert(result_name());
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return shape };
@@ -139,7 +140,7 @@ pub(crate) fn whole_result_of(result: Option<&Ty>) -> bool {
     }
 }
 
-pub fn foreign_from(contract: &FnContract, shape: ForeignShape, requires: &[i64], ensures: &[i64]) -> Foreign {
+pub(crate) fn foreign_from(contract: &FnContract, shape: ForeignShape, requires: &[i64], ensures: &[i64]) -> Foreign {
     let mut foreign = Foreign { params: shape.params, whole_result: shape.whole_result, requires: vec![], ensures: vec![] };
     for at in 0..requires.len() as i64 {
         let term = *unsafe { nikaia_std::proven::read(&requires, (at) as usize) };
@@ -162,7 +163,7 @@ pub(crate) fn assert_of(contract: &FnContract, at: i64) -> String {
     if at >= contract.from.len() as i64 { return String::from(""); }
     let from = unsafe { nikaia_std::proven::read(&contract.from, (at) as usize) };
     if !from.starts_with("assert(") || !from.ends_with(')') { return String::from(""); }
-    let c: Vec<scalar> = nikaia_std::list::chars(from.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(from.chars());
     let mut inner: String = String::from("");
     for k in 7..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) } { inner.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     inner

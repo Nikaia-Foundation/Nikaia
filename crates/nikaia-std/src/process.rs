@@ -34,6 +34,13 @@ use std::time::{Duration, Instant};
 
 use crate::io::IoError;
 
+/// `process::is_word(part)`: its Nikaia half, `runtime/raw_sinks.nika`, the
+/// precondition of `process::shell` (ADR-raw-sinks-1 D2, #1253).
+pub use crate::runtime::is_word;
+/// `process::shell(command)`: its Nikaia half, `runtime/shell.nika`, the
+/// one raw sink of this module (ADR-raw-sinks-1 §4).
+pub use crate::runtime::shell;
+
 /// What a program that ran to its end left behind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
@@ -133,6 +140,11 @@ fn started(
     if let Some(environment) = environment {
         command.env_clear().envs(environment);
     }
+    // The launcher's variables are this program's, not its child's
+    // (ADR-program-path-1 D3).
+    command
+        .env_remove(crate::env::EXE_VAR)
+        .env_remove(crate::env::MAIN_VAR);
     #[cfg(unix)]
     if within.is_some() {
         use std::os::unix::process::CommandExt;
@@ -493,6 +505,8 @@ pub fn spawn(
     let started = Instant::now();
     let mut child = Command::new(found)
         .args(args)
+        .env_remove(crate::env::EXE_VAR)
+        .env_remove(crate::env::MAIN_VAR)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_kind(ty: &Ty) -> String {
+pub(crate) fn check_simd_kind(ty: &Ty) -> String {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else if name == "simd::Lanes" { String::from("Lanes") } else if name == "simd::Fixed" { String::from("Fixed") } else if name == "simd::Mask" { String::from("Mask") } else { String::from("") } },
         _ => String::from(""),
@@ -12,7 +12,7 @@ pub fn check_simd_kind(ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_bits_of(name: &str) -> i64 {
+pub(crate) fn check_simd_bits_of(name: &str) -> i64 {
     match name {
         "u8" => 8,
         "i8" => 8,
@@ -63,7 +63,7 @@ pub(crate) fn check_simd_lane_of(ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_count_of(ty: &Ty) -> i64 {
+pub(crate) fn check_simd_count_of(ty: &Ty) -> i64 {
     match ty {
         Ty::Named { args, .. } => if args.len() == 2 {
             match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
@@ -77,7 +77,7 @@ pub fn check_simd_count_of(ty: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_bytes(ty: &Ty) -> i64 {
+pub(crate) fn check_simd_bytes(ty: &Ty) -> i64 {
     let bits = check_simd_lane_bits(&check_simd_lane_of(ty));
     let kind = check_simd_kind(ty);
     if bits == 0 { return 0; }
@@ -120,7 +120,7 @@ pub(crate) fn check_simd_narrower(lane: &str) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_method_result(on: &Ty, method: &str) -> Option<Ty> {
+pub(crate) fn check_simd_method_result(on: &Ty, method: &str) -> Option<Ty> {
     if check_simd_kind(on) != "Fixed" { return None; }
     let lane = check_simd_lane_of(on);
     let count = check_simd_count_of(on);
@@ -183,7 +183,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let func = match value {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
         _ => return false,
@@ -222,7 +222,7 @@ pub fn check_simd_element(declared: Option<&Ty>) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
+pub(crate) fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
     let given: Ty = nikaia_std::index::or(match wanted {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
@@ -240,7 +240,7 @@ pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lane_operation(&mut self, op: &BinaryOp, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<Ty> {
+    pub(crate) fn a_lane_operation(&mut self, op: &BinaryOp, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<Ty> {
         let kind = check_simd_kind(left);
         let other = check_simd_kind(right);
         let vector = if !kind.is_empty() { left.clone() } else { right.clone() };
@@ -301,7 +301,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
         if method != "shuffle" || args.len() != 1 || check_simd_kind(on) != "Fixed" { return; }
         let count = check_simd_count_of(on);
         let indices = check_simd_constant_indices(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
@@ -311,7 +311,7 @@ impl CheckState {
         }
         for index in nikaia_std::index::or(indices, || vec![].into()) {
             if count > 0 && index >= count {
-                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", unsafe { nikaia_std::proven::sub::<i64>(count, 1) }).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
+                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.shown()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", unsafe { nikaia_std::proven::sub::<i64>(count, 1) }).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
                 return;
             }
         }
@@ -336,18 +336,18 @@ impl CheckState {
         if lane.is_empty() { return; }
         let float = check_simd_float(&lane);
         if float && check_simd_integer_only(method) {
-            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).", method)], Some(String::from("Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))));
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.shown(), method), vec![format!("`{}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).", method)], Some(String::from("Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))));
             return;
         }
         if !float && check_simd_float_only(method) {
             let mut help: String = String::from("Write the operation lane by lane over `lane(i)`.");
             if method == "sum" { help = String::from("Write `wrapping_sum()`, which names what a lane does where the sum does not fit."); }
-            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is a float lane's operation (ADR-377 D9).", method)], Some(help)));
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.shown(), method), vec![format!("`{}` is a float lane's operation (ADR-377 D9).", method)], Some(help)));
         }
     }
 }
 
-pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Type, span: &Span, out: &mut Vec<Finding>) {
+pub(crate) fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Type, span: &Span, out: &mut Vec<Finding>) {
     if name != "simd::Fixed" && name != "simd::Lanes" && name != "simd::Mask" { return; }
     let help: String = String::from("Write a lane type of `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `f32` or `f64`, and a `Fixed`'s count as a literal power of two from 2 to 64: `simd::Fixed[u8, 16]`.");
     if ty.generics.is_empty() {

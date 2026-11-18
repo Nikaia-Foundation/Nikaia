@@ -1,0 +1,25 @@
+// ADR-views-3 D2 for options and function types (#1346): a `String?` read
+// through `??` and a list read by code handed in are lent, not kept.
+fn show(p: String?) -> String {
+    let f = p ?? return "none"
+    return f + "!"
+}
+
+fn total(xs: Vec[i64], read: fn(Vec[i64]) -> i64) -> i64 {
+    return read(xs) + read(xs)
+}
+
+fn sum(v: Vec[i64]) -> i64 {
+    let mut s = 0
+    for x in v {
+        s += x
+    }
+    return s
+}
+
+fn main() throws {
+    let p: String? = "a"
+    println(show(p))
+    println(show(p))
+    println(total([1, 2], sum))
+}

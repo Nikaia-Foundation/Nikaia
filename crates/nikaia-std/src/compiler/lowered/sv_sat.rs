@@ -105,7 +105,8 @@ pub(crate) fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
     s
 }
 
-pub fn sv_sat_of(query: &SvQuery) -> Option<SvSat> {
+#[cfg(test)]
+pub(crate) fn sv_sat_of(query: &SvQuery) -> Option<SvSat> {
     let log = match sv_log(query) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut s = sv_sat(log.atoms, log);
     let mut c: u32 = 0u32;

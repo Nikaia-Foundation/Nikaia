@@ -1,0 +1,32 @@
+warning[NK1354]: This list is built only to be counted: `.collect().len()` copies every item to count them.
+  --> tests/a_collect_only_counted_or_walked_is_warned.nika:7:13
+   |
+ 7 |     let n = xs.iter().collect().len()
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `count()` walks the sequence and counts its items, running every step in the same order as `collect()`, without building a list.
+   = help: Write `.count()` for `.collect().len()`.
+warning[NK1354]: This list is built only to be counted: `.collect().len()` copies every item to count them.
+  --> tests/a_collect_only_counted_or_walked_is_warned.nika:8:13
+   |
+ 8 |     let w = s.split(" ")
+   |             ^^^^^^^^^^^^
+   |
+   = note: `count()` walks the sequence and counts its items, running every step in the same order as `collect()`, without building a list.
+   = help: Write `.count()` for `.collect().len()`.
+warning[NK1354]: This list is built only to be walked once: the `for` can walk the sequence itself.
+   --> tests/a_collect_only_counted_or_walked_is_warned.nika:12:14
+    |
+ 12 |     for p in s.split(" ").collect() {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `for` walks a sequence one item at a time (Part I 3.3); every step of this one is pure and the loop names nothing it reads, so it runs the same without the list.
+    = help: Delete `.collect()`.
+warning[NK1354]: This list is built only to be walked once: the `for` can walk the sequence itself.
+   --> tests/a_collect_only_counted_or_walked_is_warned.nika:15:14
+    |
+ 15 |     for x in xs.iter().rev().skip(1).collect() {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `for` walks a sequence one item at a time (Part I 3.3); every step of this one is pure and the loop names nothing it reads, so it runs the same without the list.
+    = help: Delete `.collect()`.

@@ -25,7 +25,19 @@
 // The heading of the entry is the one released report's commit subject (with
 // the issues it fixes), or `Builders' changes (#a, #b)` for several; equal
 // `Changelog:` lines (after trimming whitespace and a trailing `.`) give one
-// bullet. Test flags: `--heading TITLE... [--fixes #N...]`, `--entries LINE...`.
+// bullet. Rows the agents added to the Runs table of `docs/tokenspeed.md` go
+// into the version's commit, when nothing else in that file changed (#1886).
+// Test flags: `--heading TITLE... [--fixes #N...]`, `--entries LINE...`,
+// `--rows-added OLD NEW` (prints whether NEW only adds Runs rows to OLD),
+// `--stage-version FILE` (stages HEAD's FILE with the working file's version
+// and date lines, in the current directory's repository).
+//
+//     nikaia run scripts/release.nika -- --rows
+//
+// commits those rows alone, on HEAD and unpushed, for a driver under
+// `--no-bump`, whose push releases nothing: without it they stayed
+// uncommitted and blocked the merge of the next release that changed the file.
+// Prints `ROWS committed`, `ROWS none` or `ROWS NOT COMMITTED: <why>`.
 //
 // `--dry-run` prints what it would do and changes nothing. `--loop M` runs
 // again every M minutes, prints only lines that changed, and ends on RED or
@@ -209,13 +221,83 @@ fn release_version() -> String throws {
     return "?"
 }
 
+// Whether `new` is `old` with only rows added to its Runs table (#1886): each
+// line `old` lacks starts with `| ` and stands below `## Runs`, and no line of
+// `old` is gone or changed. The agents append these rows (`agent.nika`) and
+// the release commits them.
+fn release_rows_added(old: String, new: String) -> bool {
+    let was = old.split("\n").collect()
+    let now = new.split("\n").collect()
+    let mut j = 0
+    let mut in_runs = false
+    for line in now {
+        if j < was.len() && line == was[j] {
+            if line.starts_with("## ") { in_runs = line.starts_with("## Runs") }
+            j += 1
+        } else if !(in_runs && line.starts_with("| ")) {
+            return false
+        }
+    }
+    return j == was.len()
+}
+
+// The specification parts whose `**Version:**` and `**Date:**` lines bump.py rewrites.
+fn release_parts() -> Vec[String] {
+    return ["docs/specification/10-nikaia-light.md", "docs/specification/20-nikaia-advance.md", "docs/specification/30-nikaia-tooling.md"]
+}
+
+// `head` with its first `**Version:**` and `**Date:**` lines replaced by the
+// first such lines of `now`, the rest of `head` as it is (#1896).
+fn release_version_lines(head: String, now: String) -> String {
+    let mut version = String()
+    let mut date = String()
+    for line in now.split("\n") {
+        if version == "" && line.starts_with("**Version:**") { version = line.to_string().clone() }
+        if date == "" && line.starts_with("**Date:**") { date = line.to_string().clone() }
+    }
+    let mut out: Vec[String] = []
+    let mut put_version = false
+    let mut put_date = false
+    for line in head.split("\n") {
+        if !put_version && version != "" && line.starts_with("**Version:**") {
+            out.push(version.clone())
+            put_version = true
+        } else if !put_date && date != "" && line.starts_with("**Date:**") {
+            out.push(date.clone())
+            put_date = true
+        } else {
+            out.push(line.clone())
+        }
+    }
+    return out.join("\n")
+}
+
+// Stages only the release's own lines of a file another lane has changed too
+// (#1896): HEAD's text with the working file's version and date lines goes
+// into the index; the working file keeps both, and the other hunks stay
+// unstaged. Whether it worked.
+fn release_stage_own(file: String) -> bool throws {
+    let head = process::run("git", ["show", f"HEAD:{file}"])
+    if !head.ok { return false }
+    let blob = release_version_lines(head.stdout, fs::read_to_string(file.clone(), fs::Root::Anywhere))
+    let sha = process::run("git", ["hash-object", "-w", "--stdin"]; stdin: process::Input::Text(blob))
+    if !sha.ok { return false }
+    return process::run("git", ["update-index", "--cacheinfo", f"100644,{sha.stdout.trim()},{file}"]).ok
+}
+
 // Raises the version, commits the files bump.py changed and pushes; the line to print.
+// A specification part another lane has changed is not added whole: only the
+// version and date lines are staged (`release_stage_own`, #1896), so that
+// lane's paragraph stays in the working file, uncommitted. A dirty
+// `CHANGELOG.md` or badge is no lane's to have, and stops the bump.
+// It also commits the rows the agents added to `docs/tokenspeed.md`, when the
+// file changed by nothing else (#1886).
 fn release_bump(title: String, entries: Vec[String]) -> String throws {
     release_git(["fetch", "origin", "develop"])
     let before = release_changed()
     for f in before {
-        if f == "CHANGELOG.md" || f.starts_with("docs/specification/") || f.starts_with("assets/badges/") {
-            return f"NO BUMP: {f} is not clean"
+        if f == "CHANGELOG.md" || f.starts_with("assets/badges/") {
+            return f"NO BUMP: {f} has changes no release made"
         }
     }
     let mut args: Vec[String] = ["scripts/bump.py", "new", "--title", title.clone()]
@@ -230,7 +312,15 @@ fn release_bump(title: String, entries: Vec[String]) -> String throws {
     for f in release_changed() {
         if !before.contains(f.clone()) { add.push(f) }
     }
+    let rows = "docs/tokenspeed.md"
+    if before.contains(rows) {
+        let old = process::run("git", ["show", f"HEAD:{rows}"])
+        if old.ok && release_rows_added(old.stdout, fs::read_to_string(rows, fs::Root::Anywhere)) { add.push(rows) }
+    }
     release_git(add)
+    for f in before {
+        if release_parts().contains(f.clone()) && !release_stage_own(f.clone()) { return f"NO BUMP: staging {f} failed" }
+    }
     let version = release_version()
     let mut message = f"{version}: {title}\n"
     for line in release_git(["log", "-1", "--format=%B"]).split("\n") {
@@ -309,7 +399,28 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
 }
 
 // The test flags: `--heading TITLE... [--fixes #N...]` prints the heading,
-// `--entries LINE...` the bullets, one per line.
+// The `--rows` job: the Runs rows the agents added to docs/tokenspeed.md as a
+// commit of their own, with only that file in it (`git commit --only`, so what
+// a builder has staged stays staged), when nothing else in the file changed.
+// The driver's next push takes the commit.
+fn release_rows_commit() -> String throws {
+    let rows = "docs/tokenspeed.md"
+    if !release_changed().contains(rows) { return "ROWS none" }
+    let old = process::run("git", ["show", f"HEAD:{rows}"])
+    if !old.ok || !release_rows_added(old.stdout, fs::read_to_string(rows, fs::Root::Anywhere)) {
+        return f"ROWS NOT COMMITTED: {rows} has changes besides added Runs rows"
+    }
+    let mut message = "tokenspeed.md: the agents' Runs rows\n"
+    for line in release_git(["log", "-1", "--format=%B"]).split("\n") {
+        if line.starts_with("Co-Authored-By:") || line.starts_with("Claude-Session:") { message = message + "\n" + line }
+    }
+    if !process::run("git", ["commit", "-q", "-m", message, "--only", "--", rows]).ok { return "ROWS NOT COMMITTED: commit failed" }
+    return "ROWS committed"
+}
+
+// `--entries LINE...` the bullets, one per line, `--rows-added OLD NEW` whether
+// NEW only adds Runs rows to OLD, `--stage-version FILE` whether staging
+// FILE's own version lines worked.
 fn release_test(args: Vec[String]) throws {
     let mut words: Vec[String] = []
     let mut fixes: Vec[String] = []
@@ -327,6 +438,14 @@ fn release_test(args: Vec[String]) throws {
         println(release_heading(words, fixes))
         return
     }
+    if args[1] == "--stage-version" && words.len() == 1 {
+        println(release_stage_own(words[0].clone()))
+        return
+    }
+    if args[1] == "--rows-added" && words.len() == 2 {
+        println(release_rows_added(words[0].clone(), words[1].clone()))
+        return
+    }
     for e in release_entries(words) { println(f"- {e}") }
 }
 
@@ -336,7 +455,11 @@ fn main() throws {
     let mut dir: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
-    if args.len() >= 2 && (args[1] == "--heading" || args[1] == "--entries") {
+    if args.len() == 2 && args[1] == "--rows" {
+        println(release_rows_commit())
+        return
+    }
+    if args.len() >= 2 && (args[1] == "--heading" || args[1] == "--entries" || args[1] == "--rows-added" || args[1] == "--stage-version") {
         release_test(args)
         return
     }

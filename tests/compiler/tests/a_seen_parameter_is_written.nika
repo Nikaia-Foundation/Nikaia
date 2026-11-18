@@ -1,0 +1,16 @@
+// `Seen[T]` is a type a person writes at a parameter of a function that
+// touches a lock (ADR-281 D24, #1651): the parameter takes a value a lock
+// handed out with its stamp. Before, `Seen` was "no type" (`NK1135`).
+fn show(s: Seen[String]) throws {
+	let k = SharedMut(1)
+	k.update fn(mut v) { v = v + 1 }
+	println(s)
+	println(k.get())
+}
+
+fn main() throws {
+	let mut text = "h"
+	text.push_str("i")
+	let m = SharedMut(text)
+	show(m.get())
+}

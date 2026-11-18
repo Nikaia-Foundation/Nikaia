@@ -21,7 +21,7 @@ pub struct CheckPause {
 impl CheckState {
     /// A call that may pause, where a lock is held, a walk runs on every core or
     /// a lambda is handed over.
-    pub fn a_call_that_may_pause(ref mut self, callee: ref String, pauses: bool, unpromised: bool, span: ref Span) sync {
+    fn a_call_that_may_pause(ref mut self, callee: ref String, pauses: bool, unpromised: bool, span: ref Span) sync {
         if !pauses {
             return
         }
@@ -34,7 +34,7 @@ impl CheckState {
     }
 
     /// A cleanup that may pause.
-    pub fn a_cleanup_that_may_pause(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_cleanup_that_may_pause(ref mut self, name: ref String, span: ref Span) sync {
         let pause = CheckPause { what: f"the cleanup of `{name}`", unpromised: null, before_walk: f"Create `{name}` outside the walk and pass it in, or walk with `iter()`, whose lambda may pause.", before_door: f"Create `{name}` before taking the lock, so it's cleaned up after the lock is released, or close it there yourself." }
         self.a_pause(pause, span)
     }
@@ -86,7 +86,7 @@ impl CheckState {
     /// `NK2209`: a call in a grammar's action that may pause. A grammar's
     /// actions may never pause: a parser works on text that's already there,
     /// which is what lets `@frame` parse in parallel.
-    pub fn a_pausing_call_in_an_action(ref mut self, callee: ref String, contract: ref FnContract, span: ref Span) sync {
+    fn a_pausing_call_in_an_action(ref mut self, callee: ref String, contract: ref FnContract, span: ref Span) sync {
         if contract.sync_claim.is_sync() {
             return
         }
@@ -101,7 +101,7 @@ impl CheckState {
     }
 
     /// `NK2202`: a call in a `sync` function that may pause.
-    pub fn a_pausing_method_in_a_sync_body(ref mut self, callee: ref String, contract: ref FnContract, span: ref Span) sync {
+    fn a_pausing_method_in_a_sync_body(ref mut self, callee: ref String, contract: ref FnContract, span: ref Span) sync {
         if contract.sync_claim.is_sync() {
             return
         }

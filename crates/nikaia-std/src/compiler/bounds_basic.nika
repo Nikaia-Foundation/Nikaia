@@ -24,7 +24,7 @@ struct CountedLoop {
 
 /// **The index nodes of `body` whose check the basic level drops**: every
 /// `xs[k]` inside a loop over `xs`'s own length that `k` counts.
-pub fn basic_indices(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[i64] {
+fn basic_indices(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[i64] {
     let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
     counted_block(body, [], words, out)
     return out
@@ -315,7 +315,7 @@ fn counted_blocks(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winnow_
 /// **Methods that leave a list's length as it was.** A method not on this
 /// list is taken to change it, so a method the list does not know costs a
 /// proof and never makes a wrong one.
-pub fn keeps_length(method: ref String) -> bool {
+fn keeps_length(method: ref String) -> bool {
     return match method {
         "len" => true, "is_empty" => true, "contains" => true, "iter" => true,
         "first" => true, "last" => true, "get" => true, "clone" => true,
@@ -326,7 +326,7 @@ pub fn keeps_length(method: ref String) -> bool {
         "filter" => true, "any" => true, "all" => true, "count" => true,
         "find" => true, "position" => true, "enumerate" => true, "zip" => true,
         "windows" => true, "chunks" => true, "rev" => true, "fold" => true,
-        "binary_search" => true, "to_string" => true, "chars" => true,
+        "binary_search" => true, "to_string" => true,
         "bytes" => true, "u32_le" => true, "u32_be" => true, "u64_le" => true,
         "u64_be" => true, "find_all" => true, "contains_key" => true,
         "keys" => true, "values" => true,
@@ -336,7 +336,7 @@ pub fn keeps_length(method: ref String) -> bool {
 
 /// **How many bytes a word read of a `Bytes` takes** (ADR-320 D12): 4 or 8
 /// for `u32_le` ... `u64_be`, 0 for any other method.
-pub fn bytes_word_width(method: ref String) -> i64 {
+fn bytes_word_width(method: ref String) -> i64 {
     return match method {
         "u32_le" => 4, "u32_be" => 4, "u64_le" => 8, "u64_be" => 8,
         else => 0,
@@ -371,29 +371,29 @@ enum Seek {
 }
 
 /// **Nothing in `body` can change `list`'s length.**
-pub fn length_stays(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn length_stays(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return !seek_block(body, Seek::LengthChanged(list.clone()), words)
 }
 
 /// **Whether `stmt` may change an element of `list`** (ADR-306 D33):
 /// asked of the statement and everything inside it.
-pub fn elements_change(stmt: ref Stmt, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn elements_change(stmt: ref Stmt, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return seek_statement(stmt, Seek::ElementsChanged(list.clone()), words)
 }
 
 /// **Nothing in `body` can change an element of `list`** (ADR-306 D33).
-pub fn elements_stay(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn elements_stay(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return !seek_block(body, Seek::ElementsChanged(list.clone()), words)
 }
 
 /// Whether `stmt`, or anything inside it, binds `name` again.
-pub fn rebinds_in_statement(stmt: ref Stmt, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn rebinds_in_statement(stmt: ref Stmt, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return seek_statement(stmt, Seek::Rebound(name.clone()), words)
 }
 
 /// **Whether `body` may read a value of the list `name`** (#1587): `false`
 /// where the body only pushes to it and asks its length.
-pub fn values_read(body: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn values_read(body: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return seek_block(body, Seek::ValuesRead(name.clone()), words)
 }
 
@@ -403,13 +403,13 @@ fn only_grows_or_measures(method: ref String) -> bool {
 }
 
 /// Whether `body` binds `name` again anywhere.
-pub fn rebinds(body: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn rebinds(body: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return seek_block(body, Seek::Rebound(name.clone()), words)
 }
 
 /// **A path of fields from a name** (ADR-306 D17): `t`, `t.slots`,
 /// `self.at`, as the walk names it; nothing for any other expression.
-pub fn path_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+fn path_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
         Expr::Variable(name, _) => words.resolve(name).clone(),
         Expr::Field { base, name, .. } => {
@@ -421,16 +421,18 @@ pub fn path_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> St
 }
 
 /// The name a path starts at: `t` of `t.slots`, of `t.slots.len()`.
-pub fn path_root(path: ref String) -> String {
+fn path_root(path: ref String) -> String {
     let parts: Vec[ref String] = path.split(".").collect()
     return parts[0].clone()
 }
 
 /// Whether `path` is `within` or a part of it: `t.slots` is within `t` and
 /// within `t.slots`, not within `t.used`.
-pub fn path_within(path: ref String, within: ref String) -> bool {
+fn path_within(path: ref String, within: ref String) -> bool {
     // No text is made for the test (#727): what follows `within` starts a field.
-    return path == within || (path.strip_prefix(within)?.starts_with(".") ?? false)
+    // A loop's value where it was reached (`at.len()@98`, ADR-361 D15) is a
+    // name of its own: no change after it moves it.
+    return path == within || (!path.contains("@") && (path.strip_prefix(within)?.starts_with(".") ?? false))
 }
 
 /// Whether `expr` is a path that `list` is, or is a part of: a change there

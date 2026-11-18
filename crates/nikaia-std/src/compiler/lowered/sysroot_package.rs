@@ -32,32 +32,6 @@ pub fn sysroot_package_render(table: &collections::BTreeMap<String, String>) -> 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_package_without_bodies(source: &str, items: &[Spanned<Item>]) -> String {
-    let mut cut: Vec<(i64, i64)> = vec![];
-    for item in items.iter() { sysroot_package_bodies(item, &mut cut); }
-    cut.sort();
-    let mut kept: String = String::from("");
-    let mut at: i64 = 0;
-    let n = source.as_bytes().len() as i64;
-    for (start, end) in cut.iter() {
-        let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
-        if start < at || end > n { return nikaia_std::block::Text::from(source.to_string()); }
-        kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).text() {
-            Ok(value) => value,
-            Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
-        });
-        at = end;
-    }
-    kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..n)).text() {
-        Ok(value) => value,
-        Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
-    });
-    let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
-    nikaia_std::block::Text::from(lines.join(""))
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i64)>) {
     let block = match &item.node {
         Item::Fn { body, .. } => body,
@@ -78,7 +52,7 @@ pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i
 pub(crate) fn sysroot_package_at(text: &str, at: i64, word: &str) -> bool {
     let n = word.as_bytes().len() as i64;
     if at < 0 || at + n > text.as_bytes().len() as i64 { return false; }
-    let head = match unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (nikaia_std::proven::add::<i64>(at, n)) as usize) }.text() {
+    let head = match nikaia_std::bytes::text_of_a_cut(&*text, unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (nikaia_std::proven::add::<i64>(at, n)) as usize) }) {
         Ok(value) => value,
         Err(_error) => { return false; },
     };
@@ -86,7 +60,7 @@ pub(crate) fn sysroot_package_at(text: &str, at: i64, word: &str) -> bool {
 }
 
 pub(crate) fn sysroot_package_slice(text: &str, a: i64, b: i64) -> &str {
-    match nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(a..b)).text() {
+    match nikaia_std::bytes::text_of_a_cut(&*text, nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(a..b))) {
         Ok(value) => value,
         Err(_error) => { "" },
     }
@@ -101,7 +75,7 @@ pub(crate) fn sysroot_package_has_for(text: &str, at: i64) -> bool {
     sysroot_package_slice(text, at, end).contains(" for ")
 }
 
-pub fn sysroot_package_shared(text: &str) -> String {
+pub(crate) fn sysroot_package_shared(text: &str) -> String {
     let keywords: Vec<&'static str> = vec!["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "];
     let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "]; #[allow(clippy::redundant_locals)] let keywords = keywords;
     let n = text.as_bytes().len() as i64;
@@ -213,7 +187,7 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
     None
 }
 
-pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in unit.items.iter() {
         let name: String = match &item.node {
@@ -293,6 +267,7 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::num::LowBits as _;\n");
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n");
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::text::TextNormalized as _;\n");
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::prelude::Hasher;\n");
     imports.sort();
     for import in imports.iter() {
         rust.push_str("#[allow(unused_imports)]\n");

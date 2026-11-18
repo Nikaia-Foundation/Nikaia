@@ -10,7 +10,7 @@ fn counts_words(text: String) -> i64 {
 // one, and added to a length.
 test "a count stands where an i64 is wanted" {
     let n: i64 = "a b c".split_whitespace().count()
-    let sum = "abc".chars().count() + "abc".len()
+    let sum = "abc".scalars.count() + "abc".len()
     let words = counts_words("one two")
     assert(words == 2)
     assert(n == 3)

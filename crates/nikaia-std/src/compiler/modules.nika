@@ -185,7 +185,7 @@ fn no_sync(claim: ref Sync) -> bool {
 
 /// **The way a function came to pause**, for ADR-288 D32's warning: each call
 /// on the way, `a` calls `b`, which `b` calls `c`.
-pub fn pause_path(chain: ref Vec[String]) -> String {
+fn pause_path(chain: ref Vec[String]) -> String {
     let mut steps: Vec[String] = []
     let mut k = 0
     while k + 1 < chain.len() {
@@ -258,7 +258,7 @@ pub struct ModulesPause {
 /// ADR-288 D32's warning where there is no statement to point at - a method
 /// call only the type checker resolved - said without one rather than not at
 /// all.
-pub fn lost_sync_unplaced(message: ref String, help: ref String) -> String {
+fn lost_sync_unplaced(message: ref String, help: ref String) -> String {
     return f"warning[NK2211]: {message}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {help}\n"
 }
 
@@ -322,7 +322,7 @@ pub fn groups(packages: ref Vec[String?]) -> Vec[(i64, i64)] {
 /// unpromised `sync` callee is still called without an `.await`. `std` has no
 /// `"inferred"` entry, its ledger being written by hand, so only a package's
 /// entries are ever changed.
-pub fn as_promised(mut ledger: Ledger, another: fn(ref String) -> bool sync) {
+fn as_promised(mut ledger: Ledger, another: fn(ref String) -> bool sync) {
     let mut unpromised: Vec[String] = []
     for (key, contract) in ledger.functions {
         if inferred_sync(contract.sync_claim) && another(key) {
@@ -449,7 +449,7 @@ pub fn dependency_ledgers(mut library: Ledger, mut contracts: Ledger, described:
 /// One group of the program's own files into `contracts`, its ledger `own`
 /// (ADR-100 D2): under no package's name, and with the sources it was derived
 /// from as the program's.
-pub fn absorb_own(mut contracts: Ledger, renames: ref collections::BTreeMap[String, String], own: ref Ledger) {
+fn absorb_own(mut contracts: Ledger, renames: ref collections::BTreeMap[String, String], own: ref Ledger) {
     contracts.sources = own.sources.clone()
     let module: String? = null
     absorb_into(contracts, module, renames, own)
@@ -481,7 +481,7 @@ pub fn is_single_file(units: i64) -> bool {
 // --- A test build (ADR-269 D1) ---
 
 /// The name the `k`th test's function has in a test build.
-pub fn test_function(k: i64) -> String {
+fn test_function(k: i64) -> String {
     return f"__nikaia_test_{k}"
 }
 
@@ -621,7 +621,7 @@ pub fn modules_test_wrappers(titles: ref Vec[String], first: i64) -> String {
 /// The attribute `lower-std` puts on a function only the tests of its file
 /// reach (#1160), which the emitter writes as `#[cfg(test)]`. A program cannot
 /// write it: an attribute it writes is a path.
-pub fn modules_test_only_mark() -> String {
+fn modules_test_only_mark() -> String {
     return "cfg(test)"
 }
 

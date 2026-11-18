@@ -1,0 +1,11 @@
+// #2033: beside `null`, `some(_)` is refused for the name it does not know
+// (NK1117), not as a `match` that misses a case (NK1151).
+use std::text
+
+fn main() throws {
+    let said = match text::parse_f64("1") {
+        some(_) => "a number",
+        null => "none",
+    }
+    println(said)
+}

@@ -10,12 +10,23 @@
 // named by their place in `out`: the same terms in the same order the Rust
 // made them.
 
+/// **A value a `let mut` or an assignment gives, as a term** (ADR-361 D13,
+/// #1848): a `bool` name is a number to the walk, `true` 1 and `false` 0, so a
+/// flag a loop sets is a state name like a counter. `lin_term` itself reads
+/// numbers only: the ledgers and the summaries read it too.
+fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+    return match expr {
+        Expr::LitBool(b, _) => built(SolverTerm::Int(if b { 1 } else { 0 }), out),
+        else => lin_term(expr, words, var, pinned, out),
+    }
+}
+
 /// `expr` as a linear term over the names `var` admits: the node's place in
 /// `out`, or nothing where it is not one. A product is linear where one side
 /// is a constant. A name or a call `pinned` gives a value the build knows is
 /// that value: a `comptime` binding (ADR-359 D7), a call run while the
 /// program was built (D11).
-pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         // A literal no `i64` holds is outside what the solver reads.
         Expr::LitInt { value, negative, .. } => {
@@ -148,14 +159,14 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
 
 /// **The bytes a text literal stands for**, its escapes read (Part I 2.5):
 /// nothing where `expr` is no literal, or holds a `\x` or `\u{…}`.
-pub fn text_literal_length(expr: ref Expr) -> i64? {
+fn text_literal_length(expr: ref Expr) -> i64? {
     let text = match expr {
         Expr::LitStr { text, .. } => text,
         else => return null,
     }
     let mut escapes = 0
     let mut escaped = false
-    for c in text.chars() {
+    for c in text.scalars {
         if escaped {
             if c == 'x' || c == 'u' {
                 return null
@@ -172,7 +183,7 @@ pub fn text_literal_length(expr: ref Expr) -> i64? {
 /// **The name of a length the walk reads**: a path's (ADR-306 D17), or for
 /// the `.bytes` of a text, the text's: `s.bytes.len() == s.len()`
 /// (supervisor decision, 2026-11-12, for ADR-396 D4).
-pub fn length_path(list: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync) -> String? {
+fn length_path(list: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync) -> String? {
     let path = path_of(list, words) ?? return null
     let length = f"{path}.len()"
     if var(length) {
@@ -197,7 +208,7 @@ pub fn length_path(list: ref Expr, words: ref winnow_grammar::InternerContext, v
 /// **The name of one element** (ADR-306 D33, D20): `xs[c]` or `t.slots[0]`,
 /// the list a path, the index a name or an integer literal that is not
 /// negative; nothing for any other index or list.
-pub fn element_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+fn element_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
         Expr::Index { base, index, .. } => {
             let list = path_of(base, words) ?? return null
@@ -210,7 +221,7 @@ pub fn element_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) 
 
 /// An element's index as its name says it: a name, or the digits of an
 /// integer literal that is not negative.
-pub fn element_index(index: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+fn element_index(index: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match index {
         Expr::Variable(name, _) => words.resolve(name).clone(),
         Expr::LitInt { value, negative, .. } => {
@@ -226,13 +237,13 @@ pub fn element_index(index: ref Expr, words: ref winnow_grammar::InternerContext
 
 /// **The name a divisor what is known pins has** (ADR-359 D6): by the
 /// divisor's id, in a form no binding can spell.
-pub fn divisor_name(divisor: ref Expr) -> String {
+fn divisor_name(divisor: ref Expr) -> String {
     return f"divisor@{node_key(divisor)}"
 }
 
 /// **The name a call's result has in the proof**: the call's id (ADR-340),
 /// in a form no binding of a program can spell.
-pub fn call_result_name(call: ref Expr) -> String {
+fn call_result_name(call: ref Expr) -> String {
     return f"result@{node_key(call)}"
 }
 
@@ -241,6 +252,17 @@ pub fn call_result_name(call: ref Expr) -> String {
 pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         Expr::LitBool(b, _) => built(SolverTerm::Bool(b), out),
+        // **A `bool` name the walk follows is a number** (ADR-361 D13):
+        // `true` is 1, so the claim is that it is at least 1 (#1848).
+        Expr::Variable(name, _) => {
+            let n = words.resolve(name)
+            if !var(n) {
+                return null
+            }
+            let named = built(SolverTerm::Var(n.clone()), out)
+            let one = built(SolverTerm::Int(1), out)
+            built(SolverTerm::Ge(named, one), out)
+        },
         // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
         // a name of its own as `lin_term` reads it.
         Expr::MethodCall { receiver, method, args, .. } => {
@@ -286,7 +308,7 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
 /// where it holds (`holds`), each part of an `&&` it reads holds; where it
 /// fails, each part of an `||` it reads fails; a `!` swaps the two.
 /// `return 0 if key != "exit" || args.len() == 0` leaves `args.len() != 0`.
-pub fn claim_parts(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> Vec[i64] {
+fn claim_parts(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> Vec[i64] {
     let mut parts: Vec[i64] = []
     claim_parts_into(expr, holds, words, var, pinned, out, parts)
     return parts
@@ -386,7 +408,7 @@ fn literal_value(value: u64, negative: bool) -> i64? {
 
 /// No name pinned: for a term read where no `comptime` and no call run
 /// while building can stand.
-pub fn nothing_pinned(name: ref String) -> i64? {
+fn nothing_pinned(name: ref String) -> i64? {
     return null
 }
 
@@ -394,7 +416,7 @@ pub fn nothing_pinned(name: ref String) -> i64? {
 /// call `pinned` gives, and their negation, `+`, `-`, `*`, `/` and `%`, as
 /// Part I 2.2 folds them. Nothing where it reads anything else or a step has
 /// no answer in an `i64`.
-pub fn folded_whole(expr: ref Expr, words: ref winnow_grammar::InternerContext, pinned: fn(ref String) -> i64? sync) -> i64? {
+fn folded_whole(expr: ref Expr, words: ref winnow_grammar::InternerContext, pinned: fn(ref String) -> i64? sync) -> i64? {
     return match expr {
         Expr::LitInt { value, negative, .. } => literal_value(value, negative),
         Expr::Variable(name, _) => pinned(words.resolve(name)),

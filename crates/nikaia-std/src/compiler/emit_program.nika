@@ -213,7 +213,7 @@ impl EmitState {
                 types.push("String")
                 passing.push("&{}")
             } else if ty == "Option<&str>" {
-                types.push("Option<String>")
+                types.push(f"{self.rust_option()}<String>")
                 passing.push("{}.as_deref()")
             } else if ty.starts_with("&[") && ty.ends_with("]") {
                 let element = (ty.strip_prefix("&[") ?? "").strip_suffix("]") ?? ""
@@ -253,10 +253,16 @@ impl EmitState {
         if host.skip_free_at_exit() {
             out.push(emit_program_allocator())
         } else if host.counts_heap() {
-            out.push("\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n")
+            out.push(f"\n{EMIT_PROGRAM_COUNTING_HEAP}\n")
         }
     }
 }
+
+/// **The counting allocator a program declares** (ADR-327 D9, D10), two
+/// lines. `nikaia run` without Cargo blanks them in the program, since the
+/// library it links declares the same allocator for both (#1844).
+pub comptime EMIT_PROGRAM_COUNTING_HEAP: ref String = "#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;"
 
 /// The type a parameter of `main` was written with, `_` where it names none.
 fn emit_program_param_type(param: String) -> String {

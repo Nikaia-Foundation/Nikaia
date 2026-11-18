@@ -13,7 +13,7 @@ use std::collections
 /// **The tally of a refused program**: one line per family of the errors in
 /// `findings` (its warnings are not counted), and `violations`, the calls
 /// `contracts::sync` found a `sync` function may not make, joined with `, `.
-pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> String {
+fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> String {
     let mut refused: Vec[String] = []
     // One line per family, because a family is what a reader can act on in one
     // go. The `NK1xxx` codes are types; `NK23xx` is a view kept past its call;
@@ -218,7 +218,7 @@ fn project_check_plural(n: i64) -> String {
 /// ([ADR-269](../../docs/specification/adr/adr-269.md) D8), as a warning, and
 /// is checked where it is reached. The bypass for the day a better prover
 /// refutes what an older one let through; without it the build stops.
-pub fn project_check_let_refuted_claims_through(mut findings: Vec[CheckFinding], refuted_claims: String) {
+fn project_check_let_refuted_claims_through(mut findings: Vec[CheckFinding], refuted_claims: String) {
     if refuted_claims != "warn" {
         return
     }
@@ -236,7 +236,7 @@ pub fn project_check_let_refuted_claims_through(mut findings: Vec[CheckFinding],
 /// is checked where it is reached, as every claim was before the switch. An
 /// index that data from outside reaches and the build does not prove
 /// (`NK1302`) is such a claim too ([ADR-396](../../docs/specification/adr/adr-396.md) D3).
-pub fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding], unproved_claims: String) {
+fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding], unproved_claims: String) {
     if unproved_claims != "warn" {
         return
     }
@@ -288,19 +288,19 @@ pub fn project_check_lint_where_nothing_crosses(mut findings: Vec[CheckFinding],
 /// ([ADR-270](../../docs/specification/adr/adr-270.md) D21, D22): `file` the
 /// path shown, `why` what changed, `places` where the questions were asked,
 /// `name` the file's name to commit.
-pub fn project_check_locked_proofs(file: String, why: String, places: String, name: String) -> String {
+fn project_check_locked_proofs(file: String, why: String, places: String, name: String) -> String {
     return f"--locked: {file} does not hold the prover's answers for these sources ({why}).{places}\nRun `nikaia build` and commit `{name}`."
 }
 
 /// **`--locked` and no ledger to compare with.**
-pub fn project_check_locked_ledger_missing(path: String) -> String {
+fn project_check_locked_ledger_missing(path: String) -> String {
     return f"--locked, but {path} is not there; run without --locked to write it"
 }
 
 /// **`--locked` and a ledger that would change**: the determinism guarantee
 /// (13.5) lets the build compare bytes, so a difference is a change in a
 /// contract; `changed` is the lines it does not have (`changed_lines`).
-pub fn project_check_locked_ledger_changed(path: String, changed: String) -> String {
+fn project_check_locked_ledger_changed(path: String, changed: String) -> String {
     return f"--locked: the contracts changed and {path} does not say so.\nWhat the build inferred and the ledger does not have:\n{changed}\nRun without --locked to record it, and read the diff."
 }
 
@@ -316,6 +316,10 @@ pub trait ProjectCheckHost {
     /// The findings at the boundary of the build (`foreign::check`): it needs
     /// the manifest rather than a ledger.
     fn foreign_check(ref self) -> Vec[CheckFinding] sync
+    /// **Each index, overflow and division the walk does not prove**, as
+    /// `NK1313` (`bounds_report_unproved`, ADR-306 D29), over the facts
+    /// `check_against` kept; asked only at `unproved-checks = "error"`.
+    fn unproved_checks(ref self, source: ref String) -> Vec[CheckFinding] sync
     /// How many calls a `sync` function may not make (`contracts::sync`); the
     /// host keeps them, named by their index.
     fn sync_violations(ref self) -> i64 sync
@@ -349,7 +353,11 @@ pub struct ProjectCheckSaid {
 /// §1 Group B); the switch changes only whether a refusal is about *this*
 /// build, which is a question about severity
 /// (`project_check_lint_where_nothing_crosses`).
-pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, building_a_library: bool) -> ProjectCheckSaid {
+///
+/// `unproved_checks` is the package's `unproved-checks`: at `error` each
+/// check the walk does not prove is refused (ADR-306 D29); a dependency is
+/// checked at `allow`.
+pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against()
     // **`NK1238` is the checker's answer for a build it knows nothing of**
     // (ADR-284 D4): a library build exports its entry points.
@@ -360,6 +368,9 @@ pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, sourc
     // separate: it asks about the **boundary** of the build rather than about a
     // type, and it needs the manifest rather than a ledger.
     all.extend(host.foreign_check())
+    if unproved_checks == "error" {
+        all.extend(host.unproved_checks(source))
+    }
     all.sort_by_key(fn(finding) { finding.span.start })
     project_check_lint_where_nothing_crosses(all, user_parallelism)
     project_check_let_refuted_claims_through(all, refuted_claims)

@@ -40,7 +40,7 @@ pub fn integer_as_count(n: ref Integer) -> i64? {
 }
 
 /// The number written out, `-` in front where it is negative.
-pub fn integer_text(n: ref Integer) -> String {
+fn integer_text(n: ref Integer) -> String {
     if n.negative {
         return f"-{n.magnitude}"
     }
@@ -48,13 +48,13 @@ pub fn integer_text(n: ref Integer) -> String {
 }
 
 /// `-n`.
-pub fn integer_negated(n: ref Integer) -> Integer {
+fn integer_negated(n: ref Integer) -> Integer {
     return integer(n.magnitude, !n.negative)
 }
 
 /// `a + b`, counted in magnitudes: the same sign adds, different signs take
 /// the smaller from the larger and keep the larger's sign.
-pub fn integer_sum(a: ref Integer, b: ref Integer) -> Integer? {
+fn integer_sum(a: ref Integer, b: ref Integer) -> Integer? {
     if a.negative == b.negative {
         let sum = a.magnitude.checked_add(b.magnitude) ?? return null
         return integer(sum, a.negative)
@@ -66,19 +66,19 @@ pub fn integer_sum(a: ref Integer, b: ref Integer) -> Integer? {
 }
 
 /// `a - b`.
-pub fn integer_difference(a: ref Integer, b: ref Integer) -> Integer? {
+fn integer_difference(a: ref Integer, b: ref Integer) -> Integer? {
     return integer_sum(a, integer_negated(b))
 }
 
 /// `a * b`: the magnitudes multiply, and the signs differ or agree.
-pub fn integer_product(a: ref Integer, b: ref Integer) -> Integer? {
+fn integer_product(a: ref Integer, b: ref Integer) -> Integer? {
     let product = a.magnitude.checked_mul(b.magnitude) ?? return null
     return integer(product, a.negative != b.negative)
 }
 
 /// `a / b`, toward zero, and `a % b`, which takes the sign of `a`. Nothing
 /// for a division by zero, which the magnitudes' own `checked_` names say.
-pub fn integer_quotient(a: ref Integer, b: ref Integer, remainder: bool) -> Integer? {
+fn integer_quotient(a: ref Integer, b: ref Integer, remainder: bool) -> Integer? {
     if remainder {
         let left = a.magnitude.checked_rem(b.magnitude) ?? return null
         return integer(left, a.negative)
@@ -88,7 +88,7 @@ pub fn integer_quotient(a: ref Integer, b: ref Integer, remainder: bool) -> Inte
 }
 
 /// `a` against `b`: -1 below, 0 equal, 1 above.
-pub fn integer_order(a: ref Integer, b: ref Integer) -> i64 {
+fn integer_order(a: ref Integer, b: ref Integer) -> i64 {
     if a.negative != b.negative {
         return if a.negative { -1 } else { 1 }
     }
@@ -105,7 +105,7 @@ pub fn integer_order(a: ref Integer, b: ref Integer) -> i64 {
 /// **The bit operators, on the bits the value has** (ADR-285 D9): two
 /// numbers that are not negative are their `u64` bits, and two an `i64` holds
 /// are its two's complement. A mix of the two shapes has no answer here.
-pub fn integer_bits(a: ref Integer, b: ref Integer, op: ref String) -> Integer? {
+fn integer_bits(a: ref Integer, b: ref Integer, op: ref String) -> Integer? {
     if !a.negative && !b.negative {
         let x = a.magnitude
         let y = b.magnitude
@@ -131,7 +131,7 @@ pub fn integer_bits(a: ref Integer, b: ref Integer, op: ref String) -> Integer? 
 /// `a << b` and `a >> b`: a count outside the width is not evaluated (D5), a
 /// left shift whose answer leaves 64 bits has none, and a right shift of a
 /// negative number rounds down as its two's complement does.
-pub fn integer_shifted(a: ref Integer, b: ref Integer, left: bool) -> Integer? {
+fn integer_shifted(a: ref Integer, b: ref Integer, left: bool) -> Integer? {
     if b.negative || b.magnitude >= 64 {
         return null
     }

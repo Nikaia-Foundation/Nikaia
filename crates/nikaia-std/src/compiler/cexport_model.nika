@@ -90,7 +90,7 @@ pub enum CxOut {
 }
 
 /// The place a result's type holds in `plains`, `handles` or `records`.
-pub fn cx_out_index(out: ref CxOut) -> i64 {
+fn cx_out_index(out: ref CxOut) -> i64 {
     return match out {
         CxOut::Choice(at) => at,
         CxOut::Handle(at) => at,
@@ -104,7 +104,7 @@ pub fn cx_out_index(out: ref CxOut) -> i64 {
 
 impl CxOut {
     /// Whether a `bool *present` follows the value's out-parameter (D30).
-    pub fn flagged(ref self) -> bool {
+    fn flagged(ref self) -> bool {
         return match self {
             CxOut::AbsentValue(_) => true,
             CxOut::AbsentRecord(_) => true,
@@ -143,7 +143,7 @@ pub enum CxPart {
 }
 
 impl CxRecord {
-    pub fn is_enum(ref self) -> bool {
+    fn is_enum(ref self) -> bool {
         return self.variants.len() > 0
     }
 
@@ -163,7 +163,7 @@ impl CxRecord {
 }
 
 /// A field, or the element of an array field.
-pub fn cx_element(part: ref CxPart) -> CxPart {
+fn cx_element(part: ref CxPart) -> CxPart {
     return match part {
         CxPart::Array(element, _) => element.clone(),
         else => part.clone(),
@@ -230,7 +230,7 @@ impl CxEntry {
 
     /// Whether it is a method of a struct C holds by value (D16), which
     /// `records` decide.
-    pub fn of_a_record(ref self, records: ref Vec[CxRecord]) -> bool {
+    fn of_a_record(ref self, records: ref Vec[CxRecord]) -> bool {
         let owner = self.owner ?? return false
         for record in records {
             if record.name == owner {
@@ -261,7 +261,7 @@ pub struct CxShown {
 }
 
 impl CxHandled {
-    pub fn is_enum(ref self) -> bool {
+    fn is_enum(ref self) -> bool {
         return self.variants.len() > 0
     }
 }
@@ -294,7 +294,7 @@ impl CxCode {
 }
 
 /// A source name, written so the language below can read it (ADR-296 D17).
-pub fn cx_escaped(name: ref String) -> String {
+fn cx_escaped(name: ref String) -> String {
     let reserved: Array[ref String, 28] = ["abstract", "async", "await", "become", "box", "const", "do", "dyn", "extern", "final", "gen", "loop", "macro", "mod", "move", "override", "priv", "ref", "static", "trait", "try", "type", "typeof", "unsafe", "unsized", "virtual", "where", "yield"]
     for word in reserved {
         if word == name {
@@ -305,7 +305,7 @@ pub fn cx_escaped(name: ref String) -> String {
 }
 
 /// The refusal for an entry point whose `what` is not exported yet.
-pub fn cx_not_yet(written: ref String, what: ref String) -> String {
+fn cx_not_yet(written: ref String, what: ref String) -> String {
     return f"`{written}` is an entry point whose {what} this compiler does not export yet: what is built is numbers, `bool`, `scalar` and an `enum` without payload in and out, text and bytes in and out, a run of numbers in, and a `pub struct` as a handle, of a function in `src/main.nika` (ADR-284 D5)."
 }
 
@@ -315,7 +315,7 @@ pub fn cx_nothing_exported() -> String {
 }
 
 /// How a value of this type crosses by value, where it does.
-pub fn cx_by_value(words: ref winnow_grammar::InternerContext, ty: ref Type) -> CxByValue? {
+fn cx_by_value(words: ref winnow_grammar::InternerContext, ty: ref Type) -> CxByValue? {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() > 0 || ty.code != null {
         return null
     }
@@ -418,7 +418,7 @@ fn cx_part(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain],
 
 /// Every `pub extern struct` and `pub extern enum` of the file, in the order
 /// it declares them.
-pub fn cx_records(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], plains: ref Vec[CxPlain]) -> Vec[CxRecord] throws {
+fn cx_records(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], plains: ref Vec[CxPlain]) -> Vec[CxRecord] throws {
     let mut declared: Vec[String] = []
     for item in items {
         match item.node {
@@ -490,7 +490,7 @@ pub fn cx_records(words: ref winnow_grammar::InternerContext, items: ref Vec[Spa
     return out
 }
 
-pub fn cx_record_of(words: ref winnow_grammar::InternerContext, records: ref Vec[CxRecord], ty: ref Type) -> i64? {
+fn cx_record_of(words: ref winnow_grammar::InternerContext, records: ref Vec[CxRecord], ty: ref Type) -> i64? {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() > 0 || ty.code != null {
         return null
     }
@@ -508,7 +508,7 @@ pub fn cx_record_of(words: ref winnow_grammar::InternerContext, records: ref Vec
 /// **The records, each after every record its fields hold**: C, and Python's
 /// `ctypes`, want a struct complete before another holds it. One that holds
 /// itself has no size, which rustc says; this only must not walk it forever.
-pub fn cx_records_in_order(records: ref Vec[CxRecord]) -> Vec[i64] {
+fn cx_records_in_order(records: ref Vec[CxRecord]) -> Vec[i64] {
     let mut order: Vec[i64] = []
     let mut at = 0
     while at < records.len() {
@@ -534,7 +534,7 @@ fn cx_ordered(at: i64, records: ref Vec[CxRecord], mut seen: Vec[i64], mut walki
 }
 
 /// The `enum`s without payload the file declares.
-pub fn cx_plain_enums(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[CxPlain] {
+fn cx_plain_enums(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[CxPlain] {
     let mut out: Vec[CxPlain] = []
     for item in items {
         match item.node {
@@ -563,7 +563,7 @@ pub fn cx_plain_enums(words: ref winnow_grammar::InternerContext, items: ref Vec
 }
 
 /// Which of `plains` a type names, when it is one of them as written.
-pub fn cx_choice(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], ty: ref Type) -> i64? {
+fn cx_choice(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], ty: ref Type) -> i64? {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() > 0 || ty.code != null {
         return null
     }
@@ -579,7 +579,7 @@ pub fn cx_choice(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxP
 }
 
 /// Which of `handles` a type names, as a view or not, nullable or not.
-pub fn cx_handle_of(words: ref winnow_grammar::InternerContext, handles: ref Vec[CxHandled], ty: ref Type) -> i64? {
+fn cx_handle_of(words: ref winnow_grammar::InternerContext, handles: ref Vec[CxHandled], ty: ref Type) -> i64? {
     if ty.is_tuple || ty.generics.len() > 0 || ty.code != null {
         return null
     }
@@ -595,7 +595,7 @@ pub fn cx_handle_of(words: ref winnow_grammar::InternerContext, handles: ref Vec
 }
 
 /// What a parameter of this type takes from C, where it can.
-pub fn cx_taken(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord], ty: ref Type) -> CxIn? {
+fn cx_taken(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord], ty: ref Type) -> CxIn? {
     let record = cx_record_of(words, records, ty)
     if record != null {
         return CxIn::Record(record ?? return null)
@@ -663,7 +663,7 @@ pub fn cx_taken(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPl
 }
 
 /// What a result of this type hands back, where it can.
-pub fn cx_handed(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord], ty: ref Type) -> CxOut? {
+fn cx_handed(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord], ty: ref Type) -> CxOut? {
     let record = cx_record_of(words, records, ty)
     if record != null {
         return CxOut::Record(record ?? return null)
@@ -719,13 +719,13 @@ pub fn cx_handed(words: ref winnow_grammar::InternerContext, plains: ref Vec[CxP
 /// The names of a wrapper's parameters, as `name: type` lists write them - a
 /// type may hold commas of its own (`fn(i64, *mut c_void)`), so only a comma
 /// outside brackets ends one.
-pub fn cx_parameter_names(params: ref Vec[String]) -> Vec[String] {
+fn cx_parameter_names(params: ref Vec[String]) -> Vec[String] {
     let mut names: Vec[String] = []
     for list in params {
         let mut depth = 0
         let mut current: String = ""
         let mut previous = ' '
-        for c in list.chars() {
+        for c in list.scalars {
             if c == '<' || c == '(' || c == '[' {
                 depth += 1
             } else if c == '>' && previous == '-' {
@@ -752,7 +752,7 @@ pub fn cx_parameter_names(params: ref Vec[String]) -> Vec[String] {
 }
 
 /// Each `pub struct` and each `pub enum` with payload the file declares: what C holds by its address.
-pub fn cx_handled_structs(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[CxHandled] {
+fn cx_handled_structs(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[CxHandled] {
     let mut out: Vec[CxHandled] = []
     for item in items {
         match item.node {
@@ -828,7 +828,7 @@ pub fn cx_handled_structs(words: ref winnow_grammar::InternerContext, items: ref
 
 /// What an entry hands back: its result's shape, or the kind `_kind` writes
 /// (D31). The outer `null` is an entry that has no result.
-pub fn cx_result_of(entry: ref CxEntry, words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord]) -> CxResult {
+fn cx_result_of(entry: ref CxEntry, words: ref winnow_grammar::InternerContext, plains: ref Vec[CxPlain], handles: ref Vec[CxHandled], records: ref Vec[CxRecord]) -> CxResult {
     let kind = entry.kind_of
     if kind != null {
         return CxResult::Made(CxOut::Choice(kind ?? 0))
@@ -917,7 +917,7 @@ fn cx_take(words: ref winnow_grammar::InternerContext, owner: String?, item: ref
 /// error `enum` the entry file declares and an entry point throws, in
 /// declaration order across the library. After them, every `std` error an
 /// entry point throws, with `std`'s numbers for the target.
-pub fn cx_variant_codes(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], entries: ref Vec[CxEntry], contracts: ref Ledger, target: ref String) -> Vec[CxRaising] {
+fn cx_variant_codes(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], entries: ref Vec[CxEntry], contracts: ref Ledger, target: ref String) -> Vec[CxRaising] {
     let mut thrown: collections::BTreeSet[String] = collections::BTreeSet()
     for entry in entries {
         let contract = contracts.functions[entry.key()] ?? continue
@@ -997,7 +997,7 @@ pub fn cx_std_codes(error: ref String, target: ref String) -> Vec[CxCode] {
 
 /// An `errno`'s number on the target: Linux's on both Linux targets, WASI's
 /// under WebAssembly (D33).
-pub fn cx_errno(target: ref String, name: ref String) -> i64 {
+fn cx_errno(target: ref String, name: ref String) -> i64 {
     let wasi = target.starts_with("wasm32")
     if name == "ENOENT" {
         return if wasi { 44 } else { 2 }

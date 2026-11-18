@@ -1,6 +1,7 @@
-error: Expected `->` or `{` here, but found `pub`.
+error: This rule's body ends without an action: write `pattern -> { action }`.
   --> tests/pub_before_a_rule_is_not_said_as_a_reserved_name.nika:5:5
    |
  5 |     pub rule name -> String = w:until(";") ";" -> { w.clone() }
    |     ^^^
    |
+   = help: Only an `@stream` entry or a `par_fold` goes without one.

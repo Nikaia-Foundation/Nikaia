@@ -78,6 +78,8 @@ pub struct ProjectMembersManifest {
     pub foreign: Vec<String>,
     pub has_build: bool,
     pub uses_in: Option<fs::Path>,
+    pub within_std: bool,
+    pub described: Option<fs::Path>,
 }
 
 pub trait ProjectMembersHost {
@@ -85,7 +87,7 @@ pub trait ProjectMembersHost {
     fn shipped(&self) -> fs::Path;
 }
 
-pub fn project_members_official() -> Vec<(String, String)> { vec![(String::from("db"), String::from("0.1.0")), (String::from("json"), String::from("0.1.0"))] }
+pub(crate) fn project_members_official() -> Vec<(&'static str, &'static str)> { vec![("db", "0.1.0"), ("json", "0.1.0")] }
 
 pub(crate) async fn project_members_taken_in<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Vec<(String, fs::Path)> {
     let src = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("src")));
@@ -220,7 +222,7 @@ pub struct ProjectMembersMember {
     pub fetched: Option<String>,
 }
 
-pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> Vec<i64> {
+pub(crate) fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> Vec<i64> {
     let at_of: collections::HashMap<fs::Path, i64> = (nikaia_std::range::span(0, members.len() as i64)).map(|at| { (nikaia_std::fs::path::clone(&(nikaia_std::index::get(&members, nikaia_std::index::at(at)).root)), at) }).collect();
     let needs: Vec<collections::BTreeSet<i64>> = members.iter().map(|m| {
         let wanted: collections::BTreeSet<i64> = m.dependencies.iter().filter_map(|d| { at_of.get(&project_members_canonical(&d.root)).copied() }).collect();
@@ -276,9 +278,9 @@ pub async fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &
     Ok(out)
 }
 
-pub fn project_members_fetched_variable() -> String { String::from("NIKAIA_FETCHED") }
+pub(crate) fn project_members_fetched_variable() -> String { String::from("NIKAIA_FETCHED") }
 
-pub fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String {
+pub(crate) fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String {
     let lines: Vec<String> = members.iter().filter_map(|m| {
         let named = match m.fetched.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(format!("{}={}", named, nikaia_std::fs::path::display(&(m.root))))
@@ -318,7 +320,7 @@ pub(crate) fn project_members_a_nikaia_package(key: &str, named: &str, at: &std:
     return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}`, the crate Cargo found for `{}`, is not a Nikaia package: it has {} ({}).\nA Nikaia package on crates.io carries its `nikaia.toml`, its `src/*.nika` and its `nikaia.contracts`. Depend on another version, or on the package by path.", named, key, said, nikaia_std::fs::path::display(&(at)))), &"project_members_a_nikaia_package"));
 }
 
-pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Result<collections::BTreeMap<String, fs::Path>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
+pub(crate) async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Result<collections::BTreeMap<String, fs::Path>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
     let mut out: collections::BTreeMap<String, fs::Path> = collections::BTreeMap::new();
     match env::var(&project_members_fetched_variable()) {
         None => { },
@@ -440,9 +442,11 @@ pub struct ProjectMembersForeign {
     pub moved: collections::BTreeMap<String, Vec<String>>,
     pub descriptions: Ledger,
     pub beneath: collections::BTreeSet<String>,
+    pub within_std: bool,
+    pub over_std: Ledger,
 }
 
-pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new() } }
+pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank() } }
 
 pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::HashSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
     let manifest = match manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -485,7 +489,12 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
     project_members_crates_beneath(root, &mut seen, &mut beneath, manifests);
-    ProjectMembersForeign { declared, described, descriptions, moved, beneath }
+    let over_std = match manifest.as_ref().and_then(|__nikaia_it| __nikaia_it.described.as_ref()) {
+        None => host.empty_ledger(),
+        Some(path) => nikaia_std::index::or(host.read_beside(path), || host.empty_ledger().into()),
+    };
+    let within_std = nikaia_std::index::or(manifest.as_ref().map(|__nikaia_it| __nikaia_it.within_std), || false);
+    ProjectMembersForeign { declared, described, descriptions, moved, beneath, within_std, over_std }
 }
 
 impl ProjectMembersForeign {

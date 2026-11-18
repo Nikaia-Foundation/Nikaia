@@ -1,0 +1,8 @@
+bounds in tests/a_step_that_cannot_overflow_is_derived.nika: 1 indexes, 1 proved; 4 operations, 3 proved
+     7  from + 1  proved
+    11  high - 1  proved
+    15  n + 1     checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    24  k += 1    proved
+    27  xs[2]     proved
+  derived  after: 0 <= from, from < xs.len(), proved at the calls on lines 22
+  derived  before: 0 <= high, proved at the calls on lines 23

@@ -31,7 +31,7 @@ pub struct GrammarTypesCall {
 
 /// **The name of a rule's copy** for the list of types `types`: `read__i64`,
 /// spelled as a function's copy is (`check_specialised`).
-pub fn grammar_types_copy_name(words: ref winnow_grammar::InternerContext, rule: ref String, types: ref Vec[Type]) -> String {
+fn grammar_types_copy_name(words: ref winnow_grammar::InternerContext, rule: ref String, types: ref Vec[Type]) -> String {
     let mut spelled: Vec[String] = []
     for ty in types {
         spelled.push(grammar_types_spelled(words, ty))
@@ -158,7 +158,7 @@ fn grammar_types_chooses(alts: ref Vec[GrammarAlt]) -> bool {
 /// **Whether a grammar needs the copying** (ADR-grammar-2 D1-D3): a rule
 /// that takes types, a `match` on a kind, or a `members[S]`, whose value
 /// rule is copied once per field type.
-pub fn grammar_types_wanted(def: ref GrammarDef) -> bool {
+fn grammar_types_wanted(def: ref GrammarDef) -> bool {
     for rule in def.rules {
         if rule.generics.len() > 0 || grammar_types_chooses(rule.alts) {
             return true
@@ -556,7 +556,7 @@ fn grammar_types_members(built: ref Type, value: winnow_grammar::Symbol, span: r
 }
 
 /// A type with each type parameter `bound` names put in.
-pub fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> Type {
+fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> Type {
     if ty.generics.len() == 0 && !ty.is_tuple {
         let given: Type? = bound.get(words.resolve(ty.name))?.clone()
         if given != null {
@@ -663,7 +663,7 @@ pub struct GrammarTypesGeneric {
 /// Each grammar's rules that take types, by grammar and rule, and whether a
 /// `match` on a kind or a `members[S]` asks for the copying too, also in a
 /// rule that takes no types (ADR-grammar-2 D2, D3).
-pub fn grammar_types_generic(items: ref Vec[Spanned[Item]]) -> GrammarTypesGeneric {
+fn grammar_types_generic(items: ref Vec[Spanned[Item]]) -> GrammarTypesGeneric {
     let mut found = GrammarTypesGeneric { rules: collections::BTreeSet(), chooses: false }
     for item in items {
         match item.node {
@@ -691,7 +691,7 @@ pub struct GrammarTypesAsked {
 
 /// **A call `G::read[i64](input)` of a rule in `generic`**, read off the
 /// expression: what it asks for, or nothing for any other expression.
-pub fn grammar_types_asked(expr: ref Expr, generic: ref collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesAsked? {
+fn grammar_types_asked(expr: ref Expr, generic: ref collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesAsked? {
     match expr {
         Expr::Call { func, .. } => match func {
             Expr::Index { base, index, .. } => match base {
@@ -767,7 +767,7 @@ fn grammar_types_bracket_part(part: ref Expr, words: ref winnow_grammar::Interne
 
 /// **The type a call's brackets write where an expression stands for it**:
 /// `i64`, `json::Value`, `Vec[i64]`; nothing for a value.
-pub fn grammar_types_written(expr: ref Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type? {
+fn grammar_types_written(expr: ref Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type? {
     match expr {
         Expr::Variable(name, _) => return grammar_types_named(name, []),
         Expr::Path(segments, _) => {
@@ -794,7 +794,7 @@ fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec[Type]) -> Typ
 /// **A value in a rule's brackets** (`NK1230`, ADR-grammar-2 D1), said at
 /// `span`, the part that is a value: a rule that takes types takes them as a
 /// function's type parameters are written.
-pub fn grammar_types_value_refused(callee: ref String, span: ref Span) -> GrammarTypesRefusal {
+fn grammar_types_value_refused(callee: ref String, span: ref Span) -> GrammarTypesRefusal {
     return GrammarTypesRefusal {
         code: "NK1230",
         call: -1,
@@ -807,7 +807,7 @@ pub fn grammar_types_value_refused(callee: ref String, span: ref Span) -> Gramma
 
 /// **The type a rule's type parameter `name` stands for in a copy**, where
 /// it is put as a value's head (`T::kind`, `T::from(…)`): a plain type only.
-pub fn grammar_types_plain(name: winnow_grammar::Symbol, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> winnow_grammar::Symbol? {
+fn grammar_types_plain(name: winnow_grammar::Symbol, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> winnow_grammar::Symbol? {
     let ty = bound.get(words.resolve(name)) ?? return null
     if ty.generics.len() == 0 && !ty.is_nullable && !ty.is_tuple {
         return ty.name

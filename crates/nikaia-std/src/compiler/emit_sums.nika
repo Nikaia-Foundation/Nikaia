@@ -25,7 +25,7 @@ impl EmitState {
     }
 
     /// The members of the sum of that name.
-    pub fn sum_members(ref self, sum: ref String) -> Vec[String]? {
+    fn sum_members(ref self, sum: ref String) -> Vec[String]? {
         for members in self.sums.keys() {
             let name = self.sums.get(members) ?? continue
             if name == sum {
@@ -37,7 +37,7 @@ impl EmitState {
 
     /// What an error name is: 0 nothing the emitter can name, 1 the unit's own,
     /// 2 a library's (ADR-280 D9).
-    pub fn name_of_error(ref self, world: ref EmitWorld, name: ref String) -> i64 {
+    fn name_of_error(ref self, world: ref EmitWorld, name: ref String) -> i64 {
         let kind = error_kind(self.declared_errors, world.library, name)
         // **An error a dependency declares** is in the unit's ledger under the
         // name a caller writes (`lib::Fault`): its envelope is opened at a
@@ -51,7 +51,7 @@ impl EmitState {
 
     /// As `name_of_error`, for a set of failures: only a set of exactly one
     /// names anything.
-    pub fn named_error_of(ref self, world: ref EmitWorld, thrown: ref Vec[String]) -> i64 {
+    fn named_error_of(ref self, world: ref EmitWorld, thrown: ref Vec[String]) -> i64 {
         if thrown.len() != 1 {
             return 0
         }
@@ -59,7 +59,7 @@ impl EmitState {
     }
 
     /// As `named_error_of`, for the function `key`.
-    pub fn named_error(ref self, world: ref EmitWorld, key: ref String) -> i64 {
+    fn named_error(ref self, world: ref EmitWorld, key: ref String) -> i64 {
         let contract = self.own_contracts.functions.get(key) ?? return 0
         return self.named_error_of(world, contract.fails_with)
     }
@@ -67,7 +67,7 @@ impl EmitState {
     /// Whether a type carries a view, so a mention of it takes a lifetime: a
     /// struct of this package that holds one, one that is tethered, or a
     /// library's that the library records a tether for.
-    pub fn borrows_named(ref self, world: ref EmitWorld, name: ref String) -> bool {
+    fn borrows_named(ref self, world: ref EmitWorld, name: ref String) -> bool {
         if self.tethered.contains(name) || self.borrowing.contains(name) {
             return true
         }
@@ -77,7 +77,7 @@ impl EmitState {
 
     /// The lifetime arguments a mention of `name` writes: `lifetime` once per
     /// view field (ADR-views-3 D8), or once for a struct with one.
-    pub fn lifetime_args(ref self, name: ref String, lifetime: ref String) -> String {
+    fn lifetime_args(ref self, name: ref String, lifetime: ref String) -> String {
         let slots = self.view_slots.get(name) ?? return lifetime.clone()
         let mut parts: Vec[String] = []
         let mut at = 0
@@ -114,7 +114,7 @@ impl EmitState {
 
     /// **The sums the functions this file declares fail with**, by name: in
     /// `std` and the tools the ledger holds the files beside it too (#1347).
-    pub fn sums_used_here(ref self, world: ref EmitWorld) -> collections::BTreeSet[String] {
+    fn sums_used_here(ref self, world: ref EmitWorld) -> collections::BTreeSet[String] {
         let mut out: collections::BTreeSet[String] = collections::BTreeSet()
         for key in sums_declared_here(world) {
             let contract = self.own_contracts.functions.get(key) ?? continue
@@ -130,7 +130,7 @@ impl EmitState {
     /// in a file of `std` or the tools package, whose modules import the
     /// package root, where the sum's own file puts it (`emit_sums_written`,
     /// #1360).
-    pub fn sum_root(ref self) -> String {
+    fn sum_root(ref self) -> String {
         if self.is_std {
             return ""
         }
@@ -141,7 +141,7 @@ impl EmitState {
     /// the sum where the member carries a view.
     /// **An error a dependency declares** is held in its envelope, as the
     /// dependency's functions hand it (#1418).
-    pub fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
+    fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
         let kind = self.name_of_error(world, member)
         if self.borrows_named(world, member) {
             return sum_member_type(kind, member, params, self.is_std)
@@ -151,7 +151,7 @@ impl EmitState {
 
     /// A bare value of `std`'s error `member`, put in the envelope the sum
     /// holds it in (ADR-280 D13).
-    pub fn sum_member_value(ref self, world: ref EmitWorld, member: ref String, value: ref String) -> String {
+    fn sum_member_value(ref self, world: ref EmitWorld, member: ref String, value: ref String) -> String {
         if self.name_of_error(world, member) == 0 {
             return value.clone()
         }
@@ -161,7 +161,7 @@ impl EmitState {
     /// Write every generated sum, once, at the crate root: a module is its own
     /// file below, so a sum written into each of them would be a different type
     /// per file and a failure could not cross one.
-    pub fn write_error_sums(ref self, world: ref EmitWorld, mut out: EmitOut) {
+    fn write_error_sums(ref self, world: ref EmitWorld, mut out: EmitOut) {
         if !self.entry {
             return
         }
@@ -360,7 +360,7 @@ impl EmitState {
                 }
             }
             if arms.len() > 0 {
-                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{fatal_arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
+                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> {self.rust_option()}<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> {self.rust_option()}<i32> {{\n        match self {{\n{fatal_arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
             }
         }
     }
@@ -371,7 +371,7 @@ impl EmitState {
     /// hand are the elided ones, `params` and `static_params` the parameter
     /// lists of the lifetimes in hand and of `'static`, and `borrows` whether
     /// the function's own signature carries a view.
-    pub fn channel_of(ref self, world: ref EmitWorld, thrown: ref Vec[String], elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
+    fn channel_of(ref self, world: ref EmitWorld, thrown: ref Vec[String], elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
         let sum = self.sums.get(thrown)
         if sum != null {
             let mut shown: String = ""
@@ -415,7 +415,7 @@ impl EmitState {
     /// what the value carries is that set or a part of it, so the box is
     /// opened into the channel before the `?`. Nothing where the channel is
     /// the box itself.
-    pub fn box_into_channel(ref self, world: ref EmitWorld, scope: ref EmitScope) -> String {
+    fn box_into_channel(ref self, world: ref EmitWorld, scope: ref EmitScope) -> String {
         if scope.channel == "std::boxed::Box<dyn std::error::Error>" || scope.function == "" {
             return ""
         }
@@ -432,12 +432,40 @@ impl EmitState {
         if arms == "" {
             return ""
         }
+        // **A box that holds a sum is opened member by member** (#1836): the
+        // value's body fails in its callee's sum, and the `?` that hands that
+        // into the box puts the sum there whole, where `holds` sees none of
+        // its members. Each sum whose members all lie in the set is asked
+        // for; one with a view cannot be, as a fatal sum is not
+        // (`fatal_registrations`).
+        let mut sums: String = ""
+        for (members, name) in self.sums {
+            let mut inside = members.len() > 0
+            let mut borrows = false
+            for member in members {
+                if !contract.fails_with.contains(member) {
+                    inside = false
+                }
+                if self.borrows_named(world, member) {
+                    borrows = true
+                }
+            }
+            // A file of `std` names only the sums it writes (`emit_sums_written`).
+            if inside && !borrows && (!self.is_std || self.sums_written.contains(name)) {
+                let sum = f"{self.sum_root()}{name}"
+                let mut cases: String = ""
+                for member in members {
+                    cases = f"{cases}{sum}::{sum_variant(member)}(e) => e.into(), "
+                }
+                sums = f"{sums}let error = match error.downcast::<{sum}>() {{ Ok(sum) => return match *sum {{ {cases}}}, Err(error) => error }}; "
+            }
+        }
         let channel = scope.channel.clone()
-        return f".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
+        return f".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {channel} {{ {sums}{arms}unreachable!(\"a function value failed outside its set\") }})"
     }
 
     /// The failure channel of the function `key`.
-    pub fn error_channel(ref self, world: ref EmitWorld, key: ref String, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
+    fn error_channel(ref self, world: ref EmitWorld, key: ref String, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
         let contract = self.own_contracts.functions.get(key) ?? return "std::boxed::Box<dyn std::error::Error>"
         return self.channel_of(world, contract.fails_with, elided, params, static_params, borrows)
     }
@@ -453,7 +481,7 @@ impl EmitState {
 /// whose own functions fail with it (`used_here`, #1347), and only there; each
 /// such file then names its own copy, so a failure of one file's sum does not
 /// cross into another's (no tool has one yet).
-pub fn emit_sums_written(sums: ref collections::BTreeMap[Vec[String], String], units: ref Vec[ParsedView], used_here: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+fn emit_sums_written(sums: ref collections::BTreeMap[Vec[String], String], units: ref Vec[ParsedView], used_here: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     let mut declared: Vec[collections::BTreeSet[String]] = []
     for unit in units {

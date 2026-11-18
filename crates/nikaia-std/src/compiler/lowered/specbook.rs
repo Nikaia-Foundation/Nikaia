@@ -25,10 +25,10 @@ pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
         let mut code: String = String::from("");
         for k in start..end {
             if k > start { code.push('\n'); }
-            code.push_str(nikaia_std::index::get(&lines, nikaia_std::index::at(k)));
+            code.push_str(unsafe { nikaia_std::proven::read(&lines, (k) as usize) });
         }
         found.push(SpecBlock { line: unsafe { nikaia_std::proven::add::<i64>(start, 1) }, discusses_a_refusal: discusses_a_refusal(&code), sketch: is_a_sketch(&code), code });
-        at = end + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
     found
 }
@@ -41,7 +41,7 @@ pub fn discusses_a_refusal(code: &str) -> bool {
 }
 
 pub fn is_a_sketch(code: &str) -> bool {
-    let c: Vec<scalar> = nikaia_std::list::chars(code.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(code.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < c.len() {
         if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '…' { return true; }
@@ -135,7 +135,7 @@ pub fn opening(code: &str) -> String {
     for line in code.split("\n") {
         let trimmed = line.trim();
         if trimmed.is_empty() { continue; }
-        let c: Vec<scalar> = nikaia_std::list::chars(trimmed.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(trimmed.chars());
         if c.len() <= 56 { return nikaia_std::block::Text::from(trimmed.to_string()); }
         let mut cut: String = String::from("");
         for k in 0..55 { cut.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }

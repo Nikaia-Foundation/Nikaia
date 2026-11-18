@@ -36,7 +36,24 @@ pub enum Switch {
 /// Part I 1.2 names the options rather than counting them, and this list is
 /// what a manifest is checked against.
 pub fn known() -> Vec[String] {
-    return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "artifact", "symbol-prefix"]
+    return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "unproved-checks", "artifact", "symbol-prefix", "raw-sinks"]
+}
+
+/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4): one per raw
+/// sink, each letting data from outside the program reach it unproved. A key
+/// outside these is refused naming them, as a `[build]` typo is.
+pub fn raw_sinks_allow_keys() -> Vec[String] {
+    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-paths-anywhere"]
+}
+
+/// **One `[allow]` key, checked** (ADR-raw-sinks-1 D4, D5): one of the four,
+/// where `table` is how the message names its table (`[allow]`,
+/// `[allow.packages.thumbs]`).
+pub fn raw_sinks_allow_key(table: ref String, key: ref String) throws {
+    if !contains(raw_sinks_allow_keys(), key) {
+        let expected = choices(raw_sinks_allow_keys())
+        throw Refused::Because(f"`{table}` has no key called `{key}`. The keys are: {expected}.")
+    }
 }
 
 // A key this compiler had and no longer has, with what to do instead, or
@@ -62,7 +79,7 @@ fn moved(key: ref String) -> String {
 
 /// What a `[build]` key does: kept, moved with a note, or refused - as
 /// withdrawn in its own words, or as a typo naming the keys there are.
-pub fn build_key(key: ref String) -> Switch throws {
+fn build_key(key: ref String) -> Switch throws {
     let gone = withdrawn(key)
     if gone.len() > 0 {
         throw Refused::Because(f"`{key}` in `[build]` is no longer supported: {gone}")
@@ -88,7 +105,7 @@ pub fn targets() -> Vec[String] {
 /// `[build]`: a silently ignored `opt_level` leaves a build at a setting its
 /// author believed they had changed. `incremental` and `debug` are ADR-002 D5,
 /// `codegen-units` D6.
-pub fn codegen_keys() -> Vec[String] {
+fn codegen_keys() -> Vec[String] {
     return ["opt-level", "lto", "codegen-units", "incremental", "debug"]
 }
 
@@ -102,7 +119,7 @@ pub fn codegen_units(target: ref String, units: i64?, written: String) throws {
 }
 
 /// `[build.<target>]` names a machine, or is refused naming the ones there are.
-pub fn codegen_table(target: ref String) throws {
+fn codegen_table(target: ref String) throws {
     if !contains(targets(), target) {
         let expected = choices(targets())
         throw Refused::Because(f"`[build.{target}]` isn't a machine Nikaia builds for. The machines are: {expected}.")
@@ -110,7 +127,7 @@ pub fn codegen_table(target: ref String) throws {
 }
 
 /// A key of `[build.<target>]` is one it may carry, or is refused.
-pub fn codegen_key(target: ref String, key: ref String) throws {
+fn codegen_key(target: ref String, key: ref String) throws {
     if !contains(codegen_keys(), key) {
         let expected = choices(codegen_keys())
         throw Refused::Because(f"`[build.{target}]` has no key called `{key}`. The keys are: {expected}.")
@@ -151,7 +168,7 @@ pub fn dependency(name: ref String, typed: bool, kind: ref String, has_path: boo
 /// crate name Cargo makes of the key.
 pub fn crate_name(key: ref String) -> String {
     let mut name: String = ""
-    for c in key.chars() {
+    for c in key.scalars {
         if c == '-' {
             name.push('_')
         } else {
@@ -185,8 +202,9 @@ fn choices(words: ref Array[String]) -> String {
 
 /// One value of `nikaia.toml`, in the plain words the `toml` reader gives it
 /// (MF). The adapter walks the document once, in the file's key order, and
-/// hands over the six sections this module reads (`package`, `dependencies`,
-/// `library`, `build`, `features`, `rust-library`), their entries, and each key of an entry that is a
+/// hands over the sections this module reads (`package`, `dependencies`,
+/// `library`, `build`, `features`, `rust-library`, `allow`, and
+/// `allow.packages` for the tables inside `[allow.packages]`), their entries, and each key of an entry that is a
 /// table. Nothing deeper: no reader looks further in.
 pub struct ManifestItem {
     /// The top-level table it is in.
@@ -246,6 +264,16 @@ pub struct ManifestFile {
     /// gets `0.0.0` - a version nobody typed, rather than a guess at one they
     /// meant.
     pub version: String,
+    /// **`[package] within`** (#1976, owner 2026-11-17): `std` where the
+    /// package is checked as part of `std`, the toolchain's own packages; it
+    /// reaches `std`'s helpers and unpublished modules, and `assume` is
+    /// refused. The one value it takes; null where the manifest does not say.
+    pub within: String?,
+    /// **`[package] described`** (#1976): the ledger of described names the
+    /// package is also checked against, as written, relative to the
+    /// manifest's directory; its names win a collision with `std`'s. Null
+    /// where the manifest does not say.
+    pub described: String?,
     pub dependencies: collections::BTreeMap[String, ManifestDependency],
     /// `[build.<target>]` - `opt-level` and `lto`, per machine (Part III 13.3).
     pub codegen: collections::BTreeMap[String, collections::BTreeMap[String, String]],
@@ -264,6 +292,11 @@ pub struct ManifestFile {
     /// failing a manifest somebody already wrote to the specification would
     /// punish them for the move ([ADR-303](../../../docs/specification/adr/adr-303.md) D5).
     pub notes: Vec[String],
+    /// **What `[allow]` lets through** (ADR-raw-sinks-1 D4, D5): each key set
+    /// to `true`, the package's own as `untrusted-shell` and a dependency's,
+    /// from `[allow.packages.NAME]`, as `NAME:untrusted-shell`, the words
+    /// `--allow` takes.
+    pub allow: Vec[String],
     /// The directory the manifest was found in, and therefore the project root.
     /// `None` when there was no manifest at all.
     pub root: fs::Path?,
@@ -271,7 +304,22 @@ pub struct ManifestFile {
 
 /// The manifest of no project: every section empty.
 pub fn manifest_empty() -> ManifestFile {
-    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], rust_library: null, notes: [], root: null }
+    return ManifestFile {
+        build: collections::BTreeMap(),
+        package: collections::BTreeMap(),
+        name: null,
+        version: "0.0.0",
+        within: null,
+        described: null,
+        dependencies: collections::BTreeMap(),
+        codegen: collections::BTreeMap(),
+        libraries: collections::BTreeMap(),
+        features: [],
+        rust_library: null,
+        notes: [],
+        allow: [],
+        root: null,
+    }
 }
 
 /// **One entry of `[features]`** (ADR-393 D2, Part III 13.3): a feature and
@@ -352,10 +400,19 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     }
     manifest.name = manifest_word_at(items, "package", "name", "")
     manifest.version = manifest_word_at(items, "package", "version", "") ?? "0.0.0"
+    manifest.within = manifest_within(
+        manifest.package,
+        manifest_word_at(items, "package", "within", ""),
+    )
+    manifest.described = manifest_described(
+        manifest.package,
+        manifest_word_at(items, "package", "described", ""),
+    )
     manifest.dependencies = manifest_dependencies(items)
     manifest.libraries = manifest_libraries(items)
     manifest.features = manifest_features(items)
     manifest.rust_library = manifest_rust_library(items)
+    manifest.allow = manifest_allow(items)
 
     for value in items {
         if value.section != "build" || value.name.len() == 0 || value.key.len() > 0 {
@@ -381,6 +438,90 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
         }
     }
     return manifest
+}
+
+/// **`[package] within`** (#1976): `std`, or nothing; any other value, or
+/// one that is no text, is refused.
+fn manifest_within(
+    package: ref collections::BTreeMap[String, String],
+    word: String?,
+) -> String? throws {
+    if !package.contains_key("within") {
+        return null
+    }
+    let said = word ?? ""
+    if said != "std" {
+        throw Refused::Because(f"`within` in `[package]` is `{package.get("within") ?? ""}`, and the one package a package can be within is `std`: write `within = \"std\"`, or leave the key out.")
+    }
+    return said
+}
+
+/// **`[package] described`** (#1976): the path as written; a value that is
+/// no text, or an empty one, is refused. Whether the file is there is
+/// `manifest_described_at`'s, which knows the manifest's directory.
+fn manifest_described(
+    package: ref collections::BTreeMap[String, String],
+    word: String?,
+) -> String? throws {
+    if !package.contains_key("described") {
+        return null
+    }
+    let said = word ?? ""
+    if said.len() == 0 {
+        throw Refused::Because(f"`described` in `[package]` is `{package.get("described") ?? ""}`, and it takes the path of a ledger of described names, relative to the manifest: `described = \"described.contracts\"`.")
+    }
+    return said
+}
+
+/// **The ledger `[package] described` names**, resolved against the
+/// manifest's directory (#1976); null where the manifest names none. A file
+/// that is not there is refused, by its path.
+pub fn manifest_described_at(manifest: ref ManifestFile) -> fs::Path? throws {
+    let written = manifest.described ?? return null
+    let bare: fs::Path = written.clone()
+    let path = manifest.root?.join(written) ?? bare
+    let found = fs::metadata(path, fs::Root::Anywhere) catch {
+        throw Refused::Because(f"`described` in `[package]` names {path.display()}, which can't be read: {error}.")
+    }
+    if !found.is_file() {
+        throw Refused::Because(f"`described` in `[package]` names {path.display()}, which is not a file.")
+    }
+    return path
+}
+
+/// **`[allow]` and `[allow.packages.NAME]`** (ADR-raw-sinks-1 D4, D5): the
+/// keys set to `true`, a dependency's written `NAME:key`. A key outside the
+/// four, or a value that is not `true` or `false`, is refused.
+fn manifest_allow(items: ref Vec[ManifestItem]) -> Vec[String] throws {
+    let mut allowed: Vec[String] = []
+    for item in items {
+        if item.name.len() == 0 {
+            continue
+        }
+        let mut table: String = ""
+        let mut key: String = ""
+        let mut word: String = ""
+        if item.section == "allow" && item.key.len() == 0 && !(item.name == "packages" && item.table) {
+            table = "[allow]"
+            key = item.name.clone()
+            word = item.name.clone()
+        } else if item.section == "allow.packages" && item.key.len() > 0 {
+            table = f"[allow.packages.{item.name}]"
+            key = item.key.clone()
+            word = f"{item.name}:{item.key}"
+        } else if item.section == "allow.packages" && !item.table {
+            throw Refused::Because(f"`{item.name}` in `[allow.packages]` is a table of keys, as `[allow.packages.{item.name}]` with `untrusted-shell = true` under it.")
+        } else {
+            continue
+        }
+        raw_sinks_allow_key(table, key)
+        match item.text {
+            "true" => allowed.push(word),
+            "false" => {}
+            else => throw Refused::Because(f"`{key}` in `{table}` is `true` or `false`, not `{item.text}`."),
+        }
+    }
+    return allowed
 }
 
 /// Whether this manifest says anything about how to build.
@@ -560,7 +701,7 @@ fn manifest_by_version(items: ref Vec[ManifestItem], value: ref ManifestItem) ->
 /// with a digit.
 fn manifest_an_identifier(word: ref String) -> bool {
     let mut first = true
-    for c in word.chars() {
+    for c in word.scalars {
         if !(c.is_alphanumeric() || c == '_') || (first && c >= '0' && c <= '9') {
             return false
         }

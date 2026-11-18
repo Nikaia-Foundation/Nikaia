@@ -9,6 +9,7 @@ pub struct CxExported {
     pub header: String,
     pub python: String,
     pub node: String,
+    pub java: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -31,6 +32,7 @@ pub struct CxBuild {
     pub any_pause: bool,
     pub python: CxPython,
     pub node: CxNode,
+    pub java: CxJava,
 }
 
 pub(crate) fn cx_sum_name(members: &[String]) -> String {
@@ -170,7 +172,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     let ctx = CxCtx { plains: plains.copy_owned(), handles: handles.copy_owned(), records: records.copy_owned(), codes: codes.copy_owned(), prefix: nikaia_std::block::Text::from(prefix.to_string()), upper: nikaia_std::block::Text::from(upper.to_string()), user_code: nikaia_std::block::Text::from(user_code.to_string()) };
     let mut symbols: collections::BTreeSet<String> = collections::BTreeSet::new();
     for own in ["last_error", "init", "shutdown", "set_allocator", "alloc_fn", "free_fn"] { symbols.insert(format!("{}_{}", prefix, own)); }
-    let mut build = CxBuild { rust, declarations: String::from(""), crossing, symbols, any_pause: false, python: CxPython::empty(), node: CxNode::empty() };
+    let mut build = CxBuild { rust, declarations: String::from(""), crossing, symbols, any_pause: false, python: CxPython::empty(), node: CxNode::empty(), java: CxJava::empty() };
     let mut at: i64 = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
@@ -217,8 +219,9 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     let header = cx_header(package, prefix, &upper, &guard, &constants, &types, &build.declarations);
     let python = build.python.module(package, prefix, &ctx, &held, build.any_pause);
     let node = build.node.module(package, prefix, &ctx, &held);
+    let java = build.java.module(package, prefix, &ctx, &held);
     if build.declarations.is_empty() { return Ok(None); }
-    Ok(Some(CxExported { rust: build.rust, header, python, node }))
+    Ok(Some(CxExported { rust: build.rust, header, python, node, java }))
 }
 
 pub(crate) fn cx_handle_named(handles: &[CxHandled], name: &str) -> Option<i64> {
@@ -560,6 +563,7 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     }
     build.python.entry(words, ctx, entry, &symbol, text_out, pauses);
     build.node.entry(words, ctx, entry, &symbol, text_out, pauses);
+    build.java.entry(words, ctx, entry, &symbol, text_out);
     if pauses {
         build.any_pause = true;
         let names = cx_parameter_names(&rust_params);
@@ -662,7 +666,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             { let __nikaia_stored = true; nikaia_std::index::set(&mut *crossing, (at) as usize, __nikaia_stored); }
             params.rust_params.push(format!("{}: std::ffi::c_int", local));
             params.c_params.push(format!("{}_{} {}", prefix, plain.name, param));
-            let arms = cx_choice_arms_in(&plain);
+            let arms = cx_choice_arms_in(plain);
             params.checks.push_str(&format!("    let {} = match {} {{ {} _ => return -1 }};\n", local, local, arms));
             if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
@@ -693,7 +697,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
                         rust_args.push(String::from("std::ffi::c_int"));
                         c_args.push(format!("{}_{}", prefix, plain.name));
                         closure_params.push(format!("{}: &{}", name, plain.name));
-                        passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(&plain)));
+                        passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(plain)));
                     },
                     CxLent::Text => {
                         rust_args.push(String::from("*const u8, usize"));

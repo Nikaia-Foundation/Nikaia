@@ -271,7 +271,7 @@ pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+pub(crate) fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -294,14 +294,14 @@ pub(crate) fn check_crossings_settle(state: &mut CheckState, fails: bool, pauses
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     check_crossings_settle(state, held.fails, held.pauses);
     if held.pauses { state.a_cleanup_that_may_pause(name, span); }
@@ -311,7 +311,7 @@ pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, worl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
     if held.pauses { state.a_cleanup_that_may_pause(name, span); }
@@ -330,7 +330,7 @@ pub(crate) fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
+pub(crate) fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
     let refused: Option<CheckFinding> = check_crossings_refusal(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
     let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
     state.findings.push(finding);
@@ -344,7 +344,7 @@ pub(crate) fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+pub(crate) fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
     let mut wanted: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     if state.declared_bounds.contains_key(key) {
         wanted = match match state.declared_bounds.get(key) {
@@ -363,14 +363,14 @@ pub(crate) fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<T
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+pub(crate) fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
     let refused = check_crossings_impls(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_task_of_a_scope(state: &mut CheckState, args: &[Expr]) {
+pub(crate) fn check_crossings_a_task_of_a_scope(state: &mut CheckState, args: &[Expr]) {
     if state.in_parallel.is_none() { state.in_parallel = Some(state.scope.len() as i64); }
     state.scoped_task = true;
     if !args.is_empty() { state.facts.scope_tasks.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
@@ -378,7 +378,7 @@ pub fn check_crossings_a_task_of_a_scope(state: &mut CheckState, args: &[Expr]) 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_scope_that_pauses(state: &mut CheckState, args: &[Expr], paused: &[i64], span: &Span) {
+pub(crate) fn check_crossings_a_scope_that_pauses(state: &mut CheckState, args: &[Expr], paused: &[i64], span: &Span) {
     if args.is_empty() { return; }
     let body = id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64;
     if !paused.contains(&body) { return; }
@@ -416,7 +416,7 @@ pub(crate) fn check_crossings_entry(state: &CheckState, key: &str, chained: bool
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_crossings_a_lambda_that_pauses_at_an_entry(state: &mut CheckState, key: &str, receiver: &Expr, on: &Ty, args: &[Expr], lambda_at: i64, result: Ty, span: &Span) -> Ty {
+pub(crate) fn check_crossings_a_lambda_that_pauses_at_an_entry(state: &mut CheckState, key: &str, receiver: &Expr, on: &Ty, args: &[Expr], lambda_at: i64, result: Ty, span: &Span) -> Ty {
     let parallel = match on {
         Ty::Seq { parallel, .. } => { let parallel = *parallel; parallel },
         _ => false,
@@ -451,7 +451,7 @@ pub(crate) fn check_crossings_known(bound: &collections::BTreeMap<String, Ty>, n
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
+pub(crate) fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result: &Ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let name: String = match result {
@@ -472,13 +472,13 @@ pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState,
         let k = nikaia_std::num::value(k);
         if !state.number_shaped(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }) && !state.a_member_of_an_open_argument(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }) { return; }
     }
-    state.flow.open_calls.insert(id_of(nikaia_std::index::get(&args, 0)) as i64, at);
+    state.flow.open_calls.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64, at);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
+pub(crate) fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
     let none: Vec<(String, bool, String)> = vec![];
     let keeps = match world.newly_keeps.get(key) { Some(__nikaia_value) => __nikaia_value, None => return check_arguments(state, world, host, key, written, contract, given, found, passed, &none, span) };
     check_arguments(state, world, host, key, written, contract, given, found, passed, &keeps, span)

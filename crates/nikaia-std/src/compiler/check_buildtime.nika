@@ -13,7 +13,7 @@ impl CheckState {
     /// `Bag { items: [1, 2, 3] }` the language below refuses — the struct is
     /// fine and the `Vec` in it is not, and *this cannot be evaluated* leaves
     /// them to work that out.
-    pub fn a_field_that_owns_memory(ref mut self, bound: ref String, field: ref String, held: ref String, holder: ref String, span: ref Span) sync {
+    fn a_field_that_owns_memory(ref mut self, bound: ref String, field: ref String, held: ref String, holder: ref String, span: ref Span) sync {
         let carries = field.contains("::")
         let mut message: String = f"`{bound}.{field}` is a `{held}`, which {holder} can't hold."
         let mut note: String = "A value computed at build time can't own memory, so every field has to be one that doesn't."
@@ -38,7 +38,7 @@ impl CheckState {
     /// worth a code rather than a note on `NK1127`: the build has just computed
     /// the value, so it knows the length the reader would otherwise have to
     /// work out by reading the body.
-    pub fn a_constant_that_owns_memory(ref mut self, bound: ref String, held: ref Ty, computed: ref BuildValue, holder: ref String, span: ref Span) sync {
+    fn a_constant_that_owns_memory(ref mut self, bound: ref String, held: ref Ty, computed: ref BuildValue, holder: ref String, span: ref Span) sync {
         let mut owns: String = "a `String`"
         let mut fixed: String = "a `String`, as a view"
         // **Text is the case with no length in it**, which is why the way out is
@@ -62,7 +62,7 @@ impl CheckState {
             }
             else => {}
         }
-        self.findings.push(check_refusal("NK1167", span, f"`{bound}` is a `{held.text()}`, which {holder} can't hold.", [f"{capitalised(owns)} allocates memory, and a value computed at build time can't. It can hold {fixed} instead."], way_out))
+        self.findings.push(check_refusal("NK1167", span, f"`{bound}` is a `{held.shown()}`, which {holder} can't hold.", [f"{capitalised(owns)} allocates memory, and a value computed at build time can't. It can hold {fixed} instead."], way_out))
     }
 
     /// `NK1154`: two elements of one list literal are not the same type
@@ -71,7 +71,7 @@ impl CheckState {
     /// **Named rather than widened.** A list holds one type, so the two are a
     /// mistake in one of them and the message says which two - exactly as a
     /// `let` with an annotation does, which is the shape this borrows.
-    pub fn a_list_whose_elements_disagree(ref mut self, first_kind: ref String, first: ref String, other_kind: ref String, other: ref Ty, span: ref Span) sync {
+    fn a_list_whose_elements_disagree(ref mut self, first_kind: ref String, first: ref String, other_kind: ref String, other: ref Ty, span: ref Span) sync {
         let mut one = first_kind.clone()
         if first != "?" && first.len() > 0 {
             one = f"`{first}`"
@@ -79,7 +79,7 @@ impl CheckState {
         let other_text = other.text()
         let mut two = other_kind.clone()
         if other_text != "?" && other_text.len() > 0 {
-            two = f"`{other_text}`"
+            two = spoken(other, null)
         }
         self.findings.push(check_refusal("NK1154", span, f"This list mixes {one} and {two}, but a list holds one type.", ["The first element with a known type sets the type for the rest."], "Convert the element that doesn't fit, or use two lists."))
     }
@@ -98,7 +98,7 @@ impl CheckState {
     /// rather than answering it wrongly, for C.4's reason again: the cost of
     /// silence is a backend message, and the cost of speaking is a correct
     /// program refused.
-    pub fn an_empty_list_with_no_element_type(ref mut self, name: ref String, span: ref Span) sync {
+    fn an_empty_list_with_no_element_type(ref mut self, name: ref String, span: ref Span) sync {
         // **A map nothing writes into and nothing types** (ADR-285 D43).
         if self.flow.empty_maps.contains(span.start as i64) {
             self.findings.push(check_refusal("NK1153", span, f"`{name}` is a map, and nothing says what it holds.", ["A map gets its key and value types from what is written into it, and nothing is written into it here."], f"Write the type, `let {name}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it."))
@@ -123,7 +123,7 @@ impl CheckState {
     /// writes and the lowering is name for name
     /// ([ADR-296](../../docs/specification/adr/adr-296.md) D17). What this
     /// refuses is the *source* spelling.
-    pub fn a_constructor_written_as_new(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+    fn a_constructor_written_as_new(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         let ty = name.strip_suffix("::new") ?? return
         if !world.own.functions.contains_key(name) && !world.library.functions.contains_key(name) {
             return
@@ -137,7 +137,7 @@ impl CheckState {
     /// `[T: Enum]` (Part II 10.3). A reader who writes either has read that
     /// section, so the message names the bound that makes it reachable rather
     /// than saying the type has no such member.
-    pub fn a_shape_that_is_not_reachable_yet(ref mut self, ty: ref String, member: ref String, span: ref Span) sync {
+    fn a_shape_that_is_not_reachable_yet(ref mut self, ty: ref String, member: ref String, span: ref Span) sync {
         let mut bound: String = "Struct"
         if member == "variants" {
             bound = "Enum"
@@ -151,7 +151,7 @@ impl CheckState {
 
     /// `NK1144`: a `let` whose only name is the ignore pattern
     /// ([ADR-291](../../docs/specification/adr/adr-291.md) D7).
-    pub fn a_let_that_binds_nothing(ref mut self, span: ref Span) sync {
+    fn a_let_that_binds_nothing(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK1144", span, "`let _ = …` binds nothing, so there's no reason for the `let`.", ["A call made for its effect is written as the call on its own, `f()`.", "`_` would also throw the value away on the spot, so its cleanup would run right here instead of at the end of the block."], "Write the expression on its own, or give it a name."))
     }
 
@@ -163,7 +163,7 @@ impl CheckState {
     /// the literal's and [ADR-118](../../docs/specification/adr/adr-118.md) D1
     /// restates it for `with`, which borrows the braces; both come here, because
     /// one rule written twice is two rules waiting to disagree.
-    pub fn a_field_written_twice(ref mut self, ty: ref String, field: ref String, span: ref Span) sync {
+    fn a_field_written_twice(ref mut self, ty: ref String, field: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1172", span, f"You're setting `{ty}.{field}` twice.", ["Each field gets its value once; Nikaia won't silently pick one of the two."], f"Remove one of the two `{field}`."))
     }
 
@@ -187,7 +187,7 @@ impl CheckState {
     ///
     /// **And the copy is named as the other answer**, because sometimes it is
     /// the one that was meant — but it is the *program's* to write.
-    pub fn a_copy_the_source_did_not_write(ref mut self, name: ref String, want: ref String, span: ref Span) sync {
+    fn a_copy_the_source_did_not_write(ref mut self, name: ref String, want: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1183", span, f"`{name}` is a view of a `{want}`, but this `let` declares a `{want}` of its own.", [f"A `for` lends each element, so `{name}` points at an element the collection still owns. A `{want}` of its own would be a copy, and Nikaia never copies behind your back."], f"Remove the type: `let … = {name}` keeps the view, which reads the same. If you want a copy, write `{name}.clone()`."))
     }
 
@@ -199,43 +199,43 @@ impl CheckState {
     /// than something nobody has told the compiler about.
     /// **`NK1180` for a variant**: a reflected variant answers `.name` and
     /// `.is(value)`.
-    pub fn a_reflected_variant_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
+    fn a_reflected_variant_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1180", span, f"A variant from `T::variants` has no `{member}`.", ["A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`."))
     }
 
     /// **`NK1231`: a `meta::Type` that would reach the running program**
     /// ([ADR-330](../../docs/specification/adr/adr-330.md) D6): it carries
     /// types, which exist only while the program is built.
-    pub fn a_kind_kept_at_run_time(ref mut self, written: ref String, span: ref Span) sync {
+    fn a_kind_kept_at_run_time(ref mut self, written: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1231", span, f"`{written}` is a `meta::Type`, which exists only while the program is built.", ["A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then."], "Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`."))
     }
 
     /// **`NK1171`: an arm of a `match` on a kind names no case of
     /// `meta::Type`** (ADR-330 D3, D4).
-    pub fn a_kind_arm_names_no_case(ref mut self, written: ref String, span: ref Span) sync {
+    fn a_kind_arm_names_no_case(ref mut self, written: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1171", span, f"`meta::Type` has no variant called `{written}`.", ["`meta::Type` is `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool`, `Text`, `Bytes`, `Scalar`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Array(A, N)`, `Tuple(parts)`, `Struct(T)`, `Enum(T)`, `Fn(F)` or `Opaque(T)`."], "Name one of its cases, or `else`."))
     }
 
     /// `NK1180`: a member a field from `T::fields` does not have.
-    pub fn a_reflected_field_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
+    fn a_reflected_field_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`."))
     }
 
     /// **`NK1230`: a reflected field's `.ty` where a value belongs**
     /// ([ADR-330](../../docs/specification/adr/adr-330.md) D5): it is the
     /// field's type, asked with `::`.
-    pub fn a_field_type_as_a_value(ref mut self, span: ref Span) sync {
+    fn a_field_type_as_a_value(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK1230", span, "`.ty` of a field from `T::fields` is a type, not a value.", ["A reflected field's `.ty` is the field's type, and a type is asked what it is with `::`."], "Ask it: `field.ty::kind`, `field.ty::name`, or `field.ty::fields` where it is a struct."))
     }
 
     /// **`NK1180`: a member a field's type does not answer** (ADR-330 D2, D5).
-    pub fn a_field_type_has_no_member(ref mut self, member: ref String, span: ref Span) sync {
+    fn a_field_type_has_no_member(ref mut self, member: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1180", span, f"A field's `.ty` has no `::{member}`.", ["A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct."], "Use `.ty::kind`, `.ty::name` or `.ty::fields`."))
     }
 
     /// **`NK1181`: a path after a value** (ADR-330 D5): `x.name::member` asks
     /// a type, and only a reflected field's `.ty` is one.
-    pub fn a_path_after_a_value(ref mut self, written: ref String, span: ref Span) sync {
+    fn a_path_after_a_value(ref mut self, written: ref String, span: ref Span) sync {
         let head: String = written.split("::").next()?.clone() ?? written.clone()
         self.findings.push(check_refusal("NK1181", span, f"`.{written}` is written under `.{head}`, but `.{head}` is a value, not a type.", ["A name in front of `::` has to be a type; after a `.`, only a field's `.ty` from `T::fields` is one."], f"Read the field with `.{head}`, or ask a reflected field's type with `field.ty::…`."))
     }
@@ -262,7 +262,7 @@ impl CheckState {
     /// [Part III C.1](../../docs/specification/30-nikaia-tooling.md)'s class —
     /// and the line it answered about was a **grammar action**, where the way
     /// out is not *write a `&`* at all.
-    pub fn a_run_this_body_owns(ref mut self, owner: ref String, field: ref String, held: ref String, span: ref Span) sync {
+    fn a_run_this_body_owns(ref mut self, owner: ref String, field: ref String, held: ref String, span: ref Span) sync {
         let known = held != "?"
         let mut owned: String = "a value this body owns"
         let mut way_out: String = f"Declare `{field}` as `Vec[T]`, which is what parsing builds. If you need a view, run the grammar in a `comptime` declared `&[T]`."
@@ -280,7 +280,7 @@ impl CheckState {
     /// second and wrong account of one mistake. Decided once the whole program
     /// is checked, because a `comptime` above the grammar runs it before its
     /// actions are walked; where nothing else is wrong, it is still said.
-    pub fn walls_a_refusal_explains(ref mut self) sync {
+    fn walls_a_refusal_explains(ref mut self) sync {
         let mut other_errors = false
         for found in self.findings {
             if !did_not_build(found) {

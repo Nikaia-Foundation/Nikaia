@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
+    pub(crate) fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
         let here = span.start as i64;
         if !(*op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
         let left = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -52,7 +52,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_negation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Expr, span: &Span) {
+    pub(crate) fn a_negation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Expr, span: &Span) {
         let here = span.start as i64;
         if self.flow.overflowed.contains(&here) { return; }
         let operand = match self.constant_of(world, inner) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -82,7 +82,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn slots_waiting(&self, span: &Span) -> Vec<bool> {
+    pub(crate) fn slots_waiting(&self, span: &Span) -> Vec<bool> {
         let mut waiting: Vec<bool> = vec![];
         let key = span.start as i64;
         let slots = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return waiting };
@@ -91,7 +91,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn findings_moved(&mut self, span: &Span, at: &Span, pushed: i64, waiting: &[bool]) {
+    pub(crate) fn findings_moved(&mut self, span: &Span, at: &Span, pushed: i64, waiting: &[bool]) {
         if at == span { return; }
         for index in pushed..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(index)).span == *span { (*unsafe { nikaia_std::proven::slot(&mut self.findings, (index) as usize) }).span = at.clone(); } }
         let key = span.start as i64;
@@ -115,7 +115,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> {
+pub(crate) fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> {
     let into = nikaia_std::index::or(widened_into(found, want), || "".into());
     if !into.is_empty() { return Some(FactWrap::Widen(nikaia_std::block::Text::from(into.to_string()))); }
     if mapped_as_bytes(found, want) { return Some(FactWrap::MappedBytes); }
@@ -169,14 +169,14 @@ pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &Check
 // this was written - see `contracts::sync`.
 pub(crate) fn check_overflow_wanted(want: &Ty) -> String {
     match want {
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", unviewed_type(inner).text()) },
-        _ => want.text(),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", unviewed_type(inner).shown()) },
+        _ => want.shown(),
     }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_wrap_undecided(found: &Ty, want: &Ty, literal: bool) -> bool {
+pub(crate) fn check_wrap_undecided(found: &Ty, want: &Ty, literal: bool) -> bool {
     if literal || !found.is_unknown() { return false; }
     match want {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); widened_into(found, inner).is_none() },
@@ -210,7 +210,7 @@ pub(crate) fn check_overflow_a_number_inside(want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
+pub(crate) fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
     let mut literal = false;
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -274,7 +274,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+pub(crate) fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
     let literal = matches!(given, Expr::ListLit { .. } | Expr::Tuple(_, _));
     if literal && !check_overflow_a_nullable(found) {
         match want {
@@ -347,7 +347,7 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+pub(crate) fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
     let items = match given {
         Expr::Tuple(items, _) => items,
         _ => return false,
@@ -367,19 +367,18 @@ pub fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr,
         let part = unsafe { nikaia_std::proven::read(&wants, (i) as usize) };
         let had = unsafe { nikaia_std::proven::read(&founds, (i) as usize) };
         let is_null = matches!(item, Expr::LitNull(_));
-        let lent = state.facts.nullable_args.contains_key(&(id_of(&item) as i64));
-        if check_overflow_a_nullable(&part) && !check_overflow_a_nullable(&had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(&item)) {
-            state.facts.wrapped.insert(id_of(&item) as i64, FactWrap::Constructor);
+        let lent = state.facts.nullable_args.contains_key(&(id_of(item) as i64));
+        if check_overflow_a_nullable(part) && !check_overflow_a_nullable(had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(item)) {
+            state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor);
             any = true;
-        } else if check_overflow_list_into_nullables(state, &item, &had, &part) { any = true; }
+        } else if check_overflow_list_into_nullables(state, item, had, part) { any = true; }
     }
     any
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_overflow_ends_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
-    if !ends_in_tuple(given) { return false; }
+pub(crate) fn check_overflow_ends_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
     let mut any = false;
     for end in tuple_ends(given) {
         let own: Ty = nikaia_std::index::or(match state.arm_types.get(&(id_of(end) as i64)) {
@@ -393,13 +392,13 @@ pub fn check_overflow_ends_into_nullables(state: &mut CheckState, given: &Expr, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+pub(crate) fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_unsigned_slot_refused(slot: &CheckUnsignedSlot) -> CheckFinding {
-    let found = slot.found.text();
-    let want = slot.want.text();
+pub(crate) fn check_unsigned_slot_refused(slot: &CheckUnsignedSlot) -> CheckFinding {
+    let found = slot.found.shown();
+    let want = slot.want.shown();
     let value = nikaia_std::block::Text::from(slot.written.to_string());
     let into = nikaia_std::block::Text::from(slot.into.to_string());
     let mut finding = nikaia_std::index::or(match slot.refusal.as_ref() {

@@ -252,7 +252,7 @@ fn migrate_after_dsl(tokens: ref Vec[MigrateToken]) -> bool sync {
 // Whether a gap holds only blanks on one line: dropping it joins two tokens
 // of a line, never two lines or a comment.
 fn migrate_blank(gap: String) -> bool sync {
-    return gap.chars().all(fn(c) { c == ' ' || c == '\t' })
+    return gap.scalars.all(fn(c) { c == ' ' || c == '\t' })
 }
 
 // The text of token `k`, or nothing past the end.
@@ -511,7 +511,7 @@ fn migrate_name_a_code(tokens: ref Vec[MigrateToken], k: i64, mut prefix: Vec[St
 /// then `a26`, … .
 fn migrate_letter(position: i64) -> String sync {
     let letters = "abcdefghijklmnopqrstuvwxyz"
-    let chars: Vec[scalar] = letters.chars().collect()
+    let chars: Vec[scalar] = letters.scalars.collect()
     if position < 26 {
         let mut one: String = ""
         one.push(chars[position])
@@ -698,7 +698,7 @@ pub fn migrate_views3_markdown_unwritten(source: String) -> Vec[String] sync {
 /// `migrate_views3_unwritten` of `code` whose first line is line
 /// `before + 1` of its file.
 fn migrate_unwritten_from(code: String, before: i64) -> Vec[String] sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
     let tokens = lexer.tokens
     let mut out: Vec[String] = []
@@ -716,7 +716,7 @@ fn migrate_unwritten_from(code: String, before: i64) -> Vec[String] sync {
             if last >= 0 && from.is_empty() {
                 let mut line = before + 1
                 let mut at = 0
-                for c in code.chars() {
+                for c in code.scalars {
                     if at >= tokens[k].at {
                         break
                     }
@@ -748,7 +748,7 @@ fn migrate_ordinal_of(items: ref Vec[i64], wanted: i64) -> i64 sync {
 /// goes, since `p: ref T` and `p: T` read alike after it (ADR-views-3 D4:
 /// such a one was a borrow, and is never marked `keep`).
 pub fn migrate_views3_lent(code: String) -> Vec[bool] sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
     let mut out: Vec[bool] = []
     for k in migrate_parameters(lexer.tokens) {
@@ -761,7 +761,7 @@ pub fn migrate_views3_lent(code: String) -> Vec[bool] sync {
 /// code as written, before `ref` goes, since `ref self` and `self` read
 /// alike after it (ADR-views-3 D2: a consumed one becomes `keep self`).
 pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
     let mut out: Vec[bool] = []
     for (_, bare) in migrate_receivers(lexer.tokens) {
@@ -776,7 +776,7 @@ pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
 /// the method starts, takes it where `by_value` says its receiver was the old
 /// by-value `self`, in `migrate_views3_selves`'s order).
 pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool], lent: Vec[bool]) -> String sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
     let tokens = lexer.tokens
     let n = tokens.len()

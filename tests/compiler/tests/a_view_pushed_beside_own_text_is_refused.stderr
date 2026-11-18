@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/a_view_pushed_beside_own_text_is_refused.nika:12:17
     |
  12 |     briefs.push(urgent)

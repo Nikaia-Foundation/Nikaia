@@ -16,7 +16,7 @@ pub(crate) enum EscapeRead {
 pub(crate) const HEX: &str = "0123456789abcdef";
 
 pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Option<NotAnEscape> {
-    let c: Vec<scalar> = nikaia_std::list::chars(literal.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(literal.chars());
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '\\' {
@@ -32,7 +32,7 @@ pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<s
 }
 
 pub fn decoded(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Option<String> {
-    let c: Vec<scalar> = nikaia_std::list::chars(literal.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(literal.chars());
     let mut out: String = String::from("");
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -77,12 +77,12 @@ pub(crate) fn one_escape(c: &[scalar], at: i64, char_of: &impl Fn(i64) -> Option
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn a_high_byte(literal: &str) -> Option<i64> {
-    let c: Vec<scalar> = nikaia_std::list::chars(literal.chars());
+pub(crate) fn a_high_byte(literal: &str) -> Option<i64> {
+    let c: Vec<scalar> = nikaia_std::list::scalars(literal.chars());
     if c.len() != 4 || *unsafe { nikaia_std::proven::read(&c, (0) as usize) } != '\\' || *unsafe { nikaia_std::proven::read(&c, (1) as usize) } != 'x' { return None; }
     let high = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let low = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (3) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let value = high * 16 + low;
+    let value = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(high, 16), low) };
     if value < 128 { return None; }
     Some(value)
 }
@@ -98,7 +98,7 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
     let high = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (from) as usize) }), || 128);
     let low = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) }), || 128);
     let why = "`\\x` takes two hexadecimal digits naming a byte below `\\x80`";
-    let value = high * 16 + low;
+    let value = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(high, 16), low) };
     if value >= 128 { return not_an_escape(&written, why); }
     let byte = match char_of(value) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, why) };
     EscapeRead::Means { value: byte, next: end }
@@ -125,12 +125,12 @@ pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &impl 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn code_point(c: &[scalar], from: i64, to: i64) -> Option<i64> {
-    if from >= to || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) == '_' { return None; }
+    if from >= to || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } == '_' { return None; }
     let mut value: i64 = 0;
     let mut digits = 0;
     let mut at = from;
     while at < to {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '_' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '_' {
             let digit = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             value = value * 16 + digit;
             digits += 1;
@@ -161,9 +161,9 @@ pub(crate) fn hex_digit(c: scalar) -> Option<i64> {
     None
 }
 
-pub fn hex_of(n: i64) -> String {
+pub(crate) fn hex_of(n: i64) -> String {
     if n == 0 { return String::from("0"); }
-    let digits: Vec<scalar> = nikaia_std::list::chars(HEX.chars());
+    let digits: Vec<scalar> = nikaia_std::list::scalars(HEX.chars());
     let mut backwards: Vec<scalar> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut rest = n;
     while rest > 0 {

@@ -5,7 +5,7 @@ pub(crate) fn is_offered(name: &str) -> bool { name == "i32" || name == "i64" ||
 
 pub fn types_this_file_declares(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> { types_declared_in(&program.items, words) }
 
-pub fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in items.iter() {
         match &item.node {
@@ -53,7 +53,7 @@ pub fn a_literal(expr: &Expr) -> bool {
 
 pub(crate) fn is_a_number(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
 
-pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, declarations: &[Spanned<TraitMethod>]) -> Vec<DeclaredFn> {
+pub(crate) fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, declarations: &[Spanned<TraitMethod>]) -> Vec<DeclaredFn> {
     let mut out: Vec<DeclaredFn> = vec![];
     for declaration in declarations.iter() {
         let mut declared = declared_trait_method(words, aliases, "", &declaration.node, false);
@@ -64,7 +64,7 @@ pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collec
     out
 }
 
-pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
+pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
     let owner = nikaia_std::block::Text::from(words.resolve(definition.name).to_string());
     let mut out: Vec<DeclaredFn> = vec![];
     for rule in definition.rules.iter() {
@@ -96,7 +96,7 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
     out
 }
 
-pub fn grammar_entry_interns(words: &winnow_grammar::InternerContext, definition: &GrammarDef, entry: &str) -> bool {
+pub(crate) fn grammar_entry_interns(words: &winnow_grammar::InternerContext, definition: &GrammarDef, entry: &str) -> bool {
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
     for r in definition.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(r.name).to_string())); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -220,7 +220,7 @@ pub struct PublishedEnsures {
     pub condition: String,
 }
 
-pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &impl Fn(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
+pub(crate) fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &impl Fn(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
     let (name, receiver, args, config, ret_type, body) = match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => { let name = *name; (name, receiver, args, config, ret_type, body) },
         _ => return None,
@@ -260,7 +260,7 @@ pub struct ComputedAt {
     pub field: bool,
 }
 
-pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
+pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
     let declared: collections::BTreeSet<String> = units.iter().flat_map(|u| { types_declared_in(u.items, u.words) }).collect();
     let mut defaults: Vec<ComputedAt> = vec![];
     for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
@@ -300,14 +300,14 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
                 },
                 Item::Enum { name, variants, is_public, .. } => {
                     let is_public = *is_public; let name = *name;
-                    ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, &borrowing_names));
+                    ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, borrowing_names));
                 },
                 Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                     let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                     let key = view.text(name);
                     let mut contract = TypeContract::empty();
                     contract.public = is_public;
-                    contract.tethered = tethered_fields(view.words, fields, &borrowing_names);
+                    contract.tethered = tethered_fields(view.words, fields, borrowing_names);
                     contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern);
                     for (at, f) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) {
                         let d = match f.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -378,9 +378,29 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
     all
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LedgerDerives {
+    pub compares: collections::BTreeSet<String>,
+    pub equates: collections::BTreeSet<String>,
+    pub hashes: collections::BTreeSet<String>,
+    pub copies: collections::BTreeSet<String>,
+}
+
+pub(crate) fn ledger_derives(ledger: &mut Ledger, derives: &LedgerDerives) {
+    let names: Vec<String> = ledger.types.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+    for name in names.iter() {
+        let contract = match ledger.types.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if derives.compares.contains(name) { contract.compares = true; }
+        if derives.equates.contains(name) { contract.equates = true; }
+        if derives.hashes.contains(name) { contract.hashes = true; }
+        if derives.copies.contains(name) { contract.copies = true; }
+    }
+}
+
 pub trait LedgerInferHost {
     fn check_units(&self, ledger: &Ledger);
     fn outside_results(&self) -> collections::BTreeSet<String>;
+    fn derives(&self) -> LedgerDerives;
     fn infer_sync(&self, ledger: &mut Ledger);
     fn reads_back(&self, condition: &str, readable: &collections::BTreeSet<String>) -> bool;
     fn infer_throws(&self, ledger: &mut Ledger);
@@ -402,6 +422,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     let defaults = declare_items(units, borrowing, ledger);
     host.check_units(&ledger);
     ledger_untrusted_results(ledger, &host.outside_results());
+    ledger_derives(ledger, &host.derives());
     host.infer_sync(ledger);
     ledger_expression_ensures(ledger, units, host);
     host.infer_panics(ledger);

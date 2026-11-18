@@ -15,7 +15,7 @@ lane's copy, with the two paths below made the lane's own.
   (`gh api repos/Nikaia-Foundation/Nikaia/actions/runs?branch=ci/<lane>`) and
   its failed job's log before anything else.
 * Fix forward, never skip or loosen a test; cheap checks only (the failing
-  tests, the tests your fix touches, `cargo fmt`, clippy when Rust changed,
+  tests, the tests your fix touches, `cargo fmt --all`, clippy when Rust changed,
   `nikaia run scripts/pre-push.nika`). The driver runs the suite again after you.
 * Commit locally with `target/fast/nikaia run scripts/commit.nika -- REPORT`
   (it adds exactly the report's `Files:`); no push. One commit per cause.

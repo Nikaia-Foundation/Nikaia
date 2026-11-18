@@ -15,9 +15,10 @@
 // not fail; `nikaia run scripts/pre-push.nika -- push` (the session that
 // pushes) makes it fail like the others.
 //
-// All four run on a copy of the index (`git checkout-index` into
-// target/pre-push-*), not on the working tree: the shared tree holds other
-// agents' unfinished files, and the self-hosted badge counted them, so the
+// All four run on a copy of the index (`git checkout-index` into a slot of
+// target/pre-push, emptied first; scripts/slot.nika: a fixed place, so the page
+// examples' builds hit ADR-021 D14's rustc store, #2015), not on the working
+// tree: the shared tree holds other agents' unfinished files, and the self-hosted badge counted them, so the
 // check was green here and red on CI for the same commit (2026-11-01). What is
 // staged is what the next commit holds; with nothing staged it is HEAD.
 // `bump.py check` runs there too: it read the working tree, so another agent's
@@ -27,9 +28,16 @@
 // website/ or tests/page-examples/, the examples of those pages go through
 // `nikaia test` in tests/page-examples, as CI's `examples` job does (about a
 // minute; the package's built `target/` is copied in first). Nothing of those
-// staged: the line says `page-examples skipped`.
+// staged: the line says `page-examples skipped`. The compiler it runs is
+// the repository's own build (`target/fast/nikaia`, else `target/release`):
+// its directory goes first on PATH, since the examples' program spawns a
+// bare `nikaia` too; `nikaia` on PATH as it is only when neither is built
+// (#1883: the step failed with "no such file or directory: nikaia" wherever
+// target/fast was not on PATH).
 
 use std::cli
+use std::env
+use std::fs
 use std::process
 
 fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
@@ -59,18 +67,66 @@ fn page_examples(copy: String) -> bool throws {
     }
     let dir = f"{copy}/tests/page-examples"
     process::run("cp", ["-r", "tests/page-examples/target", f"{dir}/"])
-    return check("page-examples", "nikaia", ["test"], dir)
+    let bin = pre_push_bin()
+    let path = env::var("PATH") ?? ""
+    let exe = if bin == "" { "nikaia" } else { f"{bin}/nikaia" }
+    let out = process::run(exe, ["test"]; dir: dir, env: [("PATH", f"{bin}:{path}")])
+    if out.code == 0 {
+        println("page-examples green")
+        return true
+    }
+    println("page-examples red")
+    println(out.stdout.trim_end())
+    println(out.stderr.trim_end())
+    return false
+}
+
+// The directory of the repository's built compiler, absolute; "" when
+// neither build exists (PATH is then searched as it is).
+fn pre_push_bin() -> String throws {
+    for dir in ["target/fast", "target/release"] {
+        if fs::exists(f"{dir}/nikaia", fs::Root::Anywhere) {
+            return process::run("realpath", [dir.clone()]).stdout.trim().clone()
+        }
+    }
+    return ""
+}
+
+// Runs this script again in a slot of target/pre-push (scripts/slot.nika,
+// ADR-021 D14), with `--in <slot>` before its arguments, and ends with its
+// exit code.
+fn pre_push_in_slot(args: Vec[String]) throws {
+    let exe = env::current_exe()?.display() ?? "nikaia"
+    let main = env::current_main()?.display() ?? "scripts/pre-push.nika"
+    let mut again: Vec[String] = ["run", "scripts/slot.nika", "--", "target/pre-push", exe.clone(), "run", main, "--", "--in", "{slot}"]
+    let mut i = 1
+    while i < args.len() {
+        again.push(args[i].clone())
+        i += 1
+    }
+    let ran = process::run(exe, again; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)
+    process::exit(ran.code)
 }
 
 fn main() throws {
-    process::run("mkdir", ["-p", "target"])
-    let copy = process::run("mktemp", ["-d", "target/pre-push-XXXXXX"]).stdout.trim().clone()
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut copy: String = ""
+    let mut i = 1
+    while i + 1 < args.len() {
+        if args[i] == "--in" { copy = args[i + 1].clone() }
+        i += 1
+    }
+    if copy == "" {
+        pre_push_in_slot(args)
+        return
+    }
     let mut ok = check("index", "git", ["checkout-index", "-a", f"--prefix={copy}/"], ".")
     if ok {
         ok = check("fmt", "cargo", ["fmt", "--all", "--", "--check"], copy.clone())
         ok = check("adr-refs", "python3", ["scripts/check-adr-refs.py"], copy.clone()) && ok
         let mut strict = false
-        for a in cli::args() { if a == "push" { strict = true } }
+        for a in args { if a == "push" { strict = true } }
         if strict {
             ok = check("badges", "python3", ["scripts/badges.py", "--check"], copy.clone()) && ok
         } else if process::run("python3", ["scripts/badges.py", "--check"]; dir: copy.clone()).code == 0 {
@@ -79,8 +135,7 @@ fn main() throws {
             println("badges stale (the driver's)")
         }
         ok = check("version", "python3", ["scripts/bump.py", "check"], copy.clone()) && ok
-        ok = page_examples(copy.clone()) && ok
+        ok = page_examples(copy) && ok
     }
-    process::run("rm", ["-rf", copy])
     if !ok { process::exit(1) }
 }

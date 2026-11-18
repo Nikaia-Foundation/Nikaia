@@ -142,7 +142,7 @@ fn result_carries(names: ref winnow_grammar::InternerContext, result: ref Type?,
 
 /// Whether a written type **carries** a view: it is one, it names a type that
 /// holds one, or one of its arguments does.
-pub fn carries_a_view(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> bool {
+fn carries_a_view(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> bool {
     if holds_view(ty) || borrowing.contains(names.resolve(ty.name)) {
         return true
     }
@@ -156,7 +156,7 @@ pub fn carries_a_view(names: ref winnow_grammar::InternerContext, ty: ref Type, 
 
 /// **A name declared `String` holds text of this frame's own**, whatever its
 /// initialiser was (ADR-282 D4, ADR-282 D3).
-pub fn declares_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> bool {
+fn declares_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> bool {
     let written = ty ?? return false
     return names.resolve(written.name) == "String" && written.generics.len() == 0 && !written.is_view && !written.is_nullable
 }
@@ -229,7 +229,7 @@ fn an_entry(key: ref String, asked: ref Asked) -> FnContract? {
 
 // Owned text or bytes - something a view can point **into**: `String`,
 // `Bytes`, a mapped file, a run of `u8`. A `Vec[Entry]` is not one.
-pub fn is_a_buffer(ty: ref Ty) -> bool {
+fn is_a_buffer(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => a_buffer_name(name, args),
         else => false,
@@ -317,7 +317,7 @@ fn buffer_named(plan: ref BufferPlan, wanted: i64) -> String? {
 
 fn padded(word: ref String, width: i64) -> String {
     let mut out = word.clone()
-    let mut n = word.chars().collect().len()
+    let mut n = word.scalars.count()
     while n < width {
         out.push(' ')
         n = n + 1

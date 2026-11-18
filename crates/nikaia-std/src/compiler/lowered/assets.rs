@@ -32,7 +32,7 @@ pub fn unused_entries(allowed: &collections::BTreeSet<String>, taken: &collectio
     out
 }
 
-pub fn why_not_read(why: &Denied, path: &str) -> String {
+pub(crate) fn why_not_read(why: &Denied, path: &str) -> String {
     match why {
         Denied::NoList => String::from("A build reads no files unless it's given a list of the files it may read."),
         Denied::NotListed { list } => format!("`{}` is the list of files this build may read, and `{}` isn't in it.", list, path),
@@ -42,7 +42,7 @@ pub fn why_not_read(why: &Denied, path: &str) -> String {
     }
 }
 
-pub fn way_out_of_a_read(why: &Denied, path: &str) -> String {
+pub(crate) fn way_out_of_a_read(why: &Denied, path: &str) -> String {
     match why {
         Denied::NoList => String::from("Pass `--allow-read-from-list=<file>`, and put this path in that file."),
         Denied::NotListed { list } => format!("Add `{}` as a line in `{}`.", path, list),

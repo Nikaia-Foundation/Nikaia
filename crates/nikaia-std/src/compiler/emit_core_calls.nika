@@ -182,7 +182,7 @@ impl EmitState {
     /// A call. `Stats(temp)` is the anonymous constructor of Kap 4.2 - Rust has
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
-    pub fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An argument that uses what an earlier one lends to a `mut`
         // parameter is bound before the call**: Rust holds that
         // `&mut` from the first argument to the call, so `f(w, g(w))` is
@@ -476,7 +476,7 @@ impl EmitState {
 
     /// A call, past `call`'s precondition check: to the unchecked entry where
     /// `unchecked` says so (ADR-269 D20).
-    pub fn emit_core_call_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_call_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An `assert` is a claim checked here** (ADR-269 D2, D4) unless it was
         // proved, and the failure is written with what only this compiler knew -
         // the claim as written and its operands by name.
@@ -664,7 +664,12 @@ impl EmitState {
                         // **What it takes as a view is lent to it** (D20).
                         out.push("&")
                     }
+                    // Part I 2.3: a plain value where its type asks for a
+                    // `T?` (#1996), as at a named call.
+                    let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(arg))
+                    out.push(before)
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+                    out.push(after)
                 }
                 out.push(")")
                 if pauses {
@@ -881,7 +886,7 @@ impl EmitState {
     /// arguments, Kap 5.1's deferred parameters, ADR-055 D2's `.await` and
     /// ADR-023 D8's `?`. `receiver` is `null` for the safe form, where the
     /// receiver is the name the enclosing `match` already bound.
-    pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An argument that lends the receiver's local to a `mut` parameter
         // is bound before the call**, as a call's is (`emit_core_call`): Rust
         // borrows the receiver from before the arguments to the call, so
@@ -976,11 +981,11 @@ impl EmitState {
     /// The method call, its arguments bound or not.
     fn emit_core_method_call_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
-        // **`text.chars().collect()` is a list of characters asked for at its
-        // size** (`nikaia_std::list::chars`): the same list, without the growing a
-        // `collect` over `Chars` does. Only where nothing declares another thing
-        // to build.
-        if self.emit_call_chars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
+        // **`text.scalars.collect()` is a list of scalars asked for at its
+        // size** (`nikaia_std::list::scalars`): the same list, without the
+        // growing a `collect` over Rust's `Chars` does. Only where nothing
+        // declares another thing to build.
+        if self.emit_call_scalars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
             return
         }
         // **A grammar is entered by an ordinary call** (ADR-296 D24); the dot is
@@ -1077,6 +1082,43 @@ impl EmitState {
         if name == "read" && args.len() == 0 && (self.facts.method_callees[on_node]?.clone() ?? "") == "net::Connection::read(within)" {
             deadline = emit_call_option_named(world, config, "within")
         }
+        // **A cut of a text's own bytes is text where its two ends are**
+        // (Part I 2.6, #1870): `s.bytes[a..<b].text()` is `std`'s
+        // `bytes::text_of_a_cut` of the text (`&*`, whichever text it is),
+        // two boundary checks, where `text()` on the bare `&[u8]` ran
+        // `from_utf8` over the whole cut. The text is read twice, so only a
+        // place nothing is done to evaluate; the call is `std`'s `Bytes::text`
+        // by the ledger.
+        if receiver != null && name == "text" && args.len() == 0 && (self.facts.method_callees[on_node]?.clone() ?? "Bytes::text").ends_with("Bytes::text") {
+            let cut = receiver ?? return
+            match cut {
+                Expr::Index { base, index, .. } => {
+                    let ranged = match index {
+                        Expr::Range { .. } => true,
+                        else => false,
+                    }
+                    if ranged && self.facts.text_bytes.contains(node_key(base)) {
+                        match base {
+                            Expr::Field { base: text, .. } => {
+                                if emit_pure_place(text) {
+                                    out.push("nikaia_std::bytes::text_of_a_cut(&*")
+                                    self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                                    out.push(", ")
+                                    self.emit_expr(world, walk, out, host, cut, depth, flow, scope)
+                                    out.push(")")
+                                    if flow.can_throw && !flow.caught && self.method_can_fail(on_node) {
+                                        out.push("?")
+                                    }
+                                    return
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
         // **The text form of text is the text** (ADR-282 D8): nothing is called,
         // and whether it is lent, built or handed over is decided around it as for
         // any other text.
@@ -1105,11 +1147,14 @@ impl EmitState {
         // front of it, as for any `ref String` parameter. `replace`'s
         // replacement is lent the same way (#877). A block's text is lent as
         // the `str` it holds, `&*`: Rust's `Pattern` is a trait no other
-        // crate may give a type (#490).
+        // crate may give a type (#490). A name put into a keep is already
+        // lent (`&Text`), so it takes one `*` more (#1875).
         let lent_pattern = args.len() == 1 || (name == "replace" && args.len() == 2)
         if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
-            let lend = if self.on_block_types() { "&*" } else { "&" }
+            let plain = if self.on_block_types() { "&*" } else { "&" }
+            let kept = if self.on_block_types() { "&**" } else { "&*" }
+            let lend = if self.emit_stmt_a_kept_name(world, walk, args[0]) { kept } else { plain }
             // `replace` answers Rust's `String`, made a block's text.
             let made = name == "replace"
             if made {
@@ -1119,7 +1164,8 @@ impl EmitState {
             out.push(f".{name}({lend}")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             if args.len() == 2 {
-                out.push(f", {lend}")
+                let lend_second = if self.emit_stmt_a_kept_name(world, walk, args[1]) { kept } else { plain }
+                out.push(f", {lend_second}")
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(")")
@@ -1521,7 +1567,9 @@ impl EmitState {
             let on = receiver ?? return
             declared = self.facts.collected_into.contains(node_key(on))
         }
-        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
+        // **Nor a type's own `collect`** (#1975): it builds what it declares.
+        let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
+        if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
         // **And a sequence's `sum` names what it hands back** (#1007): Rust
@@ -1645,19 +1693,19 @@ impl EmitState {
         }
     }
 
-    /// `text.chars().collect()`, asked for at its size. `true` where it has been
-    /// written.
-    fn emit_call_chars[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, name: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    /// `text.scalars.collect()`, asked for at its size (ADR-320 D3). `true`
+    /// where it has been written.
+    fn emit_call_scalars[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, name: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if receiver == null || name != "collect" || args.len() != 0 {
             return false
         }
         let on = receiver ?? return false
         match on {
-            Expr::MethodCall { receiver: text, method: chars, args: none, .. } => {
-                if none.len() != 0 || emit_text(world, chars) != "chars" || self.facts.collected_into.contains(node_key(on)) {
+            Expr::Field { base: text, .. } => {
+                if !self.facts.text_scalars.contains(node_key(on)) || self.facts.collected_into.contains(node_key(on)) {
                     return false
                 }
-                out.push("nikaia_std::list::chars(")
+                out.push("nikaia_std::list::scalars(")
                 self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
                 out.push(".chars())")
                 return true
@@ -1690,7 +1738,7 @@ impl EmitState {
 
     /// The `MethodCall` arm of `expr_as_written` (and the `?.` that is a plain
     /// call, ADR-279 D13): the forms that are not the call itself, then the call.
-    pub fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         // **`s.find(needle; from:)` on text is `std`'s search** (ADR-320 D6): the
         // language below's `str::find` takes one argument and answers a `usize`.
@@ -1926,7 +1974,7 @@ fn emit_tuple_part_copy(i: i64, word: ref String) -> String {
     return f"__nikaia_tuple.{i}.{word}()"
 }
 
-pub fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
+fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
     let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { emit_tuple_part_copy(i, word) }).collect()
     if copies.len() == 1 {
         return f"({copies[0]},)"

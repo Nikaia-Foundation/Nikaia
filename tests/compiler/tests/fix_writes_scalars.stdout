@@ -1,0 +1,57 @@
+refused before: true, NK1353 4 times
+dry run: TMP/main.nika:11: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:22: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:23: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:25: NK1353: replaced `.chars()` with `.scalars`
+--- TMP/main.nika
++++ TMP/main.nika
+@@ -11,1 +11,1 @@
+-    for c in s.chars() {
++    for c in s.scalars {
+@@ -22,2 +22,2 @@
+-    println(s.chars().count())
+-    let v: Vec[scalar] = "abc".chars().collect()
++    println(s.scalars.count())
++    let v: Vec[scalar] = "abc".scalars.collect()
+@@ -25,1 +25,1 @@
+-    println("  hi ".trim().chars().all(fn(c) { c.is_alphabetic() }))
++    println("  hi ".trim().scalars.all(fn(c) { c.is_alphabetic() }))
+unchanged after the dry run: true
+fix: TMP/main.nika:11: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:22: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:23: NK1353: replaced `.chars()` with `.scalars`
+TMP/main.nika:25: NK1353: replaced `.chars()` with `.scalars`
+struct W { n: i64 }
+
+impl W {
+    fn chars(ref self) -> i64 {
+        return self.n
+    }
+}
+
+fn vowels(s: ref str) -> i64 {
+    let mut n = 0
+    for c in s.scalars {
+        if c == 'a' || c == 'e' {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    let s = "tea"
+    println(vowels(s))
+    println(s.scalars.count())
+    let v: Vec[scalar] = "abc".scalars.collect()
+    println(v.len())
+    println("  hi ".trim().scalars.all(fn(c) { c.is_alphabetic() }))
+    let w = W { n: 7 }
+    println(w.chars())
+}
+check: Checked TMP/main.nika
+2
+3
+3
+true
+7

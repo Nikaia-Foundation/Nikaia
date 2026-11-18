@@ -7,7 +7,7 @@ pub struct CheckAttributesMark {
     pub repeatable: bool,
 }
 
-pub fn check_attributes_mark_name() -> String { String::from("meta::Attribute") }
+pub(crate) fn check_attributes_mark_name() -> String { String::from("meta::Attribute") }
 
 pub(crate) fn check_attributes_inline_name() -> &'static str { "inline" }
 
@@ -49,7 +49,7 @@ pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, 
     }
 }
 
-pub fn check_attributes_mark_text(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> String {
+pub(crate) fn check_attributes_mark_text(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> String {
     let read = check_attributes_mark_of(unit, mark);
     let mut places: String = String::from("");
     for place in read.places.iter() {
@@ -154,7 +154,7 @@ pub(crate) fn check_attributes_repeats(marks: &collections::BTreeMap<String, Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     let marks = check_attributes_marks(world);
     for item in world.here.items.iter() {
         let place: String = match &item.node {
@@ -411,7 +411,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
     let kind = check_attributes_literal_misfit(arg, &want);
     if kind.is_some() {
         let said = match kind { Some(__nikaia_value) => __nikaia_value, None => return };
-        let wanted = want.text();
+        let wanted = want.shown();
         state.findings.push(check_refusal("NK1102", span, format!("`@{}`'s `{}` is `{}`, and this gives {}.", owner, field_name, wanted, said), vec![], Some(format!("Give `{}` a `{}`.", field_name, wanted))));
         return;
     }
@@ -420,7 +420,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], span: &Span) -> Option<String> {
+pub(crate) fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], span: &Span) -> Option<String> {
     let mut written: String = String::from("");
     let mut one = false;
     if args.len() == 1 {
@@ -537,14 +537,14 @@ pub(crate) fn check_attributes_misfit_named(literal: &Expr, name: &str, plain: b
     }
 }
 
-pub fn check_attributes_literal_misfit(literal: &Expr, want: &Ty) -> Option<String> {
+pub(crate) fn check_attributes_literal_misfit(literal: &Expr, want: &Ty) -> Option<String> {
     match want {
         Ty::Named { name, args, .. } => check_attributes_misfit_named(literal, name, args.is_empty()),
         _ => None,
     }
 }
 
-pub fn check_attributes_inline_written(words: &winnow_grammar::InternerContext, attributes: &[Attribute]) -> Option<String> {
+pub(crate) fn check_attributes_inline_written(words: &winnow_grammar::InternerContext, attributes: &[Attribute]) -> Option<String> {
     for attribute in attributes.iter() {
         if words.resolve(attribute.name) != "inline" { continue; }
         if !attribute.config.is_empty() { return None; }

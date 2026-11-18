@@ -421,7 +421,7 @@ fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledg
 /// count, and each call hands over the `Bytes` it has, a mapping's at a count
 /// and a run of bytes copied into one. A `ref Bytes` only read, or one the
 /// result views, stays a run of bytes, which any caller lends as it is.
-pub fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
+fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
     let signature = contract.signature ?? return false
     if at < 0 || at >= signature.params.len() {
         return false
@@ -917,6 +917,9 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
             // where an entry is known to take its receiver: a field's type is
             // not asked here, so no answer is not read as a move.
             let root = keeps_field_root(receiver, interner, context) ?? return
+            if keeps_text_view(receiver, interner, context) {
+                return
+            }
             let ours = receiver_taken_in(own, context.own_methods, method, null)
             let theirs = receiver_taken_in(library, context.library_methods, method, null)
             if ours.hit || theirs.hit {
@@ -940,6 +943,32 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let fails_closed = method != "clone" && (context.unresolved || (!ours.any && !theirs.any))
     if fails_closed || ours.hit || theirs.hit {
         walk.uses.kept.extend(names.clone())
+    }
+}
+
+/// **A view of a text is borrowed from it** (ADR-320 D3, D11): a method that
+/// takes `s.scalars` or `s.graphemes` whole takes the view, not the text, as
+/// `s.chars()` did (#1974). `bytes` is a field name of other types too, so
+/// only of a parameter declared `String` or `str`.
+fn keeps_text_view(receiver: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> bool {
+    match receiver {
+        Expr::Field { base, name, .. } => {
+            let field = interner.resolve(name)
+            if field == "scalars" || field == "graphemes" {
+                return true
+            }
+            if field != "bytes" {
+                return false
+            }
+            match base {
+                Expr::Variable(ident, _) => {
+                    let ty = context.types[interner.resolve(ident)] ?? return false
+                    return ty == "String" || ty == "str"
+                }
+                else => return false,
+            }
+        }
+        else => return false,
     }
 }
 
@@ -1706,7 +1735,7 @@ fn keeps_a_copied_scalar(ty: ref Ty) -> bool {
 /// such a value that may be `null`. Kept below, it is handed over by value
 /// all the same, so no caller's value goes with it and no `keep` is written
 /// or asked for.
-pub fn keeps_a_copy_type(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+fn keeps_a_copy_type(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     return keeps_copied_field(ty, copies)
 }
 
@@ -1723,7 +1752,7 @@ fn keeps_type_name(ty: ref Ty) -> String? {
 /// **The file's copy types** (ADR-294 D9.1): a data-less enum, and a struct
 /// whose every field is a copied scalar or such a type, asked again until
 /// nothing more joins; never one with a `Drop`.
-pub fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
+fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
     let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
     for item in view.items {
         match item.node {

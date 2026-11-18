@@ -48,6 +48,7 @@ pub struct Decision {
     pub why: Option<String>,
     pub fallback: Option<Fallback>,
     pub duplications: Vec<String>,
+    pub moved: Vec<String>,
     pub copied_out: Vec<String>,
     pub kept_its_lock: Option<String>,
 }
@@ -64,10 +65,10 @@ pub struct Sharing {
 }
 
 impl Sharing {
-    pub fn count_of(&self, function: &str, value: &str) -> Count { nikaia_std::index::or(*nikaia_std::index::get(&self.counts, &(slot(function, value))), || Count::Atomic) }
+    pub fn count_of(&self, function: &str, value: &str) -> Count { nikaia_std::index::or((*nikaia_std::index::get(&self.counts, &(slot(function, value)))).copied(), || Count::Atomic) }
 }
 
-pub fn every_count_plain(sharing: &mut Sharing) {
+pub(crate) fn every_count_plain(sharing: &mut Sharing) {
     for decision in sharing.decisions.iter_mut() {
         (*decision).count = Count::Plain;
         (*decision).why = None;
@@ -108,6 +109,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
         for site in decision.copied_out.iter() { out.push_str(&format!("             copied out: {} each time - `access` reads it in place\n", site)); }
         if decision.duplications.is_empty() { out.push_str("             one handle, so the count is never stepped\n"); }
         for site in decision.duplications.iter() { out.push_str(&format!("             duplicated: {}\n", site)); }
+        for site in decision.moved.iter() { out.push_str(&format!("             moved: {}\n", site)); }
         if decision.count != Count::Plain { atomic = unsafe { nikaia_std::proven::add::<i64>(atomic, 1) }; }
         if decision.undecided() {
             undecided += 1;
@@ -149,7 +151,7 @@ pub(crate) fn why_said(decision: &Decision, said: Option<&str>) -> String {
 
 pub fn slot(function: &str, name: &str) -> String { format!("{}::{}", function, name) }
 
-pub fn split_slot(key: &str) -> (String, String) {
+pub(crate) fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
     let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
@@ -158,7 +160,7 @@ pub fn split_slot(key: &str) -> (String, String) {
     (nikaia_std::block::Text::from(function.join("::")), name)
 }
 
-pub fn holds_a_word(ty: &Ty) -> bool {
+pub(crate) fn holds_a_word(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && name == "SharedMut" && args.len() == 1 && a_word(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) },
         _ => false,
@@ -174,7 +176,7 @@ pub(crate) fn a_word(ty: &Ty) -> bool {
     }
 }
 
-pub fn held_that_does_not_copy(ty: &Ty) -> Option<String> {
+pub(crate) fn held_that_does_not_copy(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, .. } => a_held_value(ty, name, args),
         _ => None,
@@ -186,7 +188,7 @@ pub(crate) fn a_held_value(ty: &Ty, name: &str, args: &[Ty]) -> Option<String> {
     Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text())
 }
 
-pub fn literal_type(expr: &Expr) -> Option<String> {
+pub(crate) fn literal_type(expr: &Expr) -> Option<String> {
     match expr {
         Expr::LitStr { .. } => Some(String::from("String")),
         Expr::LitInterpolated { .. } => Some(String::from("String")),
@@ -206,28 +208,28 @@ pub(crate) fn held_type(expr: &Expr, asked: &Asked<'_, '_, '_>) -> Option<String
     }
 }
 
-pub fn published_reason(key: &str, at: &str) -> String {
+pub(crate) fn published_reason(key: &str, at: &str) -> String {
     if at == RESULT_POSITION { return format!("`{}` is public and hands a `Shared` back, so what the caller does with it is in a unit this build cannot see", key); }
     format!("`{}` is public, so its callers are in a unit this build cannot see, and one of them may cross a thread with it", key)
 }
 
-pub fn handed_on_to(key: &str, param: &str) -> String { format!("handed to `{}` as `{}`, which takes a handle of its own", key, param) }
+pub(crate) fn handed_on_to(key: &str, param: &str) -> String { format!("handed to `{}` as `{}`, which takes a handle of its own", key, param) }
 
 pub fn unseen(callee: Option<&str>) -> String {
     let named = nikaia_std::index::or(callee, || "the callee");
     format!("the compiler knows nothing about `{}`, so it has to assume it might start a thread", named)
 }
 
-pub fn by_value_shared(ty: &Ty) -> bool {
+pub(crate) fn by_value_shared(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; !view && (name == "Shared" || name == "SharedMut") },
         _ => false,
     }
 }
 
-pub fn is_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" || name == "Locked" }
+pub(crate) fn is_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" || name == "Locked" }
 
-pub fn holds_shared(ty: &Ty) -> bool {
+pub(crate) fn holds_shared(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, .. } => name == "Shared" || name == "SharedMut" || any_holds_shared(args),
         Ty::Tuple(parts) => any_holds_shared(parts),
@@ -241,7 +243,7 @@ pub(crate) fn any_holds_shared(types: &[Ty]) -> bool {
     false
 }
 
-pub fn shared_fields(ty: &str, asked: &Asked<'_, '_, '_>) -> Vec<String> {
+pub(crate) fn shared_fields(ty: &str, asked: &Asked<'_, '_, '_>) -> Vec<String> {
     let name = without_a_view(ty);
     let contract = match ledger_type(&name, asked.own, asked.library) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
@@ -249,7 +251,7 @@ pub fn shared_fields(ty: &str, asked: &Asked<'_, '_, '_>) -> Vec<String> {
     out
 }
 
-pub fn declared_field_type(ty: &str, field: &str, asked: &Asked<'_, '_, '_>) -> Option<Ty> {
+pub(crate) fn declared_field_type(ty: &str, field: &str, asked: &Asked<'_, '_, '_>) -> Option<Ty> {
     let contract = match ledger_type(&without_a_view(ty), asked.own, asked.library) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for declared in contract.fields.iter() { if declared.name == field { return Some(declared.ty.clone()); } }
     None
@@ -308,12 +310,13 @@ pub struct Slots {
     pub parent: Vec<i64>,
     pub forced: Vec<Forced>,
     pub duplicated: Vec<(String, String)>,
+    pub moved: Vec<(String, String)>,
     pub held_together: Vec<String>,
     pub copies: Vec<(String, String)>,
 }
 
 impl Slots {
-    pub fn new(declared_here: collections::BTreeSet<String>) -> Slots { Slots { declared_here, handles: collections::BTreeMap::new(), index: collections::BTreeMap::new(), parent: vec![], forced: vec![], duplicated: vec![], held_together: vec![], copies: vec![] } }
+    pub fn new(declared_here: collections::BTreeSet<String>) -> Slots { Slots { declared_here, handles: collections::BTreeMap::new(), index: collections::BTreeMap::new(), parent: vec![], forced: vec![], duplicated: vec![], moved: vec![], held_together: vec![], copies: vec![] } }
     pub fn id(&mut self, key: &str) -> i64 {
         let found = *nikaia_std::index::get(&self.index, key);
         if found.is_some() { return nikaia_std::index::or(found, || 0); }
@@ -354,6 +357,11 @@ impl Slots {
         let key = slot(function, value);
         self.id(&key);
         self.duplicated.push((key, site));
+    }
+    pub fn moves(&mut self, function: &str, value: &str, site: String) {
+        let key = slot(function, value);
+        self.id(&key);
+        self.moved.push((key, site));
     }
     pub(crate) fn foreign_slots_hold_the_floor(&mut self) {
         let field_prefix = format!("{}::", FIELDS);
@@ -408,6 +416,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
         if !holds_a_word(&handle_type(&slots, key)) { not_a_word.insert(root); }
     }
     let duplicated = sites_by_slot(&slots.duplicated); #[allow(clippy::redundant_locals)] let keys = keys;
+    let moved_at = sites_by_slot(&slots.moved); #[allow(clippy::redundant_locals)] let keys = keys;
     let copied_out = sites_by_slot(&slots.copies); #[allow(clippy::redundant_locals)] let keys = keys;
     let mut decisions: Vec<Decision> = vec![];
     let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
@@ -427,7 +436,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            fallback = nikaia_std::index::or_maybe(*nikaia_std::index::get(&fallback_of, &root), || None);
+            fallback = nikaia_std::index::or_maybe((*nikaia_std::index::get(&fallback_of, &root)).copied(), || None);
             count = Count::Atomic;
             if fallback.is_none() && a_word && !floor.contains(&root) && !held.contains(&root) { count = Count::Word; }
         }
@@ -435,6 +444,9 @@ pub fn decided(slots: &mut Slots) -> Sharing {
         counts.insert(nikaia_std::block::Text::from(key.to_string()), count);
         if !handle.internal {
             decisions.push(Decision { function: nikaia_std::block::Text::from(handle.function.to_string()), value: nikaia_std::block::Text::from(handle.value.to_string()), ty: handle.ty.text(), count, why, fallback, duplications: nikaia_std::index::or(match *nikaia_std::index::get(&duplicated, key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into()), moved: nikaia_std::index::or(match *nikaia_std::index::get(&moved_at, key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || vec![].into()), copied_out: nikaia_std::index::or(match *nikaia_std::index::get(&copied_out, key) {
@@ -516,7 +528,7 @@ pub(crate) fn class_before(a: &Class, b: &Class) -> bool {
 
 pub(crate) const PARALLEL: [&str; 4] = ["par_iter", "par_pieces", "par_fold", "par_map"];
 
-pub fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+pub(crate) fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in items.iter() {
         match &item.node {
@@ -547,6 +559,21 @@ pub fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     out
 }
 
+pub(crate) fn variants_here(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                let owner = nikaia_std::block::Text::from(names.resolve(name).to_string());
+                for one in variants.iter() { out.insert(format!("{}::{}", owner, names.resolve(one.name))); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
 pub(crate) fn method_name(names: &winnow_grammar::InternerContext, item: &Item) -> String {
     match item {
         Item::Fn { name, .. } => { let name = *name; if name.is_none() { String::from("new") } else { a_symbols_text(names, std::convert::identity(name)) } },
@@ -554,7 +581,7 @@ pub(crate) fn method_name(names: &winnow_grammar::InternerContext, item: &Item) 
     }
 }
 
-pub fn allocates_here(expr: &Expr, asked: &Asked<'_, '_, '_>) -> bool {
+pub(crate) fn allocates_here(expr: &Expr, asked: &Asked<'_, '_, '_>) -> bool {
     match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -576,7 +603,7 @@ pub(crate) fn a_call_that_allocates(path: Option<&str>, asked: &Asked<'_, '_, '_
     is_hull(callee) || hands_back_a_plain_value(callee, asked)
 }
 
-pub fn hands_back_a_plain_value(callee: &str, asked: &Asked<'_, '_, '_>) -> bool {
+pub(crate) fn hands_back_a_plain_value(callee: &str, asked: &Asked<'_, '_, '_>) -> bool {
     let suffix = format!("::{}", callee);
     if has_an_entry(asked.own, callee, &suffix) { return plain_in(asked.own, callee, &suffix); }
     plain_in(asked.library, callee, &suffix)
@@ -602,7 +629,7 @@ pub(crate) fn a_plain_result(contract: Option<&FnContract>) -> bool {
     !result.is_unknown() && !holds_shared(result)
 }
 
-pub fn origin_reason(expr: &Expr, names: &winnow_grammar::InternerContext) -> String {
+pub(crate) fn origin_reason(expr: &Expr, names: &winnow_grammar::InternerContext) -> String {
     let from = where_it_came_from(expr, names);
     format!("{}, so this analysis did not watch the allocation being made - and the count belongs to the allocation. A call handed to another thread hands its result back across one (ADR-292)", from)
 }
@@ -623,7 +650,7 @@ pub(crate) fn a_call_that_hands_it_back(path: Option<&str>) -> String {
     format!("`{}` hands it back", callee)
 }
 
-pub fn named_handle(expr: &Expr, names: &winnow_grammar::InternerContext, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
+pub(crate) fn named_handle(expr: &Expr, names: &winnow_grammar::InternerContext, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_handle_in_scope(names.resolve(name), scope) },
         Expr::Block(block, _) => a_handle_at_the_tail(block, names, scope),
@@ -646,7 +673,7 @@ pub(crate) fn a_handle_at_the_tail(block: &Block, names: &winnow_grammar::Intern
     }
 }
 
-pub fn named_type(expr: &Expr, names: &winnow_grammar::InternerContext, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
+pub(crate) fn named_type(expr: &Expr, names: &winnow_grammar::InternerContext, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; scope_type_name(names.resolve(name), scope) },
         _ => None,
@@ -658,7 +685,7 @@ pub(crate) fn scope_type_name(name: &str, scope: &collections::BTreeMap<String, 
     Some(without_a_view(&ty.text()))
 }
 
-pub fn walks_in_parallel(receiver: &Expr, names: &winnow_grammar::InternerContext, parallel: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn walks_in_parallel(receiver: &Expr, names: &winnow_grammar::InternerContext, parallel: &collections::BTreeSet<String>) -> bool {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; parallel.contains(names.resolve(name)) },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; a_parallel_method(names.resolve(method)) || walks_in_parallel(receiver, names, parallel) },
@@ -666,7 +693,7 @@ pub fn walks_in_parallel(receiver: &Expr, names: &winnow_grammar::InternerContex
     }
 }
 
-pub fn a_parallel_method(method: &str) -> bool {
+pub(crate) fn a_parallel_method(method: &str) -> bool {
     for one in PARALLEL.iter() {
         let one = *one;
         if one == method { return true; }
@@ -674,7 +701,7 @@ pub fn a_parallel_method(method: &str) -> bool {
     false
 }
 
-pub fn call_path(func: &Expr, names: &winnow_grammar::InternerContext) -> Option<String> {
+pub(crate) fn call_path(func: &Expr, names: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(names.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(joined_segments(segments, names)),
@@ -693,6 +720,7 @@ pub struct SharingWalk {
     pub library_keys: collections::BTreeMap<String, String>,
     pub own_keys: collections::BTreeMap<String, String>,
     pub moves: SharingMoves,
+    pub variants: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -709,7 +737,7 @@ pub fn sharing_moves_unknown() -> SharingMoves { SharingMoves { known: false, mo
 pub fn sharing_moves_of(facts: &CheckFacts) -> SharingMoves { SharingMoves { known: true, moved: facts.moved_handles.copy_owned(), stored: facts.stored_handles.copy_owned(), stored_fields: facts.stored_handle_fields.copy_owned(), task_handles: facts.task_handles.copy_owned() } }
 
 pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new(), moves };
+    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new(), moves, variants: variants_here(asked.names, &program.items) };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
@@ -821,7 +849,10 @@ pub(crate) fn let_binding(named: String, written: Option<&Type>, value: &Expr, a
     if holds_shared(&ty) {
         let function = nikaia_std::block::Text::from(walk.function.to_string());
         walk.slots.note(&function, &named, ty.clone(), false, false);
-        if aliased.is_some() { walk.slots.join(&slot(&function, &named), &slot(&function, nikaia_std::index::or(aliased.as_deref(), || ""))); } else {
+        if aliased.is_some() {
+            a_handle_given(value, asked, &format!("bound to `{}`", named), walk);
+            walk.slots.join(&slot(&function, &named), &slot(&function, nikaia_std::index::or(aliased.as_deref(), || "")));
+        } else {
             let source = slot_of(value, asked, walk);
             if source.is_some() { walk.slots.join(&slot(&function, &named), nikaia_std::index::or(source.as_deref(), || "")); } else if !(by_value_shared(&ty) && allocates_here(value, asked)) { origin_unseen(&function, &named, value, asked, walk); }
         }
@@ -931,6 +962,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
                     walk.slots.held_together.push(slot(&walk.function, &handle));
                 }
             }
+            if walk.variants.contains(&path) { for arg in args.iter() { a_handle_given(arg, asked, &format!("put into variant `{}`", path), walk); } }
             sharing_arguments(&SharingCall { callee, is_method: false }, args, config, asked, &holes_of, &ty_of, walk);
             sharing_expression(func, asked, holes_of, ty_of, walk);
         },
@@ -987,7 +1019,12 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
             sharing_expression(expr, asked, holes_of, ty_of, walk);
             sharing_block(handler, asked, &holes_of, &ty_of, walk);
         },
-        Expr::Tuple(parts, _) => { for part in parts.iter() { sharing_expression(part, asked, holes_of, ty_of, walk); } },
+        Expr::Tuple(parts, _) => {
+            for part in parts.iter() {
+                a_handle_given(part, asked, "put into a tuple", walk);
+                sharing_expression(part, asked, holes_of, ty_of, walk);
+            }
+        },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
             sharing_expression(start, asked, holes_of, ty_of, walk);
@@ -1009,6 +1046,12 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         },
         _ => { },
     }
+}
+
+pub(crate) fn a_handle_given(value: &Expr, asked: &Asked<'_, '_, '_>, place: &str, walk: &mut SharingWalk) {
+    let named = match named_handle(value, asked.names, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = node_key(value);
+    if walk.moves.stored.contains(&at) { walk.slots.duplicates(&walk.function, &named, format!("{}, which holds a handle of its own", place)); } else if walk.moves.moved.contains(&at) { walk.slots.moves(&walk.function, &named, format!("{} at its last use, the same handle", place)); }
 }
 
 pub(crate) fn a_kept_lambda_uses(lambda: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
@@ -1116,13 +1159,13 @@ pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[C
     let described = parameters_of((called.callee).as_deref(), asked, &mut walk.own_keys, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let handle = named_handle(&arg, asked.names, &walk.scope);
+        let handle = named_handle(arg, asked.names, &walk.scope);
         if handle.is_none() {
-            an_argument_that_is_not_a_handle(called, (described).as_ref(), at, &arg, asked, walk);
-            a_lambda_handed_on((described).as_ref(), at, &arg, asked, &holes_of, &ty_of, walk);
+            an_argument_that_is_not_a_handle(called, (described).as_ref(), at, arg, asked, walk);
+            a_lambda_handed_on((described).as_ref(), at, arg, asked, &holes_of, &ty_of, walk);
             continue;
         }
-        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(&arg)), walk);
+        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(arg)), walk);
     }
     for setting in config.iter() {
         let why = format!("it is handed to `{}` as the option `{}`, and no contract says what happens to a `Shared` in an option", nikaia_std::index::or(match called.callee.as_ref() {
@@ -1167,7 +1210,7 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
     walk.slots.join(&found, &slot(&known.key, &param));
 }
 
-pub fn made_slot(value: i64) -> String { format!("<made {}>", value) }
+pub(crate) fn made_slot(value: i64) -> String { format!("<made {}>", value) }
 
 pub(crate) fn made_into(value: &Expr, ty: &Ty, target: &str, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) -> bool {
     let inside = match value {

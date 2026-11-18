@@ -209,7 +209,7 @@ fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
 
 /// A solver over `query`'s atoms with every clause of `query` read as an
 /// input of a fresh log; `null` where the atoms leave `u32`.
-pub fn sv_sat_of(query: ref SvQuery) -> SvSat? {
+fn sv_sat_of(query: ref SvQuery) -> SvSat? {
 	let log = sv_log(query) ?? return null
 	let mut s = sv_sat(log.atoms, log)
 	let mut c: u32 = 0

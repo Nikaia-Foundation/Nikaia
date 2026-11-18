@@ -4,10 +4,10 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_package_copy(world, ty) }
+    pub(crate) fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_dependency_copy(world, ty) && !self.a_package_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && self.copies_in_the_package.contains(name) },
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_package_copy(world, inner) || !self.takes_away(world, inner) },
@@ -23,10 +23,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) }
+    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) || self.a_dependency_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_dependency_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+        match ty {
+            Ty::Named { name, .. } => !self.structs.contains_key(name) && !self.enums.contains_key(name) && !world.parts_beside.contains_key(name) && a_ledger_copies(ty, &vec![world.own]),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_dependency_copy(world, inner) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || !args.is_empty() && !a_number_name(name) || self.structs.contains_key(name) || self.enums.contains_key(name) || world.library.types.contains_key(name),
             Ty::Tuple(_) => true,
@@ -35,10 +44,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_integer_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { self.no_number_is(world, ty) || a_float_type(ty) }
+    pub(crate) fn no_integer_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { self.no_number_is(world, ty) || a_float_type(ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
+    pub(crate) fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
         let mut param: &'static str = "";
         if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" { param = "sep"; } else if key == "str::find" || key == "str::rfind" { param = "needle"; } else if key == "str::replace" || key == "str::replacen" { param = "from"; } else { return; }
         let routed = param == "needle" || key == "str::replacen";
@@ -69,7 +78,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         match found {
             Ty::Named { name, args, view } => { let view = *view; view && self.is_a_view_of(world, name, args, want) },
             _ => false,
@@ -85,29 +94,29 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.text())], Some(String::from("Write `.clone()` to copy it here.")))); }
+    pub(crate) fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), want, Some(found)), vec![format!("This is a view: it points into a `{}` that something else owns.", want.shown()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.shown())], Some(String::from("Write `.clone()` to copy it here.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_handler_that_does_more_than_the_type_allows(&mut self, promised: &CheckPromises, seen: &CheckHanded, span: &Span) {
+    pub(crate) fn a_handler_that_does_more_than_the_type_allows(&mut self, promised: &CheckPromises, seen: &CheckHanded, span: &Span) {
         if seen.pauses && !promised.may_pause { self.findings.push(check_refusal("NK2206", span, String::from("This lambda can pause, but the parameter it's passed to is `sync`."), vec![String::from("A function type says what the code passed in may do, and `sync` means it must never pause."), String::from("A lambda that does less fits a type that allows more, never the other way round.")], Some(String::from("Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type.")))); }
         if seen.fails && !promised.may_fail { self.findings.push(check_refusal("NK2606", span, String::from("This lambda can fail, but the parameter it's passed to doesn't say `throws`."), vec![String::from("A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.")], Some(String::from("Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.")))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_failing_lambda_where_the_type_does_not_fail(&mut self, place: &Ty, span: &Span) {
-        let shown = place.text();
+    pub(crate) fn a_failing_lambda_where_the_type_does_not_fail(&mut self, place: &Ty, span: &Span) {
+        let shown = place.shown();
         let wanted: String = match place {
             Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }), is_sync, can_throw: true }.text() },
+            }), is_sync, can_throw: true, spelled: CodeNames::none() }.shown() },
             _ => format!("{} throws", shown),
         };
         self.findings.push(check_refusal("NK1102", span, format!("This lambda can fail, but `{}` says the code it names never fails.", shown), vec![String::from("A function type without `throws` cannot fail, so a lambda that can is not of that type.")], Some(format!("Write `{}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`.", wanted))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+    pub(crate) fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_owned" || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }
         let shown: String = match receiver {
@@ -118,7 +127,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+    pub(crate) fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_string" && written != "clone" { return; }
         let plain = matches!(receiver, Expr::LitStr { .. });
@@ -127,7 +136,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) {
+    pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
+        let at = check_span_at(world, call, span);
+        for said in self.findings.iter() { if said.code == "NK1353" && said.span.start == at.start { return; } }
+        let mut refused = check_refusal("NK1353", &at, String::from("`chars()` is not one of the views text is read through."), vec![String::from("Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.")], Some(String::from("Write `.scalars` for `.chars()`; `nikaia fix` writes it.")));
+        refused.edit = chars_renamed(world, call, receiver);
+        self.findings.push(refused);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) {
         if root == "self" && self.changing_self {
             self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but this method takes `mut self`: it changes `self` in place and doesn't own it.", path, to), vec![String::from("`self` belongs to the caller. A part handed to something that keeps it is taken out and given back by assigning it, but not inside a lambda, and not where its type has no empty value or stand-in."), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
             return;
@@ -138,12 +156,23 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: &str) -> Vec<String> {
+pub(crate) fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for entry_name in method_keys(methods, method) {
         let entry_value = match *nikaia_std::index::get(&ledger.functions, &entry_name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if takes_self(entry_value) { out.push(nikaia_std::block::Text::from(entry_name.to_string())); }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn chars_renamed(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
+    let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(".scalars") }); }
+    let written = u32::try_from(".chars()".as_bytes().len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
+    if of.start > whole.start && of.end + written < whole.end { return Some(CheckEdit { span: Span { start: whole.end - written, end: whole.end }, text: String::from(".scalars") }); }
+    None
 }
 

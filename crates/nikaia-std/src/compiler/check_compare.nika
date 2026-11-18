@@ -12,7 +12,7 @@ use std::collections
 comptime COMPARE_PLAIN: Array[ref String, 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"]
 
 /// The containers, which compare when what they hold does.
-comptime COMPARE_CONTAINERS: Array[ref String, 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"]
+comptime COMPARE_CONTAINERS: Array[ref String, 15] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared", "Seen"]
 
 /// The maps and sets not kept in order, which have no order.
 // What `.clone()` does not reach: a task's handle and a lock (#1245).
@@ -213,7 +213,9 @@ impl CheckComparable {
         if COMPARE_PLAIN.contains(name) {
             return true
         }
-        if COMPARE_CONTAINERS.contains(name) {
+        // A struct or enum the program declares under a container's name
+        // (`struct Seen`) is asked by its fields, not as the container.
+        if COMPARE_CONTAINERS.contains(name) && !self.structs.contains_key(name) && !self.enums.contains_key(name) {
             return self.all_of(args, how, seen)
         }
         // Keyed by the whole type: `Spanned[Stmt]` and `Spanned[Item]` are two
@@ -301,6 +303,23 @@ impl CheckComparable {
         if nobody_knows(name, self.own, self.library) {
             return true
         }
+        // **Another package's hand-written equality or hash answers** as one
+        // of this package does (ADR-341 D5, ADR-010 D12, #2031): its ledger
+        // records the `impl`, and its type has no derive to stand for it.
+        if how == CompareStrength::Hashes {
+            if self.implements("Hash", name) {
+                return true
+            }
+            if self.implements("Eq", name) {
+                return false
+            }
+        } else if how == CompareStrength::Orders {
+            if self.implements("Ord", name) {
+                return true
+            }
+        } else if self.implements("Eq", name) {
+            return true
+        }
         // A type whose parts are Rust: the column, whose absence is no.
         for ledger in [self.own, self.library] {
             let contract = ledger.types.get(name) ?? continue
@@ -320,7 +339,7 @@ impl CheckComparable {
     /// **The part that keeps `ty` from hashing** (ADR-010 D11), for
     /// `NK1260`'s message: the innermost part that does not hash, or `ty`
     /// itself where nothing inside it is to blame.
-    pub fn unhashed(ref self, ty: ref Ty) -> Ty {
+    fn unhashed(ref self, ty: ref Ty) -> Ty {
         let mut at = ty.clone()
         let mut turns = 0
         while turns < 32 {
@@ -413,12 +432,12 @@ impl CheckComparable {
 /// **`NK1188`: `==` on a type that does not compare** (ADR-204 D3).
 /// Asked of one side and only where its type is known; the two sides
 /// disagreeing is `NK1102`'s business.
-pub fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
+fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
     let mut found: String = ""
     if !asking.of(left) {
-        found = left.text()
+        found = left.shown()
     } else if !asking.of(right) {
-        found = right.text()
+        found = right.shown()
     }
     if found == "" {
         return null
@@ -439,7 +458,7 @@ pub struct CompareDeclared {
 /// **Which declared types compare** (ADR-204 D1), for the derive the emitter
 /// writes: only what this unit declares, after every type is collected,
 /// because the answer is structural.
-pub fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> CompareDeclared {
+fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> CompareDeclared {
     let mut declared: Vec[String] = []
     for item in here.items {
         match item.node {
@@ -494,7 +513,7 @@ impl CheckState {
     /// **`NK2204`: a write to shared mutable state that skips the door**: the
     /// message names the door with the value in it. Only a name as the target;
     /// a field or an index into a hull says nothing.
-    pub fn a_write_that_skips_the_door(ref mut self, world: ref CheckWorld, target: ref Expr, into: ref Ty, written: ref String, span: ref Span) {
+    fn a_write_that_skips_the_door(ref mut self, world: ref CheckWorld, target: ref Expr, into: ref Ty, written: ref String, span: ref Span) {
         let hull = match into {
             Ty::Named { name, .. } => name == "SharedMut",
             else => false,
@@ -513,14 +532,14 @@ impl CheckState {
     /// **A cleanup that can fail where the function cannot** (`NK2605`,
     /// ADR-297 D2, D3): the value `name` of type `ty` dies here, and `owner`'s
     /// cleanup can fail.
-    pub fn a_failing_cleanup_undeclared(ref mut self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) {
+    fn a_failing_cleanup_undeclared(ref mut self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) {
         let finding = self.a_failing_cleanup_refusal(name, ty, owner, span) ?? return
         self.findings.push(finding)
     }
 
     /// `NK2605` as it would be said here, where the function can fail neither
     /// by declaring it nor inside a `catch`.
-    pub fn a_failing_cleanup_refusal(ref self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) -> CheckFinding? {
+    fn a_failing_cleanup_refusal(ref self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) -> CheckFinding? {
         if self.flow.throwing || self.flow.caught || self.current == null {
             return null
         }
@@ -541,7 +560,7 @@ impl CheckState {
     /// **The parts an arm only reads are lent** (ADR-291): a part that does
     /// not copy, which nothing in the arm took (`handed` from `from`, `changed`
     /// from `changed_from`), returned or handed back as the arm's value.
-    pub fn parts_lent(ref self, world: ref CheckWorld, body: ref Expr, parts: ref collections::BTreeMap[String, Ty], from: i64, changed_from: i64) -> collections::BTreeSet[String] {
+    fn parts_lent(ref self, world: ref CheckWorld, body: ref Expr, parts: ref collections::BTreeMap[String, Ty], from: i64, changed_from: i64) -> collections::BTreeSet[String] {
         let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
         for (name, ty) in parts {
             if !self.takes_away(world, ty) {
@@ -649,7 +668,7 @@ fn compare_path_within(path: ref String, name: ref String, inside: ref String) -
 /// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither.**
 /// `wanted` is what the callee `key` declares for each parameter, `bound` what
 /// the call binds them to, `parameters` the type parameters in scope here.
-pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collections::BTreeMap[String, Vec[String]], key: ref String, wanted: ref collections::BTreeMap[String, Vec[String]], bound: ref collections::BTreeMap[String, Ty], span: ref Span) -> Vec[CheckFinding] {
+fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collections::BTreeMap[String, Vec[String]], key: ref String, wanted: ref collections::BTreeMap[String, Vec[String]], bound: ref collections::BTreeMap[String, Ty], span: ref Span) -> Vec[CheckFinding] {
     let mut refused: Vec[CheckFinding] = []
     for (parameter, traits) in wanted {
         let held = bound.get(parameter) ?? continue
@@ -662,7 +681,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
             // by `Eq` alone is the `NK1248` of a hashed position.
             if wanted_trait == "Hash" {
                 let own_bounds = compare_parameter_bounds(held, parameters)
-                let shown = held.text()
+                let shown = held.shown()
                 if own_bounds.len() == 1 && own_bounds[0] == "?" {
                     if asking.hashes(held) {
                         continue
@@ -685,7 +704,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
                 if asking.clones(held, parameters) {
                     continue
                 }
-                let shown = held.text()
+                let shown = held.shown()
                 refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Clone` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Clone]`, so the type passed has to copy, and `{shown}` can't: a task's handle and a lock are never copied."], "Pass a type that copies, or hand the value itself to a function without the bound."))
                 continue
             }
@@ -708,7 +727,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
             if met {
                 continue
             }
-            let shown = held.text()
+            let shown = held.shown()
             let mut what: String = "an equality that is an equivalence"
             if ordered {
                 what = "an order"
@@ -725,7 +744,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
 
 /// **`NK1247`: a `BTreeMap` or `BTreeSet` keyed by a type with no order**,
 /// anywhere in `ty`.
-pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
+fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
     let mut refused: Vec[CheckFinding] = []
     let mut stack: Vec[Ty] = [ty.clone()]
     while stack.len() > 0 {
@@ -757,7 +776,7 @@ pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span:
 /// **`NK1260`: a `HashMap` or `HashSet` keyed by a type that does not hash**
 /// (ADR-010 D11), anywhere in `ty`. The message names the part that does not
 /// hash, and for a hand-written equality the `impl Hash` that would answer it.
-pub fn compare_keys_that_do_not_hash(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
+fn compare_keys_that_do_not_hash(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
     let mut refused: Vec[CheckFinding] = []
     let mut stack: Vec[Ty] = [ty.clone()]
     while stack.len() > 0 {
@@ -786,9 +805,9 @@ pub fn compare_keys_that_do_not_hash(asking: ref CheckComparable, ty: ref Ty, sp
 
 /// The `NK1260` of one key: `what` is the map or set, `key` its key type.
 fn compare_unhashed_refusal(asking: ref CheckComparable, what: ref String, key: ref Ty, span: ref Span) -> CheckFinding {
-    let shown = key.text()
+    let shown = key.shown()
     let part = asking.unhashed(key)
-    let part_shown = part.text()
+    let part_shown = part.shown()
     let part_name = match part {
         Ty::Named { name, .. } => name.clone(),
         else => "",
@@ -818,7 +837,7 @@ fn compare_parameter_bounds(ty: ref Ty, parameters: ref collections::BTreeMap[St
 
 /// **`NK1249`: `impl Eq` or `impl Ord` the program may not write**: for a type
 /// it does not declare, or `Ord` for a type that is not `Eq` (ADR-341).
-pub fn compare_language_impls(asking: ref CheckComparable, here: ref ParsedView) -> Vec[CheckFinding] {
+fn compare_language_impls(asking: ref CheckComparable, here: ref ParsedView) -> Vec[CheckFinding] {
     let mut refused: Vec[CheckFinding] = []
     for item in here.items {
         match item.node {

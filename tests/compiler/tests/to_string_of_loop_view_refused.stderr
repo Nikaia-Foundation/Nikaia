@@ -1,4 +1,4 @@
-error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
    --> tests/to_string_of_loop_view_refused.nika:15:32
     |
  15 |             rest => { out.push(rest.to_string()) },

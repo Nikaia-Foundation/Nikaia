@@ -1,4 +1,4 @@
-error[NK1104]: You're returning `ref String`, but the function is declared to return `String`.
+error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
   --> tests/owned_after_view_chain_returns_refused.nika:6:12
    |
  6 |     return rest

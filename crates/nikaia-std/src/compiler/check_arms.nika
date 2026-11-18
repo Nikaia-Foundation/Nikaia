@@ -126,7 +126,7 @@ fn the_parts_meet_with_holes(xs: ref Vec[Ty], ys: ref Vec[Ty]) -> Vec[Ty]? {
 /// **Arms that meet where each is known** (`the_types_meet_with_holes`): the
 /// type of the choice, or `null` where two arms differ in a known part or
 /// an arm is of no known type at all.
-pub fn arms_meet_with_holes(arms: ref Vec[CheckArm]) -> Ty? {
+fn arms_meet_with_holes(arms: ref Vec[CheckArm]) -> Ty? {
     if arms.len() < 2 {
         return null
     }
@@ -156,7 +156,7 @@ impl CheckState {
     /// cannot type stays unknown. Or because one of them is a `T?` already
     /// (#435). A number takes its type from where it stands, and a text literal
     /// takes `String` where its neighbours are text of their own (ADR-282 D4).
-    pub fn arms_meet_at_null(ref mut self, world: ref CheckWorld, arms: ref Vec[CheckArm]) -> Ty? sync {
+    fn arms_meet_at_null(ref mut self, world: ref CheckWorld, arms: ref Vec[CheckArm]) -> Ty? sync {
         let mut asked = false
         for arm in arms {
             if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) {
@@ -235,7 +235,7 @@ impl CheckState {
     /// **A lambda's text literal is built where its type keeps text**: the value
     /// a lambda ends in is handed to whoever calls it, as a function's is
     /// (ADR-282 D4).
-    pub fn a_lambdas_text_is_its_own(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr) sync {
+    fn a_lambdas_text_is_its_own(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr) sync {
         match want {
             Ty::Fn { result, .. } => {
                 match value {
@@ -276,7 +276,7 @@ fn an_arm_is_an_integer(arm: ref CheckArm) -> bool {
 /// tell the type of the value, and no arm is unknown for another refusal's
 /// sake. The finding stands at `span`; the caller moves the caret to the first
 /// arm that is not the first one's type (#107).
-pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> CheckFinding? {
+fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> CheckFinding? {
     if arms.len() < 2 {
         return null
     }
@@ -325,8 +325,10 @@ pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) 
         article = "`if`"
     }
     let mut shown: Vec[String] = []
+    // Each type as a message says it (ADR-views-3 D4, #1528), a view in
+    // words.
     for ty in known {
-        let text = ty.text()
+        let text = spoken(ty, null)
         if !shown.contains(text) {
             shown.push(text)
         }
@@ -339,11 +341,11 @@ pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) 
     while index < shown.len() {
         let one = shown[index].clone()
         if index + 1 == shown.len() {
-            listed = f"{listed} and `{one}`"
+            listed = f"{listed} and {one}"
         } else if index == 0 {
-            listed = f"`{one}`"
+            listed = one.clone()
         } else {
-            listed = f"{listed}, `{one}`"
+            listed = f"{listed}, {one}"
         }
         index = index + 1
     }

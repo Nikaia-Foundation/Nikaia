@@ -255,7 +255,7 @@ pub(crate) fn a_position_the_result_points_into(callee: Option<&str>, at: i64, o
     points_into_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at)
 }
 
-pub fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
+pub(crate) fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at < 0 || at >= signature.params.len() as i64 { return false; }
     let parameter = &unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.0;
@@ -551,6 +551,7 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
         },
         Expr::Field { .. } => {
             let root = match keeps_field_root(receiver, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if keeps_text_view(receiver, interner, context) { return; }
             let ours = receiver_taken_in(own, context.own_methods, method, None);
             let theirs = receiver_taken_in(library, context.library_methods, method, None);
             if ours.hit || theirs.hit { walk.uses.kept.insert(root); }
@@ -564,6 +565,26 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
     let theirs = receiver_taken_in(library, context.library_methods, method, (owner).as_deref());
     let fails_closed = method != "clone" && (context.unresolved || !ours.any && !theirs.any);
     if fails_closed || ours.hit || theirs.hit { walk.uses.kept.extend(names.iter().cloned()); }
+}
+
+pub(crate) fn keeps_text_view(receiver: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> bool {
+    match receiver {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let field = interner.resolve(name);
+            if field == "scalars" || field == "graphemes" { return true; }
+            if field != "bytes" { return false; }
+            match base {
+                Expr::Variable(ident, _) => {
+                    let ident = *ident;
+                    let ty = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return ty == "String" || ty == "str";
+                },
+                _ => return false,
+            }
+        },
+        _ => return false,
+    }
 }
 
 pub(crate) fn keeps_field_root(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
@@ -585,7 +606,7 @@ pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
     let subject = &nikaia_std::index::get(&signature.params, 0).1;
     if subject.is_a_view() { return false; }
     match subject {
-        Ty::Named { .. } => moves(&subject),
+        Ty::Named { .. } => moves(subject),
         _ => true,
     }
 }
@@ -1101,7 +1122,7 @@ pub(crate) fn keeps_a_copied_scalar(ty: &Ty) -> bool {
     }
 }
 
-pub fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool { keeps_copied_field(ty, copies) }
+pub(crate) fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool { keeps_copied_field(ty, copies) }
 
 pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     match ty {
@@ -1111,7 +1132,7 @@ pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     }
 }
 
-pub fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+pub(crate) fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in view.items.iter() {
         match &item.node {

@@ -1,4 +1,4 @@
-error[NK1102]: This limit is `ref String`, but `limit:` takes an `i64`.
+error[NK1102]: This limit is a view of a `String`, but `limit:` takes an `i64`.
    --> tests/async_admission_not_a_strategy.nika:12:2
     |
  12 | 	let x = async(admission: Plain { n: 1 }, limit: "two") {

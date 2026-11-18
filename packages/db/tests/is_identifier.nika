@@ -1,0 +1,12 @@
+// `db::is_identifier`, the precondition of `db::raw` on a part from outside
+// the program (ADR-raw-sinks-1 D2, #1253).
+use db
+
+fn main() throws {
+    println(db::is_identifier("users"))
+    println(db::is_identifier("_Users_2"))
+    println(db::is_identifier("2users"))
+    println(db::is_identifier(""))
+    println(db::is_identifier("users; DROP TABLE users"))
+    println(db::is_identifier("a-b"))
+}

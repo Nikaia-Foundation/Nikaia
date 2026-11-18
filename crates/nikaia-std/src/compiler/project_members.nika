@@ -38,6 +38,12 @@ pub struct ProjectMembersManifest {
     /// package ([ADR-338](../../../docs/specification/adr/adr-338.md) D3);
     /// null for the package's `src/`.
     pub uses_in: fs::Path?,
+    /// **`[package] within = "std"`** (#1976): the package is checked as
+    /// part of `std`.
+    pub within_std: bool,
+    /// **`[package] described`** (#1976), resolved against the manifest's
+    /// directory; null where it names none.
+    pub described: fs::Path?,
 }
 
 /// What the walk asks of the compiler.
@@ -56,7 +62,7 @@ pub trait ProjectMembersHost {
 /// the one place that says which names are official. A `use` of one that
 /// nothing else names takes it in (`project_members_taken_in`); a name joins
 /// the list when its package is under `packages/` with this version.
-pub fn project_members_official() -> Vec[(String, String)] {
+fn project_members_official() -> Vec[(String, String)] {
     return [("db", "0.1.0"), ("json", "0.1.0")]
 }
 
@@ -93,7 +99,7 @@ fn project_members_used(dir: ref fs::Path) -> collections::BTreeSet[String] {
         let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { continue }
         for line in text.lines() {
             let rest = line.strip_prefix("use ") ?? continue
-            let word: String = rest.trim_start().chars().take_while(fn(c) { c.is_alphanumeric() || c == '_' }).collect()
+            let word: String = rest.trim_start().scalars.take_while(fn(c) { c.is_alphanumeric() || c == '_' }).collect()
             out.insert(word)
         }
     }
@@ -319,7 +325,7 @@ pub struct ProjectMembersMember {
 /// compiler that hung or panicked on the way to that message would be reporting
 /// the wrong thing. What comes out is every member exactly once either way,
 /// which is what the caller needs of it.
-pub fn project_members_dependencies_first(members: ref Vec[ProjectMembersMember]) -> Vec[i64] {
+fn project_members_dependencies_first(members: ref Vec[ProjectMembersMember]) -> Vec[i64] {
     let at_of: collections::HashMap[fs::Path, i64] = (0..<members.len()).map(fn(at) { (members[at].root.clone(), at) }).collect()
 
     // `needs[at]` is what `at` waits for.
@@ -406,12 +412,12 @@ pub fn project_members_members_of[H: ProjectMembersHost](entry_manifest: ref Pro
 /// The variable a build hands Cargo's `rustc` wrapper where each package by
 /// version landed, one `crate=directory` line each, so the wrapper reads the
 /// driver's resolution rather than asking Cargo again from inside its build.
-pub fn project_members_fetched_variable() -> String {
+fn project_members_fetched_variable() -> String {
     return "NIKAIA_FETCHED"
 }
 
 /// `members`' packages by version, as `project_members_fetched_variable()` carries them.
-pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
+fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
     let lines: Vec[String] = members.iter().filter_map(fn(m) {
         let named = m.fetched ?? return null
         f"{named}={m.root.display()}"
@@ -470,7 +476,7 @@ fn project_members_a_nikaia_package(key: ref String, named: ref String, at: ref 
 /// resolved is the one the next build reads. With nothing by version, no
 /// Cargo runs. Under a build, the `rustc` wrapper is handed the answer in
 /// `project_members_fetched_variable()` instead.
-pub fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> collections::BTreeMap[String, fs::Path] throws {
+fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> collections::BTreeMap[String, fs::Path] throws {
     let mut out: collections::BTreeMap[String, fs::Path] = collections::BTreeMap()
     match env::var(project_members_fetched_variable()) {
         null => {},
@@ -662,11 +668,27 @@ pub struct ProjectMembersForeign {
     /// own manifest does not. Only a head: what the crate's items are is the
     /// dependency's description, and nothing here reads it.
     pub beneath: collections::BTreeSet[String],
+    /// **`[package] within = "std"`** (#1976, owner 2026-11-17): the
+    /// package is checked as part of `std`: it reaches `std`'s helpers, and
+    /// `assume` is refused in it.
+    pub within_std: bool,
+    /// **The ledger `[package] described` names** (#1976): described names
+    /// the package is also checked against, which win a collision with
+    /// `std`'s; blank where the manifest names none.
+    pub over_std: Ledger,
 }
 
 /// A build with no project around it: nothing declared, nothing described.
 pub fn project_members_no_foreign() -> ProjectMembersForeign {
-    return ProjectMembersForeign { declared: collections::BTreeSet(), described: collections::BTreeSet(), moved: collections::BTreeMap(), descriptions: Ledger::blank(), beneath: collections::BTreeSet() }
+    return ProjectMembersForeign {
+        declared: collections::BTreeSet(),
+        described: collections::BTreeSet(),
+        moved: collections::BTreeMap(),
+        descriptions: Ledger::blank(),
+        beneath: collections::BTreeSet(),
+        within_std: false,
+        over_std: Ledger::blank(),
+    }
 }
 
 /// The Rust crates every path dependency of `root` declares, and theirs in
@@ -726,7 +748,22 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
     let mut beneath: collections::BTreeSet[String] = collections::BTreeSet()
     let mut seen: collections::HashSet[fs::Path] = collections::HashSet()
     project_members_crates_beneath(root, seen, beneath, manifests)
-    return ProjectMembersForeign { declared: declared, described: described, descriptions: descriptions, moved: moved, beneath: beneath }
+    // **What the manifest says of `std`** (#1976): the ledger is read where
+    // the manifest reader found it; one that does not read is none.
+    let over_std = match manifest?.described {
+        null => host.empty_ledger(),
+        path => host.read_beside(path) ?? host.empty_ledger(),
+    }
+    let within_std = manifest?.within_std ?? false
+    return ProjectMembersForeign {
+        declared: declared,
+        described: described,
+        descriptions: descriptions,
+        moved: moved,
+        beneath: beneath,
+        within_std: within_std,
+        over_std: over_std,
+    }
 }
 
 impl ProjectMembersForeign {

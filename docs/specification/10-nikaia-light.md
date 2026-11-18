@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1403 (Draft)
-**Date:** 2026-11-16
+**Version:** 0.0.1430 (Draft)
+**Date:** 2026-11-18
 
 ---
 
@@ -109,6 +109,12 @@ reached: `use std::fs` at the top of the file, and
 that lives in a `std` module is refused without its prefix — `NK1117` for a
 function, `NK1135` for a type — and a prefix is refused without its `use`, each
 with the line to add. A name on this list written with a `std` module in front of it, such as `io::println`, is refused too (`NK1163`).
+
+Data from outside the program reaches a shell, an SQL text, markup written as
+it is or a path with no root to keep it in (`process::shell`, `db::raw`,
+`html::Raw`, `fs::Root::Anywhere`) only where the compiler proves it harmless,
+from its type or a guard, or the manifest's `[allow]` admits it; otherwise the
+program is refused (Part III 14.2, [ADR-raw-sinks-1](adr/adr-raw-sinks-1.md)).
 
 ---
 
@@ -2289,7 +2295,10 @@ less fits a type that allows more. A pausing lambda handed to a `fn() sync` is
 refused.
 
 The context of such a parameter is **inferred**, not written. A parameter the
-body only calls is immediate and borrows. A parameter the body keeps (stores,
+body only calls is immediate and borrows. Where the body calls it one call at
+a time, the lambda may change what it captures, with nothing written for it; a
+body that calls it from tasks that run at once refuses such a lambda with
+`NK2104`, naming the binding ([ADR-views-3](adr/adr-views-3.md) D17). A parameter the body keeps (stores,
 hands back, gives to a task) says `keep`, as every kept parameter does (6.5),
 and is detached and moves; there is no `@detached` to write. For an immediate
 parameter the lambda's `touches` count for the callee, while
@@ -2303,7 +2312,12 @@ callee's promises about pausing follow the type, so a `listen` that calls a stor
 **A function type stands wherever a type does**: a struct field, a result, a
 `let`, an element of a list. A function value in any of them is **kept**: the
 lambda moves what it captures, and a copy of the value shares the one closure.
-A field that holds one is called like a method, `button.on_click(4)`, where the
+So a kept lambda that changes a binding it captures from the function around
+it (an assignment, `+=`, a `mut` method) is refused with `NK2101`, naming the
+binding: the change would reach only the lambda's own copy, never the binding
+the reader sees (#2047). A kept lambda that only reads what it captures, or
+changes its own locals, is unchanged, and so is a lambda run in place, which
+changes the binding itself ([ADR-views-3](adr/adr-views-3.md) D17). A field that holds one is called like a method, `button.on_click(4)`, where the
 struct has no method of that name. A named function stands where a function
 value is wanted. A kept value handed to a parameter that only runs it is lent.
 Two values of a type that holds a function are not compared (`NK1188`).

@@ -42,7 +42,14 @@ signature = "(text: ref String, each: fn(ref String, ref Case) -> bool sync) -> 
 [type."Case"]
 pub = true
 variants = ["Lower", "Upper", "Mixed"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Tally"]
 pub = true
 fields = ["pub words: i64", "pub longest: String"]
+compares = true
+equates = true
+hashes = true

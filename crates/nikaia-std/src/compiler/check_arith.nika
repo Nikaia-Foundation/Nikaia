@@ -86,7 +86,7 @@ fn arith_negated_literal(expr: ref Expr) -> String? {
 impl CheckState {
     /// The code `process::exit` is given, where it is a constant: `0..=255`
     /// (ADR-343 D4), refused as `NK1116` refuses a constant that cannot fit.
-    pub fn an_exit_code_out_of_range(ref mut self, key: ref String, args: ref Vec[Expr], span: ref Span) {
+    fn an_exit_code_out_of_range(ref mut self, key: ref String, args: ref Vec[Expr], span: ref Span) {
         if key != "process::exit" || args.len() == 0 {
             return
         }
@@ -100,7 +100,7 @@ impl CheckState {
     /// `env_remove` that is empty or holds `=` or a NUL, and a value in `env`
     /// that holds a NUL, is refused where it is written; one the program
     /// computes is `run`'s to refuse when it is called.
-    pub fn an_environment_entry_invalid[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
+    fn an_environment_entry_invalid[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
         if key != "process::run" {
             return
         }
@@ -127,7 +127,7 @@ impl CheckState {
     /// **`NK1287`: a `bytes::ByteSet` the build proves empty** (ADR-375 D2):
     /// its list written as `[]`. A set the program computes may be empty for
     /// good reasons and finds nothing then; one written empty is a mistake.
-    pub fn a_byte_set_written_empty(ref mut self, world: ref CheckWorld, key: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    fn a_byte_set_written_empty(ref mut self, world: ref CheckWorld, key: ref String, args: ref Vec[Expr], span: ref Span) sync {
         if key != "bytes::ByteSet" || args.len() != 1 {
             return
         }
@@ -144,7 +144,7 @@ impl CheckState {
     }
 
     /// **`NK1248`: `<` or `==` on a type parameter no bound lets compare.**
-    pub fn an_operator_needs_a_bound(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) {
+    fn an_operator_needs_a_bound(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
@@ -185,7 +185,7 @@ impl CheckState {
 
 /// **`an i32` and `a u64`**: the article as the name is said (`NK1116`'s
 /// rule). A `u` is said *you*, so it takes `a`; the other vowels take `an`.
-pub fn an_or_a_named(ty: ref String) -> String {
+fn an_or_a_named(ty: ref String) -> String {
     if ty.starts_with("i") || ty.starts_with("a") || ty.starts_with("e") || ty.starts_with("o") || ty.starts_with("I") || ty.starts_with("A") || ty.starts_with("E") || ty.starts_with("O") {
         return "an"
     }
@@ -294,13 +294,13 @@ fn arith_a_name(expr: ref Expr) -> bool {
 }
 
 /// The text of what is shown, cut to 60 characters.
-pub fn arith_shown(written: ref String) -> String {
-    if written.chars().count() <= 60 {
+fn arith_shown(written: ref String) -> String {
+    if written.scalars.count() <= 60 {
         return written.clone()
     }
     let mut shown: String = ""
     let mut count = 0
-    for c in written.chars() {
+    for c in written.scalars {
         if count < 57 {
             shown.push_str(c.to_string())
         }
@@ -311,7 +311,7 @@ pub fn arith_shown(written: ref String) -> String {
 }
 
 /// A `bool`, viewed or not.
-pub fn is_a_bool_type(ty: ref Ty) -> bool {
+fn is_a_bool_type(ty: ref Ty) -> bool {
     return match ty.unseen() {
         Ty::Named { name, args, .. } => args.len() == 0 && name == "bool",
         else => false,
@@ -320,7 +320,7 @@ pub fn is_a_bool_type(ty: ref Ty) -> bool {
 
 /// **Text or a `bool` in arithmetic** (`NK1191`): `+` joins two texts and
 /// nothing else; a text beside a number or a `bool` is no join.
-pub fn text_or_bool_in_arithmetic(op: BinaryOp, left: ref Ty, right: ref Ty) -> bool {
+fn text_or_bool_in_arithmetic(op: BinaryOp, left: ref Ty, right: ref Ty) -> bool {
     let left_text = is_text_type(left.unseen())
     let right_text = is_text_type(right.unseen())
     if is_a_bool_type(left) || is_a_bool_type(right) {
@@ -343,7 +343,7 @@ pub fn text_or_bool_in_arithmetic(op: BinaryOp, left: ref Ty, right: ref Ty) -> 
 impl CheckState {
     /// **`NK1191`: arithmetic on a list, a map, a set, a `struct` or an `enum`.**
     /// `compound` says the operator was written with `=` after it.
-    pub fn arithmetic_on_something_that_has_none(ref mut self, world: ref CheckWorld, op: BinaryOp, left_expr: ref Expr, left: ref Ty, right_expr: ref Expr, right: ref Ty, compound: bool, span: ref Span) sync {
+    fn arithmetic_on_something_that_has_none(ref mut self, world: ref CheckWorld, op: BinaryOp, left_expr: ref Expr, left: ref Ty, right_expr: ref Expr, right: ref Ty, compound: bool, span: ref Span) sync {
         let symbol = arith_symbol(op)
         let left_collection = is_a_collection_type(left)
         if !left_collection && !is_a_collection_type(right) {
@@ -352,11 +352,11 @@ impl CheckState {
             } else if declared_with_no_arithmetic(world.here, right) != null {
                 self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
             } else if text_or_bool_in_arithmetic(op, left, right) {
-                let mut culprit = left.text()
+                let mut culprit = left.shown()
                 if is_text_type(left.unseen()) {
                     culprit = "String"
                 } else if !is_a_bool_type(left) {
-                    culprit = right.text()
+                    culprit = right.shown()
                     if is_text_type(right.unseen()) {
                         culprit = "String"
                     }
@@ -398,7 +398,7 @@ impl CheckState {
     /// **`NK1191` for `-` or `!` on a type that does not take it**: `-` wants a
     /// number, `!` a `bool`, an integer, a vector or a mask. An unknown type is
     /// `NK1245`'s.
-    pub fn a_unary_operator_on_the_wrong_type(ref mut self, world: ref CheckWorld, negation: bool, found: ref Ty, span: ref Span) sync {
+    fn a_unary_operator_on_the_wrong_type(ref mut self, world: ref CheckWorld, negation: bool, found: ref Ty, span: ref Span) sync {
         if found.is_unknown() {
             return
         }
@@ -421,7 +421,7 @@ impl CheckState {
             symbol = "-"
             note = "`-` negates a number."
         }
-        let mut shown = seen.text()
+        let mut shown = seen.shown()
         if is_text_type(seen) {
             shown = "String"
         }
@@ -434,7 +434,7 @@ impl CheckState {
     /// mean**: the struct has one numeric field, the side is a plain name and
     /// the other side is not a declared type too. Anything else would be a
     /// guess, and the help says what is always true instead.
-    pub fn arithmetic_on_a_declared_type(ref mut self, world: ref CheckWorld, symbol: ref String, side: ref Expr, ty: ref Ty, other_side: ref Expr, other: ref Ty, at: i64, compound: bool, span: ref Span) sync {
+    fn arithmetic_on_a_declared_type(ref mut self, world: ref CheckWorld, symbol: ref String, side: ref Expr, ty: ref Ty, other_side: ref Expr, other: ref Ty, at: i64, compound: bool, span: ref Span) sync {
         let kind = declared_with_no_arithmetic(world.here, ty) ?? return
         let seen = ty.unseen()
         let name = match seen {
@@ -474,7 +474,7 @@ impl CheckState {
 
     /// **`NK1245`: a value whose type nothing can tell**, unless what left it
     /// without one was said elsewhere or stood back for a reason.
-    pub fn a_value_of_no_known_type(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
+    fn a_value_of_no_known_type(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
         let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_call_of_open_members(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset")
         // **A name is asked where it is bound**: a `let`'s value, a loop's
         // sequence, the place a lambda stands, a declared parameter. Whatever
@@ -564,7 +564,7 @@ impl CheckState {
     /// stands** (`NK1245`, #703): a member of its parameter is where the
     /// language below has to know the type, and nothing here does. Once per
     /// parameter, and not for a number its uses type.
-    pub fn a_member_of_an_unknown_lambda_parameter(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
+    fn a_member_of_an_unknown_lambda_parameter(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
         let base: ref Expr = match expr {
             Expr::Field { base, .. } => base,
             Expr::MethodCall { receiver, .. } => receiver,

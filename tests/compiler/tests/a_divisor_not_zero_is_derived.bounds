@@ -1,0 +1,8 @@
+bounds in tests/a_divisor_not_zero_is_derived.nika: 1 indexes, 1 proved; 4 operations, 3 proved
+     7  n / g   proved
+    11  a % b   proved
+    15  n / d   checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    23  g += 1  proved
+    27  ds[1]   proved
+  derived  ratio: g != 0, 0 <= g, proved at the calls on lines 21
+  derived  rest: b != 0, 0 <= b, proved at the calls on lines 22

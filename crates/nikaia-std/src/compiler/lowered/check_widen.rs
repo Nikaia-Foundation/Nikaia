@@ -56,7 +56,7 @@ pub(crate) fn a_plain_name(ty: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
+pub(crate) fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
     let from = nikaia_std::index::or(an_integer_named(found), || "".into());
     let into = nikaia_std::index::or(an_integer_named(want), || "".into());
     if from.is_empty() || into.is_empty() || from == into { return None; }
@@ -67,7 +67,7 @@ pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
+pub(crate) fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
     let from = nikaia_std::index::or(an_integer_named(found), || "".into());
     let into = nikaia_std::index::or(an_integer_named(want), || "".into());
     if from.is_empty() || into.is_empty() || from == into { return false; }
@@ -76,7 +76,7 @@ pub fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
+pub(crate) fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
     let from = nikaia_std::index::or(a_plain_name(found), || "".into());
     let into = nikaia_std::index::or(a_plain_name(want), || "".into());
     let held = match found {
@@ -95,7 +95,7 @@ pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
+pub(crate) fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
     match want {
         Ty::Named { name, args, .. } => {
             if name == "Vec" && args.len() == 1 && a_float_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
@@ -134,7 +134,7 @@ pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn names_a_path(left: &Ty, right: &Ty) -> bool {
+pub(crate) fn names_a_path(left: &Ty, right: &Ty) -> bool {
     let l = nikaia_std::index::or(a_plain_name(left), || "".into());
     let r = nikaia_std::index::or(a_plain_name(right), || "".into());
     let l_either = l == "fs::Path" || l == "String" || l == "str";
@@ -144,7 +144,7 @@ pub fn names_a_path(left: &Ty, right: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn text_as_a_path(found: &Ty, want: &Ty) -> i64 {
+pub(crate) fn text_as_a_path(found: &Ty, want: &Ty) -> i64 {
     let asked: i64 = match want {
         Ty::Named { name, args, view } => { let view = *view; if name == "fs::Path" && args.is_empty() { if view { 1 } else { 0 } } else { -1 } },
         _ => -1,
@@ -157,7 +157,7 @@ pub fn text_as_a_path(found: &Ty, want: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn mapped_as_bytes(found: &Ty, want: &Ty) -> bool {
+pub(crate) fn mapped_as_bytes(found: &Ty, want: &Ty) -> bool {
     let asked = match want {
         Ty::Named { name, args, view } => { let view = *view; name == "Bytes" && args.is_empty() && !view },
         _ => false,
@@ -171,7 +171,7 @@ pub fn mapped_as_bytes(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn views_into_nullable_text(found: &Ty, want: &Ty) -> bool {
+pub(crate) fn views_into_nullable_text(found: &Ty, want: &Ty) -> bool {
     let present: &Ty = match found {
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held },
         _ => found,
@@ -192,7 +192,7 @@ pub fn views_into_nullable_text(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn views_into_text(found: &Ty, want: &Ty) -> bool {
+pub(crate) fn views_into_text(found: &Ty, want: &Ty) -> bool {
     let seen = match found {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "str" },
         _ => false,
@@ -206,7 +206,7 @@ pub fn views_into_text(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn binary_op_text(op: &BinaryOp) -> String {
+pub(crate) fn binary_op_text(op: &BinaryOp) -> String {
     match op {
         BinaryOp::Add => String::from("+"),
         BinaryOp::Sub => String::from("-"),
@@ -229,7 +229,7 @@ pub fn binary_op_text(op: &BinaryOp) -> String {
     }
 }
 
-pub fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, second: &str, at: &Span) -> CheckFinding {
+pub(crate) fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, second: &str, at: &Span) -> CheckFinding {
     let mut message: String = String::from("");
     let mut help: String = String::from("");
     if element {
@@ -243,7 +243,7 @@ pub fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, seco
     check_refusal("NK1200", at, message, notes, Some(help))
 }
 
-pub fn a_map_number_asked_for_two_types(name: &str, keys: bool, other: &str, first: &str, second: &str, at: &Span) -> CheckFinding {
+pub(crate) fn a_map_number_asked_for_two_types(name: &str, keys: bool, other: &str, first: &str, second: &str, at: &Span) -> CheckFinding {
     let mut part: &'static str = "values";
     let mut written: String = format!("{}, {}", other, first);
     if keys {
@@ -256,7 +256,7 @@ pub fn a_map_number_asked_for_two_types(name: &str, keys: bool, other: &str, fir
     check_refusal("NK1200", at, message, notes, Some(help))
 }
 
-pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &Span, computed: bool) -> CheckFinding {
+pub(crate) fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &Span, computed: bool) -> CheckFinding {
     let mut magnitude = wanted;
     if magnitude < 0 { magnitude = 0 - magnitude; }
     let had = counted(magnitude, "element");
@@ -274,23 +274,23 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &S
     check_refusal("NK1157", span, message, notes, Some(help))
 }
 
-pub fn a_repeat_count_unknown_for_its_array(written: &str, wanted: i64, span: &Span) -> CheckFinding {
+pub(crate) fn a_repeat_count_unknown_for_its_array(written: &str, wanted: i64, span: &Span) -> CheckFinding {
     let message = format!("This has `{}` elements, a number the build doesn't know, but the array holds {}.", written, wanted);
     let help = format!("Write the length as a number the build knows, `[…; {}]`, or make it a `Vec`.", wanted);
     let notes: Vec<String> = vec![String::from("The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.")];
     check_refusal("NK1157", span, message, notes, Some(help))
 }
 
-pub fn a_repeated_value_that_does_not_copy(names: &winnow_grammar::InternerContext, value: &Expr, count: &Expr, ty: &Ty, span: &Span) -> CheckFinding {
+pub(crate) fn a_repeated_value_that_does_not_copy(names: &winnow_grammar::InternerContext, value: &Expr, count: &Expr, ty: &Ty, span: &Span) -> CheckFinding {
     let v = written_expression(names, value);
     let n = written_expression(names, count);
-    let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.text());
+    let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.shown());
     let help = format!("Write each copy: `(0..<{}).map(fn(_i) {{ {}.clone() }}).collect()`.", n, v);
     let notes: Vec<String> = vec![String::from("`[v; n]` copies a number, a `bool`, a `scalar`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.")];
     check_refusal("NK1280", span, message, notes, Some(help))
 }
 
-pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str, ty: &str, name: &str, wide: &str, span: &Span) -> CheckFinding {
+pub(crate) fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str, ty: &str, name: &str, wide: &str, span: &Span) -> CheckFinding {
     let message = format!("`{}` takes one type for `{}`, but you're passing `{}` and `{}`.", key, variable, bound, ty);
     let notes: Vec<String> = vec![String::from("A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.")];
     check_refusal("NK1102", span, message, notes, Some(format!("Convert one of them: `{} as {}`.", name, wide)))
@@ -299,7 +299,7 @@ pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub(crate) fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         #[allow(unused_mut)] let mut variables: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables;
         let mut places: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);

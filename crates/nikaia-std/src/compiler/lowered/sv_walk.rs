@@ -23,7 +23,7 @@ impl SvRandom {
     pub(crate) fn below(&mut self, n: i64) -> i64 {
         let hi = self.draw();
         let lo = self.draw();
-        (hi * 32768 + lo) % n
+        (unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(hi, 32768), lo) }) % n
     }
 }
 
@@ -121,21 +121,21 @@ impl SvWalk {
             let step = (*nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize)).checked_mul(m.delta);
             let now = match step {
                 None => None,
-                _ => (*unsafe { nikaia_std::proven::read(&self.row_value, (a) as usize) }).checked_add(nikaia_std::index::or(step, || 0)),
+                _ => (*nikaia_std::index::get(&self.row_value, nikaia_std::index::at(a))).checked_add(nikaia_std::index::or(step, || 0)),
             };
             if now.is_none() {
                 overflow = true;
                 break;
             }
-            let h = sv_walk_holds(nikaia_std::index::or(now, || 0), &unsafe { nikaia_std::proven::read(&self.atoms, (a) as usize) }.rel);
-            if h != *unsafe { nikaia_std::proven::read(&self.holds, (a) as usize) } {
+            let h = sv_walk_holds(nikaia_std::index::or(now, || 0), &nikaia_std::index::get(&self.atoms, nikaia_std::index::at(a)).rel);
+            if h != *nikaia_std::index::get(&self.holds, nikaia_std::index::at(a)) {
                 let up: i64 = if h { 1 } else { -1 };
-                for c in (*unsafe { nikaia_std::proven::read(&self.lit_clauses, (2 * a) as usize) }).iter() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(2 * a))).iter() {
                     let c = nikaia_std::num::value(c);
                     if *nikaia_std::index::get(&self.scratch, nikaia_std::index::at(c)) == 0 { self.touched.push(c); }
                     { let __nikaia_stored = up; let __nikaia_at = (c) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.scratch, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.scratch, __nikaia_at, __nikaia_stored) }; }
                 }
-                for c in (*unsafe { nikaia_std::proven::read(&self.lit_clauses, (2 * a + 1) as usize) }).iter() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(2 * a + 1))).iter() {
                     let c = nikaia_std::num::value(c);
                     if *nikaia_std::index::get(&self.scratch, nikaia_std::index::at(c)) == 0 { self.touched.push(c); }
                     { let __nikaia_stored = up; let __nikaia_at = (c) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.scratch, __nikaia_at) } - __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.scratch, __nikaia_at, __nikaia_stored) }; }
@@ -161,10 +161,10 @@ impl SvWalk {
         let mut i: i64 = 0;
         while ((i) as usize) < (*nikaia_std::index::get(&self.col_atoms, nikaia_std::index::at(m.col))).len() {
             let a = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.col_atoms, (m.col) as usize) }, (i) as usize);
-            { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize) * m.delta; let __nikaia_at = (a) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.row_value, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.row_value, __nikaia_at, __nikaia_stored) }; }
-            let h = sv_walk_holds(*unsafe { nikaia_std::proven::read(&self.row_value, (a) as usize) }, &unsafe { nikaia_std::proven::read(&self.atoms, (a) as usize) }.rel);
-            if h != *unsafe { nikaia_std::proven::read(&self.holds, (a) as usize) } {
-                { let __nikaia_stored = h; unsafe { nikaia_std::proven::write(&mut self.holds, (a) as usize, __nikaia_stored) }; }
+            self.row_value[nikaia_std::index::at(a)] += *nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize) * m.delta;
+            let h = sv_walk_holds(*nikaia_std::index::get(&self.row_value, nikaia_std::index::at(a)), &nikaia_std::index::get(&self.atoms, nikaia_std::index::at(a)).rel);
+            if h != *nikaia_std::index::get(&self.holds, nikaia_std::index::at(a)) {
+                { let __nikaia_stored = h; nikaia_std::index::set(&mut self.holds, nikaia_std::index::at(a), __nikaia_stored); }
                 let (made, lost) = if h { (2 * a, 2 * a + 1) } else { (2 * a + 1, 2 * a) };
                 for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(made))).copy_owned() {
                     self.true_count[nikaia_std::index::at(c)] += 1;
@@ -195,7 +195,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
     }
     let mut a: i64 = 0;
     while a < atoms {
-        let row = unsafe { nikaia_std::proven::read(&query.atoms, (a) as usize) }.row.clone();
+        let row = &unsafe { nikaia_std::proven::read(&query.atoms, (a) as usize) }.row;
         let mut i: i64 = 0;
         while ((i) as usize) < row.cols.len() {
             let col = *unsafe { nikaia_std::proven::read(&row.cols, (i) as usize) } as i64;
@@ -229,7 +229,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
     Some(w)
 }
 
-pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, moves: i64) -> SvWalkRun {
+pub(crate) fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, moves: i64) -> SvWalkRun {
     if !query.reals.is_empty() || moves <= 0 { return sv_walk_none(); }
     let mut w = match sv_walk_start(query, carried) { Some(__nikaia_value) => __nikaia_value, None => return sv_walk_none() };
     let mut rng = sv_random(params.seed);
@@ -286,9 +286,9 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
     SvWalkRun { found: w.unsat.is_empty(), values: w.values.copy_owned(), moves: step, least, phases }
 }
 
-pub fn sv_walk_params() -> SvWalkParams { SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 } }
+pub(crate) fn sv_walk_params() -> SvWalkParams { SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 } }
 
-pub fn sv_walk_units(moves: i64, params: &SvWalkParams) -> i64 {
+pub(crate) fn sv_walk_units(moves: i64, params: &SvWalkParams) -> i64 {
     if moves <= 0 || params.moves_per_unit <= 0 { return 0; }
     (unsafe { nikaia_std::proven::sub::<i64>(moves, 1) }) / params.moves_per_unit + 1
 }
@@ -350,7 +350,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
         let name = *name;
         out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_walk_test_each(&format!("{}.smt2", name), text)));
     }
-    let expected = vec!["problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk", "equation.smt2: walk found true in 11 moves, same again true, a model; refuted 7", "unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval", "real.smt2: walk found false in 0 moves, same again true, no model; refuted 2"];
+    let expected = vec!["problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk", "equation.smt2: walk found true in 11 moves, same again true, a model; refuted 15", "unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval", "real.smt2: walk found false in 0 moves, same again true, no model; refuted 2"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }

@@ -7,7 +7,7 @@
 
 /// **A word another language reserves and this one does not**: what to write
 /// instead, for the refusal of a name nothing declares.
-pub fn reserved_elsewhere(name: ref String) -> String? {
+fn reserved_elsewhere(name: ref String) -> String? {
     if name == "loop" {
         return "Nikaia has no `loop` keyword. Write `while true { … }`. (`loop` is an ordinary name, so `let loop = 3` is fine.)"
     }
@@ -25,7 +25,7 @@ pub fn reserved_elsewhere(name: ref String) -> String? {
 
 /// The closest name among `among`, when one is close enough to be worth
 /// suggesting: at most one edit for every three characters of the name.
-pub fn nearest_name(name: ref String, among: ref Vec[String]) -> String? {
+fn nearest_name(name: ref String, among: ref Vec[String]) -> String? {
     let mut best: String? = null
     let mut best_distance = -1
     let mut longest = name.len()
@@ -46,7 +46,7 @@ pub fn nearest_name(name: ref String, among: ref Vec[String]) -> String? {
 }
 
 /// `a` or `an` in front of a word, which may be spelled in backticks.
-pub fn with_article(what: ref String) -> String sync {
+fn with_article(what: ref String) -> String sync {
     return f"{article(what)} {what}"
 }
 
@@ -58,7 +58,7 @@ pub fn with_article(what: ref String) -> String sync {
 pub fn article(what: ref String) -> String sync {
     let mut first = ' '
     let mut alone = true
-    for c in what.chars() {
+    for c in what.scalars {
         if first == ' ' {
             if !c.is_alphanumeric() {
                 continue
@@ -99,7 +99,7 @@ pub fn counted(n: i64, what: ref String) -> String {
 }
 
 /// Names in backticks, the last joined with `and`: `` `a`, `b` and `c` ``.
-pub fn names_listed(names: ref Vec[String]) -> String {
+fn names_listed(names: ref Vec[String]) -> String {
     if names.len() == 0 {
         return "no fields"
     }
@@ -124,8 +124,8 @@ pub fn indented_text(text: ref String) -> String {
 
 /// Every `{…}` group in a string, by the text between the braces - a
 /// `\u{…}` escape is not one, and an empty group is left out.
-pub fn brace_groups(text: ref String) -> Vec[String] {
-    let c: Vec[scalar] = text.chars().collect()
+fn brace_groups(text: ref String) -> Vec[String] {
+    let c: Vec[scalar] = text.scalars.collect()
     let mut found: Vec[String] = []
     let mut at = 0
     while at < c.len() {
@@ -165,8 +165,8 @@ pub fn brace_groups(text: ref String) -> Vec[String] {
 /// `null` where it holds none (#1361). `{{` is one; `}}` is one only where no
 /// single `{` before it is still open, so the closing braces of nested JSON,
 /// `{"a":{}}`, are not. A `\u{…}` escape is passed over.
-pub fn collapsed_doubled_braces(text: ref String) -> String? {
-    let c: Vec[scalar] = text.chars().collect()
+fn collapsed_doubled_braces(text: ref String) -> String? {
+    let c: Vec[scalar] = text.scalars.collect()
     let mut out: String = ""
     let mut doubled = false
     let mut open = 0
@@ -215,7 +215,7 @@ pub fn collapsed_doubled_braces(text: ref String) -> String? {
 /// What a refusal adds about another package's entry that never promised
 /// `sync` (ADR-288 D28): whose it is, and that the word is missing there
 /// rather than a pause here.
-pub fn not_promised_note(callee: ref String) -> String {
+fn not_promised_note(callee: ref String) -> String {
     let parts: Vec[ref String] = callee.splitn(2, "::").collect()
     let mut package: String = "its package"
     let mut function = callee.clone()
@@ -229,7 +229,7 @@ pub fn not_promised_note(callee: ref String) -> String {
 /// **A `std` lookup whose key the language below takes by reference**: the
 /// map or set is asked about the key and keeps nothing - a removal takes the
 /// entry along and is one too.
-pub fn is_a_lookup(key: ref String) -> bool {
+fn is_a_lookup(key: ref String) -> bool {
     let mut bare = key.clone()
     if key.starts_with("collections::") {
         let parts: Vec[ref String] = key.splitn(2, "::").collect()
@@ -242,7 +242,7 @@ pub fn is_a_lookup(key: ref String) -> bool {
 /// emitter (ADR-246): a struct's field by its name, a variant's part as
 /// `Variant#0`, a variant's named field as `Variant.name`. `at` is -1 and
 /// `field` empty where there is none.
-pub fn boxed_member(owner: ref String, at: i64, field: ref String) -> String {
+fn boxed_member(owner: ref String, at: i64, field: ref String) -> String {
     if at >= 0 {
         return f"{owner}#{at}"
     }
@@ -257,7 +257,7 @@ pub fn boxed_member(owner: ref String, at: i64, field: ref String) -> String {
 /// and a word that starts with a sign keeps what was written. The backticked
 /// word itself, closing tick included, is copied as it is.
 pub fn articles(text: ref String) -> String {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut out: String = ""
     let mut before: Vec[scalar] = []
     let mut at = 0

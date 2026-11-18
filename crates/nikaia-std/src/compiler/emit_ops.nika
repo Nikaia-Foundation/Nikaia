@@ -25,7 +25,7 @@ pub fn precedence(op: BinaryOp) -> i64 {
 }
 
 /// The operator as Rust writes it.
-pub fn binary_op(op: BinaryOp) -> String {
+fn binary_op(op: BinaryOp) -> String {
     return match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
@@ -58,7 +58,7 @@ pub fn unary_op(op: UnaryOp) -> String {
 }
 
 /// The suffix a repeated pattern is written with.
-pub fn repeat_suffix(rep: Repeat) -> String {
+fn repeat_suffix(rep: Repeat) -> String {
     return match rep {
         Repeat::Star => "*",
         Repeat::Plus => "+",
@@ -93,7 +93,7 @@ pub fn jumps(expr: ref Expr) -> bool {
 /// Whether a `??`'s fallback ends in a jump: a jump itself, another `??`
 /// whose own fallback does - the chain `a ?? b ?? continue` is one fallback
 /// that may leave - or a block whose last statement does (#457).
-pub fn jumps_at_the_end(expr: ref Expr) -> bool {
+fn jumps_at_the_end(expr: ref Expr) -> bool {
     return match expr {
         Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback),
         Expr::Block(block, _) => block_jumps_at_the_end(block),
@@ -119,7 +119,7 @@ fn block_jumps_at_the_end(block: ref Block) -> bool {
 /// leaves at its end - a jump, a block that ends in one, a `match` whose arms
 /// all leave, an `if` whose branches both do (#696). Such an expression is
 /// not wrapped as the value of a result.
-pub fn never_a_value(expr: ref Expr) -> bool {
+fn never_a_value(expr: ref Expr) -> bool {
     return match expr {
         Expr::Match { arms, .. } => {
             let mut all = arms.len() > 0
@@ -153,7 +153,7 @@ fn block_never_a_value(block: ref Block) -> bool {
 /// Whether this expression is a **number written down**, sign and all
 /// (ADR-285 D21): the negation is part of the answer rather than a wrapper
 /// around it.
-pub fn a_number(expr: ref Expr) -> bool {
+fn a_number(expr: ref Expr) -> bool {
     return match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -171,7 +171,7 @@ fn a_negated_number(op: UnaryOp, inner: ref Expr) -> bool {
 
 /// Whether an index is written **only in literals**, and therefore needs no
 /// conversion and can take none: `xs[0]`, `xs[-1]`, `&text[1..3]`, `xs[2 * 3]`.
-pub fn only_literals(index: ref Expr) -> bool {
+fn only_literals(index: ref Expr) -> bool {
     return match index {
         Expr::LitInt { .. } => true,
         Expr::Unary { expr, .. } => only_literals(expr),
@@ -182,7 +182,7 @@ pub fn only_literals(index: ref Expr) -> bool {
 }
 
 /// Whether a written index **counts from the end** (ADR-285 D1).
-pub fn a_negation_inside(index: ref Expr) -> bool {
+fn a_negation_inside(index: ref Expr) -> bool {
     return match index {
         Expr::Unary { op, expr, .. } => a_negation_or_inside(op, expr),
         Expr::Binary { lhs, rhs, .. } => a_negation_inside(lhs) || a_negation_inside(rhs),
@@ -200,14 +200,14 @@ fn a_negation_or_inside(op: UnaryOp, inner: ref Expr) -> bool {
 
 /// `xs.len()` - the four `std` entries that hand back a length, by the name
 /// all four of them have (ADR-285 D1).
-pub fn is_length(method: ref String, args: ref Vec[Expr]) -> bool {
+fn is_length(method: ref String, args: ref Vec[Expr]) -> bool {
     return method == "len" && args.len() == 0
 }
 
 /// A list a function value only reads is a slice (#458): `&Vec<T>` written
 /// as `&[T]`, and with a named lifetime `&'r Vec<T>` as `&'r [T]` (#1016);
 /// `&mut Vec<T>` stays.
-pub fn a_list_read_as_a_slice(written: String) -> String {
+fn a_list_read_as_a_slice(written: String) -> String {
     if !written.starts_with("&") || !written.ends_with(">") {
         return written
     }
@@ -228,7 +228,7 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
 }
 
 /// The `#[frame]` attribute a `frame` writes.
-pub fn frame_attribute(frame: ref FrameAttr) -> String {
+fn frame_attribute(frame: ref FrameAttr) -> String {
     let mut keys: Vec[String] = []
     let boundary = frame.boundary?.clone()
     if boundary != null {
@@ -245,7 +245,7 @@ pub fn frame_attribute(frame: ref FrameAttr) -> String {
 
 /// Whether this expression names a place: a variable, a field, a safe field
 /// or an index.
-pub fn is_a_place(expr: ref Expr) -> bool {
+fn is_a_place(expr: ref Expr) -> bool {
     return match expr {
         Expr::Variable(_, _) => true,
         Expr::Field { .. } => true,
@@ -257,7 +257,7 @@ pub fn is_a_place(expr: ref Expr) -> bool {
 
 /// Whether a match pattern binds the part it stands for: a single name, or
 /// `else`.
-pub fn binds_a_part(part: ref MatchPattern) -> bool {
+fn binds_a_part(part: ref MatchPattern) -> bool {
     return match part {
         MatchPattern::Path(one) => one.len() == 1,
         MatchPattern::Otherwise => true,

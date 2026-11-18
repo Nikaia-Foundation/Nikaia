@@ -111,7 +111,7 @@ fn a_bare_name_in_a_pattern_is_the_value_matched() {
     );
     assert!(
         found.iter().any(|f| f.code == "NK1103"
-            && f.message == "This value is `ref E`, but the `let` declares `String`."),
+            && f.message == "This value is a view of an `E`, but the `let` declares `String`."),
         "{found:#?}"
     );
 }

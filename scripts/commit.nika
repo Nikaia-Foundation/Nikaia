@@ -56,6 +56,23 @@
 // commits has the report's `Commit:` subject and touches every listed path,
 // the script commits nothing, writes `Pushed: local <that sha>` and prints
 // `already committed <sha8> local`; otherwise it refuses as before.
+//
+// **Your hunks only** (#1918): `--dry-run` also lists the hunks of each
+// listed source (`git diff -U0` against HEAD, a `Partial:` file's staged
+// hunks; lowered files left out) under `hunks of the listed sources`, and
+// writes `Reviewed: <digest>` into the report, the digest of the listed
+// files as they are (each `Files:` path's content, each `Partial:` path's
+// staged blob). A hunk you did not write is another agent's: move the file
+// to `Partial:` and stage only yours. The commit then refuses when the
+// report's `Reviewed:` differs from the files as they are now: another
+// agent's edit arrived after the review (#1888's run swept another agent's
+// hunks of `bounds_rules.nika` into its commit). A report without
+// `Reviewed:` commits as before.
+//
+// **No commit inside a merge** (#1901): while `.git/MERGE_HEAD` (or a
+// cherry-pick's or revert's head) exists, as during the driver's `git merge
+// --no-commit --autostash`, the script refuses: a commit then would be a
+// merge commit with the private index's tree, which drops the merged side.
 
 use std::cli
 use std::fs
@@ -273,18 +290,81 @@ fn commit_lowered(private: String, listed: Vec[String]) -> String throws {
 }
 
 fn commit_put_pushed(path: String, text: String, sha: String) throws {
+    commit_put_field(path, text, "Pushed:", sha)
+}
+
+// Writes `KEY VALUE` into the report at PATH (text TEXT): in place of its
+// `KEY` line, else after its last line.
+fn commit_put_field(path: String, text: String, key: String, value: String) throws {
     let mut out: Vec[String] = []
     let mut done = false
     for line in text.trim_end().split("\n") {
-        if line.starts_with("Pushed:") {
-            out.push(f"Pushed: {sha}")
+        if line.starts_with(key.clone()) {
+            out.push(f"{key} {value}")
             done = true
         } else {
             out.push(line.clone())
         }
     }
-    if !done { out.push(f"Pushed: {sha}") }
+    if !done { out.push(f"{key} {value}") }
     fs::write(path, fs::Root::Anywhere, out.join("\n") + "\n")
+}
+
+// The digest of the listed files as they are (#1918): each `Files:` path
+// with its content's blob (`absent` for a deleted one), each `Partial:` path
+// with its staged entry.
+fn commit_reviewed(files: Vec[String], partial: Vec[String]) -> String throws {
+    let mut all: String = ""
+    for f in files {
+        let blob = if fs::exists(f.clone(), fs::Root::Anywhere) { commit_git(["hash-object", "--", f.clone()]) } else { "absent" }
+        all.push_str(f"F {f} {blob}\n")
+    }
+    for f in partial {
+        all.push_str(f"P {f} {commit_git(["ls-files", "-s", "--", f.clone()])}\n")
+    }
+    return commit_sha(all)
+}
+
+fn commit_generated(path: String) -> bool {
+    return path.contains("/lowered/") || path.ends_with("/lowered.rs")
+}
+
+// The hunk headers of the listed sources (#1918), one line each: `PATH @@
+// ... @@ context`, `PATH new file` for one HEAD lacks; lowered files left
+// out, at most 30 hunks a file.
+fn commit_hunks(files: Vec[String], partial: Vec[String]) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    let mut all: Vec[(String, bool)] = []
+    for f in files { all.push((f.clone(), false)) }
+    for f in partial { all.push((f.clone(), true)) }
+    for (f, staged) in all {
+        if commit_generated(f.clone()) { continue }
+        if !process::run("git", ["cat-file", "-e", f"HEAD:{f}"]).ok {
+            out.push(f"  {f} new file")
+            continue
+        }
+        let diff = if staged { commit_git(["diff", "--cached", "-U0", "--", f.clone()]) } else { commit_git(["diff", "-U0", "HEAD", "--", f.clone()]) }
+        let mut n = 0
+        for line in diff.split("\n") {
+            if !line.starts_with("@@") { continue }
+            if n == 30 {
+                out.push(f"  {f} ... more hunks")
+                break
+            }
+            out.push(f"  {f} {line.trim()}")
+            n = n + 1
+        }
+    }
+    return out
+}
+
+// The ref of a merge, cherry-pick or revert in progress (`MERGE_HEAD`, ...),
+// or "" when there is none.
+fn commit_merging() -> String throws {
+    for r in ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"] {
+        if process::run("git", ["rev-parse", "-q", "--verify", r.clone()]).ok { return r.clone() }
+    }
+    return ""
 }
 
 fn main() throws {
@@ -336,12 +416,35 @@ fn main() throws {
     if note != "" { println(note) }
     let msg = commit_message(report.clone())
     let others = commit_others(files.clone(), partial.clone())
+    let reviewed = commit_reviewed(files.clone(), partial.clone())
     if dry {
+        let hunks = commit_hunks(files.clone(), partial.clone())
+        if hunks.len() > 0 {
+            println("hunks of the listed sources (each must be yours: a file with another agent's hunk goes under Partial: with only yours staged):")
+            for h in hunks { println(h) }
+        }
+        commit_put_field(path.clone(), report.clone(), "Reviewed:", reviewed.clone())
         if files.len() > 0 { println(f"git add {files.join(" ")}") }
         if partial.len() > 0 { println(f"staged hunks of {partial.join(" ")}") }
         if others.len() > 0 { println(f"left staged, not committed: {others.join(" ")}") }
         println(msg)
         return
+    }
+    // Changed since the review (#1918): another agent's edit of a listed
+    // file arrived after `--dry-run` showed its hunks.
+    let was = commit_field(report.clone(), "Reviewed:")
+    if was != "" && was != reviewed {
+        println("REFUSED: a listed file changed since --dry-run wrote Reviewed: (another agent's edit?): run --dry-run again and check each hunk it lists is yours")
+        process::exit(1)
+    }
+    // A merge in progress (#1901): the driver's `git merge --no-commit
+    // --autostash` holds the other agents' files in its stash until it
+    // commits; a `git commit` now would record a merge commit whose tree is
+    // HEAD plus the listed files, dropping the merged side's changes.
+    let merging = commit_merging()
+    if merging != "" {
+        println(f"REFUSED: a merge is in progress (.git/{merging} exists): wait until it is gone, check your edits are back, then run this again")
+        process::exit(1)
     }
     // The private index: HEAD, the listed files whole, the staged hunks of
     // the Partial: files (#1792).

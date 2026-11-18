@@ -8,6 +8,7 @@
 // progress note - comes from `ComptimeBundleHost`; the Rust `Bundle` the other
 // Rust modules read is made from `ComptimeBundle`.
 
+use std::collections
 use std::env
 use std::fs
 use std::hash
@@ -113,11 +114,19 @@ pub trait ComptimeBundleHost {
     fn run_child(ref self, binary: ref fs::Path, level: ref String, libraries: ref Vec[fs::Path], name: ref String) -> ComptimeBundleRan sync throws
 }
 
-/// The run bundle's one file: the crates, named, and nothing else.
+/// **The run bundle's one file**: the crates, named, and the program's
+/// counting allocator (ADR-327 D9, D10; #1844). A dynamic library allocates
+/// with its own allocator, so a `std` call whose code is the library's (a
+/// set's `insert`) was counted by no task while the program declared the
+/// allocator; declared here, every allocation of the program and the library
+/// is counted, and the program declares none (`run_fast.rs`).
 comptime COMPTIME_BUNDLE_RUN_SOURCE: ref String = "// GENERATED: the library `nikaia run` links a program against.
 pub extern crate nikaia_std;
 pub extern crate winnow;
 pub extern crate winnow_grammar;
+
+#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;
 "
 
 /// The crates the bundle names: `std`, and what a `grammar` lowers to.
@@ -127,7 +136,7 @@ comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", 
 /// **The library and the crates Cargo's JSON messages name** (#1163): the
 /// `library` target's dynamic library (`.so`, `.dylib` or `.dll`, as the
 /// platform names one) and each named crate's `rlib`.
-pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
+fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
     let mut dylib: fs::Path? = null
     let mut rlibs: Vec[(String, fs::Path)] = []
     for message in cargo_json_lines(messages) {
@@ -219,10 +228,30 @@ fn comptime_bundle_recorded[H: ComptimeBundleHost](flavour: ComptimeBundleFlavou
 /// What the run bundle's record is valid for: this compiler, the toolchain
 /// and the newest of `std`'s sources (a `std` edited under a development
 /// checkout is built again, as Cargo would).
+///
+/// **And of the crates it names by `path =`** (#1839): `std` builds the
+/// crates under `crates/unsafe` from source, and so does each of them its
+/// own path dependencies, so an edit there rebuilds the bundle too.
 fn comptime_bundle_run_fingerprint[H: ComptimeBundleHost](host: ref H) -> String {
     let mut newest = 0
     let mut count = 0
-    let mut pending = [host.std_dir()]
+    let mut crates = [host.std_dir()]
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut pending: Vec[fs::Path] = []
+    while true {
+        let root = crates.pop() ?? break
+        if !seen.insert(root.display()) {
+            continue
+        }
+        let manifest = fs::read_to_string(root.join("Cargo.toml"), fs::Root::Anywhere) catch { "" }
+        for line in manifest.lines() {
+            match comptime_bundle_path_dependency(line) {
+                null => {},
+                named => crates.push(root.join(named)),
+            }
+        }
+        pending.push(root)
+    }
     while true {
         let dir = pending.pop() ?? break
         let names = fs::read_dir(dir, fs::Root::Anywhere) catch { continue }
@@ -246,6 +275,21 @@ fn comptime_bundle_run_fingerprint[H: ComptimeBundleHost](host: ref H) -> String
     }
     let rustc = env::var("RUSTC") ?? "rustc"
     return comptime_bundle_digest(f"{host.compiler()}\n{host.rustc_version()}\n{rustc}\n{newest}:{count}")
+}
+
+/// The directory a manifest line names by `path = "..."`, where it names one.
+fn comptime_bundle_path_dependency(line: ref String) -> String? {
+    let text = line.trim()
+    if text.starts_with("#") {
+        return null
+    }
+    let (_, after) = text.split_once("path") ?? return null
+    let (equals, value) = after.split_once("\"") ?? return null
+    if equals.trim() != "=" {
+        return null
+    }
+    let (named, _) = value.split_once("\"") ?? return null
+    return named.to_string()
 }
 
 /// The target directory a record's crates were built in: three levels above

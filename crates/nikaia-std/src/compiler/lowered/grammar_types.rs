@@ -8,7 +8,7 @@ pub struct GrammarTypesCall {
     pub types: Vec<Type>,
 }
 
-pub fn grammar_types_copy_name(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
+pub(crate) fn grammar_types_copy_name(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
     let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
     check_specialised(rule, &nikaia_std::block::Text::from(spelled.join(", ")))
@@ -108,7 +108,7 @@ pub(crate) fn grammar_types_chooses(alts: &[GrammarAlt]) -> bool {
     false
 }
 
-pub fn grammar_types_wanted(def: &GrammarDef) -> bool {
+pub(crate) fn grammar_types_wanted(def: &GrammarDef) -> bool {
     for rule in def.rules.iter() {
         if !rule.generics.is_empty() || grammar_types_chooses(&rule.alts) { return true; }
         for alt in rule.alts.iter() { if grammar_types_has_members(&alt.pattern) { return true; } }
@@ -426,7 +426,7 @@ pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol,
     out
 }
 
-pub fn grammar_types_put(ty: &Type, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Type {
+pub(crate) fn grammar_types_put(ty: &Type, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Type {
     if ty.generics.is_empty() && !ty.is_tuple {
         let given: Option<Type> = match bound.get(words.resolve(ty.name)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -527,7 +527,7 @@ pub struct GrammarTypesGeneric {
     pub chooses: bool,
 }
 
-pub fn grammar_types_generic(items: &[Spanned<Item>]) -> GrammarTypesGeneric {
+pub(crate) fn grammar_types_generic(items: &[Spanned<Item>]) -> GrammarTypesGeneric {
     let mut found = GrammarTypesGeneric { rules: collections::BTreeSet::new(), chooses: false };
     for item in items.iter() {
         match &item.node {
@@ -549,7 +549,7 @@ pub struct GrammarTypesAsked {
     pub callee: String,
 }
 
-pub fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
+pub(crate) fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
@@ -608,7 +608,7 @@ pub(crate) fn grammar_types_bracket_part(part: &Expr, words: &winnow_grammar::In
     }
 }
 
-pub fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; return Some(grammar_types_named(name, vec![])) },
         Expr::Path(segments, _) => {
@@ -630,9 +630,9 @@ pub fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContex
 
 pub(crate) fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec<Type>) -> Type { Type { name, generics, is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
 
-pub fn grammar_types_value_refused(callee: &str, span: &Span) -> GrammarTypesRefusal { GrammarTypesRefusal { code: String::from("NK1230"), call: -1, span: span.clone(), message: format!("`{}` takes a type here, not a value.", callee), note: format!("`{}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).", callee), help: format!("Write the type: `{}[i64](…)`, not a value of it.", callee) } }
+pub(crate) fn grammar_types_value_refused(callee: &str, span: &Span) -> GrammarTypesRefusal { GrammarTypesRefusal { code: String::from("NK1230"), call: -1, span: span.clone(), message: format!("`{}` takes a type here, not a value.", callee), note: format!("`{}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).", callee), help: format!("Write the type: `{}[i64](…)`, not a value of it.", callee) } }
 
-pub fn grammar_types_plain(name: winnow_grammar::Symbol, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {
+pub(crate) fn grammar_types_plain(name: winnow_grammar::Symbol, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {
     let ty = match bound.get(words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if ty.generics.is_empty() && !ty.is_nullable && !ty.is_tuple { return Some(ty.name); }
     None

@@ -6,7 +6,7 @@ error[NK1101]: `Item` takes 1 value before the `;`, but you passed 2.
    |
    = note: A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).
    = help: Give one value for each, by position; an option goes after the `;` by name.
-error[NK1102]: The value for `n` here is `ref String`, but it has to be `i64`.
+error[NK1102]: The value for `n` here is a view of a `String`, but it has to be `i64`.
    --> tests/grammar_values_are_checked_where_they_stand.nika:10:29
     |
  10 |     entry rule b -> i64 = v:Item("x") -> { v }
@@ -28,7 +28,7 @@ error[NK1102]: A guard here is `i64`, but it has to be `bool`.
     |                                        ^^^^^
     |
     = help: A guard is a condition: compare, as in `if(m > n)`.
-error[NK1102]: A bound here is `ref String`, but it has to be `i64`.
+error[NK1102]: A bound here is a view of a `String`, but it has to be `i64`.
    --> tests/grammar_values_are_checked_where_they_stand.nika:13:27
     |
  13 |     entry rule e -> i64 = " "{"two"} -> { 0 }

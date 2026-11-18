@@ -45,11 +45,15 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
         SvChecked::Consistent => { },
         SvChecked::Conflict(ref lemma) => {
             let mut hints: Vec<u32> = vec![];
+            let mut hinted: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut i: i64 = 0;
             while ((i) as usize) < unit_lits.len() {
                 let l = *unsafe { nikaia_std::proven::read(&unit_lits, (i) as usize) };
                 let negation = if l % 2u32 == 0u32 { l + 1u32 } else { l - 1u32 };
-                if lemma.lits.contains(&negation) && !hints.contains(nikaia_std::index::get(&unit_ids, (i) as usize)) { hints.push(*nikaia_std::index::get(&unit_ids, (i) as usize)); }
+                if lemma.lits.contains(&negation) && !hinted.contains(&l) {
+                    hinted.push(l);
+                    hints.push(*nikaia_std::index::get(&unit_ids, (i) as usize));
+                }
                 i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             }
             hints.push(lemma.id);

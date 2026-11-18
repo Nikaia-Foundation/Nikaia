@@ -55,7 +55,7 @@ fn kept_result_spelling(ty: ref Ty) -> String? sync {
     return match ty {
         Ty::Nullable(inner) => {
             let name = integer_named(inner) ?? return null
-            f"Option<{name}>"
+            f"::core::option::Option<{name}>"
         },
         else => integer_named(ty),
     }
@@ -66,7 +66,7 @@ impl CheckState {
     /// function type without `-> R`, as a named function without a result
     /// type does, so `s.spawn fn { 1 }` runs its body and hands back
     /// nothing.
-    pub fn a_lambda_hands_back_nothing(ref mut self, id: i64, result: ref Ty?) sync {
+    fn a_lambda_hands_back_nothing(ref mut self, id: i64, result: ref Ty?) sync {
         if result == null {
             self.facts.valueless_lambdas.insert(id)
         }
@@ -75,7 +75,7 @@ impl CheckState {
     /// **A pausing kept lambda's integer result is recorded** (#1029): its
     /// boxed future is cast to `BoxedIn<'_, i64>`, not `<'_, _>`, or each bare
     /// literal it hands back is `rustc`'s `i32`. One that may fail keeps `_`.
-    pub fn a_kept_lambdas_result(ref mut self, id: i64, result: ref Ty?, pauses: bool, fails: bool) sync {
+    fn a_kept_lambdas_result(ref mut self, id: i64, result: ref Ty?, pauses: bool, fails: bool) sync {
         if !pauses || fails {
             return
         }
@@ -88,7 +88,7 @@ impl CheckState {
     /// ADR-312 D5): handing a hull on duplicates the count, so the name outside
     /// is still there on the next line. Asked wherever a lambda is kept - a
     /// field, a `let`, and a parameter the callee keeps (#536).
-    pub fn a_kept_lambdas_hulls(ref mut self, world: ref CheckWorld, value: ref Expr) sync {
+    fn a_kept_lambdas_hulls(ref mut self, world: ref CheckWorld, value: ref Expr) sync {
         match value {
             Expr::Closure { params, body, .. } => {
                 self.hulls_of_a_lambda(world, value, params, body)
@@ -132,7 +132,7 @@ impl CheckState {
     /// future must own what it reads - which the emitter writes from
     /// `kept_owned`: no copy.
     /// `who` says in words who keeps it.
-    pub fn a_kept_lambda_takes_these(ref mut self, world: ref CheckWorld, value: ref Expr, pauses: bool, who: ref String, span: ref Span) sync {
+    fn a_kept_lambda_takes_these(ref mut self, world: ref CheckWorld, value: ref Expr, pauses: bool, who: ref String, span: ref Span) sync {
         match value {
             Expr::Closure { params, body, .. } => {
                 self.takes_of_a_lambda(world, value, params, body, pauses, who, span)
@@ -176,7 +176,7 @@ impl CheckState {
     /// statement: at its last use the handle is moved into the task (ADR-312
     /// D2 as revised by #1502). A value a move takes away goes with it. `who` is the
     /// task as `NK2101` names it: a `spawn`ed or an `async(detached)` one.
-    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
+    fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
         for name in named {
@@ -197,10 +197,43 @@ impl CheckState {
 }
 
 impl CheckState {
+    /// **The first binding from outside a lambda that its body changed**
+    /// (#2047): a change noted since `from` that reached a binding made
+    /// before the lambda's own, `floor` being the last such. A handle
+    /// (`Shared`) is changed through, not copied, so it is left out.
+    fn an_outer_binding_changed(ref self, from: i64, floor: i64) -> String? sync {
+        let mut at = from
+        while at < self.flow.changes_bound.len() {
+            let (name, bound) = self.flow.changes_bound[at].clone()
+            at += 1
+            if bound < 0 || bound > floor {
+                continue
+            }
+            let local = self.binding(name) ?? continue
+            if local.id != bound || is_a_handle(local.ty) {
+                continue
+            }
+            return name
+        }
+        return null
+    }
+
+    /// **`NK2101`: a kept lambda that changes a binding it captures**
+    /// (Part I 5.4 C, #2047): a kept lambda moves what it captures, so the
+    /// change reaches only its own copy, never the binding the reader sees.
+    fn a_kept_lambda_changes_a_capture(ref mut self, name: ref String, span: ref Span) sync {
+        let message = f"This lambda is kept for later, so it takes its own copy of `{name}`; a change it makes never reaches `{name}` here."
+        let note = f"A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17)."
+        let help = f"Hand the value back instead: take `{name}` as a parameter and return what it becomes (`fn(v, {name}) {{ {name} + v }}`), or keep `{name}` in a `Shared` value both sides reach."
+        self.findings.push(check_refusal("NK2101", span, message, [note], help))
+    }
+}
+
+impl CheckState {
     /// **`NK1229`: a supervisor's child that would not start fresh** (ADR-328
     /// D7, Part II 12.8): its function is called again for every attempt, so a
     /// `mut` binding it captures carries one attempt's changes into the next.
-    pub fn a_child_that_keeps_state(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+    fn a_child_that_keeps_state(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
         match body {
             Expr::Closure { params, body, .. } => {
                 self.state_of_a_child(world, params, body, span)
@@ -236,7 +269,7 @@ impl CheckState {
     /// (ADR-282 D8) - or a `String` the lambda captures is refused, as a
     /// named function's view is where that type is wanted, with the help
     /// `.clone()` (ADR-282 D10).
-    pub fn a_lambda_hands_back_text_it_does_not_own(ref mut self, world: ref CheckWorld, code: ref Ty, params: ref Vec[winnow_grammar::Symbol], body: ref Block, tail: ref Ty, span: ref Span) sync {
+    fn a_lambda_hands_back_text_it_does_not_own(ref mut self, world: ref CheckWorld, code: ref Ty, params: ref Vec[winnow_grammar::Symbol], body: ref Block, tail: ref Ty, span: ref Span) sync {
         let result: Ty = match code {
             Ty::Fn { result, .. } => result?.clone() ?? return,
             else => return,
@@ -244,7 +277,7 @@ impl CheckState {
         if result != a_string_type() {
             return
         }
-        let wanted = code.text()
+        let wanted = code.shown()
         let own = lambda_own(world, params)
         let last = tail_value_of(body)
         if last != null {
@@ -262,8 +295,7 @@ impl CheckState {
     fn a_lambda_result_of_its_own(ref mut self, world: ref CheckWorld, wanted: ref String, own: ref collections::BTreeSet[String], body: ref Block, value: ref Expr, ty: ref Ty, at: ref Span) sync {
         // Static text there is built as text of its own (ADR-282 D4).
         if lambda_a_text_view(ty) && self.text_literal(world, a_string_type(), value, true) == null {
-            let was = ty.text()
-            self.findings.push(check_refusal("NK1104", at, f"This lambda returns `{was}`, a view, but `{wanted}` returns text of its own.", ["`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns."], "Hand back a copy with `.clone()`."))
+            self.findings.push(check_refusal("NK1104", at, spoken_in(f"This lambda returns `{ty.text()}`, but `{wanted}` returns text of its own.", ty, null), ["`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns."], "Hand back a copy with `.clone()`."))
             return
         }
         let name: String = match value {
@@ -286,7 +318,7 @@ impl CheckState {
     /// `fn() -> i64` is refused here, not by `rustc`. Asked only where the
     /// result is wholly known; text against text is the views check's
     /// (`a_lambda_hands_back_text_it_does_not_own`).
-    pub fn a_lambdas_result_is_its_types(ref mut self, world: ref CheckWorld, code: ref Ty, body: ref Block, tail: ref Ty, span: ref Span) sync {
+    fn a_lambdas_result_is_its_types(ref mut self, world: ref CheckWorld, code: ref Ty, body: ref Block, tail: ref Ty, span: ref Span) sync {
         let result: Ty = match code {
             Ty::Fn { result, .. } => result?.clone() ?? return,
             else => return,
@@ -294,7 +326,7 @@ impl CheckState {
         if !wholly_known(result) || body.stmts.len() == 0 || a_body_never_ends(body) {
             return
         }
-        let wanted = code.text()
+        let wanted = code.shown()
         let last = tail_value_of(body)
         if last != null {
             let value = last ?? return

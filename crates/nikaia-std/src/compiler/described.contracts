@@ -21,6 +21,25 @@ sync = true
 touches = []
 signature = "(self: ref winnow_grammar::InternerContext, text: ref String) -> winnow_grammar::Symbol"
 
+# FNV-1a over a key's bytes from a seeded offset basis (ADR-311 D9): lives in
+# the runtime, `runtime/fixed.nika`, which `Fixed::get` calls at run time; the
+# table builder (`fixed.nika`) hashes with the same function (#2026).
+[fn."runtime::fnv"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(key: ref String, seed: u64) -> u64"
+
+# CHD's displacement, as the `phf` crate writes it: lives in the runtime,
+# `runtime/fixed.nika`, beside `fnv` (#2026).
+[fn."runtime::displace"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(f1: u32, f2: u32, d1: u32, d2: u32) -> u32"
+
 # The id every expression node of the tree carries (ADR-340, #558): a `u32`
 # the parser gives, compared as equal whatever the number (D3), so a key is
 # `get`, never the id itself.
@@ -64,6 +83,14 @@ pub = true
 sync = true
 touches = []
 signature = "(self: node_id::NodeId) -> bool"
+
+# This id with the node read from `start..end`, unless it carries a span
+# already (ADR-383 D4): how the postfix fold gives each step its span (#1977).
+[fn."node_id::NodeId::at"]
+pub = true
+sync = true
+touches = []
+signature = "(self: node_id::NodeId, start: u32, end: u32) -> node_id::NodeId"
 
 # Where the node was read, until the pass numbers it (ADR-383 D4).
 [fn."node_id::NodeId::span"]

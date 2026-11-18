@@ -4,7 +4,7 @@
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let st = out.mark();
         if emit_is_a_binding_text(world, &walk, &pattern.node) {
             match &pattern.node {
@@ -191,7 +191,11 @@ impl EmitState {
             if !first { out.push(", "); }
             first = false;
             out.push(&format!("{} = ", emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
-            if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?; }
+            if ((i) as usize) < args.len() && unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty.is_view {
+                out.push("&(");
+                self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?;
+                out.push(")");
+            } else if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?; }
         }
         for option in rule.config.iter() {
             if !first { out.push(", "); }
@@ -247,11 +251,11 @@ impl EmitState {
             return Ok(());
         }
         if called == "here" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
-            out.push(emit_here_rule());
+            out.push(&emit_here_rule());
             return Ok(());
         }
         if called == "same_line" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
-            out.push(emit_same_line_rule());
+            out.push(&emit_same_line_rule());
             return Ok(());
         }
         if called == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
@@ -375,7 +379,7 @@ pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, wa
     names.iter().any(|name| { emit_guard_reads(world, &pattern.node, name) })
 }
 
-pub(crate) fn emit_covered_rule() -> &'static str { "__nikaia_covered" }
+pub(crate) fn emit_covered_rule() -> String { String::from("__nikaia_covered") }
 
 pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
     match pattern {

@@ -79,8 +79,14 @@ fn main() throws {
     // order from the file.
     entries.sort_by_key fn(entry) { -entry.count }
 
+    // A file can hold counts whose sum does not fit in an i64: refuse it.
     let mut total = 0
-    for e in entries { total += e.count }
+    for e in entries {
+        total = total.checked_add(e.count) ?? {
+            eprintln(f"{path}: the counts add up past what an i64 holds")
+            return
+        }
+    }
 
     let count = entries.len()
     let markup = page(entries, total)

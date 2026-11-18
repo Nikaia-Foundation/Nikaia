@@ -1,0 +1,33 @@
+// #1702: the twin of `a_list_pair_emptied_in_one_branch_is_proved`
+// whose branch that empties `ks` gives `cols` one element: the lengths may
+// differ past the `if`, so `Row` keeps no length rule and `row.ks[0]` stays
+// checked.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn emptied(r: ref Row, e: bool) -> Row {
+	let mut ks: Vec[i64] = []
+	for k in r.ks {
+		ks.push(k)
+	}
+	if e {
+		ks = []
+	}
+	let cols = if ks.len() == 0 { [0] } else { r.cols.clone() }
+	return Row { cols: cols, ks: ks, constant: 0 }
+}
+
+fn main() throws {
+	let r = Row { cols: [1], ks: [1], constant: 0 }
+	println(first_k(emptied(r, false)))
+}

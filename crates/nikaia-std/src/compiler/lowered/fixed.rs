@@ -13,21 +13,6 @@ pub struct Table {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn fnv(key: &str, seed: u64) -> u64 {
-    let mut hash: u64 = 14695981039346656037u64 ^ seed;
-    for b in key.bytes() {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(1099511628211u64);
-    }
-    hash
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn displace(f1: u32, f2: u32, d1: u32, d2: u32) -> u32 { d2.wrapping_add(f1.wrapping_mul(d1)).wrapping_add(f2) }
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub fn build(keys: &[String]) -> Option<Table> {
     let n = keys.len() as i64;
     if n < HASHED_FROM {
@@ -54,7 +39,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
     let mut by_bucket: Vec<Vec<(i64, u32, u32)>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in 0..buckets { by_bucket.push(vec![]); }
     for at in 0..n {
-        let hash = fnv(unsafe { nikaia_std::proven::read(&keys, (at) as usize) }, seed);
+        let hash = runtime::fnv(unsafe { nikaia_std::proven::read(&keys, (at) as usize) }, seed);
         let g = (hash >> 32) as u32;
         let f1 = hash as u32;
         let f2 = (hash >> 16) as u32;
@@ -81,7 +66,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
                 let mut fits = true;
                 for (at, f1, f2) in (*nikaia_std::index::get(&by_bucket, nikaia_std::index::at(bucket))).iter() {
                     let at = nikaia_std::num::value(at);let f1 = nikaia_std::num::value(f1);let f2 = nikaia_std::num::value(f2);
-                    let slot = displace(f1, f2, d1, d2) as i64 % n;
+                    let slot = runtime::displace(f1, f2, d1, d2) as i64 % n;
                     let mut clash = *nikaia_std::index::get(&slots, nikaia_std::index::at(slot)) >= 0;
                     for t in taken.iter() { if t.0 == slot { clash = true; } }
                     if clash {

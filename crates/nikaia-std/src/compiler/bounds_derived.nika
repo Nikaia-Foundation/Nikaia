@@ -27,7 +27,10 @@ use std::collections
 /// values.len()`. Where `fixed` is a number, `right` is that whole number
 /// (#1571): `month < 12`, the length of a list the body writes as a literal.
 /// A length side is `scale * right.len() + offset` (ADR-391 D1, #1673):
-/// `l < 2 * xs.len()`; `1` and `0` everywhere else.
+/// `l < 2 * xs.len()`; `1` and `0` everywhere else. Where `apart`, the claim
+/// is `left != fixed` instead (a divisor not zero, `g != 0`, #1832). A side
+/// that names a parameter may be a path of fields from one (`p.walked`,
+/// `p.order.len()`, #1832).
 pub struct DerivedClaim {
 	pub left: String,
 	pub strict: bool,
@@ -37,6 +40,7 @@ pub struct DerivedClaim {
 	pub fixed: i64?,
 	pub scale: i64,
 	pub offset: i64,
+	pub apart: bool,
 }
 
 /// **A position the body reads as a step of a parameter** (#1673):
@@ -74,6 +78,9 @@ pub struct Derived {
 	/// The claims every call site proved, by the function's `key`: the
 	/// facts at its entry.
 	pub entry: collections::BTreeMap[i64, Vec[DerivedClaim]],
+	/// **Why a function is no candidate** (#1863), by its name: the first
+	/// gate `derived_candidate` stopped it at, for `--bounds`'s reasons.
+	pub gates: collections::BTreeMap[String, String],
 }
 
 /// What a scan found: each call by the callee's name, and every name met
@@ -96,20 +103,21 @@ fn derived_scan() -> DerivedScan {
 }
 
 /// Nothing derived, for a program not walked through.
-pub fn no_derived() -> Derived {
+fn no_derived() -> Derived {
 	return Derived {
 		functions: collections::BTreeMap(),
 		order: [],
 		walked: 0,
 		answers: collections::BTreeMap(),
 		entry: collections::BTreeMap(),
+		gates: collections::BTreeMap(),
 	}
 }
 
 /// **The candidates and their call sites** in `program`; `beside` is what
 /// the package's other files say (`bounds_beside`): a name met there is a
 /// call this file's walk does not see.
-pub fn derived_of(
+fn derived_of(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,
@@ -143,6 +151,7 @@ pub fn derived_of(
 			else => derived_item_names(item.node, words, everywhere.values),
 		}
 	}
+	let own_values = everywhere.values.clone()
 	for other in beside {
 		for name in other.names {
 			everywhere.values.insert(name.clone())
@@ -168,6 +177,20 @@ pub fn derived_of(
 			else => {},
 		}
 	}
+	// **A name only another file meets is a call there** (#1863): its gate
+	// says so, apart from a function this file names as a value.
+	let mut beside_only: Vec[String] = []
+	for (name, gate) in derived.gates {
+		if gate == "a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)" && !own_values.contains(name) {
+			beside_only.push(name.clone())
+		}
+	}
+	for name in beside_only {
+		derived.gates.insert(
+			name.clone(),
+			"a function another file of the package calls, whose calls the derivation does not gather (ADR-391 D1)",
+		)
+	}
 	derived.order = derived_callers_first(derived, called)
 	return derived
 }
@@ -190,20 +213,36 @@ fn derived_candidate(
 		Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
 			let named = name ?? return
 			let text = words.resolve(named).clone()
-			if is_public
-				|| is_extern
-				|| (receiver != null) != method
-				|| spread != null
-				|| !config.is_empty()
-				|| (args.is_empty() && !method) {
-					return
-				}
-			if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
+			let gate = if is_public {
+				"a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4)"
+			} else if is_extern {
+				"an `extern` function"
+			} else if (receiver != null) != method {
+				"a function of an `impl` that takes no `self`"
+			} else if spread != null || !config.is_empty() {
+				"a function with a spread or settings"
+			} else if (args.is_empty() && !method) {
+				"a function without parameters"
+			} else if (defined[text] ?? 0) != 1 {
+				"a name defined more than once in the file"
+			} else if everywhere.values.contains(text) {
+				"a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)"
+			} else if (everywhere.calls[text]?.len() ?? 0) == 0 {
+				"a function no body of the package calls"
+			} else {
+				""
+			}
+			if gate != "" {
+				derived.gates.insert(text.clone(), gate.to_string())
 				return
 			}
 			let sites = everywhere.calls[text] ?? return
 			let claims = derived_claims(args, body, method, steps, words)
-			if sites.is_empty() || claims.is_empty() {
+			if claims.is_empty() {
+				derived.gates.insert(
+					text.clone(),
+					"a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1)",
+				)
 				return
 			}
 			let key = derived_key(args, body) ?? return
@@ -230,7 +269,7 @@ fn derived_candidate(
 /// **Where a candidate's entry facts are kept**: its first parameter's byte,
 /// or, of a method that takes none but `self` (ADR-306 D34), its first
 /// statement's; none for an empty body, which reads nothing.
-pub fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
+fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
 	if !args.is_empty() {
 		return args[0].span.start as i64
 	}
@@ -475,14 +514,14 @@ fn derived_claims(
 	}
 	let mut claims: Vec[DerivedClaim] = []
 	for list in first {
-		claims.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 0 })
+		claims.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 0, apart: false })
 	}
 	for p in ints {
 		if !compared.contains(p) {
 			continue
 		}
 		if !unsigned.contains(p) {
-			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null, scale: 1, offset: 0 })
+			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null, scale: 1, offset: 0, apart: false })
 		}
 		for list in lists {
 			if indexed.contains(list) {
@@ -495,6 +534,7 @@ fn derived_claims(
 					fixed: null,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -505,6 +545,7 @@ fn derived_claims(
 					fixed: null,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 			}
 		}
@@ -519,6 +560,7 @@ fn derived_claims(
 					fixed: n,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -529,6 +571,7 @@ fn derived_claims(
 					fixed: n,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 			}
 		}
@@ -543,6 +586,7 @@ fn derived_claims(
 					fixed: null,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -553,6 +597,7 @@ fn derived_claims(
 					fixed: null,
 					scale: 1,
 					offset: 0,
+					apart: false,
 				})
 			}
 		}
@@ -566,7 +611,193 @@ fn derived_claims(
 	while claims.len() > most_claims() {
 		claims.pop()
 	}
+	// The widened shapes come after, so that none of them pushes out a claim
+	// asked before them (#1832).
+	for claim in derived_widened(args, body, words) {
+		if claims.len() >= most_claims() + most_widened() {
+			break
+		}
+		let written = derived_written(claim)
+		let mut known = false
+		for was in claims {
+			if derived_written(was) == written {
+				known = true
+				break
+			}
+		}
+		if !known {
+			claims.push(claim)
+		}
+	}
 	return claims
+}
+
+/// The most claims of the widened shapes one function is asked about at
+/// each call, besides `most_claims` (#1832).
+fn most_widened() -> i64 {
+	return 8
+}
+
+/// **The shapes ADR-391 D1 widened to** (#1832), from what the body reads:
+///
+/// * a list read at its first or its last place (`xs[0]`, `xs[xs.len() -
+///   1]`) asks `0 < xs.len()`;
+/// * a position read out of a path of fields (`p.order[p.walked]`) asks
+///   `0 <= p.walked` and `p.walked < p.order.len()`;
+/// * a whole-number parameter a division or a remainder is taken by asks
+///   `g != 0`, and of a signed one `0 <= g` as well, which together prove
+///   that `n / g` cannot overflow;
+/// * a whole-number parameter a number is added to or taken from (`p + k`,
+///   `p - k`) asks `0 <= p` where it is signed, and where a number is added
+///   `p < xs.len() - (k - 1)` of each list parameter and each list path the
+///   body indexes, which proves `p + k` fits.
+///
+/// A path is one of a parameter that is not `mut` and that the body never
+/// binds again, so the callee's frame never writes it; `self` stays with
+/// `derived_claims`.
+fn derived_widened(
+	args: ref Vec[FnArg],
+	body: ref Block,
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[DerivedClaim] {
+	let mut ints: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut signed: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut lists: Vec[String] = []
+	let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
+	for arg in args {
+		let name = words.resolve(arg.name).clone()
+		let ty = words.resolve(arg.ty.name).clone()
+		if rebinds(body, name, words) {
+			continue
+		}
+		if !arg.mutable {
+			fixed.insert(name.clone())
+		}
+		if arg.ty.generics.is_empty() && is_whole_number(ty) {
+			if !ty.starts_with("u") {
+				signed.insert(name.clone())
+			}
+			ints.insert(name)
+		} else if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" {
+			lists.push(name)
+		}
+	}
+	let mut indexed: Vec[String] = []
+	let mut nonempty: Vec[String] = []
+	let mut positions: Vec[String] = []
+	let mut divisors: Vec[String] = []
+	let mut floors: Vec[String] = []
+	// Of each parameter a number is added to, the most added.
+	let mut added: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for e in visited_in_block(body) {
+		match e {
+			Expr::Index { base, index, .. } => {
+				let list = path_of(base, words) ?? continue
+				let root = path_root(list)
+				let a_path = list != root && fixed.contains(root)
+				if !a_path && !lists.contains(list) {
+					continue
+				}
+				if !indexed.contains(list) {
+					indexed.push(list.clone())
+				}
+				if derived_first_or_last(index, list, words) && !nonempty.contains(list) {
+					nonempty.push(list.clone())
+				}
+				match index {
+					Expr::Field { .. } => {
+						let at = path_of(index, words) ?? continue
+						if fixed.contains(path_root(at)) && !positions.contains(at) {
+							positions.push(at)
+						}
+					},
+					else => {},
+				}
+			},
+			Expr::Binary { op, lhs, rhs, .. } => {
+				if op == BinaryOp::Div || op == BinaryOp::Rem {
+					match rhs {
+						Expr::Variable(name, _) => {
+							let g = words.resolve(name).clone()
+							if ints.contains(g) && !divisors.contains(g) {
+								if signed.contains(g) && !floors.contains(g) {
+									floors.push(g.clone())
+								}
+								divisors.push(g)
+							}
+						},
+						else => {},
+					}
+				}
+				if op == BinaryOp::Add || op == BinaryOp::Sub {
+					let p = match lhs {
+						Expr::Variable(name, _) => words.resolve(name).clone(),
+						else => continue,
+					}
+					let k = derived_number(rhs) ?? continue
+					if !ints.contains(p) || k < 1 || k > 64 {
+						continue
+					}
+					if signed.contains(p) && !floors.contains(p) {
+						floors.push(p.clone())
+					}
+					if op == BinaryOp::Add && k > (added[p] ?? 0) {
+						added.insert(p.clone(), k)
+					}
+				}
+			},
+			else => {},
+		}
+	}
+	let mut out: Vec[DerivedClaim] = []
+	for list in nonempty {
+		out.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 0, apart: false })
+	}
+	for at in positions {
+		out.push(DerivedClaim { left: "", strict: false, right: at.clone(), length: false, each: false, fixed: null, scale: 1, offset: 0, apart: false })
+		for list in indexed {
+			out.push(DerivedClaim { left: at.clone(), strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 0, apart: false })
+		}
+	}
+	for g in divisors {
+		out.push(DerivedClaim { left: g.clone(), strict: false, right: "", length: false, each: false, fixed: 0, scale: 1, offset: 0, apart: true })
+	}
+	for p in floors {
+		out.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null, scale: 1, offset: 0, apart: false })
+	}
+	for (p, k) in added {
+		let mut over: Vec[String] = lists.clone()
+		for list in indexed {
+			if !over.contains(list) {
+				over.push(list.clone())
+			}
+		}
+		for list in over {
+			out.push(DerivedClaim { left: p.clone(), strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 1 - k, apart: false })
+		}
+	}
+	return out
+}
+
+/// Whether `index` reads `list` at its first place, `0`, or at its last,
+/// `list.len() - 1`.
+fn derived_first_or_last(index: ref Expr, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+	match index {
+		Expr::LitInt { value, .. } => return value == 0,
+		Expr::Binary { op, lhs, rhs, .. } => {
+			if op != BinaryOp::Sub || (derived_number(rhs) ?? 0) != 1 {
+				return false
+			}
+			match lhs {
+				Expr::MethodCall { receiver, method, args, .. } => {
+					return args.is_empty() && words.resolve(method) == "len" && (path_of(receiver, words) ?? "") == list
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
+	return false
 }
 
 /// **A position into `list` read as a step of a parameter** (ADR-391 D1,
@@ -597,6 +828,7 @@ fn derived_scaled(
 		fixed: null,
 		scale: step.scale,
 		offset: 0 - step.scale * step.steps,
+		apart: false,
 	}
 	for was in scaled {
 		if was.left == claim.left && was.right == claim.right && was.scale == claim.scale && was.offset == claim.offset {
@@ -794,9 +1026,9 @@ fn derived_element_claims(
 	for (s, m) in pairs {
 		if !floors.contains(s) {
 			floors.insert(s.clone())
-			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true, fixed: null, scale: 1, offset: 0 })
+			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true, fixed: null, scale: 1, offset: 0, apart: false })
 		}
-		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true, fixed: null, scale: 1, offset: 0 })
+		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true, fixed: null, scale: 1, offset: 0, apart: false })
 	}
 	return out
 }
@@ -837,7 +1069,7 @@ fn derived_element_lets(
 /// **The order the bodies are walked in**, as positions into `starts` (the
 /// byte each body starts at): every caller before its callees, so that a
 /// callee's walk has the answers of all its call sites.
-pub fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
+fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
 	if around.derived.order.len() == starts.len() {
 		return around.derived.order.clone()
 	}
@@ -851,7 +1083,7 @@ pub fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
 /// **What one walk proved at its call sites**, kept for the callees walked
 /// after it; and where the next body is a function every call of which is
 /// answered, the claims all of them proved are the facts at its entry.
-pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
+fn derived_note(mut around: Around, walked: ref BoundsProven) {
 	for (node, proved) in walked.derived {
 		if around.derived.answers.contains_key(node) {
 			let was = around.derived.answers[node]?.clone() ?? collections::BTreeSet()
@@ -897,7 +1129,10 @@ pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
 }
 
 /// A claim as `--bounds` writes it.
-pub fn derived_written(claim: ref DerivedClaim) -> String {
+fn derived_written(claim: ref DerivedClaim) -> String {
+	if claim.apart {
+		return f"{claim.left} != {claim.fixed ?? 0}"
+	}
 	let mut left = if claim.left == "" { "0" } else { claim.left.clone() }
 	if claim.each && claim.left != "" {
 		left = f"{left}[..]"
@@ -925,7 +1160,7 @@ fn derived_written_length(claim: ref DerivedClaim) -> String {
 /// **The derived preconditions and the call sites that prove each**, one
 /// row each, for `--bounds` (D4): the function, its claims, and the bytes
 /// its calls' statements start at, apart by tabs.
-pub fn derived_rows(around: ref Around) -> Vec[String] {
+fn derived_rows(around: ref Around) -> Vec[String] {
 	let mut rows: Vec[String] = []
 	for (name, function) in around.derived.functions {
 		let held = around.derived.entry[function.key] ?? continue
@@ -942,17 +1177,14 @@ pub fn derived_rows(around: ref Around) -> Vec[String] {
 	return rows
 }
 
-/// **The private functions this file calls and names nowhere else**, for
-/// `--bounds`'s reasons: a parameter of one is bounded by its callers or by
-/// nothing.
-pub fn derived_callees(
-	program: ref Program,
-	words: ref winnow_grammar::InternerContext,
-) -> collections::BTreeSet[String] {
-	let none: Vec[ref BoundsBeside] = []
-	let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-	for (name, _) in derived_of(program, none, words).functions {
-		out.insert(name.clone())
+/// **Of each function, what keeps it from its callers' bounds**, for
+/// `--bounds`'s reasons (#1863): `""` for a private function this file calls
+/// and names nowhere else, whose parameters are bounded by its callers or by
+/// nothing; else the gate `derived_candidate` stopped it at.
+fn derived_gates(derived: ref Derived) -> collections::BTreeMap[String, String] {
+	let mut out = derived.gates.clone()
+	for (name, _) in derived.functions {
+		out.insert(name.clone(), "")
 	}
 	return out
 }

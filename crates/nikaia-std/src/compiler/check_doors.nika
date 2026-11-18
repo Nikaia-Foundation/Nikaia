@@ -7,7 +7,7 @@
 impl CheckState {
     /// `NK2203`: a lock taken while one is held. `called` is the name the
     /// program wrote, or the ledger's key of a method.
-    pub fn a_lock_inside_a_lock(ref mut self, called: ref String, holds: ref Lock, span: ref Span) sync {
+    fn a_lock_inside_a_lock(ref mut self, called: ref String, holds: ref Lock, span: ref Span) sync {
         if !self.inside_a_door || !holds.holds() {
             return
         }
@@ -15,7 +15,7 @@ impl CheckState {
         // `access`, not `SharedMut::access`.
         let parts: Vec[ref String] = called.split("::").collect()
         let method = parts[parts.len() - 1].clone()
-        let letters: Vec[scalar] = called.chars().collect()
+        let letters: Vec[scalar] = called.scalars.collect()
         let mut written = called.clone()
         if letters.len() > 0 && letters[0].to_ascii_lowercase() != letters[0] {
             written = method.clone()
@@ -29,7 +29,7 @@ impl CheckState {
     /// for it. A detached task (`spawn`, `async(detached)`) is not the
     /// block's to wait for, and is not asked. Whether it said anything: the
     /// form's own tasks are then not asked again.
-    pub fn an_async_inside_a_door(ref mut self, span: ref Span) -> bool sync {
+    fn an_async_inside_a_door(ref mut self, span: ref Span) -> bool sync {
         if !self.inside_a_door {
             return false
         }
@@ -40,7 +40,7 @@ impl CheckState {
     /// `NK2201`: a read of a mapped file while a lock is held. A block that
     /// holds a lock must never wait, and this wait doesn't show up as a pause
     /// or a second lock, which is why it gets its own message.
-    pub fn io_inside_a_door(ref mut self, world: ref CheckWorld, on: ref Ty, what: ref String, span: ref Span) sync {
+    fn io_inside_a_door(ref mut self, world: ref CheckWorld, on: ref Ty, what: ref String, span: ref Span) sync {
         if !self.inside_a_door {
             return
         }
@@ -66,7 +66,7 @@ impl CheckState {
     }
 
     /// `NK1141`: an `update` block that hands a value back.
-    pub fn an_update_block_returns_nothing(ref mut self, body: ref Block, span: ref Span) sync {
+    fn an_update_block_returns_nothing(ref mut self, body: ref Block, span: ref Span) sync {
         let mut hands_back = false
         let mut at = 0
         while at < body.stmts.len() {
@@ -96,7 +96,7 @@ impl CheckState {
     /// `NK2107`: a name declared outside a lambda that runs on several cores (or
     /// in a `task::scope`) and changed inside it: every core would write it at
     /// once. `in_parallel` is the depth of the scope the lambda began at.
-    pub fn a_shared_name_changed_in_parallel(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_shared_name_changed_in_parallel(ref mut self, name: ref String, span: ref Span) sync {
         let depth = self.in_parallel ?? return
         let mut declared: i64 = -1
         let mut frame_at = 0
@@ -126,7 +126,7 @@ impl CheckState {
     /// `NK2107` for an `async` task (ADR-async-5 D7, #1229): `name`, bound
     /// outside the task, changed inside it. The task runs beside everything
     /// after its start, so the refusal does not depend on what runs there.
-    pub fn a_task_changes_an_outer_name(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_task_changes_an_outer_name(ref mut self, name: ref String, span: ref Span) sync {
         let message = f"You're changing `{name}` in an `async` task, and `{name}` is bound outside it."
         let note = f"A task runs at the same time as everything after its start, so it would write `{name}` while the rest of the program reads or writes it."
         let help = f"Have the task produce a value, `let n = async count()`, and use it after, or keep `{name}` in a `SharedMut` and change it through `update`."
@@ -138,7 +138,7 @@ impl CheckState {
     /// to mean something: a stray `a` in `main` is the general refusal's, and a
     /// note about lambdas there would explain the wrong mistake. Whether it said
     /// anything.
-    pub fn withdrawn_automatic_name(ref mut self, name: ref String, span: ref Span) -> bool sync {
+    fn withdrawn_automatic_name(ref mut self, name: ref String, span: ref Span) -> bool sync {
         let mut in_a_lambda = false
         for around in self.repeats {
             if around.what == "lambda" {
@@ -153,7 +153,7 @@ impl CheckState {
     }
 
     /// `NK1143`: a call into C outside an `unsafe` block.
-    pub fn a_foreign_call_outside_unsafe(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_foreign_call_outside_unsafe(ref mut self, name: ref String, span: ref Span) sync {
         if self.inside_unsafe || !self.foreign_names.contains(name) {
             return
         }
@@ -161,7 +161,7 @@ impl CheckState {
     }
 
     /// `NK1294`: an `assume` outside an `unsafe` block (ADR-376 D1).
-    pub fn an_assume_outside_unsafe(ref mut self, span: ref Span) sync {
+    fn an_assume_outside_unsafe(ref mut self, span: ref Span) sync {
         if self.inside_unsafe {
             return
         }
@@ -169,7 +169,7 @@ impl CheckState {
     }
 
     /// `NK2208`: `set_after`, which is written `set(…; after: …)`.
-    pub fn a_door_that_is_not_written(ref mut self, on: ref Ty, written: ref String, span: ref Span) sync {
+    fn a_door_that_is_not_written(ref mut self, on: ref Ty, written: ref String, span: ref Span) sync {
         if written != "set_after" {
             return
         }
@@ -189,7 +189,7 @@ impl CheckState {
     /// shapes, so neither is refused there. It is the ledger's name that decides
     /// rather than a flag. A stamp names no lock (ADR-281 D22), so the message
     /// says "a lock", never the receiver, which `b.set(a.get())` would misname.
-    pub fn a_set_that_reads_what_it_writes(ref mut self, on: ref Ty, written: ref String, found: ref Vec[Ty], span: ref Span) sync {
+    fn a_set_that_reads_what_it_writes(ref mut self, on: ref Ty, written: ref String, found: ref Vec[Ty], span: ref Span) sync {
         if written != "set" {
             return
         }

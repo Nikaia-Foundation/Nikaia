@@ -45,7 +45,7 @@ impl CheckState {
     /// both declare it is not a question this can answer — Rust's own answer is
     /// that the call is ambiguous, and nothing here can write the
     /// disambiguation. That is §4's, not this.
-    pub fn bound_that_answers(ref self, world: ref CheckWorld, parameter: ref String, member: ref String) -> Ty? sync {
+    fn bound_that_answers(ref self, world: ref CheckWorld, parameter: ref String, member: ref String) -> Ty? sync {
         let bounds = self.type_parameters[parameter] ?? return null
         for bound in bounds {
             let methods = world.own.traits[bound] ?? continue
@@ -62,7 +62,7 @@ impl CheckState {
     /// This is the refusal that makes writing the `<T>` worth anything
     /// (ADR-295 D5): a body can only move and pass on a value of a parameter
     /// nothing bounds, so what it reaches on one is not a member of it.
-    pub fn nothing_says_what_a_parameter_can_do(ref mut self, parameter: ref String, kind: ref String, name: ref String, span: ref Span) sync {
+    fn nothing_says_what_a_parameter_can_do(ref mut self, parameter: ref String, kind: ref String, name: ref String, span: ref Span) sync {
         if !self.type_parameters.contains_key(parameter) {
             return
         }
@@ -73,7 +73,7 @@ impl CheckState {
     /// `Bytes` and a map's entries always do in the first case; a list, an
     /// array or a set does where its element does
     /// ([`Checker::takes_space`]).
-    pub fn elements_take_space(ref self, on: ref Ty) -> bool sync {
+    fn elements_take_space(ref self, on: ref Ty) -> bool sync {
         return match on {
             Ty::Pointed { item, .. } => self.takes_space(item, collections::BTreeSet()),
             Ty::Named { name, args, .. } => self.named_elements_take_space(name, args),
@@ -120,7 +120,7 @@ impl CheckState {
     /// **Anything not known is answered *no***: a type variable, a function, a
     /// type nothing here declares - so a length is bounded only where it is
     /// certain, and an answer missed costs a check, never a wrong proof.
-    pub fn takes_space(ref self, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
+    fn takes_space(ref self, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
         return match ty {
             Ty::Named { name, args, view } => self.named_takes_space(name, args, view, seen),
             Ty::Pointed { .. } => true,
@@ -203,7 +203,7 @@ impl CheckState {
     /// `async` and reached `rustc` as written - accepted where the method
     /// exists below, refused about generated code where it does not
     /// (Part III C.1).
-    pub fn no_number_has_this_method(ref mut self, name: ref String, method: ref String, span: ref Span) sync {
+    fn no_number_has_this_method(ref mut self, name: ref String, method: ref String, span: ref Span) sync {
         if !a_number_name(name) {
             return
         }
@@ -220,7 +220,7 @@ impl CheckState {
     /// `filter` hand back a list (Part I 5.3), so the `collect()` a reader of
     /// another language writes after them has nothing to collect, and reached
     /// `rustc` as *no method named `collect` found for `Vec`*.
-    pub fn a_list_collected(ref mut self, name: ref String, method: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    fn a_list_collected(ref mut self, name: ref String, method: ref String, args: ref Vec[Expr], span: ref Span) sync {
         if name != "Vec" || method != "collect" || args.len() != 0 {
             return
         }
@@ -265,7 +265,7 @@ impl CheckState {
     ///
     /// `None` for everything else, which is every other method call: a grammar
     /// name is not a value, so there is nothing to confuse this with.
-    pub fn grammar_entry(ref self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> String? sync {
+    fn grammar_entry(ref self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> String? sync {
         return match receiver {
             Expr::Variable(name, _) => self.grammar_rule(world.words.resolve(name), world.words.resolve(method)),
             else => null,
@@ -288,7 +288,7 @@ impl CheckState {
     /// other qualified name is. The dot is for a **value's** members, and a
     /// namespace behind one was the single place this language asked a reader
     /// to tell two things apart by what the left side happens to be.
-    pub fn grammar_path(ref self, name: ref String) -> String? sync {
+    fn grammar_path(ref self, name: ref String) -> String? sync {
         let parts: Vec[ref String] = name.split("::").collect()
         if parts.len() != 2 {
             return null
@@ -307,12 +307,12 @@ impl CheckState {
     /// name **is** one of its rules, so the message can carry the whole
     /// rewrite — and so that a method call on an ordinary value named like a
     /// grammar is untouched.
-    pub fn a_grammar_reached_through_a_dot(ref mut self, owner: ref String, rule: ref String, span: ref Span) sync {
+    fn a_grammar_reached_through_a_dot(ref mut self, owner: ref String, rule: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1147", span, f"Reach a rule of `{owner}` with `::`, not with a dot.", ["A owner is a name like a module, and its rules are reached the same way. The dot is only for a value's fields and methods."], f"Write `{owner}::{rule}(…)`."))
     }
 
     /// What kind of type a name is, for the sentence about a shape bound.
-    pub fn what_shape_it_is(ref self, ty: ref String) -> String sync {
+    fn what_shape_it_is(ref self, ty: ref String) -> String sync {
         if self.structs.contains_key(ty) {
             return f"a `struct`, so the bound it matches is `[{ty}: Struct]`"
         }
@@ -325,7 +325,7 @@ impl CheckState {
     /// Whether `ty` answers to a bound the program wrote: a shape bound by the
     /// declaration (ADR-304 D2), any other by the trait map. **It fails open
     /// everywhere this compiler has not read a declaration** (Part III C.4).
-    pub fn answers_for(ref self, world: ref CheckWorld, ty: ref String, trait_name: ref String) -> bool sync {
+    fn answers_for(ref self, world: ref CheckWorld, ty: ref String, trait_name: ref String) -> bool sync {
         if (trait_name == "Struct" || trait_name == "Enum") && !world.own.traits.contains_key(trait_name) {
             if self.type_parameters.contains_key(ty) {
                 return self.declares_bound(ty, trait_name)
@@ -381,7 +381,7 @@ impl CheckState {
     /// **`NK1122`.** A refusal costs nothing today and would break programs
     /// later, which is why it is made now rather than when somebody depends on
     /// the hole.
-    pub fn cast_names_a_foreign_type(ref mut self, into: ref String, span: ref Span) sync {
+    fn cast_names_a_foreign_type(ref mut self, into: ref String, span: ref Span) sync {
         let mut help: String = "Convert to one of the types above, or leave the cast out."
         if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" {
             help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`."
@@ -390,7 +390,7 @@ impl CheckState {
     }
 
     /// Whether `variant` is a variant of the enum `ty`.
-    pub fn is_variant(ref self, ty: ref String, variant: ref String) -> bool sync {
+    fn is_variant(ref self, ty: ref String, variant: ref String) -> bool sync {
         let variants = self.enums[ty] ?? return false
         return variants.contains(variant)
     }
@@ -400,7 +400,7 @@ impl CheckState {
     /// writes (`pool::Conn`) - by the exact key and never by suffix - and then
     /// `std`'s, matched the other way, since a value's type does not carry the
     /// module a library writes in front of it (ADR-296 D17).
-    pub fn fields_of(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract]? sync {
+    fn fields_of(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract]? sync {
         if self.structs.contains_key(name) {
             let fields = self.structs[name] ?? return null
             return a_nonempty(fields)
@@ -421,7 +421,7 @@ impl CheckState {
     /// Whether a step of this type can fail, as a ledger records it (ADR-025
     /// D6). Matched by suffix, because a library writes the module in front of
     /// a type's name and a value's type does not carry one.
-    pub fn iterates_fallibly(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
+    fn iterates_fallibly(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
         let suffix = f"::{name}"
         for (entry_name, entry_value) in world.own.types {
             if (entry_name == name || entry_name.ends_with(ref suffix)) && entry_value.iterates_fallibly {
@@ -440,7 +440,7 @@ impl CheckState {
     /// declaration's parameters and result. A type's name stands for its
     /// anonymous constructor, which the ledger keys `T::new` (ADR-140 D2). Only
     /// a declaration with a signature; anything else claims nothing.
-    pub fn function_as_a_value(ref self, world: ref CheckWorld, name: ref String) -> Ty? sync {
+    fn function_as_a_value(ref self, world: ref CheckWorld, name: ref String) -> Ty? sync {
         let mut key = name.clone()
         if self.structs.contains_key(name) || world.own.types.contains_key(name) {
             key = f"{name}::new"
@@ -448,7 +448,9 @@ impl CheckState {
         let contract = ledger_function(world, key) ?? return null
         let signature = contract.signature ?? return null
         let mut params: Vec[Ty] = []
+        let mut spelled = CodeNames::none()
         for param in signature.params {
+            spelled.params.push(param.0.clone())
             // **A `mut` parameter is lent `mut`** (#1134): the value is a
             // `fn(mut S)`, which a `fn(S)` is not.
             if signature.mutable.contains(param.0) {
@@ -457,7 +459,14 @@ impl CheckState {
                 params.push(param.1.clone())
             }
         }
-        return Ty::Fn { params: params, result: signature.result?.clone(), is_sync: contract.sync_claim.is_sync(), can_throw: contract.fails_with.len() > 0 }
+        // **The names it was declared with, for messages** (#2007): the
+        // parameters its result borrows are its `from`.
+        spelled.from = contract.borrows.clone()
+        // A method's receiver has no name a function type can write.
+        if signature.takes_a_receiver() {
+            spelled = CodeNames::none()
+        }
+        return Ty::Fn { params: params, result: signature.result?.clone(), is_sync: contract.sync_claim.is_sync(), can_throw: contract.fails_with.len() > 0, spelled: spelled }
     }
 }
 
@@ -470,14 +479,14 @@ fn a_nonempty(fields: ref Vec[FieldContract]) -> Vec[FieldContract]? sync {
 }
 
 /// The last segment of a type's name: `collections::HashMap` is `HashMap`.
-pub fn a_type_base(name: ref String) -> String sync {
+fn a_type_base(name: ref String) -> String sync {
     let parts: Vec[ref String] = name.split("::").collect()
     return parts[parts.len() - 1].clone()
 }
 
 /// Whether a name is one of the types **Part I 2.2** offers, which no
 /// declaration in any program makes a `struct` or an `enum`.
-pub fn a_part_one_type(name: ref String) -> bool sync {
+fn a_part_one_type(name: ref String) -> bool sync {
     return a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
 }
 

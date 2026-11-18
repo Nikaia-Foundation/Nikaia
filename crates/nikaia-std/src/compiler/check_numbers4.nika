@@ -10,7 +10,7 @@ use std::collections
 
 /// **The operations whose result is of their operands' type**: arithmetic and
 /// the bit operators (ADR-285 D23).
-pub fn an_operation_of_one_type(op: BinaryOp) -> bool sync {
+fn an_operation_of_one_type(op: BinaryOp) -> bool sync {
     return !op.is_comparison() && op != BinaryOp::And && op != BinaryOp::Or
 }
 
@@ -72,7 +72,7 @@ fn number_branches_of_value(value: ref Expr) -> Vec[ref Expr]? sync {
 /// **The values a choice can come to**: each branch's last expression, for an
 /// `if` with an `else` and for a `match`. A branch that leaves comes to nothing
 /// and is left out; a branch with no value makes the whole `null`.
-pub fn number_branches(expr: ref Expr) -> Vec[ref Expr]? sync {
+fn number_branches(expr: ref Expr) -> Vec[ref Expr]? sync {
     let mut out: Vec[ref Expr] = []
     match expr {
         Expr::If { then_branch, else_branch, .. } => {
@@ -94,7 +94,7 @@ pub fn number_branches(expr: ref Expr) -> Vec[ref Expr]? sync {
 
 /// Every integer literal in a value, by its node, for the suffix the emitter may
 /// owe it.
-pub fn literals_in(expr: ref Expr) -> Vec[(i64, Integer)] sync {
+fn literals_in(expr: ref Expr) -> Vec[(i64, Integer)] sync {
     let mut out: Vec[(i64, Integer)] = []
     match expr {
         Expr::LitInt { value, negative, .. } => out.push((id_of(expr) as i64, integer(value, negative))),
@@ -122,7 +122,7 @@ impl CheckState {
     /// **An element read out of a list whose elements are open** (D34): `xs[i]`,
     /// and not a slice of it.
     /// `p.0` of a tuple written in numbers: the open number that part is.
-    pub fn open_part_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
+    fn open_part_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
         let field: String = match expr {
             Expr::Field { name, .. } => world.words.resolve(name).clone(),
             else => return null,
@@ -146,7 +146,7 @@ impl CheckState {
         return null
     }
 
-    pub fn open_element_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
+    fn open_element_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
         return match expr {
             Expr::Index { base, index, .. } => self.open_element_in(world, base, index),
             else => null,
@@ -167,7 +167,7 @@ impl CheckState {
     /// **The open number a list's innermost elements are, and how many lists
     /// stand around it** (ADR-285 D34, #938): a name bound to such a list,
     /// and an element of a list of lists, which is one list fewer.
-    pub fn open_list_of(ref self, world: ref CheckWorld, expr: ref Expr) -> (i64, i64)? sync {
+    fn open_list_of(ref self, world: ref CheckWorld, expr: ref Expr) -> (i64, i64)? sync {
         match expr {
             Expr::Variable(name, _) => {
                 let local = self.binding(world.words.resolve(name)) ?? return null
@@ -193,7 +193,7 @@ impl CheckState {
 
     /// **The constant an element of an immutable list of literals is**, where the
     /// index folds (D34, D26); the index is folded by `constant_of`.
-    pub fn element_constant(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckConstant? sync {
+    fn element_constant(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckConstant? sync {
         return match expr {
             Expr::Index { base, index, .. } => self.element_constant_in(world, base, index),
             else => null,
@@ -224,7 +224,7 @@ impl CheckState {
     /// type of their own and stop it; so does a shift's count, which is any
     /// integer (ADR-285 D9). Each number once: `a + a + … + a` is one number,
     /// and every caller acts on each it is handed.
-    pub fn open_numbers_in(ref self, world: ref CheckWorld, expr: ref Expr) -> Vec[i64] sync {
+    fn open_numbers_in(ref self, world: ref CheckWorld, expr: ref Expr) -> Vec[i64] sync {
         let mut out: Vec[i64] = []
         match expr {
             Expr::Variable(name, _) => {
@@ -313,7 +313,7 @@ impl CheckState {
     /// **A value that is nothing but numbers**: literals and open numbers, joined
     /// by the operations [`open_numbers_in`] walks. A `let` of one is an open
     /// number itself (D1).
-    pub fn number_shaped(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn number_shaped(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => self.a_name_of_an_open_number(world, name),
@@ -362,7 +362,7 @@ impl CheckState {
 
     /// **A method of a number that hands back the number's own type** (#629
     /// D-2): `n.abs()`, `n.pow(2)`, `n.max(m)` are the open number `n` is.
-    pub fn a_method_of_a_number(ref self, receiver: ref Expr) -> bool sync {
+    fn a_method_of_a_number(ref self, receiver: ref Expr) -> bool sync {
         let calls = self.flow.open_calls[id_of(receiver) as i64] ?? return false
         return calls.len() == 1 && calls[0] == -1
     }
@@ -510,7 +510,7 @@ fn number_position_code(what: ref String) -> String? sync {
 impl CheckState {
     /// **A use asks the open numbers in a value for a type** (D2): a type
     /// standing beside it (`beside`), or an index, which takes any integer.
-    pub fn number_asked(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty, at: ref Span, beside: bool) sync {
+    fn number_asked(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty, at: ref Span, beside: bool) sync {
         let seen = want.unseen()
         let copy = value_of_a_copy(seen)
         // **A list of open elements asked for a list of one integer type**
@@ -550,7 +550,7 @@ impl CheckState {
     /// **A cast out of an open number waits for its type** (#629 D-1): what it
     /// keeps or checks is decided with the number, as on a typed one. `false`
     /// where the value is no open number.
-    pub fn open_number_cast(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref Ty) -> bool sync {
+    fn open_number_cast(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref Ty) -> bool sync {
         let into_name = match into {
             Ty::Named { name, .. } => name.clone(),
             else => return false,
@@ -571,7 +571,7 @@ impl CheckState {
     /// **A method called on an open number needs its type written** (#629
     /// D-2): the language below has no method on a number it cannot name.
     /// `false` where the value is no open number.
-    pub fn open_number_typed(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn open_number_typed(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let numbers = self.open_numbers_in(world, value)
         if numbers.len() == 0 {
             return false
@@ -595,7 +595,7 @@ impl CheckState {
 
     /// **One operation, one type**: the open numbers on both sides of it are one
     /// question from here on (D1).
-    pub fn open_numbers_joined(ref mut self, numbers: ref Vec[i64]) sync {
+    fn open_numbers_joined(ref mut self, numbers: ref Vec[i64]) sync {
         if numbers.len() == 0 {
             return
         }
@@ -611,7 +611,7 @@ impl CheckState {
     /// **An operation over an open number is a site of the overflow proof**
     /// (ADR-306 D6) once the number's type is written: kept with the number
     /// until then. `values` are the operation's sides.
-    pub fn open_number_site(ref mut self, world: ref CheckWorld, values: ref Vec[ref Expr], site: i64) sync {
+    fn open_number_site(ref mut self, world: ref CheckWorld, values: ref Vec[ref Expr], site: i64) sync {
         let mut numbers: Vec[i64] = []
         for value in values {
             numbers.extend(self.open_numbers_in(world, value))
@@ -640,7 +640,7 @@ impl CheckState {
     /// among them (#703), is refused at
     /// that use, with the position's own code and sentence, the value named *a
     /// number*.
-    pub fn an_open_number_where_none_fits(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) -> bool sync {
+    fn an_open_number_where_none_fits(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) -> bool sync {
         if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(world, want) {
             return false
         }
@@ -648,7 +648,7 @@ impl CheckState {
         // The position's sentence, with the value's type written as words:
         // there is none to put between backticks yet.
         let hole: String = "\u{0}"
-        let wanted = want.text()
+        let wanted = want.shown()
         let said = message(hole, wanted)
         let text = said.replace(f"`{hole}`", "a number")
         let mut note: String = "A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number."
@@ -667,7 +667,7 @@ impl CheckState {
     /// where** - through the operations, a choice and the value a branch hands
     /// back (issue #171), the emitter writes the suffix from it. A shift's count
     /// is its own type, not the shifted one's.
-    pub fn literals_are(ref mut self, value: ref Expr, ty: ref String) sync {
+    fn literals_are(ref mut self, value: ref Expr, ty: ref String) sync {
         match value {
             Expr::LitInt { .. } => {
                 self.facts.unsigned_literals.insert(id_of(value) as i64, ty.clone())
@@ -696,7 +696,7 @@ impl CheckState {
         }
     }
 
-    pub fn literals_in_the_tail(ref mut self, block: ref Block, ty: ref String) sync {
+    fn literals_in_the_tail(ref mut self, block: ref Block, ty: ref String) sync {
         for tail in block_tail(block) {
             self.literals_are(tail, ty)
         }
@@ -808,7 +808,7 @@ fn open_walk_item_params(world: ref CheckWorld, arg: ref Expr, ty: ref Ty, held:
 impl CheckState {
     /// The open number a receiver's items are: a list written in number
     /// literals, or a walk of one.
-    pub fn open_items_of(ref self, world: ref CheckWorld, receiver: ref Expr) -> i64? sync {
+    fn open_items_of(ref self, world: ref CheckWorld, receiver: ref Expr) -> i64? sync {
         let walked = self.flow.open_walks[id_of(receiver) as i64]
         if walked != null {
             return self.open_root(walked ?? 0)
@@ -825,7 +825,7 @@ impl CheckState {
     /// No `let` stands where its type is written, so its literals carry it
     /// (`open_literal_lists`); the entry is keyed below every byte, by the
     /// literal's node.
-    pub fn open_literal_receiver(ref mut self, world: ref CheckWorld, receiver: ref Expr, span: ref Span) sync {
+    fn open_literal_receiver(ref mut self, world: ref CheckWorld, receiver: ref Expr, span: ref Span) sync {
         let node = id_of(receiver) as i64
         if self.flow.open_walks.contains_key(node) {
             return
@@ -865,7 +865,7 @@ impl CheckState {
     /// **A lambda handed the items is handed the open number**: each of its
     /// parameters the signature types as the receiver's item, by name, for
     /// `lambda_parameter` to bind.
-    pub fn open_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) -> collections::BTreeMap[String, i64] sync {
+    fn open_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) -> collections::BTreeMap[String, i64] sync {
         let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
         let number: i64 = items ?? return out
         let signature = contract.signature ?? return out
@@ -886,7 +886,7 @@ impl CheckState {
     /// **A lambda handed a view of an open number's item takes it out**
     /// (#1748): the parameter is the number (`open_walk_params`), and the
     /// language below hands a `&T`, so the lowering writes the pattern `&a`.
-    pub fn open_walk_copied_params(ref mut self, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
+    fn open_walk_copied_params(ref mut self, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
         if items == null {
             return
         }
@@ -921,7 +921,7 @@ impl CheckState {
     /// **What the call hands back** (`walk_open`): a walk of the same number
     /// where the signature hands back the receiver's item, or of the number a
     /// lambda's value is where it hands back that value.
-    pub fn open_walk_result(ref mut self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
+    fn open_walk_result(ref mut self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
         self.flow.walk_open = null
         self.flow.walk_view = false
         self.flow.walk_item = null

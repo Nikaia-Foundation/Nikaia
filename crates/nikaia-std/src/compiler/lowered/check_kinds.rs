@@ -115,7 +115,7 @@ pub(crate) fn kind_some_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
     String::from("value")
 }
 
-pub fn kind_a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64" }
+pub(crate) fn kind_a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64" }
 
 pub(crate) fn kind_of_a_literal(literal: &Expr) -> Option<String> {
     match literal {
@@ -181,7 +181,7 @@ pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, seg
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn raised_bounds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
+    pub(crate) fn raised_bounds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
         let mut raised = CheckRaised { steps: None, ram: None };
         let mut refused = false;
         for bound in bounds.iter() {
@@ -206,7 +206,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub(crate) fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         if !self.foreign_names.contains(written) { return; }
         let mut at: i64 = 0;
         while at < wanted.len() as i64 {
@@ -223,14 +223,14 @@ impl CheckState {
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
         let buffer = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
         let count = unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
-        if kind_the_buffers_own_length(world, &count, &buffer) { return; }
-        let folded = self.constant_of(world, &count);
+        if kind_the_buffers_own_length(world, count, buffer) { return; }
+        let folded = self.constant_of(world, count);
         if kind_a_count_fits((folded).as_ref(), kind_array_room(found, at)) { return; }
-        self.a_length_that_may_not_fit(world, written, &buffer, span);
+        self.a_length_that_may_not_fit(world, written, buffer, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
+    pub(crate) fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
         for param in params.iter() {
             let param = *param;
             let name = nikaia_std::block::Text::from(world.words.resolve(param).to_string());
@@ -239,7 +239,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         match on {
             Ty::Nullable(_) => { return; },
             Ty::Unknown => { return; },
@@ -247,17 +247,17 @@ impl CheckState {
         }
         if !shapes_has_a_null_arm(arms) { return; }
         let written = written_expression(world.words, value);
-        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some(String::from("Remove the `null` arm."))));
+        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.shown()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some(String::from("Remove the `null` arm."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_of_another_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_pattern_of_another_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let mut kind: String = String::from("");
         let mut shown: String = String::from("");
         let known = self.kind_of_the_matched(on);
         if known.is_some() {
             kind = nikaia_std::block::Text::from(nikaia_std::index::or(known.as_deref(), || "").to_string());
-            shown = format!("a `{}`", on.text());
+            shown = format!("a `{}`", on.shown());
         } else {
             kind = match kind_of_a_literal(value) { Some(__nikaia_value) => __nikaia_value, None => return };
             shown = match &*kind {
@@ -277,7 +277,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in several_errors_of(on) { members.push(member.text()); }
         if members.is_empty() {
@@ -336,7 +336,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_some_or_none_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+    pub(crate) fn a_some_or_none_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
         match on {
             Ty::Nullable(_) => { },
             _ => { return false; },
@@ -349,18 +349,67 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true;
                 let bound = kind_some_binding(world, &arm.pattern);
-                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.text()), vec![String::from("A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.")], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
+                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.shown()), vec![String::from("A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.")], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
             }
             if which == "None" && !none_seen {
                 none_seen = true;
-                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.text()), vec![String::from("A `T?` has no `None`: its nothing is written `null`.")], Some(String::from("Write `null => …`."))));
+                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.shown()), vec![String::from("A `T?` has no `None`: its nothing is written `null`.")], Some(String::from("Write `null => …`."))));
             }
         }
         some_seen || none_seen
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_pattern_naming_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+        let nullable = matches!(on, Ty::Nullable(_));
+        let certain = nullable || match on {
+            Ty::Tuple(_) => true,
+            _ => self.kind_of_the_matched(on).is_some(),
+        };
+        if !certain { return false; }
+        for arm in arms.iter() {
+            let name = match self.kind_an_undeclared_call(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let written = written_expression(world.words, value);
+            let mut help: String = format!("Write the variant with its enum, `Type::{}(…)`, or a name alone to bind the value.", name);
+            if nullable { help = String::from("Over a `T?`, a name alone binds the `T`: write `x => …`, with `null => …` beside it."); }
+            self.findings.push(check_refusal("NK1117", span, format!("Nothing declares `{}`, so `{}(…)` is no pattern of `{}`.", name, name, written), vec![String::from("A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there.")], Some(help)));
+            return true;
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn kind_an_undeclared_call(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if path.len() == 1 {
+                    let name = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
+                    if !self.enums.contains_key(&name) && !self.structs.contains_key(&name) { return Some(name); }
+                }
+                for part in parts.iter() {
+                    let found = self.kind_an_undeclared_call(world, part);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            MatchPattern::Named { fields, .. } => {
+                for field in fields.iter() {
+                    let found = self.kind_an_undeclared_call(world, &field.pat);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives.iter() {
+                    let found = self.kind_an_undeclared_call(world, alternative);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            _ => { },
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let inner = match on {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
@@ -374,7 +423,7 @@ impl CheckState {
                     MatchPattern::Literal(literal) => written_expression(world.words, literal),
                     _ => written_pattern(world.words, &arm.pattern),
                 };
-                let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.text(), inner.text(), inner.text());
+                let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.shown(), inner.shown(), inner.shown());
                 self.findings.push(check_refusal("NK1205", span, format!("`{}` may be `null`, so `{}` can't be matched on it directly.", written, variant), vec![note], Some(format!("Say what `null` stands for first: `let value = {} ?? …`, and `match value`.", written))));
                 return;
             }
@@ -382,7 +431,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn several_arrive(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &Expr) -> bool {
+    pub(crate) fn several_arrive(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &Expr) -> bool {
         let name = match guarded {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match kind_callee_name(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },

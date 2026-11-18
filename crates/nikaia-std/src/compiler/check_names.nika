@@ -28,7 +28,7 @@ impl CheckState {
     /// it stays available. `crate` and `super` name a module tree this language
     /// does not have, and `Self` is already how it writes the type an `impl` is
     /// on — so the vocabulary this costs is one nobody reaches for.
-    pub fn not_unescapable(ref mut self, name: ref String, span: ref Span, what: ref String) sync {
+    fn not_unescapable(ref mut self, name: ref String, span: ref Span, what: ref String) sync {
         if name != "crate" && name != "super" && name != "Self" {
             return
         }
@@ -48,7 +48,7 @@ impl CheckState {
     /// position adds it to both: `self` is this language's own reserved word
     /// (`NK1119`) and `crate`, `super` and `Self` are the language below's
     /// (`NK1128`).
-    pub fn nameable(ref mut self, name: ref String, span: ref Span, what: ref String) sync {
+    fn nameable(ref mut self, name: ref String, span: ref Span, what: ref String) sync {
         self.not_self(name, span, what)
         self.not_unescapable(name, span, what)
     }
@@ -63,15 +63,19 @@ impl CheckState {
     ///
     /// **Only a module `std`'s ledger has**, so a package's prefix and a name
     /// this compiler cannot see are both left alone (Part III, C.4).
-    pub fn a_module_used_before_it_is_introduced(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_module_used_before_it_is_introduced(ref mut self, name: ref String, span: ref Span) sync {
         let at = name.find("::") ?? return
         let module = name[0..<at].clone()
         if !self.std_modules.contains(module) || self.std_in_scope.contains(module) {
             return
         }
         // **A hull is a type and not a module**: `SharedMut::supervised(…)` is
-        // reached as `SharedMut(…)` is, without a `use` (ADR-328 D9).
-        if is_a_hull(module) {
+        // reached as `SharedMut(…)` is, without a `use` (ADR-328 D9). So is
+        // any prefix with a capital: `std_modules` holds the heads of `std`'s
+        // ledger keys, and `Bytes::len` makes `Bytes` one, but a type is
+        // never imported (`NK1156`, ADR-140 D5), and asking for
+        // `use std::Bytes` contradicted that refusal (#1865).
+        if is_a_hull(module) || starts_with_a_capital(module) {
             return
         }
         // A module of **this program** wins: a package called `text` beside a
@@ -101,7 +105,7 @@ impl CheckState {
     /// `use std::db::postgres` — a module nothing describes **yet**, which
     /// [ADR-140](../../docs/specification/adr/adr-140.md) D5 leaves alone for
     /// exactly this reason.
-    pub fn a_prelude_name_with_a_module_in_front(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+    fn a_prelude_name_with_a_module_in_front(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         let at = name.find("::") ?? return
         let module = name[0..<at].clone()
         let last = name[at + 2..<name.len()].clone()
@@ -121,7 +125,7 @@ impl CheckState {
     /// integer** ([ADR-285](../../docs/specification/adr/adr-285.md) D9). A
     /// `bool` is pointed at `&&` and `||`; a side whose type is not known is not
     /// asked about (Part III C.4).
-    pub fn a_bit_operator_on_something_else(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) sync {
+    fn a_bit_operator_on_something_else(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) sync {
         let written: String = match op {
             BinaryOp::BitAnd => "&",
             BinaryOp::BitOr => "|",
@@ -156,7 +160,7 @@ impl CheckState {
                     else => {}
                 }
             }
-            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.text()}`.", ["Bit operators work on the bits of an integer."], help))
+            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.shown()}`.", ["Bit operators work on the bits of an integer."], help))
             return
         }
     }
@@ -164,7 +168,7 @@ impl CheckState {
 
 /// **Whether `ty::member` is an integer type's limit** (Part I 2.2, #1294,
 /// #1325): `MIN` or `MAX` under `int` or one of the five fixed widths.
-pub fn an_integer_limit(ty: ref String, member: ref String) -> bool sync {
+fn an_integer_limit(ty: ref String, member: ref String) -> bool sync {
     if member != "MIN" && member != "MAX" {
         return false
     }
@@ -172,7 +176,7 @@ pub fn an_integer_limit(ty: ref String, member: ref String) -> bool sync {
 }
 
 /// The name of an integer type, held and not viewed: the five of Part I 2.2.
-pub fn integer_named(ty: ref Ty) -> String? sync {
+fn integer_named(ty: ref Ty) -> String? sync {
     return match ty {
         Ty::Named { name, args, view } => if args.len() == 0 && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64") { name.clone() } else { null },
         else => null,
@@ -180,7 +184,7 @@ pub fn integer_named(ty: ref Ty) -> String? sync {
 }
 
 /// Whether an expression is a literal.
-pub fn is_a_literal(expr: ref Expr) -> bool sync {
+fn is_a_literal(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,

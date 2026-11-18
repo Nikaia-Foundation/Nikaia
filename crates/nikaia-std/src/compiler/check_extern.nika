@@ -25,7 +25,7 @@ impl CheckState {
     /// **An `extern fn` is an entry point** (ADR-284 D4): `pub`, in a build
     /// that makes a library, not generic, not a trait's method, and what
     /// crosses is D5's table both ways.
-    pub fn an_entry_point(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span, of_a_trait: bool) sync {
+    fn an_entry_point(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span, of_a_trait: bool) sync {
         match item {
             Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
                 if is_extern {
@@ -78,7 +78,7 @@ impl CheckState {
 
     /// **What a `pub extern struct` may hold** (ADR-284 D14, D15): it is
     /// `pub`, it is not generic, and every field is a C value.
-    pub fn an_extern_struct(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
+    fn an_extern_struct(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
         match item {
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 if is_extern {
@@ -108,7 +108,7 @@ impl CheckState {
 
     /// **What a `pub extern enum` may hold** (ADR-284 D32): it is `pub`, and
     /// every field of every variant is a C value, as an `extern` struct's.
-    pub fn an_extern_enum(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
+    fn an_extern_enum(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
         match item {
             Item::Enum { name, variants, is_public, is_extern } => {
                 if is_extern {
@@ -154,7 +154,7 @@ impl CheckState {
 
     /// Whether `ty` crosses to C at an entry point (ADR-284 D5), `out` for a
     /// result: the shape to use where it does not, and `null` where it does.
-    pub fn crosses_to_c(ref self, world: ref CheckWorld, ty: ref Type, out: bool) -> String? sync {
+    fn crosses_to_c(ref self, world: ref CheckWorld, ty: ref Type, out: bool) -> String? sync {
         let name = world.words.resolve(ty.name).clone()
         if ty.code != null {
             return self.a_callback_crosses(world, ty, out)

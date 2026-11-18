@@ -88,7 +88,7 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
     if ledger.sources.is_empty() { return Some(format!("`{}`'s shipped {} has no `[sources]` in {} beside it, so nothing says which sources it was reviewed against.", declared, nikaia_std::fs::path::display(&(shipped)), nikaia_std::fs::path::display(&(derived)))); }
     let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), hash::sha256_hex(&entry.1.bytes().collect::<Vec<_>>())) }).collect();
     let all: collections::BTreeSet<String> = now.keys().chain(ledger.sources.keys()).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
-    let moved: Vec<String> = all.iter().filter(|&file| { now.get(file) != ledger.sources.get(file) }).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+    let moved: Vec<String> = all.iter().filter(|&file| { now.get(nikaia_std::index::as_text(&file)) != ledger.sources.get(nikaia_std::index::as_text(&file)) }).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
     let first = match moved.first() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let more = match moved.len() as i64 {
         1 => String::from(""),

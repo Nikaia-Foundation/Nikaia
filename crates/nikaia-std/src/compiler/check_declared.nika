@@ -26,19 +26,19 @@ pub enum CheckDeclared {
 
 impl CheckState {
     /// Where binding `id` of `name` was written.
-    pub fn declared_binding(ref mut self, id: i64, span: ref Span, name: ref String) sync {
+    fn declared_binding(ref mut self, id: i64, span: ref Span, name: ref String) sync {
         self.facts.bound_at.insert(id, (span.clone(), name.clone()))
     }
 
     /// What the use `expr` names.
-    pub fn declared_use(ref mut self, expr: ref Expr, what: CheckDeclared) sync {
+    fn declared_use(ref mut self, expr: ref Expr, what: CheckDeclared) sync {
         self.facts.declared.insert(node_key(expr), what)
     }
 
     /// **What a call's callee names**: a local holding code, a variant, a
     /// function or a method (a constructor too), or a struct written like a
     /// call.
-    pub fn declared_callee(ref mut self, world: ref CheckWorld, func: ref Expr, name: ref String) sync {
+    fn declared_callee(ref mut self, world: ref CheckWorld, func: ref Expr, name: ref String) sync {
         let bound: i64? = match func {
             Expr::Variable(_, _) => self.binding_id(name),
             else => null,
@@ -64,7 +64,7 @@ impl CheckState {
 
     /// **Where a callee stands**, where the grammar gave it no span: from
     /// the start of its call, as wide as the name written.
-    pub fn declared_callee_at(ref mut self, world: ref CheckWorld, call: ref Expr, func: ref Expr) sync {
+    fn declared_callee_at(ref mut self, world: ref CheckWorld, call: ref Expr, func: ref Expr) sync {
         let node = node_key(func)
         if world.here.spans[node as u32] != null {
             return
@@ -80,7 +80,7 @@ impl CheckState {
 
     /// **A path written as a value**: a variant, or a function or a method
     /// handed over.
-    pub fn declared_path(ref mut self, world: ref CheckWorld, expr: ref Expr, name: ref String) sync {
+    fn declared_path(ref mut self, world: ref CheckWorld, expr: ref Expr, name: ref String) sync {
         if self.declared_a_variant(expr, name) {
             return
         }
@@ -91,7 +91,7 @@ impl CheckState {
     }
 
     /// `Enum::Variant` as the variant it is, where it is one.
-    pub fn declared_a_variant(ref mut self, expr: ref Expr, name: ref String) -> bool sync {
+    fn declared_a_variant(ref mut self, expr: ref Expr, name: ref String) -> bool sync {
         let at = name.rfind("::") ?? return false
         let owner = name[0..<at].clone()
         let member = name[at + 2..<name.len()].clone()

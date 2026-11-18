@@ -41,6 +41,9 @@ pub struct BoundsAllProven {
 	pub negations: collections::BTreeSet[i64],
 	pub calls: collections::BTreeMap[i64, String],
 	pub derived: Vec[String],
+	/// **What keeps each function from its callers' bounds** (#1863), for
+	/// `--bounds`: `derived_gates`, `""` where they bound it (ADR-391 D1).
+	pub gates: collections::BTreeMap[String, String],
 	/// What `--bounds-trace` shows (#1495), each goal's rows once.
 	pub trace: Vec[String],
 }
@@ -73,6 +76,7 @@ pub fn bounds_proven(
 		negations: collections::BTreeSet(),
 		calls: collections::BTreeMap(),
 		derived: [],
+		gates: collections::BTreeMap(),
 		trace: [],
 	}
 	// What each call may change, each function's frame among it (ADR-306
@@ -108,20 +112,31 @@ pub fn bounds_proven(
 		decided: bp_decided(program, words, facts.comptime_values),
 		list_indices: facts.list_indices.clone(),
 		text_bytes: facts.text_bytes.clone(),
+		text_scalars: facts.text_scalars.clone(),
 		returns: collections::BTreeMap(),
+		owner: "",
 	}
+	// **What each function's result summary says** (ADR-359 D14, #1904),
+	// the prover's, assumed of a call as a ledger's `ensures` is.
+	bp_summed(context, facts.summaries)
 	// **The list fields' bounds, found program-wide** (ADR-306 D21):
 	// `tools/bounds_walk.nika`.
 	bounds_fields(context, program, words, ask)
 	// **What each function returns, found** (ADR-306 D23).
 	bounds_returns(context, program, words, ask)
 	let mut bodies: Vec[ref Spanned[Item]] = []
+	// The type whose `impl` holds each body, `""` for a free function.
+	let mut owners: Vec[String] = []
 	for item in program.items {
 		match item.node {
-			Item::Fn { .. } => bodies.push(item),
-			Item::Impl { methods, .. } => {
+			Item::Fn { .. } => {
+				bodies.push(item)
+				owners.push("")
+			},
+			Item::Impl { methods, target, .. } => {
 				for method in methods {
 					bodies.push(method)
+					owners.push(words.resolve(target.name).clone())
 				}
 			},
 			else => {},
@@ -146,6 +161,7 @@ pub fn bounds_proven(
 				let at = item.span.start as i64
 				let counters = nonnegative_locals(body)
 				counted(body, counters)
+				context.owner = owners[k].clone()
 				let walked = bounds_aggressive(args, body, bp_names(counters, words), context, program, words, fn(arena, known, goal) { ask_in(function, at, arena, known, goal) })
 				// **The invariants that carried a check through a loop** go
 				// into `nikaia.proofs` (ADR-361 D4, D10).
@@ -166,7 +182,9 @@ pub fn bounds_proven(
 			else => {},
 		}
 	}
+	context.owner = ""
 	out.derived = derived_rows(context.around)
+	out.gates = derived_gates(context.around.derived)
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []
@@ -346,4 +364,25 @@ fn bp_decided(
 		}
 	}
 	return out
+}
+
+/// **The result summaries, added to what the callees ensure** (ADR-359
+/// D14, #1904): each a callee's conditions, beside what its ledger entry
+/// says where both have it.
+fn bp_summed(mut context: BoundsContext, summaries: ref collections::BTreeMap[String, Ensured]) {
+	for (key, summed) in summaries {
+		let mut joined = summed.clone()
+		let known = context.ensured.get(key)
+		if known != null {
+			let ledger = known ?? continue
+			if ledger.params != summed.params || !ledger.options.is_empty() {
+				continue
+			}
+			joined.chars = ledger.chars.clone()
+			for condition in ledger.conditions {
+				joined.conditions.push(condition.clone())
+			}
+		}
+		context.ensured.insert(key.clone(), joined)
+	}
 }

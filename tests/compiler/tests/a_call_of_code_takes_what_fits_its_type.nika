@@ -1,0 +1,63 @@
+// What fits a function type's parameters is taken by a call through a
+// function value, as by a named call (Part I 5.4 C, #1996): a plain value
+// where the type asks for its `T?` is wrapped (Part I 2.3), a literal takes
+// the parameter's number type, and a view or a list is handed as a named
+// function is handed it.
+struct Act { f: fn(keep a: String) -> i64 }
+
+struct P { x: i64 }
+
+struct Maybe { f: fn(i64?) -> i64 }
+
+fn eat(a: String) -> i64 { return a.len() }
+
+fn opt(a: i64?) -> i64 { return a ?? 0 }
+
+fn small(a: u8) -> i64 { return a as i64 }
+
+fn fl(a: f64) -> i64 { return a as i64 }
+
+fn own_list(a: Vec[i64]) -> i64 { return a.len() }
+
+fn twice(x: i64) -> i64 { return x * 2 }
+
+fn pt(p: ref P) -> i64 { return p.x }
+
+fn via(f: fn(String) -> i64, s: String) -> i64 { return f(s) }
+
+fn via_lit(f: fn(String) -> i64) -> i64 { return f("lit") }
+
+fn via_opt(f: fn(i64?) -> i64) -> i64 { return f(4) }
+
+fn make() -> String {
+    let mut s = String()
+    s.push_str("made")
+    return s
+}
+
+fn main() throws {
+    let g: fn(String) -> i64 = eat
+    println(g(make()))
+    println(g("x"))
+    let o: fn(i64?) -> i64 = opt
+    println(o(3))
+    println(o(null))
+    println(via_opt(opt))
+    let sm: fn(u8) -> i64 = small
+    println(sm(3))
+    let ff: fn(f64) -> i64 = fl
+    println(ff(1.5))
+    let ol: fn(Vec[i64]) -> i64 = own_list
+    println(ol([1, 2]))
+    let pp: fn(ref P) -> i64 = pt
+    println(pp(P { x: 4 }))
+    println(via(eat, make()))
+    println(via_lit(eat))
+    let a = Act { f: eat }
+    println(a.f(make()))
+    let mb = Maybe { f: opt }
+    println(mb.f(5))
+    let n = 7
+    let t: fn(i64) -> i64 = twice
+    println(t(n + 1))
+}

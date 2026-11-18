@@ -53,7 +53,7 @@ fn check_core_call_on_view(ty: ref Ty) -> i64 {
 
 /// **What a call reached, filed for the function around it** (ADR-308):
 /// `reached_method`. `null` is a method nothing describes.
-pub fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
+fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
     let have = key != null
     let written: String = (key ?? "").clone()
     if !have && state.flow.guarded != null {
@@ -385,7 +385,7 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
             let shown = given.text()
             let mut said: String = f"`add` feeds the hasher, and `{shown}` doesn't hash."
             if part.text() != shown {
-                said = f"`add` feeds the hasher, and `{shown}` doesn't hash: its part `{part.text()}` doesn't."
+                said = f"`add` feeds the hasher, and `{shown}` doesn't hash: its part `{part.shown()}` doesn't."
             }
             state.findings.push(check_refusal("NK1260", span, said, ["What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself)."], "Feed it the parts `eq` compares that hash, such as an integer or a text made from the value."))
         }
@@ -469,7 +469,7 @@ fn check_core_call_on_takes(state: ref CheckState, world: ref CheckWorld, contra
 /// literals as one open number decided by its uses (D34), and a later write
 /// is a use of that number. `give_value` is `false` where the assignment that
 /// writes the value already hands it to the open number.
-pub fn check_core_call_on_map_written(mut state: CheckState, world: ref CheckWorld, map_name: ref String, key: ref Expr, key_ty: ref Ty, entry_key: bool, value: ref Expr, value_ty: ref Ty, give_value: bool, span: ref Span) sync {
+fn check_core_call_on_map_written(mut state: CheckState, world: ref CheckWorld, map_name: ref String, key: ref Expr, key_ty: ref Ty, entry_key: bool, value: ref Expr, value_ty: ref Ty, give_value: bool, span: ref Span) sync {
     let local = state.binding(map_name) ?? return
     let id = local.id
     let mut parts: Vec[Ty] = []
@@ -620,7 +620,7 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
     // text its body ends in is built as `or_insert`'s value is.
     if entry == "or_insert_with" {
         let wrapped: Ty = match expected[0] {
-            Ty::Fn { params, result, is_sync, can_throw } => if result == null && !parts[1].is_unknown() { Ty::Fn { params: params.clone(), result: parts[1].clone(), is_sync: is_sync, can_throw: can_throw } } else { expected[0].clone() },
+            Ty::Fn { params, result, is_sync, can_throw, spelled } => if result == null && !parts[1].is_unknown() { Ty::Fn { params: params.clone(), result: parts[1].clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() } } else { expected[0].clone() },
             else => expected[0].clone(),
         }
         return [wrapped]
@@ -645,7 +645,7 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
 
 /// A key read out of a map whose keys are open: a number in it is that
 /// number, and its literals are written with its type.
-pub fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld, map: ref Expr, key: ref Expr, span: ref Span) sync {
+fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld, map: ref Expr, key: ref Expr, span: ref Span) sync {
     let name: String = match map {
         Expr::Variable(n, _) => world.words.resolve(n).clone(),
         else => return,
@@ -658,7 +658,7 @@ pub fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld,
 }
 
 /// The binding's type, now a map of these parts.
-pub fn check_core_call_on_retyped(mut state: CheckState, bound_name: ref String, parts: Vec[Ty]) sync {
+fn check_core_call_on_retyped(mut state: CheckState, bound_name: ref String, parts: Vec[Ty]) sync {
     let mut frame = state.scope.len()
     while frame > 0 {
         frame = frame - 1
@@ -700,7 +700,7 @@ fn check_core_call_on_entry_key(world: ref CheckWorld, receiver: ref Expr) -> Ex
 
 /// **The open number a map's values are, reached through `m.entry(k)`**
 /// (ADR-285 D43), or `-1`.
-pub fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> i64 sync {
+fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> i64 sync {
     match receiver {
         Expr::MethodCall { receiver, method, args, .. } => {
             if world.words.resolve(method) != "entry" || args.len() != 1 {
@@ -883,7 +883,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: spoken_in(f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
         }
     }
 }
@@ -914,7 +914,7 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
         return
     }
     let at = check_span_at(world, args[0], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: spoken_in(f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
 }
 
 /// A type with every view dropped and a text literal's `str` called `String`,
@@ -1047,7 +1047,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
     // number has no type yet, so it read as `?` and fit; the receiver's
     // binding is the use that decides it (ADR-285 D2), and none can.
     if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, args[at]) && state.no_integer_is(world, want) {
-        let wanted = want.text()
+        let wanted = want.shown()
         let number_at = check_span_at(world, args[at], span)
         let message: String = f"`{key}` expects `{wanted}` here, but you're passing a number."
         let help: String = f"Make it a `{wanted}`, or give the number to a place that holds one."
@@ -1058,7 +1058,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
         return
     }
     let at_span = check_span_at(world, args[at], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: spoken_in(f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", want, have), notes: [], help: shown_in(way_out_of_a_mismatch(have, want), want, have), labels: [], edit: null })
 }
 
 /// **A list literal handed to `extend` is a list of the receiver's elements**
@@ -1139,7 +1139,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let changed: String = state.flow.receiver_name?.clone() ?? ""
         let takes = check_core_call_on_takes(state, world, contract)
         if contract.mutates || takes {
-            state.changed.push(changed)
+            state.a_change_noted(changed)
         }
     }
     // **A method that walks a produced sequence consumes it** (ADR-105 D2).
@@ -1342,6 +1342,12 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
     state.call_keepers.clear()
+    if world.own.functions.contains_key(key) {
+        check_core_call_code_args(state, world, callee, key, args, span)
+    }
+    if keyed && args.len() == 1 && found.len() == 1 {
+        check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)
+    }
     // **A fold's step and merge return the accumulator or change it in
     // place** (ADR-372 D9): the result type says which.
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
@@ -1489,7 +1495,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
 /// the receiver's type, for a `?.` the type inside; `entry` is the name the
 /// ledger knows the call by (`set(after)` at a witness door), `method` the
 /// one the program wrote.
-pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, span: ref Span) -> Ty sync {
+fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, span: ref Span) -> Ty sync {
     // **`full()` is `Error`'s own, on every type that implements it** (#497).
     if entry == "full" && args.len() == 0 {
         let mut an_error = false
@@ -1577,10 +1583,39 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
     return check_core_call_on_described(state, world, host, on, receiver, method, args, entry, resolved.key, resolved.contract, span)
 }
 
+/// **Whether `key` is an entry of the type `inner` names** (#1976): its key
+/// is the type's name, `::`, then the method's.
+fn check_core_safe_call_of_type(inner: ref Ty, key: ref String) -> bool sync {
+    return match inner {
+        Ty::Named { name, .. } => key.starts_with(f"{name}::"),
+        else => false,
+    }
+}
+
+/// **Whether the receiver's own type has an entry for `name`** (#1976), so
+/// the entries of other types by that name do not decide how it is reached.
+fn check_core_safe_call_type_keys(
+    world: ref CheckWorld,
+    inner: ref Ty,
+    name: ref String,
+) -> bool sync {
+    for key in ledger_candidates(world.own, world.own_methods, name) {
+        if check_core_safe_call_of_type(inner, key) {
+            return true
+        }
+    }
+    for key in ledger_candidates(world.library, world.library_methods, name) {
+        if check_core_safe_call_of_type(inner, key) {
+            return true
+        }
+    }
+    return false
+}
+
 /// **`x?.m(…)` over a `T?`** (Part I 3.5): the same call, on the value
 /// inside, and the result flattened (ADR-278). A witness of `join` is its
 /// `within`, of a door's `set` its `after`.
-pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], witness: i64, span: ref Span) -> Ty sync {
+fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], witness: i64, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     let read_within = witness >= 0 && check_core_method_connection(inner) && name == "read"
     let within = (witness >= 0 && check_core_call_on_task_handle(inner) && name == "join") || read_within
@@ -1610,10 +1645,17 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     // **The receiver is lent to the call where the call changes nothing**
-    // (ADR-278 D2, D16, D3): asked of every candidate for the name.
+    // (ADR-278 D2, D16, D3): asked of every candidate for the name, and of
+    // the receiver's own type's alone where it has one by that name (#1976:
+    // `root?.join(p)` on an `fs::Path?` was not lent for `TaskHandle`'s
+    // `join(within)`, and moved the field out of a borrow).
+    let own_type = check_core_safe_call_type_keys(world, inner, name)
     let mut candidates = 0
     let mut all_read = true
     for key in ledger_candidates(world.own, world.own_methods, name) {
+        if own_type && !check_core_safe_call_of_type(inner, key) {
+            continue
+        }
         candidates += 1
         let contract = world.own.functions[key] ?? continue
         if contract.mutates {
@@ -1621,6 +1663,9 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     for key in ledger_candidates(world.library, world.library_methods, name) {
+        if own_type && !check_core_safe_call_of_type(inner, key) {
+            continue
+        }
         candidates += 1
         let contract = world.library.functions[key] ?? continue
         if contract.mutates {
@@ -1689,9 +1734,9 @@ fn check_core_call_on_copied_entry(want: ref Ty, arg: ref Expr) -> Ty? {
         return null
     }
     return match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             if params.len() == 1 && params[0].is_a_view() && copies_plainly(unviewed_type(params[0])) {
-                Ty::Fn { params: [unviewed_type(params[0])], result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+                Ty::Fn { params: [unviewed_type(params[0])], result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() }
             } else {
                 null
             }
@@ -1737,14 +1782,55 @@ fn check_core_call_on_item_copies(on: ref Ty, arg: ref Expr, handed: i64) -> boo
     return one && !item.is_unknown() && !item.is_a_view() && !moves(item)
 }
 
+/// **`NK1104`: `sort_by_key`'s key is a value of its own** (#1872, ADR-282
+/// D8): the sort moves the items while it compares their keys, so a key that
+/// points into its item, `fn(row) { row }` over a list of text or
+/// `row.name.trim()`, is refused here with the copy to write, not by `rustc`
+/// (*lifetime may not live long enough*).
+fn check_core_call_on_a_viewed_key(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, lambda: ref Ty, span: ref Span) sync {
+    let key: Ty = match lambda {
+        Ty::Fn { result, .. } => result?.clone() ?? return,
+        else => return,
+    }
+    if !check_core_call_on_holds_a_view(key) {
+        return
+    }
+    let mut at: Span = check_span_at(world, arg, span)
+    match arg {
+        Expr::Closure { body, .. } => {
+            let last = tail_value_of(body)
+            if last != null {
+                at = check_span_at(world, last ?? return, span)
+            }
+        },
+        else => {},
+    }
+    state.findings.push(check_refusal("NK1104", at, spoken_in(f"This lambda returns `{key.text()}`, but `sort_by_key` wants a key of its own.", key, null), ["`sort_by_key` moves the items while it compares their keys, so a key may not point into an item."], "Hand back a copy with `.clone()`."))
+}
+
+/// Whether a type is a view or a tuple with one among its parts.
+fn check_core_call_on_holds_a_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_core_call_on_holds_a_view(part) {
+                    return true
+                }
+            }
+            false
+        },
+        else => ty.is_a_view(),
+    }
+}
+
 fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
     return match want {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let mut plain: Vec[Ty] = []
             for p in params {
                 plain.push(unviewed_type(p))
             }
-            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() }
         },
         else => want.clone(),
     }
@@ -1816,7 +1902,7 @@ fn check_core_call_on_parameters_in(state: ref CheckState, ty: ref Ty) -> collec
 /// writes the bound, since the weight is the language's and no Nikaia bound
 /// says it. `new` is the hull `SharedMut(x)` or `Locked(x)`, whose value's
 /// weight moves to the shared value at its creation (#1751).
-pub fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref String) sync {
+fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref String) sync {
     let current = (state.current ?? return).clone()
     let base = match on.unseen() {
         Ty::Named { name, .. } => type_last_segment(name),
@@ -1838,7 +1924,7 @@ pub fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref S
 /// **A generic call that hands the caller's own type parameter on** (#1559):
 /// where the callee weighs its parameter, the caller weighs its own in what
 /// binds it (`EmitState` reads `CheckFacts::weighed_of`).
-pub fn check_core_call_on_weighed_through(mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty]) sync {
+fn check_core_call_on_weighed_through(mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty]) sync {
     let current = (state.current ?? return).clone()
     let mut edges: collections::BTreeSet[(String, String, String)] = collections::BTreeSet()
     for (param, ty) in bound {

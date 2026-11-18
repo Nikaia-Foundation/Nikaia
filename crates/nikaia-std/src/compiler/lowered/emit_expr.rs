@@ -34,7 +34,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = node_key(node);
         if walk.held.contains_key(&at) {
             out.push(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.held.get(&at), || "").to_string()));
@@ -110,17 +110,18 @@ impl EmitState {
             }
             return;
         }
-        let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" };
+        let option = self.rust_option();
+        let lent = if copied || other { format!("{}::as_ref(&", option) } else { format!("{}::as_deref(&", option) };
         if !operand {
             if out.buf.ends_with("Some(&") {
                 out.buf = nikaia_std::block::Text::from(nikaia_std::index::or(out.buf.strip_suffix("Some(&"), || "").to_string());
-                out.push(lent);
+                out.push(&lent);
                 out.append(&name);
                 return;
             }
             if out.buf.ends_with("Some(") {
                 out.buf = nikaia_std::block::Text::from(nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_string());
-                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" });
+                if a_reference { out.push(&format!("{}::as_ref(", option)); } else { out.push("std::convert::identity("); }
                 out.append(&name);
                 return;
             }
@@ -132,7 +133,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_expr_unmixed<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_expr_unmixed<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = node_key(node);
         if self.facts.some_tails.contains(&at) {
             out.push("Some(");
@@ -176,7 +177,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_expr_as_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_expr_as_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.text_option_results.contains(&node_key(node)) {
             out.take_lend();
             out.push("(");
@@ -262,7 +263,7 @@ impl EmitState {
                     out.push(&format!("{{ const __NIKAIA_DSL: {} = {}; __NIKAIA_DSL }}", below, written));
                     return Ok(());
                 }
-                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target.into())), target_text) } else { nikaia_std::block::Text::from(target_text.to_string()) };
+                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target)), target_text) } else { nikaia_std::block::Text::from(target_text.to_string()) };
                 self.emit_core_template(world, walk, out, host, &name, context, content, at, depth, flow, scope)?;
             },
             Expr::Block(block, _) => { self.emit_core_block(world, walk, out, host, block, depth, flow, scope, &EmitTail::Value)?; },

@@ -52,7 +52,7 @@ impl KeepContext {
     /// or a nullable of one, or a struct made only of such fields. That is
     /// what `tether::Rebase` is written for, and the one property `Holding`
     /// needs beyond it - covariance - holds for every such struct.
-    pub fn not_held(ref self, names: ref winnow_grammar::InternerContext, ty: ref Type, mut seen: Vec[String]) -> String? {
+    fn not_held(ref self, names: ref winnow_grammar::InternerContext, ty: ref Type, mut seen: Vec[String]) -> String? {
         let name = names.resolve(ty.name)
         if ty.is_view {
             if name == "String" && ty.generics.len() == 0 {
@@ -82,7 +82,7 @@ impl KeepContext {
     }
 
     /// `not_held` for a struct, by its name.
-    pub fn struct_not_held(ref self, names: ref winnow_grammar::InternerContext, name: ref String, mut seen: Vec[String]) -> String? {
+    fn struct_not_held(ref self, names: ref winnow_grammar::InternerContext, name: ref String, mut seen: Vec[String]) -> String? {
         let declared = self.structs[name] ?? return null
         if declared.generic {
             return f"`{name}`, a struct of views with type parameters"
@@ -119,7 +119,7 @@ impl KeepContext {
 }
 
 /// The struct of views a written type names, outermost first.
-pub fn struct_in(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> String? {
+fn struct_in(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> String? {
     let name = names.resolve(ty.name)
     if borrowing.contains(name) {
         return name.clone()
@@ -134,7 +134,7 @@ pub fn struct_in(names: ref winnow_grammar::InternerContext, ty: ref Type, borro
 }
 
 /// Whether a written type names a struct of views anywhere in it.
-pub fn names_a_struct_of_views(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> bool {
+fn names_a_struct_of_views(names: ref winnow_grammar::InternerContext, ty: ref Type, borrowing: ref collections::BTreeSet[String]) -> bool {
     if borrowing.contains(names.resolve(ty.name)) {
         return true
     }
@@ -148,7 +148,7 @@ pub fn names_a_struct_of_views(names: ref winnow_grammar::InternerContext, ty: r
 
 /// Whether a ledger type holds a view anywhere in it - and a type nobody
 /// worked out may.
-pub fn a_ledger_type_with_a_view(ty: ref Ty) -> bool {
+fn a_ledger_type_with_a_view(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { view, args, .. } => view || any_with_a_view(args),
         Ty::Nullable(inner) => a_ledger_type_with_a_view(inner),
@@ -181,7 +181,7 @@ pub fn takes_a_keep(contract: ref FnContract) -> bool {
 /// The ledger key of a method that takes a keep: `self.load(…)` inside its
 /// `impl`, or a name only one keeping function in the ledger has. One answer
 /// for the plan and for the emitter, so the call and its keep cannot part.
-pub fn keeping_method_key(ledger: ref Ledger, methods: ref MethodIndex, target: ref String?, on_self: bool, method: ref String) -> String? {
+fn keeping_method_key(ledger: ref Ledger, methods: ref MethodIndex, target: ref String?, on_self: bool, method: ref String) -> String? {
     if on_self && target != null {
         let owner = target ?? ""
         let key = f"{owner}::{method}"
@@ -228,7 +228,7 @@ pub fn root_of(names: ref winnow_grammar::InternerContext, expr: ref Expr) -> St
 
 /// The local a removal takes an element out of: `kept.remove(0)`,
 /// `kept.pop()`, and the same under `?` or a `catch`.
-pub fn taken_from(names: ref winnow_grammar::InternerContext, value: ref Expr) -> String? {
+fn taken_from(names: ref winnow_grammar::InternerContext, value: ref Expr) -> String? {
     return match value {
         Expr::MethodCall { receiver, method, .. } => if hands_back_what_it_removes(names.resolve(method)) { root_of(names, receiver) } else { null },
         Expr::Try(inner, _) => taken_from(names, inner),
@@ -251,7 +251,7 @@ comptime SHEDS: Array[ref String, 9] = ["clear", "remove", "drain", "pop", "trun
 comptime TAKES: Array[ref String, 6] = ["remove", "pop", "pop_front", "pop_back", "swap_remove", "take"]
 
 /// A method whose result is a value of its own, not a view of the receiver.
-pub fn hands_back_its_own(method: ref String) -> bool {
+fn hands_back_its_own(method: ref String) -> bool {
     for one in OWNED {
         if one == method {
             return true
@@ -261,7 +261,7 @@ pub fn hands_back_its_own(method: ref String) -> bool {
 }
 
 /// A method that keeps what it is given in its receiver.
-pub fn keeps_what_it_is_given(method: ref String) -> bool {
+fn keeps_what_it_is_given(method: ref String) -> bool {
     for one in KEEPS {
         if one == method {
             return true
@@ -271,7 +271,7 @@ pub fn keeps_what_it_is_given(method: ref String) -> bool {
 }
 
 /// A method that drops entries from its receiver.
-pub fn drops_entries(method: ref String) -> bool {
+fn drops_entries(method: ref String) -> bool {
     for one in SHEDS {
         if one == method {
             return true
@@ -281,7 +281,7 @@ pub fn drops_entries(method: ref String) -> bool {
 }
 
 /// A method that hands back the element it removes.
-pub fn hands_back_what_it_removes(method: ref String) -> bool {
+fn hands_back_what_it_removes(method: ref String) -> bool {
     for one in TAKES {
         if one == method {
             return true
@@ -291,10 +291,10 @@ pub fn hands_back_what_it_removes(method: ref String) -> bool {
 }
 
 /// A sentence's first letter made a capital.
-pub fn capitalised(text: ref String) -> String {
+fn capitalised(text: ref String) -> String {
     let mut out: String = ""
     let mut first = true
-    for c in text.chars() {
+    for c in text.scalars {
         if first {
             let mut letter: String = ""
             letter.push(c)

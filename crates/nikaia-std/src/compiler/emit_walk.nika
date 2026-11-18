@@ -18,7 +18,7 @@ pub fn visited_in_block(block: ref Block) -> Vec[ref Expr] {
 }
 
 /// Every expression inside this statement, in the order a walk meets them.
-pub fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
+fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match stmt {
         Stmt::Let { value, .. } => out.extend(visited_in_expr(value)),
@@ -61,7 +61,7 @@ fn visited_in_all(all: ref Vec[Expr]) -> Vec[ref Expr] {
 
 /// Every expression inside this one, this one included, in the order a walk
 /// meets them.
-pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
+fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = [expr]
     match expr {
         Expr::Block(block, _) => out.extend(visited_in_block(block)),
@@ -118,6 +118,18 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
             out.extend(visited_in_expr(base))
             out.extend(visited_in_expr(index))
         },
+        // **A range's ends are expressions of the tree** (#1863): `1..<last + 1`
+        // reads `last`, and a walk past them missed its derived claim.
+        Expr::Range { start, end, .. } => {
+            out.extend(visited_in_expr(start))
+            out.extend(visited_in_expr(end))
+        },
+        Expr::With { base, fields, .. } => {
+            out.extend(visited_in_expr(base))
+            for field in fields {
+                out.extend(visited_in_maybe(field.value))
+            }
+        },
         Expr::Cast { expr, .. } => out.extend(visited_in_expr(expr)),
         Expr::Coalesce { value, fallback, .. } => {
             out.extend(visited_in_expr(value))
@@ -146,7 +158,7 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
 /// Every hole of a template's segments with the loop bindings in force at it:
 /// the hole's text, and each `for` it stands in as the binding and the
 /// collection the binding walks.
-pub fn template_holes_bound(segments: ref Vec[Segment]) -> Vec[(String, Vec[(String, String)])] {
+fn template_holes_bound(segments: ref Vec[Segment]) -> Vec[(String, Vec[(String, String)])] {
     let mut holes: Vec[(String, Vec[(String, String)])] = []
     let mut bound: Vec[(String, String)] = []
     walk_template_holes(segments, bound, holes)

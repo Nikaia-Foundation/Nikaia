@@ -1018,7 +1018,7 @@ fn fmt_broken(line: ref FmtLine, open: i64, close: i64) -> Vec[FmtLine] sync {
 /// The text in the one style (ADR-337 D1), its comments at these character
 /// ranges: the ones the parser found, in order (D2).
 pub fn fmt_source(source: String, starts: Vec[i64], ends: Vec[i64]) -> String throws {
-    let mut lexer = FmtLexer { c: source.chars().collect(), at: 0, starts, ends, next: 0, tokens: [] }
+    let mut lexer = FmtLexer { c: source.scalars.collect(), at: 0, starts, ends, next: 0, tokens: [] }
     lexer.run()
     let lines = fmt_joined(fmt_lines(lexer.tokens))
     let mut work: Vec[FmtLine] = []

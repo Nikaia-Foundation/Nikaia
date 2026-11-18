@@ -213,6 +213,9 @@ pub trait SvTh {
 	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] sync
 	/// `shared()`: the equalities a theory shares with others (D13).
 	fn shared(ref self) -> Vec[u32] sync
+	/// `pivots()`: the simplex pivots run so far, never falling; the
+	/// search's budget counts their growth across a check (#2048).
+	fn pivots(ref self) -> i64 sync
 }
 
 impl SvTh for SvTheory {
@@ -383,6 +386,11 @@ impl SvTh for SvTheory {
 	fn shared(ref self) -> Vec[u32] {
 		return []
 	}
+
+	/// `pivots()`: none, Fourier-Motzkin does not pivot.
+	fn pivots(ref self) -> i64 {
+		return 0
+	}
 }
 
 /// The values of the columns an elimination solved, latest first, from the
@@ -396,7 +404,7 @@ fn sv_back_substituted(
 	let mut i = solved.len()
 	while i > 0 {
 		i -= 1
-		let s = solved[i].clone()
+		let s = solved[i]
 		let mut rest: i64 = s.row.constant
 		let mut unit: i64 = 0
 		let mut j = 0

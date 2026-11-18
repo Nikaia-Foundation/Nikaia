@@ -34,13 +34,13 @@ pub struct ProverBits {
 
 impl ProverScope {
     pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new() } }
-    pub fn at_the_entry() -> ProverScope {
+    pub(crate) fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
         scope.exact = true;
         scope
     }
-    pub fn rebind(&mut self, arena: &TermArena, name: &str) {
+    pub(crate) fn rebind(&mut self, arena: &TermArena, name: &str) {
         let under = format!("{}.", name);
         let element = format!("{}[", name);
         let index = format!("[{}]", name);
@@ -128,7 +128,7 @@ impl ProverScope {
         self.rebind(&arena, name);
         self.ints = ints;
     }
-    pub fn guard_of(&self, arena: &TermArena, goal: i64) -> Option<(i64, String)> {
+    pub(crate) fn guard_of(&self, arena: &TermArena, goal: i64) -> Option<(i64, String)> {
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(goal, &mut names);
         let mut found: Option<(i64, String)> = None;
@@ -141,7 +141,7 @@ impl ProverScope {
         }
         found
     }
-    pub fn history_reads(&self, arena: &TermArena, claim: i64) -> bool {
+    pub(crate) fn history_reads(&self, arena: &TermArena, claim: i64) -> bool {
         if self.history.is_empty() { return false; }
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(claim, &mut names);
@@ -164,12 +164,12 @@ impl ProverScope {
         }
         false
     }
-    pub fn with_history(&self) -> Vec<i64> {
+    pub(crate) fn with_history(&self) -> Vec<i64> {
         let mut all = self.facts.copy_owned();
         all.extend(self.history.iter().cloned());
         all
     }
-    pub fn has_length(&mut self, arena: &mut TermArena, name: &str, known: Option<i64>) {
+    pub(crate) fn has_length(&mut self, arena: &mut TermArena, name: &str, known: Option<i64>) {
         let length = length_of(name);
         self.ints.insert(nikaia_std::block::Text::from(length.to_string()));
         let len = arena.var(&length);
@@ -183,12 +183,12 @@ impl ProverScope {
         self.facts.push(arena.equal(len, value));
         self.entry.insert(length, value);
     }
-    pub fn not_negative(&mut self, arena: &mut TermArena, name: &str) {
+    pub(crate) fn not_negative(&mut self, arena: &mut TermArena, name: &str) {
         let n = arena.var(name);
         let zero = arena.int(0);
         self.facts.push(arena.ge(n, zero));
     }
-    pub fn at_entry(&self, arena: &mut TermArena, term: i64) -> Option<i64> {
+    pub(crate) fn at_entry(&self, arena: &mut TermArena, term: i64) -> Option<i64> {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(term, &mut read);
         let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -198,7 +198,7 @@ impl ProverScope {
         }
         Some(arena.substitute(term, &values))
     }
-    pub fn on_the_path(&mut self, arena: &mut TermArena, condition: Option<i64>) {
+    pub(crate) fn on_the_path(&mut self, arena: &mut TermArena, condition: Option<i64>) {
         let at = match condition { Some(__nikaia_value) => __nikaia_value, None => {
             self.path = None;
             return;
@@ -209,7 +209,7 @@ impl ProverScope {
         } };
         self.path = pushed(copied_path((self.path).as_ref()), c);
     }
-    pub fn precondition_at(&self, arena: &mut TermArena, claim: i64, params: &collections::BTreeSet<String>) -> Option<i64> {
+    pub(crate) fn precondition_at(&self, arena: &mut TermArena, claim: i64, params: &collections::BTreeSet<String>) -> Option<i64> {
         let path = match copied_path((self.path).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let at_entry = match self.at_entry(arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut term = at_entry;
@@ -224,7 +224,7 @@ impl ProverScope {
         if read.is_empty() { return None; }
         Some(term)
     }
-    pub fn claim_at_entry(&self, arena: &mut TermArena, claim: i64, params: &collections::BTreeSet<String>) -> Option<i64> {
+    pub(crate) fn claim_at_entry(&self, arena: &mut TermArena, claim: i64, params: &collections::BTreeSet<String>) -> Option<i64> {
         let term = match self.at_entry(arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !only_parameters(&arena, term, params) || arena.size(term) > precondition_terms() { return None; }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -232,7 +232,7 @@ impl ProverScope {
         if read.is_empty() { return None; }
         Some(term)
     }
-    pub fn postcondition_at(&self, arena: &mut TermArena, claim: i64, returned: &str, params: &collections::BTreeSet<String>) -> Option<i64> {
+    pub(crate) fn postcondition_at(&self, arena: &mut TermArena, claim: i64, returned: &str, params: &collections::BTreeSet<String>) -> Option<i64> {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(claim, &mut read);
         let result = arena.var(&result_name());
@@ -249,7 +249,7 @@ impl ProverScope {
         for name in names.iter() { if *name != result_name() && !is_a_parameter(name, params) { return None; } }
         Some(term)
     }
-    pub fn pinned_names(&self, arena: &TermArena, claim: i64) -> Option<collections::BTreeSet<String>> {
+    pub(crate) fn pinned_names(&self, arena: &TermArena, claim: i64) -> Option<collections::BTreeSet<String>> {
         if !self.exact { return None; }
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(claim, &mut names);
@@ -267,7 +267,7 @@ impl ProverScope {
         for n in names.iter() { if self.loose.contains(n) || !self.ints.contains(n) { return None; } }
         Some(names)
     }
-    pub fn bounded_bits(&mut self, arena: &mut TermArena, name: &str, bits: &ProverBits) {
+    pub(crate) fn bounded_bits(&mut self, arena: &mut TermArena, name: &str, bits: &ProverBits) {
         self.ints.insert(nikaia_std::block::Text::from(name.to_string()));
         self.loose.insert(nikaia_std::block::Text::from(name.to_string()));
         let named = arena.var(name);
@@ -299,9 +299,9 @@ pub(crate) fn mentions_any(arena: &TermArena, facts: &[i64], name: &str, length:
 
 pub fn length_of(name: &str) -> String { format!("{}.len()", name) }
 
-pub fn result_name() -> String { String::from("result") }
+pub(crate) fn result_name() -> String { String::from("result") }
 
-pub fn precondition_terms() -> i64 { 64 }
+pub(crate) fn precondition_terms() -> i64 { 64 }
 
 pub(crate) fn pushed(path: Option<Vec<i64>>, c: i64) -> Option<Vec<i64>> {
     let mut p = match path { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -309,7 +309,7 @@ pub(crate) fn pushed(path: Option<Vec<i64>>, c: i64) -> Option<Vec<i64>> {
     Some(p)
 }
 
-pub fn copied_path(path: Option<&Vec<i64>>) -> Option<Vec<i64>> {
+pub(crate) fn copied_path(path: Option<&Vec<i64>>) -> Option<Vec<i64>> {
     let p = match path { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(p.copy_owned())
 }

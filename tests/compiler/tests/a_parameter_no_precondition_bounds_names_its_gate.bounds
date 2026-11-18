@@ -1,0 +1,4 @@
+bounds in tests/a_parameter_no_precondition_bounds_names_its_gate.nika: 3 indexes, 0 proved; 0 operations, 0 proved
+     5  xs[at]  checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+     9  xs[at]  checked: a parameter no precondition bounds, of a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
+    13  xs[at]  checked: a parameter no precondition bounds, of a function no body of the package calls: an `assert` at the top of the function makes it one (ADR-269 D5)

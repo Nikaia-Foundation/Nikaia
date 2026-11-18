@@ -68,11 +68,11 @@ pub trait ComptimeBundleHost {
     fn run_child(&self, binary: &std::path::Path, level: &str, libraries: &[fs::Path], name: &str) -> Result<ComptimeBundleRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
-pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.\npub extern crate nikaia_std;\npub extern crate winnow;\npub extern crate winnow_grammar;\n";
+pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.\npub extern crate nikaia_std;\npub extern crate winnow;\npub extern crate winnow_grammar;\n\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n";
 
 pub(crate) const COMPTIME_BUNDLE_NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
 
-pub fn comptime_bundle_artifacts(messages: &str, named: &[String], library: &str) -> ComptimeBundleArtifacts {
+pub(crate) fn comptime_bundle_artifacts(messages: &str, named: &[String], library: &str) -> ComptimeBundleArtifacts {
     let mut dylib: Option<fs::Path> = None;
     let mut rlibs: Vec<(String, fs::Path)> = vec![];
     for message in cargo_json_lines(messages) {
@@ -115,7 +115,7 @@ pub(crate) async fn comptime_bundle_recorded<H: ComptimeBundleHost>(flavour: &Co
     let at = comptime_bundle_bundle_dir(&flavour, &manifest, &source, host);
     host.use_entry(&at);
     let record = nikaia_std::fs::path::join(&(at), std::path::Path::new(&("built")));
-    let fingerprint = comptime_bundle_run_fingerprint(host);
+    let fingerprint = comptime_bundle_run_fingerprint(host).await;
     let held = match fs::read_to_string(&record, &fs::Root::Anywhere).await {
         Ok(value) => value,
         Err(_error) => { String::from("") },
@@ -135,10 +135,27 @@ pub(crate) async fn comptime_bundle_recorded<H: ComptimeBundleHost>(flavour: &Co
     Ok(bundle)
 }
 
-pub(crate) fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -> String {
+pub(crate) async fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -> String {
     let mut newest: i64 = 0;
     let mut count = 0;
-    let mut pending = nikaia_std::block::List::from_array_in([host.std_dir()], nikaia_std::block::Place::Block);
+    let mut crates = nikaia_std::block::List::from_array_in([host.std_dir()], nikaia_std::block::Place::Block);
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut pending: Vec<fs::Path> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    loop {
+        let root = match crates.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if !seen.insert(nikaia_std::fs::path::display(&(root))) { continue; }
+        let manifest = match fs::read_to_string(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("Cargo.toml"))), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { String::from("") },
+        };
+        for line in manifest.lines() {
+            match comptime_bundle_path_dependency(line) {
+                None => { },
+                Some(named) => { crates.push(nikaia_std::fs::path::join(&(root), std::path::Path::new(&(named)))); },
+            }
+        }
+        pending.push(root);
+    }
     loop {
         let dir = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let names = match fs::read_dir(&dir, &fs::Root::Anywhere) {
@@ -164,6 +181,16 @@ pub(crate) fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -
     }
     let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into());
     comptime_bundle_digest(&format!("{}\n{}\n{}\n{}:{}", host.compiler(), host.rustc_version(), rustc, newest, count))
+}
+
+pub(crate) fn comptime_bundle_path_dependency(line: &str) -> Option<&str> {
+    let text = line.trim();
+    if text.starts_with('#') { return None; }
+    let (_, after) = match text.split_once("path") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (equals, value) = match after.split_once("\"") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if equals.trim() != "=" { return None; }
+    let (named, _) = match value.split_once("\"") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(named)
 }
 
 pub(crate) fn comptime_bundle_tree_of(text: &str) -> Option<fs::Path> {
@@ -197,8 +224,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple12334| {
-        let (name, rlib) = __nikaia_tuple12334;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14125| {
+        let (name, rlib) = __nikaia_tuple14125;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }

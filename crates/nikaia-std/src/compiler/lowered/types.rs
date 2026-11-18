@@ -5,7 +5,7 @@ pub(crate) const SHAPE_BOUNDS: [&str; 2] = ["Struct", "Enum"];
 
 pub(crate) const STANDARD_BOUNDS: [&str; 4] = ["Eq", "Ord", "Hash", "Clone"];
 
-pub(crate) const BUILT_IN: [&str; 28] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"];
+pub(crate) const BUILT_IN: [&str; 29] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "Seen", "TaskHandle", "Array", "Bytes"];
 
 pub(crate) const UNOFFERED_WIDTHS: [&str; 7] = ["usize", "isize", "i8", "i16", "u16", "i128", "u128"];
 
@@ -59,7 +59,7 @@ pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spa
 
 pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet<String>) {
     known.insert(nikaia_std::block::Text::from(key.to_string()));
-    let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(key.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     if last >= 0 { known.insert(slice(&c, unsafe { nikaia_std::proven::add::<i64>(last, 2) }, c.len() as i64)); }
@@ -460,9 +460,9 @@ pub(crate) fn nothing_declares(name: &str, known: &collections::BTreeSet<String>
     refusal("NK1135", span.clone(), format!("There's no type called `{}`.", name), vec![String::from("A type is either built in, declared in your program with `struct` or `enum`, provided by `std`, or a type parameter.")], format!("Check the spelling, or declare `{}` with `struct` or `enum`.", name))
 }
 
-pub fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
+pub(crate) fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
     if nikaia_std::list::contains(&BUILT_IN, &name) || own.types.contains_key(name) || library.types.contains_key(name) { return false; }
-    let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     let wanted = if last < 0 { format!("::{}", name) } else { format!("{}::", slice(&c, 0, last)) };
@@ -477,7 +477,7 @@ pub(crate) fn std_module_of(name: &str, known: &collections::BTreeSet<String>) -
     let ending = format!("::{}", name);
     for key in known.iter() {
         if key.ends_with(AsRef::<str>::as_ref(&ending)) {
-            let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
+            let c: Vec<scalar> = nikaia_std::list::scalars(key.chars());
             let at = find_text(&c, 0, "::");
             let module = slice(&c, 0, at);
             for one in STD_MODULES.iter() {

@@ -27,7 +27,7 @@ fn check_handed_key(function: ref String, name: ref String) -> String sync {
 /// **The names that may hold what an open function was handed**, by
 /// `check_handed_key`, each with the open function it came from as written
 /// (`pub fn api`).
-pub fn check_handed_follow(world: ref CheckWorld) -> collections::BTreeMap[String, String] sync {
+fn check_handed_follow(world: ref CheckWorld) -> collections::BTreeMap[String, String] sync {
     let alone = world.here_at < 0
     let mut held: collections::BTreeMap[String, String] = collections::BTreeMap()
     let mut closed: collections::BTreeSet[String] = collections::BTreeSet()
@@ -774,7 +774,7 @@ fn check_handed_root(view: ref ParsedView, place: ref Expr) -> String? sync {
 /// **Whether a value may hold what a held name holds**, and from which open
 /// function: a held name, a part of one, a value built of one, the result of
 /// the package's own function given one, a branch's last value.
-pub fn check_handed_carries(world: ref CheckWorld, view: ref ParsedView, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
+fn check_handed_carries(world: ref CheckWorld, view: ref ParsedView, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
     match expr {
         Expr::Variable(name, id) => return check_handed_holds(view, key, name, id.get(), held),
         Expr::Field { base, .. } => return check_handed_carries(world, view, key, base, held),
@@ -869,7 +869,7 @@ fn check_handed_carries_block(world: ref CheckWorld, view: ref ParsedView, key: 
 /// **The place a held value is written at** inside an argument, as
 /// written: `items` of `(items, 1)`, `bag.items`; `null` where no held name
 /// stands in it.
-pub fn check_handed_written(world: ref CheckWorld, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
+fn check_handed_written(world: ref CheckWorld, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
     match expr {
         Expr::Variable(name, id) => {
             if check_handed_holds(world.here, key, name, id.get(), held) != null {

@@ -51,7 +51,7 @@ impl Reached {
     /// Whether two reached resources force an order between their operations.
     /// Two reads never do, however much they overlap: reading does not change
     /// what the other one sees.
-    pub fn conflicts_with(ref self, other: ref Reached) -> bool {
+    fn conflicts_with(ref self, other: ref Reached) -> bool {
         return (self.write || other.write) && self.might_be_same(other)
     }
 }
@@ -77,7 +77,7 @@ fn family(kind: ref String) -> String {
 /// callees a library describes, `calls` whom in this package it calls. The
 /// set is a union over the whole reachable graph, because what a caller
 /// reaches is what everything it calls reaches.
-pub fn touches_of(unknown: ref collections::BTreeMap[String, bool], outside: ref collections::BTreeMap[String, Vec[Touch]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]]) -> collections::BTreeMap[String, Vec[Touch]] {
+fn touches_of(unknown: ref collections::BTreeMap[String, bool], outside: ref collections::BTreeMap[String, Vec[Touch]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]]) -> collections::BTreeMap[String, Vec[Touch]] {
     let mut known: collections::BTreeMap[String, bool] = collections::BTreeMap()
     for (name, lost) in unknown {
         known.insert(name.clone(), !lost)

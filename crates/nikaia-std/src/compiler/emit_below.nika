@@ -78,7 +78,7 @@ fn emit_callee_text(world: ref EmitWorld, func: ref Expr) -> String? {
 /// **`int`'s limits are `i64`'s below** (Part I 2.2, #1325): `int::MAX`,
 /// in an expression or a pattern, is written `i64::MAX`; any other path as it
 /// stands.
-pub fn integer_limit_below(path: ref String) -> String {
+fn integer_limit_below(path: ref String) -> String {
     if path == "int::MIN" {
         return "i64::MIN"
     }
@@ -92,7 +92,7 @@ impl EmitState {
     /// Whether `receiver.method(..)` enters a grammar: a receiver naming one of
     /// this file's grammars and a method naming one of its entries
     /// (ADR-296 D24, D25).
-    pub fn enters_a_grammar(ref self, world: ref EmitWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
+    fn enters_a_grammar(ref self, world: ref EmitWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
         match receiver {
             Expr::Variable(name, _) => {
                 let def = self.grammars.get(world.words.resolve(name)) ?? return false
@@ -127,7 +127,7 @@ impl EmitState {
 
     /// Whether this statement enters a grammar (ADR-185 D2): the one lowering
     /// that leaves a temporary borrowing a local behind.
-    pub fn a_tail_that_enters_a_grammar(ref self, world: ref EmitWorld, stmt: ref Stmt) -> bool {
+    fn a_tail_that_enters_a_grammar(ref self, world: ref EmitWorld, stmt: ref Stmt) -> bool {
         let mut inside: Vec[ref Expr] = []
         match stmt {
             Stmt::Expr(expr) => {
@@ -149,14 +149,14 @@ impl EmitState {
 
     /// Whether any grammar entry in the program reaches a parallel rule, which
     /// decides whether the piece driver's names are in the preamble.
-    pub fn uses_driver(ref self, world: ref EmitWorld) -> bool {
+    fn uses_driver(ref self, world: ref EmitWorld) -> bool {
         return emit_uses_driver(world, self.grammars)
     }
 
     /// Whether parameter `at` of what `callee` names is text both kinds of
     /// which flow into (ADR-282 D14): a function of this unit by name, or a
     /// method by its name where every method of that name agrees.
-    pub fn either_param(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
+    fn either_param(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
         let own = emit_base(callee)
         let mut seen = 0
         for item in world.items {
@@ -189,7 +189,7 @@ impl EmitState {
     /// Whether `value` calls a function of this unit whose result is text
     /// both kinds of which flow into (ADR-282 D14, #911): `EitherText` below,
     /// which a `String` place takes only made its own.
-    pub fn either_result(ref self, world: ref EmitWorld, value: ref Expr) -> bool {
+    fn either_result(ref self, world: ref EmitWorld, value: ref Expr) -> bool {
         let func = match value {
             Expr::Call { func, .. } => func,
             else => return false,
@@ -213,7 +213,7 @@ impl EmitState {
 
     /// Whether a struct's field is text both kinds of which flow into
     /// (ADR-282 D14).
-    pub fn either_field(ref self, world: ref EmitWorld, owner: ref String, field: winnow_grammar::Symbol) -> bool {
+    fn either_field(ref self, world: ref EmitWorld, owner: ref String, field: winnow_grammar::Symbol) -> bool {
         let wanted = world.words.resolve(field)
         let own = emit_base(owner)
         for item in world.items {
@@ -236,7 +236,7 @@ impl EmitState {
     /// Whether `variant` is a variant of the enum `owner`: one this file
     /// declares, or one another unit of the package declares, which its entry
     /// in the package's ledger says.
-    pub fn is_variant(ref self, world: ref EmitWorld, owner: ref String, variant: ref String) -> bool {
+    fn is_variant(ref self, world: ref EmitWorld, owner: ref String, variant: ref String) -> bool {
         for item in world.items {
             match item.node {
                 Item::Enum { name, variants, .. } => {
@@ -262,7 +262,7 @@ impl EmitState {
 
     /// Whether `task::scope(..)` is called with a body the checker found
     /// pausing.
-    pub fn opens_a_paused_scope(ref self, world: ref EmitWorld, func: ref Expr, args: ref Vec[Expr]) -> bool {
+    fn opens_a_paused_scope(ref self, world: ref EmitWorld, func: ref Expr, args: ref Vec[Expr]) -> bool {
         match func {
             Expr::Path(_, _) => {},
             else => { return false },
@@ -275,7 +275,7 @@ impl EmitState {
     }
 
     /// Whether the callee is decided by its lambda alone.
-    pub fn decided_by_its_lambda(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
+    fn decided_by_its_lambda(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
         let name = emit_callee_text(world, func) ?? return false
         return self.lambda_decides(unaliased_in(world.aliases, name))
     }
@@ -284,7 +284,7 @@ impl EmitState {
     /// `crossings` is whether the build can have a value cross a thread: at one
     /// user thread every count is plain (ADR-312 D10), also where the analysis
     /// has no entry.
-    pub fn count_at(ref self, crossings: bool, function: ref String, value: ref String) -> Count {
+    fn count_at(ref self, crossings: bool, function: ref String, value: ref String) -> Count {
         if !crossings {
             return Count::Plain
         }
@@ -446,7 +446,7 @@ impl EmitState {
     /// A type name as the language below writes it: a shared handle by the count
     /// it was given, and the lock inside it by the same count (ADR-281 D7) -
     /// always the cheap one at one user thread (D2).
-    pub fn written_name(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> String {
+    fn written_name(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> String {
         if name == "Shared" {
             return rust_name(count)
         }
@@ -469,7 +469,7 @@ impl EmitState {
 
     /// The names a constructor of a sharing type is written with: one for a
     /// shared handle or a lock, both for a shared and locked one.
-    pub fn hull_new(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> Vec[String]? {
+    fn hull_new(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> Vec[String]? {
         if name == "Shared" {
             return [self.written_name(world, crossings, trusting, "Shared", count)]
         }
@@ -484,7 +484,7 @@ impl EmitState {
 
     /// The value `attributes(T)` or `attribute(T)` is, from the attribute lines
     /// the checker kept for the type the first argument names.
-    pub fn attributes_read(ref self, world: ref EmitWorld, wanted: ref String, args: ref Vec[Expr], texts: ref Vec[String]) -> String {
+    fn attributes_read(ref self, world: ref EmitWorld, wanted: ref String, args: ref Vec[Expr], texts: ref Vec[String]) -> String {
         let mut written: String = ""
         if args.len() > 0 {
             written = emit_callee_text(world, args[0]) ?? ""
@@ -513,7 +513,7 @@ impl EmitState {
 
 /// Whether a bound is one the language below does not carry: `Struct` and
 /// `Enum`, when the file declares no trait of that name.
-pub fn emit_is_a_shape_bound(world: ref EmitWorld, bound: ref String) -> bool {
+fn emit_is_a_shape_bound(world: ref EmitWorld, bound: ref String) -> bool {
     if bound != "Struct" && bound != "Enum" {
         return false
     }
@@ -550,7 +550,7 @@ fn emit_is_the_hash_bound(world: ref EmitWorld, bound: ref String) -> bool {
 }
 
 /// A generic parameter as it is declared: its name and the bounds that travel.
-pub fn emit_bounded(world: ref EmitWorld, param: ref GenericParam) -> String {
+fn emit_bounded(world: ref EmitWorld, param: ref GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name))
     let mut bounds: Vec[String] = []
     for bound in param.bounds {
@@ -611,7 +611,7 @@ fn emit_enters_a_parallel_rule(grammars: ref collections::BTreeMap[String, Gramm
 
 /// [`EmitState::uses_driver`] from the grammars alone: what a program needs
 /// (`emit::Needs::of`) is read off its items, with no emitter built.
-pub fn emit_uses_driver(world: ref EmitWorld, grammars: ref collections::BTreeMap[String, GrammarDef]) -> bool {
+fn emit_uses_driver(world: ref EmitWorld, grammars: ref collections::BTreeMap[String, GrammarDef]) -> bool {
     for item in world.items {
         match item.node {
             Item::Fn { body, .. } => {

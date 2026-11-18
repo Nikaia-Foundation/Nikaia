@@ -45,7 +45,7 @@ pub(crate) fn check_cleanup_is_sync(ledger: &Ledger, owner: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, on: i64) {
+    pub(crate) fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, on: i64) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
@@ -63,19 +63,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_propagates(&mut self, on: i64, fails: bool) {
+    pub(crate) fn method_propagates(&mut self, on: i64, fails: bool) {
         let key = on;
         if fails { let added = self.flow.fallible_methods.insert(key); } else { let added = self.flow.opaque_methods.insert(key); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_pauses(&mut self, on: i64, pauses: bool) {
+    pub(crate) fn method_pauses(&mut self, on: i64, pauses: bool) {
         let key = on;
         if pauses { let added = self.flow.pausing_methods.insert(key); } else { let added = self.flow.settled_methods.insert(key); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
+    pub(crate) fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
         let function = nikaia_std::block::Text::from(match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
         let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
@@ -83,7 +83,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pausing_step(&mut self, over: &Ty, span: &Span) {
+    pub(crate) fn pausing_step(&mut self, over: &Ty, span: &Span) {
         let pauses = match over {
             Ty::Seq { pauses, .. } => { let pauses = *pauses; pauses },
             _ => false,
@@ -95,7 +95,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fallible_step(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, bindings: i64, span: &Span) {
+    pub(crate) fn fallible_step(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, bindings: i64, span: &Span) {
         let mut name: String = String::from("");
         match over {
             Ty::Named { name: written, .. } => {
@@ -107,7 +107,7 @@ impl CheckState {
                 if !can_throw { return; }
                 name = match item {
                     Ty::Unknown => String::from("a sequence"),
-                    _ => format!("a sequence of `{}`", item.text()),
+                    _ => format!("a sequence of `{}`", item.shown()),
                 };
             },
             _ => { return; },
@@ -122,7 +122,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
+    pub(crate) fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
         let can_fail = match on {
             Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
             _ => false,
@@ -134,7 +134,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
+    pub(crate) fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
         let name = match ty {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return None,
@@ -148,14 +148,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fits_through_deref(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn fits_through_deref(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         if found.fits(want) { return true; }
         let seen = match self.seen_through(world, found) { Some(__nikaia_value) => __nikaia_value, None => return false };
         seen.fits(want)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_of_base(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &str) -> Vec<Ty> {
+    pub(crate) fn fields_of_base(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &str) -> Vec<Ty> {
         nikaia_std::index::or(match *nikaia_std::index::get(&world.fields_by_base, base) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -163,13 +163,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn cleanup_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<CheckCleanup> {
+    pub(crate) fn cleanup_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<CheckCleanup> {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.cleanup_within(world, ty, &mut seen)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
+    pub(crate) fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
         let mut held: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match ty.unseen() {
             Ty::Named { ref name, ref args, view } => {
@@ -217,7 +217,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tears_down(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    pub(crate) fn tears_down(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
         let name = match ty {
             Ty::Named { name, view, .. } => {
                 let view = *view;
@@ -231,7 +231,7 @@ impl CheckState {
         for teardown in ["Drop", "Cleanup"] { if check_implements_in(world.own, teardown, &base) || check_implements_in(world.library, teardown, &base) { return Some(format!("`impl {} for {}`", teardown, base)); } }
         for field in self.fields_of_base(world, &base) {
             let how = self.tears_down(world, &field, seen);
-            if how.is_some() { return Some(format!("through its `{}` field, {}", field.text(), nikaia_std::index::or(how.as_deref(), || ""))); }
+            if how.is_some() { return Some(format!("through its `{}` field, {}", field.shown(), nikaia_std::index::or(how.as_deref(), || ""))); }
         }
         None
     }

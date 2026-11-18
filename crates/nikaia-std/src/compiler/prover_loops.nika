@@ -78,7 +78,7 @@ fn loop_paths_most() -> i64 {
 }
 
 /// The name of a state name's value when the loop is reached.
-pub fn loop_before_name(name: ref String, start: i64) -> String {
+fn loop_before_name(name: ref String, start: i64) -> String {
     return f"{name}@{start}"
 }
 
@@ -97,7 +97,7 @@ fn loop_after_name(name: ref String, start: i64) -> String {
 /// whole numbers its turn changes, `facts` what holds before it, `ints` the
 /// whole numbers the prover reads there. Nothing where a turn holds what this
 /// does not follow - a way out it does not know, more paths than it counts.
-pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
     let condition = claim_term(cond, words, fn(name) { ints.contains(name) }, pinned, arena.nodes)
     return loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
 }
@@ -107,7 +107,7 @@ pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], fac
 /// at the end of each turn, a `continue`'s too; the loop ends once it passes
 /// `high` (`inclusive`) or reaches it. `low` and `high` are terms over the
 /// names before the loop; `high` reads none the turn changes.
-pub fn loop_record_range(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, counter: ref String, low: i64, high: i64, inclusive: bool, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+fn loop_record_range(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, counter: ref String, low: i64, high: i64, inclusive: bool, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
     let here = arena.var(counter)
     let mut condition = arena.lt(here, high)
     if inclusive {
@@ -289,6 +289,43 @@ fn loop_read(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref
     return arena.substitute(t, path.values)
 }
 
+/// **A value a `let` or an assignment of the body gives**, read on `path`: a
+/// `bool` literal is the number 1 or 0 (ADR-361 D13).
+fn loop_value(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext) -> i64? {
+    return match expr {
+        Expr::LitBool(b, _) => arena.int(if b { 1 } else { 0 }),
+        else => loop_read(arena, expr, path, ints, pinned, words, false),
+    }
+}
+
+/// **The list a statement `list.push(x)` grows by one** (ADR-361 D15), or
+/// empty.
+fn loop_grown(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String {
+    let expr = match stmt {
+        Stmt::Expr(e) => e,
+        else => return "",
+    }
+    return match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() != 1 || words.resolve(method) != "push" {
+                return ""
+            }
+            let list = match receiver {
+                Expr::Variable(s, _) => words.resolve(s).clone(),
+                else => return "",
+            }
+            // What is pushed is read first: one that changes the list
+            // itself leaves its length unknown.
+            let none: collections::BTreeSet[String] = collections::BTreeSet()
+            if changes_length_in_expr(args[0], list, none, words) {
+                return ""
+            }
+            list
+        },
+        else => "",
+    }
+}
+
 /// `name` gets a value nothing follows on `path`.
 fn loop_forget(mut arena: TermArena, mut path: LoopPath, name: ref String) {
     let fresh = arena.var(f"{name}~{arena.nodes.len()}")
@@ -302,10 +339,40 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
     let mut live = first.clone()
     for stmt in block.stmts {
         let mut next: Vec[LoopPath] = []
+        // **A followed list's length in the state** (ADR-361 D15): one more
+        // past `list.push(x)`; unknown before and past any other statement
+        // that may change it, an `if` only by its condition (its branches
+        // are read statement by statement).
+        let grown = loop_grown(stmt.node, words)
+        let mut moved: Vec[String] = []
+        let none: collections::BTreeSet[String] = collections::BTreeSet()
+        for name in state {
+            if !name.ends_with(".len()") {
+                continue
+            }
+            let list = (name.strip_suffix(".len()") ?? "").clone()
+            if list == grown {
+                continue
+            }
+            let changes = match stmt.node {
+                Stmt::Expr(expr) => match expr {
+                    Expr::If { cond, .. } => changes_length_in_expr(cond, list, none, words),
+                    else => changes_length_in_statement(stmt.node, list, none, words),
+                },
+                else => changes_length_in_statement(stmt.node, list, none, words),
+            }
+            if changes {
+                moved.push(name.clone())
+            }
+        }
         for path in live {
             let mut p = path.clone()
             let mut ended: String = ""
             let mut keep = true
+            for name in moved {
+                loop_forget(arena, p, name)
+            }
+            let from = next.len()
             match stmt.node {
                 Stmt::Break => {
                     ended = "break"
@@ -327,11 +394,11 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                     }
                     let mut term: i64? = null
                     if names.len() == 1 {
-                        term = loop_read(arena, value, p, ints, pinned, words, false)
+                        term = loop_value(arena, value, p, ints, pinned, words)
                     }
                     for name in names {
                         let n = words.resolve(name).clone()
-                        if state.contains(n) {
+                        if state.contains(n) || state.contains(f"{n}.len()") {
                             return null
                         }
                         p.values.remove(n)
@@ -360,7 +427,7 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                         else => "",
                     }
                     if name != "" && p.values.contains_key(name) {
-                        let read = loop_read(arena, value, p, ints, pinned, words, false)
+                        let read = loop_value(arena, value, p, ints, pinned, words)
                         let old = p.values[name] ?? arena.var(name)
                         let mut updated: i64? = null
                         // What `name op= value` makes of `old`: the value
@@ -416,6 +483,17 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
             } else if keep {
                 next.push(p)
             }
+            for k in from..<next.len() {
+                for name in moved {
+                    loop_forget(arena, next[k], name)
+                }
+                if grown != "" {
+                    let length = f"{grown}.len()"
+                    let old = next[k].values[length] ?? continue
+                    let one = arena.int(1)
+                    next[k].values.insert(length, arena.add(old, one))
+                }
+            }
         }
         live = next
         if live.len() + ends.len() > loop_paths_most() {
@@ -423,6 +501,30 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
         }
     }
     return live
+}
+
+/// **The parts of `cond` known where it is `holds`**, each read on `path`:
+/// both sides of an `&&` that holds or of an `||` that fails, and the part
+/// itself otherwise. A part no term reads is left out, which only weakens
+/// what the branch knows (#1848).
+fn loop_read_parts(mut arena: TermArena, cond: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, holds: bool) -> Vec[i64] {
+    match cond {
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Not {
+                return loop_read_parts(arena, expr, path, ints, pinned, words, !holds)
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if (op == BinaryOp::And && holds) || (op == BinaryOp::Or && !holds) {
+                let mut parts = loop_read_parts(arena, lhs, path, ints, pinned, words, holds)
+                parts.extend(loop_read_parts(arena, rhs, path, ints, pinned, words, holds))
+                return parts
+            }
+        },
+        else => {},
+    }
+    let c = loop_read(arena, cond, path, ints, pinned, words, true) ?? return []
+    return [if holds { c } else { arena.not(c) }]
 }
 
 /// An `if` or an `assert` standing as a statement, on one path: whether it
@@ -437,6 +539,11 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
             if c != null {
                 yes.constraints.push(c ?? 0)
                 no.constraints.push(arena.not(c ?? 0))
+            } else {
+                // A condition with a part no term reads (`i < n && ok(i)`)
+                // still says the parts it does on the branch they hold on.
+                yes.constraints.extend(loop_read_parts(arena, cond, path, ints, pinned, words, true))
+                no.constraints.extend(loop_read_parts(arena, cond, path, ints, pinned, words, false))
             }
             let after_yes = loop_block(arena, then_branch, [yes], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
             next.extend(after_yes)
@@ -477,7 +584,7 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
 /// - a name a turn changes by one constant on every path is its start plus
 /// that constant times the turns taken, and a counter stops at its bound -
 /// then intervals.
-pub fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
+fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let start = record.start
     // Closed forms: each name against its start, each pair against each other.
@@ -629,8 +736,234 @@ pub fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(
         found.push((claim, "asserts"))
     }
     found.extend(loop_octagons(arena, record))
+    found.extend(loop_flagged(arena, record))
     found.extend(loop_unrolled(arena, record, steady, proved, asked))
     return found
+}
+
+/// The origin of a guess [`loop_flagged`] made, as `--asserts` and
+/// `--bounds` name it (D7).
+fn loop_flagged_origin() -> String {
+    return "flag facts"
+}
+
+/// **What held where a flag rose** (ADR-361 D13, D15): a state name some path
+/// of the turn raises - sets to a constant, as a `bool` set `true`, or adds
+/// to, as a list's length that grew - and no path lowers offers
+/// `x == x@ || fact` for each fact that held on every path that raised it,
+/// with the loop's condition. A name the loop changes is projected out of
+/// those facts through its start and its direction (D13: `i >= i@` where `i`
+/// only grows), by Fourier-Motzkin on at most 2 names and 8 facts; what is
+/// beyond that is dropped, which only weakens the guess. Each guess is
+/// checked as any other (D4).
+fn loop_flagged(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
+    let mut found: Vec[(i64, String)] = []
+    let start = record.start
+    let state = record.problem.state.clone()
+    // What the closed forms bound each name by that moves one way only.
+    let mut directions: collections::BTreeMap[String, Form] = collections::BTreeMap()
+    for (name, deltas) in record.steps {
+        if deltas.is_empty() {
+            continue
+        }
+        let mut vars: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        if deltas.iter().all(fn(d) { d >= 0 }) {
+            // x@ - x <= 0
+            vars.insert(name.clone(), -1)
+            vars.insert(loop_before_name(name, start), 1)
+        } else if deltas.iter().all(fn(d) { d <= 0 }) {
+            vars.insert(name.clone(), 1)
+            vars.insert(loop_before_name(name, start), -1)
+        } else {
+            continue
+        }
+        directions.insert(name.clone(), Form { vars: vars, k: 0 })
+    }
+    let mut kept_condition: Vec[i64] = []
+    let c = record.problem.condition ?? -1
+    if c >= 0 {
+        loop_atoms(arena, c, false, kept_condition)
+    }
+    for flag in state {
+        let mut rises = 0
+        let mut lowers = false
+        let mut common: collections::BTreeMap[String, Form] = collections::BTreeMap()
+        for turn in record.turns {
+            let value = turn.values[flag] ?? continue
+            let raise = loop_raise(arena, value, flag)
+            if raise < 0 {
+                lowers = true
+                break
+            }
+            if raise == 0 {
+                continue
+            }
+            let mut said: Vec[i64] = kept_condition.clone()
+            for constraint in turn.constraints {
+                loop_atoms(arena, constraint, false, said)
+            }
+            let mut facts: Vec[Form] = []
+            for atom in said {
+                atoms(atom, fn(at) { arena.at(at) }, facts)
+            }
+            let projected = loop_projected(facts, state, directions)
+            let mut here: collections::BTreeMap[String, Form] = collections::BTreeMap()
+            for f in projected {
+                here.insert(loop_form_key(f), f.clone())
+            }
+            if rises == 0 {
+                common = here
+            } else {
+                let mut both: collections::BTreeMap[String, Form] = collections::BTreeMap()
+                for (key, f) in common {
+                    if here.contains_key(key) {
+                        both.insert(key.clone(), f.clone())
+                    }
+                }
+                common = both
+            }
+            rises += 1
+        }
+        if lowers || rises == 0 {
+            continue
+        }
+        let named = arena.var(flag)
+        let before = arena.var(loop_before_name(flag, start))
+        for (_, f) in common {
+            let unmoved = arena.equal(named, before)
+            let fact = loop_form_term(arena, f) ?? continue
+            found.push((arena.or([unmoved, fact]), loop_flagged_origin()))
+        }
+    }
+    return found
+}
+
+/// **`facts` with the names `state` and the names made up on the path
+/// projected out** (ADR-361 D15), by Fourier-Motzkin over whole numbers: a
+/// name of `directions` with its bound added, the facts that read a name left
+/// without one dropped. At most 2 names and 8 facts that read them; past that
+/// only the facts that read none are kept. Each form says `form <= 0`.
+fn loop_projected(facts: ref Vec[Form], state: ref Vec[String], directions: ref collections::BTreeMap[String, Form]) -> Vec[Form] sync {
+    let mut gone: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut reading = 0
+    for f in facts {
+        let mut reads = false
+        for (name, _) in f.vars {
+            if state.contains(name) || name.contains("~") {
+                gone.insert(name.clone())
+                reads = true
+            }
+        }
+        if reads {
+            reading += 1
+        }
+    }
+    let mut now: Vec[Form] = []
+    if gone.len() > 2 || reading > 8 {
+        for f in facts {
+            let mut reads = false
+            for (name, _) in f.vars {
+                if gone.contains(name) {
+                    reads = true
+                }
+            }
+            if !reads {
+                now.push(f.clone())
+            }
+        }
+        return now
+    }
+    now = facts.clone()
+    for name in gone {
+        let bound = directions.get(name) ?? continue
+        now.push(bound.clone())
+    }
+    for x in gone {
+        let mut kept: Vec[Form] = []
+        let mut ups: Vec[Form] = []
+        let mut downs: Vec[Form] = []
+        for f in now {
+            let cx = f.vars.get(x) ?? 0
+            if cx > 0 {
+                ups.push(f.clone())
+            } else if cx < 0 {
+                downs.push(f.clone())
+            } else {
+                kept.push(f.clone())
+            }
+        }
+        for u in ups {
+            for d in downs {
+                let cu = u.vars.get(x) ?? 0
+                let cd = (d.vars.get(x) ?? 0).checked_neg() ?? continue
+                let a = scaled(u, cd) ?? continue
+                let b = scaled(d, cu) ?? continue
+                let mut joined = sum(a, b, 1) ?? continue
+                joined.vars.remove(x)
+                kept.push(joined)
+            }
+        }
+        now = kept
+    }
+    let mut out: Vec[Form] = []
+    for f in now {
+        let mut nothing = true
+        for (_, cx) in f.vars {
+            if cx != 0 {
+                nothing = false
+            }
+        }
+        if !nothing {
+            out.push(f.clone())
+        }
+    }
+    return out
+}
+
+/// A form's text, the same for two forms that say the same.
+fn loop_form_key(f: ref Form) -> String sync {
+    let mut parts: Vec[String] = []
+    for (name, cx) in f.vars {
+        if cx != 0 {
+            parts.push(f"{cx}*{name}")
+        }
+    }
+    parts.push(f"{f.k}")
+    return parts.join(" + ")
+}
+
+/// **`form <= 0` as a term**, each side without a negative coefficient:
+/// `i@ + 1 <= args.len()`.
+fn loop_form_term(mut arena: TermArena, f: ref Form) -> i64? sync {
+    let mut left: i64? = null
+    let mut right: i64? = null
+    for (name, cx) in f.vars {
+        if cx == 0 {
+            continue
+        }
+        let v = arena.var(name)
+        let size = cx.checked_abs() ?? return null
+        let mut part = v
+        if size != 1 {
+            let times = arena.int(size)
+            part = arena.mul(times, v)
+        }
+        if cx > 0 {
+            left = if left == null { part } else { arena.add(left ?? 0, part) }
+        } else {
+            right = if right == null { part } else { arena.add(right ?? 0, part) }
+        }
+    }
+    if f.k > 0 {
+        let k = arena.int(f.k)
+        left = if left == null { k } else { arena.add(left ?? 0, k) }
+    } else if f.k < 0 {
+        let k = arena.int(f.k.checked_neg() ?? return null)
+        right = if right == null { k } else { arena.add(right ?? 0, k) }
+    }
+    let l = left ?? arena.int(0)
+    let r = right ?? arena.int(0)
+    return arena.le(l, r)
 }
 
 /// **Differences of two state names that keep a sign** (ADR-361 D5.2, the
@@ -1008,7 +1341,7 @@ fn loop_known_value(arena: ref TermArena, facts: ref Vec[i64], name: ref String)
 /// invariant, by the three queries' first two - the third is the claim's
 /// own (`loop_facts`). Nothing where no candidate survives. `asked` counts
 /// the queries.
-pub fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
     let mut kept: Vec[(i64, String)] = []
     // A turn-indexed interval may be dropped one turn at a time: only a loop
     // that got them gets the rounds for it (ADR-258 D2).
@@ -1084,7 +1417,7 @@ fn loop_proved_each(arena: ref TermArena, facts: ref Vec[i64], goal: i64, proved
 /// **What holds past the loop** (ADR-361 D4): what held before it, about
 /// the values it started from; the invariant at the head of the last turn;
 /// and one of the ways out that reach past it, from there.
-pub fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
     let start = record.start
     let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut ghosts: Vec[String] = []
@@ -1121,7 +1454,7 @@ pub fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopF
 
 /// The name of a state name's value at the head of the turn a point in the
 /// loop's body stands in: tied to the name itself there (ADR-361 D2, D3).
-pub fn loop_turn_name(name: ref String, start: i64) -> String {
+fn loop_turn_name(name: ref String, start: i64) -> String {
     return f"{name}^{start}"
 }
 
@@ -1129,7 +1462,7 @@ pub fn loop_turn_name(name: ref String, start: i64) -> String {
 /// it, about the values it started from, and the invariant at the head of the
 /// turn the point stands in. The condition and the path from the head are the
 /// walk's own facts there.
-pub fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
     let start = record.start
     let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut ghosts: Vec[String] = []
@@ -1155,13 +1488,13 @@ pub fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref 
 /// **The invariant as `--asserts` names it** (ADR-361 D7): its parts, each
 /// start the facts before the loop pin written as its value, and the
 /// strategies that found them.
-pub fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
+fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
     return loop_said(arena, record, found, "through")
 }
 
 /// The same for a claim inside the loop's body: `through` past
 /// the loop and `inside` in it (`place`).
-pub fn loop_said(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound, place: ref String) -> String {
+fn loop_said(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound, place: ref String) -> String {
     let mut known: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for name in record.problem.state {
         let ghost = loop_before_name(name, record.start)
@@ -1198,7 +1531,7 @@ pub fn loop_said(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFo
 
 /// **Why a claim past a loop stays open** (ADR-361 D7): the loop and the
 /// names it changes.
-pub fn loop_open_text(records: ref Vec[LoopRecord]) -> String {
+fn loop_open_text(records: ref Vec[LoopRecord]) -> String {
     let mut names: Vec[String] = []
     for record in records {
         for n in record.problem.state {
@@ -1210,11 +1543,66 @@ pub fn loop_open_text(records: ref Vec[LoopRecord]) -> String {
     return f"nothing before it shows it; no invariant found for the loop that changes `{names.join("`, `")}` carries it"
 }
 
+/// **What a turn's path does to a flag** (ADR-361 D15): 1 where it raises
+/// it - sets it to a constant, or adds a positive constant to it - 0 where
+/// it leaves it, -1 where it may lower it.
+fn loop_raise(arena: ref TermArena, value: i64, flag: ref String) -> i64 {
+    let read = linear_form(value, fn(at) { arena.at(at) })
+    if read == null {
+        return -1
+    }
+    let form = read ?? Form { vars: collections::BTreeMap(), k: 0 }
+    if form.vars.is_empty() {
+        return 1
+    }
+    if form.vars.len() != 1 || (form.vars.get(flag) ?? 0) != 1 || form.k < 0 {
+        return -1
+    }
+    return if form.k > 0 { 1 } else { 0 }
+}
+
+/// **Whether a state name is a flag** (ADR-361 D15): some path of a turn
+/// raises it and none lowers it.
+fn loop_is_flag(arena: ref TermArena, record: ref LoopRecord, flag: ref String) -> bool {
+    let mut rises = false
+    for turn in record.turns {
+        let value = turn.values[flag] ?? continue
+        let raise = loop_raise(arena, value, flag)
+        if raise < 0 {
+            return false
+        }
+        if raise > 0 {
+            rises = true
+        }
+    }
+    return rises
+}
+
 /// **Whether a claim reads what one of the loops changes** (ADR-361 D2):
-/// through the facts that tie its names to others, one of their state names.
-pub fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records: ref Vec[LoopRecord]) -> bool {
+/// through the facts that tie its names to others, one of their state names; or, as a flag's fact ties what held where it
+/// rose to the flag (D15), a fact that reads a flag of one of them.
+fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records: ref Vec[LoopRecord]) -> bool {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     arena.variables(claim, names)
+    let mut flags: collections::BTreeSet[String] = collections::BTreeSet()
+    for record in records {
+        for s in record.problem.state {
+            if loop_is_flag(arena, record, s) {
+                flags.insert(s.clone())
+            }
+        }
+    }
+    if !flags.is_empty() {
+        for fact in facts {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            for n in read {
+                if flags.contains(n) {
+                    return true
+                }
+            }
+        }
+    }
     let mut used: collections::BTreeSet[i64] = collections::BTreeSet()
     let mut grew = true
     while grew {
@@ -1255,7 +1643,7 @@ pub fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records
 
 /// A loop's record.problem as text: the key its invariant is kept under, so that a
 /// later pass that states it again finds it.
-pub fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
+fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
     let mut parts: Vec[String] = [f"{record.start}"]
     for fact in record.problem.fixed {
         parts.push(arena.text(fact))
@@ -1275,7 +1663,7 @@ pub fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
 /// order, each `strategy=term`, joined by `;`. A term is written as its
 /// operator and its operands, `ge(i,0)`; a space in a strategy's name is a
 /// `-`.
-pub fn loop_parts_text(arena: ref TermArena, found: ref LoopFound) -> String {
+fn loop_parts_text(arena: ref TermArena, found: ref LoopFound) -> String {
     let mut parts: Vec[String] = []
     for (term, origin) in found.parts {
         parts.push(f"{origin.replace(" ", "-")}={loop_term_word(arena, term)}")
@@ -1444,7 +1832,7 @@ fn loop_built(mut arena: TermArena, op: ref String, args: Vec[i64]) -> i64? {
 /// invariant found - nothing is searched. Nothing where the text does not
 /// read or a query is not proved; the loop is then searched as if the file
 /// held nothing for it. `asked` counts the queries.
-pub fn loop_recorded(mut arena: TermArena, record: ref LoopRecord, recorded: ref String, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+fn loop_recorded(mut arena: TermArena, record: ref LoopRecord, recorded: ref String, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
     let mut parts: Vec[(i64, String)] = []
     let mut all: Vec[i64] = []
     for part in recorded.split(";") {

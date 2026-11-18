@@ -1,0 +1,8 @@
+bounds in tests/a_list_grown_in_both_branches_keeps_its_length.nika: 4 indexes, 3 proved; 3 operations, 3 proved
+    17  b[a.len() - 1]  proved
+    17  a.len() - 1     proved
+    33  b[a.len() - 1]  proved
+    33  a.len() - 1     proved
+    46  b[a.len() - 1]  checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
+    46  a.len() - 1     proved
+    68  self.forms[s]   proved

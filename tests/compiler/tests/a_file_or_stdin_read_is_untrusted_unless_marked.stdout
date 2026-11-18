@@ -17,6 +17,6 @@ input provenance: trusted
     fs::read_to_string is trusted: `trusted: true` at p.nika:5
 hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
 -- trusted: takes a bool
-error[NK1106]: The option `trusted` of `fs::read_to_string` takes `bool`, but you're passing `ref String`.
+error[NK1106]: The option `trusted` of `fs::read_to_string` takes `bool`, but you're passing a view of a `String`.
 -- trusted: takes a value
 error[NK1117]: `maybe` isn't declared anywhere.

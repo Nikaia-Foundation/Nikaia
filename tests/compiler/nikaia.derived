@@ -27,5 +27,7 @@ inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies+provenan
 "taking_beside.nika" = "46b1e0e303cf0d96b4c8e00961d2d64aa5359697ad8c2fdda5129bd5a3eea923"
 "tier_beside.nika" = "137db96d12d9ac05efd5862fd5e168103450bcae69064fc67860fdaee24353cb"
 "tier_beside_keep.nika" = "3088b46b058361a0d3ad90e2c909c1358bed13e882b766199c61f9018a98dee4"
+"tier_private_beside.nika" = "8b1c7c1c0683fec6a0a70532febd188529c95303ffdd0d11a39fd5628cc1ae45"
+"tier_private_beside_caller.nika" = "acc9f0bfa1efdcf785f5342dbbda65093650a4fb16d041d82e0c6ba21ac5a69c"
 "trait_keep_beside.nika" = "6339e7bcf4457e2ea6494a98d16d0894b993a810ebaecd27b32b1f23f4ea22dc"
 "trait_of_a_package.nika" = "abd3b98b83ee8a6c2468d12353864633b3ee2c8e817e6c9ef6d10b106093f7b7"

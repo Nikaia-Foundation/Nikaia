@@ -1,0 +1,50 @@
+// scripts/drive.nika --pickup DIR (#1885): a builder run the time limit cut
+// off after its report was written (BRIEF.running left beside the report)
+// gets the follow-up of `builder done` at the next start: its run posted on
+// its issue, its `wip` label settled, the brief appended to unpushed.txt, the
+// marker removed. A marker without a report (a run not yet at its end) is
+// left for the cycle to run the brief again. `gh` is a stub that logs.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let bin = f"{tmp}/bin"
+    let work = f"{tmp}/work"
+    sh(tmp.clone(), "mkdir -p bin work/lane; printf '#!/bin/sh\\necho \"$1 $2 $3\" >> \"$GH_LOG\"\\n' > bin/gh; chmod +x bin/gh")
+    sh(work.clone(), "git init -q -b develop; echo 'Result: partial: item 2 left\\nFixes: none\\nFound: none\\nIssue: complete\\nFriction: none' > lane/issue-1620.md.report.md; echo brief > lane/issue-1620.md; echo 3 > lane/issue-1620.md.running; echo brief > lane/issue-1621.md; echo 0 > lane/issue-1621.md.running")
+    let path = env::var("PATH") ?? ""
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--pickup", "lane"]; dir: work.clone(), env: [("PATH", f"{bin}:{path}"), ("GH_LOG", f"{tmp}/gh.log")])
+    if !out.ok { println(f"drive.nika failed, code {out.code}: {out.stderr.trim()}") }
+    println(out.stdout.trim())
+    println(f"left: {sh(work.clone(), "ls lane | grep running || true")}")
+    println(f"unpushed: {sh(work.clone(), "cat lane/unpushed.txt")}")
+    println(sh(tmp.clone(), "cat gh.log"))
+    // A second start finds nothing more to pick up.
+    let again = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--pickup", "lane"]; dir: work, env: [("PATH", f"{bin}:{path}"), ("GH_LOG", f"{tmp}/gh.log")])
+    println(f"again: [{again.stdout.trim()}]")
+    process::run("rm", ["-rf", tmp])
+}

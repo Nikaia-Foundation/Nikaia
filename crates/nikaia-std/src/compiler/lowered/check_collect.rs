@@ -8,7 +8,7 @@ pub(crate) fn collect_default_written(default: Option<&FieldDefault>) -> String 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     let mut refused = compare_keys_with_no_order(&asking, ty, span);
     for finding in compare_keys_that_do_not_hash(&asking, ty, span) { refused.push(finding); }
@@ -132,7 +132,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         for other in world.beside.iter() { for item in other.items.iter() { self.collect_types_beside(other, &item.node); } }
         for item in world.here.items.iter() {
             match &item.node {

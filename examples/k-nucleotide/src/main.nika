@@ -121,7 +121,7 @@ fn report_frequencies(dna: String, k: i64) throws {
         rows.push((fragment, tally.n))
     }
 
-    rows.sort_by_key fn (row) { row.0 }
+    rows.sort_by_key fn (row) { row.0.clone() }
     rows.sort_by_key fn (row) { -row.1 }
 
     for row in rows {

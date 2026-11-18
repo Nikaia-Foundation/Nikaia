@@ -4,6 +4,9 @@
 /// unset, not Unicode, or empty: the toolchain treats an empty variable as an
 /// unset one, so a program never has to test for both.
 pub fn var(name: &str) -> Option<crate::block::Text> {
+    if launcher_var(name) {
+        return None;
+    }
     std::env::var(name)
         .ok()
         .filter(|value| !value.is_empty())
@@ -35,3 +38,31 @@ pub(crate) fn pairs() -> Vec<(crate::bytes::Bytes, crate::bytes::Bytes)> {
 
 /// `env::vars(prefix)`: its Nikaia half, `runtime/env.nika` (#1601, ADR-397).
 pub use crate::runtime::vars;
+
+/// The launcher's variables a program does not see, `EXE_VAR` and
+/// `MAIN_VAR`, and the test for them, `launcher_var` (ADR-program-path-1 D3):
+/// their Nikaia half, `runtime/env.nika` (#2034).
+pub use crate::runtime::{EXE_VAR, MAIN_VAR, launcher_var};
+
+/// One of the launcher's variables, where it is set and not empty.
+fn handed(name: &str) -> Option<crate::fs::Path> {
+    std::env::var_os(name)
+        .filter(|value| !value.is_empty())
+        .map(crate::fs::Path::from)
+}
+
+/// **The program that was started** (Part III 17.1, ADR-program-path-1 D1):
+/// under `nikaia run` and `nikaia test` the `nikaia` that runs it, for a built
+/// program the program itself; nothing where the system cannot name it.
+pub fn current_exe() -> Option<crate::fs::Path> {
+    handed(EXE_VAR).or_else(|| std::env::current_exe().ok())
+}
+
+/// **The file the program stands in as it was started** (Part III 17.1,
+/// ADR-program-path-1 D2): under `nikaia run x.nika` the file `x.nika`, under
+/// `nikaia run` in a project its entry point, under `nikaia test` the test's
+/// file, for a built program the program itself; nothing where the system
+/// cannot name it.
+pub fn current_main() -> Option<crate::fs::Path> {
+    handed(MAIN_VAR).or_else(|| std::env::current_exe().ok())
+}

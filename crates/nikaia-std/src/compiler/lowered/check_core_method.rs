@@ -121,7 +121,7 @@ pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
+pub(crate) fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
     if method != "join" || witness < 0 { return -1; }
     let mut at: i64 = 0;
     while at < config.len() as i64 {
@@ -150,7 +150,7 @@ pub(crate) fn check_core_method_literal(state: &mut CheckState, receiver: &Expr,
     on
 }
 
-pub fn check_core_method_counted(on: &Ty) -> bool {
+pub(crate) fn check_core_method_counted(on: &Ty) -> bool {
     match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name);
@@ -263,7 +263,7 @@ pub(crate) fn check_core_method_task_handle(ty: &Ty) -> bool {
     }
 }
 
-pub fn check_core_method_connection(ty: &Ty) -> bool {
+pub(crate) fn check_core_method_connection(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "net::Connection",
         _ => false,
@@ -352,6 +352,17 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
 }
 
+pub(crate) fn check_core_method_collects_a_list(on: &Ty, value: &Ty) -> bool {
+    let plain = match on {
+        Ty::Seq { pauses, can_throw, parallel, shape, .. } => { let can_throw = *can_throw; let parallel = *parallel; let pauses = *pauses; !pauses && !can_throw && !parallel && !shape.timed },
+        _ => false,
+    };
+    plain && match value {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.len() == 1 && (type_last_segment(name) == "Vec" || type_last_segment(name) == "List") },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> String {
     if name != "sum" { return String::from(""); }
     match on {
@@ -374,6 +385,13 @@ pub(crate) fn check_core_method_views_of_text(on: &Ty) -> bool {
             let base = type_last_segment(name);
             (base == "Vec" || base == "List") && args.len() == 1 && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_a_view() && is_text_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_core_method_text_receiver(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => args.is_empty() && (name == "String" || name == "str"),
         _ => false,
     }
 }
@@ -458,7 +476,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if text && pattern_at >= 0 && pattern_at < args.len() as i64 {
         match unsafe { nikaia_std::proven::read(&args, (pattern_at) as usize) } {
             Expr::LitStr { text: written, .. } => {
-                let scalars: Vec<scalar> = nikaia_std::list::chars(written.chars());
+                let scalars: Vec<scalar> = nikaia_std::list::scalars(written.chars());
                 if scalars.len() == 1 {
                     let literal = check_core_method_char_literal(*unsafe { nikaia_std::proven::read(&scalars, (0) as usize) });
                     if literal != "" { state.facts.char_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (pattern_at) as usize) }) as i64, literal); }
@@ -505,6 +523,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.text_slot = false;
     state.flow.text_walk = false;
     if name == "collect" && args.is_empty() && check_core_method_text_views(&value) && state.check_core_method_from_text_slots(receiver) { state.facts.text_slot_collects.insert(id_of(receiver) as i64); }
+    if name == "collect" && args.is_empty() && check_core_method_collects_a_list(&on, &value) { state.flow.listed_collects.insert(id_of(expr) as i64); }
     let summed = check_core_method_summed(&name, &on, &value);
     if summed != "" { state.facts.summed.insert(id_of(receiver) as i64, summed); }
     let walk_open: Option<i64> = state.flow.walk_open;
@@ -588,7 +607,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 if (list == "Vec" || list == "List") && items.len() == 1 {
                     let item = unsafe { nikaia_std::proven::read(&items, (0) as usize) };
                     match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(&item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
+                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) { state.facts.filter_patterns.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); } },
                         _ => { },
                     }
                 }
@@ -603,7 +622,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
@@ -617,7 +636,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false, spelled: CodeNames::none() });
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
                         _ => { },
@@ -704,7 +723,7 @@ pub(crate) fn check_core_method_one_item(name: &str) -> bool { name == "filter" 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let adds = name == "push" || name == "insert" || name == "push_front" || name == "push_back" || name == "extend" || name == "append";
     let mut code_keys: Vec<String> = vec![];
@@ -741,7 +760,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
+pub(crate) fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
     match arg {
         Expr::Variable(bound, _) => {
             let bound = *bound;
@@ -795,7 +814,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let entered: Option<String> = state.grammar_entry(world, receiver, method);
     if entered.is_some() {
         let entry: String = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         let mut owner: String = nikaia_std::block::Text::from(entry.to_string());
         let mut rule: String = String::from("");
         let cut = nikaia_std::search::find(&entry, &"::", 0);
@@ -834,7 +853,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         }
         if unknown {
             for a in args.iter() { check_core_expr(state, world, host, a, span); }
-            if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+            if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
             return Ty::Unknown;
         }
         if plain { state.reaches_through_a_plain_value(world, &on, receiver, &name, true, expr, span); }
@@ -873,7 +892,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         if name != "is" || args.len() != 1 {
             state.a_reflected_variant_has_two_members(&format!("{}(…)", name), span);
             return Ty::Unknown;
@@ -886,7 +905,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         if name != "of" {
             state.a_reflected_field_has_two_members(&format!("{}(…)", name), span);
             return Ty::Unknown;
@@ -903,14 +922,14 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         state.reaches_into_a_nullable(&on, "method", &name, span);
         check_narrow_a_proof_taken_back(state, receiver, receiver, before);
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
-        if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         return Ty::Unknown;
     }
     let read_within = witness >= 0 && check_core_method_connection(&on) && name == "read";
     let within = witness >= 0 && check_core_method_task_handle(&on) && name == "join" || read_within;
     let door = witness >= 0 && locked_content_of(&on).is_some() && name == "set";
-    if witness >= 0 && !within && !door { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
-    if on_timeout >= 0 && !within { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value, span); }
+    if witness >= 0 && !within && !door { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
+    if on_timeout >= 0 && !within { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (on_timeout) as usize) }.value, span); }
     if door {
         state.the_witness_takes_no_reference(&nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span);
         state.facts.witnessed_sets.insert(span.start as i64);
@@ -923,10 +942,14 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
         if read_within { return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "read(within)", span); }
         if on_timeout >= 0 {
-            given.push(nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value.clone());
+            given.push(unsafe { nikaia_std::proven::read(&config, (on_timeout) as usize) }.value.clone());
             return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within, on_timeout)", span);
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);
+    }
+    if name == "chars" && args.is_empty() && config.is_empty() && check_core_method_text_receiver(&on) {
+        state.a_chars_call(world, expr, receiver, span);
+        return Ty::Seq { item: std::boxed::Box::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)

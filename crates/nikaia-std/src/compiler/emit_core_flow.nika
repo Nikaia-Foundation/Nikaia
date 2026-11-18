@@ -254,7 +254,7 @@ impl EmitState {
 
     /// A lambda's arguments are the ones it names (ADR-277): nothing is read
     /// off the body, so `fn { .. }` is `||`.
-    pub fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut names: Vec[String] = []
         for p in params {
             names.push(emit_local_name(self.facts.comptime_names, emit_text(world, p)))
@@ -340,7 +340,7 @@ impl EmitState {
         // its body's error is handed back, and the scope throws it at its end.
         if fails {
             let channel = scope.tasks_channel.clone()
-            out.push(f"-> Result<(), {channel}> {{ ")
+            out.push(f"-> {self.rust_result()}<(), {channel}> {{ ")
             let failing = inside with { can_throw: true }
             let failing_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.tasks_function.clone(), channel: channel.clone(), changed: changed, tasks_channel: channel.clone(), tasks_function: scope.tasks_function.clone() }
             self.emit_core_block(world, walk, out, host, body, depth, failing, failing_scope, EmitTail::Value)
@@ -512,7 +512,7 @@ impl EmitState {
     }
 
     /// `a + b`, `a < b`, and the many shapes a comparison or a sum takes below.
-    pub fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let site = at.start as i64
         // **Two kinds compared, decided while building** (ADR-330 D3, D6).
         if self.facts.kind_compares.contains(node_key(node)) {
@@ -782,7 +782,7 @@ impl EmitState {
     }
 
     /// `value ?? fallback`, in its four shapes (Part I 3.5).
-    pub fn emit_core_coalesce[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, fallback: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_coalesce[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, fallback: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `??` after a value that cannot be absent is its left side** (ADR-279
         // D13): the fallback never runs and is not written.
         if self.facts.plain_reaches.contains(node_key(node)) {
@@ -922,10 +922,11 @@ impl EmitState {
         // the left of a `??` may be a view into a container. **And except for text
         // where the left side is a view of text** (ADR-283), **a variant of an enum
         // this file declares**, **a constructor of a type this file declares**, and
-        // **a struct written out**, or a `bool`; **and a vector of
-        // `std::simd`'s made there**, which takes the option's type from
-        // `index::or` (ADR-377 D3) and has none of its own for `into()`.
-        let bare = a_number(fallback) || emit_flow_a_simd_call(world, fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
+        // **a struct written out**, or a `bool`, **or a name of the word the
+        // left side holds** (#1841); **and a vector of `std::simd`'s made
+        // there**, which takes the option's type from `index::or` (ADR-377 D3)
+        // and has none of its own for `into()`.
+        let bare = a_number(fallback) || emit_flow_a_simd_call(world, fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node)) || self.facts.word_fallbacks.contains(node_key(node))
         // **A fallback that may be `null` too** (Part I 3.5): the first option that
         // has a value, which is the language below's `or_else`, and the answer is
         // an option still.
@@ -1077,7 +1078,7 @@ impl EmitState {
     }
 
     /// Kap 7.1: `expr catch { handler }`, the handler sees the error as `error`.
-    pub fn emit_core_try_catch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, guarded_expr: ref Expr, handler: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_try_catch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, guarded_expr: ref Expr, handler: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `catch` whose value is not used drops it** (#885): the statement
         // emitter says so through the walk, the checker through a fact.
         let dropped = walk.dropped_catch == node_key(guarded_expr) || self.facts.dropped_catches.contains(node_key(guarded_expr))
@@ -1375,7 +1376,7 @@ impl EmitState {
 
     /// The fatal errors that arrive at a `catch` over `guarded` and that its
     /// handler names in no `match` arm (ADR-345 D2).
-    pub fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
+    fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
         let mut out: Vec[String] = []
         let name = call_callee_name(world.words, world.aliases, guarded) ?? return out
         let mut arriving: Vec[String] = []
@@ -1400,14 +1401,14 @@ impl EmitState {
     }
 
     /// `expr?`.
-    pub fn emit_core_try[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_try[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         self.emit_core_postfix_base(world, walk, out, host, inner, depth, flow, scope)
         out.push("?")
     }
 
     /// `return` and `return value`: what it hands back is wrapped by its own
     /// address (`check::Checked::wrapped`, read in `expr`).
-    pub fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if value != null {
             let held = value ?? return
             // **A `return` inside an expression hands back what a `return`
@@ -1443,7 +1444,7 @@ impl EmitState {
 
     /// `break` and `continue`, the same refusal the statement form has (ADR-276
     /// D18).
-    pub fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
+    fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
         let mut word: String = "continue"
         if is_break {
             word = "break"
@@ -1457,7 +1458,7 @@ impl EmitState {
     /// `throw error` inside a handler passes the error on (ADR-280 D11), with the
     /// site it was **raised** at and not the one it was caught at; any other
     /// `throw` leaves the function with the value in the failure channel.
-    pub fn emit_core_throw[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_throw[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut is_the_binding = false
         match inner {
             Expr::Variable(name, _) => {
@@ -1535,7 +1536,7 @@ impl EmitState {
     /// **Part I 8.2 and ADR-055 D5: a task.** `spawn fn { .. }` is
     /// `TaskHandle::start(async move { .. })`: an `async` **block** and not a
     /// closure, with `move` (Part I 8.3's implicit move), and a **handle**, always.
-    pub fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match lambda {
             Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
             else => {
@@ -1550,7 +1551,7 @@ impl EmitState {
     /// task's value where its failure arrives, the `join`, after the task's
     /// own `catch` and before the receiver's. The guarded block keeps the
     /// task's node, which the checker's facts of this `catch` are keyed by.
-    pub fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match lambda {
             Expr::Closure { body, .. } => {
                 let mut at: u32 = 0

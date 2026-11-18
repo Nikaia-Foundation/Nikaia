@@ -8,8 +8,71 @@
 // whom it calls: the base case is the checker's answer about method calls
 // (ADR-288), which the compiler hands in as `BodyCalls`, and the free calls
 // are `tools/foreign.nika`'s walk. A function field's stored code is a node
-// of its own, keyed `field:Type.field` (ADR-230 D1). What stays Rust is
-// handing in each unit and writing the answer into the ledger.
+// of its own, keyed `field:Type.field` (ADR-230 D1). `locks_infer` hands in
+// each unit and writes the answer into the ledger (#1913); what stays Rust is
+// the adapter that times the pass and reads a unit's holes.
+//
+// Whether a function **touches a lock** (ADR-281 D3), propagated over the same call graph `sync` uses and with the opposite
+// lattice.
+//
+// ## One traversal and two lattices
+//
+// | | starts from | rule |
+// | :--- | :--- | :--- |
+// | `sync` | everyone is `sync` | **greatest** fixpoint — take the claim from whoever reaches a non-holder |
+// | this | nobody touches one | **least** fixpoint — give the property to whoever reaches a holder |
+//
+// So mutual recursion between pure functions keeps `sync`
+// (ADR-288 D1) and correctly
+// gets nothing here, for the mirrored reason — the same shape `keeps` has
+// beside it, and for the same reason: a restriction is added on doubt where a
+// promise is taken away on doubt.
+//
+// ## What a base case is, and why the checker answers it
+//
+// A **door** is `get`, `set`, `access` or `update` on a `Locked` or a
+// `SharedMut`, and `access_all` or `update_all` over several
+// (ADR-281 D10,
+// ADR-281). Which of those a
+// call goes to is a question about the **receiver's type**, and this file has
+// none: `kasse.set(42)` names `set`, and so does a `Config::set` somebody
+// wrote. So the base case is read from `check::MethodCalls::resolved`, which is
+// the type checker's answer (ADR-288)
+// — the same arrangement `keeps` uses for its receivers, and for the same
+// reason.
+//
+// **Guessing by name would make the column worthless rather than merely
+// coarse.** `set` and `get` are among the most common method names a program
+// writes; a column that answered *touches a lock* for every one of them would
+// be set almost everywhere, and a refusal reading it would refuse correct
+// programs — which is the one thing Part III C.4 forbids.
+//
+// ## Fail-closed, and what that costs here
+//
+// An **unresolvable** call sets the property, which is D3's own sentence: it
+// takes the `sync` claim away *and* sets this, so one polarity decision serves
+// both. That is the safe direction for a refusal about deadlock — the wrong
+// answer the other way is a program that hangs.
+//
+// **It is also why nothing reads this column yet.** The measurement comes
+// first: a property that lands on most of the corpus is one whose refusals
+// would be noise, and that is a thing to find out before `NK2201` and `NK2203`
+// are written against it, not after.
+//
+// ## Where it is written
+//
+// **The walk, the doors, the fixpoint and writing the answer are Nikaia**
+// (this file, #125, #1913). What stays in `contracts/locks.rs` is the adapter
+// that hands in each unit's view, its literals' holes and the checker's
+// resolved calls as plain data.
+//
+// ## A scope's tasks count and a `spawn` does not
+//
+// A scope waits for its tasks, so they run **during** the call and their bodies
+// belong to the surrounding function — the same reason a trailing lambda's body
+// does (ADR-288 D16). A task
+// started with `spawn` runs later and elsewhere, so taking a lock in one is the
+// ordinary case and its body is not walked.
 
 use std::collections
 
@@ -72,8 +135,8 @@ pub fn stored_reaches(field: ref String, resolved: ref collections::BTreeSet[Str
 
 /// Every function, method and `pub` grammar rule of one unit, into `graph`,
 /// under the key the ledger uses. `calls` is the checker's answer by that key.
-pub fn unit_reaches(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, calls: ref collections::BTreeMap[String, BodyCalls], mut graph: collections::BTreeMap[String, Reaches]) {
-    for item in program.items {
+fn unit_reaches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, calls: ref collections::BTreeMap[String, BodyCalls], mut graph: collections::BTreeMap[String, Reaches]) {
+    for item in items {
         match item.node {
             Item::Fn { name, body, .. } => {
                 let key = key_of_function(name, "", names)
@@ -103,6 +166,42 @@ pub fn unit_reaches(program: ref Program, names: ref winnow_grammar::InternerCon
     }
 }
 
+/// **The `locks` column of a package's ledger** (Kap 9.4): whether each
+/// function can open a lock, and which function fields' stored code can,
+/// from the checker's method answers (`resolved`, by the ledger's key) and
+/// the code stored in function fields (`stored`). `holes_of(unit, expr)` is
+/// what unit `unit` wrote in a hole of `expr`.
+pub fn locks_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], stored: ref collections::BTreeMap[String, CheckStoredCode], holes_of: fn(i64, ref Expr) -> Vec[Expr] sync) {
+    // A call made inside a `spawn` runs later and elsewhere (D3), so it is
+    // left out of the body's own calls.
+    let calls: collections::BTreeMap[String, BodyCalls] = resolved.iter().map(fn(entry) { (entry.0.clone(), outside_a_task(entry.1)) }).collect()
+    let mut graph: collections::BTreeMap[String, Reaches] = collections::BTreeMap()
+    for (field, code) in stored {
+        stored_reaches(field, code.resolved, code.unresolved, code.free, graph)
+    }
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    for unit in 0..<units.len() {
+        let view = units[unit]
+        unit_reaches(view.items, view.words, fn(name) { view.unaliased(name) }, fn(expr) { holes_of(unit, expr) }, calls, graph)
+        declared_types(view.items, view.words, declared)
+    }
+    declared.extend(ledger.types.keys().cloned())
+    declared.extend(library.types.keys().cloned())
+    let answer = locking_of(graph, declared, library, ledger)
+    for (name, holds) in answer.functions {
+        let mut contract = ledger.functions.get(name) ?? continue
+        contract.touches_a_lock = holds
+    }
+    ledger.code_locks.extend(answer.fields)
+}
+
+/// What the walk reads of one body's method answers: the calls outside a
+/// `spawn`, whether one of those could not be resolved, and the function
+/// fields it called.
+fn outside_a_task(calls: ref CheckMethodCalls) -> BodyCalls {
+    return BodyCalls { resolved: calls.resolved.iter().filter(fn(to) { !calls.in_a_task.resolved.contains(to) }).cloned().collect(), unresolved: calls.unresolved && !calls.in_a_task.unresolved, fields_called: calls.fields_called.clone() }
+}
+
 /// The free calls a lambda's body makes, for the checker to remember with the
 /// function field it is stored in (ADR-230 D1).
 pub fn free_calls(body: ref Block, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> collections::BTreeSet[String] {
@@ -114,8 +213,8 @@ pub fn free_calls(body: ref Block, names: ref winnow_grammar::InternerContext, u
 /// The types one unit declares, into `declared`: **a variant is a value, not
 /// a callee** - `Json::Array(items)` builds a value and runs no body - and the
 /// type is everything but the last segment.
-pub fn declared_types(program: ref Program, names: ref winnow_grammar::InternerContext, mut declared: collections::BTreeSet[String]) {
-    for item in program.items {
+fn declared_types(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, mut declared: collections::BTreeSet[String]) {
+    for item in items {
         match item.node {
             Item::Enum { name, .. } => {
                 declared.insert(names.resolve(name).clone())
@@ -283,7 +382,7 @@ pub fn locking(itself: ref collections::BTreeMap[String, Lock], callees: ref col
     let mut answer = Locking { functions: collections::BTreeMap(), fields: collections::BTreeMap() }
     for (name, holds) in touches {
         if name.starts_with("field:") {
-            let c: Vec[scalar] = name.chars().collect()
+            let c: Vec[scalar] = name.scalars.collect()
             let field = slice(c, 6, c.len())
             // **A published field is stored into by packages that do not exist
             // yet** (ADR-230 D1), so what this one stores is not all there is.
@@ -335,7 +434,7 @@ fn is_a_variant(declared: ref collections::BTreeSet[String], callee: ref String)
 
 /// Whether `Type.field` is a public field of a public type.
 fn published(own: ref Ledger, field: ref String) -> bool {
-    let c: Vec[scalar] = field.chars().collect()
+    let c: Vec[scalar] = field.scalars.collect()
     let dot = find_text(c, 0, ".")
     if dot < 0 {
         return false

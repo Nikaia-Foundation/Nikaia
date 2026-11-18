@@ -29,7 +29,7 @@ fn item_type_name(view: ref ParsedView, item: ref Item) -> String {
 }
 
 /// Whether the file declares a struct, an enum, a grammar or a trait called `name`.
-pub fn declares_a_type(view: ref ParsedView, name: ref String) -> bool {
+fn declares_a_type(view: ref ParsedView, name: ref String) -> bool {
     if name == "" {
         return false
     }
@@ -43,7 +43,7 @@ pub fn declares_a_type(view: ref ParsedView, name: ref String) -> bool {
 
 /// `"struct"` or `"enum"` where the file declares a type `ty` names, so no
 /// arithmetic is declared on it, or nothing.
-pub fn declared_with_no_arithmetic(view: ref ParsedView, ty: ref Ty) -> String? {
+fn declared_with_no_arithmetic(view: ref ParsedView, ty: ref Ty) -> String? {
     let seen = ty.unseen()
     let name = match seen {
         Ty::Named { name, .. } => name,
@@ -83,7 +83,7 @@ fn item_fn_takes_either(view: ref ParsedView, name: winnow_grammar::Symbol?, arg
 
 /// Whether the parameter `at` of the function `key` (`Type::name` or `name`) is
 /// text both kinds of which flow into (ADR-282 D14).
-pub fn either_param(view: ref ParsedView, key: ref String, at: i64) -> bool {
+fn either_param(view: ref ParsedView, key: ref String, at: i64) -> bool {
     let parts: Vec[ref String] = key.split("::").collect()
     let own = parts[parts.len() - 1].clone()
     let mut target: String = ""
@@ -121,7 +121,7 @@ fn item_impl_takes_either(view: ref ParsedView, t: ref Type, methods: ref Vec[Sp
 }
 
 /// Whether a struct's field is text both kinds of which flow into (ADR-282 D14).
-pub fn either_field(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
+fn either_field(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
     let owner = item_last_segment(owner)
     for item in view.items {
         let found = match item.node {
@@ -145,7 +145,7 @@ fn item_has_either_field(view: ref ParsedView, fields: ref Vec[FieldDef], field:
 }
 
 /// Whether a `use` brought a package called `name` into the file.
-pub fn imports_a_package(view: ref ParsedView, name: ref String) -> bool {
+fn imports_a_package(view: ref ParsedView, name: ref String) -> bool {
     for item in view.items {
         let found = match item.node {
             Item::Import { path, alias } => item_import_is(view, path, alias, name),
@@ -169,7 +169,7 @@ fn item_import_is(view: ref ParsedView, path: ref Vec[winnow_grammar::Symbol], a
 }
 
 /// Whether the file's `use` lines name exactly the one package `head`.
-pub fn imports_exactly(view: ref ParsedView, head: ref String) -> bool {
+fn imports_exactly(view: ref ParsedView, head: ref String) -> bool {
     for item in view.items {
         let found = match item.node {
             Item::Import { path, .. } => path.len() == 1 && view.text(path[0]) == head,
@@ -185,7 +185,7 @@ pub fn imports_exactly(view: ref ParsedView, head: ref String) -> bool {
 /// Whether the file's struct `owner` declares `field` a `String` that holds
 /// static text (ADR-282 D29): its type is the view below, and `String` in the
 /// program's words.
-pub fn a_field_of_static_text(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
+fn a_field_of_static_text(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
     for item in view.items {
         match item.node {
             Item::Struct { name, fields, .. } => {
@@ -204,7 +204,7 @@ pub fn a_field_of_static_text(view: ref ParsedView, owner: ref String, field: re
 }
 
 /// Whether the file declares an `extern` struct or enum called `name`.
-pub fn an_extern_struct_named(view: ref ParsedView, name: ref String) -> bool {
+fn an_extern_struct_named(view: ref ParsedView, name: ref String) -> bool {
     for item in view.items {
         let found = match item.node {
             Item::Struct { name: declared, is_extern, .. } => is_extern && view.text(declared) == name,
@@ -241,7 +241,7 @@ fn item_all_unit(variants: ref Vec[EnumVariant]) -> bool {
 }
 
 /// A field type an `extern` struct may hold (ADR-284 D15).
-pub fn a_c_value(view: ref ParsedView, ty: ref Type) -> bool {
+fn a_c_value(view: ref ParsedView, ty: ref Type) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.code != null {
         return false
     }
@@ -265,7 +265,7 @@ pub fn a_c_value(view: ref ParsedView, ty: ref Type) -> bool {
 }
 
 /// Whether the file or one beside it implements `Error` for the type `ty`.
-pub fn implements_error(here: ref ParsedView, beside: ref Vec[ParsedView], ty: ref String) -> bool {
+fn implements_error(here: ref ParsedView, beside: ref Vec[ParsedView], ty: ref String) -> bool {
     if item_implements_error(here, ty) {
         return true
     }
@@ -298,7 +298,7 @@ fn item_is_error_impl(unit: ref ParsedView, trait_name: winnow_grammar::Symbol?,
 impl CheckState {
     /// `NK1228`: a `dsl` block names a package where a grammar stands. Whether
     /// it was said.
-    pub fn a_package_where_a_grammar_stands(ref mut self, view: ref ParsedView, target: winnow_grammar::Symbol, span: ref Span) -> bool {
+    fn a_package_where_a_grammar_stands(ref mut self, view: ref ParsedView, target: winnow_grammar::Symbol, span: ref Span) -> bool {
         let name = view.text(target)
         if name == "html" || self.grammars.contains_key(name) {
             return false
@@ -312,7 +312,7 @@ impl CheckState {
 
     /// Whether `expr` names a function or a type of a package nothing read: the
     /// package is used (or known) and neither ledger holds a name under it.
-    pub fn through_a_package_unread(ref self, view: ref ParsedView, world: ref CheckWorld, expr: ref Expr) -> bool {
+    fn through_a_package_unread(ref self, view: ref ParsedView, world: ref CheckWorld, expr: ref Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => func,
             Expr::Path(_, _) => expr,
@@ -408,7 +408,7 @@ fn item_plain_name(subject: ref Ty) -> String? {
 
 /// What one variant declares it carries, by position, where this file
 /// declares the enum; `null` where it does not.
-pub fn check_payload_in(view: ref ParsedView, ty: ref String, variant: ref String) -> Vec[Ty]? {
+fn check_payload_in(view: ref ParsedView, ty: ref String, variant: ref String) -> Vec[Ty]? {
     for item in view.items {
         match item.node {
             Item::Enum { name, variants, .. } => {
@@ -574,7 +574,7 @@ fn item_variant_names(view: ref ParsedView, variants: ref Vec[EnumVariant]) -> V
 impl CheckState {
     /// The text that stands for a value of `subject` where one is needed and
     /// none was written: an enum's simplest variant, or a struct's fields.
-    pub fn a_placeholder(ref self, world: ref CheckWorld, subject: ref Ty) -> String? {
+    fn a_placeholder(ref self, world: ref CheckWorld, subject: ref Ty) -> String? {
         let name = item_plain_name(subject) ?? return null
         let declared = item_enum_placeholder_in(world.here, name)
         if declared != null {
@@ -618,7 +618,7 @@ impl CheckState {
     /// D3): empty where the type has an empty value, which `std::mem::take`
     /// leaves; the stand-in a `match` arm leaves otherwise; `null` where there
     /// is neither.
-    pub fn a_stand_in(ref self, world: ref CheckWorld, ty: ref Ty) -> String? {
+    fn a_stand_in(ref self, world: ref CheckWorld, ty: ref Ty) -> String? {
         if item_has_a_default(ty) {
             return ""
         }
@@ -627,7 +627,7 @@ impl CheckState {
 
     /// The fields of a type, or an enum's variants as fields, in the order the
     /// declaration wrote them.
-    pub fn shape_of(ref self, view: ref ParsedView, world: ref CheckWorld, on: ref String) -> Vec[FieldContract]? {
+    fn shape_of(ref self, view: ref ParsedView, world: ref CheckWorld, on: ref String) -> Vec[FieldContract]? {
         if !self.enums.contains_key(on) {
             return self.fields_of(world, on)
         }
@@ -661,7 +661,7 @@ impl CheckState {
     }
 
     /// `NK1117`: a function called by a name nothing declares.
-    pub fn a_function_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, name: ref String, span: ref Span) {
+    fn a_function_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, name: ref String, span: ref Span) {
         let declared = self.lookup(name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name)
         if declared {
             return
@@ -688,7 +688,7 @@ impl CheckState {
     }
 
     /// `NK1117`/`NK1181`: an `impl` names a trait nothing declares.
-    pub fn a_trait_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, written: ref String, span: ref Span) {
+    fn a_trait_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, written: ref String, span: ref Span) {
         let at = written.find("::")
         if at != null {
             let head = written[0..<(at ?? return)].clone()
@@ -717,7 +717,7 @@ impl CheckState {
     }
 
     /// `NK1181`: nothing declares the head of this path.
-    pub fn a_head_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, head: ref String, written: ref String, span: ref Span) {
+    fn a_head_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, head: ref String, written: ref String, span: ref Span) {
         let head = view.unaliased(head)
         let prefix = f"{head}::"
         let mut declared = self.structs.contains_key(head) || self.enums.contains_key(head)
@@ -937,7 +937,7 @@ impl CheckState {
     /// writes** (ADR-246 D1): a field is boxed where what it holds inline
     /// reaches back to the type that declares it. Recorded for every type of
     /// the program, this file's and the ones beside it.
-    pub fn types_that_contain_themselves(ref mut self, here: ref ParsedView, beside: ref Vec[ParsedView]) {
+    fn types_that_contain_themselves(ref mut self, here: ref ParsedView, beside: ref Vec[ParsedView]) {
         let mut files: Vec[ParsedView] = [here.clone()]
         for other in beside {
             files.push(other.clone())

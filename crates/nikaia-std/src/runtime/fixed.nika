@@ -1,0 +1,26 @@
+// crates/nikaia-std/src/runtime/fixed.nika
+//
+// **The hash a `comptime` map is looked up by** (ADR-311 D9), written once in
+// Nikaia for both sides: `Fixed::get` in `src/fixed.rs` calls it at run time,
+// and the compiler's table builder (`compiler/fixed.nika`) reaches it through
+// its described ledger (ADR-294 D9.3), so the table and the program hash the
+// same bytes the same way because they run the same function (#2026).
+
+/// FNV-1a over the key's bytes, from an offset basis the seed is folded into.
+///
+/// FNV-1a and not SipHash, for ADR-010's reason one construct over: these
+/// keys are the compiler's own, so there is no remote peer to be protected
+/// from and the faster hash is the honest choice.
+pub fn fnv(key: ref String, seed: u64) -> u64 sync {
+    let mut hash: u64 = 0xcbf29ce484222325 ^ seed
+    for b in key.bytes() {
+        hash ^= b as u64
+        hash = hash.wrapping_mul(0x100000001b3)
+    }
+    return hash
+}
+
+/// CHD's displacement, as the `phf` crate writes it.
+pub fn displace(f1: u32, f2: u32, d1: u32, d2: u32) -> u32 sync {
+    return d2.wrapping_add(f1.wrapping_mul(d1)).wrapping_add(f2)
+}

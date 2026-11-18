@@ -1,0 +1,10 @@
+use compiler_tests
+
+/// A private function's literal-only text result kept by a function of another
+/// file of the package builds: before the fix the package refused the caller
+/// with NK1102 and NK1103 (`src/tier_private_beside.nika`, #1831).
+fn main() throws {
+	for name in compiler_tests::tier_private_names() {
+		println(name)
+	}
+}

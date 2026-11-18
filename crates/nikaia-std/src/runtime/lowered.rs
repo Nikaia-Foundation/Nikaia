@@ -19,9 +19,26 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::prelude::Hasher;
+#[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
+use nikaia_std::process;
+#[allow(unused_imports)]
 use nikaia_std::text;
+#[allow(unused_imports)]
+use nikaia_std::time;
+
+#[allow(unsafe_code)]
+mod cli_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/cli.rs");
+}
+#[allow(unused_imports)]
+pub use cli_lowered::*;
 
 #[allow(unsafe_code)]
 mod env_lowered {
@@ -33,6 +50,28 @@ mod env_lowered {
 }
 #[allow(unused_imports)]
 pub use env_lowered::*;
+
+#[allow(unsafe_code)]
+mod error_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/error.rs");
+}
+#[allow(unused_imports)]
+pub use error_lowered::*;
+
+#[allow(unsafe_code)]
+mod fixed_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/fixed.rs");
+}
+#[allow(unused_imports)]
+pub use fixed_lowered::*;
 
 #[allow(unsafe_code)]
 mod http1_lowered {
@@ -56,6 +95,73 @@ mod line_breaks_lowered {
 #[allow(unused_imports)]
 pub use line_breaks_lowered::*;
 
+#[allow(unsafe_code)]
+mod raw_sinks_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/raw_sinks.rs");
+}
+#[allow(unused_imports)]
+pub use raw_sinks_lowered::*;
+
+#[allow(unsafe_code)]
+mod shell_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/shell.rs");
+}
+#[allow(unused_imports)]
+pub use shell_lowered::*;
+
+#[allow(unsafe_code)]
+mod target_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/target.rs");
+}
+#[allow(unused_imports)]
+pub use target_lowered::*;
+
+#[allow(unsafe_code)]
+mod text_float_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/text_float.rs");
+}
+#[allow(unused_imports)]
+pub use text_float_lowered::*;
+
+#[allow(unsafe_code)]
+mod text_normal_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/text_normal.rs");
+}
+#[allow(unused_imports)]
+pub use text_normal_lowered::*;
+
+pub mod cli {
+    #[allow(unused_imports)]
+    pub use super::{an};
+}
+pub mod error {
+    #[allow(unused_imports)]
+    pub use super::{indented};
+}
+pub mod fixed {
+    #[allow(unused_imports)]
+    pub use super::{fnv, displace};
+}
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
@@ -64,8 +170,28 @@ pub mod line_breaks {
     #[allow(unused_imports)]
     pub use super::{LineBreaks, line_breaks};
 }
+pub mod raw_sinks {
+    #[allow(unused_imports)]
+    pub use super::{is_word, is_plain};
+}
+pub mod shell {
+    #[allow(unused_imports)]
+    pub use super::{shell};
+}
+pub mod target {
+    #[allow(unused_imports)]
+    pub use super::{Instruction, level_has};
+}
+pub mod text_float {
+    #[allow(unused_imports)]
+    pub use super::{writes_float};
+}
+pub mod text_normal {
+    #[allow(unused_imports)]
+    pub use super::{Form};
+}
 
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a7bbc3a081949afbd8d997316f618ad6f3d6bad431cc2652f76df0fdc05e1319";
+pub const LOWERED_DIGEST: &str = "a384a7164b2eea057d8ef55dd589f6a044ffd950cc481f21e5330a37b13a1678";

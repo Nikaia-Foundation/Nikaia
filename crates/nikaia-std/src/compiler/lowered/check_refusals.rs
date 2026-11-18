@@ -4,10 +4,10 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_assert_of_another_shape(&mut self, message: String, span: &Span) { self.findings.push(check_refusal("NK1195", span, message, vec![String::from("Write it as `assert(cond)` or `assert(cond; message: \"…\")`.")], None)); }
+    pub(crate) fn an_assert_of_another_shape(&mut self, message: String, span: &Span) { self.findings.push(check_refusal("NK1195", span, message, vec![String::from("Write it as `assert(cond)` or `assert(cond; message: \"…\")`.")], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_maybe_compared_with_a_value(&mut self, left: &Ty, right: &Ty, span: &Span) {
+    pub(crate) fn a_maybe_compared_with_a_value(&mut self, left: &Ty, right: &Ty, span: &Span) {
         let first = a_known_maybe(left) && a_known_value(right);
         let second = a_known_maybe(right) && a_known_value(left);
         if !first && !second { return; }
@@ -17,34 +17,34 @@ impl CheckState {
             maybe = right.clone();
             value = left.clone();
         }
-        self.findings.push(check_refusal("NK1102", span, format!("This compares `{}` with `{}`.", maybe.text(), value.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.")], Some(String::from("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))));
+        self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("This compares `{}` with `{}`.", maybe.text(), value.text()), &maybe, Some(&value)), vec![String::from("A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.")], Some(String::from("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_maybe_in_an_operation(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, span: &Span) {
+    pub(crate) fn a_maybe_in_an_operation(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, span: &Span) {
         let mut maybe = left.clone();
         if !a_known_maybe(left) {
             if !a_known_maybe(right) { return; }
             maybe = right.clone();
         }
         let symbol = binary_op_text(&op);
-        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_maybe_in_a_hole(&mut self, held: &Ty, span: &Span) {
+    pub(crate) fn a_maybe_in_a_hole(&mut self, held: &Ty, span: &Span) {
         if !a_known_maybe(held) { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_maybe_printed(&mut self, held: &Ty, span: &Span) {
+    pub(crate) fn a_maybe_printed(&mut self, held: &Ty, span: &Span) {
         if !a_known_maybe(held) { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("This prints `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))));
+        self.findings.push(check_refusal("NK1102", span, format!("This prints `{}`, which may be `null`.", held.shown()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, span: &Span) {
+    pub(crate) fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, span: &Span) {
         let own = world.own.implementations.get("Error");
         if own.is_some() && nikaia_std::index::or(match own {
             Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
@@ -59,7 +59,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_left_out(&mut self, owner: &str, missing: &[String], span: &Span) {
+    pub(crate) fn fields_left_out(&mut self, owner: &str, missing: &[String], span: &Span) {
         let listed = left_out_text(missing);
         let mut one: &'static str = "fields";
         let mut them: &'static str = "them";
@@ -73,10 +73,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn reaches_into_a_nullable(&mut self, on: &Ty, kind: &str, name: &str, span: &Span) {
+    pub(crate) fn reaches_into_a_nullable(&mut self, on: &Ty, kind: &str, name: &str, span: &Span) {
         let mut safe: String = format!("?.{}", name);
         if kind == "method" { safe = format!("?.{}(…)", name); }
-        let mut message: String = format!("A `{}` may be missing, so you can't reach its {} directly.", on.text(), kind);
+        let mut message: String = format!("A `{}` may be missing, so you can't reach its {} directly.", on.shown(), kind);
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -91,7 +91,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn the_caller_writes_no_reference(&mut self, value: &Expr, span: &Span, because: &str) {
+    pub(crate) fn the_caller_writes_no_reference(&mut self, value: &Expr, span: &Span, because: &str) {
         let written = match value {
             Expr::Unary { op, .. } => matches!(op, UnaryOp::Ref),
             _ => false,
@@ -101,7 +101,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_struct_called_without_a_constructor(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_struct_called_without_a_constructor(&mut self, name: &str, span: &Span) {
         let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -112,13 +112,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Expr], span: &Span) {
         if !args.is_empty() || !world.library.types.contains_key(name) || resolve_call(world, name).is_some() { return; }
         self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("Calling `{}()` runs `{}::new` from the type's description, and that description has no `{}::new`.", name, name, name)], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let name = match expr {
             Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
@@ -130,7 +130,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_drop_that_throws(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>]) {
+    pub(crate) fn a_drop_that_throws(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>]) {
         if world.own.traits.contains_key("Drop") { return; }
         for method in methods.iter() {
             match &method.node {
@@ -146,7 +146,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
+    pub(crate) fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
         let mut wrote_cleanup = false;
         let note: &'static str = "`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.";
         for method in methods.iter() {
@@ -182,7 +182,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn drop_help(target: &str) -> String { format!("Handle the failure in the body (`… catch {{ }}`), or move teardown that can fail to `impl Cleanup for {} {{ fn cleanup(ref mut self) throws {{ … }} }}`.", target) }
+pub(crate) fn drop_help(target: &str) -> String { format!("Handle the failure in the body (`… catch {{ }}`), or move teardown that can fail to `impl Cleanup for {} {{ fn cleanup(ref mut self) throws {{ … }} }}`.", target) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -202,7 +202,7 @@ pub(crate) fn a_known_value(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn left_out_text(missing: &[String]) -> String {
+pub(crate) fn left_out_text(missing: &[String]) -> String {
     let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in missing.iter() { quoted.push(format!("`{}`", field)); }
     nikaia_std::block::Text::from(quoted.join(", "))

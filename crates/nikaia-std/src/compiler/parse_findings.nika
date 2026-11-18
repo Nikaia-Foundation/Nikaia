@@ -41,7 +41,7 @@ fn parse_findings_byte_of(source: String, at: i64) -> i64 {
     if at < 0 {
         return source.len()
     }
-    return source.chars().take(at).map(fn(c) { utf8_width(c) }).sum()
+    return source.scalars.take(at).map(fn(c) { utf8_width(c) }).sum()
 }
 
 /// **A refusal at byte `at`**, the caret under `word` (nothing where it is

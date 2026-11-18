@@ -1,35 +1,35 @@
-error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
+error[NK1103]: This value is a view of an `Entry`, but the `let` declares an `Entry` of its own.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:14:20
     |
  14 |     let e: Entry = v[0] ?? return 0
     |                    ^^^^^^^^^^^^^^^^
     |
     = help: Write `.clone()` to turn this view into a value of its own.
-error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
+error[NK1103]: This value is a view of an `Entry`, but the `let` declares an `Entry` of its own.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:18:20
     |
  18 |     let e: Entry = a[0] ?? b[0] ?? return 0
     |                    ^^^^^^^^^^^^^^^^^^^^^^^^
     |
     = help: Write `.clone()` to turn this view into a value of its own.
-error[NK1102]: `keep` expects `s` to be `String`, but you're passing `ref String`.
+error[NK1102]: `keep` expects `s` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:22:10
     |
  22 |     keep(v[0] ?? return 0).len()
     |          ^^^^^^^^^^^^^^^^
     |
-    = note: It's declared as `keep(s: String) -> Vec[String]`.
+    = note: It's declared as `keep(keep s: String) -> Vec[String]`.
     = note: This is a view: it points into text that something else owns.
     = note: `keep` keeps its `s` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
     = help: Write `.clone()` to copy it here.
-error[NK1102]: `by_val` expects `e` to be `Entry`, but you're passing `ref Entry`.
+error[NK1102]: `by_val` expects `e` to be an `Entry` of its own, but you're passing a view of an `Entry`.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:25:12
     |
  25 |     by_val(v[0] ?? return 0).len()
     |            ^^^^^^^^^^^^^^^^
     |
-    = note: It's declared as `by_val(e: Entry) -> Vec[Entry]`.
+    = note: It's declared as `by_val(keep e: Entry) -> Vec[Entry]`.
     = note: This is a view: it points into an `Entry` that something else owns.
     = note: `by_val` keeps its `e` after the call returns, so it needs one of its own.
     = help: Write `.clone()` to hand `by_val` a copy of its own.

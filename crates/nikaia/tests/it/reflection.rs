@@ -263,7 +263,7 @@ fn the_report_prints_what_was_unrolled() {
 
     assert!(
         report.contains("`describe` unrolled over `User` as `describe__User`")
-            && report.contains("    name: ref String")
+            && report.contains("    name: String")
             && report.contains("    age: i64"),
         "{report}"
     );

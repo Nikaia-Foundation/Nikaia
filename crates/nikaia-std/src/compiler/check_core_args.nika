@@ -10,7 +10,7 @@ use std::collections
 
 /// Whether the callee only **runs** its `at`th parameter: the absence of
 /// `keeps`, and run where no contract was resolved.
-pub fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
+fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
     let contract = callee ?? return true
     let signature = contract.signature ?? return true
     let mut i = 0
@@ -145,11 +145,38 @@ fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld,
     for p in params {
         if at < given.len() && lent_mut(given[at]) != null && !mutable.contains(p) {
             let name = world.words.resolve(p).clone()
-            let wanted = code.text()
+            let wanted = code.shown()
             let position = at + 1
             state.findings.push(check_refusal("NK1102", check_span_at(world, arg, span), f"This lambda takes `{name}` without `mut`, but `{wanted}` lends parameter {position} as `mut`.", ["`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place."], f"Write `mut {name}`."))
         }
         at += 1
+    }
+}
+
+/// **What a run lambda changes that it captures** (ADR-views-3 D17): the
+/// first binding bound outside it that its body changed, and the parameters
+/// of code it ran, which may change what they capture in turn.
+fn check_core_args_what_a_lambda_changes(mut state: CheckState, id: i64, changed_from: i64, runs_from: i64) sync {
+    let mut at = changed_from
+    while at < state.changed.len() {
+        let name = state.changed[at].clone()
+        if state.binding(name) != null {
+            state.facts.changing_lambdas.insert(id, name)
+            break
+        }
+        at += 1
+    }
+    let mut ran: Vec[String] = []
+    at = runs_from
+    while at < state.run_calls.len() {
+        let name = state.run_calls[at].clone()
+        if !ran.contains(name) {
+            ran.push(name)
+        }
+        at += 1
+    }
+    if !ran.is_empty() {
+        state.facts.lambda_runs.insert(id, ran)
     }
 }
 
@@ -166,7 +193,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
             match code {
-                Ty::Fn { params: given, result, is_sync, can_throw } => {
+                Ty::Fn { params: given, result, is_sync, can_throw, .. } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
                     // `fn(T)` hands back nothing, in `std`'s signatures as in
@@ -192,7 +219,20 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                         state.a_kept_lambda_takes_these(world, arg, pauses, who, span)
                     }
                     state.a_lambdas_text_is_its_own(world, code, arg)
+                    let changed_from = state.changed.len()
+                    let runs_from = state.run_calls.len()
+                    let bound_from = state.flow.changes_bound.len()
+                    let floor = state.next_binding
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
+                    if runs {
+                        check_core_args_what_a_lambda_changes(state, id, changed_from, runs_from)
+                    } else {
+                        // **A kept lambda changes only its own copy** (#2047).
+                        let outer: String? = state.an_outer_binding_changed(bound_from, floor)
+                        if outer != null {
+                            state.a_kept_lambda_changes_a_capture(outer ?? "", check_span_at(world, arg, span))
+                        }
+                    }
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)
                     }
@@ -234,7 +274,12 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     } else if !written.is_unknown() {
                         out = written
                     }
-                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails }
+                    // **A lambda's own names, for messages** (#2007).
+                    let mut spelled = CodeNames::none()
+                    for p in params {
+                        spelled.params.push(world.words.resolve(p).clone())
+                    }
+                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails, spelled: spelled }
                 }
                 else => {}
             }
@@ -411,7 +456,7 @@ fn check_core_args_slot(callee: ref FnContract?, at: i64) -> bool {
 /// (ADR-288). `declared_here` says whether the signature came from this
 /// program's ledger rather than from `std`'s (ADR-277 D12); `callee` is read
 /// for whether it keeps the parameter a lambda lands in (D11).
-pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
+fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
     let mut out: Vec[Ty] = []
     let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     let mut at = 0
@@ -445,19 +490,87 @@ pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: re
 /// **Arguments of a call of code**, a function value or a field that holds
 /// one (#1120): a function handed to it is kept, as the code's own type
 /// keeps its function parameters (`fn(fn() -> R) -> R` takes a
-/// `Kept<dyn Fn() -> R>`), never a closure lent for the call.
-pub fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], span: ref Span) -> Vec[Ty] sync {
+/// `Kept<dyn Fn() -> R>`), never a closure lent for the call. Each argument
+/// is of its parameter's type, as a named function's is (Part I 5.4 C,
+/// #1996).
+fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], name: ref String, span: ref Span) -> Vec[Ty] sync {
     let mut out: Vec[Ty] = []
     let mut at = 0
     for arg in args {
         if check_core_args_is_lambda(arg, expected, at) {
             out.push(check_core_args_lambda(state, world, host, arg, expected[at], false, null, at, true, span))
         } else {
-            out.push(check_core_args_other(state, world, host, arg, expected, false, null, at, true, span))
+            let found = check_core_args_other(state, world, host, arg, expected, false, null, at, true, span)
+            if at < expected.len() {
+                check_core_argument_to_code_fits(state, world, host, arg, found, expected[at], name, at + 1, span)
+            }
+            out.push(found)
         }
         at += 1
     }
     return out
+}
+
+/// **An argument of code is of the parameter's type** (Part I 5.4 C, #1996):
+/// a function type's parameters are typed as a signature's, so what does not
+/// fit is `NK1102`, as at a named call, and a plain value where the type asks
+/// for its `T?` is wrapped (Part I 2.3). Whether it is lent or kept is
+/// `check_core_call_lent`'s; a function handed to code is the lambda walk's.
+fn check_core_argument_to_code_fits[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, given_type: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
+    state.constant_fits(world, arg, want, span)
+    if want.is_unknown() || state.an_open_number_where_none_fits(world, given_type, want, arg, span, "argument", fn(found_text, want_text) { f"`{name}` expects argument {nth} to be `{want_text}`, but you're passing `{found_text}`." }) {
+        return
+    }
+    // **An integer literal handed where no integer goes** (#471, #703) is
+    // the `i64` it would be, and the mismatch says so.
+    let mut found = given_type.clone()
+    if found.is_unknown() && an_integer_literal(arg) && state.no_integer_is(world, want) {
+        found = Ty::Named { name: "i64", args: [], view: false }
+    }
+    // **A plain value where the type asks for its `T?` is wrapped**, a number
+    // nothing typed as well (Part I 2.3, 2.4).
+    if check_arguments_nullable(want) && !check_arguments_nullable(found) && !ends_in_null(arg) {
+        let how = check_widened_slot(state, world, host, found, want, arg, span)
+        if how != null {
+            let wrap = how ?? return
+            state.facts.nullable_args.insert(id_of(arg) as i64, wrap)
+            return
+        }
+    }
+    if found.is_unknown() || found.fits(want) || unviewed_type(found).fits(unviewed_type(want)) {
+        return
+    }
+    let both_code = match found {
+        Ty::Fn { .. } => match want {
+            Ty::Fn { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
+    if both_code {
+        return
+    }
+    let how = check_widened_slot(state, world, host, found, want, arg, span)
+    if how != null {
+        let wrap = how ?? return
+        state.facts.nullable_args.insert(id_of(arg) as i64, wrap)
+        return
+    }
+    if state.fits_through_deref(world, found, want) {
+        return
+    }
+    let mut handed = found.clone()
+    if is_a_view_of_a_string(handed) {
+        handed = Ty::Named { name: "str", args: [], view: true }
+    }
+    // Text a function type lends is written `String` (ADR-282 D2), and so
+    // is it shown.
+    let mut wanted = want.clone()
+    let plain = unviewed_type(want)
+    if want.is_a_view() && plain == string_ty() {
+        wanted = plain
+    }
+    state.findings.push(check_refusal("NK1102", check_span_at(world, arg, span), spoken_in(f"`{name}` expects argument {nth} to be `{wanted.text()}`, but you're passing `{handed.text()}`.", wanted, handed), [f"Its type takes a `{wanted.shown()}` there: a function type's parameters are typed as a signature's (Part I 5.4)."], shown_in(way_out_of_a_mismatch(handed, wanted), wanted, handed)))
 }
 
 /// **Arguments walked in order, each binding what the next ones are handed**
@@ -465,7 +578,7 @@ pub fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: 
 /// makes, and `step` and `merge` are handed that. A variable of the signature
 /// the receiver left unbound is bound by the first argument that shows it, and
 /// the arguments after it are expected with it.
-pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], patterns: ref Vec[Ty], mut bound: collections::BTreeMap[String, Ty], mut expected: Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
+fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], patterns: ref Vec[Ty], mut bound: collections::BTreeMap[String, Ty], mut expected: Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
     let mut out: Vec[Ty] = []
     let mut at = 0
     for arg in args {
@@ -505,7 +618,7 @@ pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: re
 /// function takes `mut` and a lambda is lent; any other result is `NK1102`.
 /// An in-place one is recorded by the argument for the lowering, with whether
 /// it takes the second argument as a view.
-pub fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: ref Expr, found: ref Ty, acc: ref Ty, owner: String, role: String, span: ref Span) sync {
+fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: ref Expr, found: ref Ty, acc: ref Ty, owner: String, role: String, span: ref Span) sync {
     let mut back: Ty = Ty::Unknown
     let mut params: Vec[Ty] = []
     match found {
@@ -647,7 +760,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
             held.push(Ty::Unknown)
         } else {
             let door = check_core_args_door(writing)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [], edit: null })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.shown()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [], edit: null })
             held.push(Ty::Unknown)
         }
         at += 1
@@ -686,7 +799,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
 /// value as a view, the way `access` does; `update_all` hands each in by value
 /// and takes a new one back per lock (D2). Both refuse anything that is not a
 /// lock.
-pub fn check_core_locks[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, writing: bool, args: ref Vec[Expr], span: ref Span) -> Ty sync {
+fn check_core_locks[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, writing: bool, args: ref Vec[Expr], span: ref Span) -> Ty sync {
     if args.len() == 0 {
         check_core_args_no_door(state, writing, "It takes the locks and then the block.", span)
         return Ty::Unknown
@@ -754,7 +867,7 @@ fn check_core_args_a_closure(value: ref Expr) -> bool {
 /// neighbours' text (ADR-282 D4), and two integer types their common one
 /// (ADR-285 D32). Once per literal: the walk stops reporting after the first
 /// disagreement but keeps walking.
-pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, items: ref Vec[Expr], span: ref Span) -> Ty sync {
+fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, items: ref Vec[Expr], span: ref Span) -> Ty sync {
     let mut agreed: Ty = Ty::Unknown
     let mut has_kind = false
     let mut first_kind: String = ""
@@ -868,7 +981,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             if !has_kind {
                 has_kind = true
                 first_kind = kind.clone()
-                first_written = found.text()
+                first_written = found.shown()
             } else if first_kind != kind && !said {
                 said = true
                 state.a_list_whose_elements_disagree(first_kind, first_written, kind, found, span)
@@ -896,7 +1009,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             said = true
             let first = agreed.clone()
             let kind: String = (element_kind(item, first) ?? "a value").clone()
-            state.a_list_whose_elements_disagree(kind, first.text(), "a value", found, span)
+            state.a_list_whose_elements_disagree(kind, first.shown(), "a value", found, span)
         }
     }
     // **An integer beside a float** (Part I 2.4, #703): `[1.5, 2]`. A number
@@ -917,7 +1030,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
         if float != null && an_integer {
             said = true
             let first: Ty = float ?? Ty::Unknown
-            state.a_list_whose_elements_disagree("a float", first.text(), "an integer", Ty::Unknown, span)
+            state.a_list_whose_elements_disagree("a float", first.shown(), "an integer", Ty::Unknown, span)
         }
     }
     // **And the narrower elements are widened into it** (D32).
@@ -958,7 +1071,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
 /// where no use says more; `check_numbers2`'s `array_literal` makes it the
 /// array a use asks for. `v` is worked out once and copied, so one that does
 /// not copy is `NK1280`.
-pub fn check_core_list_repeat[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, count: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_list_repeat[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, count: ref Expr, span: ref Span) -> Ty sync {
     // **An inner literal an array is wanted for is that array** (ADR-152
     // D4), which copies: `[[0; 2]; 3]` where `Array[Array[i64, 2], 3]` is.
     let wanted: Ty? = check_core_args_array_element(state.flow.lambda_expected)
@@ -977,14 +1090,14 @@ pub fn check_core_list_repeat[H: CheckHost](mut state: CheckState, world: ref Ch
 }
 
 /// Record that the function being walked calls the field `key`.
-pub fn check_core_args_a_field_called(mut state: CheckState, current: ref String, key: ref String) sync {
+fn check_core_args_a_field_called(mut state: CheckState, current: ref String, key: ref String) sync {
     let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
     calls.fields_called.insert(key.clone())
     state.methods.insert(current.clone(), calls)
 }
 
 /// Record whether the field's code pauses or fails for the function walked.
-pub fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses: bool, fails: bool) sync {
+fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses: bool, fails: bool) sync {
     let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
     calls.code_pauses = calls.code_pauses || pauses
     calls.code_fails = calls.code_fails || fails
@@ -995,16 +1108,16 @@ pub fn check_core_args_code_said(mut state: CheckState, current: ref String, pau
 /// is given, the lock column and what the emitter needs, and the call's result;
 /// `null` where `on` has no such field. `outer_inside` is whether a lock was
 /// already open around this call (#533).
-pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], outer_inside: bool, span: ref Span) -> Ty? sync {
+fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], outer_inside: bool, span: ref Span) -> Ty? sync {
     let code: Ty = state.a_field_that_is_code(world, on, method) ?? return null
     match code {
-        Ty::Fn { params, result, is_sync, can_throw } => {
+        Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
             // **What it takes as a view or `mut` is lent to it** (ADR-views-3
             // D2, D14), as through a function value called by name: an owned
             // `String` field handed to `fn(String)` went below by value.
-            let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+            let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), world.words.resolve(method), span)
             check_core_call_lent(state, world, args, params, found, world.words.resolve(method), span)
             state.kept_arguments_are_its_own(world, args, params)
             // **A call through a function field reaches what was stored
@@ -1126,7 +1239,7 @@ fn check_core_args_tuple_texts(mut state: CheckState, parts: ref Vec[Expr], foun
 /// II 10.7): `order:` takes a `par::Order`, `limit:` and `piece:` an `i64`.
 /// Any other name is `NK1109`, `workers:` with a help naming `limit:`, which
 /// replaced it (ADR-async-5 D27); a value of another type `NK1102`.
-pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name: winnow_grammar::Symbol, value: ref Expr, found: ref Ty, span: ref Span) sync {
+fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name: winnow_grammar::Symbol, value: ref Expr, found: ref Ty, span: ref Span) sync {
     let written = world.words.resolve(name).clone()
     let at = check_span_at(world, value, span)
     let mut wanted: String = "i64"

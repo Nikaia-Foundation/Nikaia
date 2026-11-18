@@ -36,6 +36,11 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
             }
             name == "get" || name == "first" || name == "last"
         },
+        Expr::SafeMethod { method, .. } => {
+            let method = *method;
+            let name = emit_text(world, method);
+            name == "get" || name == "first" || name == "last"
+        },
         _ => false,
     }
 }
@@ -95,7 +100,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let flattens = self.facts.flattened_reaches.contains(&node_key(receiver));
         let mut lent: &'static str = "";
         if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()"; }
@@ -138,7 +143,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_tuple<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_tuple<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let sliced: Vec<bool> = vec![];
         self.emit_core_tuple_sliced(world, walk, out, host, parts, &sliced, depth, flow, scope)?;
         Ok(())
@@ -146,7 +151,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_tuple_sliced<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], sliced: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_tuple_sliced<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], sliced: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push("(");
         let mut i: i64 = 0;
         for part in parts.iter() {
@@ -180,7 +185,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let placed = self.facts.placed_in_block.contains(&node_key(node));
         if placed && items.is_empty() {
             out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)");
@@ -200,7 +205,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_list_repeat<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, count: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_list_repeat<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, count: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.array_literals.contains(&node_key(node)) {
             out.push("[");
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
@@ -221,7 +226,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let named = walk.reflected(world, base, name, "name");
         if named.is_some() {
             out.push("\"");
@@ -287,7 +292,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_safe_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_safe_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let field = emit_text(world, name);
         let flattens = self.facts.flattened_reaches.contains(&node_key(base));
         let mut how: &'static str = "map";
@@ -306,7 +311,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let taken: Option<String> = match self.facts.taken_parts.get(&node_key(node)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -404,7 +409,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_cast<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, operand: &Expr, ty: &Type, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_cast<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, operand: &Expr, ty: &Type, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, &EmitLifetimes::Elided);
         let mut viewed = false;
         match operand {
@@ -444,7 +449,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_struct_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, name: winnow_grammar::Symbol, fields: &[FieldInit], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_struct_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, name: winnow_grammar::Symbol, fields: &[FieldInit], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let owner = unaliased_in(world.aliases, &emit_text(world, name));
         let cleaned = self.cleaned_types.contains(&owner);
         if cleaned { out.push(&format!("{}::new(", emit_cleaned(host.overlaps_user_code()))); }
@@ -526,7 +531,7 @@ impl EmitState {
         if self.is_boxed_field(owner, field) { value = format!("std::boxed::Box::new({})", value); }
         format!("{}: {}", escaped_name(field), value)
     }
-    pub fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
+    pub(crate) fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
         let owner = unaliased_in(world.aliases, name);
         let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (field, default, ty) in self.field_defaults(world, &owner) { parts.push(self.emit_place_field_default(&owner, &field, &default, &ty)); }
@@ -535,7 +540,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let known = self.facts.with_types.get(&node_key(node));
         if known.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The type of this `with` is unknown. This is a compiler bug: the check should have reported it first."), at: Some(at as i64) }, &"emit_core_with")); }
         let owner = nikaia_std::block::Text::from(nikaia_std::index::or(known, || "").to_string());

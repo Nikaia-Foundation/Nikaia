@@ -1,0 +1,32 @@
+// ADR-369 D4 (#1930): another file of the package that writes a field of
+// the same name on a local of another type does not take the rule away.
+// `fill` writes `values` on a `Bag` held by locals bound to a call of a
+// function of a third file (`bag()`), to a literal and with a declared
+// type, so `Sx::mark`'s read is proved. `spoil` writes `values` on a local
+// bound to `sz()`, which returns an `Sz`, so `Sz::mark`'s stays checked.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"bags\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+    let lib = "pub struct Sx {\n    keys: Vec[i64],\n    values: Vec[i64],\n}\n\nimpl Sx {\n    pub fn add(mut self, key: i64) -> i64 sync {\n        let at = self.keys.len()\n        self.keys.push(key)\n        self.values.push(0)\n        return at\n    }\n\n    pub fn mark(mut self, key: i64) sync {\n        let at = self.add(key)\n        self.values[at] = 1\n    }\n}\n\npub struct Sz {\n    keys: Vec[i64],\n    values: Vec[i64],\n}\n\nimpl Sz {\n    pub fn add(mut self, key: i64) -> i64 sync {\n        let at = self.keys.len()\n        self.keys.push(key)\n        self.values.push(0)\n        return at\n    }\n\n    pub fn mark(mut self, key: i64) sync {\n        let at = self.add(key)\n        self.values[at] = 1\n    }\n}\n"
+    fs::write(f"{tmp}/src/lib.nika", fs::Root::Anywhere, lib)
+    fs::write(f"{tmp}/src/other.nika", fs::Root::Anywhere, "pub struct Bag {\n    pub values: Vec[i64],\n}\n\npub fn fill() -> Bag {\n    let mut out = bag()\n    out.values.push(1)\n    let mut lit = Bag { values: [] }\n    lit.values.push(2)\n    let mut d: Bag = bag()\n    d.values.push(3)\n    return out\n}\n\npub fn spoil() {\n    let mut s = sz()\n    s.values.push(1)\n}\n")
+    fs::write(f"{tmp}/src/third.nika", fs::Root::Anywhere, "pub fn bag() -> Bag {\n    return Bag { values: [] }\n}\n\npub fn sz() -> Sz {\n    return Sz { keys: [], values: [] }\n}\n")
+    let out = process::run(nikaia, ["check", "--bounds", "src/lib.nika"]; dir: tmp.clone())
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("self.values[") || line.contains("error") {
+            println(line.trim())
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

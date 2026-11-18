@@ -58,7 +58,7 @@ pub(crate) fn kept_result_spelling(ty: &Ty) -> Option<String> {
         Ty::Nullable(inner) => {
             let inner = nikaia_std::boxed::open(inner);
             let name = match integer_named(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Some(format!("Option<{}>", name))
+            Some(format!("::core::option::Option<{}>", name))
         },
         _ => integer_named(ty),
     }
@@ -67,10 +67,10 @@ pub(crate) fn kept_result_spelling(ty: &Ty) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambda_hands_back_nothing(&mut self, id: i64, result: Option<&Ty>) { if result.is_none() { self.facts.valueless_lambdas.insert(id); } }
+    pub(crate) fn a_lambda_hands_back_nothing(&mut self, id: i64, result: Option<&Ty>) { if result.is_none() { self.facts.valueless_lambdas.insert(id); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambdas_result(&mut self, id: i64, result: Option<&Ty>, pauses: bool, fails: bool) {
+    pub(crate) fn a_kept_lambdas_result(&mut self, id: i64, result: Option<&Ty>, pauses: bool, fails: bool) {
         if !pauses || fails { return; }
         let declared: Ty = nikaia_std::index::or(match result {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {
+    pub(crate) fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {
         match value {
             Expr::Closure { params, body, .. } => { self.hulls_of_a_lambda(world, value, params, body); },
             _ => { },
@@ -110,7 +110,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, pauses: bool, who: &str, span: &Span) {
+    pub(crate) fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, pauses: bool, who: &str, span: &Span) {
         match value {
             Expr::Closure { params, body, .. } => { self.takes_of_a_lambda(world, value, params, body, pauses, who, span); },
             _ => { },
@@ -138,7 +138,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, task: i64, who: &str, span: &Span) {
+    pub(crate) fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, task: i64, who: &str, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() {
@@ -159,7 +159,32 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
+    pub(crate) fn an_outer_binding_changed(&self, from: i64, floor: i64) -> Option<String> {
+        let mut at = from;
+        while at < self.flow.changes_bound.len() as i64 {
+            let (name, bound) = (*nikaia_std::index::get(&self.flow.changes_bound, nikaia_std::index::at(at))).clone();
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            if bound < 0 || bound > floor { continue; }
+            let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if local.id != bound || is_a_handle(&local.ty) { continue; }
+            return Some(name);
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_kept_lambda_changes_a_capture(&mut self, name: &str, span: &Span) {
+        let message = format!("This lambda is kept for later, so it takes its own copy of `{}`; a change it makes never reaches `{}` here.", name, name);
+        let note = nikaia_std::block::Text::from("A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17).");
+        let help = format!("Hand the value back instead: take `{}` as a parameter and return what it becomes (`fn(v, {}) {{ {} + v }}`), or keep `{}` in a `Shared` value both sides reach.", name, name, name, name);
+        self.findings.push(check_refusal("NK2101", span, message, vec![note], Some(help)));
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         match body {
             Expr::Closure { params, body, .. } => { self.state_of_a_child(world, params, body, span); },
             _ => { },
@@ -185,7 +210,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambda_hands_back_text_it_does_not_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, params: &[winnow_grammar::Symbol], body: &Block, tail: &Ty, span: &Span) {
+    pub(crate) fn a_lambda_hands_back_text_it_does_not_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, params: &[winnow_grammar::Symbol], body: &Block, tail: &Ty, span: &Span) {
         let result: Ty = match code {
             Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -194,7 +219,7 @@ impl CheckState {
             _ => return,
         };
         if result != a_string_type() { return; }
-        let wanted = code.text();
+        let wanted = code.shown();
         let own = lambda_own(world, params);
         let last = tail_value_of(body);
         if last.is_some() {
@@ -209,8 +234,7 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn a_lambda_result_of_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, wanted: &str, own: &collections::BTreeSet<String>, body: &Block, value: &Expr, ty: &Ty, at: &Span) {
         if lambda_a_text_view(ty) && self.text_literal(world, &a_string_type(), value, true).is_none() {
-            let was = ty.text();
-            self.findings.push(check_refusal("NK1104", at, format!("This lambda returns `{}`, a view, but `{}` returns text of its own.", was, wanted), vec![String::from("`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.")], Some(String::from("Hand back a copy with `.clone()`."))));
+            self.findings.push(check_refusal("NK1104", at, spoken_in(&format!("This lambda returns `{}`, but `{}` returns text of its own.", ty.text(), wanted), ty, None), vec![String::from("`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.")], Some(String::from("Hand back a copy with `.clone()`."))));
             return;
         }
         let name: String = match value {
@@ -224,7 +248,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambdas_result_is_its_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, body: &Block, tail: &Ty, span: &Span) {
+    pub(crate) fn a_lambdas_result_is_its_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, body: &Block, tail: &Ty, span: &Span) {
         let result: Ty = match code {
             Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -233,7 +257,7 @@ impl CheckState {
             _ => return,
         };
         if !wholly_known(&result) || body.stmts.is_empty() || a_body_never_ends(body) { return; }
-        let wanted = code.text();
+        let wanted = code.shown();
         let last = tail_value_of(body);
         if last.is_some() {
             let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };

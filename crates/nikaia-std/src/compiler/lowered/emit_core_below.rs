@@ -22,7 +22,7 @@ pub(crate) fn emit_held_all(items: &[Expr], lazy: bool, called: bool) -> (Vec<&E
     (found, EmitHeldFound { safe: flags, called: ran })
 }
 
-pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitHeldFound) {
+pub(crate) fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitHeldFound) {
     let mut found: Vec<&Expr> = vec![];
     let mut flags: Vec<bool> = vec![];
     let mut ran = called;
@@ -176,7 +176,7 @@ pub(crate) fn emit_mentions(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name
     false
 }
 
-pub fn emit_filled_at_once(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, own_methods: &MethodIndex, declared: &Stmt, next: &Stmt) -> bool {
+pub(crate) fn emit_filled_at_once(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, own_methods: &MethodIndex, declared: &Stmt, next: &Stmt) -> bool {
     let name = match emit_declared_empty(world, declared) { Some(__nikaia_value) => __nikaia_value, None => return false };
     match next {
         Stmt::Expr(inner) => emit_resizes(world, own, own_methods, &name, inner),
@@ -205,7 +205,7 @@ pub(crate) fn emit_resizes(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, own_
     }
 }
 
-pub fn emit_resize_args(next: &Stmt) -> Vec<&Expr> {
+pub(crate) fn emit_resize_args(next: &Stmt) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match next {
         Stmt::Expr(inner) => {
@@ -219,7 +219,7 @@ pub fn emit_resize_args(next: &Stmt) -> Vec<&Expr> {
     out
 }
 
-pub fn emit_branch_values(block: &Block) -> Vec<&Expr> {
+pub(crate) fn emit_branch_values(block: &Block) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     for stmt in block.stmts.iter() {
         match &stmt.node {
@@ -269,7 +269,7 @@ impl EmitWalk {
 }
 
 impl EmitState {
-    pub fn options_of(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Vec<ConfigContract> {
+    pub(crate) fn options_of(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Vec<ConfigContract> {
         let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         let constructor = format!("{}::new", name);
         if self.own_contracts.functions.contains_key(&name) {
@@ -298,7 +298,7 @@ impl EmitState {
             _ => None,
         }
     }
-    pub fn caught_channel_is_named(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn caught_channel_is_named(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() { return self.named_error_of(world, &match joined { Some(__nikaia_value) => __nikaia_value, None => return false }) != 0; }
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -307,7 +307,7 @@ impl EmitState {
         if a_grammar { return false; }
         self.named_error(world, &name) != 0
     }
-    pub fn caught_sum(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> Option<String> {
+    pub(crate) fn caught_sum(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> Option<String> {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() {
             let sum = match self.sums.get(&match joined { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -327,7 +327,7 @@ impl EmitState {
             _ => return false,
         }
     }
-    pub fn block_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, block: &Block) -> bool {
+    pub(crate) fn block_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, block: &Block) -> bool {
         for each in visited_in_block(block) { if self.expr_pauses(world, each) { return true; } }
         false
     }
@@ -350,7 +350,7 @@ impl EmitState {
         }
         false
     }
-    pub fn write_keep_prelude(&self, walk: &mut EmitWalk, out: &mut EmitOut, function: &str, at: i64, depth: i64) {
+    pub(crate) fn write_keep_prelude(&self, walk: &mut EmitWalk, out: &mut EmitOut, function: &str, at: i64, depth: i64) {
         if walk.preluded.contains(&at) { return; }
         let prelude = match self.keep_prelude(&walk, function, at) { Some(__nikaia_value) => __nikaia_value, None => return };
         walk.preluded.insert(at);
@@ -358,7 +358,7 @@ impl EmitState {
         out.push("\n");
         for _ in 0..depth { out.push("    "); }
     }
-    pub fn keeping_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
+    pub(crate) fn keeping_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
         let name = match emit_written_callee(world, func) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if self.own_contracts.functions.contains_key(&name) {
             if emit_ledger_takes_a_keep(&self.own_contracts, &name) { return Some(name); }
@@ -367,18 +367,18 @@ impl EmitState {
         if emit_ledger_takes_a_keep(world.library, &name) { return Some(name); }
         None
     }
-    pub fn map_key(&self, index: &Expr, written: bool) -> Option<FactKeyForm> {
+    pub(crate) fn map_key(&self, index: &Expr, written: bool) -> Option<FactKeyForm> {
         let form = match self.facts.map_keys.get(&(node_key(index), written)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(form.clone())
     }
-    pub fn stays_the_callers(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, place: &Expr) -> bool {
+    pub(crate) fn stays_the_callers(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, place: &Expr) -> bool {
         match place {
             Expr::Variable(name, _) => { let name = *name; self.changes_in_place(function, &emit_text(world, name)) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.stays_the_callers(world, function, base) },
             _ => false,
         }
     }
-    pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
+    pub(crate) fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern);
         #[allow(unused_mut)] let mut read: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let boxed = boxed;
         for each in self.emit_holes_names_read(world, host, guard) {

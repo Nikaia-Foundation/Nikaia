@@ -1,0 +1,23 @@
+// An `i64` past the prover's window `±2^62` but inside its type is no
+// overflow (ADR-396 D8 step 2, ADR-270 D11, #1810): `x + 1` at
+// `3000000000000000000` builds and runs, and so does `a + 1` under a branch
+// that takes `a` past the window, where only `a` at the type's end would
+// overflow. Neither is `NK1207`.
+fn after(x: i64) -> i64 {
+    assert(x == 3000000000000000000)
+    return x + 1
+}
+
+fn past(a: i64) -> i64 {
+    if a > 4611686018427387904 {
+        return a + 1
+    }
+    return a
+}
+
+fn main() throws {
+    let x: i64 = 3000000000000000000
+    println(f"{x + 1}")
+    println(after(3000000000000000000))
+    println(past(5000000000000000000))
+}

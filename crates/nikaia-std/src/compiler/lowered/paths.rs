@@ -18,20 +18,20 @@ pub fn after(path: &str, word: &str) -> Option<String> {
     if path == word { return Some(String::from("")); }
     let lead = format!("{}::", word);
     if !path.starts_with(AsRef::<str>::as_ref(&lead)) { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(path.chars());
-    let w: Vec<scalar> = nikaia_std::list::chars(lead.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(path.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(lead.chars());
     Some(slice(&c, w.len() as i64, c.len() as i64))
 }
 
 pub fn module_of(relative: &str) -> Option<String> {
     if !relative.starts_with("src/") || !relative.ends_with(".rs") { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(relative.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(relative.chars());
     let inside = slice(&c, 4, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 3) });
     if inside == "lib" { return Some(String::from("")); }
     if inside == "main" || inside.starts_with("bin/") { return None; }
     let mut path = nikaia_std::block::Text::from(inside.to_string());
     if inside == "mod" { path = String::from(""); } else if inside.ends_with("/mod") {
-        let i: Vec<scalar> = nikaia_std::list::chars(inside.chars());
+        let i: Vec<scalar> = nikaia_std::list::scalars(inside.chars());
         path = slice(&i, 0, unsafe { nikaia_std::proven::sub::<i64>(i.len() as i64, 4) });
     }
     let mut out: String = String::from("");
@@ -48,7 +48,7 @@ pub fn joined(at: &str, name: &str) -> String {
 pub fn exported(at: &str, text: &str) -> Vec<Export> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let whole = text.trim();
-    let c: Vec<scalar> = nikaia_std::list::chars(whole.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(whole.chars());
     let mut out: Vec<Export> = vec![];
     let open = find_text(&c, 0, "::{");
     if open >= 0 && whole.ends_with('}') {
@@ -70,7 +70,7 @@ pub fn exported(at: &str, text: &str) -> Vec<Export> {
         path = nikaia_std::block::Text::from(before.trim().to_string());
         alias = Some(nikaia_std::block::Text::from(after_it.trim().to_string()));
     }
-    let p: Vec<scalar> = nikaia_std::list::chars(path.chars());
+    let p: Vec<scalar> = nikaia_std::list::scalars(path.chars());
     let cut = find_last_text(&p, "::");
     let mut prefix: String = String::from("");
     let mut name = nikaia_std::block::Text::from(path.to_string());
@@ -86,7 +86,7 @@ pub fn exported(at: &str, text: &str) -> Vec<Export> {
 
 pub fn named(written: &str) -> Named {
     let one = written.trim();
-    let c: Vec<scalar> = nikaia_std::list::chars(one.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(one.chars());
     let space = find_text(&c, 0, " as ");
     if space < 0 { return Named { name: nikaia_std::block::Text::from(one.to_string()), alias: nikaia_std::block::Text::from(one.to_string()) }; }
     let before = slice(&c, 0, space);
@@ -109,7 +109,7 @@ pub fn bases(export: &Export) -> Vec<String> {
     }
     let from_up = after(prefix, "super"); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if from_up.is_some() {
-        let a: Vec<scalar> = nikaia_std::list::chars(export.at.chars());
+        let a: Vec<scalar> = nikaia_std::list::scalars(export.at.chars());
         let cut = find_last_text(&a, "::");
         let mut parent: String = String::from("");
         if cut >= 0 { parent = slice(&a, 0, cut); }
@@ -141,7 +141,7 @@ pub fn split_top_level(text: &str) -> Vec<String> {
 }
 
 pub(crate) fn find_last_text(c: &[scalar], word: &str) -> i64 {
-    let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
+    let w: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     let mut found: i64 = -1;
     if w.is_empty() || (c.len() as i64) < w.len() as i64 { return found; }
     for at in 0..unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64), 1) } { if stands_at(c, at, &w) { found = at; } }

@@ -35,7 +35,7 @@ pub fn spelled(wrote: Wrote) -> String {
 
 /// The root an argument writes, where it is one the review wants to see:
 /// `Root::Anywhere`, or `Root::Dir("/")`, under whatever module path.
-pub fn written_root(names: ref winnow_grammar::InternerContext, arg: ref Expr) -> Wrote? {
+fn written_root(names: ref winnow_grammar::InternerContext, arg: ref Expr) -> Wrote? {
     return match arg {
         Expr::Path(segments, _) => if ends_with_variant(names, segments, "Anywhere") { Wrote::Anywhere } else { null },
         Expr::Call { func, args, .. } => the_whole_filesystem(names, func, args),
@@ -76,7 +76,7 @@ pub struct Reason {
 /// counts: a value worked out while the program runs says nothing the
 /// compiler can read, so the source stays as untrusted as its ledger says
 /// (fail closed).
-pub fn says_trusted(names: ref winnow_grammar::InternerContext, config: ref Vec[ConfigArg]) -> bool {
+fn says_trusted(names: ref winnow_grammar::InternerContext, config: ref Vec[ConfigArg]) -> bool {
     for option in config {
         if names.resolve(option.name) == "trusted" {
             return match option.value {

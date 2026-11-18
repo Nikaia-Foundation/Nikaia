@@ -64,6 +64,33 @@ no merge open
 base
 base
 0
+== an uncommitted lowered change the merge changed too
+MERGE autostash conflicted in crates/nikaia-std/src/compiler/lowered.rs, took HEAD's copy, stash STASH keeps theirs
+MERGE SHA pulled 1 commits
+exit ok: true
+theirs
+1
+no merge open
+ M notes.txt
+base
+base
+0
+== an uncommitted source the merge changed too
+ESCALATE drive: merging origin/develop, the merge is committed, but putting the uncommitted files back conflicted in shared.txt: resolve them by hand, stash STASH keeps the uncommitted side
+WAKE ESCALATE read=- do=fix the cause it names, then restart the driver: ESCALATE drive: merging origin/develop, the merge is committed, but putting the uncommitted files back conflicted in shared.txt: resolve them by hand, stash STASH keeps the uncommitted side
+exit ok: false
+theirs
+1
+no merge open
+M  notes.txt
+UU shared.txt
+base
+<<<<<<< Updated upstream
+theirs
+=======
+loose
+>>>>>>> Stashed changes
+0
 == an untracked badge in the way
 MERGE moved aside assets/badges/b.svg into .git/drive-aside-STAMP, merging again
 MERGE SHA pulled 1 commits

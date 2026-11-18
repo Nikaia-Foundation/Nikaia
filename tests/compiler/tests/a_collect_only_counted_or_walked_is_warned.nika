@@ -1,0 +1,18 @@
+// **`NK1354` on a list collected only to be counted or walked once**
+// (#1975): `.collect().len()` is `.count()`, on one line and across three,
+// and a `for` over a `.collect()` of pure steps walks the sequence itself.
+fn main() throws {
+    let xs = [1, 2, 3, 2]
+    let s = "a b c"
+    let n = xs.iter().collect().len()
+    let w = s.split(" ")
+        .collect()
+        .len()
+    println(f"{n} {w}")
+    for p in s.split(" ").collect() {
+        println(p)
+    }
+    for x in xs.iter().rev().skip(1).collect() {
+        println(x)
+    }
+}

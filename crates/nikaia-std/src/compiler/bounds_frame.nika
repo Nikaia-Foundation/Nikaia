@@ -41,7 +41,7 @@ fn frame_rounds() -> i64 {
 /// by its name or by `Type::method` (ADR-391 D2). `beside` is what each of
 /// the package's other files says ([`bounds_beside`]): a private function's
 /// call sites may stand there (ADR-391 D1).
-pub fn bounds_around(
+fn bounds_around(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	ledgers: ref Vec[ref Ledger],
@@ -115,7 +115,7 @@ pub fn bounds_around(
 	}
 	// **The rules between list fields** read with the frames found
 	// (ADR-369 D4, `bounds_rules.nika`): checked where a body uses them.
-	let rules = rules_candidates(program, context, words)
+	let rules = rules_candidates(program, beside, context, words)
 	context.around.rules = rules
 	// **The private functions their callers may bound** (ADR-391 D1).
 	context.around.derived = derived_of(program, beside, words)
@@ -164,7 +164,9 @@ fn frame_context(
 		decided: collections::BTreeMap(),
 		list_indices: collections::BTreeSet(),
 		text_bytes: collections::BTreeSet(),
+		text_scalars: collections::BTreeSet(),
 		returns: collections::BTreeMap(),
+		owner: "",
 	}
 }
 
@@ -315,7 +317,7 @@ fn frame_put(
 	} else if kind == 1 {
 		out.lengths.insert(mapped)
 	} else if kind == 3 {
-		out.falls.insert(mapped)
+		changed_falls(out, mapped)
 	} else {
 		out.parts.insert(mapped)
 	}
@@ -491,7 +493,7 @@ fn frame_pattern_names(
 /// onto the receiver's path and the arguments' (`handed`, none where one is
 /// not a path of fields). A value written is a value changed otherwise than
 /// by a step, and its length with it.
-pub fn frame_at_call(
+fn frame_at_call(
 	frame: ref BoundsChanged,
 	receiver: ref String?,
 	handed: ref Vec[String?],
@@ -502,14 +504,14 @@ pub fn frame_at_call(
 		out.values.insert(on.clone())
 		out.jumps.insert(on.clone())
 		out.drops.insert(on.clone())
-		out.falls.insert(on.clone())
+		changed_falls(out, on)
 		out.lengths.insert(on)
 	}
 	for path in frame.lengths {
 		out.lengths.insert(frame_onto(path, receiver, handed) ?? continue)
 	}
 	for path in frame.falls {
-		out.falls.insert(frame_onto(path, receiver, handed) ?? continue)
+		changed_falls(out, frame_onto(path, receiver, handed) ?? continue)
 	}
 	for path in frame.parts {
 		out.parts.insert(frame_onto(path, receiver, handed) ?? continue)
@@ -550,7 +552,7 @@ fn frame_list(entry: ref String) -> String {
 }
 
 /// **Whether a frame writes anything from `root`** (`#self`, `#0`, ...).
-pub fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
+fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
 	return frame.values.iter().any(fn(e) { frame_from(e, root) })
 		|| frame.lengths.iter().any(fn(e) { frame_from(e, root) })
 		|| frame.parts.iter().any(fn(e) { frame_from(e, root) })
@@ -590,6 +592,30 @@ struct FieldsScan {
 	/// written or mentioned goes into `lost`, whatever `live` holds.
 	recording: bool,
 	lost: collections::BTreeSet[String],
+	/// Recording, each field written, grown, emptied or reordered (`push`,
+	/// `clear`, `sort`), or handed to a call as it is: a mention that only
+	/// reads it is not here. One reached through `self` in an `impl`, or
+	/// given in a literal, is named with its type (`Row.cols`).
+	changed: collections::BTreeSet[String],
+	/// The type of the `impl` scanned, `""` outside one.
+	self_type: String,
+	/// Each parameter of the function scanned, with the last name of its
+	/// type: a write through `mut plan: BufferPlan` is named `BufferPlan.holds`.
+	/// A local whose `let` declares its type or binds a literal of one too.
+	typed: collections::BTreeMap[String, String],
+	/// Each local bound to a call of a function by its name, with that name:
+	/// a write through `let mut out = bag()` is named `bag().values`, which
+	/// [`rules_candidates`] reads with the declared result of `bag` (#1930).
+	calls: collections::BTreeMap[String, String],
+	/// Each parameter or local that holds a list (`Vec[T]`, `List[T]`) of
+	/// one plain type, with the last name of that type: `next[k]` of `mut
+	/// next: Vec[LoopPath]` is a `LoopPath` (#1943).
+	items: collections::BTreeMap[String, String],
+	/// The type of each field of each struct the file declares, by
+	/// `T.f`, where it is one plain type, and the item type of a list
+	/// field by `T.f[]`: `end.path` of an `end: LoopEnd` is a `LoopPath`
+	/// (#1943).
+	field_types: collections::BTreeMap[String, String],
 }
 
 /// **What a file beside the one proved says to its walks**, read once per
@@ -605,6 +631,13 @@ pub struct BoundsBeside {
 	pub reached: collections::BTreeSet[String],
 	pub has_main: bool,
 	pub lost: collections::BTreeSet[String],
+	/// Each field it writes, grows, empties or reorders, or hands to a call
+	/// (#1755): a found rule over that field no longer holds of it. One
+	/// written through a local bound to a call is `f().field` (#1930).
+	pub changed: collections::BTreeSet[String],
+	/// The last name of the type each function of the file declares as its
+	/// result, where that is one plain type ([`fields_returns`]).
+	pub returns: collections::BTreeMap[String, String],
 }
 
 /// [`BoundsBeside`] of one file, `words` its words.
@@ -620,6 +653,12 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 		here: false,
 		recording: true,
 		lost: collections::BTreeSet(),
+		changed: collections::BTreeSet(),
+		self_type: "",
+		typed: collections::BTreeMap(),
+		calls: collections::BTreeMap(),
+		items: collections::BTreeMap(),
+		field_types: fields_types(program, words),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let has_main = fields_declared(program, words, false, scan, reached)
@@ -631,10 +670,183 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 	for item in program.items {
 		fields_item(item, words, scan, ignored)
 	}
-	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
+	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed, returns: fields_returns(program, words) }
 }
 
-pub fn fields_seen(
+/// The last name of `ty` where it is one plain type, not generic, optional
+/// or a tuple; `""` otherwise.
+fn fields_plain(ty: ref Type, words: ref winnow_grammar::InternerContext) -> String {
+	if !ty.generics.is_empty() || ty.is_nullable || ty.is_tuple {
+		return ""
+	}
+	return rules_last_name(words.resolve(ty.name))
+}
+
+/// The item type of `ty` where it is a list (`Vec[T]`, `List[T]`) of one
+/// plain type ([`fields_plain`]); `""` otherwise.
+fn fields_item_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -> String {
+	let list = rules_last_name(words.resolve(ty.name))
+	if ty.generics.len() != 1 || ty.is_nullable || ty.is_tuple || (list != "Vec" && list != "List") {
+		return ""
+	}
+	return fields_plain(ty.generics[0], words)
+}
+
+/// The type of each field of each struct `program` declares, by `T.f`,
+/// where it is one plain type, and a list field's item type by `T.f[]`.
+fn fields_types(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, String] {
+	let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Struct { name, generics, fields, .. } => {
+				if !generics.is_empty() {
+					continue
+				}
+				let owner = rules_last_name(words.resolve(name))
+				for field in fields {
+					let f = words.resolve(field.name)
+					let plain = fields_plain(field.ty, words)
+					if !plain.is_empty() {
+						out.insert(f"{owner}.{f}", plain)
+					}
+					let inner = fields_item_type(field.ty, words)
+					if !inner.is_empty() {
+						out.insert(f"{owner}.{f}[]", inner)
+					}
+				}
+			},
+			else => {},
+		}
+	}
+	return out
+}
+
+/// The last name of the type `expr` has, where the scan can tell (#1943):
+/// `self` in an `impl`, a typed local or parameter, a field of one by
+/// the file's struct declarations (`field_types`), an item of a list it
+/// knows the items of, and a `clone()` of any of these; `""` otherwise.
+fn fields_type_of(expr: ref Expr, words: ref winnow_grammar::InternerContext, scan: ref FieldsScan) -> String {
+	match expr {
+		Expr::Variable(v, _) => {
+			let name = words.resolve(v)
+			if name == "self" {
+				return scan.self_type.clone()
+			}
+			return scan.typed.get(name)?.clone() ?? ""
+		},
+		Expr::Field { base, name, .. } => {
+			let of = fields_type_of(base, words, scan)
+			if of.is_empty() {
+				return ""
+			}
+			return scan.field_types.get(f"{of}.{words.resolve(name)}")?.clone() ?? ""
+		},
+		Expr::Index { base, .. } => return fields_items_of(base, words, scan),
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if words.resolve(method) == "clone" && args.is_empty() {
+				return fields_type_of(receiver, words, scan)
+			}
+			return ""
+		},
+		else => return "",
+	}
+}
+
+/// The last name of the item type of the list `expr` is, where the scan
+/// can tell: a local or parameter in `items`, a list field of a value whose
+/// type it knows, and a `clone()` or `iter()` of one; `""` otherwise.
+fn fields_items_of(expr: ref Expr, words: ref winnow_grammar::InternerContext, scan: ref FieldsScan) -> String {
+	match expr {
+		Expr::Variable(v, _) => return scan.items.get(words.resolve(v))?.clone() ?? "",
+		Expr::Field { base, name, .. } => {
+			let of = fields_type_of(base, words, scan)
+			if of.is_empty() {
+				return ""
+			}
+			return scan.field_types.get(f"{of}.{words.resolve(name)}[]")?.clone() ?? ""
+		},
+		Expr::MethodCall { receiver, method, args, .. } => {
+			let m = words.resolve(method)
+			if (m == "clone" || m == "iter") && args.is_empty() {
+				return fields_items_of(receiver, words, scan)
+			}
+			return ""
+		},
+		else => return "",
+	}
+}
+
+/// The result each function of `program` declares, by the function's
+/// name, where it is one plain type ([`fields_plain`]) and the function is
+/// not generic: what a local bound to a call of it holds (#1930).
+fn fields_returns(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, String] {
+	let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, generics, ret_type, .. } => {
+				let named = name ?? continue
+				let ty = ret_type ?? continue
+				let plain = fields_plain(ty, words)
+				if generics.is_empty() && !plain.is_empty() {
+					out.insert(words.resolve(named).clone(), plain)
+				}
+			},
+			else => {},
+		}
+	}
+	return out
+}
+
+/// What the local `name` of a `let` holds, where the scan can tell: the
+/// type the `let` declares, a struct literal's type, the function a call
+/// names (`calls`), or the type of a value it can tell ([`fields_type_of`],
+/// [`fields_items_of`], #1943).
+fn fields_let(name: ref String, ty: ref Type?, value: ref Expr, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if ty != null {
+		let declared = ty ?? return
+		let plain = fields_plain(declared, words)
+		if !plain.is_empty() {
+			scan.typed.insert(name.clone(), plain)
+		}
+		let inner = fields_item_type(declared, words)
+		if !inner.is_empty() {
+			scan.items.insert(name.clone(), inner)
+		}
+		return
+	}
+	let of = fields_type_of(value, words, scan)
+	if !of.is_empty() {
+		scan.typed.insert(name.clone(), of)
+		return
+	}
+	let inner = fields_items_of(value, words, scan)
+	if !inner.is_empty() {
+		scan.items.insert(name.clone(), inner)
+		return
+	}
+	match value {
+		Expr::StructLit { name: of, .. } => {
+			let mut t = rules_last_name(words.resolve(of))
+			if t == "Self" {
+				t = scan.self_type.clone()
+			}
+			if !t.is_empty() {
+				scan.typed.insert(name.clone(), t)
+			}
+		},
+		Expr::Call { func, .. } => {
+			match func {
+				Expr::Variable(f, _) => {
+					scan.calls.insert(name.clone(), words.resolve(f).clone())
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
+}
+
+fn fields_seen(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,
@@ -646,6 +858,12 @@ pub fn fields_seen(
 		here: true,
 		recording: false,
 		lost: collections::BTreeSet(),
+		changed: collections::BTreeSet(),
+		self_type: "",
+		typed: collections::BTreeMap(),
+		calls: collections::BTreeMap(),
+		items: collections::BTreeMap(),
+		field_types: collections::BTreeMap(),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut a_program = fields_declared(program, words, true, scan, reached)
@@ -742,7 +960,24 @@ fn fields_item(
 	mut writers: collections::BTreeSet[i64],
 ) {
 	match item.node {
-		Item::Fn { config, body, .. } => {
+		Item::Fn { args, config, body, .. } => {
+			let had = scan.typed.clone()
+			let had_calls = scan.calls.clone()
+			let had_items = scan.items.clone()
+			for arg in args {
+				scan.calls.remove(words.resolve(arg.name))
+				if arg.ty.generics.is_empty() {
+					scan.typed.insert(words.resolve(arg.name).clone(), rules_last_name(words.resolve(arg.ty.name)))
+				} else {
+					scan.typed.remove(words.resolve(arg.name))
+				}
+				let inner = fields_item_type(arg.ty, words)
+				if inner.is_empty() {
+					scan.items.remove(words.resolve(arg.name))
+				} else {
+					scan.items.insert(words.resolve(arg.name).clone(), inner)
+				}
+			}
 			scan.walked = false
 			for param in config {
 				fields_expr(param.default, words, scan)
@@ -754,11 +989,17 @@ fn fields_item(
 				writers.insert(item.span.start)
 			}
 			scan.walked = false
+			scan.typed = had
+			scan.calls = had_calls
+			scan.items = had_items
 		},
-		Item::Impl { methods, .. } => {
+		Item::Impl { target, methods, .. } => {
+			let was = scan.self_type.clone()
+			scan.self_type = rules_last_name(words.resolve(target.name))
 			for method in methods {
 				fields_item(method, words, scan, writers)
 			}
+			scan.self_type = was
 		},
 		Item::Struct { rules, .. } => {
 			for rule in rules {
@@ -783,6 +1024,11 @@ fn fields_item(
 	}
 }
 
+/// A method that keeps a list's length and moves or rewrites its elements.
+fn fields_reorders(method: ref String) -> bool {
+	return method == "sort" || method == "sort_by" || method == "sort_by_key" || method == "reverse" || method == "swap" || method == "fill"
+}
+
 /// The field `name` is written here: seen where a walk goes, lost elsewhere.
 fn fields_write(name: ref String, mut scan: FieldsScan) {
 	if scan.recording {
@@ -796,6 +1042,64 @@ fn fields_write(name: ref String, mut scan: FieldsScan) {
 		scan.wrote = true
 	} else {
 		scan.live.insert(name.clone(), false)
+	}
+}
+
+/// The field `name` is changed otherwise than by a value written (`+=`, a
+/// method that may change its length): lost, and changed when recording.
+fn fields_change(base: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	fields_mark(base, name, words, scan)
+	fields_lose(name, scan)
+}
+
+/// Recording, the field `name` of `base` is changed: named with its type
+/// where the scan can tell that type, by its name alone elsewhere.
+fn fields_mark(base: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if !scan.recording {
+		return
+	}
+	match base {
+		Expr::Variable(v, _) => {
+			if words.resolve(v) == "self" && !scan.self_type.is_empty() {
+				scan.changed.insert(f"{scan.self_type}.{name}")
+				return
+			}
+			let ty = scan.typed.get(words.resolve(v))
+			if ty != null {
+				scan.changed.insert(f"{ty ?? ""}.{name}")
+				return
+			}
+			let called = scan.calls.get(words.resolve(v))
+			if called != null {
+				scan.changed.insert(f"{called ?? ""}().{name}")
+				return
+			}
+		},
+		else => {
+			// A field of a field, an item of a list or a `clone()`, of a
+			// type the scan can tell (#1943): `next[k].values` of `mut
+			// next: Vec[LoopPath]` is `LoopPath.values`.
+			let of = fields_type_of(base, words, scan)
+			if !of.is_empty() {
+				scan.changed.insert(f"{of}.{name}")
+				return
+			}
+		},
+	}
+	scan.changed.insert(name.clone())
+}
+
+/// Recording, each field handed to a call as it is: a `mut` parameter
+/// may change it there.
+fn fields_handed(args: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if !scan.recording {
+		return
+	}
+	for arg in args {
+		match arg {
+			Expr::Field { base, name, .. } => fields_mark(base, words.resolve(name), words, scan),
+			else => {},
+		}
 	}
 }
 
@@ -818,7 +1122,18 @@ fn fields_block(block: ref Block, words: ref winnow_grammar::InternerContext, mu
 
 fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	match stmt {
-		Stmt::Let { value, .. } => fields_expr(value, words, scan),
+		Stmt::Let { names, ty, value, .. } => {
+			fields_expr(value, words, scan)
+			// A name bound again is no longer the parameter whose type it had.
+			for n in names {
+				scan.typed.remove(words.resolve(n))
+				scan.calls.remove(words.resolve(n))
+				scan.items.remove(words.resolve(n))
+			}
+			if names.len() == 1 {
+				fields_let(words.resolve(names[0]), ty, value, words, scan)
+			}
+		},
 		Stmt::Comptime { value, .. } => fields_expr(value, words, scan),
 		Stmt::Assign { target, op, value } => {
 			fields_expr(value, words, scan)
@@ -827,8 +1142,9 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 					let text = words.resolve(name)
 					if op == null {
 						fields_write(text, scan)
+						fields_mark(base, text, words, scan)
 					} else {
-						fields_lose(text, scan)
+						fields_change(base, text, words, scan)
 					}
 					fields_expr(base, words, scan)
 				},
@@ -838,8 +1154,9 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 							let text = words.resolve(name)
 							if op == null {
 								fields_write(text, scan)
+								fields_mark(owner, text, words, scan)
 							} else {
-								fields_lose(text, scan)
+								fields_change(owner, text, words, scan)
 							}
 							fields_expr(owner, words, scan)
 						},
@@ -850,12 +1167,26 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 				else => fields_expr(target, words, scan),
 			}
 		},
-		Stmt::For { iter, body, .. } => {
+		Stmt::For { bindings, iter, body, .. } => {
 			match iter {
 				Expr::Field { base, .. } => fields_expr(base, words, scan),
 				else => fields_expr(iter, words, scan),
 			}
+			let inner = fields_items_of(iter, words, scan)
+			for n in bindings {
+				scan.typed.remove(words.resolve(n))
+				scan.calls.remove(words.resolve(n))
+				scan.items.remove(words.resolve(n))
+			}
+			// One binding over a list the scan knows the items of holds
+			// one of them (#1943); past the loop the name is not it.
+			if bindings.len() == 1 && !inner.is_empty() {
+				scan.typed.insert(words.resolve(bindings[0]).clone(), inner)
+			}
 			fields_block(body, words, scan)
+			for n in bindings {
+				scan.typed.remove(words.resolve(n))
+			}
 		},
 		Stmt::While { cond, body } => {
 			fields_expr(cond, words, scan)
@@ -885,9 +1216,14 @@ fn fields_unwalked(block: ref Block, words: ref winnow_grammar::InternerContext,
 	scan.walked = was
 }
 
-fn fields_inits(fields: ref Vec[FieldInit], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+/// The fields a literal of `of` gives (`""` where its type is not known).
+fn fields_inits(fields: ref Vec[FieldInit], of: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	for field in fields {
-		fields_write(words.resolve(field.name), scan)
+		let named = words.resolve(field.name)
+		fields_write(named, scan)
+		if scan.recording {
+			scan.changed.insert(if of.is_empty() { named.clone() } else { f"{of}.{named}" })
+		}
 		fields_maybe(field.value, words, scan)
 	}
 }
@@ -916,23 +1252,34 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 					let text = words.resolve(name)
 					if writes_a_value(called, args.len()) != null {
 						fields_write(text, scan)
+						fields_mark(owner, text, words, scan)
 					} else if !keeps_length(called) && !only_removes(called) {
-						fields_lose(text, scan)
+						fields_change(owner, text, words, scan)
+					}
+					if only_removes(called) || fields_reorders(called) {
+						fields_mark(owner, text, words, scan)
 					}
 					fields_expr(owner, words, scan)
 				},
 				else => fields_expr(receiver, words, scan),
 			}
+			fields_handed(args, words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::SafeMethod { receiver, args, .. } => {
 			fields_expr(receiver, words, scan)
 			fields_all(args, words, scan)
 		},
-		Expr::StructLit { fields, .. } => fields_inits(fields, words, scan),
+		Expr::StructLit { name, fields, .. } => {
+			let mut of = rules_last_name(words.resolve(name))
+			if of == "Self" {
+				of = scan.self_type.clone()
+			}
+			fields_inits(fields, of, words, scan)
+		},
 		Expr::With { base, fields, .. } => {
 			fields_expr(base, words, scan)
-			fields_inits(fields, words, scan)
+			fields_inits(fields, "", words, scan)
 		},
 		Expr::Block(block, _) => fields_block(block, words, scan),
 		Expr::Unsafe(block, _) => fields_block(block, words, scan),
@@ -960,6 +1307,7 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 		},
 		Expr::Call { func, args, .. } => {
 			fields_expr(func, words, scan)
+			fields_handed(args, words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::Match { value, arms, .. } => {

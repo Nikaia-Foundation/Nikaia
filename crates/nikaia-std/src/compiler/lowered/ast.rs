@@ -170,15 +170,15 @@ pub fn id_of(expr: &Expr) -> u32 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn node_key(expr: &Expr) -> i64 { id_of(expr) as i64 }
+pub(crate) fn node_key(expr: &Expr) -> i64 { id_of(expr) as i64 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn fresh_id() -> node_id::NodeId { node_id::NodeId::fresh() }
+pub(crate) fn fresh_id() -> node_id::NodeId { node_id::NodeId::fresh() }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn numbered_id(number: u32) -> node_id::NodeId { node_id::NodeId::numbered(number) }
+pub(crate) fn numbered_id(number: u32) -> node_id::NodeId { node_id::NodeId::numbered(number) }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FPart {
@@ -376,8 +376,8 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
-    pub fn is_bitwise(&self) -> bool { matches!(self, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
-    pub fn is_comparison(&self) -> bool { matches!(self, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
+    pub(crate) fn is_bitwise(&self) -> bool { matches!(self, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
+    pub(crate) fn is_comparison(&self) -> bool { matches!(self, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
 }
 
 #[derive(Debug, Clone, PartialEq)]

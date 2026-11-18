@@ -10,7 +10,7 @@ pub struct BmMatched {
     pub rule_binds: collections::BTreeMap<String, String>,
 }
 
-pub fn bm_empty() -> BmMatched { BmMatched { given: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), rule_binds: collections::BTreeMap::new() } }
+pub(crate) fn bm_empty() -> BmMatched { BmMatched { given: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), rule_binds: collections::BTreeMap::new() } }
 
 pub(crate) fn bm_range(lo: i64, hi: i64) -> Range { Range { lo: Some(lo), hi: Some(hi) } }
 
@@ -25,7 +25,7 @@ pub(crate) fn bm_class(words: &winnow_grammar::InternerContext, rules: &collecti
             None
         },
         Pattern::Literal(text) => {
-            let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
+            let chars: Vec<scalar> = nikaia_std::list::scalars(text.chars());
             if chars.len() != 1 { return None; }
             let code = *unsafe { nikaia_std::proven::read(&chars, (0) as usize) } as i64;
             Some(bm_range(code, code))
@@ -39,7 +39,7 @@ pub(crate) fn bm_is_digit(class: Option<&Range>) -> bool {
     nikaia_std::index::or(held.lo, || -1) == 48 && nikaia_std::index::or(held.hi, || -1) == 57
 }
 
-pub fn bm_matched(words: &winnow_grammar::InternerContext, rules: &collections::BTreeSet<String>, pattern: &Pattern, found: &mut BmMatched) {
+pub(crate) fn bm_matched(words: &winnow_grammar::InternerContext, rules: &collections::BTreeSet<String>, pattern: &Pattern, found: &mut BmMatched) {
     match pattern {
         Pattern::Seq(parts) => { for part in parts.iter() { bm_matched(words, rules, &part.node, found); } },
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); bm_matched(words, rules, &inner.node, found); },
@@ -125,7 +125,7 @@ pub(crate) fn bm_most(rep: &Repeat) -> Option<i64> {
     }
 }
 
-pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;
@@ -155,7 +155,7 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
     out
 }
 
-pub fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;
@@ -187,7 +187,7 @@ pub fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTre
     out
 }
 
-pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     for ledger in ledgers.iter() {
@@ -222,7 +222,7 @@ pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTree
     out
 }
 
-pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+pub(crate) fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;
@@ -258,7 +258,7 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
     out
 }
 
-pub fn bm_changing_methods(ledgers: &[&Ledger]) -> collections::BTreeSet<String> {
+pub(crate) fn bm_changing_methods(ledgers: &[&Ledger]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for ledger in ledgers.iter() {
         let ledger = *ledger;

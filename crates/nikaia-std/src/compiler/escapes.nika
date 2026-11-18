@@ -42,7 +42,7 @@ comptime HEX: ref String = "0123456789abcdef"
 /// something `decoded` answers `null` for, and `rustc` refuses in its own
 /// words.
 pub fn an_escape_nothing_names(literal: ref String, char_of: fn(i64) -> scalar? sync) -> NotAnEscape? {
-    let c: Vec[scalar] = literal.chars().collect()
+    let c: Vec[scalar] = literal.scalars.collect()
     let mut at = 0
     while at < c.len() {
         if c[at] != '\\' {
@@ -66,7 +66,7 @@ pub fn an_escape_nothing_names(literal: ref String, char_of: fn(i64) -> scalar? 
 /// not compile either way, and the evaluator says *cannot evaluate* rather
 /// than inventing a meaning for it.
 pub fn decoded(literal: ref String, char_of: fn(i64) -> scalar? sync) -> String? {
-    let c: Vec[scalar] = literal.chars().collect()
+    let c: Vec[scalar] = literal.scalars.collect()
     let mut out: String = ""
     let mut at = 0
     while at < c.len() {
@@ -94,7 +94,7 @@ pub fn decoded(literal: ref String, char_of: fn(i64) -> scalar? sync) -> String?
 /// and a bell in the middle of a `const` makes a reader doubt the file.
 pub fn as_a_literal(text: ref String) -> String {
     let mut out: String = ""
-    for c in text.chars() {
+    for c in text.scalars {
         if c == '"' {
             out.push_str("\\\"")
         } else if c == '\\' {
@@ -139,8 +139,8 @@ fn one_escape(c: ref Vec[scalar], at: i64, char_of: fn(i64) -> scalar? sync) -> 
 /// **The byte a `'\xNN'` above `\x7F` names**, or `null` where the literal is
 /// anything else (ADR-320 D8): in a `'…'` such an escape is a byte, and the
 /// literal is only a `u8`.
-pub fn a_high_byte(literal: ref String) -> i64? sync {
-    let c: Vec[scalar] = literal.chars().collect()
+fn a_high_byte(literal: ref String) -> i64? sync {
+    let c: Vec[scalar] = literal.scalars.collect()
     if c.len() != 4 || c[0] != '\\' || c[1] != 'x' {
         return null
     }
@@ -256,11 +256,11 @@ fn hex_digit(c: scalar) -> i64? sync {
 }
 
 // A number in lowercase hexadecimal, without leading zeros.
-pub fn hex_of(n: i64) -> String {
+fn hex_of(n: i64) -> String {
     if n == 0 {
         return "0"
     }
-    let digits: Vec[scalar] = HEX.chars().collect()
+    let digits: Vec[scalar] = HEX.scalars.collect()
     let mut backwards: Vec[scalar] = []
     let mut rest = n
     while rest > 0 {

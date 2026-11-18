@@ -382,7 +382,7 @@ impl ProverState {
     /// candidate postcondition where it stands before a `return`. `written`
     /// is the condition as the program wrote it, `names` the names it reads,
     /// `at_byte` where the statement starts.
-    pub fn an_assert(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, cond: ref Expr, written: String, names: ref collections::BTreeSet[String], message: String?, span: Span, mut scope: ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> AssertOutcome {
+    fn an_assert(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, cond: ref Expr, written: String, names: ref collections::BTreeSet[String], message: String?, span: Span, mut scope: ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> AssertOutcome {
         let mut outcome = AssertOutcome { held: ClaimHeld::ByTheTest, findings: [] }
         if self.in_test {
             return outcome
@@ -658,7 +658,7 @@ impl ProverState {
     /// claim: the outcome says how each condition is held there - proved,
     /// carried back to the caller's entry, or checked at run time, which the
     /// build refuses (`NK1300`, ADR-380 D1) as it refuses such an `assert`.
-    pub fn precondition_call(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], of_std: bool, span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync) -> CallOutcome {
+    fn precondition_call(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], of_std: bool, span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync) -> CallOutcome {
         let mut outcome = CallOutcome { reach: CallReach::Proved, findings: [], held: [] }
         for index in 0..<claims.len() {
             let pre = claims[index]
@@ -677,6 +677,35 @@ impl ProverState {
             if goal != null && scope.history_reads(arena, goal ?? 0) {
                 self.second_queries += 1
                 if is_proved(ask(arena, scope.with_history(), goal ?? 0)) {
+                    if of_std {
+                        outcome.held.push(ClaimHeld::Proved)
+                    }
+                    continue
+                }
+            }
+            // **Asked once more with what the callees' bodies return**
+            // (ADR-359 D2, D14), as an `assert` is, where the goal reads a
+            // call with a result summary.
+            if goal != null && !scope.summed.is_empty() {
+                let summed = summed_read(arena, scope, goal ?? 0)
+                if !summed.is_empty() {
+                    let facts = summed_facts(arena, scope, summed)
+                    self.second_queries += 1
+                    if is_proved(ask(arena, facts, goal ?? 0)) {
+                        if of_std {
+                            outcome.held.push(ClaimHeld::Proved)
+                        }
+                        continue
+                    }
+                }
+            }
+            // **And through the loops before it** (ADR-361 D2, D15), as an
+            // `assert` is, where it reads what one of them changes.
+            if goal != null && (!scope.loops.is_empty() || !scope.around.is_empty()) {
+                let base = scope.with_history()
+                let mut asked_through = scope.loops.clone()
+                asked_through.extend(scope.around.clone())
+                if loop_reads(arena, base, goal ?? 0, asked_through) && self.through_loops(arena, scope, goal ?? 0, base, ask) != null {
                     if of_std {
                         outcome.held.push(ClaimHeld::Proved)
                     }
@@ -780,7 +809,7 @@ impl ProverState {
     /// parameter's term as the call's argument, and a list's length as the
     /// argument's - `p.len()` in the claim is the argument's. No goal where
     /// an argument the claim reads is not one the prover reads.
-    pub fn goal_at_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, params: ref Vec[String], term: i64, args: ref Vec[Expr], scope: ref ProverScope) -> GoalAtCall {
+    fn goal_at_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, params: ref Vec[String], term: i64, args: ref Vec[Expr], scope: ref ProverScope) -> GoalAtCall {
         let mut given_by: collections::BTreeMap[String, i64] = collections::BTreeMap()
         let mut k = 0
         for arg in args {
@@ -816,7 +845,7 @@ impl ProverState {
     /// at a call, but for a refutation only (ADR-269 D8) - every time, or for
     /// a state that reaches the call. Nothing on *unknown*, and no check moves:
     /// the callee keeps its own.
-    pub fn unwritten_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], checks: ref Vec[UnwrittenCheck], args: ref Vec[Expr], span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, mut outside: collections::BTreeMap[(i64, String), OutsideIndex]) -> Vec[Finding] {
+    fn unwritten_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], checks: ref Vec[UnwrittenCheck], args: ref Vec[Expr], span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, mut outside: collections::BTreeMap[(i64, String), OutsideIndex]) -> Vec[Finding] {
         let mut findings: Vec[Finding] = []
         for check in checks {
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope)
@@ -893,7 +922,7 @@ impl ProverState {
             written = f"`{check.written}` in `{check.within}`, reached through `{callee}`"
         }
         let at = span.start as i64
-        let mut record = OutsideIndex { at: at, written: written.clone(), name: first.clone(), source: source?.clone() ?? "", proved: true, guard_at: -1, guard: "", operation: !check.index, stated: true, site: -1 }
+        let mut record = OutsideIndex { at: at, written: written.clone(), name: first.clone(), source: source?.clone() ?? "", proved: true, guard_at: -1, guard: "", operation: !check.index, stated: true, within: "", site: -1 }
         if is_proved(ask(arena, scope.facts, goal)) || (scope.history_reads(arena, goal) && is_proved(ask(arena, scope.with_history(), goal))) {
             match scope.guard_of(arena, goal) {
                 null => {},
@@ -932,7 +961,7 @@ impl ProverState {
     /// parameters. Not where what is known proves it or rules it out - the
     /// body says that itself - nor about data from outside (ADR-269 D6), nor
     /// in a lambda, which is not the function's entry.
-    pub fn an_unwritten_check(ref mut self, mut arena: TermArena, check: UnwrittenCheck, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    fn an_unwritten_check(ref mut self, mut arena: TermArena, check: UnwrittenCheck, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
         let owner = carrying_function(at.function) ?? return
         if at.lambda {
             return
@@ -970,7 +999,7 @@ impl ProverState {
     /// #1568), meets it - an index, a divisor or a whole number's range. The walk before's checks, as
     /// for preconditions; not through a call that can come back here, nor
     /// in a test.
-    pub fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
         let owner = carrying_function(at.function) ?? return
         if self.in_test || self.reaches(callee, owner) {
             return
@@ -1035,7 +1064,7 @@ fn unread_name(names: ref collections::BTreeSet[String], scope: ref ProverScope)
 /// `params` and `bound` in place of `result`. Computed before the name is
 /// bound, so an argument that reads the name it shadows makes none; a
 /// postcondition that reads a parameter no argument gives makes none either.
-pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], params: ref Vec[String], args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, pinned: ref collections::BTreeMap[String, i64]) -> Vec[i64] {
+fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], params: ref Vec[String], args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, pinned: ref collections::BTreeMap[String, i64]) -> Vec[i64] {
     let mut args_given: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut k = 0
     for arg in args {
@@ -1085,8 +1114,11 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
 
 /// **The calls with a result summary a claim reads** (ADR-359 D2): the names
 /// their results are bound to, which the claim reads directly or through the
-/// facts that tie them to its names.
-pub fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> Vec[String] {
+/// facts that tie them to its names. The tie runs both ways (ADR-359 D14): a
+/// summary is pulled in where the claim reads its bound name or where its
+/// exits read a name the claim does, and what it reads is followed in turn,
+/// until nothing more is added.
+fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> Vec[String] {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     arena.variables(claim, names)
     let mut grown = true
@@ -1100,13 +1132,16 @@ pub fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> 
             }
         }
         for (bound, alts) in scope.summed {
-            if !names.contains(bound) {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            for alt in alts {
+                arena.variables(alt.guard, read)
+                arena.variables(alt.value, read)
+            }
+            if !names.contains(bound) && !summed_ties(read, names) {
                 continue
             }
-            for alt in alts {
-                arena.variables(alt.guard, names)
-                arena.variables(alt.value, names)
-            }
+            names.insert(bound.clone())
+            names.extend(read)
         }
         grown = names.len() != before
     }
@@ -1122,7 +1157,7 @@ pub fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> 
 /// **Where the values a claim leaned on came from** (ADR-359 D8): for each
 /// binding the claim reads, directly or through the facts, whose divisor a
 /// summary pinned.
-pub fn leaned_notes(arena: ref TermArena, scope: ref ProverScope, names: ref collections::BTreeSet[String]) -> Vec[String] {
+fn leaned_notes(arena: ref TermArena, scope: ref ProverScope, names: ref collections::BTreeSet[String]) -> Vec[String] {
     let mut read = names.clone()
     let mut grown = true
     while grown {
@@ -1156,7 +1191,7 @@ fn summed_ties(read: ref collections::BTreeSet[String], names: ref collections::
 
 /// What is known, and for each of `read` what its callee's exits hand back:
 /// `!path || bound == value`.
-pub fn summed_facts(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[String]) -> Vec[i64] {
+fn summed_facts(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[String]) -> Vec[i64] {
     let mut facts = scope.facts.clone()
     for bound in read {
         let alts = scope.summed[bound] ?? continue
@@ -1214,7 +1249,7 @@ fn summed_notes(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[Stri
 /// term: a list literal's is its items', a repeated one's its count, a
 /// name's the one the scope follows, and `Bytes(x)`'s is `x`'s (as `find_all`
 /// keeps the length of what it searches, ADR-375 D5). Null where none is known.
-pub fn length_given(mut arena: TermArena, words: ref winnow_grammar::InternerContext, expr: ref Expr, scope: ref ProverScope, pinned: ref collections::BTreeMap[String, i64]) -> i64? {
+fn length_given(mut arena: TermArena, words: ref winnow_grammar::InternerContext, expr: ref Expr, scope: ref ProverScope, pinned: ref collections::BTreeMap[String, i64]) -> i64? {
     match expr {
         Expr::ListLit { items, .. } => {
             let count: i64 = items.len()
@@ -1267,7 +1302,7 @@ pub fn length_given(mut arena: TermArena, words: ref winnow_grammar::InternerCon
     }
 }
 
-pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
+fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
     if !name.starts_with("result@") && !name.starts_with("divisor@") && scope.locals.contains(name) {
         return null
     }
@@ -1423,7 +1458,7 @@ fn values_given(arena: ref TermArena, given_by: ref collections::BTreeMap[String
 
 /// **Where the value of an index that outside data reaches came from**
 /// (ADR-396 D1), as `NK1302`'s first note says it.
-pub fn outside_note(first: ref String, source: ref String?) -> String {
+fn outside_note(first: ref String, source: ref String?) -> String {
     if source != null && (source ?? "") != first {
         return f"`{first}` comes from `{source ?? ""}`: whoever sends it chooses the value, so nothing the compiler can see says what it holds."
     }
@@ -1432,13 +1467,13 @@ pub fn outside_note(first: ref String, source: ref String?) -> String {
 
 /// **The way out of `NK1302`** (ADR-396 D2): a guard where the value
 /// arrives, after which the index is proved. Not an `assert` (NK1202).
-pub fn outside_help(first: ref String, holds: ref String) -> String {
+fn outside_help(first: ref String, holds: ref String) -> String {
     return f"Check it where it arrives, with a guard the program handles: `throw BadInput({first}) if !({holds})`, or the early `return` that rejects it. After that line, the index is proved."
 }
 
 /// Values a state may have, as `NK1302` names the case the walk could not
 /// exclude: "`month` can be 12".
-pub fn can_be(values: ref collections::BTreeMap[String, i64]) -> String {
+fn can_be(values: ref collections::BTreeMap[String, i64]) -> String {
     let mut said: Vec[String] = []
     for (name, value) in values {
         said.push(f"`{name}` can be {value}")
@@ -1467,7 +1502,7 @@ fn returned_before(before_return: ref collections::BTreeMap[i64, String], at: i6
 
 /// `text` without the full stops it ends in.
 fn without_full_stops(text: ref String) -> String {
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     let mut end = c.len()
     while end > 0 && c[end - 1] == '.' {
         end -= 1

@@ -188,7 +188,7 @@ fn fold_shifted(lhs: ref Expr, rhs: ref Expr, x: ref Integer, y: ref Integer, le
 
 /// Whether an expression is literals alone, through the operators the fold
 /// knows.
-pub fn written_in_literals(expr: ref Expr) -> bool sync {
+fn written_in_literals(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitInt { .. } => true,
         Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && written_in_literals(expr),
@@ -200,7 +200,7 @@ pub fn written_in_literals(expr: ref Expr) -> bool sync {
 /// **Whether a shift of literals alone stands in an expression** (ADR-285
 /// D40), through a negation and the arithmetic and bit operators: the
 /// expressions whose exact value a type a use asks for does not hold to.
-pub fn shifts_literals(expr: ref Expr) -> bool sync {
+fn shifts_literals(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::Unary { expr, .. } => shifts_literals(expr),
         Expr::Binary { op, lhs, rhs, .. } => ((op == BinaryOp::Shl || op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs)) || shifts_literals(lhs) || shifts_literals(rhs),

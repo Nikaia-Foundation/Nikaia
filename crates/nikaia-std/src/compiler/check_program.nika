@@ -63,7 +63,7 @@ fn check_program_impl[H: CheckHost](mut state: CheckState, world: ref CheckWorld
 
 /// **The program's items, one by one** (after the passes that are about the
 /// declarations, and before any body).
-pub fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     // **A frame under every body, filled before any of them is walked**
     // (ADR-287): a `comptime` at item level is in scope for the whole file, so
     // the name has to be there before the first `fn` is entered.
@@ -136,6 +136,35 @@ pub fn check_program_program[H: CheckHost](mut state: CheckState, world: ref Che
             else => {},
         }
     }
+    state.code_parameters_that_change(check_program_trait_methods(world))
+}
+
+/// **Each trait method an `impl` of this file writes, by the trait method it
+/// answers** (`S::each` to `Walk::each`): its code parameters lower alike in
+/// the trait and in each impl (ADR-views-3 D17), or Rust refuses the impl.
+fn check_program_trait_methods(world: ref CheckWorld) -> collections::BTreeMap[String, String] sync {
+    let mut groups: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for item in world.here.items {
+        match item.node {
+            Item::Impl { target, methods, trait_name } => {
+                let named = trait_name ?? continue
+                let written = world.here.text(named)
+                let owner = world.here.text(target.name)
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, .. } => {
+                            let sym = name ?? continue
+                            let own = world.here.text(sym)
+                            groups.insert(f"{owner}::{own}", f"{written}::{own}")
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return groups
 }
 
 /// **The instantiations that stand in the program's other files**
@@ -143,7 +172,7 @@ pub fn check_program_program[H: CheckHost](mut state: CheckState, world: ref Che
 /// and which copies there are is decided at the **call**, which may stand in
 /// any file of the package. Nothing to ask about costs nothing: a unit that
 /// declares no shape walk returns before a second file is looked at.
-pub fn check_program_instantiations_beside[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+fn check_program_instantiations_beside[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     if state.flow.harvesting || world.beside.len() == 0 {
         return
     }
@@ -220,7 +249,7 @@ fn check_program_turns[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 /// against, and a body that is wrong for one field is **right** for the
 /// others. After the ordinary walk, because the instantiations are what that
 /// walk found.
-pub fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     check_program_copies_called(state, world)
     let mut instantiations: Vec[(String, String, Vec[FieldContract])] = []
     for ((name, on), fields) in state.facts.unrolled {
@@ -304,7 +333,7 @@ fn check_program_copies_called(mut state: CheckState, world: ref CheckWorld) syn
 
 /// A type and every type it is made of, as written: the parts and the
 /// fields' types the reflection facts hold, as far as they reach.
-pub fn check_program_reached(state: ref CheckState, on: ref String) -> Vec[String] {
+fn check_program_reached(state: ref CheckState, on: ref String) -> Vec[String] {
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     let mut queue: Vec[String] = [on.clone()]
     let mut out: Vec[String] = []

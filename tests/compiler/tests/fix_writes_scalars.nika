@@ -1,0 +1,35 @@
+// #1974: `nikaia fix` writes `.scalars` for each `.chars()` on text of
+// `fix_chars_to_scalars.nika` (`NK1353`) and leaves a type's own `chars`.
+// `NK1353` is an error, so the file does not check; `--dry-run` names each
+// edit and prints the diff, writing nothing; `fix` makes them although the
+// finding is an error, and the file then checks and runs.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let file = f"{tmp}/main.nika"
+    let source = "struct W { n: i64 }\n\nimpl W {\n    fn chars(ref self) -> i64 {\n        return self.n\n    }\n}\n\nfn vowels(s: ref str) -> i64 {\n    let mut n = 0\n    for c in s.chars() {\n        if c == 'a' || c == 'e' {\n            n += 1\n        }\n    }\n    return n\n}\n\nfn main() throws {\n    let s = \"tea\"\n    println(vowels(s))\n    println(s.chars().count())\n    let v: Vec[scalar] = \"abc\".chars().collect()\n    println(v.len())\n    println(\"  hi \".trim().chars().all(fn(c) { c.is_alphabetic() }))\n    let w = W { n: 7 }\n    println(w.chars())\n}\n"
+    fs::write(file, fs::Root::Anywhere, source)
+    let before = process::run(nikaia, ["check", f"{tmp}/main.nika"])
+    let refusals = before.stderr.split("error[NK1353]").count() - 1
+    println(f"refused before: {!before.ok}, NK1353 {refusals} times")
+    let dry = process::run(nikaia, ["fix", "--dry-run", f"{tmp}/main.nika"])
+    print(f"dry run: {dry.stdout}{dry.stderr}".replace(tmp, "TMP"))
+    println(f"unchanged after the dry run: {fs::read_to_string(file, fs::Root::Anywhere) == source}")
+    let fixed = process::run(nikaia, ["fix", f"{tmp}/main.nika"])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(file, fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/main.nika"])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let after = process::run(nikaia, ["run", f"{tmp}/main.nika"])
+    print(after.stdout)
+    process::run("rm", ["-rf", tmp])
+}

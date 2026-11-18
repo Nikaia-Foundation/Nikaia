@@ -1,0 +1,61 @@
+// #1557 (ADR-361 D13, ADR-306 D31): `while i < n && cs[i] != ' '` starts
+// each turn with `i < n`, so a counter that grows by one stays at most `n`
+// whichever conjunct ends the loop, also where `n` is `cs.len() as i64`; a
+// function handing it back is found within its list, and `cs[k - 1]` after
+// `k > 0` is proved at the call.
+fn first_space(cs: ref Vec[i64], from: i64) -> i64 sync {
+	if from < 0 || from > cs.len() {
+		return cs.len()
+	}
+	let mut i = from
+	while i < cs.len() && cs[i] != 32 {
+		i += 1
+	}
+	return i
+}
+
+fn before_space(cs: Vec[i64], from: i64) -> i64 sync {
+	let k = first_space(cs, from)
+	if k > 0 {
+		return cs[k - 1]
+	}
+	return -1
+}
+
+fn first_blank(cs: ref Vec[scalar], from: i64) -> i64 sync {
+	if from < 0 || from > cs.len() as i64 {
+		return 0
+	}
+	let mut i = from
+	while i < cs.len() as i64 {
+		if cs[i] == ' ' {
+			return i
+		}
+		i += 1
+	}
+	return i
+}
+
+fn before_blank(cs: Vec[scalar]) -> i64 sync {
+	let k = first_blank(cs, 0)
+	if k > 0 {
+		return cs[k - 1] as i64
+	}
+	return -1
+}
+
+fn last_of_run(cs: ref Vec[i64], go: bool) -> i64 sync {
+	let mut i = 0
+	while go && i < cs.len() && cs[i] != 32 {
+		i += 1
+	}
+	if i > 0 {
+		return cs[i - 1]
+	}
+	return -1
+}
+
+fn main() throws {
+	let cs: Vec[scalar] = "ab c".scalars.collect()
+	println(f"{before_space([1, 2, 32, 4], 0)} {before_space([5, 6], 1)} {before_blank(cs)} {last_of_run([7, 8, 32], true)}")
+}

@@ -13,9 +13,9 @@
 // * **Every heuristic is a named parameter** of one set, `SvParams`, whose
 //   `version` names it; `sv_params_set` changes one by name (the tuning of
 //   `scripts/solver.nika tune` does so, #1284 item 5).
-// * **Work is counted in expensive steps**: one theory check of the search,
-//   or `walk.moves_per_unit` moves of the walk; the budget's `cases` bounds
-//   their sum.
+// * **Work is counted in expensive steps**: one theory check of the search
+//   and two for each pivot it ran (#2048), or `walk.moves_per_unit` moves
+//   of the walk; the budget's `cases` bounds their sum.
 // * **Signals during the search switch it**: a search that ends unknown
 //   (an overflow, the budget) hands over to the walk on what is left, and a
 //   walk run first that finds nothing hands over to the search.
@@ -64,7 +64,7 @@ pub struct SvParams {
 }
 
 /// The set's defaults.
-pub fn sv_params() -> SvParams {
+fn sv_params() -> SvParams {
 	return SvParams {
 		version: "sv-params-1",
 		pipeline: "search",
@@ -86,7 +86,7 @@ pub fn sv_params() -> SvParams {
 
 /// Sets parameter `name` to `value`; `false` where there is no such
 /// parameter or the value is not one it takes.
-pub fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
+fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 	if name == "pipeline" {
 		if value != "search" && value != "walk-first" {
 			return false
@@ -158,7 +158,7 @@ pub fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 
 /// Sets each `name=value` of `settings`, comma-separated; `false` at the
 /// first one that does not take.
-pub fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
+fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
 	for part in settings.split(",") {
 		if part.len() == 0 {
 			continue
@@ -198,7 +198,7 @@ fn sv_strategy_size(n: i64) -> i64 {
 
 /// The features of `cnf`'s query: its theory atoms (a definition's atom
 /// counts as Boolean structure, not as an atom) and its clauses.
-pub fn sv_features(cnf: ref SvCnf) -> SvFeatures {
+fn sv_features(cnf: ref SvCnf) -> SvFeatures {
 	let mut f = SvFeatures {
 		columns: cnf.query.columns as i64,
 		reals: cnf.query.reals.len(),
@@ -259,7 +259,7 @@ pub fn sv_features(cnf: ref SvCnf) -> SvFeatures {
 }
 
 /// The features as one line.
-pub fn sv_features_shown(f: ref SvFeatures) -> String {
+fn sv_features_shown(f: ref SvFeatures) -> String {
 	return f"columns {f.columns} reals {f.reals} atoms {f.atoms} clauses {f.clauses} disjunctions {f.disjunctions} nonzeros {f.nonzeros} interval {f.interval}‰ difference {f.difference}‰ coefficient {f.max_coefficient} constant {f.max_constant} boolean {f.boolean}"
 }
 
@@ -273,7 +273,7 @@ pub fn sv_features_shown(f: ref SvFeatures) -> String {
 ///   walk tends to satisfy, so `walk-first`; the search follows on what the
 ///   walk left.
 /// * Else the search, and the walk after it where it ends unknown.
-pub fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
+fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
 	let mut p = base.clone()
 	if f.reals > 0 {
 		p.pipeline = "search"
@@ -290,7 +290,7 @@ pub fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
 
 /// The pipeline `p` names, for a line: `walk-first`, `search` and its
 /// theory, `+walk` where the walk follows an unknown search.
-pub fn sv_params_shown(p: ref SvParams) -> String {
+fn sv_params_shown(p: ref SvParams) -> String {
 	let first = if p.pipeline == "walk-first" { "walk-first, " } else { "" }
 	let after = if p.walk_after { "+walk" } else { "" }
 	return f"{first}search/{p.theory}{after}"
@@ -356,7 +356,7 @@ fn sv_strategy_model(
 
 /// **The pipeline** `p` on `cnf`, within `budget`: the walk first where
 /// `p` says so, the search, the walk after an unknown search.
-pub fn sv_strategy_run(
+fn sv_strategy_run(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,
@@ -480,9 +480,9 @@ test "each query's features pick its pipeline" {
 		"problem__003.smt2: columns 10 reals 0 atoms 20 clauses 20 disjunctions 0 nonzeros 134 interval 0‰ difference 0‰ coefficient 66 constant 39 boolean 20",
 		"  picks walk-first, search/both+walk; refuted 2/walk",
 		"choice.smt2: columns 2 reals 0 atoms 3 clauses 2 disjunctions 1 nonzeros 4 interval 666‰ difference 333‰ coefficient 1 constant 10 boolean 3",
-		"  picks search/both+walk; refuted 3",
+		"  picks search/both+walk; refuted 5",
 		"real.smt2: columns 2 reals 2 atoms 4 clauses 4 disjunctions 0 nonzeros 6 interval 500‰ difference 0‰ coefficient 1 constant 2 boolean 4",
-		"  picks search/simplex; refuted 2",
+		"  picks search/simplex; refuted 6",
 	]
 	assert(out == expected.join("\n") + "\n")
 }

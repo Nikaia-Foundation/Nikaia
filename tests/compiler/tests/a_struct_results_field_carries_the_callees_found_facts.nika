@@ -1,0 +1,65 @@
+// #1920 (ADR-306 D35): a whole-number field of a call's struct result
+// carries what the callee is found to return in it at every return that
+// builds the struct by a literal: an interval (D32), a bound against a
+// list's length (D23, D31), a relation to an argument (D31); a method's
+// struct result too (D34), and the value of a method of no argument. A
+// return that hands back a struct otherwise gives the field nothing, and a
+// field written after the `let` loses its facts (D20).
+use std::text
+
+struct E { offset: i64, line: i64 }
+
+fn mk(xs: ref Vec[i64]) -> E sync {
+	if xs.len() == 0 {
+		return E { offset: 1, line: 0 }
+	}
+	let offset = xs.len()
+	return E { offset, line: 5 }
+}
+
+fn up(at: i64) -> E sync {
+	return E { offset: at + 1, line: at }
+}
+
+fn lost(xs: ref Vec[i64]) -> E sync {
+	if xs.len() == 0 {
+		return E { offset: 1, line: 0 }
+	}
+	let r = E { offset: 2, line: 0 }
+	return r
+}
+
+struct S { items: Vec[i64] }
+
+impl S {
+	fn depth(ref self) -> i64 sync {
+		return 3
+	}
+
+	fn first(ref self) -> E sync {
+		if self.items.len() == 0 {
+			return E { offset: 1, line: 1 }
+		}
+		return E { offset: self.items.len(), line: 1 }
+	}
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3]
+	let e = mk(xs)
+	println(e.offset - 1)
+	println(xs[e.offset - 1])
+	println(e.line - 1)
+	let g = up(4)
+	println(g.offset - 1)
+	let l = lost(xs)
+	println(l.offset - 1)
+	let s = S { items: [4, 5] }
+	let f = s.first()
+	println(f.offset - 1)
+	let k = s.depth()
+	println(k - 1)
+	let mut m = mk(xs)
+	m.offset = text::parse_i64("0") ?? 0
+	println(m.offset - 1)
+}

@@ -11,7 +11,7 @@ pub enum CheckDepth {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, &CheckDepth::Arm); }
+    pub(crate) fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, &CheckDepth::Arm); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
@@ -24,12 +24,12 @@ impl CheckState {
                 }
                 for index in 0..parts.len() as i64 {
                     let part = unsafe { nikaia_std::proven::read(&parts, (index) as usize) };
-                    if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, &at); } else {
+                    if !self.boxed_part(world, path, index) || binds_a_part(part) { self.a_pattern_inside_a_box_at(world, part, span, &at); } else {
                         let mut why: &'static str = "";
                         let mut reported = true;
                         match at {
                             CheckDepth::Arm => {
-                                self.a_pattern_inside_a_box_at(world, &part, span, &CheckDepth::InsideABox);
+                                self.a_pattern_inside_a_box_at(world, part, span, &CheckDepth::InsideABox);
                                 reported = false;
                             },
                             CheckDepth::InsideABox => { why = "inside a part that is itself behind a pointer"; },
@@ -48,7 +48,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn boxed_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+    pub(crate) fn boxed_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -56,7 +56,7 @@ impl CheckState {
                     let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
                     match part {
                         MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&one, (0) as usize) }).to_string())); } },
-                        MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, &part) { out.push(name); } } },
+                        MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, part) { out.push(name); } } },
                         _ => { },
                     }
                 }
@@ -67,12 +67,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn typed_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
+    pub(crate) fn typed_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
                     let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
-                    if self.boxed_part(world, path, at) && !binds_a_part(&part) {
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) {
                         let mut owner: String = String::from("");
                         match part {
                             MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string()); } },
@@ -81,10 +81,10 @@ impl CheckState {
                         }
                         if !owner.is_empty() {
                             let on = Ty::Named { name: owner, args: vec![], view: false };
-                            let typed = self.pattern_parts(world, &part, &on);
+                            let typed = self.pattern_parts(world, part, &on);
                             for (name, ty) in typed.iter() { out.insert(nikaia_std::block::Text::from(name.to_string()), ty.clone()); }
                         }
-                    } else { self.typed_inside_boxes(world, &part, out); }
+                    } else { self.typed_inside_boxes(world, part, out); }
                 }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.typed_inside_boxes(world, alternative, out); } },
@@ -93,12 +93,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn names_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+    pub(crate) fn names_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
                     let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
-                    if self.boxed_part(world, path, at) && !binds_a_part(&part) { for name in pattern_names(world, &part) { out.push(name); } } else { self.names_inside_boxes(world, &part, out); }
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) { for name in pattern_names(world, part) { out.push(name); } } else { self.names_inside_boxes(world, part, out); }
                 }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.names_inside_boxes(world, alternative, out); } },
@@ -107,7 +107,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+    pub(crate) fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string());
         let variant = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
@@ -120,13 +120,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn looks_inside_a_box(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
+    pub(crate) fn looks_inside_a_box(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
                     let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
-                    if self.boxed_part(world, path, at) && !binds_a_part(&part) { return true; }
-                    if self.looks_inside_a_box(world, &part) { return true; }
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) { return true; }
+                    if self.looks_inside_a_box(world, part) { return true; }
                 }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { if self.looks_inside_a_box(world, alternative) { return true; } } },
@@ -136,7 +136,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
+    pub(crate) fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -221,7 +221,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+    pub(crate) fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
         let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match pattern {
             MatchPattern::Path(path) => {

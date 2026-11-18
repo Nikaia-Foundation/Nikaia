@@ -152,7 +152,7 @@ pub(crate) fn lg_consistent_answer(arena: &TermArena, facts: &[i64], goal: i64, 
     LgAnswer::Refuted { model: nikaia_std::index::or(model, || LgModel { values: collections::BTreeMap::new() }) }
 }
 
-pub fn lg_bool_value(arena: &TermArena, id: i64, values: &collections::BTreeMap<String, i64>) -> Option<bool> {
+pub(crate) fn lg_bool_value(arena: &TermArena, id: i64, values: &collections::BTreeMap<String, i64>) -> Option<bool> {
     let node = arena.at(id);
     match node {
         SolverTerm::Bool(x) => Some(x),

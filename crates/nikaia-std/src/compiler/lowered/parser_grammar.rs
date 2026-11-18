@@ -655,7 +655,7 @@ grammar! {
     }
 }
 #[allow(non_snake_case, dead_code)]
-pub(crate) fn __nikaia_same_line_ParserGrammar<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>
+pub(crate) fn __nikaia_same_line_ParserGrammar<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>
 where
     B: ::winnow_grammar::rt::Slice,
     S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,
@@ -1301,7 +1301,7 @@ grammar! {
     }
 }
 #[allow(non_snake_case, dead_code)]
-pub(crate) fn __nikaia_same_line_ParserGrammarOverBytes<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>
+pub(crate) fn __nikaia_same_line_ParserGrammarOverBytes<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>
 where
     B: ::winnow_grammar::rt::Slice,
     S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,

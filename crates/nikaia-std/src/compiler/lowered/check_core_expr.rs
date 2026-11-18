@@ -35,7 +35,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
     let count = value.chars().count() as i64;
     if count <= 1 { return; }
     let composed = host.composed(&value);
-    let scalars: Vec<scalar> = nikaia_std::list::chars(composed.chars());
+    let scalars: Vec<scalar> = nikaia_std::list::scalars(composed.chars());
     if scalars.len() == 1 {
         let one = *unsafe { nikaia_std::proven::read(&scalars, (0) as usize) };
         let hex = hex_of(one as i64);
@@ -56,7 +56,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     let reaching: Option<String> = match state.flow.reaching.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -167,7 +167,7 @@ pub(crate) fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     match expr {
         Expr::LitInt { .. } => Ty::Unknown,
         Expr::LitFloat(_, _) => check_core_expr_named("f64"),
@@ -188,6 +188,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::LitNull(_) => Ty::Nullable(std::boxed::Box::new(Ty::Unknown)),
         Expr::Variable(name, _) => {
             let name = *name;
+            if state.run_code.contains(world.words.resolve(name)) { state.a_code_parameter_named(world.words.resolve(name)); }
             let read = check_core_expr_variable(state, world, host, expr, name, span);
             check_core_expr_kept_copy(state, world, expr, &read);
             let bound = state.binding(&nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
@@ -214,6 +215,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let read = check_core_method(state, world, host, expr, false, receiver, method, args, config, span);
             check_core_expr_declared_method(state, expr, receiver);
             if args.is_empty() && world.words.resolve(method) == "clone" { state.a_clone_seen(world, expr, receiver, &read, span); }
+            if args.is_empty() && world.words.resolve(method) == "len" { state.a_collect_only_counted(world, expr, receiver, span); }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
@@ -231,7 +233,14 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; check_core_field(state, world, host, expr, true, base, name, span) },
         Expr::StructLit { name, fields, .. } => { let name = *name; check_core_struct_literal(state, world, host, expr, name, fields, span) },
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); check_core_with(state, world, host, expr, base, fields, span) },
-        Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
+        Expr::Closure { params, mutable, body, .. } => {
+            let changed_from = state.flow.changes_bound.len() as i64;
+            let floor = state.next_binding;
+            let ty = check_core_ops_closure(state, world, host, params, mutable, body, span);
+            let outer: Option<String> = state.an_outer_binding_changed(changed_from, floor);
+            if outer.is_some() { state.flow.lambda_outer_changes.insert(id_of(expr) as i64, nikaia_std::index::or(outer, || "".into())); }
+            ty
+        },
         Expr::Unary { op, expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_expr_unary(state, world, host, expr, op, inner, span) },
         Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, op, lhs, rhs), || check_core_ops_binary(state, world, host, op, lhs, rhs, at, span).into()) },
         Expr::Cast { expr: inner, ty, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_cast(state, world, host, inner, ty, span) },
@@ -721,7 +730,7 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
+pub(crate) fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

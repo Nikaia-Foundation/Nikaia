@@ -1074,6 +1074,14 @@ pub(crate) fn check_core_flow_bound_in_place(state: &CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_bound_out_of_a_lent(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    let name = check_core_flow_variable(world, value);
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    state.narrowing.lent_part_refs.contains(&local.id)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, on: &Ty, arm: &MatchArm, typed: &Ty, lendable: bool, through_the_reference: bool, mut_subject: Option<&str>, choice: i64, taken: i64, span: &Span) -> Option<Ty> {
     state.an_or_pattern_that_binds_unevenly(world, &arm.pattern, span);
@@ -1101,7 +1109,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     for local in frame.iter() {
         if !state.copied(world, &local.ty) {
             in_place.insert(local.id);
-            if mut_subject.is_some() { state.narrowing.in_place_refs.insert(local.id); }
+            if mut_subject.is_some() { state.narrowing.in_place_refs.insert(local.id); } else if through_the_reference && check_core_flow_bound_in_place(&state, world, value) < 0 { state.narrowing.lent_part_refs.insert(local.id); }
         }
     }
     state.scope.push(frame);
@@ -1109,8 +1117,10 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let from = state.taken_so_far();
     let (_, handed_from) = state.taken_so_far();
     let changed_from = state.changed.len() as i64;
+    let pending_before = state.pending_coalesce_keys();
     check_core_flow_a_guard(state, world, host, &arm.pattern, (arm.guard).as_ref(), span);
     let ty = check_core_flow_guarded_body(state, world, host, (arm.guard).as_ref(), &arm.body, span);
+    state.pending_coalesces_of_an_arm_are_taken(world, &pending_before);
     let name = check_core_flow_variable(world, value);
     let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
     let lent_subject = state.facts.lent_scrutinees.contains(&(id_of(value) as i64)) && !state.facts.text_scrutinees.contains(&(id_of(value) as i64));
@@ -1185,7 +1195,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let a_variable = matches!(value, Expr::Variable(_, _));
     let in_place_binding = if a_variable { check_core_flow_bound_in_place(&state, world, value) } else { -1 };
     let in_place_name = in_place_binding >= 0;
-    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(&typed) && state.a_lent_parameter(world, value);
+    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(&typed) && (state.a_lent_parameter(world, value) || check_core_flow_bound_out_of_a_lent(&state, world, value));
     let through_the_reference = mut_subject.is_some() && a_variable || in_place_name || a_lent_parameter;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
     let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
@@ -1247,7 +1257,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let over = check_core_flow_caught(&state, world, &on, value);
     state.a_match_over_several_error_types(world, &over, value, arms, span);
     let over_error = subject == "error";
-    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
+    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) && !state.a_pattern_naming_nothing(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
     let copied = match on {

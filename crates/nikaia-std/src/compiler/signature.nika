@@ -40,7 +40,7 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
         return Translated { ty: Ty::Unknown, kept: false }
     }
     if text.starts_with("&") {
-        let c: Vec[scalar] = text.chars().collect()
+        let c: Vec[scalar] = text.scalars.collect()
         let rest = slice(c, 1, c.len())
         let inner = translate(rest, crate_word, parameters, types, mentioned)
         return Translated { ty: view_of(inner.ty), kept: false }
@@ -49,7 +49,7 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
     // `&[T]` for free: `Array[T]` without a length (#1545). `[T; N]` has a
     // length this does not read, and stays `?`.
     if text.starts_with("[") && text.ends_with("]") {
-        let c: Vec[scalar] = text.chars().collect()
+        let c: Vec[scalar] = text.scalars.collect()
         let element = slice(c, 1, c.len() - 1)
         if element.contains(";") {
             return Translated { ty: Ty::Unknown, kept: true }
@@ -61,7 +61,7 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
     // kept (#1679). `()` is the unit, which `contract` leaves out of the
     // result; a one-part `(A,)` has no ledger spelling and stays `?`.
     if text.starts_with("(") && text.ends_with(")") {
-        let c: Vec[scalar] = text.chars().collect()
+        let c: Vec[scalar] = text.scalars.collect()
         let inside = slice(c, 1, c.len() - 1)
         let written_parts = split_top_level(inside)
         if written_parts.len() == 1 {
@@ -134,7 +134,7 @@ pub fn result_of(written: ref String, crate_word: ref String, parameters: ref Ve
 
 /// A view of a type, which the ledger's language writes with the `&` on the
 /// name.
-pub fn view_of(ty: Ty) -> Ty {
+fn view_of(ty: Ty) -> Ty {
     return match ty {
         Ty::Named { name, args, .. } => Ty::Named { name: name, args: args, view: true },
         Ty::Var { name, .. } => Ty::Var { name: name, view: true },
@@ -170,7 +170,7 @@ pub fn sent_across(names: ref Vec[String], types: ref Vec[String], bounds: ref S
 pub fn sends(bounds: ref String) -> Vec[String] {
     let mut out: Vec[String] = []
     for one in split_top_level(bounds) {
-        let c: Vec[scalar] = one.chars().collect()
+        let c: Vec[scalar] = one.scalars.collect()
         let colon = find(c, 0, ':')
         if colon < 0 {
             continue
@@ -188,7 +188,7 @@ pub fn sends(bounds: ref String) -> Vec[String] {
 
 // A parameter's type without the `&`s and the `mut ` in front.
 fn unreferenced(ty: ref String) -> String {
-    let c: Vec[scalar] = ty.chars().collect()
+    let c: Vec[scalar] = ty.scalars.collect()
     let mut from = 0
     while from < c.len() && (c[from] == '&' || c[from] == ' ') {
         from += 1
@@ -196,7 +196,7 @@ fn unreferenced(ty: ref String) -> String {
     let rest = slice(c, from, c.len())
     let trimmed = rest.trim()
     if trimmed.starts_with("mut ") {
-        let t: Vec[scalar] = trimmed.chars().collect()
+        let t: Vec[scalar] = trimmed.scalars.collect()
         let after = slice(t, 4, t.len())
         return after.clone()
     }

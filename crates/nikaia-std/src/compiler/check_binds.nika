@@ -21,13 +21,13 @@ pub struct CheckBoundary {
 
 impl CheckState {
     /// A number no other binding gets, for `CheckLocal::id`.
-    pub fn a_new_binding(ref mut self) -> i64 sync {
+    fn a_new_binding(ref mut self) -> i64 sync {
         self.next_binding = self.next_binding + 1
         return self.next_binding
     }
 
     /// Put a binding into the innermost frame.
-    pub fn bind_local(ref mut self, local: CheckLocal) sync {
+    fn bind_local(ref mut self, local: CheckLocal) sync {
         if local.ty.is_unknown() {
             self.flow.unknown_bound.insert(local.id)
         }
@@ -39,7 +39,7 @@ impl CheckState {
 
     /// Bind a name, with the constant it stands for where there is one (ADR-285
     /// D29). Only a `let` ever passes anything but `None`.
-    pub fn bind_with(ref mut self, name: String, ty: Ty, constant: Integer?) sync {
+    fn bind_with(ref mut self, name: String, ty: Ty, constant: Integer?) sync {
         let id = self.a_new_binding()
         let mut local = CheckLocal::free(name, ty, id)
         local.constant = constant
@@ -104,7 +104,7 @@ impl CheckState {
     /// tuple of another width, or a value this program knows is no tuple - one
     /// of its own structs or enums, a number, a `bool`, a `char` or a
     /// `String`. A value whose type is not known stays `?` (ADR-291 D3).
-    pub fn a_tuple_pattern_that_does_not_fit(ref mut self, found: ref Ty, width: i64, site: ref String, span: ref Span) -> bool sync {
+    fn a_tuple_pattern_that_does_not_fit(ref mut self, found: ref Ty, width: i64, site: ref String, span: ref Span) -> bool sync {
         let what: String = self.binds_no_tuple_of(found, width) ?? return false
         self.findings.push(check_refusal("NK1283", span, f"{site} takes {width} parts apart, but the value is {what}.", ["A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many."], "Bind one name and read the value from it, or write as many names as the tuple has parts."))
         return true
@@ -133,7 +133,7 @@ impl CheckState {
     /// order. A part whose type is not a tuple of that width is `?` all the way
     /// down, as one level is (ADR-291 D3). `[-1]` is a variant in the head:
     /// **`NK1259`**, and every name is `?`.
-    pub fn nested_pattern_parts(ref mut self, world: ref CheckWorld, top: Vec[Ty], shape: ref Vec[i64], count: i64, site: ref String, span: ref Span) -> Vec[Ty] sync {
+    fn nested_pattern_parts(ref mut self, world: ref CheckWorld, top: Vec[Ty], shape: ref Vec[i64], count: i64, site: ref String, span: ref Span) -> Vec[Ty] sync {
         let mut out: Vec[Ty] = []
         if shape.len() == 1 && shape[0] == -1 {
             self.findings.push(check_refusal("NK1259", span, f"{site} can't take a variant apart.", ["A variant may not be the one the value holds, and a binding has no other branch to go to."], "Take the value apart with a `match`, which has an arm for each case."))
@@ -175,7 +175,7 @@ impl CheckState {
     /// **The parameters of a lambda a walk lends its item to** (#626): one a
     /// signature types as a view of the receiver's item, one `filter` and its
     /// kin hand a reference to, and one handed the item of a walk that lends.
-    pub fn lent_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, entry: ref String, receiver: ref Expr, args: ref Vec[Expr]) -> collections::BTreeSet[String] sync {
+    fn lent_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, entry: ref String, receiver: ref Expr, args: ref Vec[Expr]) -> collections::BTreeSet[String] sync {
         let mut out: collections::BTreeSet[String] = collections::BTreeSet()
         let signature = contract.signature ?? return out
         let held = open_walk_variable(signature) ?? return out
@@ -198,7 +198,7 @@ impl CheckState {
     /// **Whether the walk a call hands back lends its items** (#626): a walk
     /// of views of the receiver's item, or of the item itself where the
     /// receiver's walk lends it.
-    pub fn a_walk_that_lends(ref self, contract: ref FnContract, receiver: ref Expr) -> bool sync {
+    fn a_walk_that_lends(ref self, contract: ref FnContract, receiver: ref Expr) -> bool sync {
         let signature = contract.signature ?? return false
         let result: Ty = signature.result?.clone() ?? return false
         let made: Ty = open_walk_made(result) ?? return false
@@ -262,7 +262,7 @@ impl CheckState {
     /// for what stands in the way is carried for the message. What a lambda was
     /// seen to do stops here too (ADR-277 D7), and so does the enclosing `sync`
     /// (ADR-277 D2).
-    pub fn enter_boundary(ref mut self, what: ref String) -> CheckBoundary sync {
+    fn enter_boundary(ref mut self, what: ref String) -> CheckBoundary sync {
         let saved = CheckBoundary { loops: self.flow.loops, barrier: self.flow.barrier?.clone(), handed: self.handed_over?.clone(), promised: self.inside_a_sync_function?.clone(), async_group: self.flow.async_group, async_started: self.flow.async_started, async_depth: self.flow.async_depth }
         self.flow.loops = 0
         self.flow.async_group = null
@@ -276,7 +276,7 @@ impl CheckState {
     }
 
     /// Back out of what `enter_boundary` went into.
-    pub fn leave_boundary(ref mut self, saved: ref CheckBoundary) sync {
+    fn leave_boundary(ref mut self, saved: ref CheckBoundary) sync {
         self.inside_a_sync_function = saved.promised?.clone()
         self.handed_over = saved.handed?.clone()
         self.flow.loops = saved.loops
@@ -315,7 +315,7 @@ fn binds_tuple_parts(found: ref Ty, count: i64) -> Vec[Ty] {
 /// **`filter` is handed a reference to the item** (ADR-231 D2), and so are
 /// `find`'s, `take_while`'s, `skip_while`'s, `min_by_key`'s and
 /// `max_by_key`'s.
-pub fn binds_hands_a_view(method: ref String) -> bool {
+fn binds_hands_a_view(method: ref String) -> bool {
     return method == "filter" || method == "find" || method == "take_while" || method == "skip_while" || method == "min_by_key" || method == "max_by_key"
 }
 

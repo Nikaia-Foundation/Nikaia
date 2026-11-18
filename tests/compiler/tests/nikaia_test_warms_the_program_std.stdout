@@ -1,0 +1,6 @@
+starts: exit 0
+program "starts" (tests/starts.nika) ... ok
+test result: ok. 1 passed; 0 failed
+stays: exit 0
+program "stays" (tests/stays.nika) ... ok
+test result: ok. 1 passed; 0 failed

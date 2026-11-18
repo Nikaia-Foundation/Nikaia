@@ -3,14 +3,14 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn several_errors_of(ty: &Ty) -> Vec<Ty> {
+pub(crate) fn several_errors_of(ty: &Ty) -> Vec<Ty> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; if name == "Error" && args.len() > 1 && !view { args.copy_owned() } else { vec![] } },
         _ => vec![],
     }
 }
 
-pub fn check_float_literal_fits(value: &Expr, want: &Ty) -> bool {
+pub(crate) fn check_float_literal_fits(value: &Expr, want: &Ty) -> bool {
     match want {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_float_literal_fits(value, inner) },
         Ty::Named { name, args, .. } => {
@@ -32,7 +32,7 @@ pub fn check_float_literal_fits(value: &Expr, want: &Ty) -> bool {
     }
 }
 
-pub fn check_floats_written(value: &Expr) -> bool {
+pub(crate) fn check_floats_written(value: &Expr) -> bool {
     match check_peeled(value) {
         Expr::LitFloat(_, _) => true,
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_floats_written(expr) },
@@ -81,10 +81,10 @@ pub(crate) fn expect_code(what: &str) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec![String::from("An `f32` holds finite values up to about 3.4e38 either side of zero.")], Some(String::from("Keep it an `f64`, or write a number within the `f32` range.")))); } }
+    pub(crate) fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec![String::from("An `f32` holds finite values up to about 3.4e38 either side of zero.")], Some(String::from("Keep it an `f64`, or write a number within the `f32` range.")))); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
@@ -111,6 +111,12 @@ impl CheckState {
             said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", found_text), &*format!("an error, one of {}", members_named(&members))));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");
         }
+        if what == "returns" && want.is_a_view() {
+            let sources = written_from_of(world, nikaia_std::index::or(self.current.as_deref(), || ""));
+            if !sources.is_empty() { said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", want_text), &*format!("`{} from {}`", want.shown(), nikaia_std::block::Text::from(sources.join(" | "))))); }
+        }
+        said = spoken_in(&said, found, Some(want));
+        help = shown_in(&help, found, Some(want));
         let finding = check_refusal(&code, span, said, vec![], Some(help));
         if waiting >= 0 {
             let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -126,8 +132,8 @@ impl CheckState {
     pub(crate) fn said_as_declared(&mut self, present: &Ty, value: Option<&Expr>, before: i64) {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         if !self.facts.static_field_reads.contains(&(id_of(check_peeled(given)) as i64)) { return; }
-        let shown = format!("`{}`", present.text());
-        let said = format!("`{}`", present.owned().text());
+        let shown = spoken(present, None);
+        let said = spoken(&present.owned(), None);
         if shown == said { return; }
         let mut at = before;
         while at < self.findings.len() as i64 {
@@ -142,7 +148,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_copied_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>) -> bool {
+    pub(crate) fn a_view_copied_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>) -> bool {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
         let named = matches!(given, Expr::Variable(_, _));
         if !named || !self.a_view_that_copies(world, found) { return false; }
@@ -167,7 +173,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             if check_float_literal_fits(given, want) {

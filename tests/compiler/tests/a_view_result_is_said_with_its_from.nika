@@ -1,0 +1,6 @@
+struct H { o: Vec[String] }
+impl H {
+    fn a(self) -> Vec[String] from self { return 3 }
+}
+
+fn main() {}

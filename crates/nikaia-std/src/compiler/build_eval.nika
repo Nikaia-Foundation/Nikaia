@@ -442,7 +442,7 @@ fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, mut state: BtS
     let mut out: String = ""
     let mut chunk: String = ""
     let mut taken = 0
-    let chars: Vec[scalar] = format.chars().collect()
+    let chars: Vec[scalar] = format.scalars.collect()
     let mut at = 0
     while at < chars.len() {
         let c = chars[at]
@@ -617,6 +617,6 @@ pub fn bt_known_default(ledger: ref Ledger, package: String?, key: ref String, a
 /// own arguments are an input like its source is, and a body that shapes a
 /// table differently for two declared parameters is doing the thing `comptime`
 /// is for.
-pub fn bt_is_the_builds_own(touch: ref Touch) -> bool sync {
+fn bt_is_the_builds_own(touch: ref Touch) -> bool sync {
     return touch.text() == "args read"
 }

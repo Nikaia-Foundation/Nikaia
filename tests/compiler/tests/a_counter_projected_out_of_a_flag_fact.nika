@@ -1,0 +1,29 @@
+/// What held where a counter rose reads a name the loop changes after it
+/// (ADR-361 D15, #1848): `i < args.len()` held where `c` grew, and `i` goes
+/// on growing. `i` is projected out through its start and its direction,
+/// `i >= i@`, which leaves `i@ < args.len()`: past the loop `c != 0` gives
+/// `args.len() >= 1`, the precondition of `need`.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn f(args: ref Vec[i64], m: i64) -> i64 {
+	let mut c = 0
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			c += 1
+		}
+		i += 1
+	}
+	if c == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f([1], 2))
+	println(f([], 2))
+}

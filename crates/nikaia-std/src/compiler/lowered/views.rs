@@ -288,14 +288,14 @@ pub(crate) fn any_names_borrowing(names: &winnow_grammar::InternerContext, types
     false
 }
 
-pub fn holds_view(ty: &Type) -> bool {
+pub(crate) fn holds_view(ty: &Type) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return holds_view_written(ty) };
     let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if views_the_call_s(ty, 0) { return false; }
     holds_view(result)
 }
 
-pub fn views_the_call_s(ty: &Type, borrowing: i64) -> bool {
+pub(crate) fn views_the_call_s(ty: &Type, borrowing: i64) -> bool {
     if (*ty.code).is_none() { return false; }
     let mut lent = borrowing;
     for part in ty.generics.iter() { if holds_view(part) { lent += 1; } }
@@ -352,7 +352,7 @@ pub(crate) fn view_fields(names: &winnow_grammar::InternerContext, items: &[Span
     out
 }
 
-pub fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -> String {
+pub(crate) fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -> String {
     let mut out: String = String::from("");
     if ty.is_view {
         out.push_str("ref ");
@@ -496,7 +496,7 @@ pub(crate) fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Ty
     let mut name = nikaia_std::block::Text::from(written.to_string());
     let segments: Vec<&str> = written.split("::").collect::<Vec<_>>();
     if segments.len() > 1 { name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }).to_string()); } ::core::mem::drop(segments);
-    let first: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let first: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let a_word = !first.is_empty() && (*unsafe { nikaia_std::proven::read(&first, (0) as usize) }).is_alphabetic();
     if a_word && !rsrc_plain_name(&name) && name != "Self" && !unit.fields.contains_key(&name) {
         if asked.own.types.contains_key(&name) {
@@ -612,8 +612,8 @@ pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at
     let mut uses: i64 = 0;
     let mut allowed: i64 = 0;
     let mut handed: i64 = 0;
-    for j in at + 1..block.stmts.len() as i64 {
-        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) || tail && unsafe { nikaia_std::proven::add::<i64>(j, 1) } == block.stmts.len() as i64 && a_tail_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) { handed += 1; }
+    for j in unsafe { nikaia_std::proven::add::<i64>(at, 1) }..block.stmts.len() as i64 {
+        if returns_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) || tail && unsafe { nikaia_std::proven::add::<i64>(j, 1) } == block.stmts.len() as i64 && a_tail_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) { handed = unsafe { nikaia_std::proven::add::<i64>(handed, 1) }; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node {
             Stmt::For { iter, .. } => { if a_variable_named(asked.names, iter, name) { allowed += 1; } },
             _ => { },
@@ -696,7 +696,7 @@ pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block
     handed > 0 && result == literal
 }
 
-pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str) -> i64 {
+pub(crate) fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str) -> i64 {
     let nowhere: collections::BTreeSet<String> = collections::BTreeSet::new();
     struct_handed_back(names, block, at, name, "", &nowhere, &nowhere)
 }
@@ -1366,7 +1366,7 @@ pub struct FieldsHeld {
     pub fields: Vec<(String, Type)>,
 }
 
-pub fn fields_held(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<FieldsHeld> {
+pub(crate) fn fields_held(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<FieldsHeld> {
     let mut out: Vec<FieldsHeld> = vec![];
     for item in items.iter() {
         match &item.node {

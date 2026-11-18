@@ -136,7 +136,7 @@ impl EmitState {
     /// (ADR-297 D2): the value dies at its closing brace and parks its cleanup,
     /// and the settle point right after runs it. Not inside a closure that
     /// cannot pause - there the function's own settle point runs it.
-    pub fn emit_stmt_block_opening_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
+    fn emit_stmt_block_opening_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
         let mut settles = false
         let mut fails = false
         for each in block.stmts {
@@ -181,7 +181,7 @@ impl EmitState {
     /// **A list of views ends at its last use** (#490, `view_list_drops`):
     /// a block's `List` would hold what it views to the end of the scope, so
     /// each list the statement at `start` used last is dropped after it.
-    pub fn emit_view_list_drops(ref self, mut out: EmitOut, start: i64) {
+    fn emit_view_list_drops(ref self, mut out: EmitOut, start: i64) {
         for ended in self.facts.view_list_drops.get(start)?.clone() ?? [] {
             out.push(f" ::core::mem::drop({ended});")
         }
@@ -191,7 +191,7 @@ impl EmitState {
     /// `view_list_rebinds`): declared after it, the list is dropped first on
     /// every way out of the scope, a panic's included. The binding is the
     /// point, which Clippy's `redundant_locals` does not see.
-    pub fn emit_view_list_rebinds(ref self, mut out: EmitOut, start: i64) {
+    fn emit_view_list_rebinds(ref self, mut out: EmitOut, start: i64) {
         for (name, changing) in self.facts.view_list_rebinds.get(start)?.clone() ?? [] {
             if changing {
                 out.push(f" #[allow(unused_mut, clippy::redundant_locals)] let mut {name} = {name};")
@@ -206,7 +206,7 @@ impl EmitState {
     /// **A kept name is one in its own block** (#1073): a `let` inside that
     /// binds the name again ends with the block, and the kept buffer is read
     /// as the reference it is after it, not lent once more (`&text`).
-    pub fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
+    fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
         let kept = walk.kept_names.clone()
         self.emit_stmt_block_written(world, walk, out, host, block, depth, flow, scope, tail, opening)
         walk.kept_names = kept
@@ -368,7 +368,7 @@ impl EmitState {
 
     /// A statement; a `let` of a task whose body cannot fail is remembered,
     /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
-    pub fn emit_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mark = out.buf.len()
         let kept = walk.async_kept.len()
         let slots = walk.slots.len()

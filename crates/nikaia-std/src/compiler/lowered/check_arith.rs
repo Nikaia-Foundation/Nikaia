@@ -63,7 +63,7 @@ pub(crate) fn arith_negated_literal(expr: &Expr) -> Option<String> {
 }
 
 impl CheckState {
-    pub fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
         if key != "process::exit" || args.is_empty() { return; }
         let code = match arith_exit_code_outside(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return };
         let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
@@ -71,7 +71,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
+    pub(crate) fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
         if key != "process::run" { return; }
         for option in config.iter() {
             let named = world.words.resolve(option.name);
@@ -92,7 +92,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_byte_set_written_empty(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_byte_set_written_empty(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], span: &Span) {
         if key != "bytes::ByteSet" || args.len() != 1 { return; }
         match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::ListLit { items, .. } => {
@@ -105,7 +105,7 @@ impl CheckState {
             _ => { },
         }
     }
-    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+    pub(crate) fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let ordering = *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
@@ -134,9 +134,9 @@ impl CheckState {
     }
 }
 
-pub fn an_or_a_named(ty: &str) -> String {
-    if ty.starts_with('i') || ty.starts_with('a') || ty.starts_with('e') || ty.starts_with('o') || ty.starts_with('I') || ty.starts_with('A') || ty.starts_with('E') || ty.starts_with('O') { return String::from("an"); }
-    String::from("a")
+pub(crate) fn an_or_a_named(ty: &str) -> &'static str {
+    if ty.starts_with('i') || ty.starts_with('a') || ty.starts_with('e') || ty.starts_with('o') || ty.starts_with('I') || ty.starts_with('A') || ty.starts_with('E') || ty.starts_with('O') { return "an"; }
+    "a"
 }
 
 pub(crate) fn arith_symbol(op: &BinaryOp) -> String {
@@ -206,7 +206,7 @@ pub(crate) fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binar
 
 pub(crate) fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 
-pub fn arith_shown(written: &str) -> String {
+pub(crate) fn arith_shown(written: &str) -> String {
     if (written.chars().count() as i64) <= 60 { return nikaia_std::block::Text::from(written.to_string()); }
     let mut shown: String = String::from("");
     let mut count = 0;
@@ -218,14 +218,14 @@ pub fn arith_shown(written: &str) -> String {
     shown
 }
 
-pub fn is_a_bool_type(ty: &Ty) -> bool {
+pub(crate) fn is_a_bool_type(ty: &Ty) -> bool {
     match ty.unseen() {
         Ty::Named { ref name, ref args, .. } => args.is_empty() && name == "bool",
         _ => false,
     }
 }
 
-pub fn text_or_bool_in_arithmetic(op: &BinaryOp, left: &Ty, right: &Ty) -> bool {
+pub(crate) fn text_or_bool_in_arithmetic(op: &BinaryOp, left: &Ty, right: &Ty) -> bool {
     let left_text = is_text_type(&left.unseen());
     let right_text = is_text_type(&right.unseen());
     if is_a_bool_type(left) || is_a_bool_type(right) { return true; }
@@ -247,14 +247,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
+    pub(crate) fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
         let symbol = arith_symbol(&op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
             if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if text_or_bool_in_arithmetic(&op, left, right) {
-                let mut culprit = left.text();
+                let mut culprit = left.shown();
                 if is_text_type(&left.unseen()) { culprit = String::from("String"); } else if !is_a_bool_type(left) {
-                    culprit = right.text();
+                    culprit = right.shown();
                     if is_text_type(&right.unseen()) { culprit = String::from("String"); }
                 }
                 let note: String = String::from("Operators belong to numbers, and `+` joins two texts; text and `bool` have no other arithmetic.");
@@ -284,7 +284,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_unary_operator_on_the_wrong_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, negation: bool, found: &Ty, span: &Span) {
+    pub(crate) fn a_unary_operator_on_the_wrong_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, negation: bool, found: &Ty, span: &Span) {
         if found.is_unknown() { return; }
         let seen = found.unseen();
         let mut wrong = is_text_type(&seen) || is_a_collection_type(&seen) || declared_with_no_arithmetic(&world.here, &seen).is_some();
@@ -298,14 +298,14 @@ impl CheckState {
             symbol = "-";
             note = String::from("`-` negates a number.");
         }
-        let mut shown = seen.text();
+        let mut shown = seen.shown();
         if is_text_type(&seen) { shown = String::from("String"); }
         self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on `{}`.", symbol, shown), vec![note], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
+    pub(crate) fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
         let kind = match declared_with_no_arithmetic(&world.here, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
         let seen = ty.unseen();
         let name = match seen {
@@ -334,7 +334,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_call_of_open_members(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
         let said = arith_a_name(expr);
         let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr);
@@ -407,7 +407,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_of_an_unknown_lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn a_member_of_an_unknown_lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let base: &Expr = match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
             Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); receiver },

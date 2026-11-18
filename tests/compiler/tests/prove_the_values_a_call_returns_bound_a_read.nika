@@ -16,7 +16,7 @@ pub fn digits(n: i64) -> Vec[i64] sync {
 }
 
 pub fn positions(text: String) -> Vec[i64] sync {
-	let c: Vec[scalar] = text.chars().collect()
+	let c: Vec[scalar] = text.scalars.collect()
 	let mut out: Vec[i64] = []
 	for k in 0..<c.len() {
 		if c[k] == 'r' {

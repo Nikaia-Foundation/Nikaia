@@ -102,7 +102,7 @@ struct ShapeSeen {
 
 /// **The shape of `body`**, a function whose parameters are `args`, where
 /// `pinned` are the names a deferred body changes (`bounds_body.nika`).
-pub fn shape_of(
+fn shape_of(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	pinned: ref collections::BTreeSet[String],
@@ -167,7 +167,7 @@ pub fn shape_of(
 
 /// **The key of the elements of `expr`, a list**: a root's name, an alias's
 /// key, and `key[]` for an element of a list of lists.
-pub fn elements_key(
+fn elements_key(
 	shape: ref BodyShape,
 	expr: ref Expr,
 	words: ref winnow_grammar::InternerContext,
@@ -203,7 +203,7 @@ pub fn tracks(shape: ref BodyShape, key: ref String) -> bool {
 }
 
 /// **Methods that put one value into a list**, and which argument it is.
-pub fn writes_a_value(method: ref String, args: i64) -> i64? {
+fn writes_a_value(method: ref String, args: i64) -> i64? {
 	return match method {
 		"push" => if args == 1 { 0 } else { null },
 		"fill" => if args == 1 { 0 } else { null },
@@ -215,7 +215,7 @@ pub fn writes_a_value(method: ref String, args: i64) -> i64? {
 
 /// Methods that change a list's length only by adding to it (#1414): its
 /// length after is at least what it was.
-pub fn only_adds(method: ref String) -> bool {
+fn only_adds(method: ref String) -> bool {
 	return match method {
 		"push" => true, "push_str" => true, "insert" => true, "extend" => true,
 		else => false,
@@ -223,7 +223,7 @@ pub fn only_adds(method: ref String) -> bool {
 }
 
 /// Methods that change a list without putting anything new in it.
-pub fn only_removes(method: ref String) -> bool {
+fn only_removes(method: ref String) -> bool {
 	return match method {
 		"pop" => true, "remove" => true, "swap_remove" => true, "clear" => true,
 		"truncate" => true, "retain" => true, "dedup" => true,
@@ -232,13 +232,13 @@ pub fn only_removes(method: ref String) -> bool {
 }
 
 /// `watched[][]` is about `watched`.
-pub fn key_root(key: ref String) -> String {
+fn key_root(key: ref String) -> String {
 	let parts: Vec[ref String] = key.split("[").collect()
 	return parts[0].clone()
 }
 
 /// The variable an index, a field or a name is rooted in.
-pub fn root_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+fn root_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
 	return match expr {
 		Expr::Variable(n, _) => words.resolve(n).clone(),
 		Expr::Index { base, .. } => root_name(base, words),
@@ -247,14 +247,14 @@ pub fn root_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
 	}
 }
 
-pub fn is_unsigned(ty: ref String) -> bool {
+fn is_unsigned(ty: ref String) -> bool {
 	return match ty {
 		"u8" => true, "u16" => true, "u32" => true, "u64" => true, "usize" => true,
 		else => false,
 	}
 }
 
-pub fn is_whole_number(ty: ref String) -> bool {
+fn is_whole_number(ty: ref String) -> bool {
 	return match ty {
 		"int" => true, "i8" => true, "i16" => true, "i32" => true, "i64" => true, "isize" => true,
 		else => is_unsigned(ty),
@@ -410,7 +410,7 @@ fn returning_call(
 
 /// **A map made empty** (ADR-306 D24): `collections::BTreeMap()` or
 /// `HashMap()`, whose values the walk sees written as a list's.
-pub fn is_empty_map(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+fn is_empty_map(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
 	return match expr {
 		Expr::Call { func, args, .. } => {
 			if !args.is_empty() {

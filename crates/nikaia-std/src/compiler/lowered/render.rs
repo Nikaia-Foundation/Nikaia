@@ -226,8 +226,8 @@ pub(crate) fn package_and_function(callee: &str) -> (String, String) {
     (nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()), nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string()))
 }
 
-pub fn an_or_a(word: &str) -> String {
-    let first: Vec<scalar> = nikaia_std::list::chars(word.chars());
+pub(crate) fn an_or_a(word: &str) -> String {
+    let first: Vec<scalar> = nikaia_std::list::scalars(word.chars());
     if !first.is_empty() && (*unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'i' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'e' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'o' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'I' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'A' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'E' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'O') { return String::from("an"); }
     String::from("a")
 }

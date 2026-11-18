@@ -1,4 +1,4 @@
-error[NK1106]: `Tok::Word` holds `String`, but you're giving it `ref String`.
+error[NK1106]: `Tok::Word` holds a `String` of its own, but you're giving it a view of a `String`.
    --> tests/a_view_kept_in_a_variant_part_that_holds_string_is_refused.nika:12:22
     |
  12 | 		out.push(Tok::Word(w))

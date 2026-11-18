@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
+    pub(crate) fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
         if bound.is_empty() { return; }
         let mut pauses: Vec<i64> = vec![];
         let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -44,7 +44,7 @@ impl CheckState {
         let mut used: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(expr, world.words, &mut used);
         for name in used.iter() {
-            let before = nikaia_std::index::or(*nikaia_std::index::get(&named, name), || at.into());
+            let before = nikaia_std::index::or(*nikaia_std::index::get(&named, name), || at);
             named.insert(nikaia_std::block::Text::from(name.to_string()), if before > at { before } else { at });
         }
         if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_task_looks_at(world, host, inner, at, pauses, named); } } }

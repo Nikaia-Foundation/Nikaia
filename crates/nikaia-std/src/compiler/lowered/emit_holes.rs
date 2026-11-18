@@ -146,7 +146,7 @@ pub struct EmitHoleTables {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_holes_tables<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> EmitHoleTables {
+pub(crate) fn emit_holes_tables<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> EmitHoleTables {
     let mut errors: collections::BTreeMap<(i64, String), String> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
@@ -202,7 +202,7 @@ pub(crate) fn emit_holes_fold_steps(pattern: &Pattern) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, grammars: &collections::BTreeMap<String, GrammarDef>) -> collections::BTreeSet<String> {
+pub(crate) fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, grammars: &collections::BTreeMap<String, GrammarDef>) -> collections::BTreeSet<String> {
     #[allow(unused_mut)] let mut found: Vec<String> = vec![];
     for (_, def) in grammars.iter() {
         for rule in def.rules.iter() {
@@ -247,7 +247,7 @@ pub(crate) fn emit_holes_comptimes<H: EmitHolesHost>(host: &H, words: &winnow_gr
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+pub(crate) fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     #[allow(unused_mut)] let mut waiting: Vec<String> = vec![];
     let mut free: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
@@ -317,7 +317,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_holes_names_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, expr: &Expr) -> Vec<String> {
+    pub(crate) fn emit_holes_names_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, expr: &Expr) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         self.emit_holes_read_deep(world, host, expr, &mut out);
         out

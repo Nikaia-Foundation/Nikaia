@@ -1,0 +1,7 @@
+error: This rule's body ends without an action: write `pattern -> { action }`.
+  --> tests/grammar_last_rule_without_action.nika:6:1
+   |
+ 6 | }
+   | ^
+   |
+   = help: Only an `@stream` entry or a `par_fold` goes without one.

@@ -727,6 +727,14 @@ impl InferHost<'_> {
         let started = std::time::Instant::now();
         let out = run();
         let took = started.elapsed();
+        // The pass's end, as it happens (#1979): a mark to take a profiler's
+        // dump at, where the totals print only once the ledger is done.
+        if self.parallel {
+            eprintln!(
+                "lower-std~ ledger {pass} ended ({:.3}s)",
+                took.as_secs_f64()
+            );
+        }
         if let Some(spent) = self.spent.borrow_mut().as_mut() {
             match spent.iter_mut().find(|(name, _)| *name == pass) {
                 Some((_, total)) => *total += took,
@@ -806,6 +814,26 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
             .iter()
             .flat_map(|c| c.facts.outside.results.keys().cloned())
             .collect()
+    }
+
+    fn derives(&self) -> nikaia_std::compiler::ledger_items::LedgerDerives {
+        let mut derives = nikaia_std::compiler::ledger_items::LedgerDerives {
+            compares: BTreeSet::new(),
+            equates: BTreeSet::new(),
+            hashes: BTreeSet::new(),
+            copies: BTreeSet::new(),
+        };
+        for checked in self.checked.borrow().iter() {
+            derives
+                .compares
+                .extend(checked.facts.compares.iter().cloned());
+            derives
+                .equates
+                .extend(checked.facts.compares_totally.iter().cloned());
+            derives.hashes.extend(checked.facts.hashes.iter().cloned());
+            derives.copies.extend(checked.facts.copies.iter().cloned());
+        }
+        derives
     }
 
     fn infer_sync(&self, ledger: &mut Ledger) {

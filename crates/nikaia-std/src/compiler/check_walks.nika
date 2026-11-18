@@ -12,7 +12,7 @@ use std::collections
 /// it can fail, it changes what it is called on, it touches something outside
 /// the program's values, it takes a lock. `null` for a contract that does
 /// none of them.
-pub fn check_not_pure_because(contract: ref FnContract) -> String? {
+fn check_not_pure_because(contract: ref FnContract) -> String? {
     if !contract.sync_claim.is_sync() {
         return "can pause"
     }
@@ -332,7 +332,7 @@ impl CheckState {
     /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
     /// a branch that binds is refused on its own, and two that depend on each
     /// other are refused at the later one - one finding per branch.
-    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
+    fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
         for stmt in block.stmts {
             match stmt.node {
                 Stmt::Let { names, .. } => {
@@ -394,7 +394,7 @@ impl CheckState {
     /// finding per task, at the later one; a task inside another is that task's.
     /// Nor does a task meet the main-line statements in its window
     /// (`check_walks_window`, Part I 8.1.2, #1259).
-    pub fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
+    fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
         let mut count = 0
         for (_, wait) in self.facts.async_waits {
             if wait.group == group {
@@ -457,7 +457,7 @@ impl CheckState {
     /// records which of them the guard reads and which of those are copied out
     /// for it (a number, a `bool`, a `char`, and a view, which is a copy too:
     /// the guard compares the `&str`, not the `&&str` the box lends, #680).
-    pub fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
+    fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
         let mut inside: Vec[String] = []
         self.names_inside_boxes(world, pattern, inside)
         if inside.len() == 0 {
@@ -482,9 +482,31 @@ impl CheckState {
         self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied)
     }
 
+    /// **What an expression does that a read does not** (ADR-269 D3), each
+    /// in a sentence: the methods its walk reached (`frame`, pushed before
+    /// it was walked) that are not pure, and its free calls and forms. Empty
+    /// for a pure one: an `assert` condition (`NK1194`), and the steps of a
+    /// sequence a `for` walks without its `.collect()` (`NK1354`, #1975).
+    fn not_pure_in[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, frame: ref CheckStoredCode, condition: ref Expr) -> Vec[String] sync {
+        let mut not_pure: Vec[String] = []
+        if frame.unresolved {
+            not_pure.push("It calls a method the compiler knows nothing about, so it might change something.")
+        }
+        for key in frame.resolved {
+            let method = resolve_method(world, key) ?? continue
+            let why = check_not_pure_because(method.contract)
+            if why != null {
+                let because = why ?? ""
+                not_pure.push(f"`{key}` {because}")
+            }
+        }
+        self.a_claim_reaches(world, host, condition, not_pure)
+        return not_pure
+    }
+
     /// **The free calls and the forms in a claim that are not a read**
     /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
-    pub fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
+    fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
         let mut found: Vec[String] = []
         for each in check_visit_preorder(condition) {
             self.a_claim_looks_at(world, host, each, found)
@@ -608,4 +630,117 @@ fn check_walks_reads[H: CheckHost](world: ref CheckWorld, host: ref H, expr: ref
             }
         }
     }
+}
+
+impl CheckState {
+    /// **A parameter of code named in this body** (ADR-views-3 D17): a lambda
+    /// that names it runs it, and a `par_iter()` lambda or an `async` task that
+    /// does runs it from tasks at once.
+    fn a_code_parameter_named(ref mut self, name: ref String) sync {
+        self.run_calls.push(name.clone())
+        if self.in_parallel != null || self.flow.async_depth > 0 {
+            let current: String = self.current?.clone() ?? return
+            self.code_at_once.insert(f"{current}::{name}")
+        }
+    }
+
+    /// **Which parameters of code lower to code that changes what it
+    /// captures** (ADR-views-3 D17, Part I 5.4 C), once the whole file is
+    /// walked: one handed a lambda that changes a binding it captures, or a
+    /// parameter that is one, and the parameters handed on to it in turn. One
+    /// the body runs from tasks at once stays shared, and a lambda that changes
+    /// what it captures handed there is `NK2104`, naming the binding. A trait
+    /// method and the methods of its impls (`groups`, impl to trait) share
+    /// the choice: the trait declares the parameter as each impl writes it.
+    fn code_parameters_that_change(ref mut self, groups: ref collections::BTreeMap[String, String]) sync {
+        let mut changing: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut at_once: collections::BTreeSet[String] = self.code_at_once.clone()
+        let mut grew = true
+        while grew {
+            grew = false
+            for arg in self.code_args {
+                let target = f"{arg.callee}::{arg.param}"
+                let from = f"{arg.caller}::{arg.handed}"
+                let mut changes = arg.changes != ""
+                for ran in arg.runs {
+                    if changing.contains(f"{arg.caller}::{ran}") {
+                        changes = true
+                    }
+                }
+                if arg.handed != "" && changing.contains(from) {
+                    changes = true
+                }
+                if changes && !changing.contains(target) {
+                    changing.insert(target.clone())
+                    grew = true
+                }
+                if arg.handed != "" && changing.contains(target) && !changing.contains(from) {
+                    changing.insert(from.clone())
+                    grew = true
+                }
+                if arg.handed != "" && at_once.contains(target) && !at_once.contains(from) {
+                    at_once.insert(from.clone())
+                    grew = true
+                }
+            }
+            if check_walks_share_in_traits(groups, changing) {
+                grew = true
+            }
+            if check_walks_share_in_traits(groups, at_once) {
+                grew = true
+            }
+        }
+        let args: Vec[CheckCodeArg] = self.code_args.clone()
+        for arg in args {
+            let target = f"{arg.callee}::{arg.param}"
+            if !changing.contains(target) {
+                continue
+            }
+            if at_once.contains(target) {
+                if arg.changes != "" {
+                    let name = arg.changes.clone()
+                    let callee = arg.callee.clone()
+                    let param = arg.param.clone()
+                    self.findings.push(check_refusal("NK2104", arg.span, f"This lambda changes `{name}`, but `{callee}` runs `{param}` from tasks that run at once.", [f"Each of those tasks would change `{name}` at the same time.", "Code a body runs one call at a time may change what it captures; code it runs from tasks at once may not (Part I 8.1.2)."], f"Return a value from the lambda and combine the results afterwards, or keep `{name}` in a `SharedMut` and change it through `update`."))
+                }
+                continue
+            }
+            let from = f"{arg.caller}::{arg.handed}"
+            let kind = if arg.lambda { 1 } else if arg.handed != "" && changing.contains(from) && !at_once.contains(from) { 2 } else if arg.handed != "" { 3 } else { 4 }
+            self.facts.changing_code_args.insert(arg.node, kind)
+        }
+        for one in changing {
+            if !at_once.contains(one) {
+                self.facts.changing_code.insert(one.clone())
+            }
+        }
+    }
+}
+
+/// **A code parameter of a trait method and of each impl's method that
+/// answers it, chosen alike** (ADR-views-3 D17): one marked in an impl marks
+/// it in the trait, and one marked in the trait marks it in every impl.
+/// Whether any was added.
+fn check_walks_share_in_traits(groups: ref collections::BTreeMap[String, String], mut marked: collections::BTreeSet[String]) -> bool sync {
+    let mut added: Vec[String] = []
+    for one in marked {
+        for (member, owner) in groups {
+            let in_member = one.strip_prefix(f"{member}::")
+            if in_member != null {
+                added.push(f"{owner}::{in_member ?? ""}")
+            }
+            let in_owner = one.strip_prefix(f"{owner}::")
+            if in_owner != null {
+                added.push(f"{member}::{in_owner ?? ""}")
+            }
+        }
+    }
+    let mut grew = false
+    for one in added {
+        if !marked.contains(one) {
+            marked.insert(one.clone())
+            grew = true
+        }
+    }
+    return grew
 }

@@ -17,20 +17,20 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     let text = written.trim();
     if text.starts_with("&mut ") { return Translated { ty: Ty::Unknown, kept: false }; }
     if text.starts_with('&') {
-        let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
         let rest = slice(&c, 1, c.len() as i64);
         let inner = translate(&rest, crate_word, parameters, types, mentioned);
         return Translated { ty: view_of(inner.ty), kept: false };
     }
     if text.starts_with('[') && text.ends_with(']') {
-        let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
         let element = slice(&c, 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) });
         if element.contains(';') { return Translated { ty: Ty::Unknown, kept: true }; }
         let inner = translate(&element, crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Named { name: String::from("Array"), args: vec![inner.ty], view: false }, kept: true };
     }
     if text.starts_with('(') && text.ends_with(')') {
-        let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
         let inside = slice(&c, 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) });
         let written_parts = split_top_level(&inside);
         if written_parts.len() == 1 { return Translated { ty: Ty::Unknown, kept: true }; }
@@ -81,7 +81,7 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
     Resulted { ty: fine.ty, fails: Some(fails) }
 }
 
-pub fn view_of(ty: Ty) -> Ty {
+pub(crate) fn view_of(ty: Ty) -> Ty {
     match ty {
         Ty::Named { name, args, .. } => Ty::Named { name, args, view: true },
         Ty::Var { name, .. } => Ty::Var { name, view: true },
@@ -106,7 +106,7 @@ pub fn sends(bounds: &str) -> Vec<String> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let mut out: Vec<String> = vec![];
     for one in split_top_level(bounds) {
-        let c: Vec<scalar> = nikaia_std::list::chars(one.chars());
+        let c: Vec<scalar> = nikaia_std::list::scalars(one.chars());
         let colon = find(&c, 0, ':');
         if colon < 0 { continue; }
         let head = __keep_frame.put(slice(&c, 0, colon));
@@ -119,13 +119,13 @@ pub fn sends(bounds: &str) -> Vec<String> {
 }
 
 pub(crate) fn unreferenced(ty: &str) -> String {
-    let c: Vec<scalar> = nikaia_std::list::chars(ty.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(ty.chars());
     let mut from: i64 = 0;
     while from < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (from) as usize) } == '&' || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } == ' ') { from = unsafe { nikaia_std::proven::add::<i64>(from, 1) }; }
     let rest = slice(&c, from, c.len() as i64);
     let trimmed = rest.trim();
     if trimmed.starts_with("mut ") {
-        let t: Vec<scalar> = nikaia_std::list::chars(trimmed.chars());
+        let t: Vec<scalar> = nikaia_std::list::scalars(trimmed.chars());
         let after = slice(&t, 4, t.len() as i64);
         return nikaia_std::block::Text::from(after.to_string());
     }

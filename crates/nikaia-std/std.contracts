@@ -570,6 +570,17 @@ touches = []
 returns = "ref(text)"
 signature = "(text: ref String) -> ref String"
 
+# Whether `part` holds none of `&`, `<`, `>`, `"` and `'`: the precondition
+# of `html::Raw` on each part from outside the program (ADR-raw-sinks-1 D2).
+# A pure `bool` call, so a guard on it is a fact the prover reads (ADR-381).
+# Written in Nikaia, `src/runtime/raw_sinks.nika`.
+[fn."html::is_plain"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(part: ref String) -> bool"
+
 # Promise that `markup` is already HTML: the one constructor of `html::Raw`,
 # and the one line to review, because everything downstream of it trusts this
 # call.
@@ -2149,7 +2160,9 @@ signature = "(data: ref Vec[u8]) -> String"
 #
 # **`env::var(name)` is the value of an environment variable, null where it is
 # unset, empty or not Unicode; `env::temp_dir()` is the directory for
-# temporary files; `env::vars(prefix)` lists the variables.** None has a
+# temporary files; `env::vars(prefix)` lists the variables;
+# `env::current_exe()` and `env::current_main()` name the program that was
+# started and the file it stands in as (ADR-program-path-1).** None has a
 # `touches` line: an absent one means *touches everything* (Part III 13.5), so
 # a read of the environment keeps its order against every other effect, one of
 # which may set the variable. All are `sync`: a read of the process's own
@@ -2174,6 +2187,25 @@ pub = true
 panics = false
 sync = true
 signature = "() -> fs::Path"
+
+# The program that was started (ADR-program-path-1 D1): the `nikaia` that runs
+# it under `nikaia run` and `nikaia test`, a built program itself; null where
+# the system cannot name it. A path, so no provenance (ADR-010 D8).
+[fn."env::current_exe"]
+pub = true
+panics = false
+sync = true
+signature = "() -> fs::Path?"
+
+# The file the program stands in as started (ADR-program-path-1 D2): the
+# `.nika` file `nikaia run` was given or the project's entry point, the test's
+# file under `nikaia test`, a built program itself; null where the system
+# cannot name it.
+[fn."env::current_main"]
+pub = true
+panics = false
+sync = true
+signature = "() -> fs::Path?"
 
 # The variables whose name starts with `prefix`, as (name, value) pairs sorted
 # by name; a name or value that is not Unicode, or an empty value, is left out.
@@ -3205,22 +3237,10 @@ touches = []
 returns = "ref(self)"
 signature = "(ref self) -> Seq[u8] sync ends"
 
-# The characters, one at a time.
-#
-# They are **characters** and not bytes: a character outside ASCII is more than
-# one byte, and this walks one of it rather than several.
-[fn."String::chars"]
-pub = true
-panics = false
-sync = true
-touches = []
-returns = "ref(self)"
-signature = "(ref self) -> Seq[scalar] sync ends"
-
 # How many **bytes** the text is.
 #
 # Not how many characters: text is UTF-8, so a character outside ASCII is more
-# than one byte. `chars().count()` is the other question.
+# than one byte. `.scalars.count()` is the other question.
 [fn."String::len"]
 pub = true
 panics = false
@@ -3874,7 +3894,7 @@ signature = "[T](self: Seq[T], f: fn(T))"
 # The same elements, from the last to the first.
 #
 # Nothing is collected on the way: the sequence is walked from its back end,
-# which is why it has to have one - a range, a list's `iter()`, `chars()`.
+# which is why it has to have one - a range, a list's `iter()`, a text's `.scalars`.
 [fn."Seq::rev"]
 pub = true
 panics = false
@@ -4494,22 +4514,10 @@ touches = []
 returns = "ref(self)"
 signature = "(self: ref String) -> Seq[u8] sync ends"
 
-# The characters, one at a time.
-#
-# They are **characters** and not bytes: a character outside ASCII is more than
-# one byte, and this walks one of it rather than several.
-[fn."str::chars"]
-pub = true
-panics = false
-sync = true
-touches = []
-returns = "ref(self)"
-signature = "(self: ref String) -> Seq[scalar] sync ends"
-
 # How many **bytes** the text is.
 #
 # Not how many characters: text is UTF-8, so a character outside ASCII is more
-# than one byte. `chars().count()` is the other question.
+# than one byte. `.scalars.count()` is the other question.
 [fn."str::len"]
 pub = true
 panics = false
@@ -6284,6 +6292,32 @@ throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args", "env", "env_remove", "stdin"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
+
+# Run `command` with `/bin/sh -c` and hand back what it said, with
+# `process::run`'s options (ADR-raw-sinks-1 §4): the one raw sink of
+# `std::process`. A part of `command` from outside the program is proved to
+# meet `process::is_word` or allowed with `[allow] untrusted-shell` (D2-D4).
+# What it reads back is `untrusted`, as `run`'s is. Written in Nikaia,
+# `src/runtime/shell.nika`; a list or a stream option is a `T?` decided there.
+[fn."process::shell"]
+pub = true
+panics = false
+throws = ["io::IoError"]
+provenance = "untrusted"
+keeps = ["command", "env", "env_remove", "stdin"]
+signature = "(command: String; dir: ref String = \".\", env: Vec[(String, String)]? = null, env_remove: Vec[String]? = null, env_clear: bool = false, within: time::Duration? = null, stdin: process::Input? = null, stdout: process::Stream? = null, stderr: process::Stream? = null, trusted: bool = false) -> process::Output"
+
+# Whether `part` is one word a shell reads as written: not empty, and only
+# `A-Z`, `a-z`, `0-9` and `_ . / : = @ % + , -`. The precondition of
+# `process::shell` on each part from outside the program (ADR-raw-sinks-1
+# D2). A pure `bool` call, so a guard on it is a fact the prover reads
+# (ADR-381). Written in Nikaia, `src/runtime/raw_sinks.nika`.
+[fn."process::is_word"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(part: ref String) -> bool"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so

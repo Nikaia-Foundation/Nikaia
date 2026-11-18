@@ -12,7 +12,7 @@ pub struct CheckPause {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_call_that_may_pause(&mut self, callee: &str, pauses: bool, unpromised: bool, span: &Span) {
+    pub(crate) fn a_call_that_may_pause(&mut self, callee: &str, pauses: bool, unpromised: bool, span: &Span) {
         if !pauses { return; }
         let mut because: Option<String> = None;
         if unpromised { because = Some(nikaia_std::block::Text::from(callee.to_string())); }
@@ -21,7 +21,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_cleanup_that_may_pause(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_cleanup_that_may_pause(&mut self, name: &str, span: &Span) {
         let pause = CheckPause { what: format!("the cleanup of `{}`", name), unpromised: None, before_walk: format!("Create `{}` outside the walk and pass it in, or walk with `iter()`, whose lambda may pause.", name), before_door: format!("Create `{}` before taking the lock, so it's cleaned up after the lock is released, or close it there yourself.", name) };
         self.a_pause(&pause, span);
     }
@@ -56,7 +56,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pausing_call_in_an_action(&mut self, callee: &str, contract: &FnContract, span: &Span) {
+    pub(crate) fn a_pausing_call_in_an_action(&mut self, callee: &str, contract: &FnContract, span: &Span) {
         if contract.sync_claim.is_sync() { return; }
         let rule = match match self.inside_an_action.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -72,7 +72,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pausing_method_in_a_sync_body(&mut self, callee: &str, contract: &FnContract, span: &Span) {
+    pub(crate) fn a_pausing_method_in_a_sync_body(&mut self, callee: &str, contract: &FnContract, span: &Span) {
         if contract.sync_claim.is_sync() { return; }
         let caller = match match self.inside_a_sync_function.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

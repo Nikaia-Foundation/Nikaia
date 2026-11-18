@@ -31,19 +31,19 @@ fn lowered(purpose: &str, source: &str) -> String {
         .rust
 }
 
-/// **A text's characters are listed at their count**: `nikaia_std::list::chars`
+/// **A text's scalars are listed at their count**: `nikaia_std::list::scalars`
 /// asks for the room once, where `collect` over `Chars` grew the list step by
 /// step - the largest single cost of reading a ledger in Nikaia.
 #[test]
 fn the_characters_of_a_text_are_listed_at_their_size() {
     let source = r#"fn main() throws {
     let word = "héllo"
-    let c: Vec[scalar] = word.chars().collect()
+    let c: Vec[scalar] = word.scalars.collect()
     println(f"{c.len()} {c[1]}")
 }
 "#;
     let rust = lowered("chars", source);
-    assert!(rust.contains("nikaia_std::list::chars("), "{rust}");
+    assert!(rust.contains("nikaia_std::list::scalars("), "{rust}");
 }
 
 /// **A part an arm binds `ref` is handed on as it is** (issue #270):

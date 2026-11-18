@@ -182,6 +182,11 @@ impl Settings {
             )
             .map_err(|e| anyhow!("{e}"))?,
         )
+        .map(|mut settings| {
+            // The application's `[allow]` (ADR-raw-sinks-1 D4, D5).
+            settings.words.allow = manifest.file().allow.clone();
+            settings
+        })
     }
 
     /// The parsed values beside the checked `words`: the symbol prefix, the
@@ -216,6 +221,26 @@ impl Settings {
         (self.words.refuted_claims, self.words.unproved_claims) =
             project_settings::project_settings_refutations(&self.words, refuted, unproved)
                 .map_err(refusal)?;
+        Ok(())
+    }
+
+    /// **The command line's `--unproved-checks` over the manifest's**
+    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D29).
+    pub fn checks(&mut self, unproved: Option<&str>) -> Result<()> {
+        self.words.unproved_checks =
+            project_settings::project_settings_unproved_checks(&self.words, unproved)
+                .map_err(refusal)?;
+        Ok(())
+    }
+
+    /// **The command line's `--raw-sinks` over the manifest's, and each
+    /// `--allow` after the manifest's `[allow]`** (ADR-raw-sinks-1 D3-D5).
+    pub fn sinks(&mut self, raw_sinks: Option<&str>, allow: &[String]) -> Result<()> {
+        self.words.raw_sinks = project_settings::project_settings_raw_sinks(&self.words, raw_sinks)
+            .map_err(refusal)?;
+        let flags: Vec<String> = allow.iter().map(|word| word.to_text()).collect();
+        self.words.allow = project_settings::project_settings_allowed(&self.words.allow, &flags)
+            .map_err(refusal)?;
         Ok(())
     }
 
@@ -389,6 +414,8 @@ pub struct Lowered {
     pub python: Option<String>,
     /// Its N-API module in C, which `nikaia bind node` writes (ADR-284 D28).
     pub node: Option<String>,
+    /// Its Java source, which `nikaia bind java` writes (ADR-284 D34).
+    pub java: Option<String>,
 }
 
 /// **The packages a project depends on by path**
@@ -440,6 +467,8 @@ fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
         foreign: manifest.foreign_crates().into_iter().collect(),
         has_build: manifest.has_build_section(),
         uses_in: None,
+        within_std: manifest.within_std(),
+        described: manifest.described(),
     }
 }
 
@@ -810,7 +839,7 @@ pub fn lower_reading(
     // (ADR-284 D4, D7, D12), whether the cache answered or not; the header
     // carries the digest of the ledger this lowering wrote.
     let digest = crate::assets::digest(ledger.as_bytes());
-    let (rust, header, python, node) = match exported {
+    let (rust, header, python, node, java) = match exported {
         Some(exported) => (
             rust + &exported.rust,
             Some(
@@ -831,8 +860,14 @@ pub fn lower_reading(
                     .replace(crate::cexport::LEDGER_DIGEST, &digest)
                     .into(),
             ),
+            Some(
+                exported
+                    .java
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest)
+                    .into(),
+            ),
         ),
-        None => (rust, None, None, None),
+        None => (rust, None, None, None, None),
     };
 
     Ok(Lowered {
@@ -846,6 +881,7 @@ pub fn lower_reading(
         header,
         python,
         node,
+        java,
     })
 }
 
@@ -856,18 +892,22 @@ pub fn lower_reading(
 /// refusal that has no finding of its own (a manifest, a file that cannot be
 /// read) is one on `input`, with no code, at its first byte. `alone` reads
 /// `input` as a file of no project, whatever directory it names: an editor's
-/// document with no `file://` path (#1365).
+/// document with no `file://` path (#1365). `tests` reads the program as
+/// `nikaia test` builds it, so its `test` blocks are checked too (ADR-269 D1;
+/// `nikaia fix`, #1974).
 pub fn diagnose(
     input: &Path,
     open: &modules::Open,
     alone: bool,
+    tests: bool,
 ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
     let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
         let (manifest, packages) = match alone {
             true => (Manifest::default(), Vec::new()),
             false => (Manifest::find(input)?, packages_of_file(input)?),
         };
-        let settings = Settings::resolve(&manifest, None, None)?;
+        let mut settings = Settings::resolve(&manifest, None, None)?;
+        settings.words.tests = tests;
         with_lower_host(
             input,
             &settings,
@@ -961,8 +1001,9 @@ impl nikaia_std::compiler::lsp::LspHost for Lsp {
         entry: &str,
         open: &BTreeMap<String, String>,
         alone: bool,
+        tests: bool,
     ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
-        diagnose(Path::new(entry), open, alone)
+        diagnose(Path::new(entry), open, alone, tests)
     }
 
     fn definition(
@@ -1146,12 +1187,13 @@ impl LowerHost<'_> {
             Some(&kept),
         )?;
         if let Some(exported) = self.exported.borrow_mut().as_mut() {
-            let (python, node) = match narrowed {
-                Some(narrowed) => (narrowed.python, narrowed.node),
-                None => (String::new(), String::new()),
+            let (python, node, java) = match narrowed {
+                Some(narrowed) => (narrowed.python, narrowed.node, narrowed.java),
+                None => (String::new(), String::new(), String::new()),
             };
             exported.python = python;
             exported.node = node;
+            exported.java = java;
         }
         Ok(())
     }
@@ -1394,6 +1436,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // ledger the emitter's, no module and no contract that moved
         // (#727).
         let facts_reusable = foreign.packages(&modules).is_empty()
+            && foreign.over_std.functions.is_empty()
+            && foreign.over_std.types.is_empty()
             && newly.throws.is_empty()
             && newly.keeps.is_empty()
             && promised == program.contracts;
@@ -1480,6 +1524,12 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                     &settings.words.user_parallelism,
                     &settings.words.refuted_claims,
                     &settings.words.unproved_claims,
+                    // A dependency is built at `allow` (ADR-306 D29).
+                    if unit.package.is_none() {
+                        &settings.words.unproved_checks
+                    } else {
+                        "allow"
+                    },
                     settings.library(),
                     (keep || lsp).then_some(&mut facts),
                 )
@@ -1657,7 +1707,7 @@ impl ProjectMembersForeignHost for ForeignHost {
 /// The day one does, that is a refusal to write and not a silence to keep —
 /// issue #100 carries it.
 pub fn foreign_library(foreign: &Foreign) -> Result<Ledger> {
-    let mut library = crate::contracts::std_library();
+    let mut library = base_library(foreign);
     for (name, contract) in &foreign.descriptions.functions {
         library
             .functions
@@ -1671,6 +1721,17 @@ pub fn foreign_library(foreign: &Foreign) -> Result<Ledger> {
             .or_insert_with(|| contract.clone());
     }
     Ok(library)
+}
+
+/// **`std`'s ledger with what `[package] described` names over it** (#1976,
+/// owner 2026-11-17): a described name wins a collision with `std`'s, as
+/// `lower-std` checks the toolchain's packages. `std`'s alone where the
+/// manifest names no ledger.
+pub fn base_library(foreign: &Foreign) -> Ledger {
+    let mut library = crate::contracts::std_library();
+    library.types.extend(foreign.over_std.types.clone());
+    library.functions.extend(foreign.over_std.functions.clone());
+    library
 }
 
 /// `user_parallelism` reaches this and reaches **nothing inside the analyses**.
@@ -1724,6 +1785,7 @@ pub fn check(
     user_parallelism: &str,
     refuted_claims: &str,
     unproved_claims: &str,
+    unproved_checks: &str,
     building_a_library: bool,
     // Where the walk's facts go, for an emitter that would ask the same.
     facts_out: Option<&mut Option<check::CheckFacts>>,
@@ -1756,6 +1818,7 @@ pub fn check(
         user_parallelism,
         refuted_claims,
         unproved_claims,
+        unproved_checks,
         building_a_library,
     );
     if let (Some(out), Some(facts)) = (facts_out, host.facts.into_inner()) {
@@ -1798,8 +1861,29 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
             self.newly,
             self.reads,
         );
+        // **A package within `std` is checked as `std` is** (#1976): `assume`
+        // refused, `std`'s helpers reached.
+        let mut checked = checked;
+        if self.foreign.within_std {
+            check::refuse_assumes_in_std(&mut checked);
+            check::allow_std_helpers_in_std(&mut checked);
+        }
         *self.facts.borrow_mut() = Some(checked.facts);
         checked.findings
+    }
+
+    fn unproved_checks(&self, source: &str) -> Vec<check::Finding> {
+        match &*self.facts.borrow() {
+            Some(facts) => crate::bounds_report::unproved(
+                self.parsed,
+                self.beside,
+                source,
+                facts,
+                self.own,
+                &self.library,
+            ),
+            None => Vec::new(),
+        }
     }
 
     fn foreign_check(&self) -> Vec<check::Finding> {
@@ -2440,6 +2524,9 @@ impl Project {
             && Some(self.settings.build.target) == crate::emit::host_target()
             && self.settings.panic_strategy() == "unwind"
             && self.settings.build.reentrancy_check.is_on()
+            // **The bundle holds the counting allocator** (#1844): a program
+            // that skips its frees at exit declares its own, which Cargo builds.
+            && !self.settings.build.skip_free_at_exit
             // **A CPU level is `std`'s too** (ADR-002 D6): the library this
             // path links was built at the baseline, so `--cpu` takes Cargo's.
             && self.settings.words.cpu.is_none()
@@ -2707,11 +2794,7 @@ impl Project {
             .ok_or_else(|| refused!("{}", project_members::project_members_project_unnamed()))?;
         let resolved = resolved_versions(&self.build_dir().join("Cargo.lock"), name)?;
 
-        let mut lock = Lockfile::load(
-            &lock_path,
-            env!("NIKAIA_RUSTC_VERSION"),
-            crate::compiler_identity(),
-        )?;
+        let mut lock = Lockfile::load(&lock_path, env!("NIKAIA_RUSTC_VERSION"))?;
         if lock.dependencies == resolved {
             return Ok(());
         }
@@ -2806,6 +2889,19 @@ impl Sandbox {
     }
 }
 
+/// **What `nikaia test` hands each program it starts**
+/// ([ADR-program-path-1](../../docs/specification/adr/adr-program-path-1.md)
+/// D3): this `nikaia` as `env::current_exe`, and `main` - the test's own
+/// file, or the package's entry point for a `test` block and an output test -
+/// as `env::current_main`.
+fn test_launch_vars(main: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
+    let mut vars = vec![(nikaia_std::env::MAIN_VAR, main.as_os_str().to_os_string())];
+    if let Ok(exe) = std::env::current_exe() {
+        vars.push((nikaia_std::env::EXE_VAR, exe.into_os_string()));
+    }
+    vars
+}
+
 impl Drop for Sandbox {
     fn drop(&mut self) {
         if self.1.is_none() {
@@ -2816,18 +2912,21 @@ impl Drop for Sandbox {
 
 /// Run a built program with its arguments and its standard input, in `dir`,
 /// with `own` as the directory `fs::scratch` makes its directories in
-/// ([ADR-247](../../docs/specification/adr/adr-247.md) D5).
+/// ([ADR-247](../../docs/specification/adr/adr-247.md) D5), and `main` as the
+/// file it stands in as (`env::current_main`, ADR-program-path-1 D3).
 fn outcome_of(
     binary: &Path,
     args: &[String],
     stdin: &[u8],
     dir: &Path,
     own: &Path,
+    main: &Path,
 ) -> Result<std::process::Output> {
     use std::io::Write;
     let mut child = std::process::Command::new(binary)
         .current_dir(dir)
         .env(nikaia_std::fs::TEST_DIR_VAR, own)
+        .envs(test_launch_vars(main))
         .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -2939,7 +3038,14 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
         // `fs::scratch()`, inside `own`.
         self.held((|| {
             let own = Sandbox::new()?;
-            let out = outcome_of(binary, &[k.to_text()], &[], self.suite.root, &own.0)?;
+            let out = outcome_of(
+                binary,
+                &[k.to_text()],
+                &[],
+                self.suite.root,
+                &own.0,
+                &self.suite.root.join(ENTRY),
+            )?;
             Ok(project_tests::project_tests_block_outcome(
                 exit_code(&out.status),
                 out.stdout.into(),
@@ -2954,7 +3060,14 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
             if let Some(inputs) = &output.inputs {
                 block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
             }
-            let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
+            let out = outcome_of(
+                binary,
+                &output.args,
+                &output.stdin,
+                &own.0,
+                &own.0,
+                &self.suite.root.join(ENTRY),
+            )?;
             Ok(block_on(project_tests::project_tests_output_outcome(
                 output,
                 &own.0,
@@ -3029,6 +3142,10 @@ fn run_program_tests<'a>(
     let times = project_tests::project_tests_times_file(&Layout::user_cache_dir(), root);
     let order = block_on(project_tests::project_tests_order(programs, &times));
     let order = &order;
+    // **The program `std` before the first timer** (`project_tests_warm_up`,
+    // #1955): a program that starts `nikaia run` finds it built.
+    let first = settings.first().map_or("no", String::as_str);
+    warm_program_std(programs, first, &Sandbox::kept(kept, "warm-up")?.0)?;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
     let mut ran = Vec::new();
@@ -3114,6 +3231,22 @@ fn run_program_tests<'a>(
     });
     block_on(project_tests::project_tests_remember(&times, &ran));
     run
+}
+
+/// The warm-up of the program `std` in OWN (`project_tests_warm_up`).
+fn warm_program_std(programs: &[ProgramTest], setting: &str, own: &Path) -> Result<()> {
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
+    };
+    block_on(project_tests::project_tests_warm_up(
+        &host, programs, setting, own,
+    ))
+    .map_err(|error| {
+        host.failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))
+    })
 }
 
 /// The one build per SETTING of the PROGRAMS (`project_tests_batches`).
@@ -3219,7 +3352,16 @@ impl ProgramHost {
     /// Where `within` is more than zero, it runs in a process group of its
     /// own, and after that many seconds the whole group is killed - the
     /// program and every process it started, which would otherwise hold its
-    /// pipes open - and the run says it timed out (#1672).
+    /// pipes open - and the run says it timed out (#1672). The group ends with
+    /// this compiler too, killed included: a guard process ends it then
+    /// (`child_usage::cap::guard_group`, #1919).
+    ///
+    /// Where `processes` is more than zero, the program and every process it
+    /// starts may hold that many tasks (`child_usage::cap::Cap`): a fork past
+    /// it fails, and the run says it was `capped` where the cap can tell. When
+    /// the program ends, whatever it left running in its group or its cap is
+    /// ended before its pipes are read to their end, so a process left
+    /// behind neither outlives the test nor holds the runner (#1919).
     fn ran(
         &self,
         program: &Path,
@@ -3227,6 +3369,7 @@ impl ProgramHost {
         dir: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
     ) -> Result<project_tests::ProjectTestsRan> {
         use std::io::Write;
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -3245,10 +3388,15 @@ impl ProgramHost {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
+        let cap = child_usage::cap::Cap::new(u32::try_from(processes.max(0)).unwrap_or(u32::MAX));
+        cap.apply(&mut command);
         let expired = std::sync::Arc::new(AtomicBool::new(false));
         let out = command
             .spawn()
             .and_then(|mut child| {
+                let guard = (within > 0)
+                    .then(|| child_usage::cap::guard_group(child.id(), cap.cgroup()).ok())
+                    .flatten();
                 // Written beside the wait, so a program that prints before
                 // it reads does not fill its pipe and stop; one that stops
                 // reading early closes the pipe, which is its business.
@@ -3274,12 +3422,19 @@ impl ProgramHost {
                     });
                     (done, thread)
                 });
-                let out = child.wait_with_output();
+                let out = if processes > 0 {
+                    Self::ended_with_what_it_left(child, &cap)
+                } else {
+                    child.wait_with_output()
+                };
                 if let Some((done, thread)) = watchdog {
                     drop(done);
                     let _ = thread.join();
                 }
                 let _ = writing.join();
+                if let Some(guard) = guard {
+                    guard.release();
+                }
                 out
             })
             .with_context(|| format!("running {}", program.display()))?;
@@ -3288,6 +3443,42 @@ impl ProgramHost {
             stdout: out.stdout.into(),
             stderr: out.stderr.into(),
             timed_out: expired.load(Ordering::SeqCst),
+            capped: if cap.reached() { processes } else { 0 },
+        })
+    }
+
+    /// Read `child`'s two streams on threads of their own, wait until it has
+    /// ended, end what it left in its group and in `cap`, then reap it: its id
+    /// stays taken until then, so the group kill reaches only its own (#1919).
+    fn ended_with_what_it_left(
+        mut child: std::process::Child,
+        cap: &child_usage::cap::Cap,
+    ) -> std::io::Result<std::process::Output> {
+        use std::io::Read;
+        fn read_beside(
+            pipe: Option<impl Read + Send + 'static>,
+        ) -> std::thread::JoinHandle<std::vec::Vec<u8>> {
+            std::thread::spawn(move || {
+                let mut bytes = std::vec::Vec::new();
+                if let Some(mut pipe) = pipe {
+                    let _ = pipe.read_to_end(&mut bytes);
+                }
+                bytes
+            })
+        }
+        let stdout = read_beside(child.stdout.take());
+        let stderr = read_beside(child.stderr.take());
+        let unreaped = child_usage::cap::wait_unreaped(&child);
+        if unreaped.is_ok() {
+            child_usage::kill_group(child.id());
+        }
+        cap.end_all();
+        let status = child.wait()?;
+        unreaped?;
+        Ok(std::process::Output {
+            status,
+            stdout: stdout.join().unwrap_or_default(),
+            stderr: stderr.join().unwrap_or_default(),
         })
     }
 }
@@ -3309,16 +3500,19 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
+        main: &Path,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
             .args([verb, "--user-parallelism", setting, "--project"])
             .arg(project)
-            .env(nikaia_std::fs::TEST_DIR_VAR, own);
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .env(nikaia_std::env::MAIN_VAR, main);
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, dir, stdin, within))
+        self.held(self.ran(&self.exe, command, dir, stdin, within, processes))
     }
 
     fn explained(
@@ -3330,7 +3524,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         let mut command = std::process::Command::new(&self.exe);
         command.arg("check").args(args).arg(entry);
         self.held(
-            self.ran(&self.exe, command, own, &[], 0)
+            self.ran(&self.exe, command, own, &[], 0, 0)
                 .map(|out| out.stdout),
         )
     }
@@ -3342,6 +3536,8 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
+        main: &Path,
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -3352,8 +3548,13 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             return Ok(None);
         }
         let mut command = std::process::Command::new(&binary);
-        command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, dir, stdin, within).map(Some))
+        command
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .envs(test_launch_vars(main));
+        self.held(
+            self.ran(&binary, command, dir, stdin, within, processes)
+                .map(Some),
+        )
     }
 
     fn batched(
@@ -3371,7 +3572,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[], within))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], within, 0))?;
         let binary = project
             .join("target")
             .join("nikaia")
@@ -3391,10 +3592,15 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
+        main: &Path,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(binary);
-        command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(binary, command, dir, stdin, within))
+        command
+            .arg(name)
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .envs(test_launch_vars(main));
+        self.held(self.ran(binary, command, dir, stdin, within, processes))
     }
 }
 
@@ -3554,6 +3760,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             header: lowered.header.take(),
             python: lowered.python.take(),
             node: lowered.node.take(),
+            java: lowered.java.take(),
         };
         self.kept.borrow_mut().insert(at, lowered);
         Ok(out)
@@ -3867,29 +4074,73 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             .iter()
             .map(std::string::String::from)
             .collect();
-        self.held(self.cargo().run("run", &args, &after))
+        let mut cargo = self.cargo().clone();
+        cargo.env.extend(self.launch_vars());
+        self.held(cargo.run("run", &args, &after))
     }
 
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
-        self.held(run_directly(binary, self.program_args))
+        self.held(run_directly(binary, self.program_args, &self.launch_vars()))
+    }
+}
+
+impl DriveHost<'_> {
+    /// **What `nikaia run` hands the program it starts**
+    /// ([ADR-program-path-1](../../../docs/specification/adr/adr-program-path-1.md)
+    /// D3): this `nikaia` as `env::current_exe`, and as `env::current_main`
+    /// the file the program stands in as - one its own launcher handed this
+    /// run (`nikaia test`'s test file), else the `.nika` file `run` was
+    /// given, else the project's entry point.
+    fn launch_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
+        let mut vars = std::vec::Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            vars.push((
+                std::string::String::from(nikaia_std::env::EXE_VAR),
+                exe.into_os_string(),
+            ));
+        }
+        let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| {
+                let main = self
+                    .project
+                    .written
+                    .clone()
+                    .unwrap_or_else(|| self.project.entry());
+                std::path::absolute(&main).unwrap_or(main).into_os_string()
+            });
+        vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
+        vars
     }
 }
 
 #[cfg(unix)]
-fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
+fn run_directly(
+    binary: &std::path::Path,
+    args: &[String],
+    vars: &[(std::string::String, std::ffi::OsString)],
+) -> Result<i32> {
     use std::io::Write;
     use std::os::unix::process::CommandExt;
     std::io::stdout().flush().ok();
     std::io::stderr().flush().ok();
     // `exec` returns only when it failed to replace this process.
-    let error = std::process::Command::new(binary).args(args).exec();
+    let error = std::process::Command::new(binary)
+        .args(args)
+        .envs(vars.iter().map(|(name, value)| (name, value)))
+        .exec();
     Err(error).with_context(|| format!("running {}", binary.display()))
 }
 
 #[cfg(not(unix))]
-fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
+fn run_directly(
+    binary: &std::path::Path,
+    args: &[String],
+    vars: &[(std::string::String, std::ffi::OsString)],
+) -> Result<i32> {
     let status = std::process::Command::new(binary)
         .args(args)
+        .envs(vars.iter().map(|(name, value)| (name, value)))
         .status()
         .with_context(|| format!("running {}", binary.display()))?;
     // A program killed by a signal has no exit code. `1` is what a shell would
@@ -4198,6 +4449,59 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
 
     fn push_arg(&self, arg: &str) {
         self.invocation.borrow_mut().args.push(OsString::from(arg));
+    }
+
+    fn rustc(&self) -> String {
+        self.invocation.borrow().rustc.to_string_lossy().to_text()
+    }
+
+    fn user_cache_dir(&self) -> PathBuf {
+        Layout::user_cache_dir()
+    }
+
+    fn use_entry(&self, entry: &Path) {
+        orchestrator::cache::use_entry(entry);
+    }
+
+    /// **`rustc` run as [`Invocation::run`] runs it**, its standard error
+    /// passed on line by line as it comes and kept in `said` too, for the
+    /// second store to say again on a hit (ADR-021 D14). A `said` that
+    /// cannot be written is left out: the store then records nothing.
+    fn run_saying(&self, said: &Path) -> HostResult<i32> {
+        use std::io::{BufRead, Write};
+        let invocation = self.invocation.borrow();
+        let mut child = match std::process::Command::new(&invocation.rustc)
+            .args(&invocation.args)
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                return self.held(Err(anyhow::Error::new(error)
+                    .context(format!("running {}", invocation.rustc.to_string_lossy()))));
+            }
+        };
+        let mut kept: std::vec::Vec<u8> = std::vec::Vec::new();
+        if let Some(stderr) = child.stderr.take() {
+            let mut reader = std::io::BufReader::new(stderr);
+            let mut line: std::vec::Vec<u8> = std::vec::Vec::new();
+            while reader
+                .read_until(b'\n', &mut line)
+                .is_ok_and(|read| read > 0)
+            {
+                let _ = std::io::stderr().write_all(&line);
+                kept.extend_from_slice(&line);
+                line.clear();
+            }
+        }
+        let status = self.held(child.wait().context("waiting for rustc"))?;
+        let _ = std::fs::write(said, &kept);
+        Ok(status.code().unwrap_or(1))
+    }
+
+    fn eprint(&self, text: &str) {
+        use std::io::Write;
+        let _ = std::io::stderr().write_all(text.as_bytes());
     }
 
     fn record_dependencies(&self, inputs: &[PathBuf]) -> HostResult<()> {

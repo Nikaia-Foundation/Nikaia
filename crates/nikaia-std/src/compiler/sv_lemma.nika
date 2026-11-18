@@ -86,23 +86,23 @@ fn sv_rat_abs(b: ref SvRat) -> SvRat? {
 /// The formula of lemma `l` over the terms `defs`; `null` where the
 /// instance is not one of its schema (a wrong term, a zero divisor, a
 /// number out of `i64`).
-pub fn sv_lemma_formula(mut arena: TermArena, defs: ref Vec[SvNl], l: ref SvLemma) -> i64? {
+fn sv_lemma_formula(mut arena: TermArena, defs: ref Vec[SvNl], l: ref SvLemma) -> i64? {
 	if l.def < 0 || l.def >= defs.len() {
 		return null
 	}
-	let t = defs[l.def].clone()
+	let t = defs[l.def]
 	let m = t.name.clone()
 	let x = t.a.clone()
 	let y = t.b.clone()
 	let zero = sv_int(0)
 	let one = sv_int(1)
-	let s = l.schema.clone()
+	let s = l.schema
 	// The schemas that relate two terms of one operator.
 	if s == "mono" || s == "pow2-mono" || s == "congruence" {
 		if l.other < 0 || l.other >= defs.len() || defs[l.other].op != t.op {
 			return null
 		}
-		let u = defs[l.other].clone()
+		let u = defs[l.other]
 		if s == "congruence" {
 			let mut parts: Vec[i64] = [sv_lvv(arena, "distinct", x, u.a) ?? return null]
 			if t.op != "pow2" {
@@ -314,7 +314,7 @@ fn sv_nl_value(t: ref SvNl, values: ref collections::BTreeMap[String, SvRat]) ->
 /// Whether `values` give every term in `defs` its meaning: its exact value,
 /// or, where it has none fixed, the value of every term of the same
 /// operator and arguments.
-pub fn sv_nl_holds(defs: ref Vec[SvNl], values: ref collections::BTreeMap[String, SvRat]) -> bool {
+fn sv_nl_holds(defs: ref Vec[SvNl], values: ref collections::BTreeMap[String, SvRat]) -> bool {
 	for i in 0..<defs.len() {
 		let mine = sv_real_named(values, defs[i].name)
 		match sv_nl_value(defs[i], values) {
@@ -350,7 +350,7 @@ fn sv_nl_same_place(t: ref SvNl, u: ref SvNl, values: ref collections::BTreeMap[
 /// The query a proof with `lemmas` answers: `facts` and each lemma's
 /// formula, derived here, in order (ADR-270 D28.2). `null` where a lemma is
 /// not an instance of its schema.
-pub fn sv_lemma_query(
+fn sv_lemma_query(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,
@@ -370,7 +370,7 @@ pub fn sv_lemma_query(
 /// The check of a proof that used lemmas: `steps` replayed by `sv_check`
 /// against the query `sv_lemma_query` builds. `null` where a lemma is
 /// refused.
-pub fn sv_lemma_check(
+fn sv_lemma_check(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,

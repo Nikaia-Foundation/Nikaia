@@ -1,0 +1,3 @@
+test: 0, test result: ok. 1 passed; 0 failed
+test with a new source: 0, test result: ok. 9 passed; 0 failed
+test again: 0, test result: ok. 9 passed; 0 failed, Cargo started: 0

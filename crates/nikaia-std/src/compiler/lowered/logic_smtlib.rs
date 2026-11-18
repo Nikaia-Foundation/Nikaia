@@ -19,7 +19,7 @@ pub fn lg_smtlib_write(arena: &TermArena, facts: &[i64], goal: i64) -> String {
     out
 }
 
-pub fn lg_symbol(name: &str) -> String {
+pub(crate) fn lg_symbol(name: &str) -> String {
     let mut simple = !name.is_empty();
     let mut first = true;
     for c in name.chars() {
@@ -46,7 +46,7 @@ pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &st
     format!("({} {})", op, nikaia_std::block::Text::from(written.join(" ")))
 }
 
-pub fn lg_term(arena: &TermArena, id: i64) -> String {
+pub(crate) fn lg_term(arena: &TermArena, id: i64) -> String {
     let node = arena.at(id);
     match node {
         SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
@@ -130,7 +130,7 @@ pub(crate) enum LgParsedSexps {
 }
 
 pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
-    let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
+    let chars: Vec<scalar> = nikaia_std::list::scalars(source.chars());
     let mut stack: Vec<Vec<LgSexp>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
@@ -269,7 +269,7 @@ impl LgReader {
             if op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=" {
                 let mut links: Vec<i64> = vec![];
                 let mut next: i64 = 0;
-                while next + 1 < n {
+                while unsafe { nikaia_std::proven::add::<i64>(next, 1) } < n {
                     let a = *unsafe { nikaia_std::proven::read(&args, (next) as usize) };
                     let b = *unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::add::<i64>(next, 1)) as usize) };
                     if op == "<=" { links.push(self.arena.le(a, b)); } else if op == "<" { links.push(self.arena.lt(a, b)); } else if op == ">=" { links.push(self.arena.ge(a, b)); } else if op == ">" { links.push(self.arena.gt(a, b)); } else { links.push(self.arena.equal(a, b)); }

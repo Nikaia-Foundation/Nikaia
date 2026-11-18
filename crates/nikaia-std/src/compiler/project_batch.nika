@@ -34,7 +34,7 @@ pub fn project_batch_var() -> String {
 /// So it is only wrapped. A `main` the emitter wrote `pub` starts a line; a
 /// program whose own `main` it does not wrap (ADR-360 D1) has none, and is
 /// built alone.
-pub fn project_batch_module(k: i64, rust: ref String) -> String? {
+fn project_batch_module(k: i64, rust: ref String) -> String? {
     if !rust.starts_with("pub fn main(") && !rust.contains("\npub fn main(") {
         return null
     }
@@ -51,7 +51,7 @@ fn project_batch_header() -> String {
 /// module `modules[k]` of the program `names[k]` holds, counted from 1. What
 /// rustc says about a line names the program to leave out
 /// ([`project_batch_cited`]).
-pub fn project_batch_ranges(names: ref Vec[String], modules: ref Vec[String]) -> String {
+fn project_batch_ranges(names: ref Vec[String], modules: ref Vec[String]) -> String {
     let mut first = project_batch_header().lines().count() + 1
     let mut parts: Vec[String] = []
     for (name, module) in names.iter().zip(modules.iter()) {
@@ -67,10 +67,10 @@ pub fn project_batch_ranges(names: ref Vec[String], modules: ref Vec[String]) ->
 /// whose module holds it by `ranges` ([`project_batch_ranges`]). A note that
 /// points into another module names that one too; it is then built alone,
 /// which never changes a verdict.
-pub fn project_batch_cited(said: ref String, ranges: ref String, file: ref String) -> Vec[String] {
+fn project_batch_cited(said: ref String, ranges: ref String, file: ref String) -> Vec[String] {
     let mut lines: Vec[i64] = []
     for piece in said.split(f"{file}.rs:").skip(1) {
-        let digits: String = piece.chars().take_while(fn(c) { c.is_ascii_digit() }).collect()
+        let digits: String = piece.scalars.take_while(fn(c) { c.is_ascii_digit() }).collect()
         let line = text::parse_i64(digits) ?? continue
         lines.push(line)
     }
@@ -93,7 +93,7 @@ pub fn project_batch_cited(said: ref String, ranges: ref String, file: ref Strin
 /// dispatcher. `names[k]` is the program the module `p{ks[k]}` holds;
 /// `main`'s result is reported as a `main` of its own would report it, so the
 /// exit code and what is written on an error are the same.
-pub fn project_batch_crate(names: ref Vec[String], ks: ref Vec[i64], modules: ref Vec[String]) -> String {
+fn project_batch_crate(names: ref Vec[String], ks: ref Vec[i64], modules: ref Vec[String]) -> String {
     let mut parts: Vec[String] = [project_batch_header()]
     for module in modules {
         parts.push(module.clone())
@@ -112,7 +112,7 @@ pub fn project_batch_crate(names: ref Vec[String], ks: ref Vec[i64], modules: re
 /// ones that lower made modules of one crate, their names written to
 /// `LIST.included` and where each module is to `LIST.modules`. The Rust,
 /// and every source the programs read.
-pub fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref fs::Path, no_cache: bool) -> (String, Vec[fs::Path]) throws {
+fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref fs::Path, no_cache: bool) -> (String, Vec[fs::Path]) throws {
     let text = fs::read_to_string(list, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading the batch list {list.display()}: {error}") }
     let mut listed: Vec[String] = []
     let mut entries: Vec[fs::Path] = []

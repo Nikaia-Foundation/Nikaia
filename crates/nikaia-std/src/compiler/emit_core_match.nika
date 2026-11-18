@@ -359,7 +359,7 @@ impl EmitState {
     /// `collect`, each boxed part the pattern looks inside is written as a fresh
     /// name, `__nikaia_box0`, `__nikaia_box1`, ... in the order they are met,
     /// numbered from `found`; what comes back is the number of them so far.
-    pub fn emit_core_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
+    fn emit_core_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
         let mut n = found
         match pattern {
             // Rust's own catch-all, which is what the arm was before (ADR-291 D18).
@@ -612,7 +612,7 @@ impl EmitState {
     /// `emit_core_pattern_written` numbers them from `before`), written with the
     /// names bound (`wild` off) or as `_` (on). What comes back is the number of
     /// boxed parts in this pattern, so that the walk can go on counting.
-    pub fn emit_core_nest_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
+    fn emit_core_nest_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
         let mut n = before
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -734,7 +734,7 @@ impl EmitState {
         }
     }
 
-    pub fn emit_core_arm_body_led[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, nest_count: i64, body: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope, lead: ref String) sync throws {
+    fn emit_core_arm_body_led[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, nest_count: i64, body: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope, lead: ref String) sync throws {
         let mut taken_apart = lead.clone()
         for at in 0..<nest_count {
             let mut written = EmitOut::empty()
@@ -884,7 +884,7 @@ impl EmitState {
     /// because Rust has no fall-through and the members are separate types. An arm
     /// that names no member at all (a bare name, `else`, a literal) is the
     /// catch-all.
-    pub fn emit_core_match_over_a_sum[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, sum: ref String, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_match_over_a_sum[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, sum: ref String, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **Every member of the sum gets an arm**, and not only the ones the source
         // named: the sum is a Rust `enum` and a `match` over it has to cover it.
         let listed = self.sum_members(sum)
@@ -1026,7 +1026,7 @@ impl EmitState {
     /// a guard keeps the box the `match` reads alive through the arm, so an
     /// arm that pauses held a `Box<dyn Error>`, which is not `Send`, and the
     /// task could not go to the pool at `user-parallelism = "yes"`.
-    pub fn emit_core_match_over_a_box[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_match_over_a_box[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut members: Vec[String] = []
         let mut home: Vec[i64] = []
         let mut catch_all = 0
@@ -1124,7 +1124,7 @@ impl EmitState {
     /// guard and body; a `match` that only answers `true` or `false` as a
     /// `matches!` (0.0.249); one over the error a `catch` binds, where that
     /// travels in a sum, taken apart by member (ADR-280 D17).
-    pub fn emit_core_match[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_match[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `match` on a kind is the one arm this copy's type takes**
         // (ADR-330 D4).
         if self.facts.kind_matches.contains(node_key(value)) {

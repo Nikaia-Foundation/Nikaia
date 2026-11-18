@@ -6,11 +6,11 @@
 // these; what `std` cannot say yet (the user cache, a `rustc`
 // process) it answers as the `SysrootHost`.
 //
-// **The keys are the bytes the Rust hashed, in the same order**: a part is its
-// length as a `u64` little-endian and then its bytes, a part of a module key
-// ends with a `0`. The `Debug` texts a file key reads are made in Rust and
-// passed in, so no key changed with the move.
+// **The keys**: a part is its length as a `u64` little-endian and then its
+// bytes, a part of a module key ends with a `0`. A file key reads the
+// package by name (#1909, `sysroot_named_key`).
 
+use std::collections
 use std::fs
 use std::hash
 
@@ -173,34 +173,274 @@ fn sysroot_ended(mut read: Vec[u8], text: ref String) sync {
     read.push(0)
 }
 
-/// **The tools package's interface** (#667, #801), the same for every file of
-/// it: the compiler, the salt, the build with the package's trust (`setting`,
-/// the Rust `Debug` text) and its inferred ledger (`own`), and of every file
-/// its name and its text without bodies (`bodiless`), in file order.
-pub fn sysroot_interface[H: SysrootHost](compiler: ref String, salt: ref String, setting: ref String, own: ref String, names: ref Vec[String], bodiless: ref Vec[String], host: ref H) -> String sync {
+/// **One declaration another file of the package may read** (#1909, C): the
+/// names it is reached by and its text without bodies, docs or comments. A
+/// row of a per-name table (a ledger row, a graph row, a tier fact) is one
+/// too: its names are the words of its key and its text the row.
+pub struct SysrootDeclared {
+    pub names: Vec[String],
+    pub text: String,
+}
+
+/// **Each file's declarations by name, and what stays whole** (#1909, C):
+/// built once per package, read by `sysroot_named_key` for every file.
+pub struct SysrootNames {
+    /// The package's parts no name reaches, hashed: see `sysroot_names`.
+    pub whole: String,
+    /// Every declaration of every file and every row, in file and table
+    /// order.
+    pub declared: Vec[SysrootDeclared],
+    /// The words of each declaration's text, by its index.
+    pub words: Vec[Vec[String]],
+    /// A name to the declarations reached by it.
+    pub by_name: collections::BTreeMap[String, Vec[i64]],
+}
+
+/// Every word of `text` (letters, digits, `_`, not starting with a digit),
+/// each once, in the order first met.
+pub fn sysroot_words(text: ref String) -> Vec[String] sync {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut out: Vec[String] = []
+    let n = text.bytes.len()
+    let mut at = 0
+    while at < n {
+        let b = text.bytes[at] as i64
+        if sysroot_package_word_byte(b) && !(b >= 48 && b <= 57) {
+            let start = at
+            while at < n && sysroot_package_word_byte(text.bytes[at] as i64) {
+                at += 1
+            }
+            let word = sysroot_package_slice(text, start, at).clone()
+            if seen.insert(word.clone()) {
+                out.push(word)
+            }
+        } else if b >= 48 && b <= 57 {
+            while at < n && sysroot_package_word_byte(text.bytes[at] as i64) {
+                at += 1
+            }
+        } else {
+            at += 1
+        }
+    }
+    return out
+}
+
+/// The bytes `start` to `end` of `source` without the `cut` ranges inside
+/// them (the bodies) and without comment or doc lines: a line that is only a
+/// comment says nothing to another file, and neither does a `///` doc (#1909,
+/// D): no pass reads another file's docs (the one reader, `main_words` in
+/// `emit_entry.nika`, reads the file's own `main`).
+fn sysroot_declared_text(source: ref String, start: i64, end: i64, cut: ref Vec[(i64, i64)]) -> String sync {
+    let mut kept: String = ""
+    let mut at = start
+    for (a, b) in cut {
+        if a < at || b > end {
+            return sysroot_package_slice(source, start, end).clone()
+        }
+        kept.push_str(sysroot_package_slice(source, at, a))
+        at = b
+    }
+    kept.push_str(sysroot_package_slice(source, at, end))
+    let lines: Vec[String] = kept.lines().filter(fn(line) { !line.trim_start().starts_with("//") }).map(fn(line) { f"{line}\n" }).collect()
+    return lines.join("")
+}
+
+/// **One file's declarations by name, and the text of what no name reaches**
+/// (#1909, C). A function, a struct, a `comptime` and a grammar are reached by
+/// their name; an enum by its name and its variants'; a trait by its name and
+/// its methods'; an inherent `impl` by its methods' names; an `extern` block
+/// by the names it declares. What stays whole, and why: a trait `impl` (the
+/// checker and the emitter find it by the type and the trait, which the
+/// file's text need not name: a `{x}`, a `==`, a `for`), a `use` line (it
+/// names a package, not a declaration), and an item without a name. A `test`
+/// or `bench` is read by no other file (what only tests reach is keyed by
+/// `only_tests`) and is left out.
+pub fn sysroot_declared(source: ref String, unit: ref ParsedView) -> (Vec[SysrootDeclared], String) sync {
+    let mut out: Vec[SysrootDeclared] = []
+    let mut whole: String = ""
+    for item in unit.items {
+        let names = match item.node {
+            Item::Test { .. } | Item::Bench { .. } => continue,
+            else => sysroot_item_names(item, unit),
+        }
+        let mut cut: Vec[(i64, i64)] = []
+        sysroot_package_bodies(item, cut)
+        cut.sort()
+        let text = sysroot_declared_text(source, item.span.start as i64, item.span.end as i64, cut)
+        if !names.is_empty() {
+            out.push(SysrootDeclared { names: names, text: text })
+        } else {
+            whole.push_str(text)
+            whole.push_str("\n")
+        }
+    }
+    return (out, whole)
+}
+
+/// The names `item` is reached by, empty where it stays whole (see
+/// `sysroot_declared`).
+fn sysroot_item_names(item: ref Spanned[Item], unit: ref ParsedView) -> Vec[String] sync {
+    let mut names: Vec[String] = []
+    match item.node {
+        Item::Fn { name, .. } => names.push(unit.text(name ?? return names)),
+        Item::Struct { name, .. } => names.push(unit.text(name)),
+        Item::Comptime { name, .. } => names.push(unit.text(name)),
+        Item::Grammar(def) => names.push(unit.text(def.name)),
+        Item::Enum { name, variants, .. } => {
+            names.push(unit.text(name))
+            for variant in variants {
+                names.push(unit.text(variant.name))
+            }
+        }
+        Item::Trait { name, methods, .. } => {
+            names.push(unit.text(name))
+            for method in methods {
+                names.push(unit.text(method.node.name))
+            }
+        }
+        Item::Impl { trait_name: null, methods, .. } => {
+            for method in methods {
+                let said = sysroot_item_names(method, unit)
+                if said.is_empty() {
+                    return []
+                }
+                for one in said {
+                    names.push(one.clone())
+                }
+            }
+        }
+        Item::Extern { declarations, opaque, .. } => {
+            for declaration in declarations {
+                names.push(unit.text(declaration.node.name))
+            }
+            for one in opaque {
+                names.push(unit.text(one.node.name))
+            }
+        }
+        else => return [],
+    }
+    return names
+}
+
+/// A row of a per-name table: reached by every word of `key` and of `more`.
+fn sysroot_row(mut rows: Vec[SysrootDeclared], key: ref String, more: ref Vec[String], text: String) sync {
+    let mut names = sysroot_words(key)
+    for one in more {
+        for word in sysroot_words(one) {
+            names.push(word)
+        }
+    }
+    rows.push(SysrootDeclared { names: names, text: text })
+}
+
+/// **The package's names, built once** (#1909, C). `declared` and `wholes`
+/// are `sysroot_declared`'s answers in file order, `names` the files' names.
+/// Split per name: the ledger's `functions`, `types`, `code_locks` and
+/// `code_throws`, both call graphs (a row is reached by its key and by every
+/// function in it), and the text tiers' facts beside (`fields`, `fills`,
+/// `calls`). What stays whole, and why: the compiler, the salt and `setting`
+/// (the build, the package's one trust answer and whether facts are reused:
+/// one value for the package, no name reads it); the ledger's head
+/// (`version`, `toolchain`, `inference`, `sources`) and its `traits` and
+/// `implementations`, which the checker reads by a type and a trait as the
+/// trait `impl`s are; each file's whole part (`sysroot_declared`); and the
+/// files' names, so a file added or taken away lowers every file again.
+pub fn sysroot_names(compiler: ref String, salt: ref String, setting: ref String, names: ref Vec[String], declared: ref Vec[Vec[SysrootDeclared]], wholes: ref Vec[String], own: ref Ledger, graphs: ref EmitReachGraphs, fields: ref collections::BTreeMap[String, Vec[FieldContract]], fills: ref SliceFills, calls: ref collections::BTreeSet[String]) -> SysrootNames sync {
     let mut read: Vec[u8] = []
-    sysroot_part(read, "nikaia-lower-file-v1")
+    sysroot_part(read, "nikaia-lower-file-v2")
     sysroot_part(read, compiler)
     sysroot_part(read, salt)
     sysroot_part(read, setting)
-    sysroot_part(read, own)
+    sysroot_part(read, f"{own.version} {own.toolchain} {own.inference} {own.sources:?}")
+    sysroot_part(read, f"{own.traits:?}")
+    sysroot_part(read, f"{own.implementations:?}")
     for at in 0..<names.len() {
         sysroot_part(read, names[at])
-        sysroot_part(read, bodiless[at])
+        sysroot_part(read, wholes[at])
     }
-    return hash::sha256_hex(read)
+    let mut all: Vec[SysrootDeclared] = []
+    for file in declared {
+        for one in file {
+            all.push(one.clone())
+        }
+    }
+    let none: Vec[String] = []
+    for (key, row) in own.functions.iter() {
+        sysroot_row(all, key, none, f"function {key} {row:?}")
+    }
+    for (key, row) in own.types.iter() {
+        sysroot_row(all, key, none, f"type {key} {row:?}")
+    }
+    for (key, row) in own.code_locks.iter() {
+        sysroot_row(all, key, none, f"code lock {key} {row:?}")
+    }
+    for (key, row) in own.code_throws.iter() {
+        sysroot_row(all, key, row, f"code throws {key} {row:?}")
+    }
+    for (key, row) in graphs.pausing_reach.iter() {
+        let more: Vec[String] = row.iter().cloned().collect()
+        sysroot_row(all, key, more, f"pausing reach {key} {row:?}")
+    }
+    for (key, row) in graphs.code_cycle_graph.iter() {
+        let more: Vec[String] = row.iter().cloned().collect()
+        sysroot_row(all, key, more, f"code cycle {key} {row:?}")
+    }
+    for (key, row) in fields.iter() {
+        sysroot_row(all, key, none, f"fields beside {key} {row:?}")
+    }
+    for (key, row) in fills.filled.iter() {
+        sysroot_row(all, key, none, f"filled {key} {row}")
+    }
+    for (key, row) in fills.pieces.iter() {
+        sysroot_row(all, key, none, f"pieces {key} {row}")
+    }
+    for key in calls {
+        sysroot_row(all, key, none, f"called beside {key}")
+    }
+    let mut words: Vec[Vec[String]] = []
+    let mut by_name: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    for at in 0..<all.len() {
+        words.push(sysroot_words(all[at].text))
+        for name in all[at].names {
+            by_name.entry(name.clone()).or_default().push(at)
+        }
+    }
+    return SysrootNames { whole: hash::sha256_hex(read), declared: all, words: words, by_name: by_name }
 }
 
-/// **A file's key**: the package's interface, the file's name and its own
-/// text, so a body change lowers that file alone.
-pub fn sysroot_file_key[H: SysrootHost](interface: ref String, name: ref String, text: ref String, host: ref H) -> String sync {
-    let mut read: Vec[u8] = []
-    for b in interface.bytes() {
-        read.push(b)
+/// **A file's key** (#1909, C): the package's whole part, the file's name and
+/// text, what only tests reach of it, and every declaration and row its text
+/// reaches by name, the names in those declarations' texts followed in turn
+/// (a function's signature names the types its result is made of). A name
+/// no other file declares reaches nothing, so a body change, or a new
+/// function no other file names, lowers that file alone.
+pub fn sysroot_named_key(names: ref SysrootNames, name: ref String, text: ref String, only_tests: ref String) -> String sync {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut reached: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut work: Vec[String] = sysroot_words(text)
+    while !work.is_empty() {
+        let word = work.pop() ?? break
+        if !seen.insert(word.clone()) {
+            continue
+        }
+        let found = names.by_name.get(word) ?? continue
+        for at in found {
+            if reached.insert(at) {
+                for next in names.words[at] {
+                    if !seen.contains(next) {
+                        work.push(next.clone())
+                    }
+                }
+            }
+        }
     }
+    let mut read: Vec[u8] = []
+    sysroot_part(read, names.whole)
     sysroot_part(read, name)
-    for b in text.bytes() {
-        read.push(b)
+    sysroot_part(read, text)
+    sysroot_part(read, only_tests)
+    for at in reached {
+        sysroot_part(read, names.declared[at].text)
     }
     return hash::sha256_hex(read)
 }

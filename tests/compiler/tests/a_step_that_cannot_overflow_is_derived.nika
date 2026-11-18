@@ -1,0 +1,28 @@
+/// A precondition derived from the callers (ADR-391 D1) may keep a step of
+/// a parameter from overflowing (#1832): every caller hands `after` a `from`
+/// below `xs.len()` and `before` a `high` not below zero, so `from + 1` and
+/// `high - 1` need no check. `beyond`'s caller hands a number read out of a
+/// list, which no fact bounds, and its step stays checked.
+fn after(xs: ref Vec[i64], from: i64) -> i64 sync {
+	return from + 1
+}
+
+fn before(high: i64) -> i64 sync {
+	return high - 1
+}
+
+fn beyond(n: i64) -> i64 sync {
+	return n + 1
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let mut k = 0
+	while k < xs.len() {
+		print(after(xs, k))
+		print(before(k))
+		k += 1
+	}
+	println("")
+	println(beyond(xs[2]))
+}

@@ -1,0 +1,17 @@
+// The preconditions of the raw sinks (ADR-raw-sinks-1 D2, #1253):
+// `process::is_word` and `html::is_plain`, written in Nikaia in `std`.
+use std::html
+use std::process
+
+fn main() throws {
+    println(process::is_word("a.png"))
+    println(process::is_word("x;rm"))
+    println(process::is_word(""))
+    println(process::is_word("A-Z_a.z/0:9=@%+,-"))
+    println(process::is_word("two words"))
+    println(html::is_plain("Ada Lovelace"))
+    println(html::is_plain(""))
+    println(html::is_plain("<b>"))
+    println(html::is_plain("it's"))
+    println(html::is_plain("a & b"))
+}

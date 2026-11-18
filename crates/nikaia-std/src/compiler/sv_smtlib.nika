@@ -149,6 +149,17 @@ struct SvSmtReader {
 	/// The variable of each non-linear term and argument by its text, so
 	/// equal terms share one.
 	nl_names: collections::BTreeMap[String, String],
+	/// How many `term`s and `fold`s are under way, one inside the other:
+	/// the depth of the reader's recursion (#1959).
+	depth: i64,
+}
+
+/// How deep the reader recurses, through terms nested in terms and folds
+/// of `ite`s in `ite`s together: deeper, a term is refused and a fold left
+/// undone, where the stack would overflow (#1959: a file of the SMT-LIB set
+/// nests its terms 963 deep).
+fn sv_nesting_limit() -> i64 {
+	return 1200
 }
 
 /// The linear form of the constant `r`.
@@ -211,7 +222,7 @@ fn sv_is_numeral(a: String) -> bool {
 	if a.len() == 0 {
 		return false
 	}
-	for c in a.chars() {
+	for c in a.scalars {
 		if c < '0' || c > '9' {
 			return false
 		}
@@ -404,7 +415,10 @@ impl SvSmtReader {
 				?? return SvGot::Failed(SvReadWhy::Overflow(f"the numeral {a}"))
 			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))
 		}
-		if a.contains(".") {
+		// A decimal starts with a digit; a symbol never does, and may hold a
+		// `.` (`main_~i.4`, SMT-LIB 2.6 §3.1).
+		let first = a.scalars.nth(0) ?? ' '
+		if a.contains(".") && first >= '0' && first <= '9' {
 			return sv_decimal(a)
 		}
 		match sv_ratio(a) {
@@ -430,11 +444,19 @@ impl SvSmtReader {
 		return false
 	}
 
+	/// A term, or why not; one nested deeper than `sv_nesting_limit()` is
+	/// refused (#1959).
 	fn term(ref mut self, sexp: ref LgSexp) -> SvGot {
-		return match sexp {
+		if self.depth >= sv_nesting_limit() {
+			return SvGot::Failed(SvReadWhy::Unsupported(f"terms nested more than {sv_nesting_limit()} deep"))
+		}
+		self.depth += 1
+		let got = match sexp {
 			LgSexp::Atom(a) => self.atom(a),
 			LgSexp::List(items) => self.application(sexp, items),
 		}
+		self.depth -= 1
+		return got
 	}
 
 	/// A term that must be a formula.
@@ -485,7 +507,11 @@ impl SvSmtReader {
 	}
 
 	/// `k·v + c rel 0` for the `ite` variable `v`, pushed into its branches;
-	/// null where a branch's scaled form leaves `i64`.
+	/// null where a branch's scaled form leaves `i64`, or past
+	/// `sv_nesting_limit()` (#1959): the atom then reads `v`, which
+	/// `definitions` defines without recursion. Each answer is kept, a null
+	/// too (-2), so a chain of `ite`s that cannot be folded is walked once,
+	/// not once per path.
 	fn fold(ref mut self, rel: String, name: String, k: SvRat, c: SvRat) -> i64? {
 		let key = f"{rel} {k.num}/{k.den} {c.num}/{c.den} {name}"
 		// A sentinel, not `match get { id => return id }`: that returns the
@@ -494,6 +520,20 @@ impl SvSmtReader {
 		if known >= 0 {
 			return known
 		}
+		if known == -2 || self.depth >= sv_nesting_limit() {
+			return null
+		}
+		self.depth += 1
+		let made: i64 = self.fold_new(rel, name, k, c) ?? -2
+		self.depth -= 1
+		self.folds.insert(key, made)
+		if made < 0 {
+			return null
+		}
+		return made
+	}
+
+	fn fold_new(ref mut self, rel: String, name: String, k: SvRat, c: SvRat) -> i64? {
 		let ite = (self.ites.get(name) ?? return null).clone()
 		let at = sv_lin_constant(c)
 		let zero = sv_lin_constant(sv_int(0))
@@ -513,9 +553,7 @@ impl SvSmtReader {
 				return null
 			},
 		}
-		let made = self.choice(ite.c, then, otherwise)
-		self.folds.insert(key, made)
-		return made
+		return self.choice(ite.c, then, otherwise)
 	}
 
 	/// The atom `d rel 0`, cleared of denominators, made once per text.
@@ -995,6 +1033,14 @@ impl SvSmtReader {
 				return SvGot::Failed(why.clone())
 			},
 		}
+		return self.operation(sexp, op, args)
+	}
+
+	/// The operation `op` over the values `args` read from `sexp`. Its own
+	/// function, never inlined: its locals would grow the frame of
+	/// `application`, which recurses once per level a term nests (#1959).
+	@inline(never)
+	fn operation(ref mut self, sexp: ref LgSexp, op: String, args: Vec[SvVal]) -> SvGot {
 		let fun_name = lg_unquoted(op)
 		match self.funs.get(fun_name) {
 			null => {},
@@ -1319,7 +1365,7 @@ pub enum SvSmtRead {
 }
 
 /// Read a script with its variables' sorts.
-pub fn sv_smtlib_script(source: String) -> SvSmtRead {
+fn sv_smtlib_script(source: String) -> SvSmtRead {
 	let commands = match lg_parse(source) {
 		LgParsedSexps::Done(read) => read.clone(),
 		LgParsedSexps::Failed(why) => {
@@ -1360,6 +1406,7 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 		made: collections::BTreeMap(),
 		nl: [],
 		nl_names: collections::BTreeMap(),
+		depth: 0,
 	}
 	let mut stack: Vec[Vec[i64]] = [[]]
 	let mut asserted = 0

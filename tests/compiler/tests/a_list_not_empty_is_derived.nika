@@ -1,0 +1,42 @@
+/// A precondition derived from the callers (ADR-391 D1) may say that a list
+/// is not empty (#1832): every caller hands `last` and `first` a list it
+/// knows holds something, so `xs[xs.len() - 1]` and `xs[0]` need no check,
+/// also through a path of fields (`body.stmts`, as `check_function.nika`
+/// reads it). `top`'s caller hands a list a call made, of which it knows
+/// nothing, and its read stays checked.
+struct Body {
+	stmts: Vec[i64],
+}
+
+fn last(xs: ref Vec[i64]) -> i64 sync {
+	return xs[xs.len() - 1]
+}
+
+fn first(xs: ref Vec[i64]) -> i64 sync {
+	return xs[0]
+}
+
+fn tail(body: ref Body) -> i64 sync {
+	return body.stmts[body.stmts.len() - 1]
+}
+
+fn top(xs: ref Vec[i64]) -> i64 sync {
+	return xs[0]
+}
+
+fn made() -> Vec[i64] {
+	return [9]
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	if !xs.is_empty() {
+		println(f"{last(xs)} {first(xs)}")
+	}
+	let body = Body { stmts: [7, 8] }
+	if body.stmts.len() > 0 {
+		println(tail(body))
+	}
+	let ys = made()
+	println(top(ys))
+}

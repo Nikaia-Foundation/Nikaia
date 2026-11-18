@@ -213,14 +213,22 @@ signature = "(status: i32) -> String"
 [type."Body"]
 pub = true
 variants = ["Text(String)", "Bytes(Bytes)", "File(File)"]
+compares = true
+equates = true
 
 [type."File"]
 pub = true
 fields = ["pub path: String", "pub root: fs::Root", "pub status: i32", "pub size: i64"]
+compares = true
+equates = true
 
 [type."Method"]
 pub = true
 variants = ["Get", "Post"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."Request"]
 pub = true
@@ -229,3 +237,5 @@ fields = ["pub head: http1::Head", "pub body: String"]
 [type."Response"]
 pub = true
 fields = ["pub status: i32", "pub content_type: String", "pub body: Body"]
+compares = true
+equates = true

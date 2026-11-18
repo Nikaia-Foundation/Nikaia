@@ -139,6 +139,28 @@ pub fn raw(text: String) -> Raw {
     return Raw { text: text }
 }
 
+/// **Whether `part` is one SQL identifier** (ADR-raw-sinks-1 D2): a letter or
+/// `_`, then letters, digits and `_`, `[A-Za-z_][A-Za-z0-9_]*`. The
+/// precondition of `raw(text)` on each part from outside the program; a pure
+/// `bool` call, so a guard on it is a fact the prover reads (ADR-381).
+pub fn is_identifier(part: ref String) -> bool sync {
+    let mut first = true
+    for c in part.scalars {
+        let fits = match c {
+            'a'..'z' => true,
+            'A'..'Z' => true,
+            '_' => true,
+            '0'..'9' => !first,
+            else => false,
+        }
+        if !fits {
+            return false
+        }
+        first = false
+    }
+    return !first
+}
+
 impl Statement for Raw {
     fn text(self) -> String {
         return self.text.clone()

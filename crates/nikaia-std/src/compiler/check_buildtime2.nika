@@ -8,7 +8,7 @@ impl CheckState {
     /// `NK1152`: a call at build time that the build may not make, said with
     /// what the build gave as the reason. What the way out is depends on whether
     /// the option's default is being computed (ADR-318 D7).
-    pub fn a_body_that_may_not_run_at_build_time(ref mut self, callee: ref String, because: ref String, span: ref Span) sync {
+    fn a_body_that_may_not_run_at_build_time(ref mut self, callee: ref String, because: ref String, span: ref Span) sync {
         let mut help: String = f"Call it while the program runs, with `let` instead of `comptime`, or make `{callee}` `sync` so it touches nothing outside the program."
         if self.computing_default {
             help = f"Make `{callee}` `sync` so it touches nothing outside the program, or make the option a `T?` and call it in the body."
@@ -20,7 +20,7 @@ impl CheckState {
     /// depth or steps. `over` is what the sub-program said, `kind limit | path`,
     /// and `value_fn` the name the `comptime` itself runs under, which the path
     /// shows as the binding.
-    pub fn a_build_time_run_over_its_bound(ref mut self, bound: ref String, over: ref String, value_fn: ref String, span: ref Span) sync {
+    fn a_build_time_run_over_its_bound(ref mut self, bound: ref String, over: ref String, value_fn: ref String, span: ref Span) sync {
         let mut what: String = over.trim()
         let mut path: String = ""
         let bar = over.find("|")
@@ -48,7 +48,7 @@ impl CheckState {
         let mut notes: Vec[String] = []
         if path.len() > 0 {
             let mut shown: Vec[String] = []
-            for step in path.split(" > ").collect() {
+            for step in path.split(" > ") {
                 if step == "…" {
                     shown.push(step.clone())
                 } else if step == value_fn {
@@ -71,7 +71,7 @@ impl CheckState {
     /// `NK1168`: a `comptime` that depends on itself. **One ring, one error**:
     /// every constant in it is circular and each would report the same loop from
     /// a different corner.
-    pub fn a_constant_built_from_itself(ref mut self, bound: ref String, ring: ref Vec[String], span: ref Span) sync {
+    fn a_constant_built_from_itself(ref mut self, bound: ref String, ring: ref Vec[String], span: ref Span) sync {
         let mut sorted: Vec[String] = ring.clone()
         sorted.sort()
         let mut unique: Vec[String] = []
@@ -96,7 +96,7 @@ impl CheckState {
     /// `NK1127`: a `comptime` whose value needs something the build does not
     /// have. **One note, written per wall**, so that a sentence about `sync`
     /// lives in the walls it belongs to.
-    pub fn a_build_time_body_that_is_not_here(ref mut self, bound: ref String, what: ref String, why: ref String, way_out: ref String, span: ref Span) sync {
+    fn a_build_time_body_that_is_not_here(ref mut self, bound: ref String, what: ref String, why: ref String, way_out: ref String, span: ref Span) sync {
         // **The wall's way out, and then the one every `comptime` has**: a value
         // meant to be computed while the program runs was never a constant
         // (ADR-287 D4).

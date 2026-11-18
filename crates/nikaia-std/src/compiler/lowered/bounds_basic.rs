@@ -7,7 +7,7 @@ pub(crate) struct CountedLoop {
     pub(crate) list: String,
 }
 
-pub fn basic_indices(body: &Block, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<i64> {
+pub(crate) fn basic_indices(body: &Block, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<i64> {
     let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
     counted_block(body, &mut vec![], words, &mut out);
     out
@@ -249,9 +249,9 @@ pub(crate) fn counted_blocks(expr: &Expr, over: &[CountedLoop], words: &winnow_g
     }
 }
 
-pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all" | "contains_key" | "keys" | "values") }
+pub(crate) fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all" | "contains_key" | "keys" | "values") }
 
-pub fn bytes_word_width(method: &str) -> i64 {
+pub(crate) fn bytes_word_width(method: &str) -> i64 {
     match method {
         "u32_le" => 4,
         "u32_be" => 4,
@@ -271,21 +271,21 @@ pub(crate) enum Seek {
     Unvisited(collections::BTreeSet<i64>),
 }
 
-pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+pub(crate) fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(nikaia_std::block::Text::from(list.to_string())), words) }
 
-pub fn elements_change(stmt: &Stmt, list: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+pub(crate) fn elements_change(stmt: &Stmt, list: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
 
-pub fn elements_stay(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+pub(crate) fn elements_stay(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
 
-pub fn rebinds_in_statement(stmt: &Stmt, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
+pub(crate) fn rebinds_in_statement(stmt: &Stmt, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
 
-pub fn values_read(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::ValuesRead(nikaia_std::block::Text::from(name.to_string())), words) }
+pub(crate) fn values_read(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::ValuesRead(nikaia_std::block::Text::from(name.to_string())), words) }
 
 pub(crate) fn only_grows_or_measures(method: &str) -> bool { method == "push" || method == "len" || method == "is_empty" }
 
-pub fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
+pub(crate) fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
 
-pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+pub(crate) fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         Expr::Field { base, name, .. } => {
@@ -297,13 +297,13 @@ pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<S
     }
 }
 
-pub fn path_root(path: &str) -> String {
+pub(crate) fn path_root(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
     nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
-pub fn path_within(path: &str, within: &str) -> bool {
-    path == within || nikaia_std::index::or(match path.strip_prefix(AsRef::<str>::as_ref(within)) {
+pub(crate) fn path_within(path: &str, within: &str) -> bool {
+    path == within || !path.contains('@') && nikaia_std::index::or(match path.strip_prefix(AsRef::<str>::as_ref(within)) {
         Some(__nikaia_it) => Some(__nikaia_it.starts_with(".")),
         None => None,
     }, || false)

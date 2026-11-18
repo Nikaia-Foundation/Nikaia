@@ -1,0 +1,32 @@
+// ADR-369 D4 (#1755): a rule is found only where every method that writes
+// the fields keeps it. Another file of the package may write a private field
+// too (`spoil` empties `cols`), and the search does not walk its bodies, so
+// no rule over that field is found and `last`'s read stays checked. A field
+// the other file only reads (`peek` reads `Kept`'s `rows`), or that it
+// writes only in another type (`Other::wipe` clears its own `rows`), keeps
+// its rule, and `Kept::last`'s read is proved.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"spoiled\"\nversion = \"0.1.0\"\n")
+    let lib = "struct Spoiled {\n    cols: Vec[i64],\n    n: i64,\n}\n\nimpl Spoiled {\n    fn add(ref mut self, c: i64) {\n        self.cols.push(c)\n        self.n += 1\n    }\n\n    fn last(self) -> i64 {\n        if self.n > 0 {\n            return self.cols[self.n - 1]\n        }\n        return 0\n    }\n}\n\npub fn made() -> i64 {\n    let mut b = Spoiled { cols: [], n: 0 }\n    b.add(2)\n    return b.last()\n}\n\nstruct Kept {\n    rows: Vec[i64],\n    m: i64,\n}\n\nimpl Kept {\n    fn add(ref mut self, c: i64) {\n        self.rows.push(c)\n        self.m += 1\n    }\n\n    fn last(self) -> i64 {\n        if self.m > 0 {\n            return self.rows[self.m - 1]\n        }\n        return 0\n    }\n}\n\npub fn kept() -> i64 {\n    let mut b = Kept { rows: [], m: 0 }\n    b.add(3)\n    return b.last()\n}\n"
+    fs::write(f"{tmp}/src/lib.nika", fs::Root::Anywhere, lib)
+    fs::write(f"{tmp}/src/beside.nika", fs::Root::Anywhere, "fn spoil(mut c: Spoiled) {\n    c.cols.clear()\n}\n\nfn peek(k: Kept) -> i64 {\n    return k.rows.len() + k.m\n}\n\nstruct Other {\n    rows: Vec[i64],\n}\n\nimpl Other {\n    fn wipe(ref mut self) {\n        self.rows.clear()\n    }\n}\n")
+    let out = process::run(nikaia, ["check", "--bounds", "src/lib.nika"]; dir: tmp.clone())
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("self.cols[") || line.contains("self.rows[") {
+            println(line.trim())
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

@@ -1,0 +1,39 @@
+// ADR-359 D14: a method of a trait's implementation has no result summary
+// (trait methods stay under *Not decided here*): `self.kind(m) != 0` says
+// nothing of `m`, though the body would, and the call of `need` stays
+// unproved (#1849). Nothing calls `through_the_trait`.
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+trait Kind {
+    fn kind(ref self, n: i64) -> i64
+}
+
+struct Reader {
+    base: i64,
+}
+
+impl Kind for Reader {
+    fn kind(ref self, n: i64) -> i64 {
+        if n < 1 {
+            return 0
+        }
+        return 7
+    }
+}
+
+impl Reader {
+    pub fn through_the_trait(ref self, m: i64) -> i64 {
+        let k = self.kind(m)
+        if k == 0 {
+            return self.base
+        }
+        return need(m)
+    }
+}
+
+fn main() throws {
+    println("unreached")
+}

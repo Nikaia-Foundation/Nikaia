@@ -21,7 +21,7 @@ pub fn crosses(fields: &[String]) -> Crosses {
     Crosses::May
 }
 
-pub fn plainly_sendable(written: &str) -> bool {
+pub(crate) fn plainly_sendable(written: &str) -> bool {
     let ty = written.trim();
     if ty.starts_with('&') { return false; }
     for wrapper in PASSES_THROUGH.iter() {
@@ -35,7 +35,7 @@ pub fn plainly_sendable(written: &str) -> bool {
     is_plain(ty) || ty == "String"
 }
 
-pub fn is_plain(name: &str) -> bool {
+pub(crate) fn is_plain(name: &str) -> bool {
     for plain in PLAIN.iter() {
         let plain = *plain;
         if name == plain { return true; }
@@ -46,17 +46,17 @@ pub fn is_plain(name: &str) -> bool {
 pub fn generic_of(written: &str, name: &str) -> Option<String> {
     let text = written.trim();
     if !text.starts_with(AsRef::<str>::as_ref(name)) { return None; }
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
-    let n: Vec<scalar> = nikaia_std::list::chars(name.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
+    let n: Vec<scalar> = nikaia_std::list::scalars(name.chars());
     let after = slice(&c, n.len() as i64, c.len() as i64);
     let rest = after.trim_start();
     if !rest.starts_with('<') || !rest.ends_with('>') { return None; }
-    let r: Vec<scalar> = nikaia_std::list::chars(rest.chars());
+    let r: Vec<scalar> = nikaia_std::list::scalars(rest.chars());
     Some(slice(&r, 1, unsafe { nikaia_std::proven::sub::<i64>(r.len() as i64, 1) }))
 }
 
 pub fn bounds_send(text: &str) -> bool {
-    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut start: i64 = 0;
     for at in 0..unsafe { nikaia_std::proven::add::<i64>(c.len() as i64, 1) } {
         let ends = at == c.len() as i64 || !((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_');
@@ -136,7 +136,7 @@ pub(crate) fn is_a_sink(call: &str) -> bool {
     false
 }
 
-pub fn promise_lines(promises: &[String]) -> Vec<String> {
+pub(crate) fn promise_lines(promises: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if promises.is_empty() { return out; }
     out.push(String::from("**This crate makes promises the toolchain cannot check** (ADR-290 D10). A tool"));
@@ -146,7 +146,7 @@ pub fn promise_lines(promises: &[String]) -> Vec<String> {
     out
 }
 
-pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> Vec<String> {
+pub(crate) fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if !bound.is_empty() {
         let listed = a_list(bound, "the parameter", "the parameters");
@@ -176,7 +176,7 @@ pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> 
     out
 }
 
-pub fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) -> TypeContract {
+pub(crate) fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) -> TypeContract {
     let mut entry = TypeContract::empty();
     entry.public = true;
     entry.crosses = crosses(fields);

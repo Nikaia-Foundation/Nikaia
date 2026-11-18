@@ -1,10 +1,10 @@
-error[NK1102]: `counter` expects `a` to be `String`, but you're passing `ref String`.
+error[NK1102]: `counter` expects `a` to be a `String` of its own, but you're passing a view of a `String`.
    --> tests/ownership_matrix_view_kept_capture.nika:21:21
     |
  21 |     let c = counter(s)
     |                     ^
     |
-    = note: It's declared as `counter(a: String) -> fn() -> i64`.
+    = note: It's declared as `counter(keep a: String) -> fn() -> i64`.
     = note: This is a view: it points into text that something else owns.
     = note: `counter` keeps its `a` after the call returns, so it needs text of its own.
     = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.

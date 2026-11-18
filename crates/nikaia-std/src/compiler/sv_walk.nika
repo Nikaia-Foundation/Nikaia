@@ -316,7 +316,7 @@ fn sv_walk_start(query: ref SvQuery, carried: ref Vec[Vec[u32]]) -> SvWalk? {
 	}
 	let mut a = 0
 	while a < atoms {
-		let row = query.atoms[a].row.clone()
+		let row = query.atoms[a].row
 		let mut i = 0
 		while i < row.cols.len() {
 			let col = row.cols[i] as i64
@@ -360,7 +360,7 @@ fn sv_walk_start(query: ref SvQuery, carried: ref Vec[Vec[u32]]) -> SvWalk? {
 /// **The walk** on `query` with the clauses `carried` beside its own, at
 /// most `moves` moves under `params`. Integer columns only: a query with a
 /// real column gets no walk (ADR-270 D27).
-pub fn sv_walk(
+fn sv_walk(
 	query: ref SvQuery,
 	carried: ref Vec[Vec[u32]],
 	params: ref SvWalkParams,
@@ -446,13 +446,13 @@ pub fn sv_walk(
 
 /// The walk's parameters as the strategy's set starts them
 /// (`sv_strategy.nika`).
-pub fn sv_walk_params() -> SvWalkParams {
+fn sv_walk_params() -> SvWalkParams {
 	return SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 }
 }
 
 /// The work a walk of `moves` moves is counted as: one unit per
 /// `moves_per_unit` moves begun.
-pub fn sv_walk_units(moves: i64, params: ref SvWalkParams) -> i64 {
+fn sv_walk_units(moves: i64, params: ref SvWalkParams) -> i64 {
 	if moves <= 0 || params.moves_per_unit <= 0 {
 		return 0
 	}
@@ -599,7 +599,7 @@ test "the walk finds a random system's model and nothing where there is none" {
 	}
 	let expected = [
 		"problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk",
-		"equation.smt2: walk found true in 11 moves, same again true, a model; refuted 7",
+		"equation.smt2: walk found true in 11 moves, same again true, a model; refuted 15",
 		"unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval",
 		"real.smt2: walk found false in 0 moves, same again true, no model; refuted 2",
 	]

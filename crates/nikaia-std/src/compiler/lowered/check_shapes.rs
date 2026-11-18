@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn roots_in_a_binding(expr: &Expr) -> bool {
+pub(crate) fn roots_in_a_binding(expr: &Expr) -> bool {
     match expr {
         Expr::Variable(_, _) => true,
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); roots_in_a_binding(base) },
@@ -18,7 +18,7 @@ pub fn roots_in_a_binding(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+pub(crate) fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -37,7 +37,7 @@ pub fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn shapes_is_null(pattern: &MatchPattern) -> bool {
+pub(crate) fn shapes_is_null(pattern: &MatchPattern) -> bool {
     match pattern {
         MatchPattern::Literal(literal) => matches!(literal, Expr::LitNull(_)),
         _ => false,
@@ -46,18 +46,18 @@ pub fn shapes_is_null(pattern: &MatchPattern) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn shapes_has_a_null_arm(arms: &[MatchArm]) -> bool {
+pub(crate) fn shapes_has_a_null_arm(arms: &[MatchArm]) -> bool {
     for arm in arms.iter() { if shapes_is_null(&arm.pattern) { return true; } }
     false
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn shapes_is_otherwise(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Otherwise) }
+pub(crate) fn shapes_is_otherwise(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Otherwise) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn catches_everything(pattern: &MatchPattern) -> bool {
+pub(crate) fn catches_everything(pattern: &MatchPattern) -> bool {
     match pattern {
         MatchPattern::Otherwise => true,
         MatchPattern::Path(path) => path.len() == 1,
@@ -75,11 +75,11 @@ pub(crate) fn any_catches_everything(alternatives: &[MatchPattern]) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn plainly_a_value(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitBool(_, _) | Expr::Binary { .. } | Expr::Field { .. } | Expr::Index { .. } | Expr::Tuple(_, _)) }
+pub(crate) fn plainly_a_value(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitBool(_, _) | Expr::Binary { .. } | Expr::Field { .. } | Expr::Index { .. } | Expr::Tuple(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn an_element_beneath(expr: &Expr) -> bool {
+pub(crate) fn an_element_beneath(expr: &Expr) -> bool {
     match expr {
         Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); !matches!(index, Expr::Range { .. }) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); an_element_beneath(base) },
@@ -89,7 +89,7 @@ pub fn an_element_beneath(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn rust_constant_type(library: &Ledger, ty: &Ty) -> Option<String> {
+pub(crate) fn rust_constant_type(library: &Ledger, ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; a_named_constant_type(library, name, args, view) },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { wrapped_constant(library, item, "&[", "]") } else { None } },
@@ -141,7 +141,7 @@ pub(crate) fn wrapped_constant(library: &Ledger, inner: &Ty, open: &str, close: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn element_below(library: &Ledger, found: &Ty) -> Option<String> {
+pub(crate) fn element_below(library: &Ledger, found: &Ty) -> Option<String> {
     match found {
         Ty::Named { name, args, .. } => if (name == "Vec" || name == "List") && !args.is_empty() { rust_constant_type(library, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) } else { None },
         _ => None,
@@ -150,7 +150,7 @@ pub fn element_below(library: &Ledger, found: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn slice_element(ty: &Ty) -> Option<Ty> {
+pub(crate) fn slice_element(ty: &Ty) -> Option<Ty> {
     match ty {
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { Some(item.clone()) } else { None } },
         _ => None,
@@ -168,7 +168,7 @@ pub fn is_fixed(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn is_growable(ty: &Ty) -> bool {
+pub(crate) fn is_growable(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; name == "Vec" || name == "List" || name == "String" && !view },
         _ => false,
@@ -192,7 +192,7 @@ pub fn constructed(constructor: &str) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_panic(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_panic(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "panic" && self.lookup("panic").is_none() && !world.own.functions.contains_key("panic") },
@@ -214,7 +214,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+    pub(crate) fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,
@@ -234,7 +234,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+    pub(crate) fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,

@@ -42,7 +42,7 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_defaults_item_constants(state, world, host);
     state.types_that_contain_themselves(&world.here, &world.beside);
     check_attributes_all(state, world, host);
@@ -90,11 +90,41 @@ pub fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &Check
             _ => { },
         }
     }
+    state.code_parameters_that_change(&check_program_trait_methods(world));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_trait_methods(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
+    let mut groups: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Impl { target, methods, trait_name } => {
+                let trait_name = *trait_name;
+                let named = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let written = world.here.text(named);
+                let owner = world.here.text(target.name);
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, .. } => {
+                            let name = *name;
+                            let sym = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let own = world.here.text(sym);
+                            groups.insert(format!("{}::{}", owner, own), format!("{}::{}", written, own));
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    groups
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     if state.flow.harvesting || world.beside.is_empty() { return; }
     let mut mine: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in world.here.items.iter() {
@@ -160,7 +190,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_program_copies_called(state, world);
     let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); }
@@ -230,7 +260,7 @@ pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckW
     }
 }
 
-pub fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
+pub(crate) fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(on.to_string())], nikaia_std::block::Place::Block);
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;

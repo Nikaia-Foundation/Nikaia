@@ -1,0 +1,34 @@
+/// A method of a trait's implementation has no result summary (ADR-359
+/// D14: trait methods stay undecided), so `self.kind(t)` tells the bounds
+/// walk nothing and `t[0]` keeps its check (#1904).
+trait Kinded {
+	fn kind(ref self, t: ref Vec[i64]) -> i64 sync
+}
+
+struct Reader {
+	base: i64,
+}
+
+impl Kinded for Reader {
+	fn kind(ref self, t: ref Vec[i64]) -> i64 sync {
+		if t.len() != 1 {
+			return 0
+		}
+		return 7
+	}
+}
+
+impl Reader {
+	pub fn first(ref self, t: ref Vec[i64]) -> i64 sync {
+		if self.kind(t) == 0 {
+			return self.base
+		}
+		return t[0]
+	}
+}
+
+fn main() throws {
+	let r = Reader { base: 9 }
+	let one: Vec[i64] = [4]
+	println(f"{r.first(one)}")
+}

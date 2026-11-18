@@ -67,6 +67,8 @@ pub struct Proven {
     pub calls: BTreeMap<i64, String>,
     /// The derived preconditions, for `--bounds` (ADR-391 D4).
     pub derived: Vec<String>,
+    /// What keeps each function from its callers' bounds (#1863).
+    pub gates: BTreeMap<String, String>,
     /// What `--bounds-trace` shows (#1495): each goal of the line asked.
     pub trace: Vec<String>,
 }
@@ -142,6 +144,7 @@ pub fn proven_traced(
         nonnegative_locals: counters.into_inner(),
         calls: all.calls,
         derived: all.derived,
+        gates: all.gates,
         trace: all.trace,
     }
 }

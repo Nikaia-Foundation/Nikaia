@@ -44,10 +44,11 @@ pub enum SvDriven {
 	RealModel(collections::BTreeMap[String, SvRat]),
 }
 
-/// The new engine's answer, its work (the theory checks it ran, or a fast
-/// path's rounds) and the fast path that answered (`""`: the loop); after a
-/// search that ended *unknown*, the clauses it learned over the query's atoms
-/// and its level-zero literals, which cross to the walk (ADR-270 D14).
+/// The new engine's answer, its work (its theory checks, each one case and
+/// two more a pivot, #2048, or a fast path's rounds) and the fast path that
+/// answered (`""`: the loop); after a search that ended *unknown*, the
+/// clauses it learned over the query's atoms and its level-zero literals,
+/// which cross to the walk (ADR-270 D14).
 pub struct SvEngineRun {
 	pub driven: SvDriven,
 	pub work: i64,
@@ -82,7 +83,7 @@ fn sv_smt_stats_none() -> SvSmtStats {
 }
 
 /// The counters as `--stats` prints them.
-pub fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
+fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
 	return f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
 }
 
@@ -185,7 +186,7 @@ impl SvTh for SvBoth {
 				self.ran_at = here
 				self.exact_checks += 1
 				return match self.exact.check(false, limit, book) {
-					SvChecked::Conflict(c) => SvChecked::Conflict(c.clone()),
+					SvChecked::Conflict(c) => SvChecked::Conflict(c),
 					else => got,
 				}
 			},
@@ -226,6 +227,10 @@ impl SvTh for SvBoth {
 	fn shared(ref self) -> Vec[u32] {
 		return []
 	}
+
+	fn pivots(ref self) -> i64 {
+		return self.simplex.pivots
+	}
 }
 
 /// The search: the SAT core (which holds the book), the theory, which
@@ -237,9 +242,12 @@ pub struct SvSmt[T: SvTh] {
 	/// The SAT trail's entries handed to the theory.
 	pub head: i64,
 	pub budget: LgBudget,
-	/// Theory checks, partial and final: the work, capped by
-	/// `budget.cases`.
+	/// Theory checks, partial and final.
 	pub checks: i64,
+	/// The work of those checks, capped by `budget.cases`: each costs
+	/// `1 + sv_cases_per_pivot() * pivots`, its pivots the growth of the
+	/// theory's count during it (#2048).
+	pub spent: i64,
 	/// Theory conflicts and the literals the theory propagated.
 	pub conflicts: i64,
 	pub propagated: i64,
@@ -358,13 +366,33 @@ fn sv_smt_propagate[T: SvTh](mut s: SvSmt[T]) -> bool {
 	return any
 }
 
+/// What one simplex pivot costs the search's budget, in cases, on top of
+/// the case its check costs (#2048: `K = 1/2` pivots a case). Measured on
+/// the c_inference family, where a check pivots rarely (90 % none) but a
+/// pivot is the costly step: at 1 case a pivot `80_80_71_17_unsat` ends
+/// at about 31 s, at 2 within 27 s, and no file of the sample, the cvc5
+/// set or the regression set changes its answer.
+fn sv_cases_per_pivot() -> i64 {
+	return 2
+}
+
+/// One theory check, partial or final, and its work added to `spent`.
+fn sv_smt_check[T: SvTh](mut s: SvSmt[T], final: bool) -> SvChecked {
+	let before = s.th.pivots()
+	let got = s.th.check(final, s.budget, s.sat.book)
+	let pivots = s.th.pivots() - before
+	s.checks += 1
+	s.spent += 1 + sv_cases_per_pivot() * pivots
+	return got
+}
+
 /// **The CDCL(T) loop.**
 fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
 	while true {
 		if s.sat.refuted {
 			return SvSmtEnd::Unsat
 		}
-		if s.checks >= s.budget.cases {
+		if s.spent >= s.budget.cases {
 			return SvSmtEnd::Unknown(LgUnknown::TooManyCases)
 		}
 		let conflict = s.sat.propagate()
@@ -399,8 +427,7 @@ fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
 			}
 		}
 		s.fresh = false
-		s.checks += 1
-		let partial = s.th.check(false, s.budget, s.sat.book)
+		let partial = sv_smt_check(s, false)
 		match partial {
 			SvChecked::Conflict(_) => {
 				let end = sv_smt_answer(s, partial)
@@ -417,8 +444,7 @@ fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
 		}
 		let next = s.sat.pick()
 		if next == null {
-			s.checks += 1
-			let last = s.th.check(true, s.budget, s.sat.book)
+			let last = sv_smt_check(s, true)
 			match last {
 				SvChecked::Consistent => {
 					return SvSmtEnd::Sat
@@ -459,7 +485,7 @@ fn sv_smt_congruences(
 	}
 	let mut c = 0
 	while c < cnf.query.clauses.len() {
-		let clause = cnf.query.clauses[c].clone()
+		let clause = cnf.query.clauses[c]
 		if clause.len() == 2 {
 			for k in [0, 1] {
 				let d = clause[k]
@@ -474,7 +500,7 @@ fn sv_smt_congruences(
 	}
 	c = 0
 	while c < cnf.query.clauses.len() {
-		let clause = cnf.query.clauses[c].clone()
+		let clause = cnf.query.clauses[c]
 		let mut defined = clause.len() >= 2
 		for l in clause {
 			if l % 2 == 0 || !cnf.definition[(l / 2) as i64] {
@@ -538,7 +564,7 @@ fn sv_smt_congruence(
 		let mut found = false
 		let mut i = 0
 		while i < n && !found {
-			let pr = rows[i].clone()
+			let pr = rows[i]
 			i += 1
 			if pr.row.ks != [1] {
 				continue
@@ -673,7 +699,7 @@ fn sv_smt_search_cnf(
 	p: ref SvParams,
 	phases: ref Vec[bool],
 ) -> SvEngineRun {
-	let theory = p.theory.clone()
+	let theory = p.theory
 	let real = cnf.query.reals.len() > 0
 	if real && theory == "fm" {
 		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
@@ -827,6 +853,7 @@ fn sv_smt_run[T: SvTh](
 		head: 0,
 		budget: budget.clone(),
 		checks: 0,
+		spent: 0,
 		conflicts: 0,
 		propagated: 0,
 		propagating: true,
@@ -855,7 +882,7 @@ fn sv_smt_run[T: SvTh](
 	return match end {
 		SvSmtEnd::Unsat => SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.clone()),
-			work: s.checks,
+			work: s.spent,
 			path: "",
 			carried: [],
 			stats: stats.clone(),
@@ -870,7 +897,7 @@ fn sv_smt_run[T: SvTh](
 						true,
 						s.th.model(),
 					)),
-					work: s.checks,
+					work: s.spent,
 					path: "",
 					carried: [],
 					stats: stats.clone(),
@@ -878,13 +905,13 @@ fn sv_smt_run[T: SvTh](
 			}
 			let values = s.th.real_values()
 			if !sv_real_model_holds(arena, facts, goal, values) {
-				let mut none = sv_engine_unknown(LgUnknown::NoContradiction, s.checks)
+				let mut none = sv_engine_unknown(LgUnknown::NoContradiction, s.spent)
 				none.stats = stats.clone()
 				return none
 			}
 			SvEngineRun {
 				driven: SvDriven::RealModel(values),
-				work: s.checks,
+				work: s.spent,
 				path: "",
 				carried: [],
 				stats: stats.clone(),
@@ -893,7 +920,7 @@ fn sv_smt_run[T: SvTh](
 		SvSmtEnd::Unknown(why) => {
 			// What crosses a switch (ADR-270 D14): the learned clauses and the
 			// level-zero units over the query's own atoms.
-			let mut run = sv_engine_unknown(why.clone(), s.checks)
+			let mut run = sv_engine_unknown(why.clone(), s.spent)
 			run.stats = stats.clone()
 			let atoms = cnf.query.atoms.len()
 			for c in s.sat.carried() {
@@ -1083,9 +1110,9 @@ test "two-way disjunctions are searched with learned clauses over each theory" {
 	]
 	let out = sv_smt_test_lines(files)
 	let expected = [
-		"bits-20.smt2: simplex proved 344; fm proved 402; both proved 344",
+		"bits-20.smt2: simplex proved 384; fm proved 402; both proved 384",
 		"  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0",
-		"bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49",
+		"bits-sat.smt2: simplex refuted 73; fm refuted 72; both refuted 73",
 		"  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0",
 	]
 	assert(out == expected.join("\n") + "\n")
@@ -1105,9 +1132,9 @@ test "a congruence, a deep equality and contradicting bounds are answered before
 	]
 	let out = sv_smt_test_lines(files)
 	let expected = [
-		"threes-10.smt2: simplex proved 1; fm proved 1; both proved 1",
+		"threes-10.smt2: simplex proved 23; fm proved 1; both proved 23",
 		"  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0",
-		"branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2",
+		"branch-depth.smt2: simplex refuted 988; fm refuted 2; both refuted 988",
 		"  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0",
 		"bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0",
 		"  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0",

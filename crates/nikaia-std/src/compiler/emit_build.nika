@@ -114,7 +114,7 @@ pub enum Target {
 }
 
 /// Every target with a short name, in the order a refusal lists them.
-pub fn emit_build_targets() -> Vec[Target] sync {
+fn emit_build_targets() -> Vec[Target] sync {
     return [Target::X86_64Linux, Target::Aarch64Linux, Target::Wasm32Unknown]
 }
 
@@ -217,7 +217,7 @@ impl Target {
 
 /// Every target triple Rust knows, as `rustc --print target-list` printed it
 /// (rustc 1.97.0). Regenerate with that command when the floor moves.
-pub fn emit_build_rust_targets() -> Vec[ref String] sync {
+fn emit_build_rust_targets() -> Vec[ref String] sync {
     return [
         "aarch64-apple-darwin",
         "aarch64-apple-ios",

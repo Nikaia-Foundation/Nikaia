@@ -48,9 +48,11 @@ signature = "(raw: ref String) -> String"
 
 [type."Json"]
 variants = ["Null", "Bool(bool)", "Number(f64)", "Text(ref String)", "Array(Vec[Json])", "Object(Vec[Member])"]
+compares = true
 tethered = ["Text", "Array", "Object"]
 
 [type."Member"]
 pub = true
 fields = ["key: ref String", "value: Json"]
+compares = true
 tethered = ["key", "value"]

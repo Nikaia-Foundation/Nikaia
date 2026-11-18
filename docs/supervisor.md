@@ -3,19 +3,26 @@
 What a main session does. **Every main session is a supervisor, of its own
 work** (owner, 2026-11-14): the sessions running at the same time (a solver, a
 CI session, a lane) form a swarm, each with its own driver
-(`scripts/drive.nika`) and its own agents. Each one talks to the owner, raises
-the version for what its own driver pushed, writes its own `CHANGELOG.md`
-heading and its own `docs/tokenspeed.md` rows, and takes new `NK` codes for its
-own agents; none waits for another session to do this, and none commits
-another session's rows or headings. A collision in the version lines or
-`CHANGELOG.md` is repaired by whoever pushes second (*Versions and error
-codes*). Builders do not need this file; the rules
-for everyone are in `CLAUDE.md`. Since the owner removed the architect role
-(2026-11-01) the supervisor also writes the briefs, keeps the lanes and the
-issues and decides obvious language gaps (*Language decisions*); anything else
-goes to the owner. The cycle and the hand-over between main sessions are
-below, under *Running the lanes*; briefs and reports under *Briefs and
-reports*.
+(`scripts/drive.nika`) and its own agents. Each one talks to the owner and
+takes new `NK` codes for its own agents. **The work order is the issue**: the
+driver queues its lane's `ready` issues itself and renders the agent's prompt
+from each; nobody writes briefs by hand. **The release is the driver's**: after
+each push it runs `scripts/release.nika`, which raises the version and writes
+the `CHANGELOG.md` entry from the reports' `Changelog:` lines; the session
+checks that it ran (`DIR/released.txt` must exist) and does not do it by hand.
+None commits another session's rows or headings. **A session's checkout is
+its own** (owner, 2026-11-17): no other session writes into it, so an
+uncommitted change found there is this session's, its driver's or its agents',
+never "another session's" (`docs/tokenspeed.md`, whose rows the driver writes
+after each agent, belongs to the session running the lane), and is committed
+with its work. A collision in the version
+lines or `CHANGELOG.md` is repaired by whoever pushes second (*Versions and
+error codes*). Builders do not need this file; the rules for everyone are in
+`CLAUDE.md`. Since the owner removed the architect role (2026-11-01) the
+supervisor keeps the lanes and the issues and decides obvious language gaps
+(*Language decisions*); anything else goes to the owner. The cycle and the
+hand-over between main sessions are below, under *Running the lanes*; the
+reports under *Briefs and reports*.
 
 ## Reporting to the owner
 
@@ -54,6 +61,15 @@ reports*.
   after the suite.
 * **Before any push, look**: `git log --oneline origin/develop..develop`;
   a commit that is not the supervisor's own means the step above.
+* **Green is green** (owner, 2026-11-17): a batch the full suite passed is
+  not tested in full again only because `develop` moved meanwhile. The driver
+  merges `origin/develop` and runs the short checks, up to three rounds
+  (#2008, *Suite watch*). Beyond that, the supervisor may push such
+  a merge by judgment: it reads what the incoming commits touch, and where
+  they share no files and no topic with the batch and the short checks are
+  green, it pushes the merge. The full suite runs again only for red short
+  checks, a conflict outside `lowered/*.rs`, or an overlap in topic. CI on
+  `develop` stays the final gate; a red `develop` is fixed forward.
 
 ## Watching CI
 
@@ -67,7 +83,8 @@ reports*.
   -- --dry-run DIR` prints one `CI` line; never the MCP `actions_list` (tens of
   k tokens). CI logs: the proxy refuses the blob download; failing test names
   come from `gh api .../check-runs/<job id>/annotations`. A red run gets a
-  fix-forward brief (or a revert) from the supervisor.
+  fix-forward from the supervisor (a `ready` issue, its `#N` line first in the
+  lane's `batch.txt`), or a revert.
 
 ## Trunk, CI and issues
 
@@ -135,8 +152,8 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   never pushes. The badges are the driver's (owner, 2026-11-15): before each
   suite it regenerates them on HEAD and checks them with `badges.py --check`,
   up to three times; `pre-push.nika` only shows them, and fails on them only
-  as `pre-push.nika -- push`, for a session that pushes by hand. The driver runs the complete suite once per batch: when the
-  batch ends it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
+  as `pre-push.nika -- push`, for a session that pushes by hand. The driver runs the complete suite after every block of builders (#2022:
+  focus.txt's `block`, else 2) and when the batch ends: it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
   checkout, on CI: the tested commit pushed to `ci/<lane>` runs the whole
   workflow, `drive.nika --ci-wait` follows it with `gh api`); green, it pushes the
   tested commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and
@@ -190,6 +207,15 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   than it saves. Leaves first: a consumer moved before its dependencies finds
   its errors late. Record the state in the commit message after each chunk.
   One builder at a time for now.
+* **A sweep runs alone, and lands in one short window** (#1850). An issue
+  whose change rewrites files across the lanes (a visibility pass, a rename,
+  a migration of every compiler `.nika`: #1831 touched 459 files) is queued
+  when no other session's builder edits those files, or its brief says to
+  make the sweep the run's last step: edit, lower, build, commit, with no
+  probing or test runs in between. A sweep left uncommitted for a cycle
+  makes every other run that edits one of its files stage hunk by hunk
+  around it (#1808 filtered `pub` lines out of three bounds files and their
+  lowered `.rs` with a script).
 * **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
   Build agents are started as the `builder` type (`.claude/agents/builder.md`).
   The measure is tokens per moved line (target below 50 k); turns are the guard
@@ -234,6 +260,10 @@ What the owner expects from such a round:
   (doing nothing included), the advantages and disadvantages of each, how
   other languages do it, and a recommendation. A bare yes/no question in
   chat, even with a recommendation, is not a decision basis.
+* **One question at a time, and the message holds only it** (owner,
+  2026-11-17): the message that asks the owner carries the decision paper's
+  question and nothing else, no status or other topic before or after it;
+  the next question waits for the answer.
 * **Do not ask which issue to take next**: the order is arbitrary, pick one.
 * **What the language offers is decided from what it is for**, the coherence of
   its types and what other languages count as basic - never from what this
@@ -308,12 +338,14 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | :--- | :--- | :--- |
   | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
   | `STOP` | - | restart the driver (time limit, `--max` reached) |
-  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, write or drop the brief) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, put the issue's `#N` line in its place or drop the line; `Result: blocked`, which no `Supervisor:` line clears: file or decide what `Found:` names and write its `#M` under the report's `Needs:`; the restarted driver drops the brief and blocks the issue until `#M` is closed, as it does by itself when it filed the Founds, #1857) |
   | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
-  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | write the fix-forward brief, queued first; restart |
+  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | file the fix-forward as a `ready` issue (the failed jobs, the push's commits) and put its `#N` line first in `DIR/batch.txt` (`batch.nika` writes its brief); restart |
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
-  | `BATCH` | - | write the next briefs (every focus area empty); restart |
+  | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
   | `ESCALATE` | - | fix the cause the line names; restart |
+  | `PROVED` | `DIR/proved.log` | find the commit of the range that lowered the proof figure and file it for the prover lane; the driver goes on |
+  | (the driver's task ended, no `WAKE` line) | the log's last 20 lines | the driver crashed: fix or file the cause the lines show; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
@@ -321,8 +353,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   first; the run's files stay untracked working files, #1252), applies `BUMP
   pending` when CI is green, and on `CUT`, `BATCH DONE` and a `RED` with no
   builder queued waits for the batch's suite and stops (`ESCALATE <stop line>:
-  the supervisor writes the next briefs`): the supervisor writes the next
-  briefs (for `RED` the fix-forward, queued first) and starts it again. It
+  <what to do>`, by kind, #1887): the supervisor acts on the issues (files
+  or decides the waiting ones; for `RED` the fix-forward issue, its `#N` line queued first) and
+  starts it again. It
   prints one line per agent run and stops with one final line, exit 2, on an
   escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, a stop line,
   `--max` reached, a push rejected whose merge of `origin/develop` conflicted
@@ -343,7 +376,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   naming an open `#M` under `Needs:`/`Found:`, or ended partial naming one
   under `Needs:` (#1827), is dropped from the batch
   again, `ready` swapped for `blocked` (`DROPPED #N waits for #M`, #1819):
-  re-queue it once #M is closed.
+  re-queue it once #M is closed. A renamed `run<k>` report holds only
+  through its `Needs:` and the Founds the driver filed (#1881): write there
+  what the re-queued brief still waits for. An issue never waits for the
+  issue it is `Part of`, nor for a `#M` in quoted text (a backtick span, a
+  fenced or `<details>` block).
 * **By hand**: `nikaia run scripts/batch.nika -- DIR` after a hand-back
   (`--tokens BRIEF TOKENS CALLS` records the harness figures in
   `DIR/tokens.txt`); `nikaia run scripts/status.nika -- DIR` (CI, batch and
@@ -351,8 +388,12 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   [--dry-run] [--loop M] DIR` raises the version once for the done reports'
   `Changelog:` lines.
 * **Suite watch (owner, 2026-10-31; replaces the builders' gate of #852).**
-  Builders and QA commit locally; the driver runs `gate.nika -- --all` once
-  per batch (owner, 2026-10-31: once per batch): when the batch ends it starts
+  Builders and QA commit locally; the driver runs `gate.nika -- --all` after
+  every block of builders and at the batch's end (owner, 2026-10-31: once per
+  batch; #2022: a lane whose queue `drive_queue` refills never reached `BATCH
+  DONE`, so the single-DIR loop now starts it after every `block` builder runs
+  too, `BLOCK <n> builder runs: the suite starts`, `block` from
+  `docs/briefs/focus.txt`, else 2; no settle run by hand is needed): it starts
   the suite on HEAD in the background (`SUITE <sha8> started in the
   background`); the next builders go on meanwhile (owner, 2026-11-06), a
   finished suite is handled before the next builder, and the driver waits for
@@ -361,7 +402,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   next suite pushes it all (lock
   `target/suite.lock`, so the two lanes' drivers
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
-  commit on green (`PUSHED <sha8>`), and on red starts QA
+  commit on green (`PUSHED <sha8>`); a push rejected because `develop`
+  moved is merged with `origin/develop`, short-checked and pushed, up to three
+  rounds (`MERGE <sha8> round <k>`, #2008, owner 2026-11-17: green is green),
+  and only red short checks or a third rejection leave the merge to the next
+  suite (a conflict outside `lowered/*.rs` escalates); on red it starts QA
   (on `DIR/qa/qa-task.md`, the lane's own copy of the template
   `docs/qa-task.md`, so its report and run files land in `DIR/qa/`;
   input `DIR/qa-input.txt`, log `DIR/suite.log`),
@@ -467,6 +512,13 @@ probe is filed by the supervisor when it reads the report: a GitHub issue in bri
 `docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
 holds the defect gets the new probe as a comment instead.
 
+Before a bug issue gets `ready`, the supervisor runs
+`nikaia run scripts/drive.nika -- --cause-check N` (or a draft `FILE.md`;
+owner, 2026-11-16): it refuses a cause that does not say traced, suspected
+or unknown, and a suspected one that names no check that settles it
+(`docs/issues.md` I7). The driver marks the same in the issues it files
+from a `Found:` (`## Cause not marked`, `## Check missing`).
+
 ## Driver, suite and QA (owner, 2026-10-31)
 
 Builders commit locally and push nothing. After each
@@ -483,6 +535,12 @@ The score in [`priorities.md`](priorities.md) decides; every brief names its
 score terms in 2-3 lines. Each lane has its own `DIR` with `batch.txt`, its
 own driver run:
 
+* **One lane per session** (owner, 2026-11-17): a main session runs the
+  driver of exactly one lane. When it starts that lane's driver for the
+  first time, it first describes the lane in this list, in two to four lines
+  in the form of the entries here: its `DIR`, its label and what it takes. A
+  lane already described here is not described again. A lane without a
+  session is idle, and its issues wait for one.
 * **Main lane, `docs/briefs/`: self-hosting moves only** (owner, 2026-10-31).
   A batch holds at least two moves; the one exception is a fix-forward for a
   red `develop`. A compiler defect that blocks a move is fixed by the move's
@@ -504,6 +562,33 @@ own driver run:
   brief template, a check that turns builders red for nothing) it builds; noise
   (one run's slip, already fixed, a wish against an ADR) it closes with a
   one-line reason. An issue that is a compiler defect it relabels `bugs`.
+* **Safety lane, `docs/briefs/safety/`** (owner, 2026-11-16): the issues
+  labelled `safety`: that a program built with Nikaia cannot be attacked or
+  brought down. Data from outside that smuggles itself into a log, a query or
+  a command (injection); memory safety, ownership and sharing (doors, tasks,
+  `--sharing`); robustness when the program's own memory runs out; and the
+  rules that refuse an unsafe use of outside data (ADR-269 D6, ADR-396), as
+  rules and diagnostics. It does not make the prover stronger: where a rule
+  waits for a proof the prover cannot give, the lane files that for the solver
+  lane and the rule's issue is `blocked` on it.
+* **Views lane, `docs/briefs/views/`** (owner, 2026-11-17): the issues
+  labelled `views`: ownership as ADR-views-3 states it (`keep`, lent
+  parameters, `from`, the views of text and lists, the ownership matrix), and
+  every program of that kind that the checker accepts and `rustc` refuses
+  (NK1343). Its decisions follow *Language decisions*.
+* **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
+  The solver (ADR-270), the bounds walk and the prover behind `--bounds`
+  (indexes, divisors, overflow, relations between values, summaries), the
+  ledger's facts.
+* **CI lane, `docs/briefs/ci/`**: the issues labelled `ci`: the workflows,
+  the driver's suite and the checks around them. It also checks the result
+  of the z3 pipeline (`.github/workflows/z3.yml`, #1989) regularly, on the
+  Actions page or with `scripts/status.nika`. Nightly, it compares every
+  status stated under `tests/solver/` and a differential fuzz run with a
+  pinned z3 (`tests/solver/SOURCES.md`). It files each disagreement as its
+  own issue (the job files none): a wrong expectation for the solver lane,
+  a wrong verdict as a `solver` defect, each with the file from the run's
+  `z3-findings` artifact, and `fuzz N SEED` where the fuzzer found it.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.
@@ -517,7 +602,8 @@ own driver run:
 lanes of `docs/briefs/focus.txt` (main and bugs) in turn, a block of
 up to `block` briefs each, a `Blocks:` bug brief before any block. `CUT`
 and `RED` stop the driver for the supervisor's next briefs; an area with no
-unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block.
+unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block. It
+runs more than one lane, so it is not used (*One lane per session*).
 
 ## Briefs and reports
 
@@ -565,7 +651,10 @@ brief* (*Core* comes from `docs/builder-facts.md`), so it does not read the
 file whole; the rest it looks up with `scripts/syntax.nika`. Name the narrowest topics
 (`Tests and the gate, Probes, Grammar`), not the whole *Traps already met*;
 *Core* is never named. A heading ending in a parenthetical is named
-without it (`Moving Rust into Nikaia`); an unknown one stops the run.
+without it (`Moving Rust into Nikaia`); an unknown one stops the run. A brief
+without the line (every brief rendered from an issue) gets, besides *Core*, the
+`###` sections whose `Paths:` line has a fragment in the brief or its issues'
+text, at most three (#2002).
 
 **Issues are written in brief form** (owner, 2026-10-25): frontmatter, facts,
 *Locations*, *To build* steps with tests, rules, report form, so a builder can
@@ -587,7 +676,8 @@ issue instead of copying it and adds only the decision and the probe it lacks.
   builder needs, by their exact `##` or `###` heading; `agent.nika` inlines
   them after *Core*. A new
   trap goes into its topic's section there, not into each brief; only a trap
-  of every run goes into *Core* (`docs/builder-facts.md`).
+  of every run goes into *Core* (`docs/builder-facts.md`, at most 120 lines,
+  #2002). A new section gets a `Paths:` line under its heading.
 
 **Before a brief is written, the supervisor checks** (each tag is the run that
 paid for the rule):
@@ -714,8 +804,10 @@ new points of `Issue:` (each answer that is not `complete`), `Needs:` and
 `Friction:` as one issue labelled `improve` for the improvement lane (*Lanes*).
 Only new points (#1818, `drive_improve_sorted`, `--improve-plan` shows it): a
 `Deviation:` stays in the report (`IMPROVE-DROP`), read when the cut is
-accepted; a `broke I<n>` answer is a comment on the run's issue
-(`IMPROVE-BROKE #N`); a point the report says it closed or built, or that
+accepted; a `broke I<n>` answer, and a `wrong I<n>` answer or any other
+that the issue's suspected cause or diagnosis was wrong, is a comment on the
+run's issue (`IMPROVE-BROKE #N`; owner, 2026-11-16: a wrong guess is not an
+improvement issue of its own, the count above shows when it recurs); a point the report says it closed or built, or that
 names a rules file under `docs/`, `scripts/` or `.claude/` the run's commit
 changed, is dropped; one an open or recently closed improvement issue already
 has (its title or a `## Reported` line, by word overlap) is a comment there

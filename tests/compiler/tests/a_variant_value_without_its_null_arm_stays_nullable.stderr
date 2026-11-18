@@ -1,4 +1,4 @@
-error[NK1102]: A hole of this `f"…"` is `ref String?`, which may be `null`.
+error[NK1102]: A hole of this `f"…"` is `String?`, which may be `null`.
   --> tests/a_variant_value_without_its_null_arm_stays_nullable.nika:6:5
    |
  6 |     return match r {

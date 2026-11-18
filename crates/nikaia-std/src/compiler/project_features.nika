@@ -95,9 +95,9 @@ fn features_plain(c: scalar) -> bool {
 
 /// **A feature name Cargo accepts**: a letter, digit or `_` first, then those
 /// and `-`, `+`, `.`.
-pub fn features_name_ok(name: ref String) -> bool {
+fn features_name_ok(name: ref String) -> bool {
     let mut first = true
-    for c in name.chars() {
+    for c in name.scalars {
         let plain = features_plain(c) || c == '_'
         if first {
             if !plain { return false }
@@ -113,7 +113,7 @@ pub fn features_name_ok(name: ref String) -> bool {
 /// one Cargo accepts, each value a list of texts, and each entry of `default`
 /// a declared feature. An entry of another feature without `::` that is not
 /// the package names a feature too, and must be declared.
-pub fn features_lists_checked(features: ref Vec[ManifestFeature], package: ref String) -> FeaturesRefusal? {
+fn features_lists_checked(features: ref Vec[ManifestFeature], package: ref String) -> FeaturesRefusal? {
     let mut declared: Vec[String] = []
     for feature in features {
         declared.push(feature.name.clone())
@@ -142,7 +142,7 @@ pub fn features_lists_checked(features: ref Vec[ManifestFeature], package: ref S
 
 /// **`--features` of `nikaia bind` checked** (`NK1347`, ADR-393 D5): each
 /// name a feature `[features]` declares, `default` too where it is declared.
-pub fn features_chosen_checked(features: ref Vec[ManifestFeature], chosen: ref Vec[String]) -> FeaturesRefusal? {
+fn features_chosen_checked(features: ref Vec[ManifestFeature], chosen: ref Vec[String]) -> FeaturesRefusal? {
     let mut declared: Vec[String] = []
     for feature in features {
         declared.push(feature.name.clone())
@@ -172,7 +172,7 @@ fn features_hashes_follow(c: ref Vec[scalar], at: i64, hashes: i64) -> bool {
 
 /// **One line of the lowered Rust lexed**, its state carried on in `lexer`.
 fn features_scan_line(line: ref String, mut lexer: FeatureLexer) -> FeatureLine {
-    let c: Vec[scalar] = line.chars().collect()
+    let c: Vec[scalar] = line.scalars.collect()
     let n = c.len()
     let mut words: Vec[String] = []
     let mut last = ' '
@@ -526,7 +526,7 @@ struct FeaturesReach {
 /// owners, a dependency only feature items use is made optional, and the
 /// `[features]` table is written with `default`, the implications and the
 /// `dep:` entries.
-pub fn features_applied(rust: ref String, manifest: ref String, features: ref Vec[ManifestFeature], package: ref String) -> FeaturesMade throws {
+fn features_applied(rust: ref String, manifest: ref String, features: ref Vec[ManifestFeature], package: ref String) -> FeaturesMade throws {
     let reach = features_reach(rust, features, package)
     let mut lines = reach.lines.clone()
     let items = reach.items.clone()
@@ -769,7 +769,7 @@ fn features_reader_blanked(mut lines: Vec[String], item: ref FeatureItem) {
 /// **The readers of a crate no feature chooses from** (ADR-393 D4): a
 /// rust-library without `[features]`, or a package built whole beside the
 /// one that has them, holds only the forms over a whole input.
-pub fn features_readers_dropped(rust: ref String) -> String {
+fn features_readers_dropped(rust: ref String) -> String {
     let mut lines: Vec[String] = []
     for line in rust.split("\n") {
         lines.push(line.clone())
@@ -853,7 +853,7 @@ fn features_reach(rust: ref String, features: ref Vec[ManifestFeature], package:
 
 /// **A generated manifest with the features in it**: each optional
 /// dependency written `optional = true`, and the table before `[workspace]`.
-pub fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String {
+fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String {
     let mut out = ""
     let mut inside = false
     // A crate that already has a table (a grammar's `trace`) takes the
@@ -895,7 +895,7 @@ pub fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String
 /// **The feature whose item rustc missed**: the first name in backticks of
 /// the first error, looked up among the items in a feature only; else
 /// `fallback`.
-pub fn features_blamed(said: ref String, made: ref FeaturesMade, fallback: ref String) -> String {
+fn features_blamed(said: ref String, made: ref FeaturesMade, fallback: ref String) -> String {
     let line = features_first_error(said)
     let mut at = 0
     for piece in line.split("`") {
@@ -911,7 +911,7 @@ pub fn features_blamed(said: ref String, made: ref FeaturesMade, fallback: ref S
 
 /// **The first error of Cargo's JSON messages**, its first line as rustc
 /// renders it.
-pub fn features_first_error(said: ref String) -> String {
+fn features_first_error(said: ref String) -> String {
     for line in said.lines() {
         if !line.contains("\"reason\":\"compiler-message\"") || !line.contains("\"level\":\"error\"") { continue }
         let after = line.split("\"rendered\":\"").nth(1) ?? continue
@@ -928,7 +928,7 @@ pub fn features_first_error(said: ref String) -> String {
 /// text `entry` on the feature's line, or of the feature's name where `entry`
 /// is empty; the section's header where neither is found, and `[build]`'s
 /// where there is no `[features]` (`--features` on a program).
-pub fn features_span(toml: ref String, feature: ref String, entry: ref String) -> Span {
+fn features_span(toml: ref String, feature: ref String, entry: ref String) -> Span {
     let mut offset = 0
     let mut inside = false
     let mut header = -1

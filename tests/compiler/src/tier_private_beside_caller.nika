@@ -1,0 +1,13 @@
+/// Keeps what the private functions of `src/tier_private_beside.nika` hand
+/// back, in a list and a `let` declared `String` (#1831).
+pub fn tier_private_names() -> Vec[String] {
+	let mut names: Vec[String] = []
+	names.push(tier_private_name())
+	let n: String? = tier_private_note("&")
+	if n != null {
+		names.push(n ?? "")
+	}
+	let m = tier_private_note("x") ?? f"none of {names.len()}"
+	names.push(m)
+	return names
+}

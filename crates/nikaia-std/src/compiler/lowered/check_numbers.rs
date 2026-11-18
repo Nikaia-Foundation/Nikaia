@@ -23,7 +23,7 @@ pub(crate) fn the_high_end_of(ty: &str) -> &'static str {
     }
 }
 
-pub fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty: &str, span: Span, why: Option<String>) -> Option<Finding> {
+pub(crate) fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty: &str, span: Span, why: Option<String>) -> Option<Finding> {
     if ty != "i32" && ty != "i64" && ty != "u8" && ty != "u32" && ty != "u64" { return None; }
     if !beyond && integer_fits(value, ty) { return None; }
     let article = an_or_a(ty);

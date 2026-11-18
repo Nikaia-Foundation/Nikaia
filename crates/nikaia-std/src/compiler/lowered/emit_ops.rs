@@ -15,7 +15,7 @@ pub fn precedence(op: &BinaryOp) -> i64 {
     }
 }
 
-pub fn binary_op(op: &BinaryOp) -> String {
+pub(crate) fn binary_op(op: &BinaryOp) -> String {
     match op {
         BinaryOp::Add => String::from("+"),
         BinaryOp::Sub => String::from("-"),
@@ -46,7 +46,7 @@ pub fn unary_op(op: &UnaryOp) -> String {
     }
 }
 
-pub fn repeat_suffix(rep: &Repeat) -> String {
+pub(crate) fn repeat_suffix(rep: &Repeat) -> String {
     match rep {
         Repeat::Star => String::from("*"),
         Repeat::Plus => String::from("+"),
@@ -64,7 +64,7 @@ pub fn pointing(mutable: bool) -> String {
 
 pub fn jumps(expr: &Expr) -> bool { matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }
 
-pub fn jumps_at_the_end(expr: &Expr) -> bool {
+pub(crate) fn jumps_at_the_end(expr: &Expr) -> bool {
     match expr {
         Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); jumps_at_the_end(fallback) },
         Expr::Block(block, _) => block_jumps_at_the_end(block),
@@ -84,7 +84,7 @@ pub(crate) fn block_jumps_at_the_end(block: &Block) -> bool {
     }
 }
 
-pub fn never_a_value(expr: &Expr) -> bool {
+pub(crate) fn never_a_value(expr: &Expr) -> bool {
     match expr {
         Expr::Match { arms, .. } => {
             let mut all = !arms.is_empty();
@@ -109,7 +109,7 @@ pub(crate) fn block_never_a_value(block: &Block) -> bool {
     }
 }
 
-pub fn a_number(expr: &Expr) -> bool {
+pub(crate) fn a_number(expr: &Expr) -> bool {
     match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -125,7 +125,7 @@ pub(crate) fn a_negated_number(op: &UnaryOp, inner: &Expr) -> bool {
     }
 }
 
-pub fn only_literals(index: &Expr) -> bool {
+pub(crate) fn only_literals(index: &Expr) -> bool {
     match index {
         Expr::LitInt { .. } => true,
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); only_literals(expr) },
@@ -135,7 +135,7 @@ pub fn only_literals(index: &Expr) -> bool {
     }
 }
 
-pub fn a_negation_inside(index: &Expr) -> bool {
+pub(crate) fn a_negation_inside(index: &Expr) -> bool {
     match index {
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); a_negation_or_inside(op, expr) },
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); a_negation_inside(lhs) || a_negation_inside(rhs) },
@@ -151,9 +151,11 @@ pub(crate) fn a_negation_or_inside(op: &UnaryOp, inner: &Expr) -> bool {
     }
 }
 
-pub fn is_length(method: &str, args: &[Expr]) -> bool { method == "len" && args.is_empty() }
+pub(crate) fn is_length(method: &str, args: &[Expr]) -> bool { method == "len" && args.is_empty() }
 
-pub fn a_list_read_as_a_slice(written: String) -> String {
+pub fn is_count(callee: &str, at: i64) -> bool { callee == "repeat" && at == 0 }
+
+pub(crate) fn a_list_read_as_a_slice(written: String) -> String {
     if !written.starts_with('&') || !written.ends_with('>') { return written; }
     let after = nikaia_std::index::or(written.strip_prefix('&'), || "");
     let mut lead: String = String::from("&");
@@ -171,7 +173,7 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
     written
 }
 
-pub fn frame_attribute(frame: &FrameAttr) -> String {
+pub(crate) fn frame_attribute(frame: &FrameAttr) -> String {
     #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let boundary = match frame.boundary.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -183,9 +185,9 @@ pub fn frame_attribute(frame: &FrameAttr) -> String {
     format!("#[frame({})]", nikaia_std::block::Text::from(keys.join(", ")))
 }
 
-pub fn is_a_place(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }
+pub(crate) fn is_a_place(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }
 
-pub fn binds_a_part(part: &MatchPattern) -> bool {
+pub(crate) fn binds_a_part(part: &MatchPattern) -> bool {
     match part {
         MatchPattern::Path(one) => one.len() == 1,
         MatchPattern::Otherwise => true,

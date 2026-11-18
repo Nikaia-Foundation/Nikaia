@@ -7,19 +7,29 @@ pub enum Switch {
     Moved(String),
 }
 
-pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("artifact"), String::from("symbol-prefix")] }
+pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("unproved-checks"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks")] }
+
+pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-paths-anywhere")] }
+
+pub fn raw_sinks_allow_key(table: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    if !contains(&raw_sinks_allow_keys(), key) {
+        let expected = choices(&raw_sinks_allow_keys());
+        return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` has no key called `{}`. The keys are: {}.", table, key, expected)), &"raw_sinks_allow_key"));
+    }
+    Ok(())
+}
 
 pub(crate) fn withdrawn(key: &str) -> &'static str {
     if key == "ordering" { return "statements run in the order they are written, so there's nothing left for it to turn off. To run two things together, write `overlap { … }`; `--overlaps` shows which branches did"; }
     ""
 }
 
-pub(crate) fn moved(key: &str) -> &'static str {
-    if key == "cleanup-deadline" { return "the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"; }
-    ""
+pub(crate) fn moved(key: &str) -> String {
+    if key == "cleanup-deadline" { return String::from("the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"); }
+    String::from("")
 }
 
-pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
     let gone = withdrawn(key);
     if !gone.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[build]` is no longer supported: {}", key, gone)), &"build_key")); }
     if !contains(&known(), key) {
@@ -33,14 +43,14 @@ pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>
 
 pub fn targets() -> Vec<String> { vec![String::from("x86_64-linux"), String::from("aarch64-linux"), String::from("wasm32-unknown")] }
 
-pub fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
+pub(crate) fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
 
 pub fn codegen_units(target: &str, units: Option<i64>, written: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if nikaia_std::index::or(units, || 0) < 1 { return Err(nikaia_std::error::throwing(Refused::Because(format!("`codegen-units` in `[build.{}]` is a whole number from 1, the number of pieces rustc cuts each crate into, not `{}`.", target, written)), &"codegen_units")); }
     Ok(())
 }
 
-pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&targets(), target) {
         let expected = choices(&targets());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` isn't a machine Nikaia builds for. The machines are: {}.", target, expected)), &"codegen_table"));
@@ -48,7 +58,7 @@ pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refus
     Ok(())
 }
 
-pub fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&codegen_keys(), key) {
         let expected = choices(&codegen_keys());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` has no key called `{}`. The keys are: {}.", target, key, expected)), &"codegen_key"));
@@ -118,16 +128,19 @@ pub struct ManifestFile {
     pub package: collections::BTreeMap<String, String>,
     pub name: Option<String>,
     pub version: String,
+    pub within: Option<String>,
+    pub described: Option<String>,
     pub dependencies: collections::BTreeMap<String, ManifestDependency>,
     pub codegen: collections::BTreeMap<String, collections::BTreeMap<String, String>>,
     pub libraries: collections::BTreeMap<String, String>,
     pub features: Vec<ManifestFeature>,
     pub rust_library: Option<ManifestRustLibrary>,
     pub notes: Vec<String>,
+    pub allow: Vec<String>,
     pub root: Option<fs::Path>,
 }
 
-pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], root: None } }
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), within: None, described: None, dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], allow: vec![], root: None } }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ManifestFeature {
@@ -182,10 +195,13 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
     }
     manifest.name = manifest_word_at(items, "package", "name", "");
     manifest.version = nikaia_std::index::or(manifest_word_at(items, "package", "version", ""), || "0.0.0".into());
+    manifest.within = manifest_within(&manifest.package, manifest_word_at(items, "package", "within", ""))?;
+    manifest.described = manifest_described(&manifest.package, manifest_word_at(items, "package", "described", ""))?;
     manifest.dependencies = manifest_dependencies(items)?;
     manifest.libraries = manifest_libraries(items)?;
     manifest.features = manifest_features(items);
     manifest.rust_library = manifest_rust_library(items);
+    manifest.allow = manifest_allow(items)?;
     for value in items.iter() {
         if value.section != "build" || value.name.is_empty() || !value.key.is_empty() { continue; }
         if value.table {
@@ -202,6 +218,61 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
         }
     }
     Ok(manifest)
+}
+
+pub(crate) fn manifest_within(package: &collections::BTreeMap<String, String>, word: Option<String>) -> Result<Option<String>, nikaia_std::error::Thrown<Refused>> {
+    if !package.contains_key("within") { return Ok(None); }
+    let said = nikaia_std::index::or(word, || "".into());
+    if said != "std" { return Err(nikaia_std::error::throwing(Refused::Because(format!("`within` in `[package]` is `{}`, and the one package a package can be within is `std`: write `within = \"std\"`, or leave the key out.", nikaia_std::index::or(package.get("within"), || ""))), &"manifest_within")); }
+    Ok(Some(said))
+}
+
+pub(crate) fn manifest_described(package: &collections::BTreeMap<String, String>, word: Option<String>) -> Result<Option<String>, nikaia_std::error::Thrown<Refused>> {
+    if !package.contains_key("described") { return Ok(None); }
+    let said = nikaia_std::index::or(word, || "".into());
+    if said.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` is `{}`, and it takes the path of a ledger of described names, relative to the manifest: `described = \"described.contracts\"`.", nikaia_std::index::or(package.get("described"), || ""))), &"manifest_described")); }
+    Ok(Some(said))
+}
+
+pub fn manifest_described_at(manifest: &ManifestFile) -> Result<Option<fs::Path>, nikaia_std::error::Thrown<Refused>> {
+    let written = match manifest.described.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(None) };
+    let bare: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(written.to_string()));
+    let path = nikaia_std::index::or(match manifest.root.as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::join(&(__nikaia_it), std::path::Path::new(&(written)))),
+        None => None,
+    }, || bare.into());
+    let found = match fs::metadata(&path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` names {}, which can't be read: {}.", nikaia_std::fs::path::display(&(path)), error)), &"manifest_described_at")) },
+    };
+    if !found.is_file() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`described` in `[package]` names {}, which is not a file.", nikaia_std::fs::path::display(&(path)))), &"manifest_described_at")); }
+    Ok(Some(path))
+}
+
+pub(crate) fn manifest_allow(items: &[ManifestItem]) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
+    let mut allowed: Vec<String> = vec![];
+    for item in items.iter() {
+        if item.name.is_empty() { continue; }
+        let mut table: String = String::from("");
+        let mut key: String = String::from("");
+        let mut word: String = String::from("");
+        if item.section == "allow" && item.key.is_empty() && !(item.name == "packages" && item.table) {
+            table = String::from("[allow]");
+            key = nikaia_std::block::Text::from(item.name.to_string());
+            word = nikaia_std::block::Text::from(item.name.to_string());
+        } else if item.section == "allow.packages" && !item.key.is_empty() {
+            table = format!("[allow.packages.{}]", item.name);
+            key = nikaia_std::block::Text::from(item.key.to_string());
+            word = format!("{}:{}", item.name, item.key);
+        } else if item.section == "allow.packages" && !item.table { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[allow.packages]` is a table of keys, as `[allow.packages.{}]` with `untrusted-shell = true` under it.", item.name, item.name)), &"manifest_allow")); } else { continue; }
+        raw_sinks_allow_key(&table, &key)?;
+        match &*item.text {
+            "true" => { allowed.push(word); },
+            "false" => { },
+            _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` is `true` or `false`, not `{}`.", key, table, item.text)), &"manifest_allow")); },
+        }
+    }
+    Ok(allowed)
 }
 
 pub fn manifest_has_build_section(manifest: &ManifestFile) -> bool { !manifest.build.is_empty() || !manifest.codegen.is_empty() }

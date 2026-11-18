@@ -1,0 +1,6 @@
+sample/qflia/20180326-Bromberger: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 459.0, certificates checked 1, models evaluated 0
+sample/qflia/20220307-SMPT: 16 files, solved 16 (proved 3, refuted 13), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 28.8, certificates checked 3, models evaluated 13
+sample/qflia/seeds: 8 files, solved 6 (proved 4, refuted 2), unknown 2 (overflow 2, unreadable 0), malformed 0, wrong 0, PAR-2 584.1, certificates checked 4, models evaluated 2
+sample/qflra/clock_synchro: 1 files, solved 0 (proved 0, refuted 0), unknown 1 (overflow 1, unreadable 0), malformed 0, wrong 0, PAR-2 2048.0, certificates checked 0, models evaluated 0
+sample/qflra/seeds: 24 files, solved 24 (proved 8, refuted 16), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 9.5, certificates checked 8, models evaluated 16
+all: 50 files, solved 47 (proved 16, refuted 31), unknown 3 (overflow 3, unreadable 0), malformed 0, wrong 0, PAR-2 157.4, certificates checked 16, models evaluated 31

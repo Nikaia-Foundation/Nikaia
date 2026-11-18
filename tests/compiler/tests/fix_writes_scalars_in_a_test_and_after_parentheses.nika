@@ -1,0 +1,31 @@
+// #1974: `nikaia fix` checks a file's `test` blocks too, as `nikaia test`
+// builds it (ADR-269 D1), and writes their `.scalars`; and a receiver in
+// parentheses, `(word + "!").chars()`, gets its edit as a plain one does.
+// The fixed package checks, and its test passes.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"shout\"\nversion = \"0.1.0\"\n")
+    let file = f"{tmp}/src/main.nika"
+    let source = "fn shout(word: ref str) -> i64 {\n    return (word + \"!\").chars().count()\n}\n\ntest \"a count of scalars\" {\n    let n = \"tea\".chars().count()\n    assert(n == 3)\n    assert(shout(\"hi\") == 3)\n}\n\nfn main() throws {\n    println(shout(\"tea\"))\n}\n"
+    fs::write(file, fs::Root::Anywhere, source)
+    let fixed = process::run(nikaia, ["fix", file.clone()])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(file, fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", file.clone()])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let tested = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+    let passed = tested.stdout.contains("1 passed; 0 failed")
+    println(f"test passes: {passed}")
+    process::run("rm", ["-rf", tmp])
+}

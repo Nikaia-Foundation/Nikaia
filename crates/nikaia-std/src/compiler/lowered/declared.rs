@@ -38,8 +38,9 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         let read = code_as_read(names, ty);
         let code = match (*read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &read.generics);
-        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: std::boxed::Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw } };
-        return Ty::Fn { params, result: std::boxed::Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw };
+        let spelled = code_spelled(names, ty);
+        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: std::boxed::Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw, spelled } };
+        return Ty::Fn { params, result: std::boxed::Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw, spelled };
     }
     if ty.is_nullable {
         let mut inner = ty.clone();
@@ -59,7 +60,7 @@ pub(crate) fn lent_item(names: &winnow_grammar::InternerContext, aliases: &colle
     Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: vec![], view: false }
 }
 
-pub fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -> Type {
+pub(crate) fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -> Type {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
     if !code_lends_unmarked(names, ty) { return ty.clone(); }
     let mut generics: Vec<Type> = vec![];
@@ -81,7 +82,24 @@ pub fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -> Type 
     read
 }
 
-pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64) -> bool {
+pub(crate) fn code_spelled(names: &winnow_grammar::InternerContext, ty: &Type) -> CodeNames {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
+    if (code.param_names.len() as i64) != ty.generics.len() as i64 { return CodeNames::none(); }
+    #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+    for one in code.param_names.iter() {
+        let one = *one;
+        let name = match one { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
+        params.push(nikaia_std::block::Text::from(names.resolve(name).to_string()));
+    }
+    let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+    for source in code.result_from.iter() {
+        let source = *source;
+        from.push(nikaia_std::block::Text::from(names.resolve(source).to_string()));
+    }
+    CodeNames { params, from }
+}
+
+pub(crate) fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at >= ty.generics.len() as i64 { return false; }
     if code_reads(code, at) { return true; }
@@ -92,7 +110,7 @@ pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64
     !part.generics.is_empty() || !(a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")
 }
 
-pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
+pub(crate) fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !code.result_from.is_empty() { return true; }
     for at in 0..ty.generics.len() as i64 { if !unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }.is_view && code_lends_at(names, ty, at) { return true; } }
@@ -104,7 +122,7 @@ pub fn code_writes_from(ty: &Type) -> bool {
     !code.result_from.is_empty()
 }
 
-pub fn code_reads(code: &Code, at: i64) -> bool {
+pub(crate) fn code_reads(code: &Code, at: i64) -> bool {
     if at >= code.param_names.len() as i64 { return false; }
     let name = match *nikaia_std::index::get(&code.param_names, nikaia_std::index::at(at)) { Some(__nikaia_value) => __nikaia_value, None => return false };
     code.result_from.contains(&name)
@@ -132,7 +150,7 @@ pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &col
     out
 }
 
-pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>, itself: Option<&Ty>) -> Option<DeclaredFn> {
+pub(crate) fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>, itself: Option<&Ty>) -> Option<DeclaredFn> {
     let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
         Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => { let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) },
         _ => return None,
@@ -234,7 +252,7 @@ pub(crate) fn returns_a_view(ret_type: Option<&Type>) -> bool {
     holds_view(written)
 }
 
-pub fn default_text(expr: &Expr) -> String {
+pub(crate) fn default_text(expr: &Expr) -> String {
     match expr {
         Expr::LitBool(value, _) => { let value = *value; if value { String::from("true") } else { String::from("false") } },
         Expr::LitNull(_) => String::from("None"),
@@ -247,7 +265,7 @@ pub fn default_text(expr: &Expr) -> String {
     }
 }
 
-pub fn declared_trait_method(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, trait_name: &str, method: &TraitMethod, public: bool) -> DeclaredFn {
+pub(crate) fn declared_trait_method(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, trait_name: &str, method: &TraitMethod, public: bool) -> DeclaredFn {
     let mut params: Vec<(String, Ty)> = vec![];
     if method.receiver.is_some() {
         let subject = nikaia_std::index::or(match method.receiver.as_ref() {
@@ -281,7 +299,7 @@ pub(crate) fn optional_ty(names: &winnow_grammar::InternerContext, aliases: &col
     Some(written_ty(names, aliases, written))
 }
 
-pub fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, variants: &[EnumVariant], is_public: bool, borrowing: &collections::BTreeSet<String>) -> TypeContract {
+pub(crate) fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, variants: &[EnumVariant], is_public: bool, borrowing: &collections::BTreeSet<String>) -> TypeContract {
     let mut cases: Vec<VariantContract> = vec![];
     let mut tethered: Vec<String> = vec![];
     for variant in variants.iter() {
@@ -317,7 +335,7 @@ pub fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collecti
     contract
 }
 
-pub fn declared_fields(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, generics: &[GenericParam], fields: &[FieldDef], is_extern: bool) -> Vec<FieldContract> {
+pub(crate) fn declared_fields(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, generics: &[GenericParam], fields: &[FieldDef], is_extern: bool) -> Vec<FieldContract> {
     let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
     for generic in generics.iter() { parameters.insert(nikaia_std::block::Text::from(names.resolve(generic.name).to_string())); }
     let mut out: Vec<FieldContract> = vec![];
@@ -325,7 +343,7 @@ pub fn declared_fields(names: &winnow_grammar::InternerContext, aliases: &collec
     out
 }
 
-pub fn tethered_fields(names: &winnow_grammar::InternerContext, fields: &[FieldDef], borrowing: &collections::BTreeSet<String>) -> Vec<String> {
+pub(crate) fn tethered_fields(names: &winnow_grammar::InternerContext, fields: &[FieldDef], borrowing: &collections::BTreeSet<String>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for field in fields.iter() { if holds_view(&field.ty) || names_borrowing(names, &field.ty, borrowing) { out.push(nikaia_std::block::Text::from(names.resolve(field.name).to_string())); } }
     out

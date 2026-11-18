@@ -158,7 +158,7 @@ fn kind_some_binding(world: ref CheckWorld, pattern: ref MatchPattern) -> String
 }
 
 /// The numbers' type names.
-pub fn kind_a_number_name(name: ref String) -> bool {
+fn kind_a_number_name(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64"
 }
 
@@ -238,7 +238,7 @@ fn kind_path_text(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbo
 impl CheckState {
     /// **The bounds a `comptime` raises** (ADR-321 D11), read before anything
     /// runs: a bound that is refused runs nothing, and `null` says so.
-    pub fn raised_bounds(ref mut self, world: ref CheckWorld, bounds: ref Vec[ConfigArg], span: ref Span) -> CheckRaised? sync {
+    fn raised_bounds(ref mut self, world: ref CheckWorld, bounds: ref Vec[ConfigArg], span: ref Span) -> CheckRaised? sync {
         let mut raised = CheckRaised { steps: null, ram: null }
         let mut refused = false
         for bound in bounds {
@@ -274,7 +274,7 @@ impl CheckState {
     /// after it, a `usize` of a foreign declaration. The buffer's own `len()`,
     /// and a constant its length is known to cover, are accepted; the rest is
     /// asked of `a_length_that_may_not_fit`.
-    pub fn a_length_that_fits_its_buffer(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    fn a_length_that_fits_its_buffer(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
         if !self.foreign_names.contains(written) {
             return
         }
@@ -309,7 +309,7 @@ impl CheckState {
 
     /// **`NK2207`: an `update` block that replaces a name without reading it**,
     /// which is what `set` is for (ADR-281 D10).
-    pub fn an_update_block_reads_what_it_writes(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) sync {
+    fn an_update_block_reads_what_it_writes(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) sync {
         for param in params {
             let name = world.words.resolve(param).clone()
             if kind_an_update_only_replaces(world, name, body) {
@@ -320,7 +320,7 @@ impl CheckState {
 
     /// **`NK1256`: `null` matched on a value that cannot be `null`**
     /// (ADR-352 D3). Where the type is not known nothing is claimed.
-    pub fn a_null_arm_on_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_null_arm_on_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         match on {
             Ty::Nullable(_) => return,
             Ty::Unknown => return,
@@ -330,7 +330,7 @@ impl CheckState {
             return
         }
         let written = written_expression(world.words, value)
-        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm."))
+        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.shown()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm."))
     }
 
     /// **`NK1103`: an arm's pattern of another type than the value** (#704):
@@ -339,13 +339,13 @@ impl CheckState {
     /// or one of the program's structs or enums; a number against a `char` is
     /// not asked. A `T?` is `NK1205`'s, and a type not known stays `?`
     /// (ADR-291 D3).
-    pub fn a_pattern_of_another_type(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_pattern_of_another_type(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let mut kind: String = ""
         let mut shown: String = ""
         let known = self.kind_of_the_matched(on)
         if known != null {
             kind = (known ?? "").clone()
-            shown = f"a `{on.text()}`"
+            shown = f"a `{on.shown()}`"
         } else {
             // A number written out is typed by its use, and a `match` is none.
             kind = kind_of_a_literal(value) ?? return
@@ -369,7 +369,7 @@ impl CheckState {
     /// #673): over `error`, an arm naming a type by its bare name or its path
     /// takes that member of the set, and a type outside the set is no
     /// pattern of it. Where the set is not known nothing is claimed.
-    pub fn a_type_that_cannot_arrive(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_type_that_cannot_arrive(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let mut members: Vec[String] = []
         for member in several_errors_of(on) {
             members.push(member.text())
@@ -457,7 +457,7 @@ impl CheckState {
     /// D5). A `T?` has no constructors: its nothing is `null`, its value the
     /// `T` itself. Only a `T?` subject is asked, so a type of the program's
     /// own with a variant called `Some` or `None` keeps its meaning.
-    pub fn a_some_or_none_over_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
+    fn a_some_or_none_over_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
         match on {
             Ty::Nullable(_) => {},
             else => return false,
@@ -470,21 +470,92 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true
                 let bound = kind_some_binding(world, arm.pattern)
-                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`."], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
+                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.shown()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`."], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
             }
             if which == "None" && !none_seen {
                 none_seen = true
-                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `None`: its nothing is written `null`."], "Write `null => …`."))
+                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.shown()}`.", ["A `T?` has no `None`: its nothing is written `null`."], "Write `null => …`."))
             }
         }
         return some_seen || none_seen
+    }
+
+    /// **`NK1117`: a pattern `name(…)` whose one-word name nothing declares**
+    /// (#2033). A variant's pattern names its enum, `Message::Write(text)`,
+    /// and a one-variant enum's short form, `Exit(c)`, is rewritten to that
+    /// before the check (ADR-347); a bare name binds (Part I 3.4). So
+    /// `some(_)`, `foo(_)` is no pattern of a value of a certain type, which
+    /// the backend would only refuse later. Asked where the subject's type is
+    /// certain, so a `match` on a kind keeps its `Maybe(A)` (ADR-330 D4).
+    fn a_pattern_naming_nothing(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
+        let nullable = match on {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        let certain = nullable || match on {
+            Ty::Tuple(_) => true,
+            else => self.kind_of_the_matched(on) != null,
+        }
+        if !certain {
+            return false
+        }
+        for arm in arms {
+            let name = self.kind_an_undeclared_call(world, arm.pattern) ?? continue
+            let written = written_expression(world.words, value)
+            let mut help: String = f"Write the variant with its enum, `Type::{name}(…)`, or a name alone to bind the value."
+            if nullable {
+                help = "Over a `T?`, a name alone binds the `T`: write `x => …`, with `null => …` beside it."
+            }
+            self.findings.push(check_refusal("NK1117", span, f"Nothing declares `{name}`, so `{name}(…)` is no pattern of `{written}`.", ["A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there."], help))
+            return true
+        }
+        return false
+    }
+
+    /// The first one-word name in `pattern` written as `name(…)` that names no
+    /// enum or struct of the program, at any depth.
+    fn kind_an_undeclared_call(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if path.len() == 1 {
+                    let name = world.words.resolve(path[0]).clone()
+                    if !self.enums.contains_key(name) && !self.structs.contains_key(name) {
+                        return name
+                    }
+                }
+                for part in parts {
+                    let found = self.kind_an_undeclared_call(world, part)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            MatchPattern::Named { fields, .. } => {
+                for field in fields {
+                    let found = self.kind_an_undeclared_call(world, field.pat)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    let found = self.kind_an_undeclared_call(world, alternative)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            else => {},
+        }
+        return null
     }
 
     /// **`NK1205`: a variant or a literal matched on a `T?`** (issue #180,
     /// #704): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
     /// for first, with `??`.
-    pub fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let inner = match on {
             Ty::Nullable(inner) => inner.clone(),
             else => return,
@@ -504,7 +575,7 @@ impl CheckState {
                     MatchPattern::Literal(literal) => written_expression(world.words, literal),
                     else => written_pattern(world.words, arm.pattern),
                 }
-                let note = f"`{written}` is a `{on.text()}`: a `{inner.text()}` or nothing, and a pattern of the `{inner.text()}` says nothing about the nothing."
+                let note = f"`{written}` is a `{on.shown()}`: a `{inner.shown()}` or nothing, and a pattern of the `{inner.shown()}` says nothing about the nothing."
                 self.findings.push(check_refusal("NK1205", span, f"`{written}` may be `null`, so `{variant}` can't be matched on it directly.", [note], f"Say what `null` stands for first: `let value = {written} ?? …`, and `match value`."))
                 return
             }
@@ -513,7 +584,7 @@ impl CheckState {
 
     /// Whether the guarded call can fail with several error types, by this
     /// unit's own ledger.
-    pub fn several_arrive(ref self, world: ref CheckWorld, guarded: ref Expr) -> bool sync {
+    fn several_arrive(ref self, world: ref CheckWorld, guarded: ref Expr) -> bool sync {
         let name = match guarded {
             Expr::Call { func, .. } => kind_callee_name(world, func) ?? return false,
             Expr::Try(inner, _) => return self.several_arrive(world, inner),

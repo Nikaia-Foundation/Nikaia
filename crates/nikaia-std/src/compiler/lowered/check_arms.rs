@@ -83,7 +83,7 @@ pub(crate) fn the_parts_meet_with_holes(xs: &[Ty], ys: &[Ty]) -> Option<Vec<Ty>>
     Some(met)
 }
 
-pub fn arms_meet_with_holes(arms: &[CheckArm<'_>]) -> Option<Ty> {
+pub(crate) fn arms_meet_with_holes(arms: &[CheckArm<'_>]) -> Option<Ty> {
     if arms.len() < 2 { return None; }
     let mut met: Ty = Ty::Unknown;
     for arm in arms.iter() {
@@ -101,7 +101,7 @@ pub(crate) fn the_plain_type_agrees(plain: Option<&Ty>, inner: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn arms_meet_at_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
+    pub(crate) fn arms_meet_at_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
         let mut asked = false;
         for arm in arms.iter() { if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) { asked = true; } }
         if !asked { return None; }
@@ -144,7 +144,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr) {
+    pub(crate) fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr) {
         match want {
             Ty::Fn { result, .. } => {
                 let result = nikaia_std::boxed::open(result);
@@ -172,7 +172,7 @@ pub(crate) fn an_arm_is_an_integer(arm: &CheckArm<'_>) -> bool {
     matches!(check_peeled(tail), Expr::LitInt { .. })
 }
 
-pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Option<CheckFinding> {
     if arms.len() < 2 { return None; }
     let mut known: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut numbers = 0;
@@ -203,7 +203,7 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     }
     #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in known.iter() {
-        let text = ty.text();
+        let text = spoken(ty, None);
         if !nikaia_std::list::contains(&shown, &text) { shown.push(text); }
     }
     if numbers > 0 { shown.push(String::from("a number")); }
@@ -211,7 +211,7 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     while index < shown.len() as i64 {
         let one = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&shown, (index) as usize) }).to_string());
-        if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
+        if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and {}", listed, one); } else if index == 0 { listed = nikaia_std::block::Text::from(one.to_string()); } else { listed = format!("{}, {}", listed, one); }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     Some(check_refusal("NK1245", span, format!("The arms of this {} are {}, so the compiler can't tell what type its value is.", article, listed), vec![format!("What is not known is not checked, so the value of a `{}` whose arms disagree is refused rather than left to the language below.", word)], Some(format!("Make the arms of the {} the same type.", article))))

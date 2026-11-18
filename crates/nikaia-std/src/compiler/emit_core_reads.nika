@@ -88,7 +88,7 @@ impl EmitState {
     /// `i < xs.len()` for a counter `i` that is never negative, written as
     /// `(i as usize) < xs.len()`; `false` and nothing written where the
     /// comparison is not that.
-    pub fn emit_core_against_a_length[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_core_against_a_length[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         let mut counter_first = true
         if emit_read_a_length(world, rhs) && !emit_read_a_length(world, lhs) && walk.never_negative(world, scope.function, lhs) {
             counter_first = true
@@ -171,7 +171,7 @@ impl EmitState {
     /// find(1);`, and the reach reads the binding. Only where binding it first
     /// changes nothing about what runs (D2); there the program is refused, with
     /// the `let` it can write.
-    pub fn emit_core_hold_temporaries[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_hold_temporaries[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
         self.emit_core_hold_owned_receiver(world, walk, out, host, stmt, depth, flow, scope)
         self.emit_core_hold_indices_read_from_the_target(world, walk, out, host, stmt, depth, flow, scope)
         if self.facts.held_reaches.is_empty() {
@@ -223,7 +223,7 @@ impl EmitState {
     /// wrote. The index is bound before the statement. Only an index of a list
     /// that names the root of the place written, and not a literal and not a key
     /// of a map.
-    pub fn emit_core_hold_indices_read_from_the_target[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_hold_indices_read_from_the_target[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match stmt {
             Stmt::Assign { target, .. } => {
                 let root = emit_read_root(world, target) ?? return
@@ -269,7 +269,7 @@ impl EmitState {
     /// `String` `f()` made, and that value dies at the `;` - `rustc`'s E0716. So
     /// the call is bound first, and the chain reads the binding. Only for a
     /// `let`, and only where a method of the chain is one of text's views.
-    pub fn emit_core_hold_owned_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_hold_owned_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match stmt {
             Stmt::Let { value, .. } => {
                 // A chain that ends in text of its own holds nothing of the receiver.
@@ -381,32 +381,48 @@ impl EmitState {
     fn emit_core_hold_chain_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match at {
             Expr::MethodCall { receiver, method, .. } => {
-                let views = viewed || views_what_it_is_called_on(emit_text(world, method))
+                // **A file name's text is text of its own** (#1894): `entry.to_text()`
+                // and `display()` make a `Text` that dies at the `;` as a call's does.
+                let name = emit_text(world, method)
+                if viewed && node_key(at) != whole && (name == "to_text" || name == "display") && self.facts.path_methods.contains_key(node_key(receiver)) {
+                    self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
+                    return
+                }
+                let views = viewed || views_what_it_is_called_on(name)
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)
             },
+            // **A field or an element of a call's result dies with it** (#1894):
+            // `mk().out.split(" ")` holds `mk()`, and the chain reads its field.
+            Expr::Field { base, .. } => self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope),
+            Expr::Index { base, .. } => self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope),
             else => {
                 if !viewed || node_key(at) == whole || !(emit_read_a_call(at) || self.emit_core_a_concatenation(at)) {
                     return
                 }
-                // A statement written twice (a scratch pass, then the real one)
-                // holds the same receiver twice: the second time it is written
-                // out again, not read back from the first.
-                let key = node_key(at)
-                walk.held.remove(key)
-                let name = f"__nikaia_held_{walk.held.len()}"
-                out.push(f"let {name} = ")
-                self.emit_expr(world, walk, out, host, at, depth, flow, scope)
-                out.push(f";\n{"    ".repeat(depth)}")
-                walk.held.insert(key, name)
+                self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
             }
         }
+    }
+
+    /// Binds `at` to a name before the statement, and the chain reads the name.
+    fn emit_core_hold_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // A statement written twice (a scratch pass, then the real one)
+        // holds the same receiver twice: the second time it is written
+        // out again, not read back from the first.
+        let key = node_key(at)
+        walk.held.remove(key)
+        let name = f"__nikaia_held_{walk.held.len()}"
+        out.push(f"let {name} = ")
+        self.emit_expr(world, walk, out, host, at, depth, flow, scope)
+        out.push(f";\n{"    ".repeat(depth)}")
+        walk.held.insert(key, name)
     }
 
     /// The receiver of a method call: the expression, or the name a `?.` already
     /// bound. `tight` is for the one caller that needs the conversion to bind
     /// tighter than everything around it - `x.truncating_i32()` is Rust's `as`,
     /// which sits below the unary operators in its precedence.
-    pub fn emit_core_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tight: bool) sync throws {
+    fn emit_core_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tight: bool) sync throws {
         if receiver == null {
             out.push("__nikaia_it")
             return
@@ -427,7 +443,7 @@ impl EmitState {
     /// written, where the checker recorded no such call. `reached` is the safe
     /// form's (#533): the field is read off the name the enclosing `match` bound,
     /// and `receiver` only keys the record.
-    pub fn emit_core_a_field_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, reached: bool, method: winnow_grammar::Symbol, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_core_a_field_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, reached: bool, method: winnow_grammar::Symbol, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if !self.facts.field_calls.contains_key(node_key(receiver)) {
             return false
         }
@@ -465,7 +481,12 @@ impl EmitState {
             } else if self.facts.lent_args.contains(node_key(arg)) && !self.facts.views_handed_on.contains(node_key(arg)) {
                 out.push("&")
             }
+            // Part I 2.3: a plain value where its type asks for a `T?`
+            // (#1996), as at a named call.
+            let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(arg))
+            out.push(before)
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+            out.push(after)
         }
         out.push(")")
         if pauses {
@@ -497,7 +518,7 @@ impl EmitState {
     /// wrote. The position is bound inside a block first, `{ let
     /// __nikaia_at_0 = f.find(c); get(&f.rank, at(__nikaia_at_0)) }`, which
     /// changes nothing about what runs: the base is a place, read after.
-    pub fn emit_core_index_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_index_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let key = node_key(index)
         let root = emit_read_root(world, base) ?? ""
         if root.is_empty() || walk.held.contains_key(key) || self.slices(index) || self.map_key(index, false) != null || self.facts.kept_fn_reads.contains(node_key(base)) || !self.emit_lends_mut(world, index, root) {
@@ -692,7 +713,7 @@ impl EmitState {
     /// branch, each branch an `async` block, and `task::overlap<n>` polls all of
     /// them in one pass. The branches that can pause are handed over first (D6),
     /// and the value goes back into written order (D2).
-    pub fn emit_core_overlap[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_overlap[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let count = block.stmts.len()
         if count < 2 {
             throw EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.", at: flow.statement }
@@ -877,7 +898,7 @@ impl EmitState {
     /// one pass, and what comes back says **which** arm won; the construct
     /// lowers to a `match` over a sum. The losers are cancelled by being dropped
     /// (D2), and nothing here writes that.
-    pub fn emit_core_select[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[SelectArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_select[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[SelectArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let count = arms.len()
         if count < 2 {
             throw EmitRefused { message: "A `select` needs at least two arms to choose between.", at: flow.statement }

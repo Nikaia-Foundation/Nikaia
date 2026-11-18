@@ -1,0 +1,64 @@
+// crates/nikaia-std/src/runtime/raw_sinks.nika
+//
+// **The preconditions of `std`'s raw sinks, written in Nikaia**
+// (ADR-raw-sinks-1 D2, #1253): what an outside part of a text must be before
+// it may reach a sink that reads text as code. Each is a pure `bool` call, so
+// the prover reads it as a property (ADR-381 D1): a guard
+// `throw BadInput(name) if !process::is_word(name)` makes it a fact, and a
+// sink's precondition is proved from it.
+//
+// `src/process.rs` re-exports `is_word` as `nikaia_std::process::is_word` and
+// `src/html.rs` `is_plain` as `nikaia_std::html::is_plain`; `std.contracts`
+// writes their entries by hand, as for `env::vars`. `db::is_identifier` is
+// the `db` package's (`packages/db/src/main.nika`).
+
+/// Whether `part` is one word a shell reads as it is written: not empty, and
+/// only the letters `A-Z` and `a-z`, the digits, and `_ . / : = @ % + , -`
+/// (ADR-raw-sinks-1 D2, the precondition of `process::shell`).
+pub fn is_word(part: ref String) -> bool sync {
+    if part.is_empty() {
+        return false
+    }
+    for c in part.scalars {
+        let fits = match c {
+            'a'..'z' => true,
+            'A'..'Z' => true,
+            '0'..'9' => true,
+            '_' => true,
+            '.' => true,
+            '/' => true,
+            ':' => true,
+            '=' => true,
+            '@' => true,
+            '%' => true,
+            '+' => true,
+            ',' => true,
+            '-' => true,
+            else => false,
+        }
+        if !fits {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether `part` holds none of the characters markup reads as more than
+/// text: `&`, `<`, `>`, `"` and `'` (ADR-raw-sinks-1 D2, the precondition of
+/// `html::Raw`). The empty text is plain.
+pub fn is_plain(part: ref String) -> bool sync {
+    for c in part.scalars {
+        let steers = match c {
+            '&' => true,
+            '<' => true,
+            '>' => true,
+            '"' => true,
+            '\'' => true,
+            else => false,
+        }
+        if steers {
+            return false
+        }
+    }
+    return true
+}

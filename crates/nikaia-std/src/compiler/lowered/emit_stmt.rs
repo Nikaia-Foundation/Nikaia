@@ -89,7 +89,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_stmt_block_opening_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_block_opening_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut settles = false;
         let mut fails = false;
         for each in block.stmts.iter() {
@@ -122,13 +122,13 @@ impl EmitState {
         self.emit_stmt_block_plain(world, walk, out, host, block, depth, flow, scope, &tail, opening)?;
         Ok(())
     }
-    pub fn emit_view_list_drops(&self, out: &mut EmitOut, start: i64) {
+    pub(crate) fn emit_view_list_drops(&self, out: &mut EmitOut, start: i64) {
         for ended in nikaia_std::index::or(match self.facts.view_list_drops.get(&start) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into()) { out.push(&format!(" ::core::mem::drop({});", ended)); }
     }
-    pub fn emit_view_list_rebinds(&self, out: &mut EmitOut, start: i64) {
+    pub(crate) fn emit_view_list_rebinds(&self, out: &mut EmitOut, start: i64) {
         for (name, changing) in nikaia_std::index::or(match self.facts.view_list_rebinds.get(&start) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -137,7 +137,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_stmt_block_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_block_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let kept = walk.kept_names.copy_owned();
         self.emit_stmt_block_written(world, walk, out, host, block, depth, flow, scope, &tail, opening)?;
         walk.kept_names = kept;
@@ -257,7 +257,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mark = out.buf.len() as i64;
         let kept = walk.async_kept.len() as i64;
         let slots = walk.slots.len() as i64;

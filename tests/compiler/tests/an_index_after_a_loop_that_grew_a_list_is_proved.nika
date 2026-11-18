@@ -1,0 +1,108 @@
+// **What held where a loop grew a list or raised a flag bounds an index past
+// it** (ADR-361 D15, #1848): `at` grows only under `i < args.len()`, and `i`
+// starts at 0 and only grows, so past the loop a non-empty `at` (or a raised
+// `seen`) means `args.len() >= 1`, and `args[0]` needs no check. A list grown
+// without the guard, or under a counter that falls, proves nothing.
+
+pub fn grown(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return args[0]
+}
+
+pub fn raised(args: ref Vec[i64], m: i64) -> i64 {
+	let mut seen = false
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			seen = true
+		}
+		i += 1
+	}
+	if !seen {
+		return 0
+	}
+	return args[0]
+}
+
+pub fn unguarded(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		at.push(i)
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return args[0]
+}
+
+pub fn falling(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = m
+	while i > 0 - m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		i -= 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return args[0]
+}
+
+// A guard with a part no term reads still says its other part (site 3 of
+// #1664): `at` grows only where `i - skip < args.len()` and `wanted(i)` hold.
+// Under an `||` neither part holds alone, and nothing is proved.
+fn wanted(i: i64) -> bool {
+	return i % 2 == 0
+}
+
+pub fn chosen(args: ref Vec[i64], m: i64, receiver: bool) -> i64 {
+	let mut skip = 0
+	if receiver {
+		skip = 1
+	}
+	let mut at: Vec[i64] = []
+	let mut i = skip
+	while i < m {
+		if i - skip < args.len() as i64 && wanted(i) {
+			at.push(i - skip)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return args[0]
+}
+
+pub fn either(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 || wanted(i) {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return args[0]
+}
+
+fn main() throws {
+	println(f"{grown([5], 2)} {raised([6], 2)} {unguarded([7], 2)} {falling([8], 2)} {chosen([9], 2, true)} {either([10], 2)}")
+}

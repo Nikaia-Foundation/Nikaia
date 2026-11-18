@@ -156,7 +156,12 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
 
 /// What a `ref` parameter of code takes is lent to it (D20), unless it is a
 /// view already: a map's read past a jump is.
-pub fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
+fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
+    // **Code takes as many arguments as its type says** (Part I 5.4 C,
+    // #1996), as a named function does.
+    if args.len() != params.len() {
+        state.findings.push(check_refusal("NK1101", span, f"`{name}` takes {counted(params.len() as i64, "argument")}, but you passed {args.len()}.", [f"Its type takes {counted(params.len() as i64, "parameter")} (Part I 5.4)."], f"Pass {counted(params.len() as i64, "argument")}."))
+    }
     let mut i = -1
     for given in args {
         i += 1
@@ -174,14 +179,49 @@ pub fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: 
         if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) && !(moves(found[i]) && state.a_map_read_past_a_jump(world, given)) {
             state.facts.lent_args.insert(id_of(given) as i64)
         }
+        if !params[i].is_a_view() {
+            check_core_call_kept_by_code(state, world, given, found[i], params[i], name, i + 1, span)
+        }
     }
+}
+
+/// **A parameter a function type keeps is given to it** (Part I 5.4 C,
+/// ADR-293 D29, #1990), as a named function's kept parameter is: a name
+/// handed there is gone after the call (`NK2105` at a later use), and a view
+/// is no value of its own (`NK1102`, ADR-views-3 D5). A text literal is text
+/// of its own there (`kept_arguments_are_its_own`).
+fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, given: ref Expr, found: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
+    if a_text_literal_expr(given) || check_core_call_opaque(found) {
+        return
+    }
+    let mut handed = found.clone()
+    if is_a_view_of_a_string(handed) {
+        handed = Ty::Named { name: "str", args: [], view: true }
+    }
+    let keeper = f"`{name}` keeps its argument {nth} after the call returns"
+    let named = check_arguments_named(world, given)
+    let mut refusal: CheckKept? = state.a_view_kept(handed, want, named, keeper)
+    if refusal == null && state.a_view_of_what_does_not_copy(world, handed, want) {
+        refusal = CheckKept { notes: [f"This is a view: it points into a `{want.shown()}` that something else owns.", f"{capitalised(keeper)}, so it needs a `{want.shown()}` of its own."], help: "Write `.clone()` to copy it here." }
+    }
+    if refusal != null {
+        let why = refusal ?? return
+        state.findings.push(check_refusal("NK1102", check_span_at(world, given, span), spoken_in(f"`{name}` expects argument {nth} to be `{want.text()}`, but you're passing `{handed.text()}`.", want, handed), why.notes, why.help))
+        return
+    }
+    // Code handed to code is kept as the lowering shares it (#1120).
+    match found {
+        Ty::Fn { .. } => return,
+        else => {},
+    }
+    state.hands_over(world, given, found, f"passed to `{name}`, which keeps it", span)
 }
 
 /// **A kept function value called by name**: a `let`, or a parameter the
 /// function keeps. What its type says is what the call does.
 fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
     state.read_at.push((name.clone(), span.start as i64))
-    let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+    let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), name, span)
     check_core_call_lent(state, world, args, params, found, name, span)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
@@ -237,6 +277,52 @@ fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee
                 check_core_method_code_lent(state, world, args[i])
             }
         }
+    }
+}
+
+// **The arguments handed to parameters of code of this file's own
+// function** (ADR-views-3 D17), kept until the whole file is walked: whether
+// one lowers to code that changes what it captures depends on every call.
+fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, seen: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    if seen.len() == 0 {
+        return
+    }
+    let caller: String = state.current?.clone() ?? return
+    let contract: ref FnContract = callee ?? return
+    let signature: ref Signature = contract.signature ?? return
+    let mut i = -1
+    if signature.takes_a_receiver() {
+        i = -2
+    }
+    for (param, ty) in signature.params {
+        i += 1
+        if i < 0 || i >= args.len() as i64 || contract.keeps.contains(param) || signature.mutable.contains(param) {
+            continue
+        }
+        match ty {
+            Ty::Fn { .. } => {},
+            else => continue,
+        }
+        let arg = args[i]
+        let node = id_of(arg) as i64
+        let mut handed: String = ""
+        let mut lambda = false
+        match arg {
+            Expr::Variable(name, _) => {
+                let named = world.words.resolve(name)
+                if state.run_code.contains(named) {
+                    handed = named.clone()
+                    state.a_code_parameter_named(named)
+                }
+            },
+            Expr::Closure { .. } => {
+                lambda = true
+            },
+            else => {},
+        }
+        let changes: String = (state.facts.changing_lambdas.get(node) ?? "").clone()
+        let runs: Vec[String] = state.facts.lambda_runs.get(node)?.clone() ?? []
+        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: seen.clone(), param: param.clone(), node: node, lambda: lambda, changes: changes, runs: runs, handed: handed, span: check_span_at(world, arg, span) })
     }
 }
 
@@ -502,6 +588,11 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         guarded.unanswered = true
         state.flow.guarded = guarded
     }
+    // **A parameter of code run one call at a time, or from tasks at once**
+    // (ADR-views-3 D17).
+    if is_variable && state.run_code.contains(name) {
+        state.a_code_parameter_named(name)
+    }
     // **A parameter of code, run in place, hands back what its type says.**
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
@@ -542,7 +633,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
 /// through the package's own functions) was built by a caller this package
 /// does not see (`check_handed_follow`). A value read out of a shared value is
 /// a view in its door, `NK1102` already.
-pub fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
     if !contract.described {
         return
     }
@@ -689,7 +780,7 @@ fn check_core_call_options_handed_over(mut state: CheckState, world: ref CheckWo
 /// The options of a call that move what they are handed (#1595): those the
 /// callee does not lend, nor takes `mut`; none across the C boundary
 /// (ADR-302 D5). Each one's name and the type it was handed.
-pub fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
+fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
     let signature = contract.signature ?? return []
     if state.foreign_names.contains(written) {
         return []
@@ -830,7 +921,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // its own function parameters.
     let mut found: Vec[Ty] = []
     if !have && is_variable && state.run_code.contains(name) {
-        found = check_core_arguments_to_code(state, world, host, args, expected, span)
+        found = check_core_arguments_to_code(state, world, host, args, expected, name, span)
     } else {
         found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
     }
@@ -841,6 +932,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         seen_key = key.clone()
     }
     check_core_call_mut_args(state, world, callee, seen_key, args)
+    check_core_call_code_args(state, world, callee, seen_key, args, span)
     if feeds {
         let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
         let contract: FnContract = callee?.clone() ?? FnContract::empty()
@@ -935,7 +1027,7 @@ fn check_core_call_hands_back_a_variable(contract: ref FnContract) -> bool {
 }
 
 /// **`f(a, b)`, `Stats(first)`, `io::read_to_string()`**: a free call.
-pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     // **`T::attribute(X)` and `T::attributes(X)`, a walked type's own**
     // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
     let member = check_core_call_attribute_member(state, world, func)
@@ -1015,7 +1107,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
             else => {},
         }
         match looked {
-            Ty::Fn { params, result, is_sync, can_throw } => {
+            Ty::Fn { params, result, is_sync, can_throw, .. } => {
                 let pauses_not: bool = is_sync
                 let fails: bool = can_throw
                 let gives: Ty = result?.clone() ?? Ty::Named { name: "()", args: [], view: false }
@@ -1151,7 +1243,7 @@ fn check_core_call_type_parameters(world: ref CheckWorld, name: ref String) -> V
 
 /// **The type parameters a ledger's signature names**, each once, in the
 /// order its parameters and then its result first name them.
-pub fn signature_type_variables(signature: ref Signature) -> Vec[String] sync {
+fn signature_type_variables(signature: ref Signature) -> Vec[String] sync {
     let mut found: Vec[String] = []
     for param in signature.params {
         check_core_call_variables_in(param.1, found)
@@ -1227,7 +1319,7 @@ fn check_core_call_ty_names(ty: ref Ty, parameter: ref String) -> bool sync {
 }
 
 /// **The arm `Call`**: the prelude's `assert`, or a free call.
-pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     if check_core_call_the_prelude_claim(state, world, func, "assert") {
         return check_core_an_assert(state, world, host, args, config, span, false)
     }
@@ -1241,7 +1333,7 @@ pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 }
 
 /// **The arm `Tuple`**: each part walked, then handed over.
-pub fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
+fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
     let mut found: Vec[Ty] = []
     for part in parts {
         found.push(check_core_expr(state, world, host, part, span))

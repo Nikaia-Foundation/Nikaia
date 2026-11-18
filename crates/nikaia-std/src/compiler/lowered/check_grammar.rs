@@ -64,7 +64,7 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
-pub fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
+pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
     let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
     let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -144,7 +144,7 @@ pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
         match pattern {
             Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, rep, rules) },
             Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); self.pattern_type(world, &pat.node, rules) },
@@ -223,7 +223,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+    pub(crate) fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         match pattern {
             Pattern::Bind { name, pat } => {
@@ -314,7 +314,7 @@ pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     String::from("")
 }
 
-pub fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
     let written = grammar_position_of(world, named);
     if written == "" { return None; }
     let notes: Vec<String> = vec![format!("Over a `Bytes` `{}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743).", written)];
@@ -324,11 +324,26 @@ pub fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
+    pub(crate) fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
+        let owner: String = nikaia_std::index::or(match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
         for arg in rule.args.iter() {
             self.next_binding = self.next_binding + 1;
-            out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string()), host.type_of(&arg.ty), self.next_binding));
+            let name = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
+            let mut ty = host.type_of(&arg.ty);
+            if self.a_lent_rule_value(world, host, arg) {
+                self.facts.lent_rule_values.insert(format!("{}::{}", owner, name));
+                let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_nullable && !arg.ty.is_slice;
+                if plain_text && !arg.ty.is_view {
+                    let mut viewed = arg.ty.clone();
+                    viewed.is_view = true;
+                    ty = host.type_of(&viewed);
+                }
+            }
+            out.push(CheckLocal::free(name, ty, self.next_binding));
         }
         for option in rule.config.iter() {
             self.next_binding = self.next_binding + 1;
@@ -338,7 +353,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
+    pub(crate) fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
         match &pattern.node {
             Pattern::Seq(parts) => {
                 let mut now = scope;
@@ -387,9 +402,9 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat);
                 self.grammar_values(world, host, gram, pat, rules, scope.copy_owned());
                 let whole = pattern_named("i64", false);
-                self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."));
+                self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.");
                 match high {
-                    Some(bound) => { self.grammar_fixed(world, host, bound, &whole, &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.")); },
+                    Some(bound) => { self.grammar_fixed(world, host, bound, &whole, &scope, &pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."); },
                     None => { },
                 }
                 return scope;
@@ -402,7 +417,7 @@ impl CheckState {
                 return scope;
             },
             Pattern::Guard { cond, .. } => {
-                self.grammar_fixed(world, host, cond, &pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
+                self.grammar_fixed(world, host, cond, &pattern_named("bool", false), &scope, &pattern.span, "A guard", "A guard is a condition: compare, as in `if(m > n)`.");
                 return scope;
             },
             Pattern::Call { name, args, config } => {
@@ -416,7 +431,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
+    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: &str) {
         self.scope.push(scope.copy_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
@@ -425,16 +440,28 @@ impl CheckState {
         self.repeats.pop();
         self.scope.pop();
         if found.is_unknown() || found.text() == want.text() { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("{} here is `{}`, but it has to be `{}`.", what, found.text(), want.text()), vec![], Some(help)));
+        self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("{} here is `{}`, but it has to be `{}`.", what, found.text(), want.text()), &found, Some(&want)), vec![], Some(shown_in(help, &found, Some(&want)))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lent_rule_value<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &FnArg) -> bool {
+        if arg.mutable || arg.keep || (*arg.ty.code).is_some() { return false; }
+        let ty = host.type_of(&arg.ty);
+        !ty.is_unknown() && !self.a_word_by_its_kind(world, &ty.owned())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str) {
+    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, lent: bool, scope: &[CheckLocal], span: &Span, what: &str) {
         self.scope.push(scope.copy_owned());
-        let found = check_core_expr(&mut *self, world, host, value, span);
+        let mut found = check_core_expr(&mut *self, world, host, value, span);
         self.scope.pop();
-        self.expect_type(world, &found, &want, span, "argument", &|was, wanted| { format!("{} here is `{}`, but it has to be `{}`.", what, was, wanted) });
+        let mut wanted = want;
+        if lent {
+            found = found.owned();
+            wanted = wanted.owned();
+        }
+        self.expect_type(world, &found, &wanted, span, "argument", &|was, wanted| { format!("{} here is `{}`, but it has to be `{}`.", what, was, wanted) });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -449,7 +476,8 @@ impl CheckState {
                 if ((i) as usize) < rule.args.len() {
                     let want = host.type_of(&unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty);
                     let what = format!("The value for `{}`", world.words.resolve(unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name));
-                    self.grammar_value(world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, &want, scope, span, &what);
+                    let lent = self.a_lent_rule_value(world, host, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) });
+                    self.grammar_value(world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, want, lent, scope, span, &what);
                 }
             }
             for given in config.iter() {
@@ -459,7 +487,7 @@ impl CheckState {
                     if declared.name == given.name {
                         found = true;
                         let what = format!("The option `{}`", option);
-                        self.grammar_value(world, host, &given.value, &host.type_of(&declared.ty), scope, span, &what);
+                        self.grammar_value(world, host, &given.value, host.type_of(&declared.ty), false, scope, span, &what);
                     }
                 }
                 if !found { self.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", called, option), vec![format!("It is a rule of grammar `{}`; its options are what it declares after its `;`.", grammar_name)], Some(String::from("Name an option the rule declares, or declare it.")))); }

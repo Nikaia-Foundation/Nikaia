@@ -182,7 +182,7 @@ pub(crate) fn dump_fields(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, dept
     None
 }
 
-pub fn is_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" }
+pub(crate) fn is_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" }
 
 pub(crate) fn uncrossable(ty: &Ty, because: &str) -> Option<Uncrossable> { Some(Uncrossable { ty: ty.text(), because: nikaia_std::block::Text::from(because.to_string()) }) }
 

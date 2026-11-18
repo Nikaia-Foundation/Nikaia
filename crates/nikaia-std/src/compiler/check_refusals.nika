@@ -8,7 +8,7 @@
 impl CheckState {
     /// `NK1195`: an `assert` written in a shape other than `assert(cond)` or
     /// `assert(cond; message: "…")`.
-    pub fn an_assert_of_another_shape(ref mut self, message: String, span: ref Span) sync {
+    fn an_assert_of_another_shape(ref mut self, message: String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1195", span, message, ["Write it as `assert(cond)` or `assert(cond; message: \"…\")`."], null))
     }
 
@@ -27,7 +27,7 @@ impl CheckState {
     /// #125). A `T?` is a type of its own, read with `??` or `?.`; `x == null`
     /// is the one comparison it takes with something that is not one. Asked
     /// only where both sides are known (C.4).
-    pub fn a_maybe_compared_with_a_value(ref mut self, left: ref Ty, right: ref Ty, span: ref Span) sync {
+    fn a_maybe_compared_with_a_value(ref mut self, left: ref Ty, right: ref Ty, span: ref Span) sync {
         let first = a_known_maybe(left) && a_known_value(right)
         let second = a_known_maybe(right) && a_known_value(left)
         if !first && !second {
@@ -39,7 +39,7 @@ impl CheckState {
             maybe = right.clone()
             value = left.clone()
         }
-        self.findings.push(check_refusal("NK1102", span, f"This compares `{maybe.text()}` with `{value.text()}`.", ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`."], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))
+        self.findings.push(check_refusal("NK1102", span, spoken_in(f"This compares `{maybe.text()}` with `{value.text()}`.", maybe, value), ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`."], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))
     }
 
     /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
@@ -47,7 +47,7 @@ impl CheckState {
     /// operand is read with `??` first, or proved not `null` by a test before
     /// it (ADR-382). The same holds for a name a `match` arm binds over a `T?`
     /// scrutinee, which is the whole `T?` (Part I 3.4).
-    pub fn a_maybe_in_an_operation(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, span: ref Span) sync {
+    fn a_maybe_in_an_operation(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, span: ref Span) sync {
         let mut maybe = left.clone()
         if !a_known_maybe(left) {
             if !a_known_maybe(right) {
@@ -56,32 +56,32 @@ impl CheckState {
             maybe = right.clone()
         }
         let symbol = binary_op_text(op)
-        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`."], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))
+        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`."], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))
     }
 
     /// **`NK1102`: a `T?` as a hole of an `f"…"`** (Part I 2.3): it has no text
     /// of its own, and what `null` reads as is the author's to say.
-    pub fn a_maybe_in_a_hole(ref mut self, held: ref Ty, span: ref Span) sync {
+    fn a_maybe_in_a_hole(ref mut self, held: ref Ty, span: ref Span) sync {
         if !a_known_maybe(held) {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
+        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
     }
 
     /// **`NK1102`: a `T?` handed to a print call** (Part I 2.3), for the
     /// reason of [`a_maybe_in_a_hole`]: `println(x)` says no more than
     /// `println(f"{x}")` about what `null` reads as.
-    pub fn a_maybe_printed(ref mut self, held: ref Ty, span: ref Span) sync {
+    fn a_maybe_printed(ref mut self, held: ref Ty, span: ref Span) sync {
         if !a_known_maybe(held) {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"This prints `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))
+        self.findings.push(check_refusal("NK1102", span, f"This prints `{held.shown()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))
     }
 
     /// **`NK1164`: `impl Fatal for T` where `T` has no `impl Error`**
     /// (ADR-345 D1): a fatal type is an error as well, so the second `impl` is
     /// what the first asks for, as a bound asks for its trait.
-    pub fn a_fatal_type_that_is_no_error(ref mut self, world: ref CheckWorld, target: ref String, span: ref Span) sync {
+    fn a_fatal_type_that_is_no_error(ref mut self, world: ref CheckWorld, target: ref String, span: ref Span) sync {
         let own = world.own.implementations.get("Error")
         if own != null && (own?.contains(target) ?? false) {
             return
@@ -95,7 +95,7 @@ impl CheckState {
 
     /// **`NK1234`: a struct literal leaves out a field that has no default**
     /// (ADR-331 D5, Part I 4.1).
-    pub fn fields_left_out(ref mut self, owner: ref String, missing: ref Vec[String], span: ref Span) sync {
+    fn fields_left_out(ref mut self, owner: ref String, missing: ref Vec[String], span: ref Span) sync {
         let listed = left_out_text(missing)
         let mut one: String = "fields"
         let mut them: String = "them"
@@ -128,12 +128,12 @@ impl CheckState {
     /// that the *next* access is refused rather than emitted, which is what
     /// `find(1)?.b.c` used to become —
     /// `find(1).map(|it| it.b).c`, a field read off an `Option` (Part III C.1).
-    pub fn reaches_into_a_nullable(ref mut self, on: ref Ty, kind: ref String, name: ref String, span: ref Span) sync {
+    fn reaches_into_a_nullable(ref mut self, on: ref Ty, kind: ref String, name: ref String, span: ref Span) sync {
         let mut safe: String = f"?.{name}"
         if kind == "method" {
             safe = f"?.{name}(…)"
         }
-        let mut message: String = f"A `{on.text()}` may be missing, so you can't reach its {kind} directly."
+        let mut message: String = f"A `{on.shown()}` may be missing, so you can't reach its {kind} directly."
         match on {
             Ty::Nullable(inner) => {
                 if inner.is_unknown() {
@@ -175,7 +175,7 @@ impl CheckState {
     /// written `&` is the program's only way to say what the line means — so
     /// refusing it there would take away the escape hatch before the inference
     /// that replaces it exists. issue #96 carries that as the rest of D4.
-    pub fn the_caller_writes_no_reference(ref mut self, value: ref Expr, span: ref Span, because: ref String) sync {
+    fn the_caller_writes_no_reference(ref mut self, value: ref Expr, span: ref Span, because: ref String) sync {
         let written = match value {
             Expr::Unary { op, .. } => match op {
                 UnaryOp::Ref => true,
@@ -206,7 +206,7 @@ impl CheckState {
     /// `NK1190` for a struct of the program's own: it declares no anonymous
     /// constructor (`impl T { pub fn(…) … }`, ADR-140 D2), so a call has
     /// nothing to be lowered to, and the literal is the way it is built.
-    pub fn a_struct_called_without_a_constructor(ref mut self, name: ref String, span: ref Span) sync {
+    fn a_struct_called_without_a_constructor(ref mut self, name: ref String, span: ref Span) sync {
         let mut fields: Vec[String] = []
         let declared = self.structs[name]?.clone() ?? []
         for field in declared {
@@ -216,7 +216,7 @@ impl CheckState {
     }
 
     /// `NK1190`: `T()` of a `std` type whose description has no `T::new`.
-    pub fn a_constructor_nothing_describes(ref mut self, world: ref CheckWorld, name: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    fn a_constructor_nothing_describes(ref mut self, world: ref CheckWorld, name: ref String, args: ref Vec[Expr], span: ref Span) sync {
         if args.len() != 0 || !world.library.types.contains_key(name) || resolve_call(world, name) != null {
             return
         }
@@ -258,7 +258,7 @@ impl CheckState {
     /// declared here, and a module of this program. Anything this cannot see is a
     /// name it must not refuse, because refusing a correct program is the one
     /// thing this checker may never do (Part III, C.4).
-    pub fn nothing_declares_it(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
+    fn nothing_declares_it(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
         let name = match expr {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
             else => return,
@@ -281,7 +281,7 @@ impl CheckState {
     /// under a declaration without the word. Teardown that can fail is a
     /// `Cleanup`. Asked only of the language's `Drop`, not of a trait of the
     /// name the program declares itself.
-    pub fn a_drop_that_throws(ref mut self, world: ref CheckWorld, target: ref String, methods: ref Vec[Spanned[Item]]) sync {
+    fn a_drop_that_throws(ref mut self, world: ref CheckWorld, target: ref String, methods: ref Vec[Spanned[Item]]) sync {
         if world.own.traits.contains_key("Drop") {
             return
         }
@@ -304,7 +304,7 @@ impl CheckState {
     /// synchronous fallback a type may also have is its own `impl Drop`, which
     /// runs after the cleanup, or alone where the cleanup cannot run - so a
     /// `drop` written here is named and pointed there.
-    pub fn a_cleanup_shaped(ref mut self, world: ref CheckWorld, target: ref String, methods: ref Vec[Spanned[Item]], span: ref Span) sync {
+    fn a_cleanup_shaped(ref mut self, world: ref CheckWorld, target: ref String, methods: ref Vec[Spanned[Item]], span: ref Span) sync {
         let mut wrote_cleanup = false
         let note: String = "`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail."
         for method in methods {
@@ -345,7 +345,7 @@ impl CheckState {
 
 /// What a `drop` that would fail is told (Part I 6.4): catch it there, or
 /// make the teardown a `Cleanup`, which may fail.
-pub fn drop_help(target: ref String) -> String sync {
+fn drop_help(target: ref String) -> String sync {
     return f"Handle the failure in the body (`… catch {{ }}`), or move teardown that can fail to `impl Cleanup for {target} {{ fn cleanup(ref mut self) throws {{ … }} }}`."
 }
 
@@ -368,7 +368,7 @@ fn a_known_value(ty: ref Ty) -> bool sync {
 
 /// The fields of a literal's struct it left out that have no default, as
 /// the way out spells them.
-pub fn left_out_text(missing: ref Vec[String]) -> String sync {
+fn left_out_text(missing: ref Vec[String]) -> String sync {
     let mut quoted: Vec[String] = []
     for field in missing {
         quoted.push(f"`{field}`")

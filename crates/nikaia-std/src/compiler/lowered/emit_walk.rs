@@ -7,7 +7,7 @@ pub fn visited_in_block(block: &Block) -> Vec<&Expr> {
     out
 }
 
-pub fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
+pub(crate) fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match stmt {
         Stmt::Let { value, .. } => { out.extend(visited_in_expr(value)); },
@@ -42,7 +42,7 @@ pub(crate) fn visited_in_all(all: &[Expr]) -> Vec<&Expr> {
     out
 }
 
-pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
+pub(crate) fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![expr];
     match expr {
         Expr::Block(block, _) => { out.extend(visited_in_block(block)); },
@@ -101,6 +101,16 @@ pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
             out.extend(visited_in_expr(base));
             out.extend(visited_in_expr(index));
         },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            out.extend(visited_in_expr(start));
+            out.extend(visited_in_expr(end));
+        },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            out.extend(visited_in_expr(base));
+            for field in fields.iter() { out.extend(visited_in_maybe((field.value).as_ref())); }
+        },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(visited_in_expr(expr)); },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
@@ -126,7 +136,7 @@ pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
     out
 }
 
-pub fn template_holes_bound(segments: &[Segment]) -> Vec<(String, Vec<(String, String)>)> {
+pub(crate) fn template_holes_bound(segments: &[Segment]) -> Vec<(String, Vec<(String, String)>)> {
     let mut holes: Vec<(String, Vec<(String, String)>)> = vec![];
     let mut bound: Vec<(String, String)> = vec![];
     walk_template_holes(segments, &mut bound, &mut holes);

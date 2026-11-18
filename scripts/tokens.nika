@@ -33,7 +33,7 @@ fn at(c: ref Vec[scalar], i: i64) -> scalar {
 
 fn starts(c: ref Vec[scalar], i: i64, text: String) -> bool {
     let mut j = i
-    for t in text.chars() {
+    for t in text.scalars {
         if at(c, j) != t { return false }
         j += 1
     }
@@ -111,7 +111,7 @@ fn number_end(c: ref Vec[scalar], i: i64) -> i64 {
 }
 
 fn count_tokens(source: String) -> i64 {
-    let c: Vec[scalar] = source.chars().collect()
+    let c: Vec[scalar] = source.scalars.collect()
     let ops = operators()
     let mut count = 0
     let mut i = 0

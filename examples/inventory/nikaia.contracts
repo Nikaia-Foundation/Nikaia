@@ -50,9 +50,13 @@ sync = "inferred"
 panics = false
 touches = []
 views = ["entry: borrowed"]
+inferred = ["result == entry.count"]
 signature = "(entry: ref Entry) -> i64"
 
 [type."Entry"]
 pub = true
 fields = ["pub category: ref String", "pub item: ref String", "pub count: i64"]
+compares = true
+equates = true
+hashes = true
 tethered = ["category", "item"]

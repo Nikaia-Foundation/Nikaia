@@ -1,0 +1,24 @@
+// **`NK1354` is not said over a lambda that throws** (#1975): without the
+// list, its failure would come between the turns of the body. The lambda is
+// refused (`NK2606`); the `for` keeps its `.collect()`.
+enum Big { Too }
+
+impl Error for Big {
+    fn message(ref self) -> String {
+        return "big"
+    }
+}
+
+fn twice(x: i64) -> i64 throws {
+    if x > 10 {
+        throw Big::Too
+    }
+    return x * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    for d in xs.iter().map(fn(x) { twice(x) }).collect() {
+        println(d)
+    }
+}

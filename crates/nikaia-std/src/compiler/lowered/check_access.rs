@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
         #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for param in params.iter() {
@@ -16,7 +16,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn field_is_reachable(&mut self, ty: &str, field: &FieldContract, span: &Span) {
+    pub(crate) fn field_is_reachable(&mut self, ty: &str, field: &FieldContract, span: &Span) {
         if field.public { return; }
         let shown = ty.trim_start_matches('&');
         let at = match nikaia_std::search::find(&shown, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -39,14 +39,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_such_option(&mut self, key: &str, name: &str, signature: &Signature, span: &Span) {
+    pub(crate) fn no_such_option(&mut self, key: &str, name: &str, signature: &Signature, span: &Span) {
         let mut names: Vec<String> = vec![];
         for option in signature.config.iter() { names.push(nikaia_std::block::Text::from(option.name.to_string())); }
         self.no_such_option_among(key, name, &names, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_such_option_among(&mut self, key: &str, name: &str, names: &[String], span: &Span) {
+    pub(crate) fn no_such_option_among(&mut self, key: &str, name: &str, names: &[String], span: &Span) {
         let near = nearest_name(name, names);
         let note: String = match names.len() as i64 {
             0 => format!("`{}` takes no options: its declaration has no `;`.", key),
@@ -59,7 +59,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let is_a_function = world.own.functions.contains_key(name) || world.library.functions.contains_key(name) || world.own.functions.contains_key(&format!("{}::new", name));
         let mut note: String = String::from("Braces after a name build a struct, and no struct of that name is declared here or in a package you use.");
         let mut help: String = String::from("Declare the `struct`, or fix the name.");
@@ -71,14 +71,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
+    pub(crate) fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
         let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for setting in config.iter() { fields.push(nikaia_std::block::Text::from(world.words.resolve(setting.name).to_string())); }
         self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec![String::from("Parentheses after a type call its constructor; a struct literal with field names uses braces.")], Some(format!("Write `{} {{ {}: … }}`.", name, nikaia_std::block::Text::from(fields.join(": …, "))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
+    pub(crate) fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -107,12 +107,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_case_is_missing(&mut self, missing: &str, span: &Span) { self.findings.push(check_refusal("NK1151", span, format!("This `match` doesn't handle `{}`.", missing), vec![String::from("A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know.")], Some(String::from("Add an arm for it, or `else => …` for everything else.")))); }
+    pub(crate) fn a_case_is_missing(&mut self, missing: &str, span: &Span) { self.findings.push(check_refusal("NK1151", span, format!("This `match` doesn't handle `{}`.", missing), vec![String::from("A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know.")], Some(String::from("Add an arm for it, or `else => …` for everything else.")))); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> (String, Option<String>) {
+pub(crate) fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> (String, Option<String>) {
     let prose: String = match expr {
         Expr::Variable(name, _) => { let name = *name; format!("`{}`", world.words.resolve(name)) },
         Expr::Field { name, .. } => { let name = *name; format!("the `{}` this passes", world.words.resolve(name)) },
@@ -123,7 +123,7 @@ pub fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
+pub(crate) fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; dotted_field(world, base, name) },
@@ -140,7 +140,7 @@ pub(crate) fn dotted_field(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
     match pattern {
         MatchPattern::Path(path) => { a_last_segment(world, path, out); },
         MatchPattern::Tuple { path, .. } => { a_last_segment(world, path, out); },

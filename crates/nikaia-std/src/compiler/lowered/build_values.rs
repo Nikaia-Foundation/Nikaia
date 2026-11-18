@@ -14,7 +14,7 @@ pub enum BuildValue {
     Constant { constructor: String, parts: Vec<BuildValue> },
 }
 
-pub fn operated(op: &BinaryOp, left: &BuildValue, right: &BuildValue) -> Option<BuildValue> {
+pub(crate) fn operated(op: &BinaryOp, left: &BuildValue, right: &BuildValue) -> Option<BuildValue> {
     match left {
         BuildValue::Int(a) => match right {
             BuildValue::Int(b) => integers_operated(op, a, b),
@@ -107,7 +107,7 @@ pub enum ElementRead {
     Unreadable,
 }
 
-pub fn element_at(on: &BuildValue, at: &BuildValue) -> ElementRead {
+pub(crate) fn element_at(on: &BuildValue, at: &BuildValue) -> ElementRead {
     let items = match on {
         BuildValue::List(items) => items,
         _ => return ElementRead::Unreadable,

@@ -1,0 +1,41 @@
+// A view cut from a field or an element of a call's result, or from a file
+// name's text, is kept in a `let`: the result is held for the rest of the
+// block, as a call's own result is (#559, #1894).
+use std::fs
+use std::process
+
+struct Found { out: String, all: Vec[String] }
+
+fn made() -> String {
+    let mut text = String()
+    text.push_str("a b c")
+    text
+}
+
+fn found() -> Found {
+    Found { out: made(), all: [made()] }
+}
+
+fn listed() -> Vec[String] {
+    [made(), made()]
+}
+
+fn main() throws {
+    let words = found().out.split(" ").collect()
+    println(words.len())
+    let trimmed = found().all[0].trim().split(" ").collect()
+    println(trimmed.len())
+    let second = listed()[1].split(" ").collect()
+    println(second.len())
+    let lines = process::run("echo", ["1\n2"]).stdout.trim().split("\n").collect()
+    println(lines.len())
+    let mut parts = 0
+    for entry in fs::read_dir(".", fs::Root::Anywhere) {
+        let named: Vec[String] = entry.to_text().split("/").collect()
+        let shown = entry.display().split("/").collect()
+        if named.len() > 0 && shown.len() > 0 {
+            parts += 1
+        }
+    }
+    println(parts > 0)
+}

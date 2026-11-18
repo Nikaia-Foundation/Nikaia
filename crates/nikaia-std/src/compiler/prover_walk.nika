@@ -42,7 +42,7 @@ pub struct ProverWalk {
 
 /// **Every body of the program, walked once**: each function and method,
 /// and each test and bench, which have no callers.
-pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
+fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
     for item in program.items {
         match item.node {
             Item::Fn { .. } => prover_function(walk, item, null, false, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
@@ -305,10 +305,11 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             let free = !has_owner && !was_a_test
             let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw }
             walk.state.in_test = was_a_test
-            // **A result summary** (ADR-359 D1): every exit of a free
-            // function's body the walk reads in full.
+            // **A result summary** (ADR-359 D1, D14): every exit of the body
+            // of a free function, or of a method no trait's call can reach,
+            // that the walk reads in full.
             walk.state.summing = []
-            walk.state.unsummed = !free || key == null || !prover_summable(body)
+            walk.state.unsummed = was_a_test || of_a_trait || key == null || !prover_summable(body)
             let leaves = prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             walk.state.in_test = false
             let summed_key = key?.clone() ?? ""
@@ -467,7 +468,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             prover_loop_elements(walk, body, [], scope, words)
             let mut state: Vec[String] = []
             for n in changed {
-                if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
+                if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, cond, body, walk.state.readers, words) {
                     state.push(n.clone())
                 }
             }
@@ -671,6 +672,22 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
                     called_whole = prover_returns_whole(walk, c, program, words, own, condition)
                     called_summed = prover_summed(walk, c, args, config, bound, scope, program, words, written_of(value))
                     called = true
+                }
+            },
+            // **A call `self.m(…)` to the type's own method has its summary**
+            // (ADR-359 D14), as a call by name has: the method is resolved
+            // statically (ADR-269 D5).
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let callee = prover_own_method_callee(receiver, method, nested, words)
+                if callee != null {
+                    let c = callee ?? ""
+                    let target = prover_summed_function(program, words, c)
+                    if target != null {
+                        let bound = words.resolve(names[0]).clone()
+                        called_whole = target?.whole_result ?? false
+                        called_summed = prover_summed(walk, c, args, config, bound, scope, program, words, written_of(value))
+                        called = true
+                    }
                 }
             },
             else => {},
@@ -1104,57 +1121,91 @@ fn prover_pinned_value(mut arena: TermArena, facts: ref Vec[i64], d: i64, ask: f
     }
 }
 
-/// **A call's summary at this call** (ADR-359 D2): each exit of the callee's
-/// result summary with the call's arguments in place of its parameters.
-/// Nothing where the callee has none, an argument is not a term the prover
-/// reads, or one reads the name the result is bound to.
+/// **A call's summary at this call** (ADR-359 D2, D14): each exit of the
+/// callee's result summary with the call's arguments in place of its
+/// parameters, and a list parameter's length with the argument's. An exit
+/// that reads a parameter whose argument the prover does not read (or that
+/// reads the name the result is bound to) gives no fact; the others keep
+/// theirs. Nothing where the callee has no summary.
 fn prover_summed(mut walk: ProverWalk, callee: ref String, written: ref Vec[Expr], config: ref Vec[ConfigArg], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, call: String) -> Vec[SummaryAlt]? {
     let exits = walk.state.summaries[callee] ?? return null
-    let function = free_function(program, words, callee) ?? return null
+    let function = prover_summed_function(program, words, callee) ?? return null
     let args = arguments_in_order(function, written, config, words)
     if function.params.len() != args.len() {
         return null
     }
     let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for k in 0..<args.len() {
-        let term = lin_term(args[k], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return null
-        if walk.arena.mentions(term, bound) {
-            return null
+        let term = lin_term(args[k], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+        if term != null && !walk.arena.mentions(term ?? 0, bound) {
+            given.insert(function.params[k].clone(), term ?? 0)
         }
-        given.insert(function.params[k].clone(), term)
+        let length = length_given(walk.arena, words, args[k], scope, walk.state.pinned)
+        if length != null && !walk.arena.mentions(length ?? 0, bound) {
+            given.insert(length_of(function.params[k]), length ?? 0)
+        }
     }
     let mut alts: Vec[SummaryAlt] = []
     for exit in exits {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         walk.arena.variables(exit.guard, read)
         walk.arena.variables(exit.value, read)
+        let mut readable = true
         for name in read {
             if !given.contains_key(name) {
-                return null
+                readable = false
             }
+        }
+        if !readable {
+            continue
         }
         let guard = walk.arena.substitute(exit.guard, given)
         let value = walk.arena.substitute(exit.value, given)
         alts.push(SummaryAlt { guard: guard, value: value, callee: callee.clone(), call: call.clone(), why: exit.written.clone() })
     }
+    if alts.is_empty() {
+        return null
+    }
     return alts
 }
 
-/// **An exit of the function walked, as a summary's exit** (ADR-359 D1):
-/// the value handed back, each call in it read by its callee's summary,
-/// carried to the entry with the path to it. Where that cannot be done - a
-/// call without a summary or one that can come back here, a name whose value
-/// at the entry is not known, more than the fixed term bound - the function
-/// has no summary.
+/// **The function a summary's key names**: a free function, or `T::m`, the
+/// method `m` of `T`'s own `impl` (ADR-359 D14).
+fn prover_summed_function(program: ref Program, words: ref winnow_grammar::InternerContext, callee: ref String) -> FreeFunction? {
+    let free = free_function(program, words, callee)
+    if free != null {
+        return free
+    }
+    let cut = callee.rfind("::") ?? return null
+    let owner = callee[0..<cut].clone()
+    let name = callee[cut + 2..<callee.len()].clone()
+    return own_method(program, words, owner, name)
+}
+
+/// **`T::m` for a call `self.m(…)` in a method of `T`** (ADR-269 D5, #776),
+/// the key of `T`'s own method; null for any other receiver.
+fn prover_own_method_callee(receiver: ref Expr, method: winnow_grammar::Symbol, at: ref ProverWhere, words: ref winnow_grammar::InternerContext) -> String? {
+    if (prover_variable_named(receiver, words) ?? "") != "self" {
+        return null
+    }
+    let function = carrying_function(at.function) ?? return null
+    let cut = function.rfind("::") ?? return null
+    let owner = function[0..<cut].clone()
+    return f"{owner}::{words.resolve(method)}"
+}
+
+/// **An exit of the function walked, as a summary's exit** (ADR-359 D1,
+/// D14): the value handed back, each call in it read by its callee's
+/// summary, carried to the entry with the path to it. Where that cannot be
+/// done - a call without a summary or one that can come back here, a name
+/// whose value at the entry is not known, more than the fixed term bound -
+/// this exit gives no fact, and the function's other exits keep theirs:
+/// each exit is a fact on its own path.
 fn prover_sum_exit(mut walk: ProverWalk, value: ref Expr, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync, written_of: fn(ref Expr) -> String sync) {
     if walk.state.unsummed {
         return
     }
     let made = prover_summary_exits(walk, value, scope, at, program, words, own, unaliased, condition, written_of)
-    if made == null {
-        walk.state.unsummed = true
-        return
-    }
     for exit in made ?? [] {
         walk.state.summing.push(exit.clone())
     }
@@ -1297,7 +1348,9 @@ fn prover_plain_maybe(expr: ref Expr?) -> bool {
     return prover_plain(e)
 }
 
-/// An expression with no block, lambda, `match`, jump or `?` inside.
+/// An expression with no block, lambda, `match`, jump or `?` inside. A
+/// field or an element read is plain: an exit whose value or path reads one
+/// gives no fact, and the other exits keep theirs (ADR-359 D14, #1904).
 fn prover_plain(expr: ref Expr) -> bool {
     return match expr {
         Expr::LitInt { .. } => true,
@@ -1308,7 +1361,8 @@ fn prover_plain(expr: ref Expr) -> bool {
         Expr::Unary { expr, .. } => prover_plain(expr),
         Expr::Cast { expr, .. } => prover_plain(expr),
         Expr::Binary { lhs, rhs, .. } => prover_plain(lhs) && prover_plain(rhs),
-        Expr::Field { .. } => false,
+        Expr::Field { base, .. } => prover_plain(base),
+        Expr::Index { base, index, .. } => prover_plain(base) && prover_plain(index),
         Expr::Call { func, args, config, .. } => config.is_empty() && prover_plain(func) && prover_all_plain(args),
         Expr::MethodCall { receiver, args, config, .. } => config.is_empty() && prover_plain(receiver) && prover_all_plain(args),
         else => false,
@@ -1342,7 +1396,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], m
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
                 for n in changed {
-                    if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
+                    if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, iter, body, walk.state.readers, words) {
                         state.push(n.clone())
                     }
                 }
@@ -1488,7 +1542,9 @@ fn prover_return(mut walk: ProverWalk, value: ref Expr?, span: Span, scope: ref 
     let returned = value ?? return
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.exit(walk.arena, returned, words, scope, at.function, !at.lambda && at.posts, at.params, ask)
-    if !at.lambda && at.free {
+    // `walk.state.unsummed` says which bodies are summed (ADR-359 D14): a
+    // method's too, unless a trait's call can reach it.
+    if !at.lambda {
         prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of)
     }
 }
@@ -2212,7 +2268,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
             if callee != null {
-                prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+                prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, unaliased, written_of, condition)
             }
         },
         else => {},
@@ -2484,10 +2540,10 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
     let first = prover_outside_name(walk, goal, index, scope, words, written_of)
     let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true, -1)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true, "", -1)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null, -1)
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null, "", -1)
     let mut notes: Vec[String] = [outside_note(first, source)]
     if goal != null {
         let found = model(walk.arena, scope.facts, goal ?? 0)
@@ -2515,7 +2571,7 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 /// is proved, by the guard `guard` where one proves it; an `operation` (a
 /// `/`, `%`, `+`, `-` or `*`, D7) likewise, and whether its goal was
 /// `stated` at all.
-pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, site: i64) {
+fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, within: String, site: i64) {
     let mut guard_at: i64 = -1
     let mut condition: String = ""
     match guard {
@@ -2526,7 +2582,7 @@ pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, 
         },
     }
     let at = span.start as i64
-    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated, site: site })
+    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated, within: within.clone(), site: site })
 }
 
 /// **An operation that data from outside reaches, recorded for `--bounds`**
@@ -2538,10 +2594,14 @@ fn prover_outside_operation(mut walk: ProverWalk, expr: ref Expr, reached: ref E
     let first = prover_outside_name(walk, goal, reached, scope, words, written_of)
     let source = outside_source(reached, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true, site)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true, "", site)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null, site)
+    let mut within = String()
+    if goal != null {
+        within = prover_proof_window(walk.state.arithmetic[site]?.clone() ?? "").clone()
+    }
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null, within, site)
 }
 
 /// **A division's goal on data from outside** (ADR-396 D7): `d != 0`, and on
@@ -2575,8 +2635,8 @@ fn prover_division_goal(mut walk: ProverWalk, lhs: ref Expr, rhs: ref Expr, op_a
 }
 
 /// **An operation's goal**, `lo <= a + b <= hi` for the type the checker
-/// gave it (`prover_overflow_check`'s), null where the solver states no
-/// bound of it - an `i64`'s - or reads no whole number.
+/// gave it (`prover_overflow_check`'s; an `i64`'s and a `u64`'s within the
+/// window of `prover_stated_range`), null where it reads no whole number.
 fn prover_overflow_goal(mut walk: ProverWalk, expr: ref Expr, op_at: i64, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> i64? {
     let ty = walk.state.arithmetic[op_at]?.clone() ?? return null
     let (lo, hi) = prover_stated_range(ty) ?? return null
@@ -2630,13 +2690,17 @@ fn prover_outside_name(walk: ref ProverWalk, goal: i64?, index: ref Expr, scope:
 /// **An operation stays inside its type** (ADR-306 D15, D6): `lo <= a + b
 /// <= hi` for a `+`, `-` or `*` of the type the checker gave it, by the byte
 /// its operator starts at. A refutation is `NK1207`, as an index's is; the
-/// check stays in the machine code. Only a bound the solver can state: an
-/// `i64` none, a `u64` only its `0`. Not once the checker folded a
-/// number and refused it with `NK1116`: that refusal is the cause, and a number
-/// it folded reaches the walk through a `let`, where no span names it.
+/// check stays in the machine code. Asked of the type's true ends
+/// (`prover_type_range`), not of the window an `i64`'s and a `u64`'s proof
+/// is stated within (ADR-396 D8 step 2, #1810): leaving the window is no
+/// overflow. An `i64`'s refutation is `prover_i64_refuted_check`'s, and
+/// carried to no caller: its ends leave the solver no room to combine them.
+/// Not once the checker folded a number and refused it with `NK1116`: that
+/// refusal is the cause, and a number it folded reaches the walk through a
+/// `let`, where no span names it.
 fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
     let ty = walk.state.arithmetic[op_at]?.clone() ?? return
-    let (lo, hi) = prover_stated_range(ty) ?? return
+    let (lo, hi) = prover_type_range(ty) ?? return
     if walk.state.unfit_numbers.len() > 0 {
         return
     }
@@ -2654,23 +2718,90 @@ fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span:
         holds = f"{lo} <= {written_of(expr)} <= {hi ?? 0}"
     }
     let fails = f"goes past what {an_or_a(ty)} `{ty}` holds"
+    let help = "Use a wider type where the number needs more room, or check the operands before the operation."
+    if ty == "i64" {
+        if !walk.state.collecting {
+            prover_i64_refuted_check(walk, goal, term, written_of(expr), fails, help, span, scope, ask, model)
+        }
+        return
+    }
     if walk.state.collecting {
         let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds, index: false, within: "", site: span }
         walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
         return
     }
-    prover_refuted_check(walk, goal, written_of(expr), fails, f"Use a wider type where the number needs more room, or check the operands before the operation.", span, scope, ask, model)
+    prover_refuted_check(walk, goal, written_of(expr), fails, help, span, scope, ask, model)
+}
+
+/// **An `i64` operation refuted only past the type** (ADR-396 D8 step 2,
+/// ADR-270 D11, #1810): `goal`, of the type's true ends, refuted as
+/// `prover_refuted_check` does, and then only where the operation `term`
+/// on the values that break it overflows in checked `i64` arithmetic. The
+/// solver, which counts in `i64` and never wraps, may answer nothing near
+/// those ends; it is never the reason for an `NK1207` alone. `let x: i64 =
+/// 3000000000000000000` then `x + 1` is none; at `9223372036854775807` it
+/// is one.
+fn prover_i64_refuted_check(mut walk: ProverWalk, goal: i64, term: i64, written: String, fails: String, help: String, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(goal, read)
+    for name in read {
+        if scope.tainted.contains(name) {
+            return
+        }
+    }
+    let always = refuting_values(walk.arena, scope.facts, goal, ask, model)
+    let values = always?.clone() ?? breaking_values(walk.arena, scope, goal, model) ?? return
+    for name in read {
+        if !values.contains_key(name) {
+            return
+        }
+    }
+    if walk.arena.int_value(term, values) != null {
+        return
+    }
+    if always != null {
+        walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} every time it is reached.", notes: [f"What is known before it rules the check out: {shown(values)}."], help: help, warning: false, labels: [] })
+        return
+    }
+    walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} when {shown(values)}.", notes: ["That state reaches it: what is known here pins every name the check depends on."], help: help, warning: false, labels: [] })
+}
+
+/// **A whole-number type's true ends**, for a refutation (#1810): an
+/// `i64`'s both, a `u64`'s only its low end, which the solver, counting in
+/// `i64`, can state; every other type's as `prover_stated_range` has them.
+fn prover_type_range(ty: ref String) -> (i64, i64?)? sync {
+    return match ty {
+        "i64" => (-9223372036854775807 - 1, 9223372036854775807),
+        "u64" => (0, null),
+        else => prover_stated_range(ty),
+    }
 }
 
 /// The range of a whole-number type as the solver can state it, which counts
-/// in `i64`: an `i64` has none, a `u64` only its low end.
+/// in `i64`: an `i64`'s and a `u64`'s upper end it cannot, so those two get
+/// the window `±2^62` and `0..2^62`, the bounds walk's `solvable` (#444,
+/// ADR-396 D8 step 2, #1810) - a goal within it implies the type's, and
+/// its constants leave the solver room. `prover_proof_window` names which
+/// ranges are such a window.
 fn prover_stated_range(ty: ref String) -> (i64, i64?)? sync {
     return match ty {
         "i32" => (-2147483648, 2147483647),
         "u8" => (0, 255),
         "u32" => (0, 4294967295),
-        "u64" => (0, null),
+        "u64" => (0, solvable()),
+        "i64" => (0 - solvable(), solvable()),
         else => null,
+    }
+}
+
+/// **The window `prover_stated_range` gives `ty`, written**, where its range
+/// is one and not the type's true ends (#1810): `±2^62` for an `i64`,
+/// `0..2^62` for a `u64`, "" for every other type.
+fn prover_proof_window(ty: ref String) -> String sync {
+    return match ty {
+        "i64" => "±2^62",
+        "u64" => "0..2^62",
+        else => "",
     }
 }
 
@@ -2838,7 +2969,7 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
 /// **A call by name**: an edge of the call graph, what the call shows of
 /// the callee's precondition, and where that shows nothing broken, of the
 /// checks nobody writes in its body (ADR-395 D1): one diagnostic per call.
-fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     if scope.locals.contains(callee) {
         return
     }
@@ -2847,7 +2978,19 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
         walk.state.edges.insert((caller ?? "", callee.clone()))
     }
     let told = walk.findings.len()
-    prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    // **A call inside an argument is a whole number of its own**, as inside
+    // an `assert` (ADR-314 D3): what its callee ensures holds of it, and its
+    // summary answers a precondition what is known leaves open (ADR-359 D2,
+    // D14) - `need(kind(m) + 1)`.
+    if !walk.state.in_test && prover_an_argument_calls(args) {
+        let mut here = scope.clone()
+        for arg in args {
+            prover_call_results(walk, arg, false, here, program, words, own, unaliased, condition, written_of)
+        }
+        prover_call_precondition(walk, callee, call, args, config, span, here, at, program, words, own, library, ask, model, escape, written_of, condition)
+    } else {
+        prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    }
     if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
@@ -2858,6 +3001,26 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
         prover_unwritten_call(walk, callee, function.params, all, span, scope, words, ask, model)
+    }
+}
+
+/// Whether an argument holds a call, in the arithmetic the prover reads.
+fn prover_an_argument_calls(args: ref Vec[Expr]) -> bool {
+    for arg in args {
+        if prover_reads_a_call(arg) {
+            return true
+        }
+    }
+    return false
+}
+
+fn prover_reads_a_call(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Call { .. } => true,
+        Expr::Binary { lhs, rhs, .. } => prover_reads_a_call(lhs) || prover_reads_a_call(rhs),
+        Expr::Unary { expr, .. } => prover_reads_a_call(expr),
+        Expr::Cast { expr, .. } => prover_reads_a_call(expr),
+        else => false,
     }
 }
 
@@ -3098,7 +3261,7 @@ fn prover_qualified(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow
 }
 
 /// Whether a call is one of the checker's `assert`s.
-pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
+fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
     let named = match func {
         Expr::Variable(_, _) => true,
         else => false,
@@ -3112,7 +3275,7 @@ pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, cl
 /// **The claims of an `unsafe` block of nothing but `assume`s** (ADR-376
 /// D1), which hold after it: a block that does anything else may change what
 /// they speak of, and keeps them to itself.
-pub fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
+fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
     let mut out: Vec[Expr] = []
     for stmt in block.stmts {
         match stmt.node {
@@ -3134,7 +3297,7 @@ pub fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::Int
 }
 
 /// Whether a claim the checker kept is an `assume` (ADR-376 D1).
-pub fn prover_an_assume(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+fn prover_an_assume(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
     return match func {
         Expr::Variable(name, _) => words.resolve(name) == "assume",
         else => false,
@@ -3219,7 +3382,7 @@ fn prover_assigned(mut walk: ProverWalk, n: ref String, op: ref BinaryOp?, value
     if !scope.mutables.contains(n) {
         return false
     }
-    let read = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
+    let read = value_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
     let mut term = read
     if op != null {
         if !scope.ints.contains(n) {
@@ -3349,7 +3512,7 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
                 }
                 // A call's result `prover_let` read (#1009): followed from
                 // what the callee ensures, or dropped if not followed.
-                let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                let term = value_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                 let of_call = term == null && match value {
                     Expr::Call { .. } => scope.ints.contains(n),
                     else => false,
@@ -3708,6 +3871,18 @@ fn prover_else_lengths_changed(mut changed: collections::BTreeSet[String], else_
     prover_lengths_changed(changed, block, scope, readers, words)
 }
 
+/// **A name of a loop's state** (ADR-361 D1, D15): a whole number, or a
+/// followed list's length the turn changes only in statements the loop's
+/// problem reads (`loop_block`): not in the condition, and the list never
+/// bound again.
+fn prover_length_follows(n: ref String, cond: ref Expr, body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    if !n.ends_with(".len()") {
+        return true
+    }
+    let list = (n.strip_suffix(".len()") ?? "").clone()
+    return !changes_length_in_expr(cond, list, readers, words) && !rebinds(body, list, words)
+}
+
 /// **A followed list a loop changes only through an index** (#782) keeps
 /// its length: nothing binds it again, and nothing changes the length. So
 /// does a `mut` list parameter whose length is a name of the proof (#1375,
@@ -3788,7 +3963,7 @@ fn prover_a_test_function(name: ref String?) -> bool {
     if !text.starts_with(prefix) || text.len() == prefix.len() {
         return false
     }
-    let c: Vec[scalar] = text.chars().collect()
+    let c: Vec[scalar] = text.scalars.collect()
     for k in 14..<c.len() {
         if c[k] < '0' || c[k] > '9' {
             return false

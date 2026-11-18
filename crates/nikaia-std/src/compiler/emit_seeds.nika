@@ -120,7 +120,7 @@ impl EmitSeedsTables {
 
     /// The map positions of a type by the names of its parts
     /// (`emit_seeds_words`): what `count` gives for that type.
-    pub fn count_words(ref self, words: ref Vec[String]) -> i64 {
+    fn count_words(ref self, words: ref Vec[String]) -> i64 {
         let mut sum = 0
         for w in words {
             if emit_seeds_is_map(w) {
@@ -134,7 +134,7 @@ impl EmitSeedsTables {
 
     /// The hidden parameters of each `pub` struct, until the counts stop
     /// growing (a struct holds another one that holds a map).
-    pub fn count_types(ref mut self, declared: ref Vec[EmitSeedsDeclared]) {
+    fn count_types(ref mut self, declared: ref Vec[EmitSeedsDeclared]) {
         self.types.clear()
         for d in declared {
             if !self.excluded.contains(d.name) {
@@ -185,7 +185,7 @@ impl EmitSeedsTables {
     /// The barrier closure: the `pub` functions and methods that hand a map
     /// they were given to a barrier (or to another such function) are fixed,
     /// until none is added.
-    pub fn close_barriers(ref mut self, bodies: ref Vec[EmitSeedsBody]) {
+    fn close_barriers(ref mut self, bodies: ref Vec[EmitSeedsBody]) {
         for _ in 0..<4 {
             let mut changed = false
             for b in bodies {
@@ -203,7 +203,7 @@ impl EmitSeedsTables {
 
     /// The types with a method (not a trait's) that hands a map of `self`
     /// on: one body per `impl`, named by its type.
-    pub fn self_handers(ref self, impls: ref Vec[EmitSeedsBody]) -> Vec[String] {
+    fn self_handers(ref self, impls: ref Vec[EmitSeedsBody]) -> Vec[String] {
         let mut out: Vec[String] = []
         for i in impls {
             if self.arity(i.name) == 0 || out.contains(i.name) {
@@ -646,7 +646,7 @@ fn emit_seeds_root(unit: ref ParsedView, e: ref Expr) -> String? {
 
 /// The names of a type's parts that can hold a map position (neither a
 /// tuple nor code), in order.
-pub fn emit_seeds_words(words: ref winnow_grammar::InternerContext, ty: ref Type, mut out: Vec[String]) {
+fn emit_seeds_words(words: ref winnow_grammar::InternerContext, ty: ref Type, mut out: Vec[String]) {
     if ty.code == null && !ty.is_tuple {
         out.push(words.resolve(ty.name).clone())
     }
@@ -657,7 +657,7 @@ pub fn emit_seeds_words(words: ref winnow_grammar::InternerContext, ty: ref Type
 
 /// The map types written in a type itself, a struct that holds some not
 /// counted.
-pub fn emit_seeds_bare(words: ref winnow_grammar::InternerContext, ty: ref Type) -> i64 {
+fn emit_seeds_bare(words: ref winnow_grammar::InternerContext, ty: ref Type) -> i64 {
     let mut sum = 0
     if ty.code == null && !ty.is_tuple && emit_seeds_is_map(words.resolve(ty.name).clone()) {
         sum = 1
@@ -737,12 +737,12 @@ struct EmitSeedsRun {
     out: Vec[scalar],
 }
 
-pub fn emit_seeds_place() -> EmitSeedsPlace {
+fn emit_seeds_place() -> EmitSeedsPlace {
     return EmitSeedsPlace { declaring: false, share: false, next: 0, seen: [], has_shape: false, groups: [], at: 0, names: [], within_target: null, within_params: [] }
 }
 
 /// An item that declares parameters starts here, after `base` of its `impl`'s.
-pub fn emit_seeds_declare(mut place: EmitSeedsPlace, base: i64) {
+fn emit_seeds_declare(mut place: EmitSeedsPlace, base: i64) {
     place.share = true
     place.declaring = true
     place.next = base
@@ -752,7 +752,7 @@ pub fn emit_seeds_declare(mut place: EmitSeedsPlace, base: i64) {
 /// A `pub` function or method declares: one parameter for each group of
 /// positions its body joins. A position of the `impl`'s own type has that
 /// type's parameter: `within` is its ordinal, -1 where it is not one.
-pub fn emit_seeds_declare_fn(mut place: EmitSeedsPlace, base: i64, groups: ref Vec[i64], within: ref Vec[i64], start: i64) {
+fn emit_seeds_declare_fn(mut place: EmitSeedsPlace, base: i64, groups: ref Vec[i64], within: ref Vec[i64], start: i64) {
     emit_seeds_declare(place, base)
     place.share = false
     let mut names: Vec[String] = []
@@ -772,13 +772,13 @@ pub fn emit_seeds_declare_fn(mut place: EmitSeedsPlace, base: i64, groups: ref V
 }
 
 /// A type declares: one parameter for each map position, in field order.
-pub fn emit_seeds_declare_type(mut place: EmitSeedsPlace, base: i64) {
+fn emit_seeds_declare_type(mut place: EmitSeedsPlace, base: i64) {
     emit_seeds_declare(place, base)
     place.share = false
 }
 
 /// The item is written: how many parameters it declared past `base`.
-pub fn emit_seeds_finish(mut place: EmitSeedsPlace, base: i64) -> i64 {
+fn emit_seeds_finish(mut place: EmitSeedsPlace, base: i64) -> i64 {
     let mut n = place.next - base
     if n < 0 {
         n = 0
@@ -793,17 +793,17 @@ pub fn emit_seeds_finish(mut place: EmitSeedsPlace, base: i64) -> i64 {
     return n
 }
 
-pub fn emit_seeds_enter(mut place: EmitSeedsPlace, target: ref String, params: ref Vec[String]) {
+fn emit_seeds_enter(mut place: EmitSeedsPlace, target: ref String, params: ref Vec[String]) {
     place.within_target = target.clone()
     place.within_params = params.clone()
 }
 
-pub fn emit_seeds_leave(mut place: EmitSeedsPlace) {
+fn emit_seeds_leave(mut place: EmitSeedsPlace) {
     place.within_target = null
     place.within_params = []
 }
 
-pub fn emit_seeds_within(place: ref EmitSeedsPlace) -> bool {
+fn emit_seeds_within(place: ref EmitSeedsPlace) -> bool {
     return place.within_target != null
 }
 
@@ -821,7 +821,7 @@ pub struct EmitSeedsShape {
 /// its hidden type parameters begin, whether it declares any, and whether the
 /// `impl` it stands in already does. A barrier's signature writes the keyed
 /// map (`walk.floor`).
-pub fn emit_seeds_begin[H: EmitHost](tables: ref EmitSeedsTables, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, written: ref Item, owner_target: String?, owner_declared: bool) -> EmitSeedsBegin sync {
+fn emit_seeds_begin[H: EmitHost](tables: ref EmitSeedsTables, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, written: ref Item, owner_target: String?, owner_declared: bool) -> EmitSeedsBegin sync {
     match written {
         Item::Fn { name, args, ret_type, is_public, .. } => {
             let in_seeded_impl = emit_seeds_within(walk.place)
@@ -866,7 +866,7 @@ pub fn emit_seeds_begin[H: EmitHost](tables: ref EmitSeedsTables, world: ref Emi
 
 /// **The seed table at the end of a signature**: how many hidden parameters
 /// the function declared and what they are called.
-pub fn emit_seeds_end(mut walk: EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
+fn emit_seeds_end(mut walk: EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
     walk.floor = false
     let mut hidden = 0
     if seeded {
@@ -944,19 +944,19 @@ fn emit_seeds_between(c: ref Vec[scalar], from: i64, to: i64) -> String {
     return out
 }
 
-pub fn emit_seeds_last(name: ref String) -> String {
-    let c: Vec[scalar] = name.chars().collect()
+fn emit_seeds_last(name: ref String) -> String {
+    let c: Vec[scalar] = name.scalars.collect()
     return emit_seeds_between(c, emit_seeds_last_start(c), c.len())
 }
 
-pub fn emit_seeds_is_map(name: ref String) -> bool {
+fn emit_seeds_is_map(name: ref String) -> bool {
     let l = emit_seeds_last(name)
     return l == "HashMap" || l == "HashSet" || l == "TrustedMap" || l == "TrustedSet"
 }
 
 /// `TrustedMap` is `HashMap` with a hasher of its own.
 fn emit_seeds_renamed(path: ref String) -> String {
-    let c: Vec[scalar] = path.chars().collect()
+    let c: Vec[scalar] = path.scalars.collect()
     let from = emit_seeds_last_start(c)
     let head = emit_seeds_between(c, 0, from)
     let word = emit_seeds_between(c, from, c.len())
@@ -994,7 +994,7 @@ fn emit_seeds_closing(c: ref Vec[scalar], open: i64) -> i64 {
 }
 
 fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
-    for ch in text.chars() {
+    for ch in text.scalars {
         run.out.push(ch)
     }
 }
@@ -1003,7 +1003,7 @@ fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
 /// fills an ordinary mention with; `tables` how many parameters a type name
 /// declares.
 pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool, tables: ref EmitSeedsTables) -> String {
-    let mut run = EmitSeedsRun { c: text.chars().collect(), at: 0, out: [] }
+    let mut run = EmitSeedsRun { c: text.scalars.collect(), at: 0, out: [] }
     emit_seeds_run(run, place, fast, tables, false)
     let mut out: String = ""
     for ch in run.out {

@@ -1,0 +1,28 @@
+/// A precondition derived from the callers (ADR-391 D1) may say that a
+/// divisor is not zero (#1832): every caller hands `ratio` and `rest` a `g`
+/// between 1 and 3, so `0 <= g` and `g != 0` hold at their entry and `n / g`
+/// and `a % b` need no check. `share`'s caller hands a divisor read out of a
+/// list, which no fact bounds, and its division stays checked.
+fn ratio(n: i64, g: i64) -> i64 sync {
+	return n / g
+}
+
+fn rest(a: i64, b: i64) -> i64 sync {
+	return a % b
+}
+
+fn share(n: i64, d: i64) -> i64 sync {
+	return n / d
+}
+
+fn main() throws {
+	let mut g = 1
+	while g < 4 {
+		print(ratio(12, g))
+		print(rest(7, g))
+		g += 1
+	}
+	println("")
+	let ds = [2, 5]
+	println(share(10, ds[1]))
+}

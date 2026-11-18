@@ -44,7 +44,7 @@ pub struct LgWhy {
 }
 
 /// A `LgWhy` before anything was read.
-pub fn lg_why() -> LgWhy {
+fn lg_why() -> LgWhy {
     return LgWhy { unknown: LgUnknown::NoContradiction, quotients: [] }
 }
 
@@ -57,7 +57,7 @@ pub struct LgBudget {
     pub bounds: i64,
 }
 
-pub fn lg_budget() -> LgBudget {
+fn lg_budget() -> LgBudget {
     return LgBudget { cases: 1024, bounds: 4096 }
 }
 
@@ -152,7 +152,7 @@ fn lg_variable(name: ref String) -> LgLin {
     return LgLin { terms: terms, constant: 0 }
 }
 
-pub fn lg_add(a: ref LgLin, b: ref LgLin) -> LgLin? {
+fn lg_add(a: ref LgLin, b: ref LgLin) -> LgLin? {
     let mut terms = a.terms.clone()
     for (name, k) in b.terms {
         let before = terms.get(name) ?? 0
@@ -167,7 +167,7 @@ pub fn lg_add(a: ref LgLin, b: ref LgLin) -> LgLin? {
     return LgLin { terms: terms, constant: constant }
 }
 
-pub fn lg_scale(a: ref LgLin, k: i64) -> LgLin? {
+fn lg_scale(a: ref LgLin, k: i64) -> LgLin? {
     if k == 0 {
         return lg_constant(0)
     }
@@ -197,7 +197,7 @@ fn lg_gcd(a: i64, b: i64) -> i64 {
 
 /// Divide through by the coefficients' common factor and round the bound
 /// towards the integers: `2x + 3 <= 0` is `x + 2 <= 0` over the integers.
-pub fn lg_tightened(a: ref LgLin) -> LgLin {
+fn lg_tightened(a: ref LgLin) -> LgLin {
     let mut g = 0
     for (_, k) in a.terms {
         g = lg_gcd(g, k.abs())
@@ -219,7 +219,7 @@ pub fn lg_tightened(a: ref LgLin) -> LgLin {
 
 /// How two maps of terms are ordered, as `BTreeMap` orders them: pair by pair,
 /// then by length.
-pub fn lg_terms_cmp(a: ref collections::BTreeMap[String, i64], b: ref collections::BTreeMap[String, i64]) -> i64 {
+fn lg_terms_cmp(a: ref collections::BTreeMap[String, i64], b: ref collections::BTreeMap[String, i64]) -> i64 {
     let mut left_names: Vec[ref String] = []
     let mut left_ks: Vec[i64] = []
     for (name, k) in a {
@@ -448,7 +448,7 @@ impl LgIndexed {
             if !item.atom {
                 continue
             }
-            let atom = self.atoms[item.n].clone()
+            let atom = self.atoms[item.n]
             let mut at = 0
             let mut placed = false
             while at < by_form.len() {
@@ -561,7 +561,7 @@ impl LgIndexed {
 /// The query's facts and its goal's negation, every atom and every disjunction
 /// numbered in the order they are written. The solver and the checker both start
 /// here, so a certificate names the same atoms and disjunctions the solver saw.
-pub fn lg_indexed(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) -> LgIndexed? {
+fn lg_indexed(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) -> LgIndexed? {
     let mut all: Vec[LgFormula] = []
     for fact in facts {
         all.push(lg_formula(arena, fact, true, why) ?? return null)
@@ -925,7 +925,7 @@ fn lg_consistent(names: ref Vec[String], bounds: ref Vec[Vec[LgLin]]) -> LgClose
     let mut round = names.len()
     while round > 0 {
         round -= 1
-        let name = names[round].clone()
+        let name = names[round]
         let mut low: i64? = null
         let mut high: i64? = null
         for bound in bounds[round] {
@@ -999,7 +999,7 @@ fn lg_traced(steps: ref Vec[LgStep], last: i64) -> LgRefutation {
     let mut at = last
     while at >= 0 {
         if needed[at] {
-            match steps[at].clone() {
+            match steps[at] {
                 LgStep::Hypothesis(_) => {},
                 LgStep::Tighten(from) => {
                     needed[from] = true
@@ -1021,7 +1021,7 @@ fn lg_traced(steps: ref Vec[LgStep], last: i64) -> LgRefutation {
     while at <= last {
         if needed[at] {
             renumbered[at] = kept.len()
-            match steps[at].clone() {
+            match steps[at] {
                 LgStep::Hypothesis(i) => kept.push(LgStep::Hypothesis(i)),
                 LgStep::Tighten(from) => kept.push(LgStep::Tighten(renumbered[from])),
                 LgStep::Combine { left, by_left, right, by_right } => kept.push(LgStep::Combine { left: renumbered[left], by_left: by_left, right: renumbered[right], by_right: by_right }),

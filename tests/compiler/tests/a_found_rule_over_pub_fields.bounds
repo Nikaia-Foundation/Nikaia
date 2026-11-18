@@ -1,0 +1,8 @@
+bounds in tests/a_found_rule_over_pub_fields.nika: 5 indexes, 2 proved; 2 operations, 1 proved
+    20  self.n += 1            checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    25  self.cols[self.n - 1]  proved
+    25  self.n - 1             proved
+    47  self.rows[s]           proved
+    67  self.rows[s]           checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    79  p.rows[0]              checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    83  m.rows[0]              checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

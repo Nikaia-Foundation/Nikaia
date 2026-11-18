@@ -58,7 +58,7 @@ fn main() throws {
     let status = process::run(nikaia.clone(), ["run", "scripts/status.nika", "--", tmp.clone()]; dir: repo.clone())
     println(f"status: {status.stdout.trim().split("\n").collect()[2]}")
     println(f"again: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    println(f"lines after a second run: {read(f"{tmp}/a.report.md").trim().split("\n").collect().len()}")
+    println(f"lines after a second run: {read(f"{tmp}/a.report.md").trim().split("\n").count()}")
     report(tmp.clone(), "Result: done\nPushed: local abc\nGate: green\nDeviation: x\n" + tail)
     println(f"done with a deviation: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
     print(f"review.txt: {read(f"{tmp}/review.txt")}")

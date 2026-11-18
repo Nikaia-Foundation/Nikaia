@@ -40,7 +40,7 @@ impl Range {
     }
 
     /// The values a whole-number type holds, where `ty` is one.
-    pub fn of_type(ty: ref String) -> Range? {
+    fn of_type(ty: ref String) -> Range? {
         return match ty {
             "i8" => Range { lo: -128, hi: 127 },
             "i16" => Range { lo: -32768, hi: 32767 },
@@ -64,7 +64,7 @@ impl Range {
     /// the proof can state. `of_type` claims `i64::MAX` for them, which is
     /// right for a goal (staying below it is stronger) and wrong for a fact:
     /// `(k.bits_as_u64() >> 56)` is 255 for `k = -1`, not at most 127.
-    pub fn held_by_type(ty: ref String) -> Range? {
+    fn held_by_type(ty: ref String) -> Range? {
         if ty == "u64" || ty == "usize" {
             return Range { lo: 0, hi: null }
         }
@@ -115,7 +115,7 @@ impl Range {
         return out
     }
 
-    pub fn is_bounded(ref self) -> bool {
+    fn is_bounded(ref self) -> bool {
         return self.lo != null || self.hi != null
     }
 

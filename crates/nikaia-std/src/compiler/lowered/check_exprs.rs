@@ -20,7 +20,7 @@ pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     None
 }
 
-pub fn a_plain_string(ty: &Ty) -> bool {
+pub(crate) fn a_plain_string(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
         _ => false,
@@ -60,7 +60,7 @@ pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, re
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
+    pub(crate) fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
         let what = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string());
@@ -74,7 +74,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+    pub(crate) fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
         let left_bare = a_bare_bit_operation(lhs);
         let right_bare = a_bare_bit_operation(rhs);
         if !left_bare && !right_bare { return; }
@@ -88,13 +88,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
+    pub(crate) fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
         self.a_value_with_no_text(world, hole, held, span, false);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
+    pub(crate) fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_value_with_no_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
@@ -103,7 +103,7 @@ impl CheckState {
             return;
         }
         let written = written_expression(world.words, hole);
-        let mut what: String = format!("`{}`", held.text());
+        let mut what: String = format!("`{}`", held.shown());
         let mut help: String = String::from("Write the parts you want in holes of their own, or build the text in a loop first.");
         if printed { help = String::from("Print the parts you want in holes of an `f\"…\"`, or build the text in a loop first."); }
         if is_a_list_type(held) {
@@ -163,12 +163,12 @@ impl CheckState {
             },
             Ty::Named { ref name, .. } => {
                 if name == "SharedMut" || name == "Locked" {
-                    let mut message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.text());
-                    let mut note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                    let mut message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.shown());
+                    let mut note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.shown());
                     let mut out = format!("Take the value out first: `let value = {}.get()`, then write `{{value}}`.", shown);
                     if printed {
-                        message = format!("You can't print a `{}`.", held.text());
-                        note = format!("A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                        message = format!("You can't print a `{}`.", held.shown());
+                        note = format!("A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.shown());
                         out = format!("Take the value out first: `let value = {}.get()`, then print `value`.", shown);
                     }
                     self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(out)));
@@ -237,7 +237,7 @@ impl CheckState {
             },
             _ => { return; },
         }
-        let mut called: String = format!("`{}`", held.text());
+        let mut called: String = format!("`{}`", held.shown());
         if what == "a range" || what == "a tuple" { called = nikaia_std::block::Text::from(what.to_string()); }
         if printed {
             let note = format!("A print call writes its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
@@ -249,19 +249,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let inner = match over {
-            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.text() },
+            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.shown() },
             _ => return,
         };
         let written = written_expression(world.words, iter);
-        let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.text(), inner);
+        let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.shown(), inner);
         let help = format!("Say what `null` walks first: `for … in {} ?? [] {{ … }}`, or check it for `null` before the loop.", written);
         self.findings.push(check_refusal("NK1206", span, format!("`{}` may be `null`, so a `for` can't walk it directly.", written), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let name: String = match over {
             Ty::Named { name, args, .. } => if args.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { return; },
             _ => return,
@@ -277,22 +277,22 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
-        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
+    pub(crate) fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) || self.a_word_by_its_kind(world, held) { return; }
         let name = match held {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,
         };
         if !moves(held) || self.copies_in_the_package.contains(&name) { return; }
         let written = written_expression(world.words, read);
-        let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.text());
+        let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.shown());
         let notes: Vec<String> = vec![String::from("The map keeps its values, so reading one gives a view of it, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back.")];
-        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written); #[allow(clippy::redundant_locals)] let notes = notes;
+        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.shown(), written); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
+    pub(crate) fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -317,7 +317,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
+    pub(crate) fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -333,11 +333,11 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
+    pub(crate) fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
         let wanted = Ty::Named { name: String::from("bool"), args: vec![], view: false };
         if found.fits(&wanted) { return; }
         let help: String = String::from("Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.");
-        self.findings.push(check_refusal("NK1108", span, format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), vec![nikaia_std::block::Text::from(why.to_string())], Some(help)));
+        self.findings.push(check_refusal("NK1108", span, spoken_in(&format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), found, None), vec![nikaia_std::block::Text::from(why.to_string())], Some(help)));
     }
 }
 
@@ -357,7 +357,7 @@ pub struct CheckKept {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_kept(&self, found: &Ty, want: &Ty, named: Option<&str>, keeper: &str) -> Option<CheckKept> {
+    pub(crate) fn a_view_kept(&self, found: &Ty, want: &Ty, named: Option<&str>, keeper: &str) -> Option<CheckKept> {
         if !a_plain_str_view(found) || !a_plain_string(want) { return None; }
         let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.";
         let said = capitalised(keeper);
@@ -395,7 +395,7 @@ pub(crate) fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, 
 }
 
 impl CheckState {
-    pub fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
+    pub(crate) fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
         match written {
             Expr::Path(segments, _) => a_variant_path(self, world, segments),
             Expr::StructLit { .. } => true,

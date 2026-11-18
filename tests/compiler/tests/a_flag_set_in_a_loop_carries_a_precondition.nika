@@ -1,0 +1,28 @@
+/// A `bool` set `true` inside a loop carries what held where it was set
+/// (ADR-361 D13, D5 item 4, #1848): `seen` rises only under
+/// `i < args.len()`, and `i` starts at 0 and only grows, so past the loop
+/// `seen` gives `args.len() >= 1`, the precondition of `need`.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn f(args: ref Vec[i64], m: i64) -> i64 {
+	let mut seen = false
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			seen = true
+		}
+		i += 1
+	}
+	if !seen {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f([1], 2))
+	println(f([], 2))
+}

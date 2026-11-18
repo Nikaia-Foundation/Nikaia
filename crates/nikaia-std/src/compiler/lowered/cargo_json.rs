@@ -4,7 +4,7 @@
 // use json
 
 
-pub fn cargo_json_lines(messages: &str) -> Vec<json::Value> {
+pub(crate) fn cargo_json_lines(messages: &str) -> Vec<json::Value> {
     let mut out: Vec<json::Value> = vec![];
     for line in messages.lines() {
         let value = match json::parse(line) {
@@ -16,7 +16,7 @@ pub fn cargo_json_lines(messages: &str) -> Vec<json::Value> {
     out
 }
 
-pub fn cargo_json_member(value: Option<&json::Value>, key: &str) -> Option<json::Value> {
+pub(crate) fn cargo_json_member(value: Option<&json::Value>, key: &str) -> Option<json::Value> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match present {
         json::Value::Object(members) => match members.iter().find(|&member| { member.key == key }).map(|__nikaia_it| &__nikaia_it.value) {
@@ -27,7 +27,7 @@ pub fn cargo_json_member(value: Option<&json::Value>, key: &str) -> Option<json:
     }
 }
 
-pub fn cargo_json_text(value: Option<&json::Value>) -> Option<String> {
+pub(crate) fn cargo_json_text(value: Option<&json::Value>) -> Option<String> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match present {
         json::Value::Str(text) => Some(nikaia_std::block::Text::from(text.to_string())),
@@ -35,7 +35,7 @@ pub fn cargo_json_text(value: Option<&json::Value>) -> Option<String> {
     }
 }
 
-pub fn cargo_json_bool(value: Option<&json::Value>) -> Option<bool> {
+pub(crate) fn cargo_json_bool(value: Option<&json::Value>) -> Option<bool> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match present {
         json::Value::Bool(truth) => { let truth = *truth; Some(truth) },
@@ -43,7 +43,7 @@ pub fn cargo_json_bool(value: Option<&json::Value>) -> Option<bool> {
     }
 }
 
-pub fn cargo_json_number(value: Option<&json::Value>) -> Option<i64> {
+pub(crate) fn cargo_json_number(value: Option<&json::Value>) -> Option<i64> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(match json::as_i64(&present.clone()) {
         Ok(value) => value,
@@ -51,7 +51,7 @@ pub fn cargo_json_number(value: Option<&json::Value>) -> Option<i64> {
     })
 }
 
-pub fn cargo_json_items(value: Option<&json::Value>) -> Vec<json::Value> {
+pub(crate) fn cargo_json_items(value: Option<&json::Value>) -> Vec<json::Value> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     match present {
         json::Value::Array(items) => items.copy_owned(),
@@ -59,16 +59,16 @@ pub fn cargo_json_items(value: Option<&json::Value>) -> Vec<json::Value> {
     }
 }
 
-pub fn cargo_json_an_artifact(message: &json::Value) -> bool { nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(message), "reason")).as_ref()), || "".into()) == "compiler-artifact" }
+pub(crate) fn cargo_json_an_artifact(message: &json::Value) -> bool { nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(message), "reason")).as_ref()), || "".into()) == "compiler-artifact" }
 
-pub fn cargo_json_filenames(message: &json::Value) -> Vec<fs::Path> { cargo_json_items((cargo_json_member(Some(message), "filenames")).as_ref()).iter().filter_map(|file| { cargo_json_text(Some(&file.clone())) }).map(|file| { cargo_json_path(file) }).collect::<Vec<_>>() }
+pub(crate) fn cargo_json_filenames(message: &json::Value) -> Vec<fs::Path> { cargo_json_items((cargo_json_member(Some(message), "filenames")).as_ref()).iter().filter_map(|file| { cargo_json_text(Some(&file.clone())) }).map(|file| { cargo_json_path(file) }).collect::<Vec<_>>() }
 
-pub fn cargo_json_path(text: String) -> fs::Path {
+pub(crate) fn cargo_json_path(text: String) -> fs::Path {
     let path: fs::Path = std::path::PathBuf::from(text);
     path
 }
 
-pub fn cargo_json_extension(file: &std::path::Path) -> String {
+pub(crate) fn cargo_json_extension(file: &std::path::Path) -> String {
     nikaia_std::index::or(match nikaia_std::fs::path::extension(&(file)).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
         None => None,

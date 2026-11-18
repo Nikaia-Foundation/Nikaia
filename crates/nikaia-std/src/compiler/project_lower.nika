@@ -294,7 +294,7 @@ pub fn project_lower_check[H: ProjectLowerHost](host: ref H) -> String throws {
 /// published ones. **An expression function's `ensures` stays** (ADR-314 D3):
 /// its body is one `return`, so it has no `assert` of its own to publish one,
 /// only preconditions carried back, and its own come after the published.
-pub fn project_lower_published(ledger: Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
+fn project_lower_published(ledger: Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
     let mut ledger = ledger
     for (key, found) in published {
         let mut contract = ledger.functions[key] ?? continue
