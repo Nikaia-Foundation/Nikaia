@@ -1313,12 +1313,14 @@ pub(crate) fn rules_standing(walk: &BoundsWalk, facts: &BoundsFacts, fact: i64) 
     for (marker, length, _, high) in walk.capped.iter() {
         let high = nikaia_std::num::value(high);
         if high == fact {
-            if facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) }) { return true; }
+            if rules_marker_stands(walk, facts, marker, length) { return true; }
             marked = true;
         }
     }
     !marked
 }
+
+pub(crate) fn rules_marker_stands(walk: &BoundsWalk, facts: &BoundsFacts, marker: &str, length: &str) -> bool { facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) }) }
 
 pub(crate) fn rules_capped_grown(walk: &mut BoundsWalk, facts: &BoundsFacts, name: &str, changed: &BoundsChanged) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
@@ -1343,7 +1345,7 @@ pub(crate) fn rules_capped_call(walk: &mut BoundsWalk, name: &str, method: &str)
 pub(crate) fn rules_capped_holds(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, root: &str, ask: &mut impl FnMut(&TermArena, &[i64], i64) -> bool) -> bool {
     let element = bounding_element_of(&format!("{}.{}", root, rule.a));
     let length = length_of(&format!("{}.{}", root, rule.b));
-    for entry in walk.capped.iter() { if entry.1 == length && entry.2 == element && rules_standing(&walk, facts, entry.3) { return true; } }
+    for entry in walk.capped.iter().rev() { if entry.1 == length && entry.2 == element && rules_marker_stands(&walk, facts, &entry.0, &length) { return true; } }
     let each = walk.arena.var(&element);
     let len = walk.arena.var(&length);
     let high_each = walk.arena.le(each, len);
