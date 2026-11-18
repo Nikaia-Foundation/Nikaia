@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1442] — 2026-11-18
+
+**Builders' changes (#2129)**
+- fix: a program whose detached task waits on I/O that never finishes now exits 70 with the cleanup-deadline message; `block_on` used to panic "a future returned Pending without arranging for its waker" once the drain's park timed out.
+- A Duration has saturating_add, saturating_sub, saturating_mul(n), min and max, and an integer has nanos() (ADR-402): below zero gives no time, past the longest span stays there, and plain + - * still stop the program.
+
 ## [0.0.1441] — 2026-11-18
 
 **Builders' changes (#2090, #2136)**
