@@ -1,0 +1,29 @@
+// What `target::has` answers for each named x86-64 level in a `comptime`,
+// where the build passes the level to the build-time run (ADR-371 D6): the
+// level table of `runtime/target.nika`, read through `target.rs`'s
+// `at_level`. Moved from the `nikaia-std` unit test `target::tests::levels`
+// (#2082). x86-64 only, as the levels are.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"levels\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "use std::target\n\ncomptime CRC: bool = target::has(target::Instruction::Crc32c)\ncomptime BMI: bool = target::has(target::Instruction::Bmi2)\ncomptime AVX: bool = target::has(target::Instruction::Avx2)\n\nfn main() throws {\n    println(f\"crc32c {CRC}, bmi2 {BMI}, avx2 {AVX}\")\n}\n")
+    for level in ["x86-64", "x86-64-v2", "x86-64-v3", "x86-64-v4"] {
+        let out = process::run(nikaia, ["run", f"--cpu={level}"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+        print(f"{level}: {out.stdout}")
+        if out.code != 0 {
+            println(f"exit {out.code}: {out.stderr}")
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}
