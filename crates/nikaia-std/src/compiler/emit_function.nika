@@ -770,6 +770,13 @@ impl EmitState {
                             let bound = (spelled.strip_prefix("impl ") ?? "").clone()
                             spelled = f"dyn {bound}"
                         }
+                        // **Code run one call at a time that is handed code
+                        // changing what it captures** (ADR-views-3 D17):
+                        // `&mut impl FnMut`, `&mut impl AsyncFnMut`.
+                        if runs && ty.code != null && !ty.is_nullable && reference.starts_with("&") && !reference.contains("mut") && self.facts.changing_code.contains(f"{key}::{pname}") {
+                            spelled = emit_fn_code_that_changes(spelled)
+                            reference = f"{reference}mut "
+                        }
                         walk.in_parameter = inside
                         walk.code_parameter_runs = held
                     }
@@ -1476,4 +1483,21 @@ fn emit_holds_a_ref_of_a_type(world: ref EmitWorld, ty: ref Type) -> bool {
         }
     }
     return false
+}
+
+/// **The trait of code that may change what it captures** (ADR-views-3 D17):
+/// `impl Fn(..)` is `impl FnMut(..)`, `impl AsyncFn(..)` `impl AsyncFnMut(..)`,
+/// and the same behind `dyn` or `for<'call>`.
+fn emit_fn_code_that_changes(spelled: ref String) -> String {
+    let async_at = spelled.find("AsyncFn(")
+    if async_at != null {
+        let at = async_at ?? 0
+        let before = spelled[0..<at]
+        let after = spelled[at + "AsyncFn(".len()..]
+        return f"{before}AsyncFnMut({after}"
+    }
+    let at = spelled.find("Fn(") ?? return spelled.clone()
+    let before = spelled[0..<at]
+    let after = spelled[at + "Fn(".len()..]
+    return f"{before}FnMut({after}"
 }

@@ -51,7 +51,12 @@
 //                                 (drive_post_run: result, tokens, cost,
 //                                 time, turns, report, debrief; a brief
 //                                 without an issue on its area's lane
-//                                 issue); no suite until the batch ends;
+//                                 issue); after every `block` builder runs
+//                                 (drive_lane_block: focus.txt's `block`,
+//                                 else 2) the suite starts in the
+//                                 background (`BLOCK <n> builder runs: the
+//                                 suite starts`, #2022), else at the
+//                                 batch's end;
 //                                 a report's `Found:` appended to
 //                                 DIR/found.txt and printed as `FOUND
 //                                 <brief>: Found: ...`, then filed as an
@@ -88,9 +93,11 @@
 // red suite, it ends with `STOP drive: time limit after <n> min`, exit 4, for
 // the supervisor to start it again. It stops so too where the minutes left
 // until the task's end (NIKAIA_DRIVE_TASK_MIN, default 120) are fewer than a
-// run of the lane takes, the longest of its last five, 60 while it has none
-// (`STOP drive: time limit after <n> min (<m> min left of 120, a run of DIR
-// takes <k> min)`, drive_time_check, #1885). A builder run cut off all the
+// builder of the lane takes, the median of its last nine runs, 60 while it
+// has none (`STOP drive: time limit after <n> min (<m> min left of 120, a
+// builder of DIR takes <k> min)`, drive_time_check, #1885, #2022); checked
+// before the merge that precedes each builder and again after it, so minutes
+// spent merging stop only a builder that no longer fits. A builder run cut off all the
 // same after its report (BRIEF.running left beside it) gets its follow-up at
 // the next start (`PICKUP <name>`, drive_pickup). A suite still running on
 // CI (or a red one not yet handed to QA) is not lost: its files stay in
@@ -114,11 +121,14 @@
 // reports, run files and focus.txt stay untracked working
 // files beside the tree. After each builder run, the
 // run's brief is appended to DIR/unpushed.txt (one brief path a line). The
-// builders of a batch run one after the other with no suite between them. When
-// the batch ends (CUT, RED or BATCH DONE) the suite starts on HEAD in the
-// background (`drive_suite`) and the next builders go on meanwhile (owner,
-// 2026-11-06); a suite that has finished is handled before the next builder
-// (`drive_suite_done`). Before a bump, the next suite, or the end of the run
+// builders run one after the other; after every `block` of them
+// (drive_lane_block), and when the batch ends (CUT, RED or BATCH DONE), the
+// suite starts on HEAD in the background (`drive_suite`) and the next
+// builders go on meanwhile (owner, 2026-11-06). Before, the suite ran only at
+// BATCH DONE, which a lane whose ready issues drive_queue appends before each
+// cycle never reaches: its green commits sat unpushed for hours and each
+// merge of origin/develop grew (#2022). A suite that has finished is handled
+// before the next builder (`drive_suite_done`). Before a bump, the next suite, or the end of the run
 // (an escalation and a RESTART too) the driver waits for it (`drive_settle`:
 // one line `SUITE <sha8> waiting`, a poll every 10 s) and handles its result.
 // Green pushes the tested sha; when that push is rejected and HEAD has moved
@@ -470,27 +480,30 @@ fn drive_run_seconds(json_path: String) -> i64 throws {
 	return ms / 1000
 }
 
-// Minutes a run of DIR is expected to take (#1885): the longest of DIR's last
-// five runs (drive_run_seconds, newest run.json first), rounded up; 60 while
-// DIR has none.
+// Minutes a builder of DIR is expected to take (#1885, #2022): the median of
+// DIR's last nine runs (drive_run_seconds, newest run.json first; the upper
+// one of an even count), rounded up; 60 while DIR has none. The longest run
+// stopped a lane with one long run at every start, after its merges, with
+// most of the task's time left (#2022).
 fn drive_run_minutes(dir: String) -> i64 throws {
-	let listed = process::run("sh", ["-c", "ls -t -- \"$1\"/*.run.json 2>/dev/null | head -5", "sh", dir.clone()]).stdout
-	let mut longest: i64 = 0
-	let mut seen: i64 = 0
+	let listed = process::run("sh", ["-c", "ls -t -- \"$1\"/*.run.json 2>/dev/null | head -9", "sh", dir.clone()]).stdout
+	let mut spans: Vec[i64] = []
 	for path in listed.split("\n") {
 		if path.trim() == "" { continue }
-		seen += 1
-		longest = longest.max(drive_run_seconds(path.trim().clone()))
+		spans.push(drive_run_seconds(path.trim().clone()))
 	}
-	if seen == 0 { return 60 }
-	return (longest + 59) / 60
+	if spans.len() == 0 { return 60 }
+	spans.sort()
+	return (spans[spans.len() / 2] + 59) / 60
 }
 
 // Whether an agent of DIR may start (#1885): "" when it may; `up` past
 // NIKAIA_DRIVE_LIMIT_MIN (drive_time_up); else, where the minutes left until
 // the task ends (NIKAIA_DRIVE_TASK_MIN, default 120: the 2 h after which the
-// harness ends the driver and its agent) are fewer than a run of DIR takes
-// (drive_run_minutes, at most NIKAIA_DRIVE_LIMIT_MIN), what says so.
+// harness ends the driver and its agent) are fewer than a builder of DIR
+// takes (drive_run_minutes, at most NIKAIA_DRIVE_LIMIT_MIN), what says so.
+// The minutes already spent (merges, restarts) count only as time gone: a
+// builder that still fits in what is left starts (#2022).
 fn drive_time_check(dir: String) -> String throws {
 	if drive_time_up() { return "up" }
 	let task = text::parse_i64(env::var("NIKAIA_DRIVE_TASK_MIN") ?? "") ?? 120
@@ -501,7 +514,7 @@ fn drive_time_check(dir: String) -> String throws {
 	let limit = text::parse_i64(env::var("NIKAIA_DRIVE_LIMIT_MIN") ?? "") ?? 105
 	let run = drive_run_minutes(dir).min(limit)
 	if left >= run { return "" }
-	return f"{left} min left of {task}, a run of {dir} takes {run} min"
+	return f"{left} min left of {task}, a builder of {dir} takes {run} min"
 }
 
 // Ends the run at the time limit, before an agent starts: a suite this driver
@@ -818,16 +831,12 @@ fn drive_say(dry: bool, line: String) throws {
 	if dry { println(f"would run: {line}") }
 }
 
-// Pushes the tested commit; rejected, merges `origin/develop` once,
-// regenerates the lowered files and badges in the merge (drive_merge_fetched,
-// #1333: they depend on both sides), runs the
-// short checks on the merge (drive_merge_check: two lanes each green alone can
-// be red together, and develop went red for hours that way on 2026-11-08) and
-// pushes exactly the merge commit only when they pass (a merge, not a rebase: a
-// rebase replays the tested commits and, on 2026-11-05, deleted every brief a
-// replayed commit had untracked). Red, or rejected again: nothing is pushed,
-// the merge stays in HEAD and the next suite tests it on CI ("none"). Prints
-// `PUSHED <sha8>`. "head" when the merge was pushed, "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
+// Pushes the tested commit; rejected, merges `origin/develop` and pushes the
+// merge, up to drive_push_rounds rounds (drive_push_merges, #2008: with five
+// sessions pushing, a second rejection is the normal case, and a batch the
+// full suite passed is not tested in full again only because develop moved,
+// owner 2026-11-17). Prints `PUSHED <sha8>`. "head" when the merge was
+// pushed, "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
 // went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
@@ -841,31 +850,9 @@ fn drive_push(dir: String, sha: String) -> String throws {
 			println(f"SUITE {drive_short(sha)} green, push rejected and HEAD moved on: the next suite pushes")
 			return "none"
 		}
-		// The shared checkout holds other agents' unfinished files and build locks:
-		// they are stashed around the merge, not a reason to stop (2026-10-28).
-		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
-		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
-		let base = process::run(
-			"git",
-			["merge-base", sha.clone(), "FETCH_HEAD"],
-		).stdout.trim().clone()
-		// The merge is regenerated before the checks (#1333): lowered files and
-		// badges depend on both sides, and on 2026-11-07 a merge pushed without
-		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
 		drive_merge_lock("push rejected")
-		drive_merge_fetched("push rejected", drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py")
-		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-		let failed = drive_merge_check(base, merge.clone())
-		if failed != "" {
-			println(f"SUITE {drive_short(sha)} green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge")
-			println(drive_tail(failed, 40))
-			return "none"
-		}
-		let second = process::run("git", ["push", "origin", f"{merge}:develop"])
-		if !second.ok {
-			println(f"SUITE {drive_short(sha)} green, push rejected again after the merge: the next suite pushes")
-			return "none"
-		}
+		let merge = drive_push_merges(sha.clone(), drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py", "")
+		if merge == "" { return "none" }
 		pushed = merge.clone()
 		// Builders went on during the checks: their commits stay in unpushed.txt.
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
@@ -876,6 +863,73 @@ fn drive_push(dir: String, sha: String) -> String throws {
 	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
 	drive_proved_start(dir, pushed)
 	return head
+}
+
+// The merge rounds of a rejected push of SHA (#2008): at most this many.
+fn drive_push_rounds() -> i64 {
+	return 3
+}
+
+// The merge rounds of drive_push, after the push of SHA was rejected: each
+// round (`MERGE <sha8> round <k>`, the sha merged into) fetches
+// `origin/develop`, merges it into HEAD and regenerates the lowered files and
+// badges in the merge (drive_merge_fetched with LOWER, BUILD and BADGES,
+// #1333: they depend on both sides), runs the short checks on the merge
+// (drive_merge_check, or the shell command CHECK when not "": two lanes each
+// green alone can be red together, and develop went red for hours that way on
+// 2026-11-08) and pushes exactly the merge commit when they pass (a merge,
+// not a rebase: a rebase replays the tested commits and, on 2026-11-05,
+// deleted every brief a replayed commit had untracked). Rejected again, the
+// next round merges the newer `origin/develop`. Short checks red, or still
+// rejected after the last round: nothing is pushed, the merge stays in HEAD,
+// the next suite tests it on CI, and "" is returned (also when HEAD moved on
+// past the last merge between rounds); a merge that conflicts
+// outside the generated lowered files escalates (drive_merge_fetched).
+// Pushed: the merge's sha.
+fn drive_push_merges(sha: String, lower: String, build: String, badges: String, check: String) -> String throws {
+	let rounds = drive_push_rounds()
+	let mut expect = sha.clone()
+	let mut k: i64 = 1
+	while k <= rounds {
+		// Builders committed on the last merge during its checks: a merge now
+		// would push their untested commits; the next suite pushes them all.
+		let before = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		if before != expect {
+			println(f"SUITE {drive_short(sha.clone())} green, push rejected and HEAD moved on: the next suite pushes")
+			return ""
+		}
+		// The shared checkout holds other agents' unfinished files and build locks:
+		// they are stashed around the merge, not a reason to stop (2026-10-28).
+		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
+		let base = process::run(
+			"git",
+			["merge-base", before, "FETCH_HEAD"],
+		).stdout.trim().clone()
+		// The merge is regenerated before the checks (#1333): lowered files and
+		// badges depend on both sides, and on 2026-11-07 a merge pushed without
+		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
+		drive_merge_fetched("push rejected", lower.clone(), build.clone(), badges.clone())
+		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		println(f"MERGE {drive_short(merge.clone())} round {k}")
+		let mut failed: String = ""
+		if check == "" {
+			failed = drive_merge_check(base, merge.clone())
+		} else {
+			let run = process::run("sh", ["-c", check.clone()])
+			if !run.ok { failed = check.clone() + "\n" + run.stdout + run.stderr }
+		}
+		if failed != "" {
+			println(f"SUITE {drive_short(sha.clone())} green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge")
+			println(drive_tail(failed, 40))
+			return ""
+		}
+		if process::run("git", ["push", "origin", f"{merge}:develop"]).ok { return merge }
+		expect = merge
+		k += 1
+	}
+	println(f"SUITE {drive_short(sha)} green, push rejected after {rounds} merge rounds: the next suite pushes")
+	return ""
 }
 
 // After a push (#1821): the release (`scripts/release.nika DIR`) runs at
@@ -2891,6 +2945,11 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
 	)
 	if !dry { drive_pull_or_restart(exe.clone(), "before the next issue") }
+	// The merge may have taken minutes: the builder must still fit (#2022).
+	if !dry {
+		let why = drive_time_check(dir)
+		if why != "" { drive_time_stop(why) }
+	}
 	drive_disk(exe.clone(), dry)
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
@@ -2911,7 +2970,7 @@ fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 	drive_report_pushed(dry, brief)
 	drive_wip_end(dry, brief)
 	drive_tidy(dry, dir.clone())
-	drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
+	drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the block or the batch ends)")
 	if dry { return }
 	drive_append(f"{dir}/unpushed.txt", brief.clone())
 	let found = drive_found(dir.clone(), brief.clone())
@@ -3797,6 +3856,15 @@ fn drive_focus_block(text: String) -> i64 {
 	let words = drive_focus_words(text, "block")
 	if words.len() < 2 { return 3 }
 	return text::parse_i64(words[1]) ?? 3
+}
+
+// The block length of the single-DIR loop (#2022): docs/briefs/focus.txt's
+// `block N` where it names one, else 2. After that many builder runs the
+// suite starts on HEAD, so a lane whose queue never runs out still pushes.
+fn drive_lane_block() -> i64 throws {
+	let words = drive_focus_words(drive_read("docs/briefs/focus.txt"), "block")
+	if words.len() < 2 { return 2 }
+	return (text::parse_i64(words[1]) ?? 2).max(1)
 }
 
 // The areas in order, each `NAME DIR`. An area line may name the lane's
@@ -4922,6 +4990,14 @@ fn main() throws {
 		if scripts != "" { println(f"scripts brought: {scripts}") }
 		return
 	}
+	// The merge rounds of a rejected push (#2008), without the release: run in
+	// a repository with an `origin` and SHA at HEAD; CHECK the short checks'
+	// command. Prints the merge pushed, or `none`.
+	if args.len() == 7 && args[1] == "--push-merges" {
+		let merge = drive_push_merges(args[2], args[3], args[4], args[5], args[6])
+		if merge == "" { println("none") } else { println(f"pushed {drive_short(merge)}") }
+		return
+	}
 	if args.len() == 5 && args[1] == "--merge-fetched" {
 		drive_merge_fetched("push rejected", args[2], args[3], args[4])
 		return
@@ -5182,6 +5258,9 @@ fn main() throws {
 	if !dry { drive_adopt() }
 	let mut runs: i64 = 0
 	let mut bumps: i64 = 0
+	// Builder runs since the last suite started (#2022).
+	let mut built: i64 = 0
+	let block = drive_lane_block()
 	let own = drive_read("scripts/drive.nika")
 	while runs <= max {
 		if !dry { drive_pickup(dir.clone()) }
@@ -5210,9 +5289,15 @@ fn main() throws {
 			drive_wake(dir, action)
 			process::exit(2)
 		}
-		// A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may
+		// Builders go on while CI runs the suite (owner, 2026-11-06; #2022):
+		// a finished suite is handled before the next builder; a bump waits
+		// for a running one. The cycle is read again after either (QA may
 		// have committed, a push moved CI).
-		if !dry && (action.starts_with("NEXT ") || action == "BUMP") && drive_testing() != "" {
+		if !dry && action.starts_with("NEXT ") && drive_suite_done() {
+			drive_settle(exe.clone(), dir)
+			continue
+		}
+		if !dry && action == "BUMP" && drive_testing() != "" {
 			drive_settle(exe.clone(), dir)
 			continue
 		}
@@ -5240,9 +5325,23 @@ fn main() throws {
 			let brief = (action.strip_prefix("NEXT ") ?? "")
 			drive_builder(exe.clone(), dry, dir, brief)
 			runs += 1
+			// The end of a block: the suite starts in the background, the
+			// next builders go on (#2022: a lane whose queue drive_queue
+			// refills never reached BATCH DONE, and its green commits sat
+			// unpushed for hours).
+			built += 1
+			drive_say(
+				dry,
+				f"builder run {built} of a block of {block} (drive_lane_block); at {block}: the suite on HEAD in the background (BLOCK <n> builder runs: the suite starts), the next builders go on",
+			)
 			if dry {
 				println(f"DRY-RUN NEXT {drive_stem(action)}")
 				return
+			}
+			if built >= block {
+				println(f"BLOCK {built} builder runs: the suite starts")
+				drive_suite(exe.clone(), dry, dir)
+				built = 0
 			}
 			continue
 		}

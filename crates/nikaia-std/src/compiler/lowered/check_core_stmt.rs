@@ -928,6 +928,8 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             Expr::Closure { .. } => { state.facts.let_lambdas.insert(id, value.clone()); },
             _ => { },
         }
+        let changed: Option<String> = state.flow.lambda_outer_changes.remove(&(id_of(value) as i64));
+        if changed.is_some() { state.a_kept_lambda_changes_a_capture(nikaia_std::index::or(changed.as_deref(), || ""), &check_span_at(world, value, span)); }
     }
     if bytes_view {
         state.text_bytes_lets.insert(id);

@@ -197,6 +197,39 @@ impl CheckState {
 }
 
 impl CheckState {
+    /// **The first binding from outside a lambda that its body changed**
+    /// (#2047): a change noted since `from` that reached a binding made
+    /// before the lambda's own, `floor` being the last such. A handle
+    /// (`Shared`) is changed through, not copied, so it is left out.
+    fn an_outer_binding_changed(ref self, from: i64, floor: i64) -> String? sync {
+        let mut at = from
+        while at < self.flow.changes_bound.len() {
+            let (name, bound) = self.flow.changes_bound[at].clone()
+            at += 1
+            if bound < 0 || bound > floor {
+                continue
+            }
+            let local = self.binding(name) ?? continue
+            if local.id != bound || is_a_handle(local.ty) {
+                continue
+            }
+            return name
+        }
+        return null
+    }
+
+    /// **`NK2101`: a kept lambda that changes a binding it captures**
+    /// (Part I 5.4 C, #2047): a kept lambda moves what it captures, so the
+    /// change reaches only its own copy, never the binding the reader sees.
+    fn a_kept_lambda_changes_a_capture(ref mut self, name: ref String, span: ref Span) sync {
+        let message = f"This lambda is kept for later, so it takes its own copy of `{name}`; a change it makes never reaches `{name}` here."
+        let note = f"A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17)."
+        let help = f"Hand the value back instead: take `{name}` as a parameter and return what it becomes (`fn(v, {name}) {{ {name} + v }}`), or keep `{name}` in a `Shared` value both sides reach."
+        self.findings.push(check_refusal("NK2101", span, message, [note], help))
+    }
+}
+
+impl CheckState {
     /// **`NK1229`: a supervisor's child that would not start fresh** (ADR-328
     /// D7, Part II 12.8): its function is called again for every attempt, so a
     /// `mut` binding it captures carries one attempt's changes into the next.

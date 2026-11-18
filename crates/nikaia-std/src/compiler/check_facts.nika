@@ -463,6 +463,19 @@ pub struct CheckFacts {
     /// no result.
     pub valueless_lambdas: collections::BTreeSet[i64],
     pub run_code_fails: collections::BTreeSet[i64],
+    /// **A run lambda that changes a binding bound outside it** (ADR-views-3
+    /// D17): the first such binding, by the lambda's node.
+    pub changing_lambdas: collections::BTreeMap[i64, String],
+    /// The parameters of code a run lambda runs, by the lambda's node.
+    pub lambda_runs: collections::BTreeMap[i64, Vec[String]],
+    /// **Code parameters lowered to change what they capture** (ADR-views-3
+    /// D17), `function::parameter`: called one call at a time, and handed
+    /// code that changes what it captures.
+    pub changing_code: collections::BTreeSet[String],
+    /// **An argument handed to such a parameter**, by its node: `1` lent
+    /// `&mut`, `2` a parameter of the same kind lent on as `&mut *`, `3` one
+    /// lowered to `Fn` as `&mut &*`, `4` any other code `&mut` before it.
+    pub changing_code_args: collections::BTreeMap[i64, i64],
     pub sync_functions_run_async: collections::BTreeMap[i64, i64],
     /// A declared function that throws, named where a parameter of a
     /// `fn(..) throws` type runs it (ADR-280 D9, #703): the argument and the
@@ -868,6 +881,10 @@ impl CheckFacts {
             failing_lambdas: collections::BTreeSet(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
+            changing_lambdas: collections::BTreeMap(),
+            lambda_runs: collections::BTreeMap(),
+            changing_code: collections::BTreeSet(),
+            changing_code_args: collections::BTreeMap(),
             sync_functions_run_async: collections::BTreeMap(),
             boxed_fn_values: collections::BTreeMap(),
             infallible_fn_values: collections::BTreeMap(),

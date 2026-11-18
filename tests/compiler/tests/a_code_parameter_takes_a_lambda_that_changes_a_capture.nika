@@ -1,0 +1,9 @@
+// A code parameter the body calls one call at a time takes a lambda that
+// changes what it captures (ADR-views-3 D17, #1553).
+fn each(xs: Vec[i64], f: fn(i64)) { for x in xs { f(x) } }
+
+fn main() throws {
+    let mut total = 0
+    each([1, 2], fn(v) { total = total + v })
+    println(total)
+}

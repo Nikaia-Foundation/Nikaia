@@ -8,6 +8,22 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1429] — 2026-11-18
+
+**Builders' changes (#2033, #2034)**
+- A `match` pattern `name(…)` whose one-word name nothing declares (`some(_)` over a `T?`) is refused with NK1117 instead of failing in rustc (NK1343).
+- Self-hosting: which launcher variables (NIKAIA_EXE, NIKAIA_MAIN) a program does not see is decided in runtime/env.nika; `env::pairs()` is now the bare OS list.
+
+## [0.0.1428] — 2026-11-18
+
+**Builders' changes (#1553, #2008, #2022, #2045, #2047)**
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding. A lambda that runs a pausing code parameter now waits for that call.
+- A function's code parameter that the body calls one call at a time now takes a lambda that changes a binding it captures (`each(xs, fn(v) { total = total + v })`), lowered to Rust's FnMut; a body that runs the parameter from tasks at once refuses such a lambda with NK2104, naming the binding.
+- Driver: a green batch whose push is rejected because develop moved is merged with origin/develop, short-checked and pushed in up to three rounds (`MERGE <sha8> round <k>`) instead of running the full suite again after the second rejection.
+- Driver: a lane with a long queue pushes after each block of builders; a builder that fits the time left starts after long merges - In single-lane mode the driver starts the suite after every block of builders (focus.txt's `block`, else 2), not only at BATCH DONE, which a refilled queue never reached, and builders go on while it runs. The time check before a builder counts the median of the lane's last nine runs, not the longest, and is made again after the merge.
+- A trait method's code parameter, called one call at a time, now takes a lambda that changes a binding it captures (`s.each(fn(v) { total = total + v })`): the trait and every impl of it in the file lower the parameter alike, so a call on the type or through a bound compiles.
+- A lambda kept in a field, a `let`, a result, an element or a `keep` parameter that changes a binding it captures from the function around it is now refused with NK2101, naming the binding; it changed only its own copy, and `struct H { f: fn(i64) }` with `fn(v) { total = total + v }` printed 0.
+
 ## [0.0.1427] — 2026-11-18
 
 **Builders' changes (#2005, #2015, #2031)**

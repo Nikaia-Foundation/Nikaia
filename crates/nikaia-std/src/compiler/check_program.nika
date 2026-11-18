@@ -136,6 +136,35 @@ fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWo
             else => {},
         }
     }
+    state.code_parameters_that_change(check_program_trait_methods(world))
+}
+
+/// **Each trait method an `impl` of this file writes, by the trait method it
+/// answers** (`S::each` to `Walk::each`): its code parameters lower alike in
+/// the trait and in each impl (ADR-views-3 D17), or Rust refuses the impl.
+fn check_program_trait_methods(world: ref CheckWorld) -> collections::BTreeMap[String, String] sync {
+    let mut groups: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for item in world.here.items {
+        match item.node {
+            Item::Impl { target, methods, trait_name } => {
+                let named = trait_name ?? continue
+                let written = world.here.text(named)
+                let owner = world.here.text(target.name)
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, .. } => {
+                            let sym = name ?? continue
+                            let own = world.here.text(sym)
+                            groups.insert(f"{owner}::{own}", f"{written}::{own}")
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return groups
 }
 
 /// **The instantiations that stand in the program's other files**

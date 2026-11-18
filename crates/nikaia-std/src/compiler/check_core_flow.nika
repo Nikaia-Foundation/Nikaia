@@ -1651,7 +1651,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     let over_error = subject == "error"
     // **`Some(x)` and `None` over a `T?`** are refused alone (ADR-352 D5): the
     // cases they leave uncovered are not asked about.
-    if !state.a_some_or_none_over_a_nullable(world, over, value, arms, span) {
+    if !state.a_some_or_none_over_a_nullable(world, over, value, arms, span) && !state.a_pattern_naming_nothing(world, over, value, arms, span) {
         state.a_match_that_misses_a_case(world, over, arms, over_error, span)
     }
     state.a_variant_matched_on_a_nullable(world, over, value, arms, span)

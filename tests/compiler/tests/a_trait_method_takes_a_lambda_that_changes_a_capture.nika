@@ -1,0 +1,48 @@
+// A lambda that changes a binding it captures, handed to a code parameter of
+// a trait method's impl (ADR-views-3 D17, #2045): the trait declares the
+// parameter as the impl writes it, every impl of the trait writes it alike,
+// and a call through a bound hands it so too. The methods are `sync`: a
+// trait method whose code parameter may pause is NK1343 at
+// `user-parallelism = "yes"` for another cause.
+trait Walk {
+    fn each(ref self, f: fn(i64) sync) sync
+}
+
+struct S {
+    n: i64,
+}
+
+struct T {
+    m: i64,
+}
+
+impl Walk for S {
+    fn each(ref self, f: fn(i64) sync) sync {
+        f(self.n)
+        f(self.n)
+    }
+}
+
+impl Walk for T {
+    fn each(ref self, f: fn(i64) sync) sync {
+        f(self.m)
+    }
+}
+
+fn through_a_bound[W: Walk](w: ref W) -> i64 {
+    let mut total = 0
+    w.each(fn(v) { total = total + v })
+    return total
+}
+
+fn main() throws {
+    let mut total = 0
+    let s = S { n: 4 }
+    s.each(fn(v) { total = total + v })
+    println(total)
+    let t = T { m: 3 }
+    let mut last = 0
+    t.each(fn(v) { last = v })
+    println(last)
+    println(through_a_bound(s))
+}

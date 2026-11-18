@@ -521,12 +521,17 @@ impl EmitState {
             } else if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else if (*arg.ty.code).is_some() && !arg.mutable && !arg.ty.is_view {
                 let held = walk.code_parameter_runs;
                 let inside = walk.in_parameter;
-                walk.code_parameter_runs = self.own_contracts.functions.contains_key(&key) && !self.emit_fn_keeps(&key, &emit_text(world, arg.name));
+                let walk_runs = self.own_contracts.functions.contains_key(&key) && !self.emit_fn_keeps(&key, &emit_text(world, arg.name));
+                walk.code_parameter_runs = walk_runs;
                 walk.in_parameter = true;
                 written = self.emit_item_ty(world, walk, host, &arg.ty, &EmitLifetimes::Elided);
                 walk.in_parameter = inside;
                 walk.code_parameter_runs = held;
                 if self.emit_fn_lends(world, &key, at) { reference = "&"; }
+                if walk_runs && reference == "&" && !arg.ty.is_nullable && self.facts.changing_code.contains(&format!("{}::{}", key, emit_text(world, arg.name))) {
+                    written = emit_fn_code_that_changes(&written);
+                    reference = "&mut ";
+                }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
                 let mut viewed = arg.ty.clone();
                 viewed.is_view = true;

@@ -1,0 +1,12 @@
+// #2033: `some(_)` names nothing over a `T?`, so the checker refuses it
+// (NK1117) instead of handing it to the backend; `none` beside it is a bare
+// name, which binds.
+use std::text
+
+fn main() throws {
+    let said = match text::parse_f64("1") {
+        some(_) => "a number",
+        none => "none",
+    }
+    println(said)
+}

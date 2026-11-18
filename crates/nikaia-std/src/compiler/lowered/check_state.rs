@@ -348,6 +348,19 @@ impl CheckMethodCalls {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckCodeArg {
+    pub caller: String,
+    pub callee: String,
+    pub param: String,
+    pub node: i64,
+    pub lambda: bool,
+    pub changes: String,
+    pub runs: Vec<String>,
+    pub handed: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckStoredCode {
     pub resolved: collections::BTreeSet<String>,
     pub unresolved: bool,
@@ -426,6 +439,9 @@ pub struct CheckState {
     pub read_seq: i64,
     pub task_bindings: Vec<Vec<(String, Ty, i64)>>,
     pub changed: Vec<String>,
+    pub run_calls: Vec<String>,
+    pub code_args: Vec<CheckCodeArg>,
+    pub code_at_once: collections::BTreeSet<String>,
     pub drained: collections::BTreeSet<i64>,
     pub said_mut: collections::BTreeSet<i64>,
     pub facts: CheckFacts,

@@ -1,0 +1,3 @@
+env::var(NIKAIA_EXE) is null: true
+env::var(NIKAIA_MAIN) is null: true
+launcher names env::vars lists: 0

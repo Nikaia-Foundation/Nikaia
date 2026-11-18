@@ -7,7 +7,8 @@ would run: write T/b1.md.running (the run's start, removed when its follow-up is
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
-would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
+would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)
+would run: builder run 1 of a block of 2 (drive_lane_block); at 2: the suite on HEAD in the background (BLOCK <n> builder runs: the suite starts), the next builders go on
 DRY-RUN NEXT b1
 == batch done (exit 0)
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free
@@ -44,7 +45,8 @@ would run: write T/b1.md.running (the run's start, removed when its follow-up is
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
-would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
+would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)
+would run: builder run 1 of a block of 2 (drive_lane_block); at 2: the suite on HEAD in the background (BLOCK <n> builder runs: the suite starts), the next builders go on
 DRY-RUN NEXT b1
 == red, nothing queued (exit 0)
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free
@@ -68,7 +70,8 @@ would run: write T/b1.md.running (the run's start, removed when its follow-up is
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
-would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
+would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)
+would run: builder run 1 of a block of 2 (drive_lane_block); at 2: the suite on HEAD in the background (BLOCK <n> builder runs: the suite starts), the next builders go on
 DRY-RUN NEXT b1
 == bump green (exit 0)
 would run: target/fast/nikaia run scripts/cycle.nika -- T --apply
