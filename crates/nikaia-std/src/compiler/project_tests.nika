@@ -1343,7 +1343,8 @@ pub struct ProjectTestsFailed {
 /// test programs, which build and run on the host's workers. A refusal of a
 /// `throws` method is kept there and handed back unchanged.
 pub trait ProjectTestsHost {
-    /// Runs test block `k` with the test build `binary`, in the package's
+    /// Runs test block number `k` (its place among all the program's tests,
+    /// `__nikaia_test_k`) with the test build `binary`, in the package's
     /// directory: how it ended and what it printed.
     fn block_outcome(ref self, binary: ref fs::Path, k: i64) -> ProjectTestsOutcome sync throws
     /// Runs `output` with the program `binary`, its inputs copied into its
@@ -1423,14 +1424,16 @@ pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) throws
 /// because the meaning of a program is the same at both (Part I 1.2) and a
 /// difference is a fault of this compiler. A failing test does not stop the
 /// others.
-pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(String, fs::Path, i64)], test_builds: ref Vec[(String, fs::Path)], outputs: ref Vec[OutputTest], programs: ref Vec[(String, fs::Path)], program_tests: i64, root: ref fs::Path, bless: bool, stderr: bool) -> Vec[ProjectTestsFailed] throws {
+pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(String, fs::Path, i64, i64)], test_builds: ref Vec[(String, fs::Path)], outputs: ref Vec[OutputTest], programs: ref Vec[(String, fs::Path)], program_tests: i64, root: ref fs::Path, bless: bool, stderr: bool) -> Vec[ProjectTestsFailed] throws {
     let total = blocks.len() + outputs.len() + program_tests
     project_tests_running(total)
     let mut failed: Vec[ProjectTestsFailed] = []
-    for (k, (title, path, line)) in blocks.iter().enumerate() {
+    // A block's number is its place among all the program's tests, which
+    // the test build dispatches by: a `--filter` leaves some out (#2090).
+    for (title, path, line, number) in blocks {
         let mut outcomes: Vec[(String, ProjectTestsOutcome)] = []
         for (setting, binary) in test_builds {
-            outcomes.push((setting.clone(), host.block_outcome(binary, k)))
+            outcomes.push((setting.clone(), host.block_outcome(binary, number)))
         }
         let label = f"test \"{title}\" ({shown_path(path, root)}:{line})"
         if !project_tests_verdict(label, outcomes) {

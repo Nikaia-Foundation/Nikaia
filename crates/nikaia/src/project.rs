@@ -2972,10 +2972,17 @@ pub struct Suite<'a> {
 /// others; the failures are reported by `project_tests_report_failures`.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
-    let blocks: Vec<(String, PathBuf, i64)> = suite
+    let blocks: Vec<(String, PathBuf, i64, i64)> = suite
         .tests
         .iter()
-        .map(|test| (test.title.clone(), test.path.clone(), test.line as i64))
+        .map(|test| {
+            (
+                test.title.clone(),
+                test.path.clone(),
+                test.line as i64,
+                test.number as i64,
+            )
+        })
         .collect();
     let host = TestsHost {
         suite,
