@@ -356,6 +356,8 @@ Paths: `lowered/`, `lowered.rs`, `lower-std`, `sysroot`, `lower_mine`
 * Moving `crates/nikaia-std/src/compiler/` means editing `SYSROOT_COMPILER` in `sysroot_cache.nika` and in its lowered `.rs` by hand before the first build, because the old binary cannot lower from the new path. (issue-1600)
 * The `__nikaia_tupleN` names in lowered files are byte offsets, so any change to a `.nika` comment's length renumbers them in the lowered output; that is not a behaviour change. (issue-1600)
 * `lowered.rs` changes on every `lower-std` after a `.nika` edit (`LOWERED_DIGEST`): commit it with your lowered file, and check stability by comparing it before and after the second build. When the tree's `lowered.rs` also holds another agent's `include!` line, list it under `Partial:` with your hunks staged (the digest hunk at least): `commit.nika` refuses a staged `include!` of a lowered file the commit lacks and a lowered change without its `lowered.rs`, and writes the digest of the set as committed into the staged copy itself. (issue-1657, #1709)
+* A call in `crates/nikaia/src/main.rs` or `sysroot.rs` to a function a `.nika` change adds does not compile until `lower-std` has written it: write the `.nika`, run `lower-std` with the old binary, then add the Rust call and build. (issue-2082)
+* A dependency of std (logic, json) is lowered into `lowered/<name>/` with its own index, so a list gathered across std (its tests, say) must also fold in each dependency's list under its name. (issue-2082)
 
 ### Grammar
 
