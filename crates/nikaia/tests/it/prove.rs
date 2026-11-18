@@ -1424,7 +1424,8 @@ fn a_callees_body_answers_an_open_claim() {
         before,
         "a second query nobody needed"
     );
-    // A body with a loop gives no summary.
+    // A body with a loop gives no summary (the argument is open: a literal one is
+    // computed at build time since #2153 and proved).
     let looping = "fn count(n: i64) -> i64 {\n\
                    \x20   let mut i = 0\n\
                    \x20   while i < n {\n\
@@ -1432,7 +1433,7 @@ fn a_callees_body_answers_an_open_claim() {
                    \x20   }\n\
                    \x20   return n\n\
                    }\n\
-                   fn main() {\n    let c = count(3)\n    assert(c == 3)\n}\n";
+                   fn check_count(n: i64) {\n    let c = count(n)\n    assert(c == n)\n}\n";
     assert!(
         matches!(held(looping)[0], AtRunTime(_)),
         "{:#?}",
