@@ -1,0 +1,7 @@
+--filter "b false": exit 1
+test "b false" (src/b.nika:9) ... FAILED
+test result: FAILED. 0 passed; 1 failed
+    n is 3
+--filter "b one": exit 0
+test "b one" (src/b.nika:5) ... ok
+test result: ok. 1 passed; 0 failed

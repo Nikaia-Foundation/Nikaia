@@ -19,9 +19,10 @@ pub struct SvParams {
     pub dense_width: i64,
     pub dense_share: i64,
     pub steps: i64,
+    pub cases: i64,
 }
 
-pub(crate) fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100, steps: 0 } }
+pub(crate) fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100, steps: 0, cases: 0 } }
 
 pub(crate) fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     if name == "pipeline" {
@@ -47,7 +48,7 @@ pub(crate) fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     }
     let n = match text::parse_i64(value) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if n < 0 { return false; }
-    if name == "walk_first" && n <= 1000 { p.walk_first = n; } else if name == "moves_per_unit" && n > 0 { p.walk.moves_per_unit = n; } else if name == "noise" && n <= 1000 { p.walk.noise = n; } else if name == "tenure" { p.walk.tenure = n; } else if name == "bound" && n > 0 { p.walk.bound = n; } else if name == "seed" { p.walk.seed = n; } else if name == "bland_after" { p.bland_after = n; } else if name == "pivot_limit" && n > 0 { p.pivot_limit = n; } else if name == "cut_rounds" { p.cut_rounds = n; } else if name == "dense_width" { p.dense_width = n; } else if name == "dense_share" && n <= 1000 { p.dense_share = n; } else if name == "steps" { p.steps = n; } else { return false; }
+    if name == "walk_first" && n <= 1000 { p.walk_first = n; } else if name == "moves_per_unit" && n > 0 { p.walk.moves_per_unit = n; } else if name == "noise" && n <= 1000 { p.walk.noise = n; } else if name == "tenure" { p.walk.tenure = n; } else if name == "bound" && n > 0 { p.walk.bound = n; } else if name == "seed" { p.walk.seed = n; } else if name == "bland_after" { p.bland_after = n; } else if name == "pivot_limit" && n > 0 { p.pivot_limit = n; } else if name == "cut_rounds" { p.cut_rounds = n; } else if name == "dense_width" { p.dense_width = n; } else if name == "dense_share" && n <= 1000 { p.dense_share = n; } else if name == "steps" { p.steps = n; } else if name == "cases" { p.cases = n; } else { return false; }
     true
 }
 
@@ -175,13 +176,16 @@ pub(crate) fn sv_strategy_model(arena: &TermArena, facts: &[i64], goal: i64, cnf
     }
 }
 
-pub(crate) fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, cnf: &SvCnf, p: &SvParams) -> SvEngineRun {
+pub(crate) fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, given: &LgBudget, cnf: &SvCnf, p: &SvParams) -> SvEngineRun {
+    let mut budget = given.clone();
+    if p.cases > 0 { budget.cases = p.cases; }
     let real = !cnf.query.reals.is_empty();
     let mut spent: i64 = 0;
     let mut phases: Vec<bool> = vec![];
     let mut first: String = String::from("");
     if p.pipeline == "walk-first" && !real {
-        let units = budget.cases / 1000 * p.walk_first + budget.cases % 1000 * p.walk_first / 1000;
+        let capped = budget.cases.min(lg_budget().cases);
+        let units = capped / 1000 * p.walk_first + capped % 1000 * p.walk_first / 1000;
         let none: Vec<Vec<u32>> = vec![];
         let moves = nikaia_std::index::or(units.checked_mul(p.walk.moves_per_unit), || 0);
         let walk = sv_walk(&cnf.query, &none, &p.walk, moves);
@@ -259,11 +263,23 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let text = sv_walk_test_smt("unsat", "Int", &vec!["x", "y"], "(assert (< (+ x y) 0))\n(assert (> (+ x y) 0))\n");
+    let at = sv_line(&nikaia_std::block::Text::from(text.to_string()), "new:pipeline=walk-first");
+    let above = sv_line(&nikaia_std::block::Text::from(text.to_string()), "new:pipeline=walk-first,cases=1048576");
+    let below = sv_line(&text, "new:pipeline=walk-first,cases=512");
+    if !(at == "proved 256/walk+pre") { nikaia_std::abort::assertion_failed("assert(at == \"proved 256/walk+pre\")", None, &[("at", (&&nikaia_std::abort::Operand(&(at))).shown()), ]) };
+    if !(above == at) { nikaia_std::abort::assertion_failed("assert(above == at)", None, &[("above", (&&nikaia_std::abort::Operand(&(above))).shown()), ("at", (&&nikaia_std::abort::Operand(&(at))).shown()), ]) };
+    if !(below == "proved 128/walk+pre") { nikaia_std::abort::assertion_failed("assert(below == \"proved 128/walk+pre\")", None, &[("below", (&&nikaia_std::abort::Operand(&(below))).shown()), ]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn sv_strategy_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("sv_strategy::each_query_s_features_pick_its_pipeline", __nikaia_test_0),
         ("sv_strategy::a_parameter_set_takes_a_setting_by_name_and_refuses_one_out_of_range_or_unknown", __nikaia_test_1),
+        ("sv_strategy::a_walk_first_walks_no_further_under_a_budget_above_the_build_time_one", __nikaia_test_2),
     ]
 }

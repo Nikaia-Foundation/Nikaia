@@ -504,6 +504,9 @@ pub struct TestCase {
     pub path: PathBuf,
     /// The line the block starts on.
     pub line: usize,
+    /// The number the test build runs it by: its place among all the
+    /// program's tests, which a `--filter` does not change.
+    pub number: usize,
 }
 
 /// The function a test build's entry dispatches from, before it takes `main`'s
@@ -1169,6 +1172,7 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
                 title,
                 path: unit.path.clone(),
                 line: line as usize,
+                number: tests.len(),
             });
         }
     }

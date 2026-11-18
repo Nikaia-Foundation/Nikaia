@@ -1011,14 +1011,15 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
     let total = unsafe { nikaia_std::proven::add::<i64>(blocks.len() as i64, outputs.len() as i64) } + program_tests;
     project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];
-    for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+    for (title, path, line, number) in blocks.iter() {
+        let line = nikaia_std::num::value(line);let number = nikaia_std::num::value(number);
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, k)?)); }
-        let label = format!("test \"{}\" ({}:{})", title, shown_path(&path, root), line);
+        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, number)?)); }
+        let label = format!("test \"{}\" ({}:{})", title, shown_path(path, root), line);
         if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
     }
     for output in outputs.iter() {
