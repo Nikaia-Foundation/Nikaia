@@ -14,12 +14,12 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use nikaia_std::compiler::logic::prover_arena::TermArena;
+use nikaia_std::compiler::logic::solver_terms::SolverTerm;
 use nikaia_std::compiler::prove_run;
 use nikaia_std::compiler::prove_terms;
-use nikaia_std::compiler::prover_arena::TermArena;
 use nikaia_std::compiler::prover_solver::SolverAnswer;
 use nikaia_std::compiler::prover_state::ProverState;
-use nikaia_std::compiler::solver_terms::SolverTerm;
 
 use crate::ast::{Expr, Item, Stmt};
 use crate::check::Finding;

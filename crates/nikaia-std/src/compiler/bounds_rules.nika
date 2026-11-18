@@ -36,6 +36,7 @@
 
 use std::collections
 use std::text
+use logic
 
 /// **A rule between two list fields of `owner`**: `kind` is `length`,
 /// `index` or `result` (above); for `result`, `a` is the method.
@@ -1245,7 +1246,7 @@ fn rules_names_lists(body: ref Block, owner: ref String, of_impl: ref String, he
 /// given by a list literal is its count; given otherwise, or left out, the
 /// rule fails. Not of a builder's own literal, whose rules are asked where
 /// it is handed back (`rule_built_literal`).
-fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[FieldInit], facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[FieldInit], facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.checking || name == "Self" {
         return
     }
@@ -1451,7 +1452,7 @@ fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeM
 ///
 /// What it finds itself, not given in `context.around.held`, it hands back,
 /// for the bodies after it (#1581).
-fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> collections::BTreeMap[String, Vec[BoundsRule]] {
+fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> collections::BTreeMap[String, Vec[BoundsRule]] {
     let mut found: collections::BTreeMap[String, Vec[BoundsRule]] = collections::BTreeMap()
     if context.around.rules.is_empty() {
         return found
@@ -1532,7 +1533,7 @@ fn rules_roots(owner: ref String, args: ref Vec[FnArg], shape: ref BodyShape, ru
 /// fields through `mut self`, and each method a `result` candidate names,
 /// is walked with every candidate left given at its start; a candidate one
 /// of them does not keep is dropped, and the rest are checked again.
-fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[BoundsRule] {
+fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[BoundsRule] {
     let mut held: Vec[BoundsRule] = []
     for rule in context.around.rules {
         if rule.owner == owner {
@@ -1624,7 +1625,7 @@ fn rules_has_result(rules: ref Vec[BoundsRule], method: ref String) -> bool {
 
 /// **One method walked to check `held`**: the indexes of those it does not
 /// keep go into `failed`.
-fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) {
+fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) {
     let mut walk = bounding_new(args, body, collections::BTreeSet(), context, program, words)
     let self_owner = if method.is_empty() { "" } else { owner }
     walk.rule_roots = rules_roots(self_owner, args, walk.shape, held, words)
@@ -1902,7 +1903,7 @@ fn rules_capped_call(mut walk: BoundsWalk, name: ref String, method: ref String)
 
 /// **Whether a `capped` rule holds of `root` here** (ADR-306 D21, #1785):
 /// standing, or `each(root.a) <= len(root.b)` proved of every element.
-fn rules_capped_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_capped_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let element = bounding_element_of(f"{root}.{rule.a}")
     let length = length_of(f"{root}.{rule.b}")
     for entry in walk.capped {
@@ -1928,19 +1929,19 @@ fn rules_of_a_field(kind: ref String) -> bool {
 /// **Whether a `floor` or `cap` rule holds of `root` here** (#1642): `0 <=
 /// root.a`, or `root.a <= len(root.b)`. A rule standing among the facts as
 /// given holds with no question asked.
-fn rules_field_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_field_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let name = f"{root}.{rule.a}"
     let length = if rule.kind == "atmost" { f"{root}.{rule.b}" } else { length_of(f"{root}.{rule.b}") }
     for fact in facts.facts {
         match walk.arena.at(fact) {
-            SolverTerm::Le(x, y) => {
+            logic::SolverTerm::Le(x, y) => {
                 if (rule.kind == "cap" || rule.kind == "atmost") && rules_term_is(walk, x, 1, name) && rules_term_is(walk, y, 1, length) {
                     return true
                 }
             },
-            SolverTerm::Ge(x, y) => {
+            logic::SolverTerm::Ge(x, y) => {
                 let at_zero = match walk.arena.at(y) {
-                    SolverTerm::Int(n) => n == 0,
+                    logic::SolverTerm::Int(n) => n == 0,
                     else => false,
                 }
                 if rule.kind == "floor" && at_zero && rules_term_is(walk, x, 1, name) {
@@ -2086,7 +2087,7 @@ fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref S
 
 /// **An index read out of a list whose every element facts bound**:
 /// `0 <= list.each() < len` proves `list[i]` inside.
-fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: ref BoundsFacts, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: ref BoundsFacts, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let base = match index {
         Expr::Index { base, .. } => base,
         else => return false,
@@ -2113,7 +2114,7 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
 /// `throw` or an error passed on. Every `length` rule must hold of `self`
 /// again; a `result` rule of the method checked must hold of what a
 /// `return` hands back.
-fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, throwing: bool, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, throwing: bool, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     // What the function is found to return (ADR-306 D23).
     bounding_returned(walk, facts, returned, throwing, context, program, words, ask)
     // What a builder hands back (`rules_builder`).
@@ -2154,7 +2155,7 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
 
 /// Every `length` rule of the type of `root` asked for of it; one not
 /// proved goes into `rule_failed`.
-fn rules_lengths_hold(mut walk: BoundsWalk, facts: ref BoundsFacts, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_lengths_hold(mut walk: BoundsWalk, facts: ref BoundsFacts, root: ref String, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     let owner = walk.rule_roots.get(root)?.clone() ?? return
     for (at, rule) in walk.rules.clone().iter().enumerate() {
         // One found failing stays failed: not asked again.
@@ -2170,7 +2171,7 @@ fn rules_lengths_hold(mut walk: BoundsWalk, facts: ref BoundsFacts, root: ref St
     }
 }
 
-fn rules_same_length(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_same_length(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let a = walk.arena.var(length_of(f"{root}.{rule.a}"))
     let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
     let multiple = rules_times(walk, rule.times, b)
@@ -2189,7 +2190,7 @@ fn rules_length_known(walk: ref BoundsWalk, facts: ref BoundsFacts, rule: ref Bo
     let b = length_of(f"{root}.{rule.b}")
     for fact in facts.facts {
         match walk.arena.at(fact) {
-            SolverTerm::Eq(x, y) => {
+            logic::SolverTerm::Eq(x, y) => {
                 if rules_term_is(walk, x, 1, a) && rules_term_is(walk, y, rule.times, b) {
                     return true
                 }
@@ -2205,13 +2206,13 @@ fn rules_length_known(walk: ref BoundsWalk, facts: ref BoundsFacts, rule: ref Bo
 fn rules_term_is(walk: ref BoundsWalk, term: i64, times: i64, name: ref String) -> bool {
     if times == 1 {
         return match walk.arena.at(term) {
-            SolverTerm::Var(n) => n == name,
+            logic::SolverTerm::Var(n) => n == name,
             else => false,
         }
     }
     return match walk.arena.at(term) {
-        SolverTerm::Mul(k, v) => match walk.arena.at(k) {
-            SolverTerm::Int(n) => n == times && rules_term_is(walk, v, 1, name),
+        logic::SolverTerm::Mul(k, v) => match walk.arena.at(k) {
+            logic::SolverTerm::Int(n) => n == times && rules_term_is(walk, v, 1, name),
             else => false,
         },
         else => false,
@@ -2220,7 +2221,7 @@ fn rules_term_is(walk: ref BoundsWalk, term: i64, times: i64, name: ref String) 
 
 /// Whether `value` is a position of `self.b`: `0 <= value < len(self.b)`,
 /// or the result of a method a `result` rule of `b` holds of.
-fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let called = rules_called(walk, value, context, words)
     if called != null {
         let (root, owner, method) = called ?? return false
@@ -2261,7 +2262,7 @@ fn rules_element_read(mut walk: BoundsWalk, value: ref Expr, facts: ref BoundsFa
 
 /// Whether `value` is at most `len(self.b)`: what a push onto `b` itself
 /// may put, the list one longer after it (ADR-306 D22).
-fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
     let zero = walk.arena.int(0)
     let len = walk.arena.var(length_of(f"{of}.{b}"))
@@ -2275,7 +2276,7 @@ fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of
 
 /// **Whether `value` is at least every element of `list`** (#1688): what a
 /// push onto an `ascending` list may put. Nothing is asked of an empty one.
-fn rules_at_least_each(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, list: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_at_least_each(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, list: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
     let each = walk.arena.var(bounding_element_of(list))
     let above = walk.arena.ge(v, each)
@@ -2290,7 +2291,7 @@ fn rules_at_least_each(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref 
 /// a `pop` took, is at least every element left; `k` is the last position
 /// where `k + 1 >= len(r.a)` is proved. A list found empty is no element,
 /// so the fact is guarded by its emptiness.
-fn rules_ascending_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_ascending_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.rules.iter().any(fn(r) { r.kind == "ascending" }) {
         return
     }
@@ -2371,7 +2372,7 @@ fn rules_order_read(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref Stri
 /// **`path.truncate(to)` of an `ascending` list after `let v = path[at]`
 /// with `to <= at`** (ADR-306 D21, #1785): every element left is at most
 /// `v`. The facts that holds, read before the call, to state after it.
-fn rules_truncated(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, method: ref String, args: ref Vec[Expr], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
+fn rules_truncated(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, method: ref String, args: ref Vec[Expr], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
     let mut out: Vec[i64] = []
     if method != "truncate" || args.len() != 1 || walk.ordered.is_empty() || !rules_ordered(walk, name) {
         return out
@@ -2397,7 +2398,7 @@ fn rules_truncated(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref Strin
 /// **An element of a list of `self` written in a checked body**
 /// (`self.a[i] = value`, ADR-306 D22): an `index` rule of `a` holds on
 /// where the value is a position of its `b`; a compound write drops it.
-fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref Expr, op: ref BinaryOp?, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref Expr, op: ref BinaryOp?, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.checking {
         return
     }
@@ -2444,7 +2445,7 @@ fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref
 
 /// Whether `value` is a list literal each item of which is a position of
 /// `of.b`: what an inner list of an `inner` rule may take (ADR-306 D28).
-fn rules_positions(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_positions(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let items = match value {
         Expr::ListLit { items, .. } => items,
         else => return false,
@@ -2504,7 +2505,7 @@ fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut 
 /// for at each end of a turn and each `break` (`rules_turn_end`): it holds
 /// at every head, by induction. Asked before the head forgets; the indexes
 /// of the rules kept.
-fn rules_loop_entry(mut walk: BoundsWalk, facts: ref BoundsFacts, changed: ref BoundsChanged, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
+fn rules_loop_entry(mut walk: BoundsWalk, facts: ref BoundsFacts, changed: ref BoundsChanged, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
     let mut kept: Vec[i64] = []
     if !walk.checking {
         return kept
@@ -2536,7 +2537,7 @@ fn rules_loop_give(mut walk: BoundsWalk, mut facts: BoundsFacts, kept: ref Vec[i
 
 /// **At the end of a turn or a `break`** of the innermost loop: each rule
 /// its head was given (`rule_loops`) must hold, or it fails.
-fn rules_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.checking || walk.rule_loops.is_empty() {
         return
     }
@@ -2555,7 +2556,7 @@ fn rules_kept_at_turns(kind: ref String) -> bool {
 }
 
 /// Whether a rule of a kind `rules_kept_at_turns` names holds of `self` here.
-fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     if rule.kind == "length" {
         return rules_same_length(walk, facts, rule, "self", ask)
     }
@@ -2571,7 +2572,7 @@ fn rules_holds_here(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref Boun
 /// rules of it; any other call that writes a field of `self` (`changed`, by
 /// its frame, or what it is handed where it has none) drops the rules of
 /// that field.
-fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, method: ref String, args: ref Vec[Expr], changed: ref BoundsChanged, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, method: ref String, args: ref Vec[Expr], changed: ref BoundsChanged, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.checking {
         return
     }

@@ -21,6 +21,12 @@ use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
 use nikaia_std::prelude::Hasher;
 #[allow(unused_imports)]
+use nikaia_std::abort::{ShownByDebug as _, ShownByNothing as _};
+#[allow(unused_imports)]
+use nikaia_std::seq::Join as _;
+#[allow(unused_imports)]
+use nikaia_std::text::TextQuoted as _;
+#[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
 use nikaia_std::process;
@@ -149,4 +155,4 @@ pub mod text_normal {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "aad0b963f11cd8e5a7c0eac8566775e71f38a3cfec9db351fdfe3e70f865cba1";
+pub const LOWERED_DIGEST: &str = "61d9baf588638f14a81ffe0be7707633bd75e0344036cec2d8a666c80fad8826";

@@ -869,20 +869,21 @@ impl EmitState {
 /// The traits of the package `package`, each as `Name as _`: what brings
 /// their methods into Rust's scope. A dependency's ledger is absorbed under
 /// its name into the unit's own contracts `own` (`modules::absorb_into`);
-/// the library ledger is read too, for what `std` ships beside it.
+/// the library ledger is read too, for what `std` ships beside it. A trait
+/// the package keeps to itself is left out: Rust refuses to import it into
+/// another crate (`trait SvDist is private`, #2020), and its methods are
+/// the package's own to call (Part I 4.7); a trait is public when its
+/// methods are (`ledger_items`, `declared_trait_method`).
 fn emit_item_package_traits(world: ref EmitWorld, own: ref Ledger, package: ref String) -> Vec[String] {
     let prefix = f"{package}::"
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-    for (key, _) in own.traits {
-        let name = key.strip_prefix(prefix) ?? ""
-        if !name.contains("::") && !name.is_empty() {
-            names.insert(f"{name} as _")
-        }
-    }
-    for (key, _) in world.library.traits {
-        let name = key.strip_prefix(prefix) ?? ""
-        if !name.contains("::") && !name.is_empty() {
-            names.insert(f"{name} as _")
+    for ledger in [own, world.library] {
+        for (key, methods) in ledger.traits {
+            let name = key.strip_prefix(prefix) ?? ""
+            let public = methods.iter().any(fn(m) { ledger.functions.get(f"{key}::{m}")?.public ?? false })
+            if !name.contains("::") && !name.is_empty() && public {
+                names.insert(f"{name} as _")
+            }
         }
     }
     return names.iter().cloned().collect()

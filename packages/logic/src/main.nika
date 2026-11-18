@@ -1,0 +1,16 @@
+// The package `logic` (ADR-270 D1, D24, D26): terms, queries over them and
+// the answers, with the solvers that give them and the checks that verify
+// them, depending on nothing but `std`.
+//
+//     use logic
+//     let script = match logic::lg_smtlib_read(text) { ... }
+//     let answer = logic::lg_check(arena, script.assertions, goal, logic::lg_budget())
+//
+// A program takes it in by path: `logic = { path = "../packages/logic" }`.
+// The compiler's prover asks it (`crates/nikaia-std/src/compiler/nikaia.toml`),
+// and the measuring rod `rod/` (ADR-270 D17) is a program over it, built by
+// `scripts/solver.nika`.
+//
+// The public surface is D24's: the arena and its terms (`prover_arena`,
+// `solver_terms`), the queries and answers (`logic_lia`, `logic_search`),
+// SMT-LIB read and write (`logic_smtlib`, `sv_smtlib`) and `lg_verify`.

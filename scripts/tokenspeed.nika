@@ -444,7 +444,7 @@ fn ts_counts(root: String, commit: String, compiler: String) -> Vec[i64] throws 
         let blob = cut[0].split_whitespace().collect()[2].clone()
         if path.starts_with("crates/nikaia/src/") && path.ends_with(".rs") {
             rust += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
-        } else if path.ends_with(".nika") && (path.contains("/compiler/") || path.contains("/tools/")) && compiler.contains("|" + (path.split("/").last() ?? "").clone() + "|") {
+        } else if path.ends_with(".nika") && (path.contains("/compiler/") || path.contains("/tools/") || path.starts_with("packages/logic/src/")) && compiler.contains("|" + (path.split("/").last() ?? "").clone() + "|") {
             nika += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
         }
     }

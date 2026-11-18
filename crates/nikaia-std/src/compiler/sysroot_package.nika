@@ -347,6 +347,14 @@ pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String]
     // **What an `impl Hash`'s `hash` feeds** (ADR-010 D12), as the prelude
     // has it: a tools file's `mut into: Hasher` names it bare (#2007).
     rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::prelude::Hasher;\n")
+    // **How a false `assert` prints its operands** (ADR-269 D2): the lowering
+    // writes `.shown()` on each, and a dependency's index (`lowered/<name>/`,
+    // #2020) has no `lib.rs` module around it that brings the traits.
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::abort::{ShownByDebug as _, ShownByNothing as _};\n")
+    // `seq.join(", ")` and `s.quoted()`, which the prelude brings a program
+    // (Part I 1.3) and that index has no `lib.rs` module to bring.
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::seq::Join as _;\n")
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::text::TextQuoted as _;\n")
     imports.sort()
     for import in imports {
         rust.push_str("#[allow(unused_imports)]\n")

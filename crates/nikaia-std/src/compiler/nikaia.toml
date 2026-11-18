@@ -7,6 +7,7 @@ described = "described.contracts"
 
 [dependencies]
 json = { path = "../../../../packages/json" }
+logic = { path = "../../../../packages/logic" }
 
 [directories]
 "lowered" = "ignore"

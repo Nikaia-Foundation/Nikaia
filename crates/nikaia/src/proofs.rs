@@ -15,8 +15,8 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use nikaia_std::compiler::logic::prover_arena::TermArena;
 use nikaia_std::compiler::proofs_answers::{self as answers, ProofsBook, ProofsThread};
-use nikaia_std::compiler::prover_arena::TermArena;
 use nikaia_std::rt::exec::block_on;
 
 pub use nikaia_std::compiler::proofs_answers::{
