@@ -2248,7 +2248,8 @@ pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFa
     }
 }
 
-pub(crate) fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Vec<i64> {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, turn: Option<i64>, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     match iter {
         Expr::MethodCall { receiver, method, args, config, .. } => {
@@ -2269,6 +2270,8 @@ pub(crate) fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, facts
                 given.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(term, || 0));
             }
             given.insert(String::from("item"), item);
+            let before = nikaia_std::index::or(turn, || bounding_fresh(walk).into());
+            given.insert(String::from("turn"), before);
             given.insert(length_of("self"), bounding_length_named(walk, &path, true));
             for nodes in each.conditions.iter() {
                 let read = walk.arena.adopt(nodes);
@@ -4406,7 +4409,7 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         }
     }
     let held = walk.arena.var(&bounding_element_of(&name));
-    for each in bounding_each(walk, value, held, &facts, context, program, words) {
+    for each in bounding_each(walk, value, held, None, &facts, context, program, words) {
         let fact = bounding_each_guarded(walk, each);
         bounding_push(&walk, facts, fact);
     }
@@ -4780,7 +4783,8 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     let mut turn_facts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut all_turns: Option<i64> = None;
     if !steps.is_empty() {
-        let t = walk.arena.var(&format!("#turn{}", walk.entries));
+        let turn_name = format!("#turn{}", walk.entries);
+        let t = walk.arena.var(&turn_name);
         walk.entries += 1;
         let mut limit: Option<i64> = None;
         let mut binding_at: Option<i64> = None;
@@ -4817,10 +4821,21 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
                 limit = Some(walk.arena.lt(t, length));
             }
         }
-        if limit.is_some() {
+        let mut counted_by: Vec<i64> = vec![];
+        if limit.is_none() && bindings.len() == 1 {
+            let element = bounding_fresh(walk);
+            let mut tied = false;
+            for fact in bounding_each(walk, iter, element, Some(t), &facts, context, program, words) {
+                tied = tied || walk.arena.mentions(fact, &turn_name);
+                counted_by.push(fact);
+            }
+            if !tied { counted_by = vec![]; }
+        }
+        if limit.is_some() || !counted_by.is_empty() {
             let zero = walk.arena.int(0);
             turn_facts.push(walk.arena.ge(t, zero));
-            turn_facts.push(nikaia_std::index::or(limit, || 0));
+            if limit.is_some() { turn_facts.push(nikaia_std::index::or(limit, || 0)); }
+            turn_facts.extend(counted_by);
             if binding_at.is_some() { turn_facts.push(nikaia_std::index::or(binding_at, || 0)); }
             for fact in bounding_turn_bounds(walk, &mut inner, &steps, t) { turn_facts.push(fact); }
         }
@@ -4916,7 +4931,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     if bindings.len() == 1 && !counted {
         let only = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }).to_string());
         let item = walk.arena.var(&only);
-        let mut stated = bounding_each(walk, iter, item, &facts, context, program, words);
+        let mut stated = bounding_each(walk, iter, item, None, &facts, context, program, words);
         let mut held = path_of(iter, words);
         if held.is_none() {
             let outer = rules_inner_of(iter, words);

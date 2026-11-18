@@ -1,0 +1,40 @@
+// #432 (ADR-375 D5, ADR-361 D13): `find_all` hands back rising positions in
+// the bytes, so its turn-th lies at or above `turn` and below `b.len()`; a
+// counter raised once a turn stays below the length (below 2^60) and an
+// `i64` holds it, `from:` or not. An `i32` counter keeps its check: 2^60 does
+// not fit.
+
+use std::bytes
+
+fn count(b: ref Bytes) -> i64 sync {
+	let mut n: i64 = 0
+	for _p in b.find_all(bytes::ByteSet([';', '\n'])) {
+		n += 1
+	}
+	return n
+}
+
+fn evens(b: ref Bytes) -> i64 sync {
+	let mut m: i64 = 0
+	for _p in b.find_all(bytes::ByteSet([';']); from: 3) {
+		m += 2
+	}
+	return m
+}
+
+fn small(b: ref Bytes) -> i32 sync {
+	let mut s: i32 = 0
+	for _p in b.find_all(bytes::ByteSet([';'])) {
+		s += 1
+	}
+	return s
+}
+
+fn main() throws {
+	let mut v: Vec[u8] = []
+	for c in "ab;c\nd;e".bytes() {
+		v.push(c)
+	}
+	let b = Bytes(v)
+	println(f"{count(b)} {evens(b)} {small(b)}")
+}
