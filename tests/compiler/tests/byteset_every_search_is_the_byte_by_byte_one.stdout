@@ -1,0 +1,7 @@
+every search: 22400 cases, 0 wrong
+a few bytes: 0 wrong
+far apart: 0 wrong
+"": [0]
+"a;;b;": [1, 0, 1, 0]
+";": [0, 0]
+empty set: 1 piece of 3
