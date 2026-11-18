@@ -1,0 +1,30 @@
+// `widening_mul` gives the exact product in two halves (#1555, Part I 2.2):
+// the low one in the unsigned type of the same width, the high one in the
+// receiver's type, so `high * 2^w + low` is the product. On a name whose
+// uses decide its type the halves follow the type decided.
+fn main() throws {
+    let k = 1 << 40
+    let (lo, hi) = k.widening_mul(k)
+    println(lo)
+    println(hi)
+    let n: i64 = -3
+    let (l2, h2) = n.widening_mul(5)
+    println(l2)
+    println(h2)
+    let w: u32 = 4000000000
+    let (l3, h3) = w.widening_mul(w)
+    println(l3)
+    println(h3)
+    let k: i32 = 100000
+    let (l4, h4) = k.widening_mul(-100000)
+    println(l4)
+    println(h4)
+    let b: u8 = 255
+    let (l5, h5) = b.widening_mul(b)
+    println(l5)
+    println(h5)
+    let big: u64 = 18446744073709551615
+    let (l6, h6) = big.widening_mul(2)
+    println(l6)
+    println(h6)
+}

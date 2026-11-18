@@ -1,0 +1,27 @@
+// `overflowing_add`, `_sub` and `_mul` give the wrapped result and whether it
+// wrapped (#1555, Part I 2.2): `i64::MAX.overflowing_add(1)` is
+// `(i64::MIN, true)`, a step that fits is itself with `false`.
+fn main() throws {
+    let (s, o) = i64::MAX.overflowing_add(1)
+    println(s == i64::MIN)
+    println(o)
+    let (fits, wrapped) = 40.overflowing_add(2)
+    println(fits)
+    println(wrapped)
+    let small: i32 = 5
+    let (d, p) = small.overflowing_sub(7)
+    println(d)
+    println(p)
+    let m: i32 = 70000
+    let (q, r) = m.overflowing_mul(m)
+    println(q)
+    println(r)
+    let u: u8 = 200
+    let (a, b) = u.overflowing_add(100)
+    println(a)
+    println(b)
+    let z: u64 = 0
+    let (e, f) = z.overflowing_sub(1)
+    println(e)
+    println(f)
+}

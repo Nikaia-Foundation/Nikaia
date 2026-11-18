@@ -1948,6 +1948,30 @@ impl EmitState {
                 return
             }
         }
+        // **`a.widening_mul(b)` is the product in the type of twice the
+        // width, cut in two** (#1555): the low half as the unsigned type of
+        // the receiver's width, the high half as the receiver's type. Rust's
+        // own `widening_mul` is not stable; the wider type is the lowering's,
+        // not the program's (ADR-270 D11).
+        if rotation == "widening_mul" && args.len() == 1 {
+            let on_type = self.facts.std_receivers[node_key(node)] ?? ""
+            let (wide, low, bits) = match on_type {
+                "u8" => ("u16", "u8", 8),
+                "u32" => ("u64", "u32", 32),
+                "i32" => ("i64", "u32", 32),
+                "u64" => ("u128", "u64", 64),
+                "i64" => ("i128", "u64", 64),
+                else => ("", "", 0),
+            }
+            if bits != 0 {
+                out.push(f"{{ let __wide = (")
+                self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)
+                out.push(f") as {wide} * (")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(f") as {wide}; (__wide as {low}, (__wide >> {bits}) as {on_type}) }}")
+                return
+            }
+        }
         // **`cloned()` over elements owned below is nothing** (ADR-384 D2),
         // and **`or_default()` of a struct of defaults builds it** (D1): the
         // language below has no `Default` for the struct.
