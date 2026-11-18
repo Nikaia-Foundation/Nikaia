@@ -472,9 +472,27 @@ impl SvBook {
 		let mut strict = false
 		let mut i = 0
 		while i < sources.len() {
-			let b = self.source(sources[i]) ?? return null
 			let m = multipliers[i]
-			let is_eq = match b.rel {
+			// A bound entry read where it is kept, not copied: a copy of
+			// each source's row was most of a combination's cost on SMPT's
+			// Petri-net queries (#2012).
+			let rel = match sources[i] {
+				SvSrc::Fact(id) => {
+					let b = self.bounds.get(id) ?? return null
+					if m != 0 {
+						row = sv_row_sum(1, row, m, b.row) ?? return null
+					}
+					b.rel
+				},
+				SvSrc::Lit(l) => {
+					let b = self.lit_bound(l) ?? return null
+					if m != 0 {
+						row = sv_row_sum(1, row, m, b.row) ?? return null
+					}
+					b.rel
+				},
+			}
+			let is_eq = match rel {
 				SvRel::Eq => true,
 				else => false,
 			}
@@ -483,12 +501,11 @@ impl SvBook {
 			}
 			if m != 0 {
 				equality = equality && is_eq
-				let is_lt = match b.rel {
+				let is_lt = match rel {
 					SvRel::Lt => true,
 					else => false,
 				}
 				strict = strict || (is_lt && m > 0)
-				row = sv_row_sum(1, row, m, b.row) ?? return null
 			}
 			i += 1
 		}

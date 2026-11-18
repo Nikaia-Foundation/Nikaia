@@ -311,15 +311,25 @@ impl SvBook {
         let mut strict = false;
         let mut i: i64 = 0;
         while ((i) as usize) < sources.len() {
-            let b = match self.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let m = *nikaia_std::index::get(&multipliers, (i) as usize);
-            let is_eq = matches!(b.rel, SvRel::Eq);
+            let rel = match *unsafe { nikaia_std::proven::read(&sources, (i) as usize) } {
+                SvSrc::Fact(id) => {
+                    let b = match self.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if m != 0 { row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+                    b.rel
+                },
+                SvSrc::Lit(l) => {
+                    let b = match self.lit_bound(l) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if m != 0 { row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+                    b.rel
+                },
+            };
+            let is_eq = matches!(rel, SvRel::Eq);
             if m < 0 && !is_eq { return None; }
             if m != 0 {
                 equality = equality && is_eq;
-                let is_lt = matches!(b.rel, SvRel::Lt);
+                let is_lt = matches!(rel, SvRel::Lt);
                 strict = strict || is_lt && m > 0;
-                row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None };
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }

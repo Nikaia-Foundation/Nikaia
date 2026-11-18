@@ -2863,13 +2863,6 @@ places = true
 views = ["name: borrowed", "arena: borrowed"]
 signature = "(name: String, arena: ref TermArena, facts: Vec[i64], goal: i64) -> String"
 
-[fn."sv_cols_key"]
-sync = "inferred"
-panics = true
-touches = []
-views = ["r: borrowed"]
-signature = "(r: ref SvRow) -> i64"
-
 [fn."sv_column_cost"]
 sync = "inferred"
 panics = true
@@ -2887,8 +2880,8 @@ signature = "(c: u32, names: ref Vec[String]) -> String"
 sync = "inferred"
 panics = true
 touches = []
-views = ["held: borrowed"]
-signature = "(held: ref Vec[SvHeld]) -> Vec[i64]"
+views = ["held: borrowed", "r: borrowed"]
+signature = "(held: ref Vec[SvHeld], r: ref SvRow) -> Vec[i64]"
 
 [fn."sv_content"]
 sync = "inferred"
@@ -3211,6 +3204,13 @@ sync = "inferred"
 panics = true
 touches = []
 signature = "(a: i64, b: i64) -> i64?"
+
+[fn."sv_has_unit"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> bool"
 
 [fn."sv_i64s_of"]
 sync = "inferred"
@@ -4104,6 +4104,13 @@ panics = true
 touches = []
 views = ["word: borrowed"]
 signature = "(word: ref String) -> SvRow?"
+
+[fn."sv_row_keys"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed"]
+signature = "(r: ref SvRow) -> (i64, i64)"
 
 [fn."sv_row_of"]
 sync = "inferred"
