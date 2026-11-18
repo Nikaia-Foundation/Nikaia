@@ -1,0 +1,18 @@
+// ADR-program-path-1 D3, #2034: under `nikaia test` the launcher hands the
+// program `NIKAIA_EXE` and `NIKAIA_MAIN`, and the program sees neither:
+// `env::var` answers null for each and `env::vars` lists neither name. The
+// rule is `launcher_var` in `runtime/env.nika`; the OS list under it,
+// `env::pairs()`, filters nothing.
+use std::env
+
+fn main() throws {
+    println(f"env::var(NIKAIA_EXE) is null: {env::var("NIKAIA_EXE") == null}")
+    println(f"env::var(NIKAIA_MAIN) is null: {env::var("NIKAIA_MAIN") == null}")
+    let mut listed = 0
+    for pair in env::vars("NIKAIA_") {
+        if pair.0 == "NIKAIA_EXE" || pair.0 == "NIKAIA_MAIN" {
+            listed += 1
+        }
+    }
+    println(f"launcher names env::vars lists: {listed}")
+}

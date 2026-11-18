@@ -1,0 +1,15 @@
+// #2033: a one-word `name(…)` pattern that names no enum or struct is
+// refused (NK1117) at any depth, here inside a tuple over a program's enum.
+enum Shape {
+    Dot,
+    Line(i64),
+}
+
+fn main() throws {
+    let s = Shape::Line(3)
+    let said = match (s, 1) {
+        (line(n), _) => n,
+        else => 0,
+    }
+    println(said)
+}
