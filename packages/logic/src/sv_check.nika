@@ -12,11 +12,11 @@
 // Kept under 1 500 lines for clauses and linear integer arithmetic (D5); a
 // rule that would push it past needs a record.
 
-/// A bound `row REL 0` and the literals it assumes, ascending.
+/// A bound `row REL 0`. The literals it assumes are found by walking the
+/// steps that made it (`SvAssumes`), only where a lemma needs them (#2012).
 pub struct SvBound {
 	pub row: SvRow,
 	pub rel: SvRel,
-	pub assumed: Vec[u32],
 }
 
 /// What an entry of the log holds.
@@ -47,6 +47,8 @@ struct SvReplay {
 	/// false; all 0 between checks, so a check costs its own literals, not
 	/// the atoms (#1312).
 	value: Vec[i64],
+	/// Per entry, the step that made it, for what a lemma assumes.
+	walk: SvAssumes,
 }
 
 /// A combination's result, or why there is none.
@@ -64,6 +66,7 @@ fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
 		reals: query.reals.clone(),
 		refuted: false,
 		value: [],
+		walk: sv_assumes(),
 	}
 	for atom in query.atoms {
 		let why = replay.row_known(atom.row)
@@ -73,10 +76,12 @@ fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
 	}
 	let mut at = 0
 	for step in log {
-		let why = replay.step(query, step)
+		let why = replay.step(query, log, step)
 		if why != "" {
 			return SvVerdict { ok: false, step: at, reason: f"{sv_step_kind(step)}: {why}" }
 		}
+		let made = replay.entries.len() - replay.walk.made_by.len()
+		replay.walk.made(at.checked_u32() ?? 0, made.checked_u32() ?? 0)
 		at += 1
 	}
 	if !replay.refuted {
@@ -87,12 +92,13 @@ fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
 
 impl SvReplay {
 	/// Replays one step; `""` where it holds, else why not.
-	fn step(ref mut self, query: ref SvQuery, step: ref SvStep) -> String {
+	fn step(ref mut self, query: ref SvQuery, log: ref Vec[SvStep], step: ref SvStep) -> String {
 		return match step {
 			SvStep::Input(c) => self.input(query, c),
 			SvStep::Learn(lits, hints) => self.learn(lits, hints),
 			SvStep::Delete(id) => self.delete(id),
 			SvStep::Farkas(lits, sources, multipliers, den) => self.farkas(
+				log,
 				lits,
 				sources,
 				multipliers,
@@ -254,7 +260,6 @@ impl SvReplay {
 		let mut row = sv_row_constant(0)
 		let mut equality = true
 		let mut strict = false
-		let mut assumed: Vec[u32] = []
 		let mut i = 0
 		while i < sources.len() {
 			let got = self.source(sources[i])
@@ -278,16 +283,12 @@ impl SvReplay {
 				}
 				strict = strict || (is_lt && m > 0)
 				row = sv_row_sum(1, row, m, b.row) ?? return SvSum { bound: null, why: "overflow" }
-				// One merge, not a `contains` per literal: quadratic in the
-				// assumptions, the replay of SMPT Referendum-PT-0200-RF-00
-				// ran past its limit (#2012).
-				assumed = sv_lits_union(assumed, b.assumed)
 			}
 			i += 1
 		}
 		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
 		return SvSum {
-			bound: SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed },
+			bound: SvBound { row: sv_row_reduced(row), rel: rel },
 			why: "",
 		}
 	}
@@ -296,6 +297,7 @@ impl SvReplay {
 	/// clause holds the negation of every literal it assumed.
 	fn farkas(
 		ref mut self,
+		log: ref Vec[SvStep],
 		lits: ref Vec[u32],
 		sources: ref Vec[SvSrc],
 		multipliers: ref Vec[i64],
@@ -322,7 +324,8 @@ impl SvReplay {
 		if !contradiction {
 			return f"the combination ends in {c} {sv_rel_text(b.rel)} 0, no contradiction"
 		}
-		for l in b.assumed {
+		let assumed = self.walk.assumed(log, sources, multipliers) ?? return "a source was made by no bound step"
+		for l in assumed {
 			let negation = l ^ 1
 			if !lits.contains(negation) {
 				return f"the clause leaves out the negation of literal {l}"
@@ -380,7 +383,6 @@ impl SvReplay {
 		self.entries.push(SvEntry::Bound(SvBound {
 			row: row,
 			rel: rel,
-			assumed: b.assumed.clone(),
 		}))
 		return ""
 	}
@@ -433,8 +435,8 @@ impl SvReplay {
 		let below = sv_row_sum(-1, l, 1, mq) ?? return "overflow"
 		let above0 = sv_row_sum(1, l, -1, mq) ?? return "overflow"
 		let above = sv_row_sum(1, above0, -(m - 1), sv_row_constant(1)) ?? return "overflow"
-		self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le, assumed: [] }))
-		self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le, assumed: [] }))
+		self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le }))
+		self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le }))
 		return ""
 	}
 }
@@ -572,7 +574,7 @@ fn sv_check_test_clauses() -> SvQuery {
 
 fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
 	let query = sv_check_test_clauses()
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let c0 = log.input(0)
 	let c1 = log.input(1)
 	let c2 = log.input(2)
@@ -590,7 +592,7 @@ fn sv_check_test_bounds() -> SvQuery {
 }
 
 fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec[u32]) -> SvLog {
-	let mut log = sv_log(sv_check_test_bounds()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(sv_check_test_bounds()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(lits, [SvSrc::Lit(sv_check_test_pos(0)), SvSrc::Lit(sv_check_test_pos(1))], [m, m], den)
@@ -609,7 +611,7 @@ fn sv_check_test_equal() -> SvQuery {
 }
 
 fn sv_check_test_lemma_log(query: ref SvQuery, m: Vec[i64], den: i64) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas([sv_check_test_neg(0), sv_check_test_neg(1)], [SvSrc::Lit(sv_check_test_pos(0)), SvSrc::Lit(sv_check_test_pos(1))], m, den)
@@ -625,7 +627,14 @@ fn sv_check_test_parity() -> SvQuery {
 // The parity refuted by a combination and the GCD test, after an extension
 // `q = ⌊x / 2⌋` pins `q` to 2 on the way.
 fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
-	let mut log = sv_log(sv_check_test_parity()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	return sv_check_test_parity_lits(divisor, m, q, [sv_check_test_neg(0), sv_check_test_neg(1)])
+}
+
+// The same, its lemma's clause `lits`: the lemma cites only the rounded
+// entry, so what it assumes is found through the rounding and the
+// combination before it (#2012).
+fn sv_check_test_parity_lits(divisor: i64, m: i64, q: u32, lits: Vec[u32]) -> SvLog {
+	let mut log = sv_log(sv_check_test_parity()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let ext = log.extend(sv_check_test_row([1], 0), m)
@@ -641,7 +650,7 @@ fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
 	// x - 2y = 0 minus x - 5 = 0: -2y + 5 = 0, not even.
 	let odd = log.combine([SvSrc::Lit(sv_check_test_pos(0)), SvSrc::Lit(sv_check_test_pos(1))], [1, -1])
 	let none = log.round(odd, divisor)
-	let f = log.farkas([sv_check_test_neg(0), sv_check_test_neg(1)], [SvSrc::Fact(none)], [1], 1)
+	let f = log.farkas(lits, [SvSrc::Fact(none)], [1], 1)
 	log.learn([], [a, b, f])
 	return log
 }
@@ -658,7 +667,7 @@ fn sv_check_test_half() -> SvQuery {
 
 // Split on x <= 0 or x >= 1 (`ge_constant` 1); each side refuted.
 fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
-	let mut log = sv_log(sv_check_test_half()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(sv_check_test_half()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_check_test_row([1], 0), sv_check_test_row([-1], ge_constant))
@@ -669,7 +678,7 @@ fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
 }
 
 fn sv_check_test_single(query: ref SvQuery, steps: Vec[SvStep]) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	log.steps = steps
 	return log
 }
@@ -709,6 +718,11 @@ test "broken proofs are rejected with their reasons" {
 	out = out + sv_check_test_report("extension on a column in use", sv_check_test_parity(), sv_check_test_parity_log(2, 2, 1))
 	out = out + sv_check_test_report("farkas over a denominator of zero", sv_check_test_bounds(), sv_check_test_farkas_log(1, 0, [sv_check_test_neg(0), sv_check_test_neg(1)]))
 	out = out + sv_check_test_report("farkas leaving a literal out of its clause", sv_check_test_bounds(), sv_check_test_farkas_log(1, 1, [sv_check_test_neg(0)]))
+	out = out + sv_check_test_report(
+		"farkas leaving out a literal its rounded entry assumed",
+		sv_check_test_parity(),
+		sv_check_test_parity_lits(2, 2, 2, [sv_check_test_neg(1)]),
+	)
 	out = out + sv_check_test_report("farkas without a contradiction", sv_check_test_fits(), sv_check_test_lemma_log(sv_check_test_fits(), [1, 1], 1))
 	out = out + sv_check_test_report("farkas leaving a variable", sv_check_test_equal(), sv_check_test_lemma_log(sv_check_test_equal(), [1, 1], 1))
 	out = out + sv_check_test_report(
@@ -756,6 +770,7 @@ test "broken proofs are rejected with their reasons" {
 		"extension on a column in use: rejected at step 2: extend: x1 is not the next fresh column x2",
 		"farkas over a denominator of zero: rejected at step 2: farkas: denominator 0 is not positive",
 		"farkas leaving a literal out of its clause: rejected at step 2: farkas: the clause leaves out the negation of literal 2",
+		"farkas leaving out a literal its rounded entry assumed: rejected at step 8: farkas: the clause leaves out the negation of literal 0",
 		"farkas without a contradiction: rejected at step 2: farkas: the combination ends in -1 <= 0, no contradiction",
 		"farkas leaving a variable: rejected at step 2: farkas: x0 is left in the combination",
 		"farkas on a negated equality: rejected at step 0: farkas: literal 1 negates an equality, which is no bound",

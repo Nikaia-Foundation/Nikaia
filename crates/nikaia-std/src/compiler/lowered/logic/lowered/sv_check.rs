@@ -5,7 +5,6 @@
 pub struct SvBound {
     pub row: SvRow,
     pub rel: SvRel,
-    pub assumed: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,6 +29,7 @@ pub(crate) struct SvReplay {
     pub(crate) reals: Vec<u32>,
     pub(crate) refuted: bool,
     pub(crate) value: Vec<i64>,
+    pub(crate) walk: SvAssumes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -39,28 +39,30 @@ pub(crate) struct SvSum {
 }
 
 pub(crate) fn sv_check(query: &SvQuery, log: &[SvStep]) -> SvVerdict {
-    let mut replay = SvReplay { atoms: query.atoms.copy_owned(), entries: vec![], columns: query.columns, reals: query.reals.copy_owned(), refuted: false, value: vec![] };
+    let mut replay = SvReplay { atoms: query.atoms.copy_owned(), entries: vec![], columns: query.columns, reals: query.reals.copy_owned(), refuted: false, value: vec![], walk: sv_assumes() };
     for atom in query.atoms.iter() {
         let why = replay.row_known(&atom.row);
         if why != "" { return SvVerdict { ok: false, step: -1, reason: format!("a query atom: {}", why) }; }
     }
     let mut at: i64 = 0;
     for step in log.iter() {
-        let why = replay.step(query, step);
+        let why = replay.step(query, log, step);
         if why != "" { return SvVerdict { ok: false, step: at, reason: format!("{}: {}", sv_step_kind(step), why) }; }
-        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        let made = unsafe { nikaia_std::proven::sub::<i64>(replay.entries.len() as i64, replay.walk.made_by.len() as i64) };
+        replay.walk.made(nikaia_std::index::or(u32::try_from(at).ok(), || 0u32), nikaia_std::index::or(u32::try_from(made).ok(), || 0u32));
+        at += 1;
     }
     if !replay.refuted { return SvVerdict { ok: false, step: at, reason: String::from("the log ends without the empty clause") }; }
     SvVerdict { ok: true, step: at, reason: String::from("") }
 }
 
 impl SvReplay {
-    pub(crate) fn step(&mut self, query: &SvQuery, step: &SvStep) -> String {
+    pub(crate) fn step(&mut self, query: &SvQuery, log: &[SvStep], step: &SvStep) -> String {
         match step {
             SvStep::Input(c) => { let c = *c; self.input(query, c) },
             SvStep::Learn(lits, hints) => self.learn(lits, hints),
             SvStep::Delete(id) => { let id = *id; self.delete(id) },
-            SvStep::Farkas(lits, sources, multipliers, den) => { let den = *den; self.farkas(lits, sources, multipliers, den) },
+            SvStep::Farkas(lits, sources, multipliers, den) => { let den = *den; self.farkas(log, lits, sources, multipliers, den) },
             SvStep::Combine(sources, multipliers) => {
                 let sum = self.combination(sources, multipliers);
                 let bound = match sum.bound { Some(__nikaia_value) => __nikaia_value, None => return sum.why };
@@ -159,7 +161,6 @@ impl SvReplay {
         let mut row = sv_row_constant(0);
         let mut equality = true;
         let mut strict = false;
-        let mut assumed: Vec<u32> = vec![];
         let mut i: i64 = 0;
         while ((i) as usize) < sources.len() {
             let got = self.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) });
@@ -172,14 +173,13 @@ impl SvReplay {
                 let is_lt = matches!(b.rel, SvRel::Lt);
                 strict = strict || is_lt && m > 0;
                 row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return SvSum { bound: None, why: String::from("overflow") } };
-                assumed = sv_lits_union(&assumed, &b.assumed);
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
-        SvSum { bound: Some(SvBound { row: sv_row_reduced(row), rel, assumed }), why: String::from("") }
+        SvSum { bound: Some(SvBound { row: sv_row_reduced(row), rel }), why: String::from("") }
     }
-    pub(crate) fn farkas(&mut self, lits: &[u32], sources: &[SvSrc], multipliers: &[i64], den: i64) -> String {
+    pub(crate) fn farkas(&mut self, log: &[SvStep], lits: &[u32], sources: &[SvSrc], multipliers: &[i64], den: i64) -> String {
         if den <= 0 { return format!("denominator {} is not positive", den); }
         let why = self.lits_known(lits);
         if why != "" { return why; }
@@ -193,7 +193,8 @@ impl SvReplay {
             SvRel::Eq => c != 0,
         };
         if !contradiction { return format!("the combination ends in {} {} 0, no contradiction", c, sv_rel_text(&b.rel)); }
-        for l in b.assumed.iter() {
+        let assumed = match self.walk.assumed(log, sources, multipliers) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a source was made by no bound step") };
+        for l in assumed.iter() {
             let l = nikaia_std::num::value(l);
             let negation = l ^ 1u32;
             if !lits.contains(&negation) { return format!("the clause leaves out the negation of literal {}", l); }
@@ -233,7 +234,7 @@ impl SvReplay {
         }
         let cols = if ks.is_empty() { vec![] } else { b.row.cols.copy_owned() };
         let row = SvRow { cols, ks, constant };
-        self.entries.push(SvEntry::Bound(SvBound { row, rel, assumed: b.assumed.copy_owned() }));
+        self.entries.push(SvEntry::Bound(SvBound { row, rel }));
         String::from("")
     }
     pub(crate) fn split(&mut self, le: &SvRow, ge: &SvRow) -> String {
@@ -262,8 +263,8 @@ impl SvReplay {
         let below = match sv_row_sum(-1, l, 1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
         let above0 = match sv_row_sum(1, l, -1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
         let above = match sv_row_sum(1, &above0, unsafe { nikaia_std::proven::neg::<i64>(nikaia_std::proven::sub::<i64>(m, 1)) }, &sv_row_constant(1)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
-        self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le, assumed: vec![] }));
-        self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le, assumed: vec![] }));
+        self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le }));
+        self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le }));
         String::from("")
     }
 }
@@ -359,7 +360,7 @@ pub(crate) fn sv_check_test_clauses() -> SvQuery {
 
 pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
     let query = sv_check_test_clauses();
-    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let c0 = log.input(0u32);
     let c1 = log.input(1u32);
     let c2 = log.input(2u32);
@@ -374,7 +375,7 @@ pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
 pub(crate) fn sv_check_test_bounds() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![1], -2), sv_check_test_le(&vec![-1], 3)], 1u32) }
 
 pub(crate) fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec<u32>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(lits, vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], vec![m, m], den);
@@ -387,7 +388,7 @@ pub(crate) fn sv_check_test_strict() -> SvQuery { sv_check_test_units(vec![sv_ch
 pub(crate) fn sv_check_test_equal() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![-1, 1], 0), sv_check_test_le(&vec![-1, 1], 1)], 2u32) }
 
 pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)], vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], m, den);
@@ -397,8 +398,10 @@ pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) ->
 
 pub(crate) fn sv_check_test_parity() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![1, -2], 0), sv_check_test_eq(&vec![1], -5)], 2u32) }
 
-pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog { sv_check_test_parity_lits(divisor, m, q, vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)]) }
+
+pub(crate) fn sv_check_test_parity_lits(divisor: i64, m: i64, q: u32, lits: Vec<u32>) -> SvLog {
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let ext = log.extend(sv_check_test_row(&vec![1], 0), m);
@@ -411,7 +414,7 @@ pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
     log.combine(vec![SvSrc::Fact(ext + 1u32), SvSrc::Lit(sv_check_test_pos(1u32))], vec![1, -1]);
     let odd = log.combine(vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], vec![1, -1]);
     let none = log.round(odd, divisor);
-    let f = log.farkas(vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)], vec![SvSrc::Fact(none)], vec![1], 1);
+    let f = log.farkas(lits, vec![SvSrc::Fact(none)], vec![1], 1);
     log.learn(vec![], vec![a, b, f]);
     log
 }
@@ -421,7 +424,7 @@ pub(crate) fn sv_check_test_fits() -> SvQuery { sv_check_test_units(vec![sv_chec
 pub(crate) fn sv_check_test_half() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![2], -1), sv_check_test_le(&vec![-2], 1)], 1u32) }
 
 pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let s = log.split(sv_check_test_row(&vec![1], 0), sv_check_test_row(&vec![-1], ge_constant));
@@ -432,7 +435,7 @@ pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
 }
 
 pub(crate) fn sv_check_test_single(query: &SvQuery, steps: Vec<SvStep>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() });
     log.steps = steps;
     log
 }
@@ -464,6 +467,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("extension on a column in use", &sv_check_test_parity(), &sv_check_test_parity_log(2, 2, 1u32))));
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas over a denominator of zero", &sv_check_test_bounds(), &sv_check_test_farkas_log(1, 0, vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)])))); __nikaia_value };
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas leaving a literal out of its clause", &sv_check_test_bounds(), &sv_check_test_farkas_log(1, 1, vec![sv_check_test_neg(0u32)])))); __nikaia_value };
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas leaving out a literal its rounded entry assumed", &sv_check_test_parity(), &sv_check_test_parity_lits(2, 2, 2u32, vec![sv_check_test_neg(1u32)])))); __nikaia_value };
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas without a contradiction", &sv_check_test_fits(), &sv_check_test_lemma_log(&sv_check_test_fits(), vec![1, 1], 1)))); __nikaia_value };
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas leaving a variable", &sv_check_test_equal(), &sv_check_test_lemma_log(&sv_check_test_equal(), vec![1, 1], 1)))); __nikaia_value };
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("farkas on a negated equality", &sv_check_test_equal(), &sv_check_test_single(&sv_check_test_equal(), vec![SvStep::Farkas(vec![], vec![SvSrc::Lit(sv_check_test_neg(0u32))], vec![1], 1)])))); __nikaia_value };
@@ -474,7 +478,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     let big: i64 = 4611686018427387904i64;
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("a combination leaving i64", &sv_check_test_bounds(), &sv_check_test_single(&sv_check_test_bounds(), vec![SvStep::Combine(vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(0u32))], vec![big, big])])))); __nikaia_value };
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("a log without the empty clause", &sv_check_test_bounds(), &sv_check_test_single(&sv_check_test_bounds(), vec![SvStep::Input(0), SvStep::Input(1)])))); __nikaia_value };
-    let expected = vec!["== rejected", "negative multiplier on an inequality: rejected at step 2: farkas: multiplier -1 of source 0 is negative on an inequality", "missing hint: rejected at step 6: learn: the hints end without a conflict", "split leaving out an alternative: rejected at step 2: split: the split leaves out an alternative: its sides add up to 2, not 1", "split with overlapping sides: rejected at step 2: split: the split's sides overlap; it is not L <= k or L >= k + 1", "rounding by zero: rejected at step 7: round: a rounding by zero", "rounding by an indivisible divisor: rejected at step 7: round: the coefficient -2 of x1 is not divisible by 3", "extension by zero: rejected at step 2: extend: divisor 0 is not positive", "extension on a column in use: rejected at step 2: extend: x1 is not the next fresh column x2", "farkas over a denominator of zero: rejected at step 2: farkas: denominator 0 is not positive", "farkas leaving a literal out of its clause: rejected at step 2: farkas: the clause leaves out the negation of literal 2", "farkas without a contradiction: rejected at step 2: farkas: the combination ends in -1 <= 0, no contradiction", "farkas leaving a variable: rejected at step 2: farkas: x0 is left in the combination", "farkas on a negated equality: rejected at step 0: farkas: literal 1 negates an equality, which is no bound", "input the query does not hold: rejected at step 0: input: the query has no clause 2", "learn without hints: rejected at step 1: learn: the hints end without a conflict", "hint that is a bound: rejected at step 1: learn: hint 0 is no clause", "deleting twice: rejected at step 2: delete: entry 0 is already deleted", "a combination leaving i64: rejected at step 0: combine: overflow", "a log without the empty clause: rejected at step 2: the log ends without the empty clause"];
+    let expected = vec!["== rejected", "negative multiplier on an inequality: rejected at step 2: farkas: multiplier -1 of source 0 is negative on an inequality", "missing hint: rejected at step 6: learn: the hints end without a conflict", "split leaving out an alternative: rejected at step 2: split: the split leaves out an alternative: its sides add up to 2, not 1", "split with overlapping sides: rejected at step 2: split: the split's sides overlap; it is not L <= k or L >= k + 1", "rounding by zero: rejected at step 7: round: a rounding by zero", "rounding by an indivisible divisor: rejected at step 7: round: the coefficient -2 of x1 is not divisible by 3", "extension by zero: rejected at step 2: extend: divisor 0 is not positive", "extension on a column in use: rejected at step 2: extend: x1 is not the next fresh column x2", "farkas over a denominator of zero: rejected at step 2: farkas: denominator 0 is not positive", "farkas leaving a literal out of its clause: rejected at step 2: farkas: the clause leaves out the negation of literal 2", "farkas leaving out a literal its rounded entry assumed: rejected at step 8: farkas: the clause leaves out the negation of literal 0", "farkas without a contradiction: rejected at step 2: farkas: the combination ends in -1 <= 0, no contradiction", "farkas leaving a variable: rejected at step 2: farkas: x0 is left in the combination", "farkas on a negated equality: rejected at step 0: farkas: literal 1 negates an equality, which is no bound", "input the query does not hold: rejected at step 0: input: the query has no clause 2", "learn without hints: rejected at step 1: learn: the hints end without a conflict", "hint that is a bound: rejected at step 1: learn: hint 0 is no clause", "deleting twice: rejected at step 2: delete: entry 0 is already deleted", "a combination leaving i64: rejected at step 0: combine: overflow", "a log without the empty clause: rejected at step 2: the log ends without the empty clause"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
     Ok(())
 }
