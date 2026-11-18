@@ -536,6 +536,7 @@ fn bounds_report_roots(stmt: ref Stmt) -> Vec[ref Expr] {
 		Stmt::Break => {},
 		Stmt::Continue => {},
 		Stmt::Expr(inner) => out.push(inner),
+		Stmt::Emit(inner) => out.push(inner),
 	}
 	return out
 }

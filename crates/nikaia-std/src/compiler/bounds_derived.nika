@@ -1259,6 +1259,7 @@ fn derived_statement(
 		},
 		Stmt::Comptime { value, .. } => derived_expr(value, at, words, scan),
 		Stmt::Expr(value) => derived_expr(value, at, words, scan),
+		Stmt::Emit(value) => derived_expr(value, at, words, scan),
 		Stmt::Assign { target, value, .. } => {
 			derived_expr(target, at, words, scan)
 			derived_expr(value, at, words, scan)

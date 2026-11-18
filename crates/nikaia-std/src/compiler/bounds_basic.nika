@@ -99,6 +99,7 @@ fn counted_statement(stmt: ref Stmt, mut over: Vec[CountedLoop], words: ref winn
             counted_maybe(value, over, words, out)
         },
         Stmt::Expr(value) => counted_expr(value, over, words, out),
+        Stmt::Emit(value) => counted_expr(value, over, words, out),
         Stmt::Break => {},
         Stmt::Continue => {},
     }

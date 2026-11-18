@@ -530,6 +530,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
         Stmt::Break => true,
         Stmt::Continue => true,
         Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        Stmt::Emit(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
     }
 }
 

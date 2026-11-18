@@ -895,6 +895,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 stores(unit, asked, value, span, own_buffer, here)
             }
             Stmt::Return(value) => handed_back_maybe(unit, asked, value, span, own_buffer, here),
+            Stmt::Emit(expr) => stores(unit, asked, expr, span, own_buffer, here),
             Stmt::Expr(expr) => {
                 if returning {
                     handed_back(unit, asked, expr, span, own_buffer, here)
@@ -1802,6 +1803,7 @@ fn statement_mentions(unit: ref Unit, asked: ref Asked, here: ref Here, stmt: re
         Stmt::Let { value, .. } => mentions(unit, asked, here, value),
         Stmt::Comptime { value, .. } => mentions(unit, asked, here, value),
         Stmt::Expr(expr) => mentions(unit, asked, here, expr),
+        Stmt::Emit(expr) => mentions(unit, asked, here, expr),
         Stmt::Return(value) => maybe_mentions(unit, asked, here, value),
         Stmt::Assign { target, value, .. } => mentions(unit, asked, here, target) || mentions(unit, asked, here, value),
         Stmt::For { iter, body, .. } => mentions(unit, asked, here, iter) || block_mentions(unit, asked, here, body),
@@ -2744,6 +2746,9 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
             Stmt::Return(value) => {
                 let reach = rsrc_maybe(unit, asked, here, known, own_buffer, value, flow)
                 rsrc_record(reach, flow)
+            }
+            Stmt::Emit(expr) => {
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow)
             }
             Stmt::Expr(expr) => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow)

@@ -1,0 +1,4 @@
+bounds in tests/a_builder_calling_its_method_in_a_loop_keeps_the_length_rule.nika: 1 indexes, 1 proved; 1 operations, 1 proved
+    20  self.b[i]  proved
+    31  i += 1     proved
+  derived  build_while: 0 <= n, proved at the calls on lines 45

@@ -39,6 +39,7 @@ fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
         Stmt::Break => {},
         Stmt::Continue => {},
         Stmt::Expr(inner) => out.extend(visited_in_expr(inner)),
+        Stmt::Emit(inner) => out.extend(visited_in_expr(inner)),
     }
     return out
 }

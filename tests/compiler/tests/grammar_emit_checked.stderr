@@ -1,0 +1,8 @@
+error[NK1102]: This `emit` hands over `String`, but the `@stream` entry's items are `Event`.
+   --> tests/grammar_emit_checked.nika:20:36
+    |
+ 20 | 	rule line = w:until(";") ";" -> { emit w.clone() }
+    |                                    ^^^^^^^^^^^^^^
+    |
+    = help: Make it an `Event`, or change the declaration to `String`.
+1 type error

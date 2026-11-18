@@ -465,4 +465,4 @@ pub mod term_text {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "ccadfbb8a3739afe54f32f86c566b575b535f0cdca8d30e7ab50dd7d32fd1e99";
+pub const LOWERED_DIGEST: &str = "500f13ae7983ed4904430e5c586a3bd7d139562ac46bce37ef577de666a2950f";

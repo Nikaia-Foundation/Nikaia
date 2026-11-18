@@ -55,6 +55,7 @@ fn statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, debug: 
         Stmt::Assign { .. } => out.push("[Nikaia Runtime] Assignment (Skipped)"),
         Stmt::Return(_) => out.push("[Nikaia Runtime] Return (Skipped)"),
         Stmt::Break => out.push("[Nikaia Runtime] Break (Skipped)"),
+        Stmt::Emit(_) => out.push("[Nikaia Runtime] Emit (Skipped)"),
         Stmt::Continue => out.push("[Nikaia Runtime] Continue (Skipped)"),
         Stmt::For { body, .. } => {
             // No iteration yet: the loop body is walked once so that calls
