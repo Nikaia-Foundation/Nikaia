@@ -5721,8 +5721,7 @@ pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_,
     if at < function.changes.len() as i64 && *unsafe { nikaia_std::proven::read(&function.changes, (at) as usize) } { return false; }
     if at < function.keeps.len() as i64 && *unsafe { nikaia_std::proven::read(&function.keeps, (at) as usize) } { return false; }
     let ty = (*unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }).clone();
-    if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
-    true
+    plain_string(ask.names, &ty) && !ty.is_nullable && !ty.is_view
 }
 
 pub(crate) fn param_arm_leaves(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {

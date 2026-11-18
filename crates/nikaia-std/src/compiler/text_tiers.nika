@@ -7984,10 +7984,7 @@ fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
         return false
     }
     let ty = function.params[at].clone()
-    if !plain_string(ask.names, ty) || ty.is_nullable || ty.is_view {
-        return false
-    }
-    return true
+    return plain_string(ask.names, ty) && !ty.is_nullable && !ty.is_view
 }
 
 /// The arms of a choice handed to a parameter that keeps its text that are a
