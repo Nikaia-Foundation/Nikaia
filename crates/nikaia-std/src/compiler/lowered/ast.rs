@@ -496,3 +496,25 @@ pub enum ConfigZone {
     Spread(winnow_grammar::Symbol),
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    if !(node_id::NodeId::numbered(1u32) == node_id::NodeId::numbered(2u32)) { nikaia_std::abort::assertion_failed("assert(node_id::NodeId::numbered(1) == node_id::NodeId::numbered(2))", None, &[("node_id::NodeId::numbered(1)", (&&nikaia_std::abort::Operand(&(node_id::NodeId::numbered(1u32)))).shown()), ("node_id::NodeId::numbered(2)", (&&nikaia_std::abort::Operand(&(node_id::NodeId::numbered(2u32)))).shown()), ]) };
+    if !(node_id::NodeId::numbered(1u32).get() != node_id::NodeId::numbered(2u32).get()) { nikaia_std::abort::assertion_failed("assert(node_id::NodeId::numbered(1).get() != node_id::NodeId::numbered(2).get())", None, &[("node_id::NodeId::numbered(1).get()", (&&nikaia_std::abort::Operand(&(node_id::NodeId::numbered(1u32).get()))).shown()), ("node_id::NodeId::numbered(2).get()", (&&nikaia_std::abort::Operand(&(node_id::NodeId::numbered(2u32).get()))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let first = node_id::NodeId::fresh().get();
+    let second = node_id::NodeId::fresh().get();
+    if !(first >= 2147483648u32) { nikaia_std::abort::assertion_failed("assert(first >= 2147483648)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ]) };
+    if !(first != second) { nikaia_std::abort::assertion_failed("assert(first != second)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ("second", (&&nikaia_std::abort::Operand(&(second))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn ast_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("ast::two_node_ids_are_equal_and_their_numbers_are_not", __nikaia_test_0),
+        ("ast::a_fresh_node_id_is_new_every_time_and_above_the_parser_s", __nikaia_test_1),
+    ]
+}
