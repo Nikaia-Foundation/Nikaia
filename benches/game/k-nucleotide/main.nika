@@ -69,7 +69,7 @@ fn report_frequencies(dna: String, k: i64) throws {
 		total += n
 		rows.push((fragment, n))
 	}
-	rows.sort_by_key fn (row) { row.0 }
+	rows.sort_by_key fn (row) { row.0.clone() }
 	rows.sort_by_key fn (row) { -row.1 }
 	for row in rows {
 		let percent = (row.1 as f64) * 100.0 / (total as f64)
