@@ -15,7 +15,7 @@ pub(crate) enum EscapeRead {
 
 pub(crate) const HEX: &str = "0123456789abcdef";
 
-pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Option<NotAnEscape> {
+pub fn an_escape_nothing_names(literal: &str, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> Option<NotAnEscape> {
     let c: Vec<scalar> = nikaia_std::list::scalars(literal.chars());
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -23,7 +23,7 @@ pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<s
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, char_of) {
+        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &mut *char_of) {
             EscapeRead::Means { next, .. } => { at = next; },
             EscapeRead::Nothing { refused } => { return Some(refused); },
         }
@@ -31,7 +31,7 @@ pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<s
     None
 }
 
-pub fn decoded(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Option<String> {
+pub fn decoded(literal: &str, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> Option<String> {
     let c: Vec<scalar> = nikaia_std::list::scalars(literal.chars());
     let mut out: String = String::from("");
     let mut at: i64 = 0;
@@ -41,7 +41,7 @@ pub fn decoded(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Optio
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, char_of) {
+        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &mut *char_of) {
             EscapeRead::Means { value, next } => {
                 out.push(value);
                 at = next;
@@ -64,13 +64,13 @@ pub fn as_a_literal(text: &str) -> String {
     out
 }
 
-pub(crate) fn one_escape(c: &[scalar], at: i64, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
+pub(crate) fn one_escape(c: &[scalar], at: i64, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> EscapeRead {
     let mut written: String = String::from("\\");
     if at >= c.len() as i64 { return not_an_escape(&written, "a `\\` at the end of a literal escapes nothing"); }
     let first = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
     written.push(first);
-    if first == 'x' { return a_byte(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, char_of); }
-    if first == 'u' { return a_character(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, char_of); }
+    if first == 'x' { return a_byte(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, &mut *char_of); }
+    if first == 'u' { return a_character(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, &mut *char_of); }
     let value = match named_escape(first) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, "no escape starts with that character") };
     EscapeRead::Means { value, next: unsafe { nikaia_std::proven::add::<i64>(at, 1) } }
 }
@@ -87,7 +87,7 @@ pub(crate) fn a_high_byte(literal: &str) -> Option<i64> {
     Some(value)
 }
 
-pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
+pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> EscapeRead {
     let mut written = nikaia_std::block::Text::from(so_far.to_string());
     let mut end = from;
     while end < unsafe { nikaia_std::proven::add::<i64>(from, 2) } && end < c.len() as i64 {
@@ -104,7 +104,7 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
     EscapeRead::Means { value: byte, next: end }
 }
 
-pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
+pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> EscapeRead {
     let mut written = nikaia_std::block::Text::from(so_far.to_string());
     if from >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } != '{' { return not_an_escape(&written, "`\\u` takes its digits in braces, as `\\u{1F600}`"); }
     written.push('{');

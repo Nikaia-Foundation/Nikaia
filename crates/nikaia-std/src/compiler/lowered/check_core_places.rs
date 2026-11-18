@@ -382,7 +382,7 @@ pub(crate) fn check_core_places_code_into<H: CheckHost>(state: &CheckState, worl
     match v {
         Expr::Closure { body, .. } => {
             stored.free.extend(host.free_calls(body));
-            let thrown = thrown_by(body, world.words, &|literal| { host.literal_holes(literal) }, &|_| { Contribution { call: None, given: vec![], errors: vec![], fatal: vec![], result: None } });
+            let thrown = thrown_by(body, world.words, &mut |literal| { host.literal_holes(literal) }, &mut |_| { Contribution { call: None, given: vec![], errors: vec![], fatal: vec![], result: None } });
             stored.thrown.extend(thrown.direct.iter().cloned());
         },
         Expr::Variable(named, _) => {
@@ -510,12 +510,12 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
         state.facts.nullable_fields.insert((id_of(expr) as i64, nikaia_std::block::Text::from(field.to_string())), wrap);
         if views_into_nullable_text(&found, &want) {
             state.flow.field_either = either_field(&world.here, name, field);
-            state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+            state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &mut |was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
         }
         return true;
     }
     state.flow.field_either = either_field(&world.here, name, field);
-    state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+    state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &mut |was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
     true
 }
 
@@ -701,7 +701,7 @@ pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckStat
     }
     let pushed = state.findings.len() as i64;
     let waiting = state.slots_waiting(span);
-    state.expect_type(world, &given, &want, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+    state.expect_type(world, &given, &want, span, "field", &mut |was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
     state.findings_moved(span, &said, pushed, &waiting);
     let how: Option<FactWrap> = check_widened_slot(state, world, host, &given, &want, (init.value).as_ref(), span);
     if how.is_some() {

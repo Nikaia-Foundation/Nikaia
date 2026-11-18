@@ -462,7 +462,7 @@ impl EmitState {
                             let bound = nikaia_std::block::Text::from(nikaia_std::index::or(spelled.strip_prefix("impl "), || "").to_string());
                             spelled = format!("dyn {}", bound);
                         }
-                        if runs && (*ty.code).is_some() && !ty.is_nullable && reference.starts_with('&') && !reference.contains("mut") && self.facts.changing_code.contains(&format!("{}::{}", key, pname)) {
+                        if runs && (*ty.code).is_some() && !ty.is_nullable && reference.starts_with('&') && !reference.contains("mut") && !self.emit_fn_code_at_once(&key, &pname) {
                             spelled = emit_fn_code_that_changes(&spelled);
                             reference = format!("{}mut ", reference);
                         }
@@ -896,6 +896,14 @@ pub(crate) fn emit_holds_a_ref_of_a_type(world: &EmitWorld<'_, '_, '_, '_>, ty: 
     if ty.is_view && emit_text(world, ty.name) != "String" { return true; }
     for inner in ty.generics.iter() { if emit_holds_a_ref_of_a_type(world, inner) { return true; } }
     false
+}
+
+impl EmitState {
+    pub(crate) fn emit_fn_code_at_once(&self, key: &str, param: &str) -> bool {
+        if self.facts.code_at_once.contains(&format!("{}::{}", key, param)) { return true; }
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        nikaia_std::list::contains(&contract.at_once, &param)
+    }
 }
 
 pub(crate) fn emit_fn_code_that_changes(spelled: &str) -> String {

@@ -239,19 +239,19 @@ pub fn prove(
         claims,
         comptimes,
         &runner,
-        &crate::proofs::asked_so_far,
-        &crate::proofs::invariants_here,
-        &crate::proofs::ask_again_from,
-        &crate::proofs::record_invariants,
-        &searched,
-        &counted,
-        &answer_of,
-        &model_of,
-        &|name| crate::emit::escaped(name).to_text(),
-        &|e| crate::emit::literal_expressions(parsed, e),
-        &|name| parsed.unaliased(name),
-        &|e| crate::check::written(parsed, e),
-        &condition_nodes,
+        &mut crate::proofs::asked_so_far,
+        &mut crate::proofs::invariants_here,
+        &mut crate::proofs::ask_again_from,
+        &mut crate::proofs::record_invariants,
+        &mut &searched,
+        &mut &counted,
+        &mut answer_of,
+        &mut model_of,
+        &mut |name| crate::emit::escaped(name).to_text(),
+        &mut |e| crate::emit::literal_expressions(parsed, e),
+        &mut |name| parsed.unaliased(name),
+        &mut |e| crate::check::written(parsed, e),
+        &mut condition_nodes,
     );
     finished(walked)
 }
@@ -295,8 +295,10 @@ pub fn changed_contracts(
         now,
         committed,
         keepers,
-        &|key| mine(key),
-        &|from, to, names| prove_run::prove_implies(from, to, names, &answer_of, &condition_nodes),
+        &mut |key| mine(key),
+        &mut |from, to, names| {
+            prove_run::prove_implies(from, to, names, &mut answer_of, &mut condition_nodes)
+        },
     )
 }
 
@@ -316,8 +318,8 @@ fn condition(arena: &mut TermArena, text: &str, names: &BTreeSet<String>) -> Opt
     prove_terms::claim_term(
         args.first()?,
         &parsed.interner,
-        &|name| names.contains(name),
-        &|_| None,
+        &mut |name| names.contains(name),
+        &mut |_| None,
         &mut arena.nodes,
     )
 }
@@ -368,7 +370,7 @@ pub fn outside_of(
         library,
         method_callees,
         field_owners,
-        &|e| crate::emit::literal_expressions(parsed, e),
+        &mut |e| crate::emit::literal_expressions(parsed, e),
     )
 }
 

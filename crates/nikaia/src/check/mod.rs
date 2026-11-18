@@ -672,7 +672,7 @@ pub use nikaia_std::compiler::check_walked::CheckMultiLock as MultiLock;
 /// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
 /// refused (`NK1212`) every literal of several that composes to more than one.
 pub fn char_literal(written: &str) -> String {
-    nikaia_std::compiler::check_glue::check_char_literal(written, &crate::build_time::char_of)
+    nikaia_std::compiler::check_glue::check_char_literal(written, &mut crate::build_time::char_of)
 }
 
 pub fn value_node(expr: &Expr) -> i64 {
@@ -772,7 +772,7 @@ pub fn check_keep_marks(
             library: &library_methods,
         },
         &checked.methods,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
     );
     checked.findings.extend(found);
 }

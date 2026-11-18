@@ -123,7 +123,7 @@ pub(crate) fn keeping_method_key(ledger: &Ledger, methods: &MethodIndex, target:
     found
 }
 
-pub fn written_callee(names: &winnow_grammar::InternerContext, func: &Expr, unaliased: &impl Fn(&str) -> String) -> Option<String> {
+pub fn written_callee(names: &winnow_grammar::InternerContext, func: &Expr, unaliased: &mut impl FnMut(&str) -> String) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(names.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(unaliased(&joined_segments(segments, names))),

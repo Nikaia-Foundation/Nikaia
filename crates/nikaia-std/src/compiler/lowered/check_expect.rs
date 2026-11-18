@@ -84,7 +84,7 @@ impl CheckState {
     pub(crate) fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec![String::from("An `f32` holds finite values up to about 3.4e38 either side of zero.")], Some(String::from("Keep it an `f64`, or write a number within the `f32` range.")))); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
@@ -173,7 +173,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub(crate) fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             if check_float_literal_fits(given, want) {
@@ -183,7 +183,7 @@ impl CheckState {
             self.number_asked(world, given, want, span, true);
             let asked = integer_named(&value_of_a_copy(&want.unseen()));
             if asked.is_some() && shifts_literals(given) { self.a_shift_asked_as(world, given, &match asked { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
-            if self.an_open_number_where_none_fits(world, found, want, given, span, what, message) { return; }
+            if self.an_open_number_where_none_fits(world, found, want, given, span, what, &mut *message) { return; }
         }
         if self.a_name_in_text(world, want, value, span) { return; }
         let mut either = false;
@@ -207,7 +207,7 @@ impl CheckState {
         if nullable { target = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         if self.a_view_copied_out(world, found, want, value) { return; }
         let before = self.findings.len() as i64;
-        self.expect_type(world, present, &target, span, what, message);
+        self.expect_type(world, present, &target, span, what, &mut *message);
         self.said_as_declared(present, value, before);
         if (self.findings.len() as i64) > before { self.a_view_kept_beside(world, present, &target, value, keeper); }
     }

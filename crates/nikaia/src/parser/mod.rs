@@ -474,7 +474,7 @@ impl Parsed {
                     func,
                     arity as i64,
                     receiver,
-                    &|text| self.interner.intern_string(text),
+                    &mut |text| self.interner.intern_string(text),
                 )
             })
             .clone()
@@ -517,7 +517,7 @@ impl Parsed {
         // The choosing is `tools/parsed_tree.nika`'s.
         self.with_items(nikaia_std::compiler::parsed_tree::parsed_kept_items(
             &self.program.items,
-            &keep,
+            &mut &keep,
         ))
     }
 
@@ -632,7 +632,7 @@ pub fn parse_expression_from(
             let finding = nikaia_std::compiler::parse_findings::parse_findings_parse_error(
                 &failure_of(&e, input),
                 input,
-                &stops_at_char,
+                &mut stops_at_char,
             );
             let said = std::iter::once(&finding.message)
                 .chain(&finding.help)
@@ -766,7 +766,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             let finding = nikaia_std::compiler::parse_findings::parse_findings_failure(
                 &failure_of(&e, input),
                 input,
-                &stops_at_char,
+                &mut stops_at_char,
             );
             refuse_parsing(finding, input)
         })?;
@@ -873,7 +873,7 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
         items,
         &parsed.expr_spans,
         &interner,
-        &|text| interner.intern_string(text),
+        &mut |text| interner.intern_string(text),
     );
     parsed.program.items = expanded.items;
     match expanded.refused.into_iter().next() {

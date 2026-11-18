@@ -67,14 +67,14 @@ pub struct SourceCall {
     pub at: i64,
 }
 
-pub fn source_calls(program: &Program, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<SourceCall> {
+pub fn source_calls(program: &Program, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Vec<SourceCall> {
     let mut out: Vec<SourceCall> = vec![];
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                sc_block(&key, body, names, library, callees, holes_of, &mut out);
+                sc_block(&key, body, names, library, callees, &mut *holes_of, &mut out);
             },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
@@ -83,7 +83,7 @@ pub fn source_calls(program: &Program, names: &winnow_grammar::InternerContext, 
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            sc_block(&key, body, names, library, callees, holes_of, &mut out);
+                            sc_block(&key, body, names, library, callees, &mut *holes_of, &mut out);
                         },
                         _ => { },
                     }
@@ -95,16 +95,16 @@ pub fn source_calls(program: &Program, names: &winnow_grammar::InternerContext, 
     out
 }
 
-pub(crate) fn sc_block(function: &str, block: &Block, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
+pub(crate) fn sc_block(function: &str, block: &Block, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
     for stmt in block.stmts.iter() {
         let at = stmt.span.start as i64;
-        for expr in check_visit_stmt(&stmt.node) { sc_expr(function, expr, at, names, library, callees, &holes_of, out); }
-        for inner in check_visit_stmt_blocks(&stmt.node) { sc_block(function, inner, names, library, callees, holes_of, out); }
+        for expr in check_visit_stmt(&stmt.node) { sc_expr(function, expr, at, names, library, callees, &mut &mut *holes_of, out); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { sc_block(function, inner, names, library, callees, &mut &mut *holes_of, out); }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn sc_expr(function: &str, expr: &Expr, at: i64, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
+pub(crate) fn sc_expr(function: &str, expr: &Expr, at: i64, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
     match expr {
         Expr::Call { func, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -125,11 +125,11 @@ pub(crate) fn sc_expr(function: &str, expr: &Expr, at: i64, names: &winnow_gramm
         },
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
-            for inner in check_visit_expr_blocks(body) { sc_block(function, inner, names, library, callees, &holes_of, out); }
+            for inner in check_visit_expr_blocks(body) { sc_block(function, inner, names, library, callees, &mut &mut *holes_of, out); }
         },
         _ => { },
     }
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { for inner in check_visit_preorder(&hole) { sc_expr(function, inner, at, names, library, callees, holes_of, out); } } }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { for inner in check_visit_preorder(&hole) { sc_expr(function, inner, at, names, library, callees, &mut &mut *holes_of, out); } } }
 }
 
 pub(crate) fn sc_call(function: &str, source: &str, method: bool, config: &[ConfigArg], at: i64, names: &winnow_grammar::InternerContext) -> SourceCall { SourceCall { function: nikaia_std::block::Text::from(function.to_string()), source: nikaia_std::block::Text::from(source.to_string()), method, marked: says_trusted(names, config), at } }

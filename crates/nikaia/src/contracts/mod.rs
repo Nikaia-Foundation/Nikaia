@@ -698,7 +698,7 @@ fn infer_package_with(
 /// A value as the literal both languages spell it the same way, where it has
 /// one.
 pub fn literal_of(value: &crate::build_time::Value) -> Option<String> {
-    nikaia_std::compiler::ledger_items::literal_of(value, &|f: f64| format!("{f:?}"))
+    nikaia_std::compiler::ledger_items::literal_of(value, &mut |f: f64| format!("{f:?}"))
 }
 
 /// What `ledger_infer_package` asks of the compiler (`tools/ledger_items.nika`,
@@ -822,6 +822,8 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
             equates: BTreeSet::new(),
             hashes: BTreeSet::new(),
             copies: BTreeSet::new(),
+            code_at_once: BTreeSet::new(),
+            code_hands: BTreeSet::new(),
         };
         for checked in self.checked.borrow().iter() {
             derives
@@ -832,6 +834,12 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
                 .extend(checked.facts.compares_totally.iter().cloned());
             derives.hashes.extend(checked.facts.hashes.iter().cloned());
             derives.copies.extend(checked.facts.copies.iter().cloned());
+            derives
+                .code_at_once
+                .extend(checked.facts.code_at_once.iter().cloned());
+            derives
+                .code_hands
+                .extend(checked.facts.code_hands.iter().cloned());
         }
         derives
     }

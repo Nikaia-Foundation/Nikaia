@@ -58,7 +58,7 @@ pub(crate) struct GrammarTypesWork {
     pub(crate) path: Vec<String>,
 }
 
-pub(crate) fn grammar_types_expand(items: &mut Vec<Spanned<Item>>, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> GrammarTypesExpanded {
+pub(crate) fn grammar_types_expand(items: &mut Vec<Spanned<Item>>, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> GrammarTypesExpanded {
     let none: Vec<String> = vec![];
     let mut work = GrammarTypesWork { queue: vec![], refused: vec![], shapes: collections::BTreeMap::new(), traits: collections::BTreeSet::new(), impls: collections::BTreeSet::new(), structs: collections::BTreeMap::new(), from: -1, path: none };
     for item in items.iter() {
@@ -90,7 +90,7 @@ pub(crate) fn grammar_types_expand(items: &mut Vec<Spanned<Item>>, calls: &[Gram
     for item in items.drain(..) {
         let mut kept = item.clone();
         match item.node {
-            Item::Grammar(ref def) => { kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern, &mut work)); },
+            Item::Grammar(ref def) => { kept.node = Item::Grammar(grammar_types_def(def, calls, words, &mut *intern, &mut work)); },
             _ => { },
         }
         out.push(kept);
@@ -148,7 +148,7 @@ pub(crate) fn grammar_types_called(words: &winnow_grammar::InternerContext, rule
     format!("{}[{}]", rule, nikaia_std::block::Text::from(spelled.join(", ")))
 }
 
-pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> GrammarDef {
+pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> GrammarDef {
     let mut generic: collections::BTreeMap<String, GrammarRule> = collections::BTreeMap::new();
     for rule in def.rules.iter() { if !rule.generics.is_empty() { generic.insert(format!("{}", words.resolve(rule.name)), rule.clone()); } }
     if generic.is_empty() && !grammar_types_wanted(def) { return def.clone(); }
@@ -168,7 +168,7 @@ pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], wo
         if rule.generics.is_empty() {
             work.from = -1;
             work.path = vec![format!("{}", words.resolve(rule.name))];
-            rules.push(grammar_types_rule(rule, &none, rule.name, &generic, owner, words, intern, work));
+            rules.push(grammar_types_rule(rule, &none, rule.name, &generic, owner, words, &mut *intern, work));
         }
     }
     let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -196,7 +196,7 @@ pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], wo
             }
             index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         }
-        rules.push(grammar_types_rule(&rule, &bound, intern(&copy), &generic, owner, words, intern, work));
+        rules.push(grammar_types_rule(&rule, &bound, intern(&copy), &generic, owner, words, &mut *intern, work));
     }
     let mut expanded = def.clone();
     expanded.rules = rules;
@@ -249,7 +249,7 @@ pub(crate) fn grammar_types_parts(ty: &Type, kind: &str) -> Vec<Type> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn grammar_types_rule(rule: &GrammarRule, bound: &collections::BTreeMap<String, Type>, name: winnow_grammar::Symbol, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> GrammarRule {
+pub(crate) fn grammar_types_rule(rule: &GrammarRule, bound: &collections::BTreeMap<String, Type>, name: winnow_grammar::Symbol, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> GrammarRule {
     let mut copy = rule.clone();
     copy.name = name;
     copy.generics = vec![];
@@ -274,25 +274,25 @@ pub(crate) fn grammar_types_rule(rule: &GrammarRule, bound: &collections::BTreeM
         config.push(c);
     }
     copy.config = config;
-    copy.alts = grammar_types_alts(&rule.alts, bound, &format!("{}", words.resolve(rule.name)), generic, owner, words, intern, work);
+    copy.alts = grammar_types_alts(&rule.alts, bound, &format!("{}", words.resolve(rule.name)), generic, owner, words, &mut *intern, work);
     copy
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn grammar_types_alts(alts: &[GrammarAlt], bound: &collections::BTreeMap<String, Type>, rule: &str, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarAlt> {
+pub(crate) fn grammar_types_alts(alts: &[GrammarAlt], bound: &collections::BTreeMap<String, Type>, rule: &str, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarAlt> {
     let mut out: Vec<GrammarAlt> = vec![];
     for alt in alts.iter() {
         match &alt.pattern.node {
-            Pattern::Choose { value, arms } => { for one in grammar_types_choose(value, arms, &alt.pattern.span, bound, rule, generic, owner, words, &intern, work) { out.push(one); } },
+            Pattern::Choose { value, arms } => { for one in grammar_types_choose(value, arms, &alt.pattern.span, bound, rule, generic, owner, words, &mut &mut *intern, work) { out.push(one); } },
             _ => {
                 let mut a = alt.clone();
-                a.pattern = grammar_types_pattern(&alt.pattern, bound, generic, owner, words, &intern, work);
+                a.pattern = grammar_types_pattern(&alt.pattern, bound, generic, owner, words, &mut &mut *intern, work);
                 if !bound.is_empty() && alt.action.is_some() {
                     let block: Block = nikaia_std::index::or(match alt.action.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || Block { stmts: vec![] });
-                    a.action = Some(grammar_types_put_block(&block, bound, words, &intern));
+                    a.action = Some(grammar_types_put_block(&block, bound, words, &mut &mut *intern));
                 }
                 out.push(a);
             },
@@ -302,7 +302,7 @@ pub(crate) fn grammar_types_alts(alts: &[GrammarAlt], bound: &collections::BTree
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Span, bound: &collections::BTreeMap<String, Type>, rule: &str, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarAlt> {
+pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Span, bound: &collections::BTreeMap<String, Type>, rule: &str, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarAlt> {
     let none: Vec<GrammarAlt> = vec![];
     let mut written: String = String::from("this value");
     let mut subject: String = String::from("");
@@ -355,7 +355,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
             grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: {}", entry, spelled, why), format!("The arm `{}` of the `match` in `{}` refuses it with `refuse(…)` (ADR-grammar-2 D6){}.", named, rule, reached), String::from("Call it with a type the grammar reads."));
             return none;
         }
-        return grammar_types_alts(&arm.alts, &inner, rule, generic, owner, words, &intern, work);
+        return grammar_types_alts(&arm.alts, &inner, rule, generic, owner, words, &mut &mut *intern, work);
     }
     grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: no arm of the `match` in `{}` takes `{}`.", entry, spelled, rule, kind), format!("`{}` chooses its pattern by `{}` (ADR-grammar-2 D6){}.", rule, written, reached), format!("Add an arm for `{}` to the `match` in `{}`, or call it with a type an arm takes.", kind, rule));
     none
@@ -377,22 +377,22 @@ pub(crate) fn grammar_types_refused_why(alts: &[GrammarAlt], words: &winnow_gram
     None
 }
 
-pub(crate) fn grammar_types_put_expr(expr: &Expr, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Expr {
+pub(crate) fn grammar_types_put_expr(expr: &Expr, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Expr {
     if bound.is_empty() { return expr.clone(); }
     let mut copy = expr.clone();
     let mut walk = grammar_types_putting(bound);
-    grammar_types_walk_expr(&mut copy, words, intern, &mut walk);
+    grammar_types_walk_expr(&mut copy, words, &mut *intern, &mut walk);
     copy
 }
 
-pub(crate) fn grammar_types_put_exprs(exprs: &[Expr], bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Vec<Expr> {
+pub(crate) fn grammar_types_put_exprs(exprs: &[Expr], bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
-    for expr in exprs.iter() { out.push(grammar_types_put_expr(expr, bound, words, intern)); }
+    for expr in exprs.iter() { out.push(grammar_types_put_expr(expr, bound, words, &mut *intern)); }
     out
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol, span: &Span, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarMember> {
+pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol, span: &Span, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarMember> {
     let mut out: Vec<GrammarMember> = vec![];
     let declared: Option<(Vec<GenericParam>, Vec<FieldDef>)> = match work.structs.get(words.resolve(built.name)) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -445,29 +445,29 @@ pub(crate) fn grammar_types_put(ty: &Type, bound: &collections::BTreeMap<String,
     copy
 }
 
-pub(crate) fn grammar_types_patterns(parts: &[Spanned<Pattern>], bound: &collections::BTreeMap<String, Type>, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<Spanned<Pattern>> {
+pub(crate) fn grammar_types_patterns(parts: &[Spanned<Pattern>], bound: &collections::BTreeMap<String, Type>, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<Spanned<Pattern>> {
     let mut out: Vec<Spanned<Pattern>> = vec![];
-    for part in parts.iter() { out.push(grammar_types_pattern(part, bound, generic, owner, words, &intern, work)); }
+    for part in parts.iter() { out.push(grammar_types_pattern(part, bound, generic, owner, words, &mut &mut *intern, work)); }
     out
 }
 
-pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collections::BTreeMap<String, Type>, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Spanned<Pattern> {
+pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collections::BTreeMap<String, Type>, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Spanned<Pattern> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let mut copy = pattern.clone();
     match &pattern.node {
-        Pattern::Seq(parts) => { copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, owner, words, &intern, work)); },
-        Pattern::Choice(parts) => { copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, owner, words, &intern, work)); },
+        Pattern::Seq(parts) => { copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, owner, words, &mut &mut *intern, work)); },
+        Pattern::Choice(parts) => { copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, owner, words, &mut &mut *intern, work)); },
         Pattern::Bind { name, pat } => {
             let pat = nikaia_std::boxed::open(pat); let name = *name;
-            copy.node = Pattern::Bind { name, pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, intern, work)) };
+            copy.node = Pattern::Bind { name, pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, &mut &mut *intern, work)) };
         },
         Pattern::Repeat { pat, rep } => {
             let pat = nikaia_std::boxed::open(pat);
-            copy.node = Pattern::Repeat { pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, intern, work)), rep: rep.clone() };
+            copy.node = Pattern::Repeat { pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, &mut &mut *intern, work)), rep: rep.clone() };
         },
         Pattern::Group(inner) => {
             let inner = nikaia_std::boxed::open(inner);
-            copy.node = Pattern::Group(std::boxed::Box::new(grammar_types_pattern(inner, bound, generic, owner, words, intern, work)));
+            copy.node = Pattern::Group(std::boxed::Box::new(grammar_types_pattern(inner, bound, generic, owner, words, &mut &mut *intern, work)));
         },
         Pattern::Counted { pat, low, high, comma } => {
             let pat = nikaia_std::boxed::open(pat); let comma = *comma;
@@ -477,12 +477,12 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }, || low.clone().into());
-                top = Some(grammar_types_put_expr(&given, bound, words, &intern));
+                top = Some(grammar_types_put_expr(&given, bound, words, &mut &mut *intern));
             }
-            copy.node = Pattern::Counted { pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, intern, work)), low: grammar_types_put_expr(low, bound, words, &intern), high: top, comma };
+            copy.node = Pattern::Counted { pat: std::boxed::Box::new(grammar_types_pattern(pat, bound, generic, owner, words, &mut &mut *intern, work)), low: grammar_types_put_expr(low, bound, words, &mut &mut *intern), high: top, comma };
         },
         Pattern::Guard { cond, expected } => {
-            copy.node = Pattern::Guard { cond: grammar_types_put_expr(cond, bound, words, &intern), expected: match expected {
+            copy.node = Pattern::Guard { cond: grammar_types_put_expr(cond, bound, words, &mut &mut *intern), expected: match expected {
                 Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             } };
@@ -490,23 +490,23 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
         Pattern::Call { name, args, config } => {
             let name = *name;
             let mut config2: Vec<ConfigArg> = vec![];
-            for one in config.iter() { config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(&one.value, bound, words, &intern) }); }
-            copy.node = Pattern::Call { name, args: grammar_types_put_exprs(args, bound, words, &intern), config: config2 };
+            for one in config.iter() { config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(&one.value, bound, words, &mut &mut *intern) }); }
+            copy.node = Pattern::Call { name, args: grammar_types_put_exprs(args, bound, words, &mut &mut *intern), config: config2 };
         },
         Pattern::Choose { .. } => { grammar_types_refuse(work, "NK1310", Some(pattern.span.clone()), String::from("A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern."), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2)."), String::from("Give the `match` a rule of its own, and call that rule here.")); },
         Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
             let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let on_null = *on_null; let on_unknown = *on_unknown; let value = *value;
             let built = grammar_types_put(ty, bound, words);
-            let key2 = grammar_types_pattern(key, bound, generic, owner, words, intern, work);
-            let sep2 = grammar_types_pattern(sep, bound, generic, owner, words, intern, work);
-            let members = grammar_types_members(&built, value, &pattern.span, generic, owner, words, &intern, work);
+            let key2 = grammar_types_pattern(key, bound, generic, owner, words, &mut &mut *intern, work);
+            let sep2 = grammar_types_pattern(sep, bound, generic, owner, words, &mut &mut *intern, work);
+            let members = grammar_types_members(&built, value, &pattern.span, generic, owner, words, &mut &mut *intern, work);
             copy.node = Pattern::Members { ty: built, key: std::boxed::Box::new(key2), value, sep: std::boxed::Box::new(sep2), on_null, on_unknown, fields: members };
         },
         Pattern::Ref { name, generics, args } => {
             let name = *name;
             let mut types: Vec<Type> = vec![];
             for ty in generics.iter() { types.push(grammar_types_put(ty, bound, words)); }
-            let parts = grammar_types_patterns(args, bound, generic, owner, words, &intern, work);
+            let parts = grammar_types_patterns(args, bound, generic, owner, words, &mut &mut *intern, work);
             let called = words.resolve(name);
             if generic.contains_key(called) && !types.is_empty() {
                 let copied = __keep_frame.put(grammar_types_copy_name(words, called, &types));
@@ -549,11 +549,11 @@ pub struct GrammarTypesAsked {
     pub callee: String,
 }
 
-pub(crate) fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
+pub(crate) fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
-                Expr::Path(segments, _) => return grammar_types_asked_of(segments, index, generic, words, intern),
+                Expr::Path(segments, _) => return grammar_types_asked_of(segments, index, generic, words, &mut *intern),
                 _ => return None,
             } },
             _ => return None,
@@ -562,11 +562,11 @@ pub(crate) fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(
     }
 }
 
-pub(crate) fn grammar_types_asked_of(segments: &[winnow_grammar::Symbol], index: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
+pub(crate) fn grammar_types_asked_of(segments: &[winnow_grammar::Symbol], index: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
     if segments.len() != 2 || !generic.contains(&(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) })) { return None; }
     let owner = *unsafe { nikaia_std::proven::read(&segments, (0) as usize) };
     let rule = *unsafe { nikaia_std::proven::read(&segments, (1) as usize) };
-    let bracket = grammar_types_bracket(index, words, intern);
+    let bracket = grammar_types_bracket(index, words, &mut *intern);
     match bracket.value {
         None => { },
         Some(value) => {
@@ -586,17 +586,17 @@ pub(crate) struct GrammarTypesBracket {
     pub(crate) value: Option<u32>,
 }
 
-pub(crate) fn grammar_types_bracket(index: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> GrammarTypesBracket {
+pub(crate) fn grammar_types_bracket(index: &Expr, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> GrammarTypesBracket {
     let mut out = GrammarTypesBracket { types: vec![], value: None };
     match index {
-        Expr::Tuple(parts, _) => { for part in parts.iter() { if !grammar_types_bracket_part(part, words, &intern, &mut out) { return out; } } },
-        _ => { grammar_types_bracket_part(index, words, &intern, &mut out); },
+        Expr::Tuple(parts, _) => { for part in parts.iter() { if !grammar_types_bracket_part(part, words, &mut &mut *intern, &mut out) { return out; } } },
+        _ => { grammar_types_bracket_part(index, words, &mut &mut *intern, &mut out); },
     }
     out
 }
 
-pub(crate) fn grammar_types_bracket_part(part: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, out: &mut GrammarTypesBracket) -> bool {
-    match grammar_types_written(part, words, &intern) {
+pub(crate) fn grammar_types_bracket_part(part: &Expr, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, out: &mut GrammarTypesBracket) -> bool {
+    match grammar_types_written(part, words, &mut &mut *intern) {
         None => {
             out.value = Some(id_of(part));
             return false;
@@ -608,7 +608,7 @@ pub(crate) fn grammar_types_bracket_part(part: &Expr, words: &winnow_grammar::In
     }
 }
 
-pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Type> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; return Some(grammar_types_named(name, vec![])) },
         Expr::Path(segments, _) => {
@@ -617,8 +617,8 @@ pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::Interne
         },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            let outer = match grammar_types_written(base, words, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let bracket = grammar_types_bracket(index, words, &intern);
+            let outer = match grammar_types_written(base, words, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let bracket = grammar_types_bracket(index, words, &mut &mut *intern);
             match bracket.value {
                 None => return Some(grammar_types_named(outer.name, bracket.types)),
                 _ => return None,
@@ -638,17 +638,17 @@ pub(crate) fn grammar_types_plain(name: winnow_grammar::Symbol, bound: &collecti
     None
 }
 
-pub fn grammar_types_whole(items: Vec<Spanned<Item>>, spans: &collections::BTreeMap<u32, Span>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> GrammarTypesExpanded {
+pub fn grammar_types_whole(items: Vec<Spanned<Item>>, spans: &collections::BTreeMap<u32, Span>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> GrammarTypesExpanded {
     let generic = grammar_types_generic(&items);
     let mut all = items;
     if generic.rules.is_empty() && !generic.chooses { return GrammarTypesExpanded { items: all, refused: vec![] }; }
     let mut walk = GrammarTypesWalk { putting: false, bound: collections::BTreeMap::new(), rules: generic.rules, calls: vec![], call_ids: vec![], refused_at: None, refused_callee: String::from("") };
-    for item in all.iter_mut() { grammar_types_walk_item(&mut (*item).node, words, intern, &mut walk); }
+    for item in all.iter_mut() { grammar_types_walk_item(&mut (*item).node, words, &mut *intern, &mut walk); }
     if walk.refused_at.is_some() {
         let at = nikaia_std::index::or(parsed_span_of(spans, nikaia_std::index::or(walk.refused_at, || 0u32)), || Span { start: 0, end: 0 });
         return GrammarTypesExpanded { items: all, refused: vec![grammar_types_value_refused(&walk.refused_callee, &at)] };
     }
-    let mut expanded = grammar_types_expand(&mut all, &walk.calls, words, intern);
+    let mut expanded = grammar_types_expand(&mut all, &walk.calls, words, &mut *intern);
     if !expanded.refused.is_empty() { grammar_types_placed(&mut (*unsafe { nikaia_std::proven::slot(&mut expanded.refused, (0) as usize) }), &walk.call_ids, spans); }
     expanded
 }
@@ -659,10 +659,10 @@ pub(crate) fn grammar_types_placed(refusal: &mut GrammarTypesRefusal, call_ids: 
     refusal.span = match parsed_span_of(spans, id) { Some(__nikaia_value) => __nikaia_value, None => return };
 }
 
-pub(crate) fn grammar_types_put_block(block: &Block, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Block {
+pub(crate) fn grammar_types_put_block(block: &Block, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Block {
     let mut copy = block.clone();
     let mut walk = grammar_types_putting(bound);
-    grammar_types_walk_block(&mut copy, words, intern, &mut walk);
+    grammar_types_walk_block(&mut copy, words, &mut *intern, &mut walk);
     copy
 }
 
@@ -679,143 +679,143 @@ pub(crate) struct GrammarTypesWalk {
 
 pub(crate) fn grammar_types_putting(bound: &collections::BTreeMap<String, Type>) -> GrammarTypesWalk { GrammarTypesWalk { putting: true, bound: bound.copy_owned(), rules: collections::BTreeSet::new(), calls: vec![], call_ids: vec![], refused_at: None, refused_callee: String::from("") } }
 
-pub(crate) fn grammar_types_walk_item(item: &mut Item, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
+pub(crate) fn grammar_types_walk_item(item: &mut Item, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
     match item {
-        Item::Fn { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },
-        Item::Test { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },
-        Item::Bench { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },
-        Item::Impl { methods, .. } => { for method in methods.iter_mut() { grammar_types_walk_item(&mut (*method).node, words, intern, walk); } },
+        Item::Fn { body, .. } => { grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk); },
+        Item::Test { body, .. } => { grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk); },
+        Item::Bench { body, .. } => { grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk); },
+        Item::Impl { methods, .. } => { for method in methods.iter_mut() { grammar_types_walk_item(&mut (*method).node, words, &mut &mut *intern, walk); } },
         _ => { },
     }
 }
 
-pub(crate) fn grammar_types_walk_block(block: &mut Block, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
+pub(crate) fn grammar_types_walk_block(block: &mut Block, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
     for stmt in block.stmts.iter_mut() {
-        grammar_types_walk_stmt(&mut (*stmt).node, words, &intern, walk);
+        grammar_types_walk_stmt(&mut (*stmt).node, words, &mut &mut *intern, walk);
         grammar_types_visit_stmt(&mut (*stmt).node, words, &walk);
     }
 }
 
-pub(crate) fn grammar_types_walk_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
+pub(crate) fn grammar_types_walk_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
     match stmt {
-        Stmt::Let { value, .. } => { grammar_types_walk_expr(&mut *value, words, &intern, walk); },
+        Stmt::Let { value, .. } => { grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk); },
         Stmt::Assign { target, value, .. } => {
-            grammar_types_walk_expr(&mut *target, words, &intern, walk);
-            grammar_types_walk_expr(&mut *value, words, &intern, walk);
+            grammar_types_walk_expr(&mut *target, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk);
         },
         Stmt::For { iter, body, .. } => {
-            grammar_types_walk_expr(&mut *iter, words, &intern, walk);
-            grammar_types_walk_block(&mut *body, words, &intern, walk);
+            grammar_types_walk_expr(&mut *iter, words, &mut &mut *intern, walk);
+            grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk);
         },
         Stmt::While { cond, body } => {
-            grammar_types_walk_expr(&mut *cond, words, &intern, walk);
-            grammar_types_walk_block(&mut *body, words, &intern, walk);
+            grammar_types_walk_expr(&mut *cond, words, &mut &mut *intern, walk);
+            grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk);
         },
-        Stmt::Return(value) => { grammar_types_walk_maybe(&mut *value, words, &intern, walk); },
-        Stmt::Expr(value) => { grammar_types_walk_expr(&mut *value, words, &intern, walk); },
+        Stmt::Return(value) => { grammar_types_walk_maybe(&mut *value, words, &mut &mut *intern, walk); },
+        Stmt::Expr(value) => { grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk); },
         _ => { },
     }
 }
 
-pub(crate) fn grammar_types_walk_maybe(expr: &mut Option<Expr>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { if expr.is_some() { grammar_types_walk_expr(expr.as_mut().unwrap(), words, &intern, walk); } }
+pub(crate) fn grammar_types_walk_maybe(expr: &mut Option<Expr>, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { if expr.is_some() { grammar_types_walk_expr(expr.as_mut().unwrap(), words, &mut &mut *intern, walk); } }
 
-pub(crate) fn grammar_types_walk_else(block: &mut Option<Block>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { if block.is_some() { grammar_types_walk_block(block.as_mut().unwrap(), words, &intern, walk); } }
+pub(crate) fn grammar_types_walk_else(block: &mut Option<Block>, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { if block.is_some() { grammar_types_walk_block(block.as_mut().unwrap(), words, &mut &mut *intern, walk); } }
 
-pub(crate) fn grammar_types_walk_all(all: &mut Vec<Expr>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for each in all.iter_mut() { grammar_types_walk_expr(&mut *each, words, &intern, walk); } }
+pub(crate) fn grammar_types_walk_all(all: &mut Vec<Expr>, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for each in all.iter_mut() { grammar_types_walk_expr(&mut *each, words, &mut &mut *intern, walk); } }
 
-pub(crate) fn grammar_types_walk_config(config: &mut Vec<ConfigArg>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for option in config.iter_mut() { grammar_types_walk_expr(&mut (*option).value, words, &intern, walk); } }
+pub(crate) fn grammar_types_walk_config(config: &mut Vec<ConfigArg>, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for option in config.iter_mut() { grammar_types_walk_expr(&mut (*option).value, words, &mut &mut *intern, walk); } }
 
-pub(crate) fn grammar_types_walk_fields(fields: &mut Vec<FieldInit>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for field in fields.iter_mut() { grammar_types_walk_maybe(&mut (*field).value, words, &intern, walk); } }
+pub(crate) fn grammar_types_walk_fields(fields: &mut Vec<FieldInit>, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) { for field in fields.iter_mut() { grammar_types_walk_maybe(&mut (*field).value, words, &mut &mut *intern, walk); } }
 
-pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
+pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            grammar_types_walk_expr(&mut *func, words, intern, walk);
-            grammar_types_walk_all(&mut *args, words, &intern, walk);
-            grammar_types_walk_config(&mut *config, words, &intern, walk);
+            grammar_types_walk_expr(&mut *func, words, &mut &mut *intern, walk);
+            grammar_types_walk_all(&mut *args, words, &mut &mut *intern, walk);
+            grammar_types_walk_config(&mut *config, words, &mut &mut *intern, walk);
         },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            grammar_types_walk_expr(&mut *receiver, words, intern, walk);
-            grammar_types_walk_all(&mut *args, words, &intern, walk);
-            grammar_types_walk_config(&mut *config, words, &intern, walk);
+            grammar_types_walk_expr(&mut *receiver, words, &mut &mut *intern, walk);
+            grammar_types_walk_all(&mut *args, words, &mut &mut *intern, walk);
+            grammar_types_walk_config(&mut *config, words, &mut &mut *intern, walk);
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            grammar_types_walk_expr(&mut *receiver, words, intern, walk);
-            grammar_types_walk_all(&mut *args, words, &intern, walk);
-            grammar_types_walk_config(&mut *config, words, &intern, walk);
+            grammar_types_walk_expr(&mut *receiver, words, &mut &mut *intern, walk);
+            grammar_types_walk_all(&mut *args, words, &mut &mut *intern, walk);
+            grammar_types_walk_config(&mut *config, words, &mut &mut *intern, walk);
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            grammar_types_walk_expr(&mut *lhs, words, intern, walk);
-            grammar_types_walk_expr(&mut *rhs, words, intern, walk);
+            grammar_types_walk_expr(&mut *lhs, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *rhs, words, &mut &mut *intern, walk);
         },
-        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); grammar_types_walk_maybe(&mut *value, words, &intern, walk); },
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); grammar_types_walk_expr(&mut *base, words, intern, walk); },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); grammar_types_walk_expr(&mut *base, words, intern, walk); },
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk); },
+        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); grammar_types_walk_maybe(&mut *value, words, &mut &mut *intern, walk); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); grammar_types_walk_expr(&mut *base, words, &mut &mut *intern, walk); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); grammar_types_walk_expr(&mut *base, words, &mut &mut *intern, walk); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            grammar_types_walk_expr(&mut *base, words, intern, walk);
-            grammar_types_walk_expr(&mut *index, words, intern, walk);
+            grammar_types_walk_expr(&mut *base, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *index, words, &mut &mut *intern, walk);
         },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-            grammar_types_walk_expr(&mut *start, words, intern, walk);
-            grammar_types_walk_expr(&mut *end, words, intern, walk);
+            grammar_types_walk_expr(&mut *start, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *end, words, &mut &mut *intern, walk);
         },
-        Expr::Tuple(items, _) => { grammar_types_walk_all(&mut *items, words, &intern, walk); },
-        Expr::ListLit { items, .. } => { grammar_types_walk_all(&mut *items, words, &intern, walk); },
+        Expr::Tuple(items, _) => { grammar_types_walk_all(&mut *items, words, &mut &mut *intern, walk); },
+        Expr::ListLit { items, .. } => { grammar_types_walk_all(&mut *items, words, &mut &mut *intern, walk); },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
-            grammar_types_walk_expr(&mut *value, words, intern, walk);
-            grammar_types_walk_expr(&mut *count, words, intern, walk);
+            grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *count, words, &mut &mut *intern, walk);
         },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            grammar_types_walk_expr(&mut *value, words, intern, walk);
-            grammar_types_walk_expr(&mut *fallback, words, intern, walk);
+            grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk);
+            grammar_types_walk_expr(&mut *fallback, words, &mut &mut *intern, walk);
         },
         Expr::TryCatch { expr: inner, handler, .. } => {
             let inner = nikaia_std::boxed::open(inner);
-            grammar_types_walk_expr(&mut *inner, words, intern, walk);
-            grammar_types_walk_block(&mut *handler, words, &intern, walk);
+            grammar_types_walk_expr(&mut *inner, words, &mut &mut *intern, walk);
+            grammar_types_walk_block(&mut *handler, words, &mut &mut *intern, walk);
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            grammar_types_walk_expr(&mut *cond, words, intern, walk);
-            grammar_types_walk_block(&mut *then_branch, words, &intern, walk);
-            grammar_types_walk_else(&mut *else_branch, words, &intern, walk);
+            grammar_types_walk_expr(&mut *cond, words, &mut &mut *intern, walk);
+            grammar_types_walk_block(&mut *then_branch, words, &mut &mut *intern, walk);
+            grammar_types_walk_else(&mut *else_branch, words, &mut &mut *intern, walk);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            grammar_types_walk_expr(&mut *value, words, intern, walk);
+            grammar_types_walk_expr(&mut *value, words, &mut &mut *intern, walk);
             for arm in arms.iter_mut() {
-                grammar_types_walk_maybe(&mut (*arm).guard, words, &intern, walk);
-                grammar_types_walk_expr(&mut (*arm).body, words, intern, walk);
+                grammar_types_walk_maybe(&mut (*arm).guard, words, &mut &mut *intern, walk);
+                grammar_types_walk_expr(&mut (*arm).body, words, &mut &mut *intern, walk);
             }
         },
-        Expr::StructLit { fields, .. } => { grammar_types_walk_fields(&mut *fields, words, &intern, walk); },
+        Expr::StructLit { fields, .. } => { grammar_types_walk_fields(&mut *fields, words, &mut &mut *intern, walk); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
-            grammar_types_walk_expr(&mut *base, words, intern, walk);
-            grammar_types_walk_fields(&mut *fields, words, &intern, walk);
+            grammar_types_walk_expr(&mut *base, words, &mut &mut *intern, walk);
+            grammar_types_walk_fields(&mut *fields, words, &mut &mut *intern, walk);
         },
-        Expr::Block(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
-        Expr::AsyncGroup(block, _, _, _, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
-        Expr::Unsafe(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
-        Expr::Overlap(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
-        Expr::Closure { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); grammar_types_walk_expr(&mut *body, words, intern, walk); },
+        Expr::Block(block, _) => { grammar_types_walk_block(&mut *block, words, &mut &mut *intern, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { grammar_types_walk_block(&mut *block, words, &mut &mut *intern, walk); },
+        Expr::Unsafe(block, _) => { grammar_types_walk_block(&mut *block, words, &mut &mut *intern, walk); },
+        Expr::Overlap(block, _) => { grammar_types_walk_block(&mut *block, words, &mut &mut *intern, walk); },
+        Expr::Closure { body, .. } => { grammar_types_walk_block(&mut *body, words, &mut &mut *intern, walk); },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); grammar_types_walk_expr(&mut *body, words, &mut &mut *intern, walk); },
         _ => { },
     }
-    if walk.putting { grammar_types_put_in(expr, words, &walk); } else { grammar_types_ask(expr, words, &intern, walk); }
+    if walk.putting { grammar_types_put_in(expr, words, &walk); } else { grammar_types_ask(expr, words, &mut &mut *intern, walk); }
 }
 
 pub(crate) fn grammar_types_visit_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, walk: &GrammarTypesWalk) {
@@ -862,9 +862,9 @@ pub(crate) fn grammar_types_head(expr: &Expr, bound: &collections::BTreeMap<Stri
     }
 }
 
-pub(crate) fn grammar_types_ask(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
+pub(crate) fn grammar_types_ask(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, walk: &mut GrammarTypesWalk) {
     let call_id = id_of(&expr);
-    let asked = match grammar_types_asked(&expr, &walk.rules, words, intern) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let asked = match grammar_types_asked(&expr, &walk.rules, words, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return };
     if asked.call.is_none() || asked.func.is_none() {
         if walk.refused_at.is_none() {
             walk.refused_at = Some(asked.refused);

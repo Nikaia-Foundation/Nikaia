@@ -45,7 +45,7 @@ impl CheckState {
     pub fn constant_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckConstant> {
         let element = self.element_constant(world, expr);
         if element.is_some() { return std::convert::identity(element); }
-        let folded = constant_of(expr, &|name| { self.a_name_folded(world, *name) });
+        let folded = constant_of(expr, &mut |name| { self.a_name_folded(world, *name) });
         checked_constant(&folded)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -244,7 +244,7 @@ impl CheckState {
         let mut joined: Vec<i64> = vec![number];
         for at in self.open_numbers_in(world, value) { joined.push(at); }
         self.open_numbers_joined(&joined);
-        let pure = constant_of(value, &|name| { Folded::Nothing });
+        let pure = constant_of(value, &mut |name| { Folded::Nothing });
         let known = checked_constant(&pure);
         let mut derived: Option<CheckConstant> = None;
         if known.is_none() { derived = self.constant_of(world, value); }

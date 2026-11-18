@@ -70,7 +70,7 @@ pub(crate) fn check_walked_settle(state: &mut CheckState) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> (Vec<winnow_grammar::Symbol>, Expr) {
+pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> (Vec<winnow_grammar::Symbol>, Expr) {
     let mut names: Vec<winnow_grammar::Symbol> = vec![];
     let mut args: Vec<Expr> = vec![];
     let mut at: i64 = 0;
@@ -95,7 +95,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
+pub(crate) fn check_walked_unsigned_slots(state: &mut CheckState, proven: &mut impl FnMut(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
     for (_, held) in state.flow.unsigned_slots.copy_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
     state.flow.unsigned_slots.clear();
@@ -258,7 +258,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     if harvesting { return; }
     check_program_instantiations_beside(state, world, host);
     check_program_unroll(state, world, host);
-    check_walked_unsigned_slots(state, &|facts, nodes| { passes.nonnegative(facts, nodes) });
+    check_walked_unsigned_slots(state, &mut |facts, nodes| { passes.nonnegative(facts, nodes) });
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();
     state.findings.extend(passes.dsl_findings());

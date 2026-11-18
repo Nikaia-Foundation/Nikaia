@@ -76,6 +76,31 @@ pub = true
 keeps = ["text"]
 signature = "(ref self, text: String) -> i64"
 
+[fn."code_beside_each"]
+pub = true
+locks = "?"
+signature = "(xs: Vec[i64], f: fn(i64))"
+
+[fn."code_beside_each_at_once"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+signature = "(xs: Vec[i64], f: fn(i64) sync)"
+
+[fn."code_beside_hands_on"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+signature = "(xs: Vec[i64], g: fn(i64) sync)"
+
+[fn."code_beside_sum"]
+pub = true
+locks = "?"
+panics = true
+signature = "(xs: Vec[i64]) -> i64"
+
 [fn."copy_places"]
 sync = "inferred"
 returns = "a: ref(p), b: ref(p), value: ref(p)"

@@ -662,6 +662,15 @@ pub struct CheckCodeArg {
     pub changes: String,
     pub runs: Vec[String],
     pub handed: String,
+    /// Whether the argument names a lambda a `let` bound, lent `&mut` as it
+    /// is: the lowering declares such a `let` changeable.
+    pub bound: bool,
+    /// Whether the argument names a function, which the lowering writes as a
+    /// lambda of its own.
+    pub item: bool,
+    /// Whether the callee's ledger entry says it runs `param` from tasks at
+    /// once (`FnContract.at_once`): a callee in another file or package.
+    pub at_once: bool,
     pub span: Span,
 }
 

@@ -42,7 +42,7 @@ pub(crate) fn bounds_report_gate(gates: &collections::BTreeMap<String, String>, 
 pub(crate) fn bounds_report_no_function() -> String { String::from("a grammar's action") }
 
 #[allow(clippy::too_many_arguments)]
-pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: &BoundsChecks, overflow: &OverflowChecks, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> String {
+pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: &BoundsChecks, overflow: &OverflowChecks, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> String {
     let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![], gate: bounds_report_no_function() };
     let none: Vec<FnArg> = vec![];
     for item in program.items.iter() {
@@ -50,7 +50,7 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
             Item::Fn { name, args, body, .. } => {
                 let name = *name;
                 walk.gate = bounds_report_gate(&facts.gates, words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
-                bounds_report_function(args, body, words, source, facts, holes_of, &mut walk);
+                bounds_report_function(args, body, words, source, facts, &mut *holes_of, &mut walk);
                 walk.gate = bounds_report_no_function();
             },
             Item::Impl { trait_name, methods, .. } => {
@@ -60,7 +60,7 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
                         Item::Fn { name, args, body, .. } => {
                             let name = *name;
                             walk.gate = if trait_name.is_some() { String::from("a method of a trait's `impl`, called wherever the trait is") } else { bounds_report_gate(&facts.gates, words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue })) };
-                            bounds_report_function(args, body, words, source, facts, holes_of, &mut walk);
+                            bounds_report_function(args, body, words, source, facts, &mut *holes_of, &mut walk);
                             walk.gate = bounds_report_no_function();
                         },
                         _ => { },
@@ -72,14 +72,14 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
                     for alt in rule.alts.iter() {
                         match &alt.action {
                             None => { },
-                            Some(action) => { bounds_report_function(&none, action, words, source, facts, holes_of, &mut walk); },
+                            Some(action) => { bounds_report_function(&none, action, words, source, facts, &mut *holes_of, &mut walk); },
                         }
                         for spec in fb_folds(&alt.pattern.node) {
-                            bounds_report_lambda(&spec.init, &none, words, source, facts, holes_of, &mut walk);
-                            bounds_report_lambda(&spec.step, &none, words, source, facts, holes_of, &mut walk);
+                            bounds_report_lambda(&spec.init, &none, words, source, facts, &mut *holes_of, &mut walk);
+                            bounds_report_lambda(&spec.step, &none, words, source, facts, &mut *holes_of, &mut walk);
                             match &spec.merge {
                                 None => { },
-                                Some(merge) => { bounds_report_lambda(merge, &none, words, source, facts, holes_of, &mut walk); },
+                                Some(merge) => { bounds_report_lambda(merge, &none, words, source, facts, &mut *holes_of, &mut walk); },
                             }
                         }
                     }
@@ -148,11 +148,11 @@ pub(crate) fn bounds_report_spaces(text: &str, width: i64) -> String {
     nikaia_std::block::Text::from(" ".repeat(nikaia_std::count::of(width - count)))
 }
 
-pub(crate) fn bounds_report_function(args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) { bounds_report_block(body, args, body, words, source, facts, holes_of, walk); }
+pub(crate) fn bounds_report_function(args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) { bounds_report_block(body, args, body, words, source, facts, &mut *holes_of, walk); }
 
-pub(crate) fn bounds_report_lambda(lambda: &Expr, args: &[FnArg], words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
+pub(crate) fn bounds_report_lambda(lambda: &Expr, args: &[FnArg], words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
     match lambda {
-        Expr::Closure { body, .. } => { bounds_report_function(args, body, words, source, facts, holes_of, walk); },
+        Expr::Closure { body, .. } => { bounds_report_function(args, body, words, source, facts, &mut *holes_of, walk); },
         _ => { },
     }
 }
@@ -194,10 +194,10 @@ pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounds_report_block(block: &Block, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
+pub(crate) fn bounds_report_block(block: &Block, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
     for stmt in block.stmts.iter() {
-        bounds_report_stmt(&stmt.node, &stmt.span, args, body, words, source, facts, &holes_of, walk);
-        for inner in check_visit_stmt_blocks(&stmt.node) { bounds_report_block(inner, args, body, words, source, facts, holes_of, walk); }
+        bounds_report_stmt(&stmt.node, &stmt.span, args, body, words, source, facts, &mut &mut *holes_of, walk);
+        for inner in check_visit_stmt_blocks(&stmt.node) { bounds_report_block(inner, args, body, words, source, facts, &mut &mut *holes_of, walk); }
     }
 }
 
@@ -216,7 +216,7 @@ pub(crate) fn bounds_report_symbol(op: &BinaryOp) -> &'static str {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
+pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
     let at = span.start as i64;
     let line = bounds_report_line(source, at);
     match stmt {
@@ -231,7 +231,7 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
         },
         _ => { },
     }
-    for expr in bounds_report_roots(stmt) { bounds_report_visit(expr, line, args, body, words, source, facts, holes_of, walk); }
+    for expr in bounds_report_roots(stmt) { bounds_report_visit(expr, line, args, body, words, source, facts, &mut *holes_of, walk); }
 }
 
 pub(crate) fn bounds_report_roots(stmt: &Stmt) -> Vec<&Expr> {
@@ -259,10 +259,10 @@ pub(crate) fn bounds_report_roots(stmt: &Stmt) -> Vec<&Expr> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounds_report_visit(expr: &Expr, line: i64, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
+pub(crate) fn bounds_report_visit(expr: &Expr, line: i64, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, source: &str, facts: &BoundsReportFacts, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, walk: &mut BoundsReportWalk) {
     bounds_report_site(expr, line, args, body, words, source, facts, walk);
-    if check_visit_has_holes(expr) { for hole in holes_of(expr) { bounds_report_visit(&hole, line, args, body, words, source, facts, holes_of, walk); } }
-    for child in check_visit_children(expr) { bounds_report_visit(child, line, args, body, words, source, facts, holes_of, walk); }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { bounds_report_visit(&hole, line, args, body, words, source, facts, &mut &mut *holes_of, walk); } }
+    for child in check_visit_children(expr) { bounds_report_visit(child, line, args, body, words, source, facts, &mut &mut *holes_of, walk); }
 }
 
 #[allow(clippy::too_many_arguments)]

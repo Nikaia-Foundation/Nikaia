@@ -99,7 +99,7 @@ pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(h
     let coalesced = vc_coalesced(&state.facts);
     let mut_viewed = vc_mut_viewed(&state.facts);
     let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed, receiver_views: &state.facts.receiver_views };
-    EmitContractsMade { give_ups: vc_analyse(&ask, &|e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
+    EmitContractsMade { give_ups: vc_analyse(&ask, &mut |e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
 #[allow(dead_code)]
 pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade { if !((units.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `emit_contracts_state`: `units.len() > 0`", None, &[("units.len()", (&&nikaia_std::abort::Operand(&(units.len() as i128))).shown()), ]) } emit_contracts_state__unchecked(host, parsed, units, beside, program, own_contracts, described, library, checked, checked_plans, refused, build, graphs) }

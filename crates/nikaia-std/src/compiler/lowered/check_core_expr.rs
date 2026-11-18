@@ -671,7 +671,7 @@ pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, worl
     let want = Ty::Named { name: String::from("time::Duration"), args: vec![], view: false };
     let mut found = walked.clone();
     if walked.is_unknown() && state.number_shaped(world, d) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-    state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("This deadline is `{}`, but `within:` takes a `{}`.", found_text, wanted_text) });
+    state.expect_type(world, &found, &want, span, "argument", &mut |found_text, wanted_text| { format!("This deadline is `{}`, but `within:` takes a `{}`.", found_text, wanted_text) });
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -686,7 +686,7 @@ pub(crate) fn check_core_async_limit<H: CheckHost>(state: &mut CheckState, world
     let walked = check_core_expr(state, world, host, n, span);
     let mut found = walked.clone();
     if walked.is_unknown() && state.number_shaped(world, n) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-    state.expect_type(world, &found, &Ty::Named { name: String::from("i64"), args: vec![], view: false }, span, "argument", &|found_text, wanted_text| { format!("This limit is `{}`, but `limit:` takes an `{}`.", found_text, wanted_text) });
+    state.expect_type(world, &found, &Ty::Named { name: String::from("i64"), args: vec![], view: false }, span, "argument", &mut |found_text, wanted_text| { format!("This limit is `{}`, but `limit:` takes an `{}`.", found_text, wanted_text) });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -723,8 +723,8 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
-    if places_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function)); }
-    if !panics_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
+    if places_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function)); }
+    if !panics_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
     check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
 }
 

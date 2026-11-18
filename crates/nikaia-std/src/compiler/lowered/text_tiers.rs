@@ -1821,7 +1821,7 @@ pub(crate) fn method_result(method: &str, walk: &TierWalk) -> Option<Declaring> 
     Some(Declaring { owner: TextOwner::Returned(nikaia_std::block::Text::from(key.to_string())), ty: result.clone() })
 }
 
-pub(crate) fn tier_callee(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>) -> Option<String> { written_callee(ask.names, func, &|name| { unaliased_in(ask.aliases, name) }) }
+pub(crate) fn tier_callee(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_>) -> Option<String> { written_callee(ask.names, func, &mut |name| { unaliased_in(ask.aliases, name) }) }
 
 pub(crate) fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, to_path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let from_ty = from.ty.clone();

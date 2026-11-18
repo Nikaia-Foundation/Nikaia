@@ -1,0 +1,16 @@
+/// Functions with a parameter of code, for the lambdas another file of the
+/// package hands them (ADR-views-3 D17, #2046): one runs it a call at a time,
+/// one from tasks at once, and one hands it on to the second.
+pub fn code_beside_each(xs: Vec[i64], f: fn(i64)) {
+    for x in xs {
+        f(x)
+    }
+}
+
+pub fn code_beside_each_at_once(xs: Vec[i64], f: fn(i64) sync) {
+    xs.par_iter().for_each(f)
+}
+
+pub fn code_beside_hands_on(xs: Vec[i64], g: fn(i64) sync) {
+    code_beside_each_at_once(xs, g)
+}

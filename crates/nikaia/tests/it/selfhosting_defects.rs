@@ -162,7 +162,7 @@ fn main() throws {
     );
     assert_eq!(said.trim(), "17");
     assert!(
-        rust.contains("both(&async |x|") && rust.contains("&|x| { x * 3 }"),
+        rust.contains("both(&mut async |x|") && rust.contains("&mut |x| { x * 3 }"),
         "{rust}"
     );
 }
@@ -200,7 +200,7 @@ fn main() throws {
     );
     assert_eq!(said.trim(), "11\n6");
     assert!(
-        rust.contains("both(&async |x|") && rust.contains("Kept(std::sync::Arc::new(move |x|"),
+        rust.contains("both(&mut async |x|") && rust.contains("Kept(std::sync::Arc::new(move |x|"),
         "{rust}"
     );
 }

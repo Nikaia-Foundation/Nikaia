@@ -770,7 +770,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             found_kept = want.clone();
         }
         if state.lends_where_a_function_type_reads(world, Some(value), &found_kept, &want) { found_kept = want.clone(); }
-        state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &|was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
+        state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &mut |was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, &want, value, span);
         bound = want;
     } else if mutable && state.flow.mixed_text.contains(&name) && found.is_a_view() && check_core_stmt_literal(value).is_some() {
@@ -1420,7 +1420,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, &into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-        state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
+        state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
         state.findings_moved(span, &at, pushed, &waiting);
     }
     check_core_stmt_unit()

@@ -189,7 +189,7 @@ impl ModulesHost for Parsing {
             &parsed.program.items,
             reachable,
             alone,
-            &|package: &str| {
+            &mut |package: &str| {
                 at.parent()
                     .map(|dir| dir.join(format!("{package}.nika")))
                     .is_some_and(|path| path.is_file())
@@ -389,7 +389,7 @@ fn package_ledger_checked(
             &unit.parsed.interner,
             library,
             &facts.method_callees,
-            &|expr: &crate::ast::Expr| crate::emit::literal_expressions(&unit.parsed, expr),
+            &mut |expr: &crate::ast::Expr| crate::emit::literal_expressions(&unit.parsed, expr),
         );
         let file = unit.path.file_name().map_or_else(
             || unit.path.display().to_text(),
@@ -753,7 +753,7 @@ impl Program {
             &self.as_its_own,
             &self.pauses,
             committed,
-            &|finding: &crate::check::Finding, unit: i64| {
+            &mut |finding: &crate::check::Finding, unit: i64| {
                 let unit = &self.units[unit as usize];
                 crate::diagnostics::render_finding(
                     finding,
@@ -1146,9 +1146,12 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
         crate::text_tiers::refine_with(&mut parsed, &beside);
     }
     let interner = &parsed.interner;
-    modules::modules_dispatcher_as_main(&mut parsed.program.items, interner, DISPATCH, &|text| {
-        interner.intern_string(text)
-    });
+    modules::modules_dispatcher_as_main(
+        &mut parsed.program.items,
+        interner,
+        DISPATCH,
+        &mut |text| interner.intern_string(text),
+    );
     units[0].parsed = parsed;
 
     let mut tests = Vec::new();
@@ -1159,7 +1162,7 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
             &mut unit.parsed.program.items,
             &unit.source,
             tests.len() as i64,
-            &|text| interner.intern_string(text),
+            &mut |text| interner.intern_string(text),
         );
         for (title, line) in found {
             tests.push(TestCase {

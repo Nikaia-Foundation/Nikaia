@@ -16,19 +16,19 @@ pub fn comptime_keeps(item: &Item, words: &winnow_grammar::InternerContext) -> b
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn comptime_sub_program(items: &mut Vec<Spanned<Item>>, source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, value: &Expr, ty: &Ty, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> bool {
-    if !comptime_unit_without_its_constants(items, source, words, bound, known, typed, intern) { return false; }
-    let returns = match comptime_written_type(ty, intern) { Some(__nikaia_value) => __nikaia_value, None => return false };
+pub fn comptime_sub_program(items: &mut Vec<Spanned<Item>>, source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, value: &Expr, ty: &Ty, known: &mut impl FnMut(&str) -> Option<BuildValue>, typed: &mut impl FnMut(&str) -> Option<Ty>, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> bool {
+    if !comptime_unit_without_its_constants(items, source, words, bound, &mut *known, &mut *typed, &mut *intern) { return false; }
+    let returns = match comptime_written_type(ty, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let main = intern("main");
     let value_fn = intern(VALUE_FN);
     items.push(Spanned { node: comptime_a_function(Some(main), None, vec![]), span: Span::nowhere(), doc: None, attributes: vec![] });
-    let mut stmts = comptime_constants_as_lets(source, words, bound, known, intern);
+    let mut stmts = comptime_constants_as_lets(source, words, bound, &mut *known, &mut *intern);
     let mut handed: Expr = value.clone();
     let turn: Option<ComptimeTurn> = comptime_turn_of(value);
     if turn.is_some() {
         let one = match turn { Some(__nikaia_value) => __nikaia_value, None => return false };
-        items.push(Spanned { node: comptime_turn_function(&one, &returns, intern), span: Span::nowhere(), doc: None, attributes: vec![] });
-        handed = comptime_turn_call(&one, intern);
+        items.push(Spanned { node: comptime_turn_function(&one, &returns, &mut *intern), span: Span::nowhere(), doc: None, attributes: vec![] });
+        handed = comptime_turn_call(&one, &mut *intern);
     }
     stmts.push(Spanned { node: Stmt::Return(Some(handed)), span: Span::nowhere(), doc: None, attributes: vec![] });
     items.push(Spanned { node: comptime_a_function(Some(value_fn), Some(returns), stmts), span: Span::nowhere(), doc: None, attributes: vec![] });
@@ -78,15 +78,15 @@ pub(crate) fn comptime_turn_of(value: &Expr) -> Option<ComptimeTurn> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Item {
+pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Item {
     let mut element = returns.clone();
     element.is_view = false;
-    let mut list = comptime_plain("Vec", intern);
+    let mut list = comptime_plain("Vec", &mut *intern);
     list.generics = vec![element];
     let kept = intern("__nikaia_turned");
     let local = intern(&turn.local);
     let t = intern("T");
-    let nowhere: nikaia_std::func::Kept<dyn Fn(Stmt) -> Spanned<Stmt> + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |node| { Spanned { node, span: Span::nowhere(), doc: None, attributes: vec![] } }));
+    #[allow(unused_mut)] let mut nowhere: nikaia_std::func::Kept<dyn Fn(Stmt) -> Spanned<Stmt> + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |node| { Spanned { node, span: Span::nowhere(), doc: None, attributes: vec![] } }));
     let push = Expr::MethodCall { receiver: std::boxed::Box::new(Expr::Variable(kept, fresh_id())), method: intern("push"), args: vec![turn.value.clone()], config: vec![], id: fresh_id() };
     let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: std::boxed::Box::new(Expr::Field { base: std::boxed::Box::new(Expr::Variable(local, fresh_id())), name: intern("name"), id: fresh_id() }), rhs: std::boxed::Box::new(Expr::LitStr { text: nikaia_std::block::Text::from(turn.field.to_string()), id: fresh_id() }), span: Span::nowhere(), grouped: false, id: fresh_id() };
     let pick = Expr::If { cond: std::boxed::Box::new(at_field), then_branch: Block { stmts: vec![nowhere(Stmt::Expr(push))] }, else_branch: None, id: fresh_id() };
@@ -99,7 +99,7 @@ pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn comptime_turn_call(turn: &ComptimeTurn, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Expr {
+pub(crate) fn comptime_turn_call(turn: &ComptimeTurn, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Expr {
     let path: Vec<winnow_grammar::Symbol> = turn.on.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
     let on = match path.len() == 1 {
         true => Expr::Variable(*nikaia_std::index::get(&path, 0), fresh_id()),
@@ -110,13 +110,13 @@ pub(crate) fn comptime_turn_call(turn: &ComptimeTurn, intern: &impl Fn(&str) -> 
     Expr::MethodCall { receiver: std::boxed::Box::new(called), method: intern("remove"), args: vec![Expr::LitInt { value: 0, negative: false, id: fresh_id() }], config: vec![], id: fresh_id() }
 }
 
-pub(crate) fn comptime_constants_as_lets(source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Vec<Spanned<Stmt>> {
+pub(crate) fn comptime_constants_as_lets(source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, known: &mut impl FnMut(&str) -> Option<BuildValue>, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Vec<Spanned<Stmt>> {
     let mut out: Vec<Spanned<Stmt>> = vec![];
     for item in source.iter() {
         match &item.node {
             Item::Comptime { name, ty, .. } => {
                 let name = *name;
-                let stmt = match comptime_constant_as_let(words, name, (ty).as_ref(), bound, known, intern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let stmt = match comptime_constant_as_let(words, name, (ty).as_ref(), bound, &mut *known, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 out.push(stmt);
             },
             _ => { },
@@ -125,14 +125,14 @@ pub(crate) fn comptime_constants_as_lets(source: &[Spanned<Item>], words: &winno
     out
 }
 
-pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, bound_here: winnow_grammar::Symbol, ty: Option<&Type>, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Spanned<Stmt>> {
+pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, bound_here: winnow_grammar::Symbol, ty: Option<&Type>, bound: &str, known: &mut impl FnMut(&str) -> Option<BuildValue>, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Option<Spanned<Stmt>> {
     let named = nikaia_std::block::Text::from(words.resolve(bound_here).to_string());
     if named == bound { return None; }
     let held = match known(&named) { Some(__nikaia_value) => __nikaia_value, None => return None };
     match held {
         BuildValue::Constant { ref constructor, ref parts } => {
             let mut args: Vec<Expr> = vec![];
-            for part in parts.iter() { args.push(match comptime_literal_of(part, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            for part in parts.iter() { args.push(match comptime_literal_of(part, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
             let names: Vec<winnow_grammar::Symbol> = vec![intern(&named)];
             let path: Vec<winnow_grammar::Symbol> = constructor.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
             let call = Expr::Call { func: std::boxed::Box::new(Expr::Path(path, fresh_id())), args, config: vec![], id: fresh_id() };
@@ -146,7 +146,7 @@ pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, 
     }
 }
 
-pub fn comptime_unit_without_its_constants(items: &mut Vec<Spanned<Item>>, source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> bool {
+pub fn comptime_unit_without_its_constants(items: &mut Vec<Spanned<Item>>, source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, known: &mut impl FnMut(&str) -> Option<BuildValue>, typed: &mut impl FnMut(&str) -> Option<Ty>, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> bool {
     for item in source.iter() {
         match &item.node {
             Item::Comptime { name, ty: declared, public, .. } => {
@@ -155,8 +155,8 @@ pub fn comptime_unit_without_its_constants(items: &mut Vec<Spanned<Item>>, sourc
                 if named == bound { continue; }
                 let held = match known(&named) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if matches!(held, BuildValue::Constant { .. }) { continue; }
-                let ty = comptime_carried_type((declared).as_ref(), &named, &held, typed, intern);
-                let value = match comptime_literal_of(&held, intern) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let ty = comptime_carried_type((declared).as_ref(), &named, &held, &mut *typed, &mut *intern);
+                let value = match comptime_literal_of(&held, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 let node = Item::Comptime { name, ty, value, public, bounds: vec![] };
                 items.push(Spanned { node, span: Span { start: item.span.start, end: item.span.end }, doc: None, attributes: vec![] });
             },
@@ -166,11 +166,11 @@ pub fn comptime_unit_without_its_constants(items: &mut Vec<Spanned<Item>>, sourc
     true
 }
 
-pub(crate) fn comptime_carried_type(declared: Option<&Type>, named: &str, held: &BuildValue, typed: &impl Fn(&str) -> Option<Ty>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+pub(crate) fn comptime_carried_type(declared: Option<&Type>, named: &str, held: &BuildValue, typed: &mut impl FnMut(&str) -> Option<Ty>, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Option<Type> {
     if declared.is_none() {
         let found = match typed(named) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let shaped = match comptime_held_as(found, held) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return comptime_written_type(&shaped, intern);
+        return comptime_written_type(&shaped, &mut *intern);
     }
     let written = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(written.clone())
@@ -235,7 +235,7 @@ pub fn comptime_constants_of(items: &[Spanned<Item>], words: &winnow_grammar::In
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn comptime_readers_dropped(count: i64, absent: collections::BTreeSet<String>, drop: &impl Fn(i64, &collections::BTreeSet<String>) -> Vec<String>) -> collections::BTreeSet<String> {
+pub fn comptime_readers_dropped(count: i64, absent: collections::BTreeSet<String>, drop: &mut impl FnMut(i64, &collections::BTreeSet<String>) -> Vec<String>) -> collections::BTreeSet<String> {
     let mut gone = absent;
     loop {
         let before = gone.len() as i64;
@@ -281,7 +281,7 @@ pub fn comptime_as_built(ty: Ty) -> Ty {
     }
 }
 
-pub(crate) fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value: &Expr, library: &Ledger, declared_in_files: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value: &Expr, library: &Ledger, declared_in_files: &mut impl FnMut(&str) -> bool) -> Option<String> {
     for expr in visited_in_expr(value) {
         match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -309,15 +309,15 @@ pub(crate) fn comptime_declared_as(item: &Item, words: &winnow_grammar::Interner
     }
 }
 
-pub(crate) fn comptime_culprit(words: &winnow_grammar::InternerContext, value: &Expr, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_culprit(words: &winnow_grammar::InternerContext, value: &Expr, derived: &Ledger, forbidden: &mut impl FnMut(&str) -> bool) -> Option<String> {
     for expr in visited_in_expr(value) {
-        let key = match comptime_key_of(words, expr, derived, forbidden) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let key = match comptime_key_of(words, expr, derived, &mut *forbidden) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if forbidden(&key) { return Some(key); }
     }
     None
 }
 
-pub(crate) fn comptime_key_of(words: &winnow_grammar::InternerContext, expr: &Expr, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_key_of(words: &winnow_grammar::InternerContext, expr: &Expr, derived: &Ledger, forbidden: &mut impl FnMut(&str) -> bool) -> Option<String> {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
@@ -327,13 +327,13 @@ pub(crate) fn comptime_key_of(words: &winnow_grammar::InternerContext, expr: &Ex
             },
             _ => None,
         } },
-        Expr::MethodCall { method, .. } => { let method = *method; comptime_method_key(words, method, derived, forbidden) },
-        Expr::SafeMethod { method, .. } => { let method = *method; comptime_method_key(words, method, derived, forbidden) },
+        Expr::MethodCall { method, .. } => { let method = *method; comptime_method_key(words, method, derived, &mut *forbidden) },
+        Expr::SafeMethod { method, .. } => { let method = *method; comptime_method_key(words, method, derived, &mut *forbidden) },
         _ => None,
     }
 }
 
-pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, method: winnow_grammar::Symbol, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, method: winnow_grammar::Symbol, derived: &Ledger, forbidden: &mut impl FnMut(&str) -> bool) -> Option<String> {
     let method = format!("::{}", words.resolve(method));
     for (key, _) in derived.functions.iter() { if key.ends_with(&*method) && forbidden(key) { return Some(nikaia_std::block::Text::from(key.to_string())); } }
     None
@@ -341,26 +341,26 @@ pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, metho
 
 pub(crate) fn comptime_a_function(name: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, stmts: Vec<Spanned<Stmt>>) -> Item { Item::Fn { name, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type, body: Block { stmts }, is_sync: false, sync_by: vec![], is_public: false, can_throw: false, is_extern: false, ret_from: vec![] } }
 
-pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
+pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
     match value {
         BuildValue::Int(n) => Some(Expr::LitInt { value: n.magnitude, negative: n.negative, id: fresh_id() }),
         BuildValue::Bool(b) => { let b = *b; Some(Expr::LitBool(b, fresh_id())) },
         BuildValue::Float(f) => { let f = *f; Some(Expr::LitFloat(format!("{:?}", f), fresh_id())) },
         BuildValue::Text(text) => Some(Expr::LitStr { text: as_a_literal(text), id: fresh_id() }),
-        BuildValue::List(items) => Some(Expr::ListLit { items: match comptime_literals_of(items, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, id: fresh_id() }),
-        BuildValue::Tuple(parts) => Some(Expr::Tuple(match comptime_literals_of(parts, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, fresh_id())),
+        BuildValue::List(items) => Some(Expr::ListLit { items: match comptime_literals_of(items, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, id: fresh_id() }),
+        BuildValue::Tuple(parts) => Some(Expr::Tuple(match comptime_literals_of(parts, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, fresh_id())),
         BuildValue::Constant { .. } => None,
         BuildValue::Struct { name: ty, fields } => {
             let named = intern(ty);
             let mut inits: Vec<FieldInit> = vec![];
             for (field, held) in fields.iter() {
-                let value = match comptime_literal_of(held, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let value = match comptime_literal_of(held, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 inits.push(FieldInit { name: intern(field), value: Some(value) });
             }
             Some(Expr::StructLit { name: named, fields: inits, id: fresh_id() })
         },
         BuildValue::Variant { ty, variant, payload } if ty == "Option" => match variant == "Some" && payload.len() == 1 {
-            true => Some(match comptime_literal_of(nikaia_std::index::get(&payload, 0), intern) { Some(__nikaia_value) => __nikaia_value, None => return None }),
+            true => Some(match comptime_literal_of(nikaia_std::index::get(&payload, 0), &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }),
             false => Some(Expr::LitNull(fresh_id())),
         },
         BuildValue::Variant { ty, variant, payload } => {
@@ -368,15 +368,15 @@ pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &dyn Fn(&str) -> w
             let path = Expr::Path(segments, fresh_id());
             match payload.is_empty() {
                 true => Some(path),
-                false => Some(Expr::Call { func: std::boxed::Box::new(path), args: match comptime_literals_of(payload, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, config: vec![], id: fresh_id() }),
+                false => Some(Expr::Call { func: std::boxed::Box::new(path), args: match comptime_literals_of(payload, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, config: vec![], id: fresh_id() }),
             }
         },
     }
 }
 
-pub(crate) fn comptime_literals_of(values: &[BuildValue], intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Expr>> {
+pub(crate) fn comptime_literals_of(values: &[BuildValue], intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Vec<Expr>> {
     let mut out: Vec<Expr> = vec![];
-    for value in values.iter() { out.push(match comptime_literal_of(value, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    for value in values.iter() { out.push(match comptime_literal_of(value, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 
@@ -415,30 +415,30 @@ pub(crate) fn comptime_held_wide(n: &Integer) -> Option<Ty> {
     None
 }
 
-pub(crate) fn comptime_written_type(ty: &Ty, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+pub(crate) fn comptime_written_type(ty: &Ty, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Type> {
     match ty {
         Ty::Named { name, args, view } => {
             let view = *view;
-            let mut out = comptime_plain(&nikaia_std::block::Text::from(name.to_string()), &intern);
+            let mut out = comptime_plain(&nikaia_std::block::Text::from(name.to_string()), &mut &mut *intern);
             out.is_view = view;
-            out.generics = match comptime_written_types(args, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            out.generics = match comptime_written_types(args, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
         },
         Ty::Count(n) => {
             let n = *n;
-            let mut out = comptime_plain(&format!("{}", n), &intern);
+            let mut out = comptime_plain(&format!("{}", n), &mut &mut *intern);
             out.count = Some(n);
             Some(out)
         },
         Ty::Tuple(parts) => {
-            let mut out = comptime_plain("", &intern);
+            let mut out = comptime_plain("", &mut &mut *intern);
             out.is_tuple = true;
-            out.generics = match comptime_written_types(parts, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            out.generics = match comptime_written_types(parts, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
         },
         Ty::Nullable(inner) => {
             let inner = nikaia_std::boxed::open(inner);
-            let mut out = match comptime_written_type(inner, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let mut out = match comptime_written_type(inner, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             out.is_nullable = true;
             Some(out)
         },
@@ -446,13 +446,13 @@ pub(crate) fn comptime_written_type(ty: &Ty, intern: &dyn Fn(&str) -> winnow_gra
     }
 }
 
-pub(crate) fn comptime_written_types(tys: &[Ty], intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Type>> {
+pub(crate) fn comptime_written_types(tys: &[Ty], intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Vec<Type>> {
     let mut out: Vec<Type> = vec![];
-    for ty in tys.iter() { out.push(match comptime_written_type(ty, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    for ty in tys.iter() { out.push(match comptime_written_type(ty, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 
-pub(crate) fn comptime_plain(name: &str, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Type { Type { name: intern(name), generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
+pub(crate) fn comptime_plain(name: &str, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Type { Type { name: intern(name), generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
 
 pub trait ComptimeLowerHost {
     fn unit_count(&self) -> i64;
@@ -479,7 +479,7 @@ pub fn comptime_lowered_units<H: ComptimeLowerHost>(host: &H, entry: i64, contra
     Some(rust)
 }
 
-pub fn comptime_without_foreign(items: &mut Vec<Spanned<Item>>, words: &winnow_grammar::InternerContext, runs: &impl Fn(&str) -> bool) {
+pub fn comptime_without_foreign(items: &mut Vec<Spanned<Item>>, words: &winnow_grammar::InternerContext, runs: &mut impl FnMut(&str) -> bool) {
     let mut kept: Vec<Spanned<Item>> = vec![];
     for item in items.drain(..) {
         match item.node {
@@ -488,18 +488,18 @@ pub fn comptime_without_foreign(items: &mut Vec<Spanned<Item>>, words: &winnow_g
                 let owner = format!("{}::", a_symbols_text(words, Some(target.name)));
                 let whole = methods.len() as i64;
                 let mut left = methods;
-                left.retain(|method| { comptime_runs(&method.node, words, &owner, runs) });
+                left.retain(|method| { comptime_runs(&method.node, words, &owner, &mut *runs) });
                 if trait_name.is_some() && (left.len() as i64) != whole { continue; }
                 let node = Item::Impl { trait_name, target, methods: left };
                 kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
             },
-            other => { if comptime_runs(&other, words, "", runs) { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); } },
+            other => { if comptime_runs(&other, words, "", &mut *runs) { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); } },
         }
     }
     items.extend(kept);
 }
 
-pub(crate) fn comptime_runs(item: &Item, words: &winnow_grammar::InternerContext, owner: &str, runs: &impl Fn(&str) -> bool) -> bool {
+pub(crate) fn comptime_runs(item: &Item, words: &winnow_grammar::InternerContext, owner: &str, runs: &mut impl FnMut(&str) -> bool) -> bool {
     match item {
         Item::Fn { name, .. } => {
             let name = *name;
@@ -572,8 +572,8 @@ pub struct ComptimeDeclared {
 
 pub trait ComptimeComputeHost {
     fn file_count(&self) -> i64;
-    fn sub_program(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
-    fn unit_without_its_constants(&self, at: i64, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
+    fn sub_program(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut impl FnMut(&str) -> Option<BuildValue>, typed: &mut impl FnMut(&str) -> Option<Ty>) -> Option<i64>;
+    fn unit_without_its_constants(&self, at: i64, bound: &str, known: &mut impl FnMut(&str) -> Option<BuildValue>, typed: &mut impl FnMut(&str) -> Option<Ty>) -> Option<i64>;
     fn file_words(&self, at: i64) -> &winnow_grammar::InternerContext;
     fn file_items(&self, at: i64) -> &[Spanned<Item>];
     fn library(&self) -> &Ledger;
@@ -596,25 +596,25 @@ pub trait ComptimeComputeHost {
     fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<BuildValue>;
     fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &BuildValue);
     fn comptimes_of(&self, at: i64) -> Vec<ComptimeDeclared>;
-    fn folded(&self, at: i64, value: &Expr, known: &impl Fn(&str) -> Option<BuildValue>) -> Option<BuildValue>;
+    fn folded(&self, at: i64, value: &Expr, known: &mut impl FnMut(&str) -> Option<BuildValue>) -> Option<BuildValue>;
     fn ty_of(&self, at: i64, written: &Type) -> Ty;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> CheckComputed {
-    let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
+pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>) -> CheckComputed {
+    #[allow(unused_mut)] let mut not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
     match host.remembered(here, bound, value, ty) {
         None => { },
         Some(value) => { return CheckComputed::Value(value); },
     }
-    let sub = match host.sub_program(here, bound, value, ty, &known, &typed) {
+    let sub = match host.sub_program(here, bound, value, ty, &mut &mut *known, &mut &mut *typed) {
         None => {
             match comptime_callee_nothing_declares(host, here, value) {
                 None => { },
                 Some(ref callee) => { return CheckComputed::NotHere(format!("It calls `{}`, which no file of your program declares and `std` doesn't have", callee)); },
             }
-            return match host.unit_without_its_constants(here, bound, &known, &typed) {
+            return match host.unit_without_its_constants(here, bound, &mut &mut *known, &mut &mut *typed) {
                 None => not_here(COMPTIME_NOT_CARRIED),
                 _ => not_here("Its type has no form this compiler writes into the program that computes it"),
             };
@@ -625,7 +625,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     for at in 0..host.file_count() {
         let unit: Option<i64> = match at == here {
             true => Some(sub),
-            false => host.unit_without_its_constants(at, bound, &known, &typed),
+            false => host.unit_without_its_constants(at, bound, &mut &mut *known, &mut &mut *typed),
         };
         match unit {
             None => { return not_here(COMPTIME_NOT_CARRIED); },
@@ -635,19 +635,19 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let carried = host.constants_of_units(&units);
     let declared = host.constants_of_files();
     let absent: collections::BTreeSet<String> = declared.difference(&carried).map(|s| { nikaia_std::block::Text::from(s.to_string()) }).collect();
-    let gone = comptime_readers_dropped(units.len() as i64, absent.copy_owned(), &|at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
+    let gone = comptime_readers_dropped(units.len() as i64, absent.copy_owned(), &mut |at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
     let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { nikaia_std::block::Text::from(s.to_string()) }).collect();
     let named = host.value_fn_names(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     if named.iter().any(|name| { left_out.contains(nikaia_std::index::as_text(&name)) || absent.contains(nikaia_std::index::as_text(&name)) && known(name).is_none() }) {
-        let ahead = comptime_worked_out_ahead(host, bound, &absent, &known, &typed);
+        let ahead = comptime_worked_out_ahead(host, bound, &absent, &mut &mut *known, &mut &mut *typed);
         if ahead.keys().all(|name| { known(name).is_some() }) { return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn"); }
-        let known = |name: &str| {
+        #[allow(unused_mut)] let mut known = |name: &str| {
             nikaia_std::index::or_maybe(known(name), || match ahead.get(name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             })
         };
-        return comptime_computed(host, here, bound, value, ty, &known, typed);
+        return comptime_computed(host, here, bound, value, ty, &mut known, &mut &mut *typed);
     }
     let home = host.unit_package(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     let others: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u).is_some() && host.unit_package(u) != home }).collect::<Vec<_>>();
@@ -688,7 +688,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr) -> Option<String> { comptime_undeclared_callee(host.file_words(here), value, host.library(), &|name| { (nikaia_std::range::span(0, host.file_count())).any(|at| { comptime_declares(host.file_items(at), host.file_words(at), name) }) }) }
+pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr) -> Option<String> { comptime_undeclared_callee(host.file_words(here), value, host.library(), &mut |name| { (nikaia_std::range::span(0, host.file_count())).any(|at| { comptime_declares(host.file_items(at), host.file_words(at), name) }) }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -700,7 +700,7 @@ pub(crate) fn comptime_forbidden_because(derived: &Ledger) -> Option<String> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn comptime_forbidden_callee<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr, derived: &Ledger) -> Option<String> {
-    comptime_culprit(host.file_words(here), value, derived, &|key| {
+    comptime_culprit(host.file_words(here), value, derived, &mut |key| {
         let contract = match derived.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => match host.library().functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false } };
         bt_may_not_run(&contract).is_some()
     })
@@ -730,7 +730,7 @@ pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], h
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound: &str, absent: &collections::BTreeSet<String>, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> collections::BTreeMap<String, BuildValue> {
+pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound: &str, absent: &collections::BTreeSet<String>, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>) -> collections::BTreeMap<String, BuildValue> {
     let mut ahead: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
     let entered = host.enter_ahead(bound);
     if !entered { return ahead; }
@@ -738,13 +738,13 @@ pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound:
         for item in host.comptimes_of(at) {
             let named = &item.name;
             if !absent.contains(named) || host.is_ahead(named) { continue; }
-            let folded = host.folded(at, &item.value, &known);
+            let folded = host.folded(at, &item.value, &mut &mut *known);
             let worked: Option<BuildValue> = match folded {
                 None => match item.ty {
                     None => None,
                     Some(ref written) => {
                         let ty = host.ty_of(at, written);
-                        match comptime_computed(host, at, named, &item.value, &ty, &known, &typed) {
+                        match comptime_computed(host, at, named, &item.value, &ty, &mut &mut *known, &mut &mut *typed) {
                             CheckComputed::Value(value) => Some(value),
                             _ => None,
                         }
