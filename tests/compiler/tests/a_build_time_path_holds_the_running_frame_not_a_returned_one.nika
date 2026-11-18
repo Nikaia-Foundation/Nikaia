@@ -3,7 +3,7 @@
 // is running and is in it.
 fn spin(n: int) -> int {
     let mut total = 0
-    for i in 0..n { total += i }
+    for i in 0..<n { total += i }
     total
 }
 

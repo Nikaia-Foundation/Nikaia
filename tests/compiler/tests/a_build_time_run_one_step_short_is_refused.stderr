@@ -1,7 +1,7 @@
 error[NK1152]: `TOTAL` took more than 5 steps while the program was built.
   --> tests/a_build_time_run_one_step_short_is_refused.nika:9:1
    |
- 9 | comptime(steps: 5) TOTAL = spin(3)
+ 9 | comptime(steps: 5) TOTAL = spin(4)
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: It was in `TOTAL` > `spin`.

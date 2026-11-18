@@ -2,11 +2,11 @@
 // takes six steps (ADR-321 D7), with a budget one less: refused.
 fn spin(n: int) -> int {
     let mut total = 0
-    for i in 0..n { total += i }
+    for i in 0..<n { total += i }
     total
 }
 
-comptime(steps: 5) TOTAL = spin(3)
+comptime(steps: 5) TOTAL = spin(4)
 
 fn main() throws {
     println(TOTAL)
