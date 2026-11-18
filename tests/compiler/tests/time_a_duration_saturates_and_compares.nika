@@ -1,0 +1,25 @@
+// A span's arithmetic that does not abort, its `min` and `max`, and the
+// integers' `nanos()` (ADR-402): `saturating_sub` below zero is no time at
+// all, `saturating_add` and `saturating_mul` past the longest span stay at
+// the longest, a factor below one is no time, and `nanos()` mirrors
+// `in_nanos` with no time below zero.
+use std::time
+
+fn main() throws {
+    let a = 5.seconds()
+    let b = 7.seconds()
+    println(f"sub {a.saturating_sub(b).in_nanos()} {b.saturating_sub(a).in_millis()}")
+    println(f"add {a.saturating_add(b).in_millis()}")
+    let big = 9223372036854775807.hours()
+    let longest = big.saturating_add(1.seconds())
+    println(f"add past {longest > big} {big.saturating_add(2.seconds()) == longest} {longest.saturating_add(longest) == longest}")
+    println(f"mul {a.saturating_mul(4).in_seconds()} {1500.millis().saturating_mul(3).in_millis()} {a.saturating_mul(0).in_nanos()} {a.saturating_mul(-3).in_nanos()}")
+    let n: i64 = 7500000000
+    let factor: i64 = 1000000000123
+    println(f"mul parts {n.nanos().saturating_mul(factor).in_millis()}")
+    println(f"mul past {big.saturating_mul(2) == longest} {1.seconds().saturating_mul(9223372036854775807) == 9223372036854775807.seconds()}")
+    println(f"min {a.min(b).in_seconds()} {b.min(a).in_seconds()}")
+    println(f"max {a.max(b).in_seconds()} {b.max(a).in_seconds()}")
+    println(n.nanos().in_nanos())
+    println(f"nanos {1500.nanos().in_nanos()} {(-5).nanos().in_nanos()} {(0 - n).nanos().in_nanos()} {999999999.nanos().in_micros()}")
+}

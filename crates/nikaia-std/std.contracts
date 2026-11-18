@@ -6188,6 +6188,15 @@ sync = true
 touches = []
 signature = "(self) -> time::Duration"
 
+# This many billionths of a second, as a span of time
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D3).
+[fn."i32::nanos"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self) -> time::Duration"
+
 # This many hours, as a span of time.
 [fn."i64::hours"]
 pub = true
@@ -6222,6 +6231,15 @@ signature = "(self) -> time::Duration"
 
 # This many millionths of a second, as a span of time.
 [fn."i64::micros"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self) -> time::Duration"
+
+# This many billionths of a second, as a span of time
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D3).
+[fn."i64::nanos"]
 pub = true
 panics = false
 sync = true
@@ -6282,6 +6300,53 @@ panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
+
+# **Arithmetic that does not abort, `min` and `max`**
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D1, D2), the names Part I
+# 2.2 gives the integers. Nikaia, `runtime/time_spans.nika`: the emitter writes
+# each call as a call of the function there, since the language below has
+# methods by four of these names and its `saturating_mul` takes a `u32`.
+# `touches = []` and `sync = true` for the arithmetic entries' reason.
+# The sum, or the longest span where it would pass it.
+[fn."time::Duration::saturating_add"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# The difference, or no time at all where `other` is the longer.
+[fn."time::Duration::saturating_sub"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# `by` times the span: no time for a factor below one, the longest span where
+# it would pass it.
+[fn."time::Duration::saturating_mul"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, by: i64) -> time::Duration"
+
+# The shorter of two spans.
+[fn."time::Duration::min"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# The longer of two spans.
+[fn."time::Duration::max"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
 
 # **A reading of the monotonic clock** ([ADR-368](../../docs/specification/adr/adr-368.md)
 # D1), the language below's `Instant` re-exported as `Duration` is. It crosses,

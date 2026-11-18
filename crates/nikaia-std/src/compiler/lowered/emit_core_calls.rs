@@ -71,6 +71,18 @@ pub(crate) fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr)
     few
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_call_span_function(callee: &str) -> String {
+    if callee == "i64::nanos" || callee == "i32::nanos" {
+        let ty = nikaia_std::index::or(callee.strip_suffix("::nanos"), || "");
+        return format!("span_nanos_{}", ty);
+    }
+    let name = match callee.strip_prefix("time::Duration::") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    if name == "saturating_add" || name == "saturating_sub" || name == "saturating_mul" || name == "min" || name == "max" { return format!("span_{}", name); }
+    String::from("")
+}
+
 pub(crate) fn emit_call_is_a_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" || name == "Locked" }
 
 pub(crate) fn emit_call_builds_a_hull(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> bool {
@@ -730,6 +742,23 @@ impl EmitState {
             if flow.can_throw && !flow.caught && self.method_can_fail(on_node) { out.push("?"); }
             return Ok(());
         }
+        let spanned = emit_call_span_function(&nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()));
+        if spanned != "" {
+            out.push(&format!("nikaia_std::runtime::{}(", spanned));
+            if receiver.is_none() { out.push("__nikaia_it"); } else {
+                let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                self.emit_core_nested(world, walk, out, host, on, 0, depth, flow, scope)?;
+            }
+            if !args.is_empty() {
+                out.push(", ");
+                self.emit_core_args(world, walk, out, host, &name, args, &vec![], depth, flow, scope)?;
+            }
+            out.push(")");
+            return Ok(());
+        }
         let truncated = truncating(&name);
         if truncated.is_some() {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, true)?;
@@ -1359,8 +1388,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple100734| {
-        let (i, word) = __nikaia_tuple100734;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple102480| {
+        let (i, word) = __nikaia_tuple102480;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

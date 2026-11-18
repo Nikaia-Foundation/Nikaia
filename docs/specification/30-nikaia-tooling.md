@@ -1068,7 +1068,7 @@ span ([ADR-150](adr/adr-150.md) D2, D5):
 use std::time
 
 fn main() throws {
-    let timeout = 90.seconds()          // also millis, micros, minutes, hours
+    let timeout = 90.seconds()          // also nanos, micros, millis, minutes, hours
     time::sleep(timeout)
     println(f"{timeout.in_minutes()}")  // 1: whole units, cut off
 }
@@ -1076,8 +1076,10 @@ fn main() throws {
 
 `in_hours`, `in_minutes`, `in_seconds`, `in_millis`, `in_micros` and
 `in_nanos` answer an `i64`; a span longer than an `i64` counts reads as `i64::MAX`, as a count too
-large to make a span saturates. `time::sleep` pauses, and gives the thread up
-while it does.
+large to make a span saturates. A span has the integers' `saturating_add`,
+`saturating_sub`, `saturating_mul(n)`, `min` and `max` (ADR-402): below zero is
+no time at all and past the longest span stays there, where plain `+ - *`
+stop the program. `time::sleep` pauses, and gives the thread up while it does.
 
 **`http` — a package, not a module of `std`**
 An HTTP/1.1 server: `GET` and `POST`, bodies by `Content-Length`, connections kept alive between requests. Chunked bodies, TLS, HTTP/2 and a client are not built. `http` is not part of `std`: it is a package reached by path, `http = { path = "../http" }`.
