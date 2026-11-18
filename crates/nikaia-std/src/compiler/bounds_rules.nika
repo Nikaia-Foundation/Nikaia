@@ -1849,13 +1849,19 @@ fn rules_standing(walk: ref BoundsWalk, facts: ref BoundsFacts, fact: i64) -> bo
     let mut marked = false
     for (marker, length, _, high) in walk.capped {
         if high == fact {
-            if facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) }) {
+            if rules_marker_stands(walk, facts, marker, length) {
                 return true
             }
             marked = true
         }
     }
     return !marked
+}
+
+/// Whether the marker `cap#k` of a `capped` bound stands among `facts`
+/// beside the length it names (`rules_capped_stand`).
+fn rules_marker_stands(walk: ref BoundsWalk, facts: ref BoundsFacts, marker: ref String, length: ref String) -> bool {
+    return facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) })
 }
 
 /// **The markers of `capped` bounds against `name`'s length that a loop or
@@ -1905,8 +1911,11 @@ fn rules_capped_call(mut walk: BoundsWalk, name: ref String, method: ref String)
 fn rules_capped_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let element = bounding_element_of(f"{root}.{rule.a}")
     let length = length_of(f"{root}.{rule.b}")
-    for entry in walk.capped {
-        if entry.1 == length && entry.2 == element && rules_standing(walk, facts, entry.3) {
+    // Each entry's bound is its own term, so it stands where its marker
+    // does (`rules_standing`); the newest, the likeliest to, is asked
+    // first (#2052).
+    for entry in walk.capped.iter().rev() {
+        if entry.1 == length && entry.2 == element && rules_marker_stands(walk, facts, entry.0, length) {
             return true
         }
     }

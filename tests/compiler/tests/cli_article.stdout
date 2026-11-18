@@ -1,0 +1,8 @@
+2: error: `a` is an `i64`, and `x` is not one.
+2: error: `--small` is a `u8`, and `x` is not one.
+2: error: `--big` is a `u64`, and `x` is not one.
+2: error: `--wide` is an `i32`, and `x` is not one.
+2: error: `--rate` is an `f64`, and `x` is not one.
+2: error: `--loud` is a `bool`, and `x` is not one.
+2: error: `--name` needs a value: a `String`.
+2: error: `a` is missing: the program takes an `i64` there.

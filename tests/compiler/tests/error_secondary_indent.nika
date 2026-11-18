@@ -1,0 +1,27 @@
+// An error with a secondary that has a secondary of its own (ADR-292 D3, D8;
+// #2043, `indented` in `runtime/error.nika`): the outer block's second branch
+// is a block whose two branches fail, so the program leaving `main` prints the
+// two levels under `and then:`, each one two spaces further right.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, "enum LoadError {\n\tMissing(String),\n\tBroken(String),\n}\n\nimpl Error for LoadError {\n\tfn message(ref self) -> String {\n\t\tmatch self {\n\t\t\tLoadError::Missing(w) => { return f\"{w} is missing\" }\n\t\t\tLoadError::Broken(w) => { return f\"{w} is broken\" }\n\t\t}\n\t}\n}\n\nfn load(which: String) -> String throws {\n\tif which == \"a\" {\n\t\tthrow LoadError::Missing(which)\n\t}\n\tthrow LoadError::Broken(which)\n}\n\nfn inner() -> String throws {\n\tlet pair = overlap {\n\t\tload(\"b\")\n\t\tload(\"c\")\n\t}\n\treturn pair.0 + pair.1\n}\n\nfn main() throws {\n\tlet pair = overlap {\n\t\tload(\"a\")\n\t\tinner()\n\t}\n\tprintln(f\"{pair.0} {pair.1}\")\n}\n")
+    let out = process::run(toolchain(), ["run", "main.nika"]; dir: tmp)
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        if !line.trim().starts_with("Compiling") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

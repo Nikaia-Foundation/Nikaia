@@ -1,0 +1,10 @@
+Error: a is missing
+  raised at load
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  b is broken
+    raised at load
+    and then:
+    c is broken
+      raised at load
+exit 1
