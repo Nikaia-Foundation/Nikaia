@@ -24,6 +24,9 @@ use std::sync::OnceLock;
 
 use ref_or_box::{Either, RefOrBox};
 
+// One joined failure under the one it joined (ADR-292 D8), in Nikaia.
+use crate::runtime::error::indented;
+
 /// Whether this process captures a trace when an error is raised.
 ///
 /// Read once. A program that never asks pays this check once rather than per
@@ -393,21 +396,6 @@ impl<E: fmt::Display> Thrown<E> {
         }
         out
     }
-}
-
-/// One joined failure, under the one it joined
-/// ([ADR-292](../../../docs/specification/adr/adr-292.md) D8).
-///
-/// Every line of it moves right, not only the first, so a secondary that has
-/// secondaries of its own reads as the tree D3 makes it: the depth on the page
-/// is the depth in the list.
-fn indented(full: &str) -> String {
-    let mut out = String::from("\n  and then:");
-    for line in full.lines() {
-        out.push_str("\n  ");
-        out.push_str(line);
-    }
-    out
 }
 
 /// What the language put around a thrown error: where it was raised, and the

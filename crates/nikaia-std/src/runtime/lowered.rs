@@ -41,6 +41,17 @@ mod env_lowered {
 pub use env_lowered::*;
 
 #[allow(unsafe_code)]
+mod error_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/error.rs");
+}
+#[allow(unused_imports)]
+pub use error_lowered::*;
+
+#[allow(unsafe_code)]
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -128,6 +139,10 @@ mod text_normal_lowered {
 #[allow(unused_imports)]
 pub use text_normal_lowered::*;
 
+pub mod error {
+    #[allow(unused_imports)]
+    pub use super::{indented};
+}
 pub mod fixed {
     #[allow(unused_imports)]
     pub use super::{fnv, displace};
@@ -164,4 +179,4 @@ pub mod text_normal {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "721ee7cfb3c1f8eb7cdf85ff57d305c9851be07487932e432befe0bf8146e245";
+pub const LOWERED_DIGEST: &str = "bcf8802e209f4bd0b11564c7efe5e3409ffdc5ebc4ab5d35aec2ef34620221f9";
