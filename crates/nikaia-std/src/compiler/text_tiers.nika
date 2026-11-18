@@ -6649,11 +6649,29 @@ fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Ex
     if ty.generics.len() == 0 || args.len() == 0 || given.len() == 0 {
         return
     }
+    // **A list extended from a declared one is linked to it, and the link is
+    // all that flows** (#2059), as for a list handed whole (`flow_value`):
+    // the kinds read out of the whole list are its tier of the last round,
+    // and flowed into the element beside the link, a `Lasting` parameter
+    // read as `still` beside the text of its own a `std` call asks makes
+    // both `EitherText`.
+    if method == "extend" && args.len() == 1 && extends_linked(place, args[0], ask, walk) {
+        extended_from(place, args[0], ask, walk)
+        return
+    }
     let wrap = method != "extend" && method != "append"
     flow_value(going_into(place.owner, ty.generics[0], [0], wrap), args[args.len() - 1], given[given.len() - 1], ask, walk)
     if method == "extend" && args.len() == 1 {
         extended_from(place, args[0], ask, walk)
     }
+}
+
+/// Whether `extended_from` links the elements of `place` to those of the
+/// list `items` comes from: two containers of as many element types.
+fn extends_linked(place: ref Declaring, items: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let from = extend_source(items, ask)
+    let found = place_of(from, ask, walk) ?? return false
+    return a_container(ask.names, found.ty) && a_container(ask.names, place.ty) && found.ty.generics.len() == place.ty.generics.len()
 }
 
 /// **A container extended from another declared one is of its tier**
