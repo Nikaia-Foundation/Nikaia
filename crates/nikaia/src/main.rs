@@ -429,6 +429,16 @@ pub enum Command {
         /// once, the tests that hold any of them (#1238).
         #[arg(long = "filter", value_name = "TEXT")]
         filters: Vec<String>,
+        /// Run the `test` blocks of the compiler's own `.nika` files
+        /// (`crates/nikaia-std/src/compiler`, its dependencies under their
+        /// name), compiled into this binary, in this process: one line per
+        /// test and a summary; a failure, or a `--filter` no test matches,
+        /// exits non-zero (#2082).
+        #[arg(long, conflicts_with_all = ["project", "both_settings", "bless", "bless_stderr"])]
+        std: bool,
+        /// With `--std`: print the names of the tests it would run, and run none.
+        #[arg(long, requires = "std")]
+        list: bool,
     },
     /// Re-lower the sysroot's `std` from its `.nika` sources (ADR-002 D4).
     ///
@@ -775,11 +785,23 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         ),
         Command::Run { project, args, .. } => ("run", project.clone(), args.clone()),
         Command::Test {
+            std: true,
+            list,
+            filters,
+            ..
+        } => {
+            let filters: std::vec::Vec<std::string::String> =
+                filters.iter().map(|f| std::format!("{f}")).collect();
+            let passed = nikaia_std::compiler::nikaia_run_tests(&filters, *list);
+            std::process::exit(if passed { 0 } else { 1 });
+        }
+        Command::Test {
             project,
             both_settings,
             bless,
             bless_stderr,
             filters,
+            ..
         } => {
             return test_command(
                 args,

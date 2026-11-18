@@ -1,0 +1,55 @@
+// A float converted with `as` into a type that does not hold it stops the
+// program naming the type and the value (ADR-285 D12): beyond the range
+// either way, not a number, an infinity, the `f64` that `i64::MAX` rounds up
+// to, a negative number into an unsigned type, and a finite `f64` beyond the
+// `f32` range. Moved from the `nikaia-std` unit tests
+// `num::tests::{the_three_that_were_silent_abort,
+// the_rounded_upper_limit_of_an_i64_is_refused, a_finite_f64_beyond_the_f32_range_aborts,
+// the_message_names_the_type_and_the_value}` and the `u64` twin of
+// `a_negative_number_is_no_usize` (#2082).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn stops(text: String) -> String {
+    for line in text.lines() {
+        if line.contains("the program stopped") {
+            return line.clone()
+        }
+    }
+    return "(no stop)"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(
+        f"{tmp}/convert.nika",
+        fs::Root::Anywhere,
+        "use std::cli\nuse std::text\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let into = args[args.len() - 2].clone()\n    let value = text::parse_f64(args[args.len() - 1]) ?? 0.0\n    if into == \"i32\" { println(value as i32) }\n    if into == \"i64\" { println(value as i64) }\n    if into == \"u64\" { println(value as u64) }\n    if into == \"f32\" { println(value as f32) }\n}\n",
+    )
+    let cases = [
+        ("i32", "1e20"), ("i32", "-1e20"), ("i32", "nan"),
+        ("i64", "1e30"), ("i64", "-1e30"), ("i64", "nan"), ("i64", "inf"), ("i64", "9223372036854775807"),
+        ("u64", "-1"), ("u64", "1e30"),
+        ("f32", "1e300"),
+    ]
+    for (into, value) in cases {
+        let out = process::run(
+            "sh",
+            ["-c", f"\"$0\" run convert.nika -- {into} {value}", toolchain()]; dir: tmp.clone(),
+        )
+        println(f"{into} {value}: exit {out.code}, {out.stdout.trim()}{stops(out.stderr)}")
+    }
+    process::run("rm", ["-rf", tmp])
+}

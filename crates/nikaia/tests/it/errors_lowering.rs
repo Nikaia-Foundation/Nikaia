@@ -575,6 +575,8 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
             // …and this build was given no allowlist, so it reads nothing
             // while it builds (ADR-310 D4).
             reads: &nikaia::assets::Reads::none(),
+            // …and it is no package's own test program (ADR-403 D1).
+            tested: &std::collections::BTreeSet::new(),
         },
         &path,
         source,

@@ -163,101 +163,6 @@ pub fn escape(text: &str) -> Cow<'_, str> {
     Cow::Owned(escaped)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{ESCAPES, escape};
-    use std::borrow::Cow;
-
-    #[test]
-    fn every_character_that_changes_the_meaning_is_escaped() {
-        for (from, to) in ESCAPES {
-            assert_eq!(escape(&from.to_string()), to, "{from}");
-        }
-    }
-
-    #[test]
-    fn text_that_needs_nothing_is_returned_unchanged_and_unallocated() {
-        let plain = "Additional fortune added at request time.";
-        assert!(matches!(escape(plain), Cow::Borrowed(_)));
-        assert_eq!(escape(plain), plain);
-    }
-
-    /// The order matters: escaping `&` last would escape the ampersands the
-    /// other four just produced.
-    #[test]
-    fn the_ampersand_is_escaped_first() {
-        assert_eq!(escape("<b>"), "&lt;b&gt;");
-        assert_eq!(escape("&lt;"), "&amp;lt;");
-    }
-
-    /// The byte scan rests on all five being ASCII: a byte of a multi-byte
-    /// character is `0x80` or above and can never be mistaken for one of them.
-    /// `ESCAPED` asserts it at compile time; this says why it matters, and
-    /// checks the property the assertion protects.
-    #[test]
-    fn text_that_is_not_ascii_passes_through_whole() {
-        assert_eq!(escape("Ünïcödé — 日本語 — 🎉"), "Ünïcödé — 日本語 — 🎉");
-        assert!(matches!(escape("日本語"), Cow::Borrowed(_)));
-        // …and a multi-byte character beside an escape keeps both.
-        assert_eq!(escape("日<本>語"), "日&lt;本&gt;語");
-        assert_eq!(escape("a & 日"), "a &amp; 日");
-    }
-
-    /// The boundaries a scan gets wrong: an escape first, last, doubled and
-    /// alone. Written when this copied runs rather than characters, and kept
-    /// after that lost its measurement - the cases are the same either way,
-    /// and a test that survives a rewrite of what it tests is the useful kind.
-    #[test]
-    fn an_escape_at_either_end_and_beside_itself() {
-        assert_eq!(escape("<a"), "&lt;a");
-        assert_eq!(escape("a<"), "a&lt;");
-        assert_eq!(escape("<<"), "&lt;&lt;");
-        assert_eq!(escape("<"), "&lt;");
-        assert_eq!(escape("a<b<c"), "a&lt;b&lt;c");
-        assert_eq!(escape(""), "");
-    }
-
-    #[test]
-    fn what_a_template_is_for() {
-        assert_eq!(
-            escape(r#"<script>alert("x")</script>"#),
-            "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;"
-        );
-    }
-
-    /// Escaping is **not** idempotent, and a test says so rather than an
-    /// invariant that is not true: escaping twice is a bug at the call site,
-    /// which is exactly why ADR-017 D2 gives an already-escaped value a type
-    /// instead of leaving it to be recognised.
-    #[test]
-    fn escaping_twice_is_visible_rather_than_harmless() {
-        assert_eq!(escape(&escape("<b>")), "&amp;lt;b&amp;gt;");
-    }
-}
-
-#[cfg(test)]
-mod raw_tests {
-    use super::*;
-
-    /// The type is the promise, and it is the only way to make it.
-    #[test]
-    fn raw_is_written_out_unchanged() {
-        let markup = Raw::new("<b>bold</b>");
-        assert_eq!(markup.as_str(), "<b>bold</b>");
-        assert_eq!(markup.to_string(), "<b>bold</b>");
-    }
-
-    /// The safe way in: escape first, and the result is markup by construction.
-    #[test]
-    fn escaped_text_becomes_markup() {
-        let markup = Raw::escaped("a < b & c");
-        assert_eq!(markup.as_str(), "a &lt; b &amp; c");
-
-        // …and it is not escaped twice, because it is no longer text.
-        assert_eq!(Raw::new(markup.as_str()).as_str(), "a &lt; b &amp; c");
-    }
-}
-
 /// What may be placed in a template hole, and how it is written.
 ///
 /// [ADR-017](../../../docs/specification/adr/adr-017.md) D2 says the one way to
@@ -316,34 +221,31 @@ render_by_display!(
 );
 
 #[cfg(test)]
-mod render_tests {
-    use super::*;
+mod tests {
+    use super::{Raw, escape};
+    use std::borrow::Cow;
 
-    /// The type decides, which is the whole of ADR-017 D2.
+    // The escapes, a template's holes and `html::Raw` written out are
+    // `tests/compiler/tests/html_text_is_escaped_and_markup_is_not.nika`
+    // (#2082). What stays here no program sees: that text needing nothing is
+    // not copied, and `Raw::escaped`, which the contracts do not name.
+
     #[test]
-    fn text_is_escaped_and_markup_is_not() {
-        assert_eq!("a<b".render(), "a&lt;b");
-        assert_eq!(String::from("a<b").render(), "a&lt;b");
-        assert_eq!(Raw::new("<b>x</b>").render(), "<b>x</b>");
+    fn text_that_needs_nothing_is_returned_unallocated() {
+        assert!(matches!(
+            escape("Additional fortune added at request time."),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(escape("日本語"), Cow::Borrowed(_)));
     }
 
-    /// A reference renders as what it points at, so a hole may hold a borrowed
-    /// value without the template knowing.
+    /// The safe way in: escape first, and the result is markup by construction.
     #[test]
-    fn a_reference_renders_as_its_target() {
-        let owned = String::from("a&b");
-        let view: &str = &owned;
-        assert_eq!(view.render(), "a&amp;b");
-        let markup = Raw::new("<i>");
-        let borrowed: &Raw = &markup;
-        assert_eq!(borrowed.render(), "<i>");
-    }
+    fn escaped_text_becomes_markup() {
+        let markup = Raw::escaped("a < b & c");
+        assert_eq!(markup.as_str(), "a &lt; b &amp; c");
 
-    /// A number cannot contain markup, so it is written as it is.
-    #[test]
-    fn a_number_writes_itself() {
-        assert_eq!(42i32.render(), "42");
-        assert_eq!(true.render(), "true");
-        assert_eq!((-1.5f64).render(), "-1.5");
+        // …and it is not escaped twice, because it is no longer text.
+        assert_eq!(Raw::new(markup.as_str()).as_str(), "a &lt; b &amp; c");
     }
 }

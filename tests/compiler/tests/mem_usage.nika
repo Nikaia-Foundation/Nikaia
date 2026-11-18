@@ -1,0 +1,26 @@
+// ADR-400 D2: `mem::usage()` is the calling thread's bytes in use: it grows
+// by what a list of 1000 integers holds and falls back once the list is
+// dropped. Read before printing, since printing may allocate.
+use std::mem
+
+/// The bytes a list of 1000 integers holds while it lives.
+fn held_by_a_list() -> i64 {
+    let before = mem::usage()
+    let mut numbers: Vec[i64] = []
+    for i in 0..<1000 {
+        numbers.push(i)
+    }
+    let held = mem::usage() - before
+    if numbers.len() != 1000 {
+        return 0
+    }
+    return held
+}
+
+fn main() throws {
+    let base = mem::usage()
+    let held = held_by_a_list()
+    let after = mem::usage()
+    println(f"the list held at least 8000 bytes: {held >= 8000}")
+    println(f"dropped, the usage fell back: {after == base}")
+}

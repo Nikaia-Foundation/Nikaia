@@ -1,0 +1,18 @@
+// A load whose lanes run past the end of its bytes stops the program
+// (`std::simd::load`): eight bytes for four `u16` lanes from byte 2 of nine.
+// Moved from the `nikaia-std` unit test
+// `simd::tests::load_reads_least_significant_first_and_stops_past_the_end`
+// (#2082).
+use std::cli
+use std::simd
+
+fn main() throws {
+    // The program's own name is the one word: 2.
+    let mut at = 1
+    for _ in cli::args() {
+        at += 1
+    }
+    let nine = "\u{1}\u{0}\u{2}\u{0}\u{3}\u{0}\u{4}\u{0}\t"
+    let l: simd::Fixed[u16, 4] = simd::load(nine.bytes, at)
+    println(f"{l.lane(0)}")
+}

@@ -1,0 +1,6 @@
+// A negative count is no access, so not one out of bounds: it stops the
+// program with its own message, which names the count (Part I, `count::of`).
+fn main() throws {
+	let count: i64 = 0 - 1
+	println("ab".repeat(count))
+}

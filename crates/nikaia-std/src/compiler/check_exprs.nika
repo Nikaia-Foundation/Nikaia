@@ -248,6 +248,16 @@ impl CheckState {
                 if name == "Self" {
                     return
                 }
+                // **Bytes are not text** (ADR-019 D7): a print call writes them
+                // as they are, and a hole of a text `f"…"` refuses them.
+                if name == "Bytes" {
+                    if !printed {
+                        let note = f"A hole is written as its value's text, and bytes are not text (ADR-019 D7). `{written}` is `{held.text()}`."
+                        let out = f"Print the bytes beside the line: `print({written})`, or write their text: `{{{shown}.text_lossy()}}`."
+                        self.findings.push(check_refusal("NK1201", span, f"You can't put `{held.text()}` in an `f\"…\"` hole.", [note], out))
+                    }
+                    return
+                }
                 // **A struct or `enum` of a package this file `use`s** (#1422):
                 // its ledger says what it is made of, and the lowering writes
                 // a text form only for an error of it, as for one of this

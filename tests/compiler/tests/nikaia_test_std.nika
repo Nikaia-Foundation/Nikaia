@@ -1,0 +1,27 @@
+// #2082: `nikaia test --std` runs the `test` blocks of the compiler's own
+// `.nika` files, compiled into `nikaia` (no `cfg(test)` build of
+// `nikaia-std`): `--list` names them, `--filter` runs those whose name holds
+// the text, one line each and a summary, and a filter that names none fails.
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let listed = process::run(nikaia, ["test", "--std", "--list", "--filter", "touch::"])
+    println(f"list exit {listed.code}")
+    print(listed.stdout)
+    let one = process::run(nikaia, ["test", "--std", "--filter", "touch::two_reads_never_conflict"])
+    println(f"one exit {one.code}")
+    print(one.stdout)
+    let logic = process::run(nikaia, ["test", "--std", "--list", "--filter", "logic::sv_walk::"])
+    println(f"dependency exit {logic.code}")
+    print(logic.stdout)
+    let none = process::run(nikaia, ["test", "--std", "--filter", "no_such_test_anywhere"])
+    println(f"none exit {none.code}")
+    print(none.stdout)
+}

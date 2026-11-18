@@ -172,14 +172,10 @@ impl SvReplay {
                 let is_lt = matches!(b.rel, SvRel::Lt);
                 strict = strict || is_lt && m > 0;
                 row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return SvSum { bound: None, why: String::from("overflow") } };
-                for l in b.assumed.iter() {
-                    let l = nikaia_std::num::value(l);
-                    if !assumed.contains(&l) { assumed.push(l); }
-                }
+                assumed = sv_lits_union(&assumed, &b.assumed);
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        assumed.sort();
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
         SvSum { bound: Some(SvBound { row: sv_row_reduced(row), rel, assumed }), why: String::from("") }
     }
@@ -319,7 +315,6 @@ pub(crate) fn sv_rel_text(rel: &SvRel) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_row(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
@@ -331,22 +326,16 @@ pub(crate) fn sv_check_test_row(ks: &[i64], c: i64) -> SvRow {
     nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_le(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_check_test_row(&ks, c), rel: SvRel::Le } }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_eq(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_check_test_row(&ks, c), rel: SvRel::Eq } }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_lt(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_check_test_row(&ks, c), rel: SvRel::Lt } }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_pos(a: u32) -> u32 { sv_lit(a, false) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_neg(a: u32) -> u32 { sv_lit(a, true) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_units(atoms: Vec<SvAtom>, columns: u32) -> SvQuery {
     let mut clauses: Vec<Vec<u32>> = vec![];
     let mut a: u32 = 0u32;
@@ -357,23 +346,20 @@ pub(crate) fn sv_check_test_units(atoms: Vec<SvAtom>, columns: u32) -> SvQuery {
     SvQuery { atoms, clauses, columns, reals: vec![] }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_report(name: &str, query: &SvQuery, log: &SvLog) -> String {
     let v = sv_check(query, &log.steps);
     if v.ok { return format!("{}: accepted ({} steps)\n", name, log.steps.len() as i64); }
     format!("{}: rejected at step {}: {}\n", name, v.step, v.reason)
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_clauses() -> SvQuery {
     let clauses: Vec<Vec<u32>> = vec![vec![sv_check_test_pos(0u32), sv_check_test_pos(1u32)], vec![sv_check_test_pos(0u32), sv_check_test_neg(1u32)], vec![sv_check_test_neg(0u32), sv_check_test_pos(1u32)], vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)]];
     SvQuery { atoms: vec![sv_check_test_le(&vec![1], 0), sv_check_test_le(&vec![0, 1], 0)], clauses, columns: 2, reals: vec![] }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
     let query = sv_check_test_clauses();
-    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let c0 = log.input(0u32);
     let c1 = log.input(1u32);
     let c2 = log.input(2u32);
@@ -385,12 +371,10 @@ pub(crate) fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_bounds() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![1], -2), sv_check_test_le(&vec![-1], 3)], 1u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec<u32>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_bounds()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(lits, vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], vec![m, m], den);
@@ -398,15 +382,12 @@ pub(crate) fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec<u32>) -> SvLo
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_strict() -> SvQuery { sv_check_test_units(vec![sv_check_test_lt(&vec![2], -3), sv_check_test_le(&vec![-2], 3)], 1u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_equal() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![-1, 1], 0), sv_check_test_le(&vec![-1, 1], 1)], 2u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let f = log.farkas(vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)], vec![SvSrc::Lit(sv_check_test_pos(0u32)), SvSrc::Lit(sv_check_test_pos(1u32))], m, den);
@@ -414,12 +395,10 @@ pub(crate) fn sv_check_test_lemma_log(query: &SvQuery, m: Vec<i64>, den: i64) ->
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_parity() -> SvQuery { sv_check_test_units(vec![sv_check_test_eq(&vec![1, -2], 0), sv_check_test_eq(&vec![1], -5)], 2u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_parity()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let ext = log.extend(sv_check_test_row(&vec![1], 0), m);
@@ -437,15 +416,12 @@ pub(crate) fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_fits() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![1], -2), sv_check_test_le(&vec![-1], 1)], 1u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_half() -> SvQuery { sv_check_test_units(vec![sv_check_test_le(&vec![2], -1), sv_check_test_le(&vec![-2], 1)], 1u32) }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(&sv_check_test_half()), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     let a = log.input(0u32);
     let b = log.input(1u32);
     let s = log.split(sv_check_test_row(&vec![1], 0), sv_check_test_row(&vec![-1], ge_constant));
@@ -455,14 +431,12 @@ pub(crate) fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
     log
 }
 
-#[cfg(test)]
 pub(crate) fn sv_check_test_single(query: &SvQuery, steps: Vec<SvStep>) -> SvLog {
-    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0 });
+    let mut log = nikaia_std::index::or(sv_log(query), || SvLog { steps: vec![], entries: 0, atoms: 0, columns: 0, limit: 0 });
     log.steps = steps;
     log
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== accepted\n"));
@@ -477,7 +451,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== rejected\n"));
@@ -507,14 +480,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn a_valid_proof_of_each_step_kind_is_accepted() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn broken_proofs_are_rejected_with_their_reasons() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_check_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_check::a_valid_proof_of_each_step_kind_is_accepted", __nikaia_test_0),
+        ("sv_check::broken_proofs_are_rejected_with_their_reasons", __nikaia_test_1),
+    ]
 }

@@ -1,0 +1,47 @@
+// A builder that calls a method of its type in a loop keeps the type's
+// `length` rule (#2063): the loop's head gives the rule of the value built
+// again, as it does of `self` (#1925), so the call in the loop finds it
+// holding and `self.b[i]` in `last` is proved, with `while` and with `for`.
+
+struct T {
+	a: Vec[i64],
+	b: Vec[i64],
+}
+
+impl T {
+	fn add(ref mut self, x: i64) {
+		self.a.push(x)
+		self.b.push(x)
+	}
+
+	fn last(ref self) -> i64 {
+		let mut out = 0
+		for i in 0..<self.a.len() {
+			out = self.b[i]
+		}
+		return out
+	}
+}
+
+fn build_while(n: i64) -> T {
+	let mut t = T { a: [], b: [] }
+	let mut i = 0
+	while i < n {
+		t.add(i)
+		i += 1
+	}
+	return t
+}
+
+fn build_for(n: i64) -> T {
+	let mut t = T { a: [], b: [] }
+	for k in 0..<n {
+		t.add(k)
+	}
+	return t
+}
+
+fn main() throws {
+	println(build_while(2).last())
+	println(build_for(3).last())
+}

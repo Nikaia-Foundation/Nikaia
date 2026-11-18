@@ -1,0 +1,27 @@
+// A text is cut at a position in `i64`, searched from a position on, from
+// its end, and replaced a counted number of times (`std::search`): a one-byte
+// needle finds what the text needle finds, a search begun inside a scalar
+// finds the next match, a negative count replaces nothing. Moved from the
+// `nikaia-std` unit tests `search::tests::*` (#2082).
+fn main() throws {
+    let (city, rest) = "Hamburg;12.0".split_at(7)
+    println(f"[{city}] [{rest}]")
+    let (none, all) = "abc".split_at(0)
+    println(f"[{none}] [{all}]")
+    let (whole, empty) = "abc".split_at(3)
+    println(f"[{whole}] [{empty}]")
+
+    println(f"{"a;b;c".rfind(";") ?? -1} {"a;b;c".rfind(';') ?? -1}")
+    println(f"{"1.2.3".replacen(".", "", 1)} {"1.2.3".replacen('.', "", 1)}")
+    println(f"{"äa;".find(";") ?? -1} {"äa;".find(';') ?? -1}")
+
+    println(f"{"a::b::c".rfind("::") ?? -1} {"abc".rfind("x") == null}")
+    println(f"{"aaa".replacen("a", "b", 2)} {"aaa".replacen("a", "b", -1)}")
+
+    let line = "Hamburg;12.0;x"
+    println(f"{line.find(";") ?? -1} {line.find(";"; from: 8) ?? -1} {line.find(";"; from: 13) == null}")
+    println(f"{"abc".find(""; from: 3) ?? -1} {"abc".find("x"; from: 4) == null} {"abc".find("a"; from: -5) ?? -1}")
+
+    // `ä` is two bytes; byte 1 is inside it.
+    println(f"{"äa;ä;".find(";"; from: 1) ?? -1} {"äöü".find("ü"; from: 1) ?? -1}")
+}

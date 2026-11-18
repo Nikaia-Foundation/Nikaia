@@ -1,0 +1,10 @@
+error[NK1152]: `TOTAL` took more than 100 steps while the program was built.
+   --> tests/a_build_time_path_holds_the_running_frame_not_a_returned_one.nika:15:1
+    |
+ 15 | comptime(steps: 100) TOTAL = outer()
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It was in `TOTAL` > `outer` > `spin`.
+    = note: Each turn of a loop and each call is a step, and the count is the same on every machine.
+    = help: Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.
+1 type error

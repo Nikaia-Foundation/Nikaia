@@ -1982,7 +1982,8 @@ pub(crate) fn prover_overflow_goal(walk: &mut ProverWalk, expr: &Expr, op_at: i6
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     let (lo, hi) = match prover_stated_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !walk.state.unfit_numbers.is_empty() { return None; }
-    let term = match lin_term(expr, words, &mut |name| { scope.ints.contains(name) }, &mut |name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut calls: Vec<i64> = vec![];
+    let term = match goal_term(expr, words, &mut |name| { scope.ints.contains(name) }, &mut |name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes, &mut calls) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let low = walk.arena.int(lo);
     let mut goal = walk.arena.le(low, term);
     if hi.is_some() {
@@ -1990,7 +1991,20 @@ pub(crate) fn prover_overflow_goal(walk: &mut ProverWalk, expr: &Expr, op_at: i6
         let below = walk.arena.le(term, high);
         goal = { let __nikaia_value = walk.arena.and(vec![goal, below]); __nikaia_value };
     }
-    Some(goal)
+    if calls.is_empty() || ty == "i64" { return Some(goal); }
+    let (least, most) = match prover_type_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut either: Vec<i64> = vec![];
+    let bottom = walk.arena.int(least);
+    for result in calls.iter() {
+        let result = nikaia_std::num::value(result);
+        either.push(walk.arena.lt(result, bottom));
+        if most.is_some() {
+            let top = walk.arena.int(nikaia_std::index::or(most, || 0));
+            either.push(walk.arena.lt(top, result));
+        }
+    }
+    either.push(goal);
+    Some(walk.arena.or(either))
 }
 
 pub(crate) fn prover_proves_here(walk: &mut ProverWalk, goal: i64, scope: &ProverScope, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {

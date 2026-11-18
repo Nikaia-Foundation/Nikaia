@@ -5,5 +5,5 @@ error[NK1186]: `std` has no module called `std::compiler`.
    | ^^^^^^^^^^^^^^^^^
    |
    = note: `compiler` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach.
-   = help: `std` offers: bool, bytes, channel, cleanup, cli, collections, env, foreign, fs, hash, html, http1, io, net, par, process, regex, simd, supervisor, target, task, text, time, winnow_grammar.
+   = help: `std` offers: bool, bytes, channel, cleanup, cli, collections, env, foreign, fs, hash, html, http1, io, mem, net, par, process, regex, simd, supervisor, target, task, text, thread, time, winnow_grammar.
 1 type error

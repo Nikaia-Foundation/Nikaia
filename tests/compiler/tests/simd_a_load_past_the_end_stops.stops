@@ -1,0 +1,1 @@
+tests/simd_a_load_past_the_end_stops.nika:16: the program stopped: range end index 10 out of range for slice of length 9

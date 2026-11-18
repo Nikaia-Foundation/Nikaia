@@ -438,13 +438,19 @@ impl SvSimplex {
 		return sv_delta_scale(sum, inverse)
 	}
 
-	/// Every basic variable's value from the non-basic ones; false where a
-	/// step leaves `i64`.
-	fn refresh(ref mut self) -> bool {
+	/// The basic values after non-basic variable `v` took a new value: each
+	/// row that holds `v` worked out again; false where a step leaves `i64`.
+	/// A basic variable stands in its own row only, so a row without `v`
+	/// keeps its value, and only these rows change (#1962: a refresh of
+	/// every row was a third of the work on `ring_2exp4_5vars_3ite`).
+	fn refresh(ref mut self, v: i64) -> bool {
+		let col = v.checked_u32() ?? return false
 		let mut r = 0
 		while r < self.rows.len() {
-			let b = self.basic[r]
-			self.values[b] = self.row_value(r) ?? return false
+			if sv_row_coef(self.rows[r], col) != 0 {
+				let b = self.basic[r]
+				self.values[b] = self.row_value(r) ?? return false
+			}
 			r += 1
 		}
 		return true
@@ -523,7 +529,7 @@ impl SvSimplex {
 			let order = sv_delta_cmp(self.values[v], value)
 			if (upper && order > 0) || (!upper && order < 0) {
 				self.values[v] = value
-				if !self.refresh() {
+				if !self.refresh(v) {
 					return self.overflow()
 				}
 			}
@@ -727,8 +733,10 @@ impl SvSimplex {
 			let target = if at.below { self.lower[b].value.clone() } else {
 				self.upper[b].value.clone()
 			}
+			// `b` left the basis: the rows that hold it now are row `r`
+			// and those the pivot combined with it.
 			self.values[b] = target
-			if !self.refresh() {
+			if !self.refresh(b) {
 				return self.overflow()
 			}
 			count += 1
@@ -1021,6 +1029,12 @@ impl SvTh for SvSimplex {
 	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32] {
 		let mut out: Vec[u32] = []
 		let count = book.atoms.len().checked_u32() ?? return out
+		// Each row's bound from above and below, worked out once per call
+		// (#1962): the bounds do not change while it runs, a row `view`
+		// adds leaves the others as they were, and the atoms of one form
+		// share a row. Per row and side: 0 not yet, 1 none, 2 in `bounds`.
+		let mut known: Vec[i64] = []
+		let mut bounds: Vec[SvDelta] = []
 		let mut a: u32 = 0
 		while a < count {
 			for l in [sv_lit(a, false), sv_lit(a, true)] {
@@ -1052,7 +1066,23 @@ impl SvTh for SvSimplex {
 				if r < 0 {
 					continue
 				}
-				let got = self.row_bound(r, up) ?? continue
+				while known.len() < 2 * self.rows.len() {
+					known.push(0)
+					bounds.push(sv_sx_zero())
+				}
+				let at = if up { 2 * r + 1 } else { 2 * r }
+				if known[at] == 0 {
+					known[at] = 1
+					let found = self.row_bound(r, up)
+					if found != null {
+						known[at] = 2
+						bounds[at] = found ?? sv_sx_zero()
+					}
+				}
+				if known[at] != 2 {
+					continue
+				}
+				let got = bounds[at].clone()
 				let order = sv_delta_cmp(got, seen.value)
 				if (up && order <= 0) || (!up && order >= 0) {
 					let parts = self.row_parts(r, up) ?? continue
@@ -1909,7 +1939,7 @@ fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
 
 // Refuted by the split x <= 0 or x >= 1, each side by a Farkas sum.
 fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_real_test_row([1], 0), sv_real_test_row([-1], 1))
@@ -1931,7 +1961,7 @@ fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
 
 // Refuted by rounding each bound: x <= 0 and x >= 1.
 fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let up = log.combine([SvSrc::Lit(sv_lit(0, false))], [1])
@@ -1953,7 +1983,7 @@ fn sv_real_test_empty() -> SvQuery {
 }
 
 fn sv_real_test_empty_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(

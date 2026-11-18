@@ -8,6 +8,74 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1442] — 2026-11-18
+
+**Builders' changes (#2129)**
+- fix: a program whose detached task waits on I/O that never finishes now exits 70 with the cleanup-deadline message; `block_on` used to panic "a future returned Pending without arranging for its waker" once the drain's park timed out.
+- A Duration has saturating_add, saturating_sub, saturating_mul(n), min and max, and an integer has nanos() (ADR-402): below zero gives no time, past the longest span stays there, and plain + - * still stop the program.
+
+## [0.0.1441] — 2026-11-18
+
+**Builders' changes (#2090, #2136)**
+- The solver's compare scores ours under the time limit alone, not under the build-time case budget (ADR-270 D17); nikaia test --filter runs the test it names
+- `nikaia test --filter` runs the tests it names; before, it could run another test in their place and report it passed.
+- Fixed: `nikaia run` and build-time code work with Cargo 1.100. Its always-on build-dir layout puts each crate in its own `build/<crate>/<hash>/out`, and the bundle now hands rustc every one of those directories (#2136).
+
+## [0.0.1440] — 2026-11-18
+
+**Builders' changes (#1967, #1968, #1972)**
+- The solver's regression set pins QF_LRA sal carpark-Carpark2-ausgabe-6 under a 1 s limit; it takes about 0.07 s since the faster simplex propagation and the opt-level 3 build (was about 6 s).
+- The solver's regression set pins QF_LRA spider_benchmarks current_frame.base under a 1 s limit. It has taken about 0.06 s since the faster simplex propagation and the opt-level 3 build (about 8 s before).
+- `--bounds` now gives an outside operation a goal when an operand is a method result. The prover reads each call as a fresh value of its type (ADR-270 D29), so `size + asked.length()` reads "not proved within ±2^62" and a u8 sum with a pinned 0 is proved.
+
+## [0.0.1439] — 2026-11-18
+
+**std::collections: HashMap.remove, HashMap.retain and BTreeMap.retain (#2111)**
+- `collections::HashMap` gains `remove` and `retain`, and `collections::BTreeMap` gains `retain`: `m.retain(fn(k, v) { return v > 1 })` keeps the pairs the function says yes to; a number key or value is handed as the number, a text as text.
+
+## [0.0.1438] — 2026-11-18
+
+**Builders' changes**
+- A text cut at a position before its start now stops the program naming the program's line, not std's Rust.
+- A Bytes compared by order (<, <=, >, >=) with a text's bytes or a cut of bytes builds, as == already did.
+
+## [0.0.1437] — 2026-11-18
+
+**Builders' changes (#2107)**
+- Fixed: an i32 (or other narrower integer) count, as in `"ab".repeat(n)`, no longer stops the build with an internal error (NK1343).
+- solver_regress no longer depends on wall-clock time: solver.nika run --budget N bounds each run by N proof-log steps, deterministic on every machine, and an over-budget run answers "unknown (steps)".
+
+## [0.0.1436] — 2026-11-18
+
+**A narrower integer count goes into count::of widened, not around it**
+- Fixed: an i32 (or other narrower integer) count, as in `"ab".repeat(n)`, no longer stops the build with an internal error (NK1343).
+
+## [0.0.1435] — 2026-11-18
+
+**Builders' changes (#1555, #2004, #2068)**
+- Integers say whether a step overflowed and give a product's high half: `overflowing_add`, `overflowing_sub`, `overflowing_mul` and `widening_mul` on i32, i64, u32, u8 and u64, and `--bounds` proves an index past `if !overflowed` (#1555)
+- The solver benchmark builds the solver at opt-level 3 (it built at opt-level 0, so every figure was of an unoptimised binary); the comparison with z3 and cvc5 in docs/solver-workload.md section 9 was measured again.
+- Solver: QF_LIA 20220307-SMPT solves 356 of 371, up from 338: the equality elimination substitutes in place and tidies only the bounds that changed, and two sorted assumption sets are merged instead of looked up literal by literal, in the solver and the certificate checker
+- A method called on a parenthesised integer expression of literals, `(1 << 4).wrapping_mul(2)`, builds: the expression is one open number and takes its type as a `let` of it would.
+
+## [0.0.1434] — 2026-11-18
+
+**Builders' changes (#1617, #1618, #1619, #1859)**
+- benches/game: fasta against the Benchmarks Game's fastest Rust entry (Rust entry 7, held to one thread). `nikaia run benches/game/game.nika -- fasta` counts it: the plain program 3.66x Rust's instructions at a third of the tokens (1.16x the same algorithm in plain Rust); written for speed, with a letter table and a byte buffer, 0.96x
+- A function or method of a program's own called `repeat` takes its arguments as written; only `str::repeat`'s count is converted, by the entry the call resolves to (it was an internal error)
+- benches/game: k-nucleotide against the Benchmarks Game's fastest Rust entry (Rust entry 7), on fasta's output. `nikaia run benches/game/game.nika -- k-nucleotide` counts it: the plain program 8.08x Rust's instructions at a third of its tokens, written for speed with two-bit codes as map keys 3.15x; most of both losses is the keyed hash an input-keyed map gets (1.13x Rust for speed when the input is trusted)
+- benches/game: reverse-complement against the Benchmarks Game's fastest Rust entry (Rust entry 1). `nikaia run benches/game/game.nika -- reverse-complement` counts it: the program as first written 23.2x Rust's instructions at a fifth of its tokens, written for speed (in place, a table) 5.5x; the gap is the entry's SSSE3 run-time byte shuffle and vector stores, which std::simd does not offer yet
+- benches/game: the json package against serde_json, reading standard input into the tree and writing it back. `nikaia run benches/game/game.nika -- json` counts three generated inputs (1 KB, 10 MB, 512 levels deep): 1.4x, 1.8x and 2.0x serde_json's instructions at about a third of its tokens, most of the gap the path text the package builds for every value and its copying a character at a time
+- print, println, eprint and eprintln take Bytes and write them unchanged (ADR-019 D7); Bytes in a hole of a text f"…" is refused with NK1201, not an internal error.
+
+## [0.0.1433] — 2026-11-18
+
+**Builders' changes (#2020, #2023)**
+- The solvers and the logic layer are the package logic: packages/logic, used by the compiler and by any program with logic = { path = ... } (lg_smtlib_read, lg_check, lg_verify); scripts/solver.nika builds its rod from there.
+- An assert in the fallback block of a ?? inside a test is checked by the test under nikaia test, not refused NK1300.
+- CI builds the solver program once per shard before the tests, so `solver_sample` no longer overruns its 300 s at `user-parallelism = no`.
+- `nikaia test --std` runs the test blocks of the compiler's own .nika files, compiled into nikaia without a cfg(test) build (#2082)
+
 ## [0.0.1432] — 2026-11-18
 
 **Builders' changes (#1510, #2046, #2076)**

@@ -1,0 +1,4 @@
+bounds in tests/a_counter_over_find_all_is_bounded_by_the_bytes.nika: 0 indexes, 0 proved; 3 operations, 2 proved
+    12  n += 1  proved
+    20  m += 2  proved
+    28  s += 1  checked: a counter the loop on line 27 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)

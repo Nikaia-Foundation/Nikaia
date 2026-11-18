@@ -67,6 +67,10 @@ pub const ENTRY: &str = "src/main.nika";
 /// from an ordinary run: Cargo owns the wrapper's argument list, so there is no
 /// flag or subcommand available to say which mode this is.
 pub const WRAPPER_MARKER: &str = "NIKAIA_RUSTC_WRAPPER";
+
+/// The roots of the packages whose own test program is built (ADR-403 D4),
+/// for the wrapper, which lowers each with every item `pub`.
+const TESTS_OF_VAR: &str = "NIKAIA_TESTS_OF";
 // The switches' variables (`TARGET_VAR` .. `CPU_VAR`) are
 // `project_settings.nika`'s, which writes and reads them.
 
@@ -350,6 +354,7 @@ impl Settings {
                 &cpu_key,
                 build.crate_root,
                 build.counts_heap,
+                build.every_item_public,
             ),
             "rust",
         )
@@ -1143,6 +1148,9 @@ struct LowerHost<'a> {
 /// dependencies' promises and whether the facts are the emitter's.
 struct Checking {
     modules: BTreeSet<String>,
+    /// The packages whose own `tests/` the input is a program of (ADR-403
+    /// D1): their non-`pub` names are reachable from it.
+    tested: BTreeSet<String>,
     newly: check::Newly,
     promised: Ledger,
     facts_reusable: bool,
@@ -1449,8 +1457,17 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 dependency: unit.package.is_some(),
             })
             .collect();
+        let tested = self
+            .packages
+            .iter()
+            .filter(|dependency| {
+                project_tests::project_tests_tests_of(&dependency.root, self.input)
+            })
+            .map(|dependency| dependency.name.clone())
+            .collect();
         *self.checking.borrow_mut() = Some(Checking {
             modules,
+            tested,
             newly,
             promised,
             facts_reusable,
@@ -1483,6 +1500,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             newly: &checking.newly,
             beside: &beside,
             reads: self.reads,
+            tested: &checking.tested,
         };
         // **A dependency's unit is checked as its own package writes it**
         // (issue #159). The program's
@@ -1772,6 +1790,9 @@ pub struct Around<'a> {
     /// about a function it cannot see the body of. Each file owns the interner
     /// its symbols resolve in, so the AST travels rather than the items.
     pub beside: &'a [&'a crate::parser::Parsed],
+    /// **The packages whose own `tests/` this program is in** (ADR-403 D1):
+    /// a name of theirs that is not `pub` is reachable from it.
+    pub tested: &'a BTreeSet<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1795,6 +1816,7 @@ pub fn check(
         newly,
         beside,
         reads,
+        tested,
     } = around;
     let host = CheckHost {
         parsed,
@@ -1808,6 +1830,7 @@ pub fn check(
         newly,
         reads,
         foreign,
+        tested,
         facts: std::cell::RefCell::new(None),
         violations: std::cell::RefCell::new(Vec::new()),
     };
@@ -1844,6 +1867,8 @@ struct CheckHost<'a> {
     newly: &'a check::Newly,
     reads: &'a assets::Reads,
     foreign: &'a Foreign,
+    /// The packages whose own `tests/` the unit is a program of (ADR-403 D1).
+    tested: &'a BTreeSet<String>,
     /// The walk's facts, for the caller's `facts_out`.
     facts: std::cell::RefCell<Option<check::CheckFacts>>,
     /// What `sync::check` found, named by index on the Nikaia side.
@@ -1867,6 +1892,10 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
         if self.foreign.within_std {
             check::refuse_assumes_in_std(&mut checked);
             check::allow_std_helpers_in_std(&mut checked);
+        }
+        // **A package's own test programs see its private names** (ADR-403 D1).
+        if !self.tested.is_empty() {
+            check::allow_privates_in_own_tests(&mut checked, self.tested);
         }
         *self.facts.borrow_mut() = Some(checked.facts);
         checked.findings
@@ -2972,10 +3001,17 @@ pub struct Suite<'a> {
 /// others; the failures are reported by `project_tests_report_failures`.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
-    let blocks: Vec<(String, PathBuf, i64)> = suite
+    let blocks: Vec<(String, PathBuf, i64, i64)> = suite
         .tests
         .iter()
-        .map(|test| (test.title.clone(), test.path.clone(), test.line as i64))
+        .map(|test| {
+            (
+                test.title.clone(),
+                test.path.clone(),
+                test.line as i64,
+                test.number as i64,
+            )
+        })
         .collect();
     let host = TestsHost {
         suite,
@@ -3520,9 +3556,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         args: &[String],
         entry: &Path,
         own: &Path,
+        main: &Path,
     ) -> HostResult<nikaia_std::bytes::Bytes> {
         let mut command = std::process::Command::new(&self.exe);
-        command.arg("check").args(args).arg(entry);
+        command
+            .arg("check")
+            .args(args)
+            .arg(entry)
+            .env(nikaia_std::env::MAIN_VAR, main);
         self.held(
             self.ran(&self.exe, command, own, &[], 0, 0)
                 .map(|out| out.stdout),
@@ -3564,6 +3605,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         list: &Path,
         within: i64,
+        main: &Path,
     ) -> HostResult<project_tests::ProjectTestsBatchBuilt> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -3571,6 +3613,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .arg(project)
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
+            .env(nikaia_std::env::MAIN_VAR, main)
             .env("CARGO_TERM_QUIET", "true");
         let built = self.held(self.ran(&self.exe, command, own, &[], within, 0))?;
         let binary = project
@@ -3730,6 +3773,12 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         if at != 0 {
             let mut changed = settings.clone();
             changed.build.counts_heap = false;
+            // **A package's own test program reaches its private names**
+            // ([ADR-403](../../docs/specification/adr/adr-403.md) D4): the
+            // package is lowered for it with every item `pub`, under a key of
+            // its own, and linked by that program alone.
+            changed.build.every_item_public =
+                project_tests::project_tests_tests_of(&member.root, &project.entry());
             dependency = changed;
             settings = &dependency;
         }
@@ -3933,12 +3982,28 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn settings_env(&self) -> Vec<(String, String)> {
-        self.project
+        let mut env: Vec<(String, String)> = self
+            .project
             .settings
             .as_env()
             .into_iter()
             .map(|(name, value)| (name, value.to_string_lossy().to_text()))
-            .collect()
+            .collect();
+        // **The package whose own test program this is** (ADR-403 D4): the
+        // wrapper lowers it with every item `pub`, as `lower_member` does.
+        let entry = self.project.entry();
+        let tested: Vec<String> = self
+            .members
+            .borrow()
+            .iter()
+            .skip(1)
+            .filter(|member| project_tests::project_tests_tests_of(&member.root, &entry))
+            .map(|member| canonical(&member.root).display().to_text())
+            .collect();
+        if !tested.is_empty() {
+            env.push((TESTS_OF_VAR.to_text(), tested.join("\u{1f}").to_text()));
+        }
+        env
     }
 
     fn root_tag(&self) -> String {
@@ -4338,12 +4403,24 @@ fn wrapper_lower(
         settings = settings.rooted_at(root);
     }
     settings.build.counts_heap = program && root.is_none();
+    let manifest = Manifest::find(source)?;
+    // **A package built for its own test program** (ADR-403 D4): the drive
+    // names it in `TESTS_OF_VAR`, and its library is lowered with every item
+    // `pub`.
+    if !program
+        && let (Some(root), Some(tested)) = (manifest.root(), std::env::var_os(TESTS_OF_VAR))
+    {
+        let root = canonical(root).display().to_text();
+        settings.build.every_item_public = tested
+            .to_string_lossy()
+            .split('\u{1f}')
+            .any(|each| each == root.as_str());
+    }
     // **The packages, found the same way the project build finds
     // them**: the manifest above the `.nika` path Cargo handed over,
     // read here because a dependency list is not a switch the
     // environment could carry. `packages_of` is the one resolution
     // rule, so the two cannot disagree about what the program is.
-    let manifest = Manifest::find(source)?;
     let packages = match manifest.root() {
         Some(root) => packages_of(&manifest, root, false)?,
         None => Vec::new(),

@@ -388,161 +388,21 @@ impl LowBits for u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::LowBits;
-
-    /// A view of a count, as a loop over a list lends one.
-    fn by_view(x: u8, n: &u8) -> u8 {
-        x.low_bits(n)
-    }
-
-    /// `low_bits` against the definition, for every count around each width,
-    /// of a signed and an unsigned count type.
-    #[test]
-    fn low_bits_keep_the_lowest_bits() {
-        let a: u64 = 0x0123_4567_89ab_cdef;
-        for n in -70i64..=140 {
-            let k = n.clamp(0, 128) as u32;
-            let keep = |w: u32| if k >= w { u64::MAX } else { (1u64 << k) - 1 };
-            assert_eq!(a.low_bits(n), a & keep(64), "u64 {n}");
-            assert_eq!(
-                (a as u32).low_bits(n),
-                (a as u32) & keep(32) as u32,
-                "u32 {n}"
-            );
-            assert_eq!(
-                (a as u8).low_bits(n as i32),
-                (a as u8) & keep(8) as u8,
-                "u8 {n}"
-            );
-            if n >= 0 {
-                assert_eq!(a.low_bits(n as u64), a & keep(64), "u64 count {n}");
-                let count = n as u8;
-                assert_eq!(by_view(a as u8, &count), (a as u8) & keep(8) as u8);
-            }
-        }
-        assert_eq!(a.low_bits(u64::MAX), a);
-        assert_eq!(a.low_bits(i64::MIN), 0);
-        assert_eq!(a.low_bits(1i64 << 40), a);
-        assert_eq!(a.low_bits(i128::MAX), a);
-    }
-
     use super::*;
 
-    /// **Every `u64` is above every negative number**, and the two compare
-    /// as numbers where both are in range.
+    /// `to_usize` and `to_isize` convert toward zero or stop. No program
+    /// reaches them (Part I 2.2 has no `usize` or `isize`), so this stays a
+    /// Rust test until the decision on unobservable `std` tests (#2082); the
+    /// rest of this module's tests are `tests/compiler` programs
+    /// (`num_a_number_converts_compares_and_keeps_its_low_bits`,
+    /// `num_a_float_that_does_not_fit_stops`).
     #[test]
-    fn a_u64_and_an_i64_compare_as_numbers() {
-        use std::cmp::Ordering::*;
-        assert_eq!(unsigned_with_signed(0, -1), Greater);
-        assert_eq!(unsigned_with_signed(u64::MAX, i64::MAX), Greater);
-        assert_eq!(unsigned_with_signed(7, 7), Equal);
-        assert_eq!(unsigned_with_signed(6, 7), Less);
-        assert_eq!(signed_with_unsigned(-1, 0), Less);
-        assert_eq!(signed_with_unsigned(i64::MIN, 0), Less);
-        assert_eq!(signed_with_unsigned(i64::MAX, u64::MAX), Less);
-        assert_eq!(signed_with_unsigned(7, 7), Equal);
-    }
-
-    /// **An `f64` into an `f32` is the nearest one**, an infinity and "not a
-    /// number" as they are, and a float into an integer goes through `f64`
-    /// (#736).
-    #[test]
-    fn a_float_converts_into_an_f32_and_from_one() {
-        assert_eq!(to_f32(2.5), 2.5f32);
-        assert_eq!(to_f32(f64::INFINITY), f32::INFINITY);
-        assert!(to_f32(f64::NAN).is_nan());
-        assert_eq!(to_f32(f32::MAX as f64), f32::MAX);
-        assert_eq!(to_i32(1.75f32), 1);
-        assert_eq!(to_u8(200.5f32), 200);
-        assert_eq!(to_u64(2.5f64), 2);
-    }
-
-    /// **A finite `f64` beyond the `f32` range aborts.**
-    #[test]
-    #[should_panic(expected = "does not fit in an `f32`")]
-    fn a_finite_f64_beyond_the_f32_range_aborts() {
-        to_f32(1e300);
-    }
-
-    /// **A cast's operand reaches the number through any number of views**,
-    /// which is what `for n in NS { n as i64 }` needs: the binding is a `&i32`
-    /// and `as` does not see through one.
-    #[test]
-    fn a_view_of_a_number_answers_the_number() {
-        let n: i32 = 7;
-        assert_eq!(value(n), 7i32);
-        assert_eq!(value(&n), 7i32);
-        assert_eq!(value(&&n), 7i32);
-        assert_eq!(value(&1.5f64) as i64, 1);
-        assert_eq!(value(&'a') as u32, 97);
-        assert!(value(&true));
-    }
-
-    #[test]
-    fn a_value_that_fits_comes_through() {
-        assert_eq!(to_i32(42.9), 42);
-        assert_eq!(to_i32(-42.9), -42);
-        assert_eq!(to_i64(1e18), 1_000_000_000_000_000_000);
-        assert_eq!(to_i32(i32::MAX as f64), i32::MAX);
-        assert_eq!(to_i32(i32::MIN as f64), i32::MIN);
+    fn a_usize_and_an_isize_convert_toward_zero_or_stop() {
         assert_eq!(to_usize(7.5), 7);
         assert_eq!(to_isize(-7.5), -7);
-    }
-
-    /// The three silent cases, each one an abort now.
-    #[test]
-    fn the_three_that_were_silent_abort() {
-        for value in [1e20_f64, -1e20_f64, f64::NAN] {
-            assert!(
-                std::panic::catch_unwind(|| to_i32(value)).is_err(),
-                "{value} must not pass as an `i32`"
-            );
-        }
-        for value in [1e30_f64, -1e30_f64, f64::NAN, f64::INFINITY] {
-            assert!(
-                std::panic::catch_unwind(|| to_i64(value)).is_err(),
-                "{value} must not pass as an `i64`"
-            );
-        }
-    }
-
-    /// `i64::MAX as f64` rounds up, so the value exactly at the rounded limit is
-    /// one an `i64` cannot hold and must be refused. This is the case the
-    /// `i128` detour exists for.
-    #[test]
-    fn the_rounded_upper_limit_of_an_i64_is_refused() {
-        assert!(std::panic::catch_unwind(|| to_i64(i64::MAX as f64)).is_err());
-        assert_eq!(
-            to_i64((i64::MAX as f64).next_down()),
-            9_223_372_036_854_774_784
-        );
-    }
-
-    /// A negative number is no `usize` - a bound the machine decides on the
-    /// other side, asked here without a constant.
-    ///
-    /// `-0.5` is not among them: truncating toward zero *is* zero, and a `usize`
-    /// holds that. What the check refuses is a value the type cannot hold, not a
-    /// value that had a fraction.
-    #[test]
-    fn a_negative_number_is_no_usize() {
-        assert!(std::panic::catch_unwind(|| to_usize(-1.0)).is_err());
-        assert!(std::panic::catch_unwind(|| to_usize(1e30)).is_err());
         assert_eq!(to_usize(-0.5), 0);
         assert_eq!(to_usize(0.0), 0);
-    }
-
-    /// The message names the type in this language's words and carries the value,
-    /// because the line alone does not say which of two conversions on it failed.
-    #[test]
-    fn the_message_names_the_type_and_the_value() {
-        let failed = std::panic::catch_unwind(|| to_i32(1e20)).expect_err("it aborts");
-        let said = failed
-            .downcast_ref::<String>()
-            .expect("the message is a String");
-        assert!(
-            said.contains("`i32`") && said.contains("100000000000000000000"),
-            "the message must name the type and the value: {said}"
-        );
+        assert!(std::panic::catch_unwind(|| to_usize(-1.0)).is_err());
+        assert!(std::panic::catch_unwind(|| to_usize(1e30)).is_err());
     }
 }

@@ -1,13 +1,32 @@
 // The solver's regression set (`tests/solver/regress`, #1961): files of the
 // SMT-LIB set (`tests/solver/SOURCES.md`) a fix brought within the limit,
-// run under a 10 s wall-clock limit, so a slowdown back to the old cost
-// shows as `unknown` in the diff. QF_LIA bofill-scheduling
-// SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
+// run under a work budget of 300000 steps of the proof log (`--budget`,
+// #2107), so a file whose elimination or search grows past it shows as
+// `unknown (steps)` in the diff. A count, not a wall-clock limit: the arm64
+// CI runner overran 10 s on the two SMPT files that take 4 s and 2 s on an
+// x86 machine (`docs/measuring.md`: count, never time). The files need 31128
+// (Diffusion2D), 225922 (Referendum), 851 (c_inference, which its cases stop
+// first) and 9967 steps (bofill), the same on every machine.
+// QF_LIA bofill-scheduling SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
 // and about 2 s since. QF_LIA 20231117-c_inference 30_30_86_7_sat ran past
 // its time limit while only the theory checks that pivot counted toward the
 // budget (#2011); since a check costs one case and two more a pivot (#2048)
 // it ends `unknown (cases)` within about 3 s.
+// QF_LIA 20220307-SMPT Diffusion2D-PT-D50N010-RC-00 took about 19 s while
+// each round of the equality elimination copied and tidied every bound
+// again; since it substitutes in place and tidies only what changed, about
+// 4 s (#2012). Referendum-PT-0200-RF-00 took about 20 s while each
+// combination looked every assumed literal up in the other set, in the
+// engine and in the certificate checker; since the two sorted sets are
+// merged, about 2 s (#2012).
+// QF_LRA sal carpark-Carpark2-ausgabe-6 (#1967) took about 6 s on the rod
+// until 310f645c6 (the simplex's propagation scanned the trail for each
+// atom), and QF_LRA spider_benchmarks current_frame.base (#1968) about 8 s;
+// at opt-level 3 (c41d26781, #2004) both take under 0.1 s. They need 7983
+// and 4541 steps. Their old cost was the price of each step, not the number
+// of steps, so the budget does not catch its return; the measuring rod's
+// count of instructions does (`docs/measuring.md`).
 use std::fs
 use std::process
 
@@ -44,7 +63,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--timeout", "10", "tests/solver/regress"]
+	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--budget", "300000", "tests/solver/regress"]
 	let out = process::run(nikaia, all.clone(); dir: repo)
 	println(out.stdout.trim())
 	// A failed inner run names its cause in the diff (#1305).

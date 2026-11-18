@@ -61,6 +61,15 @@ pub struct SvParams {
 	/// satisfiable to a walk and gets `walk-first`.
 	pub dense_width: i64,
 	pub dense_share: i64,
+	/// The most steps of the proof log, `0` for no limit (`SvLog.limit`,
+	/// #2107): a work budget that counts the equality elimination, which no
+	/// case does. The runner's `--budget N`.
+	pub steps: i64,
+	/// The branches the search may look at in place of the budget's,
+	/// `0` for the budget's own: the rod's `compare` sets one its time limit
+	/// always reaches first, so only that limit stops ours (ADR-270 D17,
+	/// #2090). The walk first still gets its share of at most `lg_budget()`.
+	pub cases: i64,
 }
 
 /// The set's defaults.
@@ -81,6 +90,8 @@ fn sv_params() -> SvParams {
 		cut_rounds: 8,
 		dense_width: 4,
 		dense_share: 100,
+		steps: 0,
+		cases: 0,
 	}
 }
 
@@ -150,6 +161,10 @@ fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 		p.dense_width = n
 	} else if name == "dense_share" && n <= 1000 {
 		p.dense_share = n
+	} else if name == "steps" {
+		p.steps = n
+	} else if name == "cases" {
+		p.cases = n
 	} else {
 		return false
 	}
@@ -360,16 +375,24 @@ fn sv_strategy_run(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,
-	budget: ref LgBudget,
+	given: ref LgBudget,
 	cnf: ref SvCnf,
 	p: ref SvParams,
 ) -> SvEngineRun {
+	let mut budget = given.clone()
+	if p.cases > 0 {
+		budget.cases = p.cases
+	}
 	let real = cnf.query.reals.len() > 0
 	let mut spent = 0
 	let mut phases: Vec[bool] = []
 	let mut first = ""
 	if p.pipeline == "walk-first" && !real {
-		let units = budget.cases / 1000 * p.walk_first + budget.cases % 1000 * p.walk_first / 1000
+		// The walk's share is of the build-time budget at most: under a
+		// larger one (the rod's, #2090) it walks no further, and the search
+		// gets the rest. Under `lg_budget()` the share is as before (D25).
+		let capped = budget.cases.min(lg_budget().cases)
+		let units = capped / 1000 * p.walk_first + capped % 1000 * p.walk_first / 1000
 		let none: Vec[Vec[u32]] = []
 		let moves = units.checked_mul(p.walk.moves_per_unit) ?? 0
 		let walk = sv_walk(cnf.query, none, p.walk, moves)
@@ -401,6 +424,8 @@ fn sv_strategy_run(
 	}
 	match run.driven {
 		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::OutsideTheTheory }) => return run,
+		// The step budget is spent: the walk would run past it (#2107).
+		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::TooManySteps }) => return run,
 		SvDriven::Answer(LgAnswer::Unknown { .. }) => {},
 		else => return run,
 	}
@@ -502,4 +527,16 @@ test "a parameter set takes a setting by name and refuses one out of range or un
 		"  speed=3: false, noise 50, walk_first 500",
 	]
 	assert(out == expected.join("\n") + "\n")
+}
+
+test "a walk first walks no further under a budget above the build-time one" {
+	// Unsatisfiable, so the walk spends its whole share and the search
+	// proves it (#2090): `cases` above `lg_budget()` leaves the share as is.
+	let text = sv_walk_test_smt("unsat", "Int", ["x", "y"], "(assert (< (+ x y) 0))\n(assert (> (+ x y) 0))\n")
+	let at = sv_line(text.clone(), "new:pipeline=walk-first")
+	let above = sv_line(text.clone(), "new:pipeline=walk-first,cases=1048576")
+	let below = sv_line(text, "new:pipeline=walk-first,cases=512")
+	assert(at == "proved 256/walk+pre")
+	assert(above == at)
+	assert(below == "proved 128/walk+pre")
 }

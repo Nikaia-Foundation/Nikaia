@@ -3123,7 +3123,7 @@ pub mod cexport_python {
 }
 pub mod check_access {
     #[allow(unused_imports)]
-    pub use super::{check_access_inside_std};
+    pub use super::{check_access_inside_std, check_access_in_own_tests};
 }
 pub mod check_arguments {}
 pub mod check_arith {}
@@ -3335,7 +3335,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -3445,7 +3445,7 @@ pub mod emit_needs {
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
-    pub use super::{precedence, unary_op, pointing, jumps, is_count};
+    pub use super::{precedence, unary_op, pointing, jumps};
 }
 pub mod emit_order {
     #[allow(unused_imports)]
@@ -3683,7 +3683,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, project_tests_warm_up, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_tests_of, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, project_tests_warm_up, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -3862,7 +3862,54 @@ pub mod logic {
     include!("lowered/logic/lowered.rs");
 }
 
+/// **The `test` blocks of this package and of its dependencies** (#2082), by
+/// name, as `nikaia test --std` runs them.
+pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(logic::nikaia_tests().into_iter().map(|(test, run)| (format!("logic::{test}"), run)));
+    all
+}
+
+/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of
+/// them with none, and prints one line each and a summary; `list` prints
+/// only the names. Whether every test run passed and one was run at all.
+pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
+    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();
+    if list {
+        for (name, _) in &wanted {
+            println!("{name}");
+        }
+        return !wanted.is_empty();
+    }
+    let (mut passed, mut failed) = (0usize, 0usize);
+    for (name, run) in &wanted {
+        match std::panic::catch_unwind(*run) {
+            Ok(Ok(())) => {
+                passed += 1;
+                println!("test {name} ... ok");
+            }
+            Ok(Err(e)) => {
+                failed += 1;
+                println!("test {name} ... FAILED: {e}");
+            }
+            Err(_) => {
+                failed += 1;
+                println!("test {name} ... FAILED: it panicked");
+            }
+        }
+    }
+    let outcome = if failed == 0 { "ok" } else { "FAILED" };
+    println!("test result: {outcome}. {passed} passed; {failed} failed");
+    failed == 0 && !wanted.is_empty()
+}
+
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c56efda8bfd84711dcc04c6d41d6b1a9036841edb9b8f23bf31e1a1f1b8f3f50";
+pub const LOWERED_DIGEST: &str = "3ad3227060b43497a697d6bc8bdba90f39333a3119e66daba7eeaf6ba70cb568";

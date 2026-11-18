@@ -208,6 +208,30 @@ fn written(
     wrote.map_err(|error| print_error(error, what))
 }
 
+/// **Bytes printed as they are** (ADR-019 D7, ADR-319 D4): `print(b)` of
+/// `Bytes` and a file's name, to standard output or standard error, through the
+/// buffer text goes through, with a newline where the call says so, under one
+/// lock.
+pub fn print_bytes(bytes: &[u8], to_err: bool, newline: bool) -> Result<(), IoError> {
+    match to_err {
+        true => bytes_written(std::io::stderr().lock(), bytes, newline, STDERR),
+        false => bytes_written(std::io::stdout().lock(), bytes, newline, STDOUT),
+    }
+}
+
+fn bytes_written(
+    mut to: impl std::io::Write,
+    bytes: &[u8],
+    newline: bool,
+    what: &str,
+) -> Result<(), IoError> {
+    let mut wrote = to.write_all(bytes);
+    if newline && wrote.is_ok() {
+        wrote = to.write_all(b"\n");
+    }
+    wrote.map_err(|error| print_error(error, what))
+}
+
 /// A failed write's error: the stream's name and what the operating system
 /// said, `standard output: Broken pipe (os error 32)`.
 pub(crate) fn print_error(error: std::io::Error, what: &str) -> IoError {
@@ -238,9 +262,15 @@ pub async fn read_to_string() -> Result<crate::block::Text, IoError> {
 ///
 /// The half for input that is not text - and the one that says what
 /// `read_to_string` is doing, since the only difference is the check.
-pub async fn read() -> Result<Vec<u8>, IoError> {
+///
+/// A program's `Vec[u8]` is a block's list ([`crate::block::List`]), so the
+/// bytes are handed over as one, the same memory: a plain `Vec` here was a
+/// rustc error wherever the result met a `Vec[u8]` the program declared
+/// (#1619).
+pub async fn read() -> Result<crate::block::List<u8>, IoError> {
     crate::rt::io::stdin_whole()
         .await
+        .map(crate::block::List::from)
         .map_err(|e| IoError::of(e, STDIN))
 }
 

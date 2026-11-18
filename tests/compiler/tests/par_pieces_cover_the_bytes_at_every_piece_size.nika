@@ -1,0 +1,60 @@
+// `par_pieces` cuts bytes after the separator into pieces that cover them,
+// none empty, at every piece size and none, walked in order at
+// `user-parallelism = no` and claimed at `yes` (`par.rs`'s `pieces` and
+// `pieces_in_order`, Part II 12.6). Moved from the `nikaia-std` unit test
+// `par::tests::bytes_are_cut_after_the_separator_into_pieces_that_cover_them` (#2082).
+
+// Checks the pieces of `b`: together they are `b`, none is empty, each but
+// the last ends in the separator. Their count.
+fn covered(b: Bytes, pieces: Vec[Bytes]) -> i64 throws {
+	let mut at = 0
+	for (n, p) in pieces.iter().enumerate() {
+		if p.len() == 0 {
+			println("an empty piece")
+		}
+		if p != b[at..<at + p.len()] {
+			println("a piece that is not the bytes it covers")
+		}
+		if n + 1 < pieces.len() && p[p.len() - 1] != '\n' {
+			println("a piece that does not end in the separator")
+		}
+		at += p.len()
+	}
+	if at != b.len() {
+		println("pieces that do not cover the bytes")
+	}
+	return pieces.len()
+}
+
+fn cut(b: Bytes, piece: i64) -> i64 throws {
+	let pieces: Vec[Bytes] = b.par_pieces('\n'; piece: piece).map(fn(p) { p.clone() }).collect()
+	return covered(b, pieces)
+}
+
+fn cut_unsized(b: Bytes) -> i64 throws {
+	let pieces: Vec[Bytes] = b.par_pieces('\n').map(fn(p) { p.clone() }).collect()
+	return covered(b, pieces)
+}
+
+fn main() throws {
+	let mut text: String = ""
+	for n in 0..<2000 {
+		text.push_str(f"station{n % 37};{n % 90}.{n % 10}\n")
+	}
+	let lines = text.bytes.clone()
+	let short = lines[0..<lines.len() - 1].clone()
+	let none = "no separator at all".bytes.clone()
+	println(f"unsized: {cut_unsized(lines) > 0} {cut_unsized(short) > 0} {cut_unsized(none)}")
+	for piece in [1, 7, 64, 1000000] {
+		println(f"piece {piece}: {cut(lines, piece)} {cut(short, piece)} {cut(none, piece)}")
+	}
+	let empty = "".bytes.clone()
+	println(f"empty: {cut_unsized(empty)} {cut(empty, 1)}")
+	println(f"three separators, piece 1: {cut("\n\n\n".bytes.clone(), 1)}")
+	let counted = lines.par_pieces('\n'; piece: 64).fold(
+		fn { 0 },
+		fn(n, p) { n + p.iter().filter(fn(c) { c == '\n' }).count() },
+		fn(a, b) { a + b },
+	)
+	println(f"separators counted: {counted}")
+}

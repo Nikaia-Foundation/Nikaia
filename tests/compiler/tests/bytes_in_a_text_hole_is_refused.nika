@@ -1,0 +1,8 @@
+// `Bytes` in a hole of a text `f"…"` is refused by name (ADR-019 D7, #1859),
+// in a print call's `f"…"` too, never the internal error.
+fn main() throws {
+    let b = Bytes([0x50, 0x34])
+    let line = f"image {b}"
+    println(line)
+    println(f"{Bytes([0x41])}")
+}

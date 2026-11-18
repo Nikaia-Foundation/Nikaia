@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1432 (Draft)
+**Version:** 0.0.1442 (Draft)
 **Date:** 2026-11-18
 
 ---
@@ -873,7 +873,7 @@ asks for an `fs::Path`, an `f"…"` builds one, and its holes may be a path, tex
 or a number (Part III 17.1); a `let` without a type takes it from the binding's
 first use. A path in a hole of an `f"…"` that is text is refused (`NK1201`): the text is
 written `p.to_text()` or `p.display()`. Handed to `print` or `println`, a path
-in a hole is written as its bytes are.
+in a hole is written as its bytes are. `print`, `println`, `eprint` and `eprintln` also take `Bytes` and write them unchanged, `println` with a `\n` after them ([ADR-019](adr/adr-019.md) D7); `Bytes` in a hole of a text `f"…"` is refused.
 
 **A template's holes need no `f`.** `dsl html { <p>{name}</p> } eod` (Part II)
 marks the construct as a place where code appears.
@@ -3232,6 +3232,75 @@ For every known pattern of this kind, the standard library provides a safe,
 named method (`retain`, `drain`, `entry`, `swap(i, j)`, …), and the diagnostic
 names it.
 
+### 6.9. Measuring Memory: `std::mem`
+
+Whether an operation keeps a buffer or copies it is the compiler's choice, and
+a program reads no address of a value ([ADR-400](adr/adr-400.md) D3). What a
+program, and above all a test, can read is what the calling thread asked of
+the allocator:
+
+* `mem::allocations() -> i64` is how many times the calling thread has
+  requested memory since it started (D1). A growth that has to ask for more
+  counts; a shrink kept in place does not.
+* `mem::usage() -> i64` is the calling thread's bytes in use: what it
+  allocated less what it freed (D2). A free counts on the thread that frees,
+  so on a thread that frees what another allocated the value can be negative.
+
+Both count per thread, so `std`'s own helper threads do not change them while
+a test runs. Equal counts before and after an operation mean it requested
+nothing. A count is read into a `let` before anything is printed, since
+printing may allocate, and compared after; an `assert` cannot hold it, since
+its condition may not touch the outside world (NK1194):
+
+```nika
+use std::mem
+
+fn main() throws {
+    let mut numbers: Vec[i64] = []
+    let before = mem::allocations()
+    for i in 0..<1000 {
+        numbers.push(i)
+    }
+    let grown = mem::allocations()
+    let count = numbers.len()
+    let read = mem::allocations()
+    println(grown > before)   // true: the list asked for memory as it grew
+    println(read == grown)    // true: reading its length asked for none
+    println(count)
+}
+```
+
+### 6.10. Naming the Calling Thread: `std::thread`
+
+A test that asks whether two calls ran on the same thread, as a library's
+kept threads are meant to (ADR-284 D9), compares the threads' names
+([ADR-401](adr/adr-401.md)):
+
+* `thread::id() -> thread::Id` names the thread that calls it. Two calls on
+  the same thread give equal ids; two different threads never do (D1).
+* A `thread::Id` is compared with `==` and `!=` and is a key of a map or a
+  member of a set. It has no arithmetic, no order and no conversion to a
+  number, and it is neither the operating system's thread id nor an address:
+  a thread takes it from a counter on its first call and keeps it for its
+  life, and no other thread ever gets it, even after the first one ended (D2).
+* It names a **thread, not a task**: a task may be resumed on another thread
+  than the one it began on, so an id read before a pause may differ from one
+  read after it, and state kept by thread id breaks when a task moves (D3).
+  Concurrency stays with tasks (Part II); `std::thread` holds nothing else.
+
+```nika
+use std::collections
+use std::thread
+
+fn main() throws {
+    let first = thread::id()
+    let mut names: collections::HashMap[thread::Id, String] = collections::HashMap()
+    names.insert(first, "main")
+    println(thread::id() == first)              // true: the same thread
+    println(names.get(thread::id()) ?? "none")  // main
+}
+```
+
 ---
 
 ## Chapter 7: Error Handling
@@ -4077,6 +4146,13 @@ Visibility is per package.
 
 The boundary is the package and not the file. Moving a declaration from one
 file of a package to another changes no visibility.
+
+**A package's own test programs see what the package sees**
+([ADR-403](adr/adr-403.md) D1, D2): `tests/NAME.nika` of a package that `use`s
+the package reaches its names that are not `pub`, by the same paths as its
+public ones. Nothing else does: another package, a program outside the
+package's `tests/`, and a `tests/` program of a package that depends on this
+one see only `pub` names. A test reaching a name publishes nothing.
 
 Reaching a private item or field from another package, by reading a field or
 by giving one a value in a struct literal, is refused with `NK1110`, and the

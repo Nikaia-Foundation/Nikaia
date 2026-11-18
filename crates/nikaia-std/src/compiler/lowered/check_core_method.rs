@@ -841,6 +841,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let mut on: Ty = check_core_expr(state, world, host, receiver, span);
     for held in empty_entry.iter() { state.flow.empty_lists.insert(empty_map, held.clone()); }
     on = check_core_method_literal(state, receiver, on);
+    state.open_receiver_placed(world, receiver, &on, span);
     if safe {
         let mut unknown = false;
         let mut plain = true;

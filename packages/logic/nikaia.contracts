@@ -385,6 +385,12 @@ panics = true
 touches = []
 signature = "(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32"
 
+[fn."SvLog::over"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> bool"
+
 [fn."SvLog::round"]
 sync = "inferred"
 panics = true
@@ -962,7 +968,7 @@ signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
 sync = "inferred"
 panics = true
 touches = []
-signature = "(ref mut self) -> bool"
+signature = "(ref mut self, v: i64) -> bool"
 
 [fn."SvSimplex::row_bound"]
 sync = "inferred"
@@ -3328,6 +3334,13 @@ touches = []
 views = ["atom: borrowed"]
 signature = "(atom: ref SvAtom, l: u32, real: bool) -> SvBound?"
 
+[fn."sv_lits_ascending"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["ls: borrowed"]
+signature = "(ls: ref Vec[u32]) -> bool"
+
 [fn."sv_lits_union"]
 sync = "inferred"
 panics = false
@@ -4617,8 +4630,8 @@ sync = "inferred"
 locks = "?"
 panics = true
 places = true
-views = ["arena: borrowed", "facts: borrowed", "budget: borrowed", "cnf: borrowed", "p: borrowed"]
-signature = "(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget, cnf: ref SvCnf, p: ref SvParams) -> SvEngineRun"
+views = ["arena: borrowed", "facts: borrowed", "given: borrowed", "cnf: borrowed", "p: borrowed"]
+signature = "(arena: ref TermArena, facts: ref Vec[i64], goal: i64, given: ref LgBudget, cnf: ref SvCnf, p: ref SvParams) -> SvEngineRun"
 
 [fn."sv_strategy_simplex"]
 sync = "inferred"
@@ -4649,12 +4662,12 @@ touches = []
 views = ["cnf: borrowed", "values: borrowed"]
 signature = "(cnf: ref SvCnf, values: ref Vec[i64]) -> collections::BTreeMap[String, i64]"
 
-[fn."sv_substituted"]
+[fn."sv_substitute"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
-views = ["held: borrowed"]
-signature = "(held: ref Vec[SvHeld], lo: i64, hi: i64, x: u32, s: i64, mut book: SvBook) -> Vec[SvHeld]?"
+signature = "(mut held: Vec[SvHeld], lo: i64, hi: i64, x: u32, s: i64, mut book: SvBook) -> bool"
 
 [fn."sv_sx_lemma"]
 sync = "inferred"
@@ -5229,7 +5242,7 @@ hashes = true
 
 [type."LgUnknown"]
 pub = true
-variants = ["OutsideTheTheory", "Overflow", "TooManyCases", "TooManyBounds", "NoContradiction"]
+variants = ["OutsideTheTheory", "Overflow", "TooManyCases", "TooManyBounds", "TooManySteps", "NoContradiction"]
 compares = true
 equates = true
 hashes = true
@@ -5496,7 +5509,7 @@ copies = true
 
 [type."SvLog"]
 pub = true
-fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32"]
+fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub columns: u32", "pub limit: i64"]
 compares = true
 equates = true
 hashes = true
@@ -5538,7 +5551,7 @@ copies = true
 
 [type."SvParams"]
 pub = true
-fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64"]
+fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64", "pub cases: i64"]
 compares = true
 equates = true
 hashes = true

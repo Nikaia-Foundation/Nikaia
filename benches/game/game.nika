@@ -5,6 +5,7 @@
 //
 //     nikaia run benches/game/game.nika              every problem
 //     nikaia run benches/game/game.nika -- n-body    one
+//     nikaia run benches/game/game.nika -- json      json-small, -large, -deep
 //
 // `$NIKAIA` names the compiler; else the `nikaia` on the path, else a release
 // build of the repository's own.
@@ -28,7 +29,8 @@ struct Game {
 	name: String,
 	// The arguments every program of it runs with.
 	args: String,
-	// What the counts are divided by, and its name in the table.
+	// What the counts are divided by, and its name in the table; 0 is the
+	// size of the standard input in bytes.
 	units: i64,
 	unit: String,
 	// The Nikaia program, from the repository's root, as a Nikaia programmer
@@ -42,6 +44,24 @@ struct Game {
 	// Where the entry runs on threads: the environment that holds it to one,
 	// for a second row (callgrind serialises threads and counts them all).
 	one_thread: String,
+	// The environment the entry's own row runs in (`VAR=value`, a command
+	// before it), else empty: where its threads wait for each other by
+	// spinning, callgrind's serialised threads count the spinning, not the
+	// work, so it is held to one there.
+	rust_env: String,
+	// A shell filter the output is passed through for the table's head,
+	// where it is too long to show (empty: shown whole).
+	shown: String,
+	// Where the programs read standard input: another problem and its
+	// arguments (`fasta 250000`), whose Rust entry's output is the input,
+	// or a Nikaia program and its arguments (`benches/game/json/input.nika
+	// large`), whose output is (empty: none).
+	input: String,
+	// The Rust binary, where it is not `name` (one serves several problems).
+	bin: String = "",
+	// An official package the Nikaia programs take in, `packages/{package}`
+	// (empty: none).
+	package: String = "",
 }
 
 fn games() -> Vec[Game] {
@@ -57,6 +77,9 @@ fn games() -> Vec[Game] {
 			label: "Rust #9",
 			cpu: "ivybridge",
 			one_thread: "",
+			rust_env: "",
+			shown: "",
+			input: "",
 		},
 		Game {
 			name: "spectral-norm",
@@ -69,6 +92,9 @@ fn games() -> Vec[Game] {
 			label: "Rust #6",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
+			input: "",
 		},
 		Game {
 			name: "fannkuch-redux",
@@ -81,6 +107,9 @@ fn games() -> Vec[Game] {
 			label: "Rust #6",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
+			input: "",
 		},
 		Game {
 			name: "binary-trees",
@@ -93,8 +122,98 @@ fn games() -> Vec[Game] {
 			label: "Rust #5",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
+			input: "",
 		},
+		// 10n letters, the output also the input of k-nucleotide and
+		// reverse-complement. The entry takes min(CPUs, 2) threads that wait
+		// for their turn by spinning, which under callgrind never ends in
+		// reasonable time (ten minutes, unfinished): it is counted on one CPU,
+		// which holds it to one thread.
+		Game {
+			name: "fasta",
+			args: "2500000",
+			units: 25000000,
+			unit: "letter",
+			nikaia: "benches/game/fasta/main.nika",
+			speed: "benches/game/fasta/speed.nika",
+			rust: "benches/game/fasta/rust-7.rs",
+			label: "Rust entry 7",
+			cpu: "ivybridge",
+			one_thread: "",
+			rust_env: "taskset -c 0",
+			shown: "md5sum | cut -c1-32",
+			input: "",
+		},
+		// The input is fasta's output at 250000 (2500000 letters); section
+		// THREE, which is counted, holds 1250000 of them, the unit. The
+		// game's own input is fasta's at 25000000; a tenth of it keeps the
+		// plain program's callgrind run under a minute.
+		Game {
+			name: "k-nucleotide",
+			args: "",
+			units: 1250000,
+			unit: "letter of section THREE",
+			nikaia: "benches/game/k-nucleotide/main.nika",
+			speed: "benches/game/k-nucleotide/speed.nika",
+			rust: "benches/game/k-nucleotide/rust-7.rs",
+			label: "Rust entry 7",
+			cpu: "ivybridge",
+			one_thread: "",
+			rust_env: "",
+			shown: "",
+			input: "fasta 250000",
+		},
+		// The input is fasta's output at 2500000 (25000000 letters, the
+		// unit, in 25.4 MB); the game's is fasta's at 25000000, ten times
+		// that, which a callgrind run of the plain program does not finish
+		// in a minute. The entry reverses blocks of each sequence on rayon's
+		// pool, so it gets a row on one thread too.
+		Game {
+			name: "reverse-complement",
+			args: "",
+			units: 25000000,
+			unit: "letter",
+			nikaia: "benches/game/reverse-complement/main.nika",
+			speed: "benches/game/reverse-complement/speed.nika",
+			rust: "benches/game/reverse-complement/rust-1.rs",
+			label: "Rust entry 1",
+			cpu: "ivybridge",
+			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "md5sum | cut -c1-32",
+			input: "fasta 2500000",
+		},
+		// Not a game problem: the json package against serde_json, the
+		// library a Rust program uses (#1620). Standard input read into the
+		// tree, `json::Value` and `serde_json::Value`, and written back
+		// without blanks; the inputs are generated (`json/input.nika`), each
+		// counted per byte of it.
+		json_game("small"),
+		json_game("large"),
+		json_game("deep"),
 	]
+}
+
+fn json_game(input: String) -> Game {
+	return Game {
+		name: f"json-{input}",
+		args: "",
+		units: 0,
+		unit: "byte of input",
+		nikaia: "benches/game/json/tree.nika",
+		speed: "",
+		rust: "benches/game/json/rust-tree.rs",
+		label: "serde_json 1 (`preserve_order`, `arbitrary_precision`)",
+		cpu: "x86-64",
+		one_thread: "",
+		rust_env: "",
+		shown: "md5sum | cut -c1-32",
+		input: f"benches/game/json/input.nika {input}",
+		bin: "json",
+		package: "json",
+	}
 }
 
 fn root() -> String throws {
@@ -138,19 +257,67 @@ struct Program {
 
 // The Rust entries, each setting in a target directory of its own.
 fn build_rust(repo: String, work: String, game: Game) -> Program throws {
+	let mut bin = game.bin.clone()
+	if bin.len() == 0 {
+		bin = game.name.clone()
+	}
 	for setting in ["on", "off"] {
 		must(
-			f"RUSTFLAGS='-C target-cpu={game.cpu} -C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{game.cpu}-{setting} cargo build -q --release --bin {game.name} --manifest-path {repo}/benches/game/Cargo.toml",
+			f"RUSTFLAGS='-C target-cpu={game.cpu} -C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{game.cpu}-{setting} cargo build -q --release --bin {bin} --manifest-path {repo}/benches/game/Cargo.toml",
 			f"cargo build of {game.name} ({setting})",
 		)
 	}
+	let mut env = String()
+	let mut held = ""
+	if game.rust_env.len() > 0 {
+		env.push_str(f"{game.rust_env} ")
+		held = f", `{game.rust_env}`"
+	}
 	return Program {
-		name: f"{game.label}, `target-cpu={game.cpu}`",
-		on: f"{work}/rust-{game.cpu}-on/release/{game.name}",
-		off: f"{work}/rust-{game.cpu}-off/release/{game.name}",
-		env: String(),
+		name: f"{game.label}{held}, `target-cpu={game.cpu}`",
+		on: f"{work}/rust-{game.cpu}-on/release/{bin}",
+		off: f"{work}/rust-{game.cpu}-off/release/{bin}",
+		env: env,
 		source: game.rust.clone(),
 	}
+}
+
+// The environment of every run of a Nikaia program of `game`. A program
+// that reads standard input parks on the `io_uring` ring while an I/O worker
+// reads it, and valgrind 3.22 runs that wait (`io_uring_enter` with
+// `min_complete` 1) as a call that does not block, holding the lock it runs
+// one thread at a time under: the worker never runs and the program waits for
+// ever. Such a program runs pinned to the blocking path (`io-method`, the
+// runtime's configuration, ADR-303 D5), which reads standard input as the
+// ring does, on the worker.
+fn nikaia_env(work: String, game: Game) -> String throws {
+	if game.input.len() == 0 { return String() }
+	fs::write(f"{work}/io-blocking.toml", fs::Root::Anywhere, "io-method = \"blocking\"\n")
+	return f"NIKAIA_RUNTIME_CONFIG={work}/io-blocking.toml "
+}
+
+// The arguments every program of `game` runs with, its standard input put
+// in place: the Rust entry of the problem `game.input` names, or the Nikaia
+// program it names, is built and run, and its output written to
+// `{work}/out/{name}.input`.
+fn run_args(nikaia: String, repo: String, work: String, game: Game) -> String throws {
+	if game.input.len() == 0 { return game.args.clone() }
+	let words: Vec[String] = game.input.split_whitespace().collect()
+	let file = f"{work}/out/{game.name}.input"
+	if words[0].ends_with(".nika") {
+		let maker = build_nikaia(nikaia, repo, work, game, words[0], "-input", "x86-64")
+		must(f"{maker.off} {words[1]} > {file}", f"the input of {game.name} ({game.input})")
+	}
+	for source in games() {
+		if source.name == words[0] {
+			let maker = build_rust(repo, work, source)
+			must(
+				f"{maker.env}{maker.off} {words[1]} > {file}",
+				f"the input of {game.name} ({game.input})",
+			)
+		}
+	}
+	return f"{game.args} < {file}"
 }
 
 // The Nikaia program `source` (`game.nikaia` or `game.speed`, `kind` the
@@ -171,7 +338,7 @@ fn build_nikaia(
 	fs::write(
 		f"{dir}/nikaia.toml",
 		fs::Root::Anywhere,
-		"[package]
+		f"[package]
 name = \"game\"
 version = \"0.1.0\"
 
@@ -179,7 +346,7 @@ version = \"0.1.0\"
 opt-level = 3
 codegen-units = 1
 incremental = false
-",
+{uses(repo, game)}",
 	)
 	// valgrind 3.22 runs the executor's io_uring_enter wait as a call that
 	// does not block, under its one-thread lock, so a program that reads
@@ -209,12 +376,18 @@ incremental = false
 	}
 }
 
+// The manifest's table of the package `game` takes in, else nothing.
+fn uses(repo: String, game: Game) -> String {
+	if game.package.len() == 0 { return String() }
+	return f"\n[dependencies]\n{game.package} = {{ path = \"{repo}/packages/{game.package}\" }}\n"
+}
+
 // --- the same output, then the counts --------------------------------------
 
 // Every program at both settings prints the first one's output.
 fn same_output(work: String, programs: Vec[Program], args: String) throws {
 	let want = f"{work}/out/want"
-	must(f"{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
+	must(f"{programs[0].env}{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
 	for p in programs {
 		for bin in [p.on.clone(), p.off.clone()] {
 			let r = sh(f"{p.env}{bin} {args} | cmp -s - {want}")
@@ -271,7 +444,14 @@ fn tokens(repo: String, nikaia: String, source: String) -> String throws {
 
 // One problem's rows: each program counted at both settings, the last column
 // its instructions with checks off against the Rust entry's.
-fn measure(nikaia: String, repo: String, work: String, game: Game) -> String throws {
+fn measure(
+	nikaia: String,
+	repo: String,
+	work: String,
+	game: Game,
+	args: String,
+	units: i64,
+) -> String throws {
 	let rust_entry = build_rust(repo, work, game)
 	let mut programs: Vec[Program] = [rust_entry.clone()]
 	if game.one_thread.len() > 0 {
@@ -291,19 +471,19 @@ fn measure(nikaia: String, repo: String, work: String, game: Game) -> String thr
 		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64"))
 		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64-v3"))
 	}
-	same_output(work, programs, game.args)
+	same_output(work, programs, args)
 	let mut out = String()
 	let mut rust = 0
 	for p in programs {
-		let on = count(work, p.env, p.on, game.args)
-		let off = count(work, p.env, p.off, game.args)
+		let on = count(work, p.env, p.on, args)
+		let off = count(work, p.env, p.off, args)
 		if rust == 0 {
 			rust = off.instructions
 		}
-		let i_on = per(on.instructions, game.units, 1)
-		let m_on = per(on.mispredicted, game.units, 3)
-		let i_off = per(off.instructions, game.units, 1)
-		let m_off = per(off.mispredicted, game.units, 3)
+		let i_on = per(on.instructions, units, 1)
+		let m_on = per(on.mispredicted, units, 3)
+		let i_off = per(off.instructions, units, 1)
+		let m_off = per(off.mispredicted, units, 3)
 		let against = per(off.instructions, rust, 2)
 		let length = tokens(repo, nikaia, p.source.clone())
 		out.push_str(f"| {game.name} | {p.name} | {i_on} | {m_on} | {i_off} | {m_off} | {against} | {length} |\n")
@@ -324,11 +504,27 @@ fn main() throws {
 	let mut table = String()
 	let mut said = String()
 	for game in games() {
-		if only.len() > 0 && game.name != only {
+		if only.len() > 0 && game.name != only && !game.name.starts_with(f"{only}-") {
 			continue
 		}
-		table.push_str(measure(nikaia, repo, work, game))
-		said.push_str(f"{game.name}: per {game.unit}, `{game.name} {game.args}`, output `{sh(f"{work}/bin/{game.name}.x86-64.on {game.args}").stdout.trim().replace("\n", " ")}`\n")
+		let args = run_args(nikaia, repo, work, game)
+		let mut units = game.units
+		if units == 0 {
+			units = text::parse_i64(sh(f"wc -c < {work}/out/{game.name}.input").stdout.trim()) ?? 1
+		}
+		table.push_str(measure(nikaia, repo, work, game, args, units))
+		let mut run = f"{nikaia_env(work, game)}{work}/bin/{game.name}.x86-64.on {args}"
+		let mut what = "output"
+		if game.shown.len() > 0 {
+			run = f"{run} | {game.shown}"
+			what = f"output through `{game.shown}`"
+		}
+		let call: String = f"{game.name} {game.args}"
+		let mut how = f"`{call.trim()}`"
+		if game.input.len() > 0 {
+			how = f"`{call.trim()}` on standard input from `{game.input}`"
+		}
+		said.push_str(f"{game.name}: per {game.unit}, {how}, {what} `{sh(run).stdout.trim().replace("\n", " ")}`\n")
 	}
 	let spec = f"{repo}/docs/specification/10-nikaia-light.md"
 	let version = sh(f"sed -n 's/^\\*\\*Version:\\*\\* \\([0-9.]*\\).*/\\1/p' {spec}").stdout

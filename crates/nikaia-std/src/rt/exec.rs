@@ -476,6 +476,14 @@ pub fn block_on<T>(future: impl Future<Output = T>) -> T {
             });
             continue;
         }
+        // **Or the park gave up because the drain's deadline ran out**
+        // ([ADR-297](../../../../docs/specification/adr/adr-297.md) D5): an
+        // I/O operation that never answers (a FIFO nobody writes to) is what
+        // the deadline bounds, and the round above abandons it and says so.
+        // It is no future without a waker, so it must not reach the panic.
+        if draining_since.is_some_and(|since| since.elapsed() >= deadline) {
+            continue;
+        }
 
         // **There was no I/O to wait for either.** A future returned `Pending`
         // without arranging for its waker to be called, which is a defect in

@@ -1,0 +1,14 @@
+// A text cut at a position before its start stops the program
+// (`std::search::split_at`). Moved from the `nikaia-std` unit test
+// `search::tests::a_cut_before_the_start_stops` (#2082).
+use std::cli
+
+fn main() throws {
+    // The program's own name is the one word: -1.
+    let mut n = 0
+    for _ in cli::args() {
+        n += 1
+    }
+    let (before, after) = "abc".split_at(n - 2)
+    println(f"[{before}] [{after}]")
+}

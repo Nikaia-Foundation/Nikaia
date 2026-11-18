@@ -405,34 +405,10 @@ fn sha256_block(state: &mut [u32; 8], block: &[u8; 64]) {
 
 #[cfg(test)]
 mod tests {
-    /// The definition, a bit at a time.
-    fn crc32c_slow(mut crc: u32, word: u64) -> u32 {
-        for byte in word.to_le_bytes() {
-            crc ^= u32::from(byte);
-            for _ in 0..8 {
-                crc = (crc >> 1) ^ (super::CASTAGNOLI & (crc & 1).wrapping_neg());
-            }
-        }
-        crc
-    }
-
-    /// The table and the build's own path against the definition, and
-    /// CRC-32C's check value: "123456789" is 0xE3069283.
-    #[test]
-    fn crc32c_is_the_castagnoli_crc() {
-        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
-        for _ in 0..10_000 {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            let (crc, word) = (seed as u32, seed.rotate_left(29));
-            assert_eq!(super::crc32c_by_table(crc, word), crc32c_slow(crc, word));
-            assert_eq!(super::crc32c(crc, word), crc32c_slow(crc, word));
-        }
-        let crc = super::crc32c(!0, u64::from_le_bytes(*b"12345678"));
-        let crc = (crc >> 8) ^ super::CRC32C_TABLES[0][((crc ^ u32::from(b'9')) & 0xFF) as usize];
-        assert_eq!(!crc, 0xE306_9283);
-    }
+    // CRC-32C against its definition and its check value is
+    // `tests/compiler/tests/hash_crc32c_is_the_castagnoli_crc.nika` (#2082).
+    // What stays here no program reaches: the fixed-seed hasher of a trusted
+    // map, which a program never calls by name.
 
     use super::*;
     use std::collections::HashMap;

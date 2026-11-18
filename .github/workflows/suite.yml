@@ -46,7 +46,9 @@ jobs:
   # the dumps of all shards.
   #
   # One toolchain per leg (ADR-001 D1): `rust-toolchain.toml` names it and
-  # `rustup show` installs exactly that.
+  # `rustup show` installs it. The build records its `rustc -V` in the
+  # artifact and every test shard runs that exact version (#2116): runners
+  # of one run may carry images with different stables.
   build:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
@@ -106,6 +108,64 @@ jobs:
           CARGO_INCREMENTAL: 1
         run: cargo build --workspace --release
 
+      # **The solver program is built once per run and arch, here** (#2087),
+      # not in every `compiler-*` shard that has a test running
+      # `scripts/solver.nika` (all five had one: about 100 s each, per
+      # arch). `scripts/solver.nika -- build` keeps the binary in
+      # `target/solver-rod/<key>/` (#2023), the key the program's files and
+      # the path, size and age of the `nikaia` that builds it; the tar below
+      # carries both the binary and this `nikaia` with its age, the shards
+      # unpack them on the same path, and their solver tests find it and build
+      # nothing - against the program this run's compiler built (#2075).
+      # Built before the tests at all (#2023): the first test to run it paid
+      # the build inside its 300 s, which `solver_sample` overran.
+      # Here and not in a job of its own: a matrix shares its `needs`, so all
+      # fourteen shards would wait for such a job, not only the five.
+      # It builds with the shards' program `std` (same key, restored, never
+      # saved here: compiler-0 saves it) and a rustc store of its own
+      # (ADR-021 D14); both live in `target/nikaia-project-tests`, removed
+      # again before the build is saved. The wrapper's trace says per crate
+      # whether rustc ran or its outputs were reused from the store.
+      - name: Name the program std
+        id: rlib-key
+        run: echo "rustc=$(rustc --version | tr -c 'A-Za-z0-9.\n' '-')" >>"$GITHUB_OUTPUT"
+
+      - name: Restore the program std
+        id: rlib
+        uses: actions/cache/restore@v4
+        with:
+          path: target/nikaia-project-tests/rlib
+          key: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-${{ hashFiles('crates/nikaia-std/**', '!crates/nikaia-std/src/compiler/**', 'crates/unsafe/**', 'Cargo.lock') }}
+          restore-keys: rlib-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-
+
+      - name: Restore the solver's rustc store
+        uses: actions/cache/restore@v4
+        with:
+          path: target/nikaia-project-tests/rustc
+          key: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-solver-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-solver-
+
+      # As in the shards: on an exact hit the sources are dated back, so
+      # Cargo builds no `std` crate. After the workspace's build, which this
+      # does not touch.
+      - name: Date the std sources before the restored tree
+        if: steps.rlib.outputs.cache-hit == 'true'
+        run: |
+          git ls-files -z -- crates/nikaia-std crates/unsafe ':!crates/nikaia-std/src/compiler' |
+            xargs -0 touch -d '2000-01-01 00:00:00 UTC'
+
+      # A solver that does not build fails its tests in the shards, which
+      # then build it themselves and say why; it does not hold back the
+      # other shards.
+      - name: Build the solver program
+        continue-on-error: true
+        run: |
+          trace="$RUNNER_TEMP/solver-trace"
+          env -u CARGO_TARGET_DIR NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" NIKAIA_WRAPPER_TRACE="$trace" \
+            ./target/release/nikaia run scripts/solver.nika -- build
+          echo "rustc per crate (ran: compiled; reused: from the store):"
+          sort "$trace" 2>/dev/null | uniq -c || true
+
       # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
       # with `--extern` into `deps/`), the test binaries and the unit-test
       # executables of `target/debug` (nothing else of it); not cargo's
@@ -113,9 +173,12 @@ jobs:
       # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
       - name: Pack the build
         run: |
+          rustc -V >target/release/rustc-version
+          rustc --print sysroot >target/release/rustc-sysroot
           cut -f1 target/release/test-binaries.tsv | grep '/target/debug/' | sed "s|^$PWD/||" >"$RUNNER_TEMP/unit-binaries"
           tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' \
-            -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries"
+            -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries" \
+            $(ls -d target/solver-rod 2>/dev/null)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -124,11 +187,21 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-      # After the artifact, so the shards do not wait for it. Only the newest
+      # On `develop` only, as the build (#2087).
+      - name: Save the solver's rustc store
+        if: ${{ !cancelled() && github.ref == 'refs/heads/develop' }}
+        uses: actions/cache/save@v4
+        with:
+          path: target/nikaia-project-tests/rustc
+          key: rustc-${{ inputs.arch }}-${{ runner.os }}-${{ steps.rlib-key.outputs.rustc }}-solver-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # After the artifact, so the shards do not wait for it. The solver's
+      # caches and binary are not part of the build (their own keys). Only the newest
       # incremental session of each crate is kept; rustc would otherwise
       # carry every earlier one along.
       - name: Keep the newest incremental session
         run: |
+          rm -rf target/nikaia-project-tests target/solver-rod
           for d in target/release/incremental/*/ target/debug/incremental/*/; do
             ls -dt "$d"s-*/ 2>/dev/null | tail -n +2 | while read -r old; do
               rm -rf "$old" "${old%/}.lock"
@@ -136,7 +209,15 @@ jobs:
           done
           du -sh target ~/.cargo/registry || true
 
+      # **The big caches are saved on `develop` only** (#2087): every other
+      # branch restores, never saves. One run wrote about 3.5 GB (both
+      # arches), the repository holds 10 GB, and the `ci/*` runs saved theirs
+      # like a `develop` run, so `develop`'s own entries were evicted before
+      # the next commit could restore them (x64 missed in most runs). GitHub
+      # lets a branch restore only its own and the default branch's entries,
+      # so a `ci/*` run's saves served nobody but its own next run.
       - name: Save the build for the next commit
+        if: github.ref == 'refs/heads/develop'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -250,6 +331,33 @@ jobs:
       - name: Unpack the build
         run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
 
+      # The rlibs in `deps/` link only with the rustc that wrote them
+      # (E0514 otherwise, #2116): this shard's image may carry another stable.
+      - name: Use the rustc the build used
+        run: |
+          built="$(cat target/release/rustc-version)"
+          if [ "$(rustc -V)" != "$built" ]; then
+            version="$(echo "$built" | cut -d' ' -f2)"
+            rustup toolchain install "$version" --profile minimal --component rustfmt,clippy
+            echo "RUSTUP_TOOLCHAIN=$version" >>"$GITHUB_ENV"
+            export RUSTUP_TOOLCHAIN="$version"
+          fi
+          if [ "$(rustc -V)" != "$built" ]; then
+            echo "::error::the build used $built, this shard has $(rustc -V)"
+            exit 1
+          fi
+          # The tests hand emitted programs to the `rustc` path the build
+          # script baked in (cargo's resolved one, the `stable-*` directory),
+          # not to PATH: where that directory holds another version, point it
+          # at the one the build used (#2116).
+          baked="$(cat target/release/rustc-sysroot)"
+          if [ "$("$baked/bin/rustc" -V 2>/dev/null)" != "$built" ]; then
+            rm -rf "$baked"
+            ln -s "$(rustc --print sysroot)" "$baked"
+            "$baked/bin/rustc" -V
+          fi
+          rustc -V
+
       # How long each program of `tests/compiler` took last time: `nikaia
       # test` starts the longest first (#1600). Restored from the newest run
       # of this shard, saved as this run's after the tests.
@@ -316,27 +424,6 @@ jobs:
           git ls-files -z -- crates/nikaia-std crates/unsafe ':!crates/nikaia-std/src/compiler' |
             xargs -0 touch -d '2000-01-01 00:00:00 UTC'
 
-      # **The solver program is built before the tests that run it** (#2023):
-      # `scripts/solver.nika` builds the solver from its sources (a cold build
-      # is a front end of about a minute and rustc of another, on one core),
-      # and the first of a shard's tests that run it paid that build inside
-      # its 300 s, which `solver_sample` overran at `user-parallelism = no`
-      # (its answers take seconds). Built here with the same toolchain, the
-      # binary is kept in `target/solver-rod/` under the key the tests look
-      # up (`solver_build`), so they build nothing. Only a shard that has
-      # such a test pays it.
-      - name: Build the solver program
-        if: startsWith(matrix.shard, 'compiler-')
-        run: |
-          k=${SHARD#compiler-}
-          # The shard's programs, picked as the Test step below picks them.
-          mine=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
-            awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {print "tests/compiler/tests/" $0 ".nika"}')
-          if [ -n "$mine" ] && grep -l 'scripts/solver.nika' $mine >/dev/null; then
-            env -u CARGO_TARGET_DIR NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
-              ./target/release/nikaia run scripts/solver.nika -- build
-          fi
-
       # Each one-file program a checker test accepts is written to the dump
       # this shard sweeps (#705).
       - name: Test
@@ -357,8 +444,8 @@ jobs:
           # comptime bundles a second time, in `~/.cache/nikaia`, beside the
           # ones the other tests build in this directory (#1600).
           export NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
           run_it() { (cd "$itdir" && "$it" --exact "$@"); }
           case "$SHARD" in
@@ -379,6 +466,12 @@ jobs:
                 (cd "$dir" && "$bin") 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
                 echo "::endgroup::"
               done <target/release/test-binaries.tsv
+              # The `test` blocks of the compiler's `.nika` files, compiled
+              # into `nikaia` rather than into a `cfg(test)` copy of
+              # `nikaia-std` (#2082).
+              echo "::group::nikaia test --std"
+              ./target/release/nikaia test --std 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
+              echo "::endgroup::"
             fi
             exit $status
             ;;
@@ -407,8 +500,10 @@ jobs:
           path: target/nikaia-project-tests/test-times
           key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # On `develop` only, as the build (#2087). The test times stay per run
+      # and branch: a few KB per shard.
       - name: Save the rustc store
-        if: ${{ !cancelled() && startsWith(matrix.shard, 'compiler-') }}
+        if: ${{ !cancelled() && startsWith(matrix.shard, 'compiler-') && github.ref == 'refs/heads/develop' }}
         uses: actions/cache/save@v4
         with:
           path: target/nikaia-project-tests/rustc
@@ -426,7 +521,7 @@ jobs:
       # repository's 10 GB, or unused for 7 days); the size of a saved tree
       # is printed here.
       - name: Keep only the std of this run
-        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop' }}
         run: |
           names=$(for m in crates/nikaia-std/Cargo.toml crates/unsafe/*/Cargo.toml; do
             sed -n 's/^name = "\(.*\)"$/\1/p;T;q' "$m"; done)
@@ -443,11 +538,19 @@ jobs:
                 name=$(basename "$unit")
                 case " $(echo $names) " in *" ${name%-*} "*) rm -rf "$unit" && echo "not saved, built from other sources: $unit" ;; esac
               done
+            # Cargo 1.100's layout (#2136): a unit is `build/<crate>/<hash>/`,
+            # its fingerprint and its `out/` in it.
+            find "$tree" -mindepth 6 -maxdepth 7 -path '*/build/*/*/fingerprint/invoked.timestamp' ! -newer "$RUNNER_TEMP/checked-out" |
+              while read -r stamp; do
+                unit=$(dirname "$(dirname "$stamp")")
+                name=$(basename "$(dirname "$unit")")
+                case " $(echo $names) " in *" $name "*) rm -rf "$unit" && echo "not saved, built from other sources: $unit" ;; esac
+              done
           done
           du -sh target/nikaia-project-tests/rlib/* || true
 
       - name: Save the program std
-        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && matrix.shard == 'compiler-0' && steps.rlib.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop' }}
         uses: actions/cache/save@v4
         with:
           path: target/nikaia-project-tests/rlib
@@ -505,8 +608,8 @@ jobs:
           set -o pipefail
           mkdir -p "$NIKAIA_DUMP_ACCEPTED"
           echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
 
       - name: Name the sweep's failures

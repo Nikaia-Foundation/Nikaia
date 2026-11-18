@@ -46,6 +46,7 @@ pub(crate) fn sv_unknown(why: &LgUnknown) -> String {
         LgUnknown::Overflow => String::from("unknown (overflow)"),
         LgUnknown::TooManyCases => String::from("unknown (cases)"),
         LgUnknown::TooManyBounds => String::from("unknown (bounds)"),
+        LgUnknown::TooManySteps => String::from("unknown (steps)"),
         LgUnknown::NoContradiction => String::from("unknown (no contradiction)"),
         _ => String::from("unknown"),
     }
@@ -67,7 +68,6 @@ pub(crate) fn sv_engine_settings(engine: &str) -> &str {
     nikaia_std::index::get(&engine, nikaia_std::index::at(at + ":".len() as i64..))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_line(source: &str, engine: &str) -> String { sv_line_stats(source, engine, false) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

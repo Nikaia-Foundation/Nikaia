@@ -56,7 +56,9 @@ pub struct Receiver<T> {
 ///
 /// A capacity below one is refused rather than quietly turned into something
 /// else: `bounded(0)` is a rendezvous channel, which is a different promise and
-/// which no page writes (§4).
+/// which no page writes (§4). The stop names the program's line, not this
+/// one (ADR-300 D10), so it is `#[track_caller]`.
+#[track_caller]
 pub fn bounded<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
     let room = usize::try_from(capacity).unwrap_or(0);
     assert!(
@@ -176,60 +178,5 @@ impl<T> Receiver<T> {
             Poll::Pending
         })
         .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn drive<T>(future: impl std::future::Future<Output = T>) -> T {
-        crate::rt::exec::block_on(future)
-    }
-
-    #[test]
-    fn a_value_sent_is_the_value_received() {
-        let _runtime = crate::rt::start(crate::rt::UserCode::Sequential);
-        drive(async {
-            let (tx, rx) = bounded::<i64>(4);
-            tx.send(7).await;
-            assert_eq!(rx.recv().await, Some(7));
-        });
-    }
-
-    #[test]
-    fn a_channel_with_no_senders_left_hands_back_nothing() {
-        let _runtime = crate::rt::start(crate::rt::UserCode::Sequential);
-        drive(async {
-            let (tx, rx) = bounded::<i64>(4);
-            tx.send(1).await;
-            drop(tx);
-            assert_eq!(rx.recv().await, Some(1));
-            assert_eq!(rx.recv().await, None);
-        });
-    }
-
-    /// The order a queue keeps is the order it was given.
-    #[test]
-    fn the_order_is_the_order_it_was_sent_in() {
-        let _runtime = crate::rt::start(crate::rt::UserCode::Sequential);
-        drive(async {
-            let (tx, rx) = bounded::<i64>(4);
-            for n in 1..=3 {
-                tx.send(n).await;
-            }
-            drop(tx);
-            let mut seen = Vec::new();
-            while let Some(n) = rx.recv().await {
-                seen.push(n);
-            }
-            assert_eq!(seen, vec![1, 2, 3]);
-        });
-    }
-
-    #[test]
-    #[should_panic(expected = "at least one")]
-    fn a_capacity_of_nothing_is_refused() {
-        let _ = bounded::<i64>(0);
     }
 }

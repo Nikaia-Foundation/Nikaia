@@ -1,7 +1,7 @@
-bounds in tests/bounds_capped_rules_probe.nika: 8 indexes, 2 proved; 8 operations, 1 proved
+bounds in tests/bounds_capped_rules_probe.nika: 8 indexes, 8 proved; 8 operations, 1 proved
     36  self.marks[0]                             proved
     39  out + self.trail[i]                       checked: a counter the loop on line 38 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
-    39  self.trail[i]                             checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    39  self.trail[i]                             proved
     47  out + self.a[i] + self.b[i] + self.c[i] + self.d[i] + self.e[i] + self.f[i]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     47  out + self.a[i] + self.b[i] + self.c[i] + self.d[i] + self.e[i]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     47  out + self.a[i] + self.b[i] + self.c[i] + self.d[i]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
@@ -9,10 +9,10 @@ bounds in tests/bounds_capped_rules_probe.nika: 8 indexes, 2 proved; 8 operation
     47  out + self.a[i] + self.b[i]               checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     47  out + self.a[i]                           checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     47  self.a[i]                                 proved
-    47  self.b[i]                                 checked: the length of another list, which bounds the loop and not this index (#388)
-    47  self.c[i]                                 checked: the length of another list, which bounds the loop and not this index (#388)
-    47  self.d[i]                                 checked: the length of another list, which bounds the loop and not this index (#388)
-    47  self.e[i]                                 checked: the length of another list, which bounds the loop and not this index (#388)
-    47  self.f[i]                                 checked: the length of another list, which bounds the loop and not this index (#388)
+    47  self.b[i]                                 proved
+    47  self.c[i]                                 proved
+    47  self.d[i]                                 proved
+    47  self.e[i]                                 proved
+    47  self.f[i]                                 proved
     72  i += 1                                    proved
   derived  build: 0 <= n, proved at the calls on lines 78

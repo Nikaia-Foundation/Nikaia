@@ -33,12 +33,58 @@ pub fn rustc() -> &'static str {
     env!("NIKAIA_RUSTC")
 }
 
-pub fn deps_dir() -> PathBuf {
-    std::env::current_exe()
-        .expect("test binary path")
-        .parent()
-        .expect("deps directory")
+/// **The profile directory this test was built in** (`target/release`):
+/// the test binary's `deps/` is in it under Cargo's older layout, its
+/// `build/nikaia/<hash>/out/` under the layout Cargo 1.100 always uses
+/// (#2136).
+pub fn profile_dir() -> PathBuf {
+    let exe = std::env::current_exe().expect("test binary path");
+    let parent = exe.parent().expect("the test binary's directory");
+    if parent.file_name().is_some_and(|name| name == "deps") {
+        return parent
+            .parent()
+            .expect("the profile directory")
+            .to_path_buf();
+    }
+    exe.ancestors()
+        .nth(5)
+        .expect("the profile directory above build/<crate>/<hash>/out")
         .to_path_buf()
+}
+
+/// The directories this test's crates were built in.
+pub fn deps_dirs() -> &'static [PathBuf] {
+    static DIRS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+    DIRS.get_or_init(|| dependency_dirs(&profile_dir()))
+}
+
+/// **Where Cargo put the crates of a profile directory**: its `deps/`
+/// (Cargo's older layout) and each crate's `build/<crate>/<hash>/out/` (the
+/// layout Cargo 1.100 always uses, #2136).
+pub fn dependency_dirs(profile: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if profile.join("deps").is_dir() {
+        dirs.push(profile.join("deps"));
+    }
+    let crates = std::fs::read_dir(profile.join("build"))
+        .into_iter()
+        .flatten();
+    for unit in crates
+        .flatten()
+        .flat_map(|krate| std::fs::read_dir(krate.path()).into_iter().flatten())
+    {
+        let out = unit.ok().map(|unit| unit.path().join("out"));
+        if let Some(out) = out.filter(|out| out.is_dir()) {
+            dirs.push(out);
+        }
+    }
+    dirs.sort();
+    dirs
+}
+
+/// The directories searched, as a message names them.
+fn shown_dirs() -> String {
+    profile_dir().display().to_text()
 }
 
 /// The newest rlib of a crate. Used for the anchor only.
@@ -47,14 +93,20 @@ fn newest_rlib(crate_name: &str) -> PathBuf {
     found.sort_by_key(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok());
     found
         .pop()
-        .unwrap_or_else(|| panic!("no {crate_name} rlib in {}", deps_dir().display()))
+        .unwrap_or_else(|| panic!("no {crate_name} rlib in {}", shown_dirs()))
 }
 
-/// Every `lib<crate_name>-<hash>.rlib` in the deps directory.
+/// Every `lib<crate_name>-<hash>.rlib` in the deps directories.
 fn candidates(crate_name: &str) -> Vec<PathBuf> {
+    rlibs_in(deps_dirs(), crate_name)
+}
+
+/// Every `lib<crate_name>-<hash>.rlib` in `dirs`.
+pub fn rlibs_in(dirs: &[PathBuf], crate_name: &str) -> Vec<PathBuf> {
     let prefix = format!("lib{crate_name}-");
-    let mut found: Vec<_> = std::fs::read_dir(deps_dir())
-        .expect("read deps directory")
+    let mut found: Vec<_> = dirs
+        .iter()
+        .flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten())
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
         .filter(|path| {
@@ -100,7 +152,7 @@ fn dependency_of(of: &Path, crate_name: &str) -> PathBuf {
             of.display(),
             matched.len(),
             candidates.len(),
-            deps_dir().display(),
+            shown_dirs(),
             candidates
                 .iter()
                 .map(|p| p.file_name().expect("file name"))
@@ -256,10 +308,7 @@ pub fn scratch_dir(purpose: &str) -> PathBuf {
 fn run_root() -> &'static Path {
     static ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     ROOT.get_or_init(|| {
-        let scratch = deps_dir()
-            .parent()
-            .expect("the deps directory is inside the profile directory")
-            .join("nikaia-scratch");
+        let scratch = profile_dir().join("nikaia-scratch");
         sweep_stale_scratch_dirs(&scratch);
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -343,13 +392,19 @@ fn run_has_ended(root: &str) -> bool {
     !Path::new(&format!("/proc/{pid}")).exists()
 }
 
+/// `-L dependency=<dir>` for each of `dirs`.
+pub fn dependency_args(dirs: &[PathBuf]) -> Vec<String> {
+    dirs.iter()
+        .flat_map(|dir| ["-L".to_text(), format!("dependency={}", dir.display())])
+        .collect()
+}
+
 /// Compile emitted Rust. `args` are rustc's, after the edition and the externs
 /// - `--crate-type`, `--emit`, `-O`, `--error-format`, `-o`.
 pub fn compile(source: &Path, args: &[&str]) -> Output {
     Command::new(rustc())
         .args(["--edition", "2024"])
-        .arg("-L")
-        .arg(format!("dependency={}", deps_dir().display()))
+        .args(dependency_args(deps_dirs()))
         .args(externs())
         .args(args)
         .arg(source)

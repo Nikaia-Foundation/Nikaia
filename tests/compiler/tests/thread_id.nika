@@ -1,0 +1,24 @@
+// ADR-401 D1: `thread::id()` names the calling thread. Two calls on one
+// thread give equal ids, and an id is a map key and a set member. That another
+// thread's id differs is shown by a library's kept threads, in
+// `a_library_thread_is_kept_for_the_next_call`: a task gets no thread of its
+// own at `user_parallelism = no`, so a test of one would mean two things.
+use std::collections
+use std::thread
+
+fn main() throws {
+    let first = thread::id()
+    let again = thread::id()
+    println(f"same thread, equal: {first == again}")
+    println(f"same thread, not unequal: {!(first != again)}")
+
+    let mut names: collections::HashMap[thread::Id, String] = collections::HashMap()
+    names.insert(first, "main")
+    let found = names.get(thread::id()) ?? "none"
+    println(f"found by its id: {found}")
+
+    let mut seen: collections::HashSet[thread::Id] = collections::HashSet()
+    seen.insert(first)
+    seen.insert(again)
+    println(f"one member: {seen.len()}")
+}

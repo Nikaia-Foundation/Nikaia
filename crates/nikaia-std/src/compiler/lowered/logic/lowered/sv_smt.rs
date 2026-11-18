@@ -420,6 +420,7 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
     let real = !cnf.query.reals.is_empty();
     if real && theory == "fm" { return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0); }
     let mut book = match sv_book(&cnf.query) { Some(__nikaia_value) => __nikaia_value, None => return sv_engine_unknown(LgUnknown::Overflow, 0) };
+    book.log.limit = p.steps;
     let mut ids: Vec<u32> = vec![];
     let mut c: u32 = 0u32;
     for _ in cnf.query.clauses.iter() {
@@ -433,6 +434,7 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
         SvFastEnd::Skip => { },
     }
     let pre = if p.pre { sv_pre(&mut book, cnf, &ids) } else { sv_pre_none() };
+    if book.log.over() { return sv_engine_unknown(LgUnknown::TooManySteps, 0); }
     if pre.unsat { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.copy_owned()), work: 0, path: String::from("pre"), carried: vec![], stats: sv_smt_stats_none() }; }
     let shown = sv_smt_pre_shown(&pre);
     let mut units: Vec<u32> = vec![];
@@ -609,7 +611,6 @@ pub(crate) fn sv_real_model_holds(arena: &TermArena, facts: &[i64], goal: i64, v
     !at_goal
 }
 
-#[cfg(test)]
 pub(crate) fn sv_smt_test_family(n: i64, k: i64, total: i64, status: &str, extra: &str) -> String {
     let mut text = format!("(set-logic QF_LIA)\n(set-info :status {})\n", status);
     let mut terms: String = String::from("");
@@ -621,7 +622,6 @@ pub(crate) fn sv_smt_test_family(n: i64, k: i64, total: i64, status: &str, extra
     nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, extra)), format!("(assert (= (+{}) {}))\n(check-sat)\n", terms, total)))
 }
 
-#[cfg(test)]
 pub(crate) fn sv_smt_test_lines(files: &[(String, String)]) -> String {
     let mut out: String = String::from("");
     for (name, source) in files.iter() {
@@ -634,7 +634,6 @@ pub(crate) fn sv_smt_test_lines(files: &[(String, String)]) -> String {
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("bits-20"), sv_smt_test_family(20, 1, 21, "unsat", "")), (String::from("bits-sat"), sv_smt_test_family(12, 1, 5, "sat", "(assert (<= (+ x1 x2 x3) 1))\n(assert (>= (+ x4 x5) 2))\n"))];
     let out = sv_smt_test_lines(&files);
@@ -643,7 +642,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("threes-10"), sv_smt_test_family(10, 3, 16, "unsat", "")), (String::from("branch-depth"), String::from("(set-logic QF_LIA)\n(set-info :status sat)\n(declare-fun x () Int)\n(declare-fun x6 () Int)\n(declare-fun x4 () Int)\n(assert (and (= 0 (+ x6 1 (* 2 x4))) (= 0 (+ (* x 51725) (* x6 241)))))\n(check-sat)\n")), (String::from("bounds"), String::from("(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(declare-const y Int)\n(assert (or (< x 0) (> x 10)))\n(assert (<= 0 x 10))\n(assert (= y (+ x 1)))\n(check-sat)\n"))];
     let out = sv_smt_test_lines(&files);
@@ -653,14 +651,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn two_way_disjunctions_are_searched_with_learned_clauses_over_each_theory() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn a_congruence_a_deep_equality_and_contradicting_bounds_are_answered_before_or_without_search() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_smt_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_smt::two_way_disjunctions_are_searched_with_learned_clauses_over_each_theory", __nikaia_test_0),
+        ("sv_smt::a_congruence_a_deep_equality_and_contradicting_bounds_are_answered_before_or_without_search", __nikaia_test_1),
+    ]
 }

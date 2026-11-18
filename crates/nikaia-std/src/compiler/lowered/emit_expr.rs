@@ -227,7 +227,10 @@ impl EmitState {
             Expr::Range { start, end, inclusive, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
                 if inclusive { out.push("nikaia_std::range::through("); } else { out.push("nikaia_std::range::span("); }
-                self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
+                let literal_start = matches!(start, Expr::LitInt { .. });
+                let literal_end = matches!(end, Expr::LitInt { .. });
+                let start_flow = if literal_start && literal_end { flow.widened() } else { flow };
+                self.emit_expr(world, walk, out, host, start, depth, start_flow, scope)?;
                 out.push(", ");
                 self.emit_expr(world, walk, out, host, end, depth, flow, scope)?;
                 out.push(")");

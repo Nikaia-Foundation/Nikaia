@@ -141,10 +141,7 @@ fn the_users_cargo_home_is_read() {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
         .expect("a cargo home");
-    let kept_here = common::deps_dir()
-        .parent()
-        .expect("the profile directory")
-        .join("nikaia-tools-below");
+    let kept_here = common::profile_dir().join("nikaia-tools-below");
     let home = kept_here.join("cargo-home");
     std::fs::create_dir_all(&home).expect("a cargo home");
     for kept in ["registry", "git"] {

@@ -7,6 +7,7 @@ pub enum LgUnknown {
     Overflow,
     TooManyCases,
     TooManyBounds,
+    TooManySteps,
     NoContradiction,
 }
 

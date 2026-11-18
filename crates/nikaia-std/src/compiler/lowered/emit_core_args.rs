@@ -146,7 +146,7 @@ pub(crate) fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, in
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let params = call_arguments(signature);
     if i >= params.len() as i64 { return None; }
-    let ty = nikaia_std::index::get(&params, nikaia_std::index::at(i)).1.clone();
+    let ty = unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1.clone();
     if inside {
         return match ty {
             Ty::Nullable(ref item) => { let item = nikaia_std::boxed::open(item); emit_rust_crossing(item, true, 0) },
@@ -437,7 +437,7 @@ impl EmitState {
             None => None,
         }, || nikaia_std::block::Text::from(callee.to_string()).into()), i);
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node)?;
-        let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
+        let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
@@ -454,7 +454,7 @@ impl EmitState {
         if self.foreign_params.contains_key(callee) {
             let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if i < params.len() as i64 {
-                let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).clone();
+                let ty = (*unsafe { nikaia_std::proven::read(&params, (i) as usize) }).clone();
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }
@@ -462,7 +462,7 @@ impl EmitState {
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, method_callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
-        out.push(&before);
+        if !count { out.push(&before); }
         let owner_key = nikaia_std::index::or(match method_callee {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -521,7 +521,10 @@ impl EmitState {
         let held = has_how && how != "" && !boxed_alone || lent_whole;
         if held { out.push("("); }
         if pointer == 3 { out.push("&"); } else if pointer == 4 { out.push("&mut "); }
-        if count { out.push("nikaia_std::count::of("); }
+        if count {
+            out.push("nikaia_std::count::of(");
+            out.push(&before);
+        }
         let mut inside = flow;
         if wants_a_size && !count { inside = flow.inferred(); }
         if self.emit_arg_handed_on_changed(world, &scope.function, callee, i, arg) { inside = inside.place(); }
@@ -537,14 +540,17 @@ impl EmitState {
         if pointer == 6 { out.push(".lent()"); }
         if held { out.push(")"); }
         if has_how && how != "" { out.push(&how); }
-        if count { out.push(")"); }
+        if count {
+            out.push(&after);
+            out.push(")");
+        }
         if kept_here { out.push(")"); }
         if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
         out.push(&owner_close);
-        out.push(&after);
+        if !count { out.push(&after); }
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }
         if boxed_here { out.push(")"); }
@@ -1728,6 +1734,15 @@ impl EmitState {
                     Expr::LitInterpolated { parts, .. } => { self.emit_core_joined_name(world, walk, out, host, parts, &names, depth, flow, scope)?; },
                     _ => { self.emit_expr(world, walk, out, host, given, depth, flow, scope)?; },
                 }
+                out.push(&format!("), {}, {})", to_err, newline));
+                if !fails { out.push(".unwrap_or(())"); }
+                return Ok(());
+            }
+            if self.facts.printed_bytes.contains(&key) {
+                let to_err = text.starts_with('e');
+                let newline = text.ends_with("ln");
+                out.push("nikaia_std::io::print_bytes(&(");
+                self.emit_expr(world, walk, out, host, given, depth, flow, scope)?;
                 out.push(&format!("), {}, {})", to_err, newline));
                 if !fails { out.push(".unwrap_or(())"); }
                 return Ok(());

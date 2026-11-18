@@ -191,7 +191,7 @@ impl EmitState {
             // (ADR-393 D1, #1447).
             // And a program's lowered as a module of another crate, whose
             // `main` the crate calls (#1582).
-            let shared = if self.is_std || self.offered_to_rust || self.as_a_module() { "pub " } else { "" }
+            let shared = if self.is_std || self.offered_to_rust || self.every_item_public || self.as_a_module() { "pub " } else { "" }
             out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[allow(non_camel_case_types)]\n{shared}enum {name}{decl} {{\n")
             for member in members {
                 let variant = sum_variant(member)

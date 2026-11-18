@@ -26,8 +26,12 @@ pub struct ComptimeBundle {
     /// so that a path `nikaia_std::…` resolves in every module; the code is
     /// the library's.
     pub rlibs: Vec[(String, fs::Path)],
-    /// Where the libraries it was built from are.
-    pub deps: fs::Path,
+    /// Where the libraries it was built from are: each directory Cargo put
+    /// one in (#2136). Under Cargo's older layout that is
+    /// `<tree>/<triple>/debug/deps` (and `<tree>/debug/deps` for the proc
+    /// macros); under the layout Cargo 1.100 always uses, each crate has
+    /// its own `build/<crate>/<hash>/out`. The first is `std`'s.
+    pub deps: Vec[fs::Path],
     /// What changes when the library is rebuilt: part of every key.
     pub stamp: String,
     /// Where the toolchain's own `std` is, which a program linked with
@@ -50,6 +54,8 @@ pub enum ComptimeBundleFlavour {
 pub struct ComptimeBundleArtifacts {
     pub dylib: fs::Path?,
     pub rlibs: Vec[(String, fs::Path)],
+    /// The directory of each file Cargo built for the library (#2136).
+    pub dirs: Vec[fs::Path],
 }
 
 /// How the child ended: whether it said it succeeded, what it wrote, and
@@ -139,12 +145,25 @@ comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", 
 fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
     let mut dylib: fs::Path? = null
     let mut rlibs: Vec[(String, fs::Path)] = []
+    let mut dirs: Vec[fs::Path] = []
     for message in cargo_json_lines(messages) {
         if !cargo_json_an_artifact(message) {
             continue
         }
         let files = cargo_json_filenames(message)
         let name = cargo_json_text(cargo_json_member(cargo_json_member(message, "target"), "name")) ?? continue
+        if name != library {
+            for file in files.iter() {
+                match file.parent() {
+                    null => {},
+                    dir => {
+                        if !dirs.contains(dir) {
+                            dirs.push(dir)
+                        }
+                    },
+                }
+            }
+        }
         if named.iter().any(fn(each) { each == name }) {
             let rlib = files.iter().find(fn(file) { cargo_json_extension(file) == "rlib" }) ?? continue
             rlibs.push((name, rlib.clone()))
@@ -152,7 +171,7 @@ fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: 
             dylib = files.iter().find(fn(file) { let extension = cargo_json_extension(file); extension == "so" || extension == "dylib" || extension == "dll" })?.clone()
         }
     }
-    return ComptimeBundleArtifacts { dylib: dylib, rlibs: rlibs }
+    return ComptimeBundleArtifacts { dylib: dylib, rlibs: rlibs, dirs: dirs }
 }
 
 fn comptime_bundle_named() -> Vec[String] {
@@ -205,7 +224,7 @@ fn comptime_bundle_recorded[H: ComptimeBundleHost](flavour: ComptimeBundleFlavou
     let fingerprint = comptime_bundle_run_fingerprint(host)
     let held = fs::read_to_string(record, fs::Root::Anywhere) catch { "" }
     // **And the tree it was built in**, which is another cache entry
-    // (#1705): `<tree>/<triple>/debug/deps` holds the crates it names.
+    // (#1705): `<tree>/<triple>/debug` holds the library.
     match comptime_bundle_tree_of(held) {
         null => {},
         tree => host.use_entry(tree),
@@ -217,9 +236,12 @@ fn comptime_bundle_recorded[H: ComptimeBundleHost](flavour: ComptimeBundleFlavou
         },
     }
     let bundle = comptime_bundle_bundle_of(flavour, host)
-    let mut text = f"{fingerprint}\n{bundle.dylib.display()}\n{bundle.deps.display()}\n{bundle.libdir.display()}\n"
+    let mut text = f"{fingerprint}\n{bundle.dylib.display()}\n{bundle.libdir.display()}\n"
     for (name, rlib) in bundle.rlibs {
         text.push_str(f"{name}={rlib.display()}\n")
+    }
+    for dir in bundle.deps {
+        text.push_str(f"{dir.display()}\n")
     }
     comptime_bundle_write_if_changed(record, text, host.unique_beside(record))
     return bundle
@@ -293,31 +315,30 @@ fn comptime_bundle_path_dependency(line: ref String) -> String? {
 }
 
 /// The target directory a record's crates were built in: three levels above
-/// its `deps` line (`<tree>/<triple>/debug/deps`).
+/// its library (`<tree>/<triple>/debug/libnikaia_run_bundle.so`), where
+/// Cargo puts it under either layout (#2136).
 fn comptime_bundle_tree_of(text: ref String) -> fs::Path? {
-    let deps: fs::Path = text.lines().nth(2) ?? return null
-    return deps.parent()?.parent()?.parent()?.clone()
+    let dylib: fs::Path = text.lines().nth(1) ?? return null
+    return dylib.parent()?.parent()?.parent()?.clone()
 }
 
-/// **Where the bundle's proc macros are** (#1705): built for a named
-/// `--target`, Cargo puts what runs on the host in `<tree>/debug/deps`, beside
-/// the target's `<tree>/<triple>/debug/deps`.
-pub fn comptime_bundle_host_deps(deps: ref fs::Path) -> fs::Path? {
-    let tree: fs::Path = deps.parent()?.parent()?.parent() ?? return null
-    return tree.join("debug").join("deps")
-}
-
-/// The bundle a record names, where it is still the one it names.
+/// The bundle a record names, where it is still the one it names: its
+/// fingerprint, library and toolchain directory, a line `name=rlib` for each
+/// crate it names, and then each directory its libraries are in (#2136).
 fn comptime_bundle_read_record(text: String, fingerprint: String) -> ComptimeBundle? {
     let lines: Vec[String] = text.lines().collect()
-    if lines.len() < 4 || lines[0] != fingerprint {
+    if lines.len() < 3 || lines[0] != fingerprint {
         return null
     }
     let dylib: fs::Path = lines[1]
-    let deps: fs::Path = lines[2]
-    let libdir: fs::Path = lines[3]
-    let rlibs: Vec[(String, fs::Path)] = lines.iter().skip(4).filter_map(fn(line) { line.split_once("=") }).map(fn((name, rlib)) { (name.clone(), comptime_bundle_path(rlib)) }).collect()
-    if rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
+    let libdir: fs::Path = lines[2]
+    let named = COMPTIME_BUNDLE_NAMED.len()
+    let rlibs: Vec[(String, fs::Path)] = lines.iter().skip(3).take(named).filter_map(fn(line) { line.split_once("=") }).map(fn((name, rlib)) { (name.clone(), comptime_bundle_path(rlib)) }).collect()
+    if rlibs.len() != named {
+        return null
+    }
+    let deps: Vec[fs::Path] = lines.iter().skip(3 + named).map(fn(line) { comptime_bundle_path(line.clone()) }).collect()
+    if deps.is_empty() {
         return null
     }
     let stamp = comptime_bundle_stamp_of(dylib, rlibs, libdir) catch { return null }
@@ -421,7 +442,15 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
         throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
     }
     let dylib = found.dylib ?? throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
-    let deps = found.rlibs[0].1.parent() ?? throw ComptimeBundleFailed::Said("no directory for std")
+    let std_dir = found.rlibs[0].1.parent() ?? throw ComptimeBundleFailed::Said("no directory for std")
+    // `std`'s directory first: a program built against the bundle loads
+    // from it (`libraries` below).
+    let mut deps: Vec[fs::Path] = [std_dir.clone()]
+    for dir in found.dirs {
+        if dir != std_dir {
+            deps.push(dir.clone())
+        }
+    }
     let libdir = comptime_bundle_path(host.target_libdir())
     let stamp = comptime_bundle_stamp_of(dylib, found.rlibs, libdir)
     return ComptimeBundle { dylib: dylib, rlibs: found.rlibs, deps: deps, stamp: stamp, libdir: libdir }
@@ -479,14 +508,10 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
         args.push("--extern")
         args.push(f"{crate_name}={rlib.display()}")
     }
-    args.push("-L")
-    args.push(f"dependency={bundle.deps.display()}")
-    match comptime_bundle_host_deps(bundle.deps) {
-        null => {},
-        host_deps => {
-            args.push("-L")
-            args.push(f"dependency={host_deps.display()}")
-        },
+    // Each directory a crate the bundle names was built in (#2136).
+    for dir in bundle.deps {
+        args.push("-L")
+        args.push(f"dependency={dir.display()}")
     }
     args.push("-o")
     args.push(binary.display())
@@ -505,7 +530,9 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
         null => {},
         parent => libraries.push(parent),
     }
-    libraries.push(bundle.deps.clone())
+    for dir in bundle.deps.iter().take(1) {
+        libraries.push(dir.clone())
+    }
     libraries.push(comptime_bundle_path(host.target_libdir()))
     let ran = host.run_child(binary, named, libraries, name) catch {
         comptime_bundle_tidy(binary, dir, scratch)

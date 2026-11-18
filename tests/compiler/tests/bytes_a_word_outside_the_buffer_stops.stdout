@@ -1,0 +1,2 @@
+past: exit 101, word.nika:8: the program stopped: range end index 9 out of range for slice of length 8
+before start: exit 101, word.nika:11: the program stopped: index out of bounds: the index is -1

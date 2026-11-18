@@ -977,7 +977,6 @@ pub fn sv_smtlib_read(source: &str) -> LgRead {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_smtlib_test_row(name: &str, source: &'static str) -> String {
     match sv_smtlib_script(source) {
         SvSmtRead::Script(ref s, ref sorts) => {
@@ -995,7 +994,6 @@ pub(crate) fn sv_smtlib_test_row(name: &str, source: &'static str) -> String {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn sv_smtlib_test_rows(files: &[(&'static str, &'static str)]) -> String {
     let mut out: String = String::from("");
     for (name, text) in files.iter() {
@@ -1005,7 +1003,6 @@ pub(crate) fn sv_smtlib_test_rows(files: &[(&'static str, &'static str)]) -> Str
     out
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(&'static str, &'static str)> = vec![("let", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((y (+ x 1)) (z 2)) (< y z)))\n(check-sat)\n"), ("let, shadowing", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((x 3)) (let ((x (+ x 1))) (= x 4))))\n(check-sat)\n"), ("named", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (or (! (= x 5) :named foo) (> x 9)))\n(assert (not foo))\n(check-sat)\n"), ("define-fun, constant", "(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun big () Bool (> x 9))\n(assert big)\n(check-sat)\n"), ("define-fun, parameters", "(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun twice ((a Int)) Int (* 2 a))\n(assert (= (twice x) (twice 3)))\n(check-sat)\n"), ("Bool constant", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-fun q () Bool)\n(assert (or p (not q)))\n(check-sat)\n"), ("ite, Boolean", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (ite p (> x 0) (< x 0)))\n(check-sat)\n"), ("ite, arithmetic", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (= x (+ 1 (ite p 2 3))))\n(check-sat)\n"), ("ite, constant condition", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= x (ite (< 1 2) 2 3)))\n(check-sat)\n"), ("ite, compared with a constant", "(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (= (ite p 2 3) 3))\n(check-sat)\n"), ("ite, nested, compared with a constant", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (ite (= x 1) 5 (ite (= x 2) 7 x)) 7))\n(check-sat)\n"), ("ite, scaled and shifted", "(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (<= (+ (* 2 (ite p 4 1)) 1) 5))\n(check-sat)\n"), ("ite, read twice", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (let ((v (ite p 1 0))) (and (= v 1) (> (+ x v) 3))))\n(check-sat)\n"), ("= between Booleans", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (>= x 5) (< x 0)))\n(check-sat)\n"), ("distinct between Booleans", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (distinct p q))\n(check-sat)\n"), ("xor", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (xor p q true))\n(check-sat)\n"), ("=> chain", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(declare-const r Bool)\n(assert (=> p q r))\n(check-sat)\n"), ("negative numeral", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (<= -175 x))\n(check-sat)\n"), ("skipped commands", "(set-logic QF_LIA)\n(set-option :produce-models true)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(get-value (x))\n(get-model)\n(get-info :reason-unknown)\n(echo \"done\")\n"), ("push and pop", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(push 1)\n(assert (< x 0))\n(pop 1)\n(push)\n(assert (< x 5))\n(check-sat)\n"), ("reset-assertions", "(set-logic QF_LIA)\n(assert (= 0 1))\n(reset-assertions)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n"), ("two check-sat", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(assert (< x 0))\n(check-sat)\n"), ("non-linear product", "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const y Int)\n(assert (= (* x y) 1))\n(check-sat)\n"), ("uninterpreted function", "(set-logic QF_LIA)\n(declare-fun f (Int) Int)\n(assert (= (f 1) 2))\n(check-sat)\n"), ("non-standard symbol", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (int.pow2 x) 2))\n(check-sat)\n"), ("undeclared name", "(set-logic QF_LIA)\n(assert (> y 0))\n(check-sat)\n"), ("numeral out of i64", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (< x 9223372036854775808))\n(check-sat)\n")];
     let out = sv_smtlib_test_rows(&files);
@@ -1014,7 +1011,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(&'static str, &'static str)> = vec![("real zero", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (= 0 0.0))\n(check-sat)\n"), ("decimal scale", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 0.5 x) 1))\n(check-sat)\n"), ("division", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x (/ 1 3)))\n(check-sat)\n"), ("real ite", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (> (ite (> x 0) x 0.5) x))\n(check-sat)\n"), ("division by a variable", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ 1 x) 2))\n(check-sat)\n"), ("division by zero", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ x 0) 2))\n(check-sat)\n"), ("real product", "(set-logic QF_LRA)\n(declare-const x Real)\n(declare-const y Real)\n(assert (= (* x y) 1))\n(check-sat)\n"), ("overflowing scale", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 4611686018427387904 x) (/ 1 3)))\n(check-sat)\n"), ("decimal out of i64", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x 0.00000000000000000001))\n(check-sat)\n")];
     let out = sv_smtlib_test_rows(&files);
@@ -1024,14 +1020,10 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 
-#[cfg(test)]
-mod nikaia_tests {
-    #[test]
-    fn the_integer_forms_are_read_or_refused_with_their_reasons() {
-        super::__nikaia_test_0().unwrap()
-    }
-    #[test]
-    fn the_real_forms_are_read_with_their_real_variables() {
-        super::__nikaia_test_1().unwrap()
-    }
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sv_smtlib_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sv_smtlib::the_integer_forms_are_read_or_refused_with_their_reasons", __nikaia_test_0),
+        ("sv_smtlib::the_real_forms_are_read_with_their_real_variables", __nikaia_test_1),
+    ]
 }

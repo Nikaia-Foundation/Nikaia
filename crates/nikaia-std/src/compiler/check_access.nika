@@ -52,6 +52,7 @@ impl CheckState {
             return
         }
         let name = field.name.clone()
+        self.facts.privates_reached.insert(span.start as i64, package.clone())
         self.findings.push(check_refusal("NK1110", span, f"You can't reach `{ty}.{name}` from here: it's private to `{package}`.", ["A field is private to its package unless it's declared `pub`."], f"Write `pub {name}` in `{package}`, or use a public method the type offers."))
     }
 
@@ -89,6 +90,8 @@ impl CheckState {
         }
         if helper {
             self.facts.std_helpers_reached.insert(span.start as i64)
+        } else {
+            self.facts.privates_reached.insert(span.start as i64, module.clone())
         }
         let help: String = if self.modules.contains(module) { f"Write `pub fn {item}` in `{module}`, or use something it makes public." } else { f"`{item}` is a helper inside `std`; use something `{module}` makes public." }
         self.findings.push(check_refusal("NK1110", span, f"You can't use `{item}` from here: it's private to `{module}`.", ["Everything is private to its package unless it's declared `pub`."], help))
@@ -317,6 +320,21 @@ pub fn check_access_inside_std(findings: ref Vec[CheckFinding], reached: ref col
     let mut kept: Vec[CheckFinding] = []
     for f in findings {
         if f.code == "NK1110" && reached.contains(f.span.start as i64) {
+            continue
+        }
+        kept.push(f.clone())
+    }
+    return kept
+}
+
+/// **A package's own test programs see its private names** (ADR-403 D1):
+/// drops the `NK1110` of each name in `privates_reached` whose package is in
+/// `tested`, the packages whose `tests/` the checked program is in. Every
+/// other program keeps the refusal (D2).
+pub fn check_access_in_own_tests(findings: ref Vec[CheckFinding], reached: ref collections::BTreeMap[i64, String], tested: ref collections::BTreeSet[String]) -> Vec[CheckFinding] {
+    let mut kept: Vec[CheckFinding] = []
+    for f in findings {
+        if f.code == "NK1110" && tested.contains(reached.get(f.span.start as i64) ?? "") {
             continue
         }
         kept.push(f.clone())

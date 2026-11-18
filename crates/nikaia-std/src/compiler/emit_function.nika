@@ -1081,7 +1081,7 @@ impl EmitState {
                 let outer_unpinned = walk.unpinned
                 walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl
                 let mut vis: String = ""
-                if (owner_bridged ?? false) || is_public {
+                if (owner_bridged ?? false) || is_public || (self.every_item_public && !answers_a_trait) {
                     vis = "pub "
                 }
                 // ADR-303 D4: `fn main` is the runtime's, and the program's own

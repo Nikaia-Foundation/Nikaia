@@ -219,6 +219,12 @@ pub fn project_tests_is_program(file: &std::path::Path, root: &std::path::Path) 
     nikaia_std::fs::path::same(&(project_members_canonical(&parent)), &(project_members_canonical(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))))))
 }
 
+pub fn project_tests_tests_of(root: &std::path::Path, input: &std::path::Path) -> bool {
+    if project_tests_is_program(input, root) { return true; }
+    let main = match env::current_main() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    project_tests_is_program(&main, root)
+}
+
 pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<String>) -> ProjectMembersManifest {
     #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
     let mut paths: Vec<(String, fs::Path)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
@@ -554,9 +560,9 @@ pub(crate) fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> P
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
     fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
-    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
+    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path, main: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
     fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
-    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
+    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64, main: &std::path::Path) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
     fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64, main: &std::path::Path) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
@@ -674,7 +680,8 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         }
         let list = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.list")));
         fs::write(&list, &fs::Root::Anywhere, nikaia_std::block::Text::from(lines.join("")), false, true).await?;
-        let built = host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list, project_tests_build_time_limit())?;
+        let main = nikaia_std::fs::path::join(&(nikaia_std::index::get(&chunk, 0).dir), std::path::Path::new(&(format!("{}.nika", unsafe { nikaia_std::proven::read(&chunk, (0) as usize) }.name))));
+        let built = host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list, project_tests_build_time_limit(), &main)?;
         if built.timed_out { continue; }
         match built.binary {
             None => {
@@ -803,9 +810,10 @@ pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program
     if program.bounds.is_none() && program.asserts.is_none() && program.sharing.is_none() { return Ok(found); }
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
-    if program.bounds.is_some() { found.bounds = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own)?, &entry, &written, root); }
-    if program.asserts.is_some() { found.asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
-    if program.sharing.is_some() { found.sharing = project_tests_relocated(&host.explained(&vec![String::from("--sharing")], &entry, own)?, &entry, &written, root); }
+    let main = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
+    if program.bounds.is_some() { found.bounds = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own, &main)?, &entry, &written, root); }
+    if program.asserts.is_some() { found.asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own, &main)?, &entry, &written, root); }
+    if program.sharing.is_some() { found.sharing = project_tests_relocated(&host.explained(&vec![String::from("--sharing")], &entry, own, &main)?, &entry, &written, root); }
     Ok(found)
 }
 
@@ -1011,14 +1019,15 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
     let total = unsafe { nikaia_std::proven::add::<i64>(blocks.len() as i64, outputs.len() as i64) } + program_tests;
     project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];
-    for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+    for (title, path, line, number) in blocks.iter() {
+        let line = nikaia_std::num::value(line);let number = nikaia_std::num::value(number);
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, k)?)); }
-        let label = format!("test \"{}\" ({}:{})", title, shown_path(&path, root), line);
+        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, number)?)); }
+        let label = format!("test \"{}\" ({}:{})", title, shown_path(path, root), line);
         if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
     }
     for output in outputs.iter() {

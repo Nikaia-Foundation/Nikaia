@@ -623,10 +623,12 @@ impl EmitState {
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(node) && self.keeps_code_at(method_callee?.clone() ?? callee.clone(), i)
         // Part I 2.3: a plain value in a parameter the callee declares nullable.
         let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node)
-        // **A count the language below wants in `usize`** (ADR-285 D15), not
+        // **A count the language below wants in `usize`** (ADR-285 D15), as
+        // the checker found it by the entry the call resolved to (`str::repeat`,
+        // never a function of the program's own that is called `repeat`), not
         // where the argument is written only in literals, and a `usize` a C
         // declaration names is one too (ADR-302 D6).
-        let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
+        let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
         let count = wants_a_size && !only_literals(arg)
         // **The caller writes no `&`** (ADR-094 D1): where the callee reads this
         // argument rather than keeping it, the reference is the compiler's. A
@@ -680,7 +682,12 @@ impl EmitState {
         if lent_option || lent_path {
             out.push("&")
         }
-        out.push(before)
+        // **A count's wrap goes inside `count::of`** (ADR-285 D15): a narrower
+        // integer widened into `i64` is still the count, and `count::of` takes
+        // it, never the other way round, `i64::from(count::of(n))`, a `usize`.
+        if !count {
+            out.push(before)
+        }
         // **A list or text a described Rust crate owns crosses as it is**
         // (ADR-327 D8, #1541): what the call hands over is placed outside the
         // task's block (a local handed to a call never is in it), so the
@@ -809,6 +816,7 @@ impl EmitState {
         }
         if count {
             out.push("nikaia_std::count::of(")
+            out.push(before)
         }
         // A count written only in literals is left for Rust to infer as a
         // `usize`, so a suffix may not be written into it either.
@@ -862,6 +870,7 @@ impl EmitState {
             out.push(how)
         }
         if count {
+            out.push(after)
             out.push(")")
         }
         if kept_here {
@@ -883,7 +892,9 @@ impl EmitState {
             out.push(".clone()")
         }
         out.push(owner_close)
-        out.push(after)
+        if !count {
+            out.push(after)
+        }
         // A kept function value copied from a place (#1031), where the
         // argument hands it over: not lent, not lent as its closure.
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(node)
@@ -2626,7 +2637,7 @@ impl EmitState {
     }
 
     /// `println(..)` and its three: a file's name is written as its bytes
-    /// (ADR-319 D4), an `f".."` is a format string, a plain string has its braces
+    /// (ADR-319 D4), `Bytes` as they are (ADR-019 D7), an `f".."` is a format string, a plain string has its braces
     /// escaped (ADR-309 D4), anything else goes through `{}`. **A failed write
     /// is an `io::IoError`** (ADR-392): each is `std`'s fallible writer, given
     /// `format_args!`, and its failure leaves as any call's does: `emit_call`
@@ -2651,6 +2662,19 @@ impl EmitState {
                     Expr::LitInterpolated { parts, .. } => self.emit_core_joined_name(world, walk, out, host, parts, names, depth, flow, scope),
                     else => self.emit_expr(world, walk, out, host, given, depth, flow, scope),
                 }
+                out.push(f"), {to_err}, {newline})")
+                if !fails {
+                    out.push(".unwrap_or(())")
+                }
+                return
+            }
+            // **`Bytes` are written as they are** (ADR-019 D7), through the
+            // buffer text goes through.
+            if self.facts.printed_bytes.contains(key) {
+                let to_err = text.starts_with("e")
+                let newline = text.ends_with("ln")
+                out.push("nikaia_std::io::print_bytes(&(")
+                self.emit_expr(world, walk, out, host, given, depth, flow, scope)
                 out.push(f"), {to_err}, {newline})")
                 if !fails {
                     out.push(".unwrap_or(())")

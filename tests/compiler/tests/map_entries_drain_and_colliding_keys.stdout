@@ -1,0 +1,8 @@
+a 3, b 2, c 1
+drained a 3
+drained b 2
+drained c 1
+(1, b) 2, len 2
+Hamburg 1, a clone is equal: true, k still has 1
+colliding: 8 keys, abcdefgi 6, abcdefghijklmnopq 7
+ab 2, x -1

@@ -803,6 +803,16 @@ pub fn allow_std_helpers_in_std(checked: &mut Checked) {
     );
 }
 
+/// **A package's own test programs see its private names** (`NK1110`,
+/// ADR-403 D1): `tools/check_access.nika`.
+pub fn allow_privates_in_own_tests(checked: &mut Checked, tested: &BTreeSet<String>) {
+    checked.findings = nikaia_std::compiler::check_access::check_access_in_own_tests(
+        &checked.findings,
+        &checked.facts.privates_reached,
+        tested,
+    );
+}
+
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::compiler::written::written_expression(&parsed.interner, expr)

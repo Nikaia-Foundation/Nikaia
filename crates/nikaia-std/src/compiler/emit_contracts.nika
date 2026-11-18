@@ -33,6 +33,9 @@ pub struct EmitContractsBuild {
     pub crate_root: String,
     /// The package is offered to Rust (`Build::offered_to_rust`, ADR-393 D1).
     pub offered_to_rust: bool,
+    /// Every item is `pub`, for the package's own `tests/` programs
+    /// (`Build::every_item_public`, ADR-403 D4).
+    pub every_item_public: bool,
 }
 
 /// The state, which checks a statement holds and which are proved, and what
@@ -179,6 +182,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         package_grammar: units.iter().any(fn(unit) { unit.items.iter().any(fn(item) { match item.node { Item::Grammar(_) => true, else => false } }) }),
         crate_root: build.crate_root.clone(),
         offered_to_rust: build.offered_to_rust,
+        every_item_public: build.every_item_public,
         fails: tables.fails,
         trusted_input: build.trusted,
         unchecked_assumes: unchecked,

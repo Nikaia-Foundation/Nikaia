@@ -1,0 +1,262 @@
+// Every search of a byte set agrees with a byte-by-byte walk (ADR-375 D2,
+// D3, D5): `find_all` at both scans, its `count`, `last` and `nth`, the same
+// after a partial walk (`skip`), `find` and `split`, at lengths 0..<200, every
+// `from` near a block border, hits far apart, and a set of one to three bytes
+// written at the call (`bytes::Few`) against the built set of the same bytes.
+// Moved from the `nikaia-std` unit tests `byteset::tests::*` (#2082).
+
+use std::bytes
+
+// A small generator, the same on every run.
+fn hay_of(mut seed: u64, n: i64, alphabet: Vec[u8]) -> (Vec[u8], u64) {
+    let mut hay: Vec[u8] = []
+    for _ in 0..<n {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)
+        hay.push(alphabet[((seed >> 33) % (alphabet.len() as u64)) as i64])
+    }
+    return (hay, seed)
+}
+
+fn hits(hay: Vec[u8], members: Vec[u8], from: i64) -> Vec[i64] {
+    let mut want: Vec[i64] = []
+    let mut i = if from > 0 { from } else { 0 }
+    while i < hay.len() {
+        if members.contains(hay[i]) {
+            want.push(i)
+        }
+        i += 1
+    }
+    return want
+}
+
+fn pieces(hay: Vec[u8], members: Vec[u8]) -> Vec[Vec[u8]] {
+    let mut out: Vec[Vec[u8]] = []
+    let mut piece: Vec[u8] = []
+    for b in hay {
+        if members.contains(b) {
+            out.push(piece)
+            piece = []
+        } else {
+            piece.push(b)
+        }
+    }
+    out.push(piece)
+    return out
+}
+
+fn at(want: Vec[i64], k: i64) -> i64 {
+    return if k < want.len() { want[k] } else { -1 }
+}
+
+fn last_of(want: Vec[i64]) -> i64 {
+    return if want.len() > 0 { want[want.len() - 1] } else { -1 }
+}
+
+// Checks every search of `set` (holding `members`) in `hay` from `from`;
+// the number of mismatches it printed.
+fn agree(hay: Vec[u8], members: Vec[u8], from: i64) -> i64 throws {
+    let set = bytes::ByteSet(members.clone())
+    let b = Bytes(hay.clone())
+    let want = hits(hay, members, from)
+    let mut bad = 0
+    let by_block: Vec[i64] = b.find_all(set; from: from).collect()
+    let after_hit: Vec[i64] = b.find_all(set; from: from, scan: bytes::Scan::AfterHit).collect()
+    if by_block != want || after_hit != want {
+        println(f"find_all {members.len()} {hay.len()} {from}")
+        bad += 1
+    }
+    for scan in [bytes::Scan::ByBlock, bytes::Scan::AfterHit] {
+        let rest = if want.len() > 0 { want.len() - 1 } else { 0 }
+        if b.find_all(set; from: from, scan: scan).skip(1).count() != rest {
+            println(f"count after one {members.len()} {hay.len()} {from}")
+            bad += 1
+        }
+        if (b.find_all(set; from: from, scan: scan).skip(1).nth(1) ?? -1) != at(want, 2) {
+            println(f"nth after one {members.len()} {hay.len()} {from}")
+            bad += 1
+        }
+        let tail = if want.len() > 1 { last_of(want) } else { -1 }
+        if (b.find_all(set; from: from, scan: scan).skip(1).last() ?? -1) != tail {
+            println(f"last after one {members.len()} {hay.len()} {from}")
+            bad += 1
+        }
+    }
+    if b.find_all(set; from: from).count() != want.len() {
+        println(f"count {members.len()} {hay.len()} {from}")
+        bad += 1
+    }
+    if (b.find_all(set; from: from).last() ?? -1) != last_of(want) {
+        println(f"last {members.len()} {hay.len()} {from}")
+        bad += 1
+    }
+    if (b.find(set; from: from) ?? -1) != at(want, 0) {
+        println(f"find {members.len()} {hay.len()} {from}")
+        bad += 1
+    }
+    for k in [0, 1, 2, 5, 40, 70] {
+        if (b.find_all(set; from: from).nth(k) ?? -1) != at(want, k) {
+            println(f"nth {k} {members.len()} {hay.len()} {from}")
+            bad += 1
+        }
+        if (b.find_all(set; from: from).skip(k + 1).nth(0) ?? -1) != at(want, k + 1) {
+            println(f"next after nth {k} {members.len()} {hay.len()} {from}")
+            bad += 1
+        }
+    }
+    return bad
+}
+
+fn split_agrees(hay: Vec[u8], members: Vec[u8]) -> i64 throws {
+    let set = bytes::ByteSet(members.clone())
+    let got: Vec[Bytes] = Bytes(hay.clone()).split(set).map(fn(p) { p.clone() }).collect()
+    let want: Vec[Bytes] = pieces(hay, members).map(fn(p) { Bytes(p) })
+    if got != want {
+        println(f"split {members.len()} {hay.len()}")
+        return 1
+    }
+    return 0
+}
+
+fn sets() -> Vec[Vec[u8]] {
+    let mut all: Vec[u8] = []
+    let mut wide: Vec[u8] = []
+    for i in 0..<256 {
+        all.push(i as u8)
+        if i % 7 == 0 {
+            wide.push(i as u8)
+        }
+    }
+    wide.push(255)
+    let mut band: Vec[u8] = []
+    for i in 16..<32 {
+        band.push(i as u8)
+    }
+    band.push(5)
+    band.push(149)
+    band.push(243)
+    return [[], [59], [59, 10], [0, 128, 255], [97, 101, 105, 111, 117], all, wide, band]
+}
+
+fn every_search_is_the_byte_by_byte_one() throws {
+    let alphabet: Vec[u8] = [59, 10, 97, 101, 0, 128, 255, 127, 21, 149, 120, 121]
+    let mut seed: u64 = 7
+    let mut bad = 0
+    let mut cases = 0
+    for members in sets() {
+        for n in 0..<200 {
+            let (hay, next) = hay_of(seed, n, alphabet.clone())
+            seed = next
+            for from in [0, -3, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 130, 250] {
+                bad += agree(hay.clone(), members.clone(), from)
+                cases += 1
+            }
+            bad += split_agrees(hay, members.clone())
+        }
+    }
+    println(f"every search: {cases} cases, {bad} wrong")
+}
+
+// The positions a set written at the call finds, against `want`.
+fn few_agree(name: String, got: Vec[i64], want: Vec[i64]) -> i64 throws {
+    if got != want {
+        println(f"few {name}")
+        return 1
+    }
+    return 0
+}
+
+fn a_few_bytes_find_what_their_set_finds() throws {
+    let alphabet: Vec[u8] = [59, 10, 97, 0, 128, 255, 120]
+    let mut seed: u64 = 11
+    let mut bad = 0
+    for n in 0..<200 {
+        let (hay, next) = hay_of(seed, n, alphabet.clone())
+        seed = next
+        let b = Bytes(hay.clone())
+        for from in [0, -1, 1, 31, 63, 64, 65, 130, 250] {
+            let semi = hits(hay.clone(), [59], from)
+            bad += few_agree("1", b.find_all(bytes::ByteSet([';']); from: from).collect(), semi.clone())
+            bad += few_agree("1 after hit", b.find_all(bytes::ByteSet([';']); from: from, scan: bytes::Scan::AfterHit).collect(), semi.clone())
+            bad += few_agree("1 twice", b.find_all(bytes::ByteSet([';', ';']); from: from).collect(), semi.clone())
+            if b.find_all(bytes::ByteSet([';']); from: from).count() != semi.len() {
+                bad += few_agree("1 count", [], [0])
+            }
+            if (b.find_all(bytes::ByteSet([';']); from: from).last() ?? -1) != last_of(semi) {
+                bad += few_agree("1 last", [], [0])
+            }
+            if (b.find_all(bytes::ByteSet([';']); from: from).nth(2) ?? -1) != at(semi, 2) {
+                bad += few_agree("1 nth", [], [0])
+            }
+            let lines = hits(hay.clone(), [59, 10], from)
+            bad += few_agree("2", b.find_all(bytes::ByteSet([';', '\n']); from: from).collect(), lines.clone())
+            bad += few_agree("2 after hit", b.find_all(bytes::ByteSet([';', '\n']); from: from, scan: bytes::Scan::AfterHit).collect(), lines.clone())
+            if b.find_all(bytes::ByteSet([';', '\n']); from: from).count() != lines.len() {
+                bad += few_agree("2 count", [], [0])
+            }
+            if (b.find_all(bytes::ByteSet([';', '\n']); from: from).last() ?? -1) != last_of(lines) {
+                bad += few_agree("2 last", [], [0])
+            }
+            let high = hits(hay.clone(), [0, 128, 255], from)
+            bad += few_agree("3", b.find_all(bytes::ByteSet([0, 128, 255]); from: from).collect(), high.clone())
+            bad += few_agree("3 after hit", b.find_all(bytes::ByteSet([0, 128, 255]); from: from, scan: bytes::Scan::AfterHit).collect(), high.clone())
+            if (b.find_all(bytes::ByteSet([0, 128, 255]); from: from).nth(2) ?? -1) != at(high, 2) {
+                bad += few_agree("3 nth", [], [0])
+            }
+        }
+    }
+    println(f"a few bytes: {bad} wrong")
+}
+
+// Hits further apart than a half block or a block: the walk goes on over
+// whole blocks, and `nth`, `count` and `last` after it agree.
+fn hits_far_apart_are_found_as_near_ones() throws {
+    let mut bad = 0
+    let mut not_x: Vec[u8] = []
+    for i in 0..<256 {
+        if i != 120 {
+            not_x.push(i as u8)
+        }
+    }
+    for gap in [31, 32, 33, 63, 64, 65, 97, 200] {
+        for n in [0, 1, 31, 32, 64, 65, 129, 300, 700] {
+            let mut hay: Vec[u8] = []
+            for i in 0..<n {
+                hay.push(if i % gap == gap - 1 { 59 } else { 120 })
+            }
+            let want = hits(hay.clone(), [59], 0)
+            let b = Bytes(hay)
+            for set in [bytes::ByteSet([59 as u8]), bytes::ByteSet(not_x.clone())] {
+                let got: Vec[i64] = b.find_all(set).collect()
+                let few: Vec[i64] = b.find_all(bytes::ByteSet([';']); scan: bytes::Scan::AfterHit).collect()
+                let rest = if want.len() > 0 { want.len() - 1 } else { 0 }
+                let tail = if want.len() > 1 { last_of(want) } else { -1 }
+                if got != want || few != want
+                    || (b.find_all(set; scan: bytes::Scan::AfterHit).nth(0) ?? -1) != at(want, 0)
+                    || (b.find_all(set; scan: bytes::Scan::AfterHit).skip(1).nth(1) ?? -1) != at(want, 2)
+                    || b.find_all(set; scan: bytes::Scan::AfterHit).skip(1).count() != rest
+                    || (b.find_all(set; scan: bytes::Scan::AfterHit).skip(1).last() ?? -1) != tail {
+                    println(f"far apart {gap} {n}")
+                    bad += 1
+                }
+            }
+        }
+    }
+    println(f"far apart: {bad} wrong")
+}
+
+fn split_follows_text() throws {
+    for s in ["", "a;;b;", ";"] {
+        let got: Vec[String] = s.bytes.split(bytes::ByteSet([59 as u8])).map(fn(p) { f"{p.len()}" }).collect()
+        println(f"\"{s}\": [{got.iter().join(", ")}]")
+    }
+    let nothing: Vec[u8] = []
+    let none: Vec[Bytes] = Bytes([97, 59, 98]).split(bytes::ByteSet(nothing)).map(fn(p) { p.clone() }).collect()
+    println(f"empty set: {none.len()} piece of {none[0].len()}")
+}
+
+fn main() throws {
+    every_search_is_the_byte_by_byte_one()
+    a_few_bytes_find_what_their_set_finds()
+    hits_far_apart_are_found_as_near_ones()
+    split_follows_text()
+}

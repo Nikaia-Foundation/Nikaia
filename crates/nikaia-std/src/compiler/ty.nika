@@ -1691,7 +1691,8 @@ pub struct FnContract {
     pub ensures: Vec[String],
     /// **What holds of each element of the sequence it hands back**
     /// ([ADR-375](../../../../docs/specification/adr/adr-375.md) D5): as
-    /// `ensures`, over the parameters, `self.len()` and `item`, the element.
+    /// `ensures`, over the parameters, `self.len()`, `item`, the element, and
+    /// `turn`, the number of elements before it (#432).
     pub ensures_each: Vec[String],
     /// **What the body was observed to return** (ADR-359 D3): each exit of
     /// the function's result summary, `!path || result == value`, over the

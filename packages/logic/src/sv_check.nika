@@ -278,15 +278,13 @@ impl SvReplay {
 				}
 				strict = strict || (is_lt && m > 0)
 				row = sv_row_sum(1, row, m, b.row) ?? return SvSum { bound: null, why: "overflow" }
-				for l in b.assumed {
-					if !assumed.contains(l) {
-						assumed.push(l)
-					}
-				}
+				// One merge, not a `contains` per literal: quadratic in the
+				// assumptions, the replay of SMPT Referendum-PT-0200-RF-00
+				// ran past its limit (#2012).
+				assumed = sv_lits_union(assumed, b.assumed)
 			}
 			i += 1
 		}
-		assumed.sort()
 		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
 		return SvSum {
 			bound: SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed },
@@ -574,7 +572,7 @@ fn sv_check_test_clauses() -> SvQuery {
 
 fn sv_check_test_clause_log(drop_hint: bool) -> SvLog {
 	let query = sv_check_test_clauses()
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let c0 = log.input(0)
 	let c1 = log.input(1)
 	let c2 = log.input(2)
@@ -592,7 +590,7 @@ fn sv_check_test_bounds() -> SvQuery {
 }
 
 fn sv_check_test_farkas_log(m: i64, den: i64, lits: Vec[u32]) -> SvLog {
-	let mut log = sv_log(sv_check_test_bounds()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(sv_check_test_bounds()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(lits, [SvSrc::Lit(sv_check_test_pos(0)), SvSrc::Lit(sv_check_test_pos(1))], [m, m], den)
@@ -611,7 +609,7 @@ fn sv_check_test_equal() -> SvQuery {
 }
 
 fn sv_check_test_lemma_log(query: ref SvQuery, m: Vec[i64], den: i64) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas([sv_check_test_neg(0), sv_check_test_neg(1)], [SvSrc::Lit(sv_check_test_pos(0)), SvSrc::Lit(sv_check_test_pos(1))], m, den)
@@ -627,7 +625,7 @@ fn sv_check_test_parity() -> SvQuery {
 // The parity refuted by a combination and the GCD test, after an extension
 // `q = ⌊x / 2⌋` pins `q` to 2 on the way.
 fn sv_check_test_parity_log(divisor: i64, m: i64, q: u32) -> SvLog {
-	let mut log = sv_log(sv_check_test_parity()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(sv_check_test_parity()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let ext = log.extend(sv_check_test_row([1], 0), m)
@@ -660,7 +658,7 @@ fn sv_check_test_half() -> SvQuery {
 
 // Split on x <= 0 or x >= 1 (`ge_constant` 1); each side refuted.
 fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
-	let mut log = sv_log(sv_check_test_half()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(sv_check_test_half()) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_check_test_row([1], 0), sv_check_test_row([-1], ge_constant))
@@ -671,7 +669,7 @@ fn sv_check_test_split_log(ge_constant: i64) -> SvLog {
 }
 
 fn sv_check_test_single(query: ref SvQuery, steps: Vec[SvStep]) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0 }
 	log.steps = steps
 	return log
 }

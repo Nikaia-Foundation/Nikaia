@@ -1,0 +1,56 @@
+// A recursive variant is boxed, and its box is opened where it was taken, lent
+// or changed, and looked into by a nested pattern either way (`boxed.rs`'s
+// `open` and `peek`). Moved from the `nikaia-std` unit tests `boxed::tests::*`
+// (#2082).
+enum Tree {
+	Leaf(i64),
+	Node(Tree, i64),
+}
+
+fn deepest(t: Tree) -> i64 {
+	return match t {
+		Tree::Leaf(n) => n,
+		Tree::Node(inner, _) => deepest(inner),
+	}
+}
+
+fn unwrapped(t: Tree) -> Tree {
+	return match t {
+		Tree::Node(inner, _) => inner,
+		Tree::Leaf(n) => Tree::Leaf(n),
+	}
+}
+
+fn bump(mut t: Tree) {
+	match t {
+		Tree::Leaf(n) => { t = Tree::Leaf(n + 1) }
+		Tree::Node(inner, _) => bump(inner),
+	}
+}
+
+fn leaf_under(t: Tree) -> i64 {
+	return match t {
+		Tree::Node(Tree::Leaf(n), _) => n,
+		else => -1,
+	}
+}
+
+fn taken_under(t: Tree) -> Tree {
+	return match t {
+		Tree::Node(Tree::Leaf(n), m) => Tree::Leaf(n * 10 + m),
+		Tree::Node(inner, _) => inner,
+		else => Tree::Leaf(0),
+	}
+}
+
+fn main() throws {
+	let mut t = Tree::Node(Tree::Node(Tree::Leaf(4), 1), 2)
+	println(deepest(t))
+	bump(t)
+	println(deepest(t))
+	let inner = unwrapped(t)
+	println(leaf_under(inner))
+	println(deepest(inner))
+	println(deepest(taken_under(inner)))
+	println(deepest(taken_under(Tree::Node(Tree::Node(Tree::Leaf(7), 3), 2))))
+}

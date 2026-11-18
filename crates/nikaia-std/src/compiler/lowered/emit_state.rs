@@ -72,6 +72,7 @@ pub struct EmitState {
     pub package_grammar: bool,
     pub crate_root: String,
     pub offered_to_rust: bool,
+    pub every_item_public: bool,
     pub fails: bool,
     pub trusted_input: bool,
     pub unchecked_assumes: bool,

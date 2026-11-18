@@ -28,6 +28,13 @@ one machine level, and the figures with proved checks removed rest on
 trusting the proofs. The study gives the full table, the method and the open
 items.
 
+The [Benchmarks Game table](https://github.com/Nikaia-Foundation/Nikaia/tree/main/benches/game)
+counts seven programs of the Computer Language Benchmarks Game and the `json`
+package against the fastest Rust entry published for each, again in
+instructions. Only two Nikaia programs written for speed do less work than
+their Rust entry. Most rows count more, often several times more. The table
+says what is known of the cause of each loss and keeps every row.
+
 ## The questions
 
 ### Can safe code reach the speed of the fastest unsafe code?

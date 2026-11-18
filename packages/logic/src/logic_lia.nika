@@ -30,6 +30,9 @@ pub enum LgUnknown {
     TooManyCases,
     /// An elimination held more bounds than the budget allows.
     TooManyBounds,
+    /// The proof log grew past the step budget the run set (`SvLog.limit`,
+    /// #2107): the equality elimination's steps counted with the search's.
+    TooManySteps,
     /// The solver searched within its budget and found no contradiction; the
     /// goal may hold, but this solver does not show it.
     NoContradiction,

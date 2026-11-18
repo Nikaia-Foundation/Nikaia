@@ -196,14 +196,14 @@ impl EmitState {
         let mut takes_out = false;
         let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         while place < names.len() as i64 {
-            if self.facts.copied_item_params.contains(&(node_key(node), place)) { takes_out = true; }
+            if self.facts.copied_item_params.contains(&(node_key(node), place)) || self.facts.copied_mut_item_params.contains(&(node_key(node), place)) { takes_out = true; }
             place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
         }
         if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if takes_out {
             #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for name in names.iter() {
-                if self.facts.copied_item_params.contains(&(node_key(node), at)) { written.push(format!("&{}", name)); } else { written.push(nikaia_std::block::Text::from(name.to_string())); }
+                if self.facts.copied_item_params.contains(&(node_key(node), at)) { written.push(format!("&{}", name)); } else if self.facts.copied_mut_item_params.contains(&(node_key(node), at)) { written.push(format!("&mut {}", name)); } else { written.push(nikaia_std::block::Text::from(name.to_string())); }
                 at += 1;
             }
             out.push(&format!("|{}| ", nikaia_std::block::Text::from(written.join(", "))));

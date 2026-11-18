@@ -302,6 +302,7 @@ pub fn sysroot_package_with_dependencies__unchecked(package: &[(String, String)]
         for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_COMPILER_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
     }
     files.sort();
+    index.push_str(&sysroot_package_tests(&package, dependencies));
     let digest = sysroot_package_digest(&index, &files);
     index.push_str(&format!("\n/// **The digest of this lowered set** (#1610): every file `lower-std` wrote\n/// beside this index, and the index above this line. Compiled into the same\n/// crate as the code it names, it is the compiler's identity for its caches.\npub const LOWERED_DIGEST: &str = \"{}\";\n", digest));
     let mut all: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&package, (0) as usize) }.0.to_string()), index)];
@@ -310,6 +311,38 @@ pub fn sysroot_package_with_dependencies__unchecked(package: &[(String, String)]
 }
 #[allow(dead_code)]
 pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> { if !((package.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `sysroot_package_with_dependencies`: `package.len() > 0`", None, &[("package.len()", (&&nikaia_std::abort::Operand(&(package.len() as i128))).shown()), ]) } sysroot_package_with_dependencies__unchecked(package, dependencies) }
+
+pub(crate) fn sysroot_package_tests(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> String {
+    let mut calls: String = String::from("");
+    for at in 1..package.len() as i64 {
+        let path = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&package, (at) as usize) }.0.to_string());
+        let stem = match path.strip_prefix(&*format!("{}/", SYSROOT_COMPILER_FILES)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let stem = match stem.strip_suffix(".rs") { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if unsafe { nikaia_std::proven::read(&package, (at) as usize) }.1.contains(&*format!("fn {}_nikaia_tests()", stem)) { calls.push_str(&format!("    all.extend({}_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));\n", stem)); }
+    }
+    for (name, theirs) in dependencies.iter() { if !theirs.is_empty() && unsafe { nikaia_std::proven::read(&theirs, (0) as usize) }.1.contains("pub fn nikaia_tests()") { calls.push_str(&format!("    all.extend({}::nikaia_tests().into_iter().map(|(test, run)| (format!(\"{}::{{test}}\"), run)));\n", name, name)); } }
+    if calls.is_empty() { return String::from(""); }
+    let run = "fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>";
+    let mut text: String = String::from("\n/// **The `test` blocks of this package and of its dependencies** (#2082), by\n/// name, as `nikaia test --std` runs them.\n");
+    text.push_str(&format!("pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, {})> {{\n    let mut all: std::vec::Vec<(std::string::String, {})> = std::vec::Vec::new();\n", run, run));
+    text.push_str(&calls);
+    text.push_str("    all\n}\n");
+    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names. Whether every test run passed and one was run at all.\n");
+    text.push_str("pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {\n");
+    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n");
+    text.push_str("    if list {\n        for (name, _) in &wanted {\n            println!(\"{name}\");\n        }\n        return !wanted.is_empty();\n    }\n");
+    text.push_str("    let (mut passed, mut failed) = (0usize, 0usize);\n");
+    text.push_str("    for (name, run) in &wanted {\n");
+    text.push_str("        match std::panic::catch_unwind(*run) {\n");
+    text.push_str("            Ok(Ok(())) => {\n                passed += 1;\n                println!(\"test {name} ... ok\");\n            }\n");
+    text.push_str("            Ok(Err(e)) => {\n                failed += 1;\n                println!(\"test {name} ... FAILED: {e}\");\n            }\n");
+    text.push_str("            Err(_) => {\n                failed += 1;\n                println!(\"test {name} ... FAILED: it panicked\");\n            }\n");
+    text.push_str("        }\n    }\n");
+    text.push_str("    let outcome = if failed == 0 { \"ok\" } else { \"FAILED\" };\n");
+    text.push_str("    println!(\"test result: {outcome}. {passed} passed; {failed} failed\");\n");
+    text.push_str("    failed == 0 && !wanted.is_empty()\n}\n");
+    text
+}
 
 pub(crate) fn sysroot_package_digest(index: &str, files: &[(String, String)]) -> String {
     let mut all: String = String::from("");

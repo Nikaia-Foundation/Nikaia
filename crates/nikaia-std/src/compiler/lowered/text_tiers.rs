@@ -4764,9 +4764,19 @@ pub(crate) fn put_into_container(place: &Declaring, method: &str, args: &[Expr],
         return;
     }
     if ty.generics.is_empty() || args.is_empty() || given.is_empty() { return; }
+    if method == "extend" && args.len() == 1 && extends_linked(place, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk) {
+        extended_from(place, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk);
+        return;
+    }
     let wrap = method != "extend" && method != "append";
     flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], wrap), Some(unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::sub::<i64>(args.len() as i64, 1)) as usize) }), unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::sub::<i64>(given.len() as i64, 1)) as usize) }, ask, walk);
     if method == "extend" && args.len() == 1 { extended_from(place, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk); }
+}
+
+pub(crate) fn extends_linked(place: &Declaring, items: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let from = extend_source(items, ask);
+    let found = match place_of(from, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    a_container(ask.names, &found.ty) && a_container(ask.names, &place.ty) && (found.ty.generics.len() as i64) == place.ty.generics.len() as i64
 }
 
 pub(crate) fn extended_from(place: &Declaring, items: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -5711,8 +5721,7 @@ pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_,
     if at < function.changes.len() as i64 && *unsafe { nikaia_std::proven::read(&function.changes, (at) as usize) } { return false; }
     if at < function.keeps.len() as i64 && *unsafe { nikaia_std::proven::read(&function.keeps, (at) as usize) } { return false; }
     let ty = (*unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }).clone();
-    if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
-    true
+    plain_string(ask.names, &ty) && !ty.is_nullable && !ty.is_view
 }
 
 pub(crate) fn param_arm_leaves(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {

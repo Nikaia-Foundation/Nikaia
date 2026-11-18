@@ -1,0 +1,46 @@
+// An I/O operation still pending when `main` ends is bounded by the
+// `cleanup-deadline` (ADR-297 D5, D6): the program is abandoned with exit 70
+// and says on standard error what did not finish (D7, D8). The child reads a
+// FIFO nobody writes to from a detached task, under a runtime config of
+// 50 ms named by `NIKAIA_RUNTIME_CONFIG` (ADR-303 D5) that pins the blocking
+// I/O path, so the read waits on an I/O worker. Moved from the `nikaia-std`
+// unit test `the_drain_is_bounded_by_its_deadline` (#2127); a hang is a
+// failure, since the drain must end well before the test's time limit.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkfifo", ["-m", "600", f"{tmp}/fifo"])
+	fs::write(
+		f"{tmp}/runtime.toml",
+		fs::Root::Anywhere,
+		"io-method = \"blocking\"\ncleanup-deadline = \"50ms\"\n",
+	)
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::fs\n\nfn main() throws {\n\tasync(detached) fn {\n\t\tlet bytes = fs::read(\"fifo\", fs::Root::Anywhere) catch { return }\n\t\tprintln(f\"read {bytes.len()}\")\n\t}\n\tprintln(\"main ends\")\n}\n",
+	)
+	let out = process::run(
+		toolchain(),
+		["run", "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+	)
+	println(out.stdout.trim())
+	println(f"exit {out.code}")
+	let said = out.stderr.contains("1 pending I/O operation(s) did not finish within the 0.05s cleanup deadline and were abandoned")
+	println(f"the expired drain is named: {said}")
+	process::run("rm", ["-rf", tmp])
+}

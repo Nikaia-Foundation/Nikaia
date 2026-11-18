@@ -1,0 +1,13 @@
+// A count goes in as whatever integer it is (Part I, `count::of`): an `i32`
+// the checker widens into the `i64` a count slot takes is still the count
+// (#2082: it was emitted `i64::from(count::of(n))`, a `usize`, and refused).
+fn main() throws {
+	let three: i64 = 3
+	let zero: i32 = 0
+	let two: i64 = 2
+	let narrow: i32 = 2
+	println(f"[{"ab".repeat(three)}]")
+	println(f"[{"ab".repeat(zero)}]")
+	println(f"[{"ab".repeat(two)}]")
+	println(f"[{"ab".repeat(narrow)}]")
+}

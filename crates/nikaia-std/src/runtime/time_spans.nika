@@ -1,0 +1,102 @@
+// crates/nikaia-std/src/runtime/time_spans.nika
+//
+// **A span's arithmetic that does not abort, `min`, `max` and `nanos()`**
+// ([ADR-402](../../../../docs/specification/adr/adr-402.md)), written in
+// Nikaia. `std.contracts` writes the entries a program calls by hand
+// (`time::Duration::saturating_sub`, `i64::nanos`, ...), and the emitter
+// writes each such call as a call of the function here
+// (`emit_core_calls.nika`, `span_function`): the language below has methods
+// by four of these names on its `Duration`, and its `saturating_mul` takes a
+// `u32`, so a method of a trait here would never be the one called.
+//
+// The longest span is the one the constructors saturate towards, the language
+// below's `Duration::MAX`: the most seconds a `u64` holds and the last
+// nanosecond before the next one.
+
+use std::time
+
+/// The longest span, where `saturating_add` and `saturating_mul` stay.
+fn span_longest() -> time::Duration sync {
+    return time::Duration(18446744073709551615, 999999999)
+}
+
+/// `a.saturating_add(b)`: the sum, or the longest span past it (D1).
+pub fn span_saturating_add(a: time::Duration, b: time::Duration) -> time::Duration sync {
+    let longest = span_longest()
+    if b > longest - a {
+        return longest
+    }
+    return a + b
+}
+
+/// `a.saturating_sub(b)`: the difference, or no time where `b` is the longer
+/// (D1).
+pub fn span_saturating_sub(a: time::Duration, b: time::Duration) -> time::Duration sync {
+    if b >= a {
+        return 0.seconds()
+    }
+    return a - b
+}
+
+/// `a.saturating_mul(by)`: `by` times the span, no time for a factor below
+/// one, the longest span past it (D1).
+//
+// The span's whole seconds and its nanoseconds are multiplied apart, in
+// `u64`: the nanoseconds times the factor's whole billions are seconds that
+// cannot pass a `u64` (below 10^9 times below 10^10), and times the rest
+// below 10^18 nanoseconds. Only the seconds can pass the longest span.
+pub fn span_saturating_mul(a: time::Duration, by: i64) -> time::Duration sync {
+    if by <= 0 {
+        return 0.seconds()
+    }
+    let billion: i64 = 1000000000
+    // `in_seconds` stops at `i64::MAX`; a span past it (only a saturated one
+    // gets there) keeps the rest of its seconds in `high`.
+    let low = a.in_seconds()
+    let past_low = a - low.seconds()
+    let high = past_low.in_seconds()
+    let nanos = (past_low - high.seconds()).in_nanos() as u64
+    let secs = low as u64 + high as u64
+    let whole = (by / billion) as u64
+    let part = (by % billion) as u64
+    let factor = by as u64
+    let parted = nanos * part
+    let carried = nanos * whole + parted / 1000000000
+    let multiplied = secs.checked_mul(factor) ?? return span_longest()
+    let total = multiplied.checked_add(carried) ?? return span_longest()
+    return time::Duration(total, (parted % 1000000000) as u32)
+}
+
+/// `a.min(b)`: the shorter of the two spans (D2).
+//
+// `keep` on both: the emitter hands the spans over by value, as a span
+// copies, and the answer is one of them, owned.
+pub fn span_min(keep a: time::Duration, keep b: time::Duration) -> time::Duration sync {
+    if b < a {
+        return b
+    }
+    return a
+}
+
+/// `a.max(b)`: the longer of the two spans (D2).
+pub fn span_max(keep a: time::Duration, keep b: time::Duration) -> time::Duration sync {
+    if b > a {
+        return b
+    }
+    return a
+}
+
+/// `n.nanos()` on an `i64`: this many billionths of a second, no time below
+/// zero (D3, ADR-150 D2).
+pub fn span_nanos_i64(n: i64) -> time::Duration sync {
+    if n <= 0 {
+        return 0.seconds()
+    }
+    let billion: i64 = 1000000000
+    return time::Duration((n / billion) as u64, (n % billion) as u32)
+}
+
+/// `n.nanos()` on an `i32`, as on an `i64` (D3).
+pub fn span_nanos_i32(n: i32) -> time::Duration sync {
+    return span_nanos_i64(n as i64)
+}

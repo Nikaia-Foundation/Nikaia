@@ -1,0 +1,101 @@
+// The Benchmarks Game's `reverse-complement`, written for speed: the same
+// output as `main.nika`. Standard input is read whole into one list of bytes,
+// and each sequence is reversed and complemented in place, through a table of
+// the 256 bytes: a letter from the left swaps with one from the right, a run
+// of them at a time, and the line ends stay where they are, so the lines of
+// 60 are written back as they were read.
+//
+//     nikaia run speed.nika < fasta-output.txt
+use std::io
+
+// The complement of one IUB code, upper or lower case, in upper case.
+fn complement(b: u8) -> u8 {
+	return match b as char {
+		'A' | 'a' => 'T' as u8,
+		'C' | 'c' => 'G' as u8,
+		'G' | 'g' => 'C' as u8,
+		'T' | 't' => 'A' as u8,
+		'U' | 'u' => 'A' as u8,
+		'M' | 'm' => 'K' as u8,
+		'R' | 'r' => 'Y' as u8,
+		'W' | 'w' => 'W' as u8,
+		'S' | 's' => 'S' as u8,
+		'Y' | 'y' => 'R' as u8,
+		'K' | 'k' => 'M' as u8,
+		'V' | 'v' => 'B' as u8,
+		'H' | 'h' => 'D' as u8,
+		'D' | 'd' => 'H' as u8,
+		'B' | 'b' => 'V' as u8,
+		'N' | 'n' => 'N' as u8,
+		else => b,
+	}
+}
+
+// `complement` of every byte, by its value.
+fn complements() -> Array[u8, 256] {
+	let mut table: Array[u8, 256] = [0; 256]
+	for i in 0..<256 {
+		table[i] = complement(i as u8)
+	}
+	return table
+}
+
+// The letters of `data[start..<end]`, lines of 60 letters each but the last,
+// each ended by a line feed, reversed and complemented in place.
+fn reverse_complement(mut data: Vec[u8], table: Array[u8, 256], start: i64, end: i64) {
+	let mut i = start
+	let mut j = end - 1
+	while i <= j {
+		let left = 60 - (i - start) % 61
+		let right = (j - start) % 61 + 1
+		if left == 0 {
+			i = i + 1
+		} else if right == 61 {
+			j = j - 1
+		} else {
+			let n = left.min(right).min((j - i + 1) / 2)
+			if n == 0 {
+				data[i] = table[data[i]]
+				return
+			}
+			// The two runs lie inside `data` and apart: checked once a
+			// run, so no index below is checked a letter.
+			if i < 0 || j >= data.len() || i + n > j - n + 1 {
+				return
+			}
+			for k in 0..<n {
+				let a = data[i + k]
+				data[i + k] = table[data[j - k]]
+				data[j - k] = table[a]
+			}
+			i = i + n
+			j = j - n
+		}
+	}
+}
+
+fn main() throws {
+	let mut data = io::read() catch {
+		eprintln(f"cannot read standard input: {error}")
+		return
+	}
+	let table = complements()
+	let mut at = 0
+	while at < data.len() && data[at] != '>' as u8 {
+		at = at + 1
+	}
+	while at < data.len() {
+		while at < data.len() && data[at] != 10 {
+			at = at + 1
+		}
+		let start = at + 1
+		at = start
+		while at < data.len() && data[at] != '>' as u8 {
+			at = at + 1
+		}
+		if start < at {
+			reverse_complement(data, table, start, at - 1)
+		}
+	}
+	print(Bytes(data))
+}

@@ -2233,6 +2233,57 @@ sync = true
 provenance = "untrusted"
 signature = "() -> Vec[(Bytes, Bytes)]"
 
+# ## The calling thread's memory (ADR-400)
+#
+# **`mem::allocations()` is how many times the calling thread has requested
+# memory since it started; `mem::usage()` is the bytes it holds now, what it
+# allocated less what it freed** (ADR-400 D1, D2). A free counts on the thread
+# that frees, so `usage` may be negative. Both read a per-thread counter of the
+# program's allocator; neither hands out an address (D3). No `touches` line: an
+# absent one means *touches everything* (Part III 13.5), so a read keeps its
+# order against the allocations it counts. `sync`: a read of a counter.
+
+# How many times the calling thread has requested memory since it started.
+[fn."mem::allocations"]
+pub = true
+panics = false
+sync = true
+signature = "() -> i64"
+
+# The calling thread's bytes in use: allocated less freed, negative where it freed more.
+[fn."mem::usage"]
+pub = true
+panics = false
+sync = true
+signature = "() -> i64"
+
+# ## The name of the calling thread (ADR-401)
+#
+# **`thread::id()` names the thread that calls it with a `thread::Id`**: two
+# calls on one thread give equal ids, two threads never do (ADR-401 D1). The id
+# is taken from a process-wide counter on the thread's first call and never
+# handed out again, so a thread started after another ended never looks like it
+# (D2). It names a thread, not a task: a task may be resumed on another thread
+# (D3). No `touches` line, as `mem::allocations`: which thread runs a call is
+# the outside world. `sync`: a read of a per-thread slot.
+
+# The name of a thread: compared with `==` and `!=`, and a map key or set
+# member; no order, no arithmetic, no number.
+[type."thread::Id"]
+pub = true
+crosses = true
+compares = true
+equates = true
+hashes = true
+copies = true
+
+# The calling thread's id.
+[fn."thread::id"]
+pub = true
+panics = false
+sync = true
+signature = "() -> thread::Id"
+
 # ## The CPU level a program is built for (ADR-371 D6)
 #
 # **`target::has(i)` answers whether the level `--cpu` named has the instruction
@@ -2898,6 +2949,26 @@ signature = "() -> collections::HashMap[?, ?]"
 # checker's scope is a map of names, and *is this name declared* is the question
 # it asks most (0.0.232, the miniature compiler written to measure how far
 # self-hosting is).
+# Take a key and what it names out of the map, and hand back what it named,
+# or nothing where the key was not there, as `collections::BTreeMap::remove`
+# does (#2111).
+[fn."collections::HashMap::remove"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[K, V](mut self: ref collections::HashMap[K, V], key: ?) -> V?"
+
+# Keep the pairs the function says yes to and drop the rest, in place (#2111).
+#
+# Each pair is handed to the function once, its key and its value, as
+# `Vec::retain` hands each element.
+[fn."collections::HashMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::HashMap[K, V], f: fn(ref K, ref V) -> bool)"
+
 # Whether the map holds this key.
 [fn."collections::HashMap::contains_key"]
 pub = true
@@ -3154,6 +3225,15 @@ panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V])"
+
+# Keep the pairs the function says yes to and drop the rest, in place, as
+# `collections::HashMap::retain` does (#2111). The pairs are handed over in
+# key order.
+[fn."collections::BTreeMap::retain"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V], f: fn(ref K, ref V) -> bool)"
 
 # Whether the map holds this key.
 [fn."collections::BTreeMap::contains_key"]
@@ -6108,6 +6188,15 @@ sync = true
 touches = []
 signature = "(self) -> time::Duration"
 
+# This many billionths of a second, as a span of time
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D3).
+[fn."i32::nanos"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self) -> time::Duration"
+
 # This many hours, as a span of time.
 [fn."i64::hours"]
 pub = true
@@ -6142,6 +6231,15 @@ signature = "(self) -> time::Duration"
 
 # This many millionths of a second, as a span of time.
 [fn."i64::micros"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self) -> time::Duration"
+
+# This many billionths of a second, as a span of time
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D3).
+[fn."i64::nanos"]
 pub = true
 panics = false
 sync = true
@@ -6202,6 +6300,53 @@ panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
+
+# **Arithmetic that does not abort, `min` and `max`**
+# ([ADR-402](../../docs/specification/adr/adr-402.md) D1, D2), the names Part I
+# 2.2 gives the integers. Nikaia, `runtime/time_spans.nika`: the emitter writes
+# each call as a call of the function there, since the language below has
+# methods by four of these names and its `saturating_mul` takes a `u32`.
+# `touches = []` and `sync = true` for the arithmetic entries' reason.
+# The sum, or the longest span where it would pass it.
+[fn."time::Duration::saturating_add"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# The difference, or no time at all where `other` is the longer.
+[fn."time::Duration::saturating_sub"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# `by` times the span: no time for a factor below one, the longest span where
+# it would pass it.
+[fn."time::Duration::saturating_mul"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, by: i64) -> time::Duration"
+
+# The shorter of two spans.
+[fn."time::Duration::min"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
+
+# The longer of two spans.
+[fn."time::Duration::max"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, other: time::Duration) -> time::Duration"
 
 # **A reading of the monotonic clock** ([ADR-368](../../docs/specification/adr/adr-368.md)
 # D1), the language below's `Instant` re-exported as `Duration` is. It crosses,
@@ -7199,7 +7344,9 @@ signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 # count, `last` searches from the end. A consumer written right after
 # `find_all` is the one named here; a step between them is another sequence.
 # **Each position lies at or after `from` and inside the bytes** (ADR-375 D5):
-# a fact for the bounds walk on the name a `for` binds.
+# a fact for the bounds walk on the name a `for` binds. **The positions
+# rise**, so the one after `turn` others lies at or above `turn`, and a `for`
+# over them turns fewer times than the bytes are long (ADR-361 D13, #432).
 # **How it goes from one hit to the next is the program's** (ADR-375 D6):
 # `ByBlock` reads the next block when the last one's hits are spent,
 # `AfterHit` looks for each hit in the half block right after the one before.
@@ -7209,7 +7356,7 @@ panics = false
 sync = true
 touches = []
 consumers = ["count", "nth", "last"]
-ensures_each = ["from <= item", "item < self.len()"]
+ensures_each = ["from <= item", "item < self.len()", "turn <= item"]
 signature = "(ref self, set: bytes::ByteSet; from: i64 = 0, scan: bytes::Scan = bytes::Scan::ByBlock) -> Seq[i64] sync"
 
 # How `find_all` goes from one hit to the next (ADR-375 D6): by block, or

@@ -1,0 +1,4 @@
+same thread, equal: true
+same thread, not unequal: true
+found by its id: main
+one member: 1
