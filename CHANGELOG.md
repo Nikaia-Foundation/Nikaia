@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1438] — 2026-11-18
+
+**Builders' changes**
+- A text cut at a position before its start now stops the program naming the program's line, not std's Rust.
+- A Bytes compared by order (<, <=, >, >=) with a text's bytes or a cut of bytes builds, as == already did.
+
 ## [0.0.1437] — 2026-11-18
 
 **Builders' changes (#2107)**

@@ -1,0 +1,12 @@
+// A `Bytes` is ordered against a text's bytes, or any cut of bytes, as
+// against another `Bytes`, either way round, as `==` already compared them
+// (#2082): byte by byte, a shorter run that begins the longer one first.
+// Before, the checker took `b < "a".bytes` and rustc refused the code (NK1343).
+fn main() throws {
+    let b = Bytes([79, 115, 108, 111])
+    println(f"{b < "Oslo;4".bytes} {b > "Oslo;4".bytes} {b <= "Oslo".bytes} {b >= "Osla".bytes}")
+    println(f"{"Oslo;4".bytes < b} {"Osla".bytes < b} {"Oslo".bytes >= b}")
+    let row = "x Oslo x".bytes
+    let at = 2
+    println(f"{b == row[at..<at + 4]} {b < row[at..<at + 5]} {row[0..<at] < b}")
+}

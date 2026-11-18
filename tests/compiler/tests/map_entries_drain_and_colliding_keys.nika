@@ -1,0 +1,50 @@
+// A map's entry and drain, keys of other types, a clone's equality,
+// and keys whose hashes all collide (map.rs, #2082): an `impl Hash` that adds
+// nothing gives every key the same hash, so only `Eq` tells them apart.
+use std::collections
+
+struct Name { text: String }
+
+impl Eq for Name {
+    fn eq(ref self, other: ref Self) -> bool sync {
+        return self.text == other.text
+    }
+}
+
+impl Hash for Name {
+    fn hash(ref self, mut into: Hasher) sync {
+    }
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    for word in "a b a c b a".split(" ") {
+        m.entry(word).and_modify(fn(n) { n += 1 }).or_insert(1)
+    }
+    println(f"a {m["a"] ?? 0}, b {m["b"] ?? 0}, c {m["c"] ?? 0}")
+    let mut drained: Vec[(String, i64)] = []
+    for (k, n) in m.drain() {
+        drained.push((k, n))
+    }
+    drained.sort()
+    for (k, n) in drained {
+        println(f"drained {k} {n}")
+    }
+
+    let mut pairs: collections::HashMap[(i64, String), i64] = collections::HashMap()
+    pairs.insert((1, "a"), 1)
+    pairs.insert((1, "b"), 2)
+    println(f"(1, b) {pairs[(1, "b")] ?? 0}, len {pairs.len()}")
+    let mut k: collections::HashMap[String, i64] = collections::HashMap()
+    k.insert("Hamburg", 1)
+    println(f"Hamburg {k["Hamburg"] ?? 0}, a clone is equal: {k == k.clone()}, k still has {k.len()}")
+
+    let mut z: collections::HashMap[Name, i64] = collections::HashMap()
+    let mut i = 0
+    for t in ["a", "b", "ab", "ba", "", "abcdefgh", "abcdefgi", "abcdefghijklmnopq"] {
+        z.insert(Name { text: t }, i)
+        i += 1
+    }
+    println(f"colliding: {z.len()} keys, abcdefgi {z[Name { text: "abcdefgi" }] ?? -1}, abcdefghijklmnopq {z[Name { text: "abcdefghijklmnopq" }] ?? -1}")
+    println(f"ab {z[Name { text: "ab" }] ?? -1}, x {z[Name { text: "x" }] ?? -1}")
+}

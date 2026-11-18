@@ -1,0 +1,63 @@
+// A `Bytes` (moved from bytes.rs's unit tests, #2082): equal by content whatever owns it (ADR-373
+// D1), read as a run of bytes, text only where it is text, `find` at every
+// offset and from every start (#701), words in the order their name says
+// (ADR-320 D12).
+use std::collections
+
+fn main() throws {
+    let mut v: Vec[u8] = []
+    for b in "Oslo;3".bytes {
+        v.push(b)
+    }
+    let handed = Bytes(v)
+    let text = "Oslo;3".bytes
+    let whole = "x Oslo;3 x".bytes
+    let cut = whole[2..<8]
+    let mut seen: collections::HashSet[Bytes] = collections::HashSet()
+    seen.insert(handed.clone())
+    println(f"equal: {handed == text} {handed == cut} {text == cut}")
+    seen.insert(Bytes(text.iter().collect()))
+    seen.insert(Bytes(cut.iter().collect()))
+    println(f"one hash: {seen.len()}, before Oslo;4: {handed < "Oslo;4".bytes}, empty equal: {Bytes([]) == Bytes([])}")
+
+    let ada = "Ada".bytes
+    println(f"len {ada.len()}, empty {ada.is_empty()}, first {ada[0]}")
+    let said = ada.text() catch { "none" }
+    println(f"text: {said}")
+    let bad = Bytes([255])
+    let not_said = bad.text() catch { "not text" }
+    println(f"not text: {not_said}")
+
+    let semi = "a;b;c".bytes
+    println(f"find: {semi.find(59; from: 0) ?? -1} {semi.find(59; from: 2) ?? -1} {semi.find(59; from: 4) ?? -1} {semi.find(59; from: 9) ?? -1}")
+    let mut wrong = 0
+    for at in 0..<64 {
+        let mut dots: Vec[u8] = []
+        for i in 0..<64 {
+            dots.push(if i == at { 59 } else { 46 })
+        }
+        let b = Bytes(dots)
+        for from in -1..<66 {
+            let want = if from <= at { at } else { -1 }
+            if (b.find(59; from: from) ?? -1) != want {
+                wrong += 1
+                println(f"needle {at}, from {from}: {b.find(59; from: from) ?? -1}")
+            }
+        }
+        if b.find(120; from: 0) != null {
+            wrong += 1
+        }
+    }
+    println(f"find at every offset: {wrong} wrong")
+    let mut all: Vec[u8] = []
+    for i in 0..<64 {
+        all.push(59)
+    }
+    println(f"none in nothing: {Bytes([]).find(59; from: 0) ?? -1}, the last of 64: {Bytes(all).find(59; from: 63) ?? -1}")
+
+    let w = Bytes([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    println(f"{w.u32_le(0)} {w.u32_be(0)} {w.u64_le(1)} {w.u64_be(1)} {w.u32_le(5)}")
+    println("abcd".bytes.u32_be(0))
+
+    println(f"empty len {Bytes([]).len()}")
+}

@@ -1,0 +1,39 @@
+// Two cuts compared, `a[i..<j] == b[k..<l]`, are compared a word at a time
+// in place (`nikaia_std::same!`, bytes.rs's `same_bytes`, #776): at every
+// length to 199, equal, with each one byte changed, and one byte shorter; and
+// cuts of text and of numbers.
+fn main() throws {
+    let mut wrong = 0
+    let mut differ = 0
+    for n in 0..<200 {
+        let mut a: Vec[u8] = []
+        for i in 0..<n {
+            a.push(((i * 7 + 3) % 256).truncating_u8())
+        }
+        let c = a.clone()
+        if a[0..<n] != c[0..<n] {
+            wrong += 1
+            println(f"{n}: not equal to its copy")
+        }
+        for at in 0..<n {
+            let mut b = a.clone()
+            b[at] = b[at] ^ 32
+            if a[0..<n] == b[0..<n] {
+                wrong += 1
+                println(f"{n} {at}: equal")
+            } else {
+                differ += 1
+            }
+        }
+        if n > 0 && a[0..<n] == a[0..<n - 1] {
+            wrong += 1
+            println(f"{n}: equal to one byte shorter")
+        }
+    }
+    println(f"{wrong} wrong, {differ} told apart")
+    let t = "abcabd"
+    let at = t.find("abd") ?? 0
+    println(f"{t[0..<at] == t[0..<at]} {t[0..<at] == t[at..<at + "abd".len()]}")
+    let xs = [1, 2, 1, 2]
+    println(f"{xs[0..<2] == xs[2..<4]}")
+}

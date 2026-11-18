@@ -1,0 +1,21 @@
+[&] -> [&amp;]
+[<] -> [&lt;]
+[>] -> [&gt;]
+["] -> [&quot;]
+['] -> [&#39;]
+[Additional fortune added at request time.] -> [Additional fortune added at request time.]
+[<b>] -> [&lt;b&gt;]
+[&lt;] -> [&amp;lt;]
+[Ünïcödé — 日本語 — 🎉] -> [Ünïcödé — 日本語 — 🎉]
+[日<本>語] -> [日&lt;本&gt;語]
+[a & 日] -> [a &amp; 日]
+[<a] -> [&lt;a]
+[a<] -> [a&lt;]
+[<<] -> [&lt;&lt;]
+[<] -> [&lt;]
+[a<b<c] -> [a&lt;b&lt;c]
+[] -> []
+[<script>alert("x")</script>] -> [&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;]
+twice: &amp;lt;b&amp;gt;
+<p>a&amp;b|<b>x</b>|42|true|-1.5</p>
+<p>a&lt;b|<i>|-1|false|0.25</p>

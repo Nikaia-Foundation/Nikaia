@@ -1,0 +1,11 @@
+equal: true true true
+one hash: 1, before Oslo;4: true, empty equal: true
+len 3, empty false, first 65
+text: Ada
+not text: not text
+find: 1 3 -1 -1
+find at every offset: 0 wrong
+none in nothing: -1, the last of 64: 63
+67305985 16909060 650777868590383874 144964032628459529 151521030
+1633837924
+empty len 0

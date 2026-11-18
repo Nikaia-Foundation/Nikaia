@@ -1,0 +1,136 @@
+// `std::simd`'s lanes at the build's width and at fixed widths: a byte
+// mask's first lane at 8, 16, 32 and 64 lanes, a load least significant
+// byte first, the integer lane operations, float lanes that keep the scalar
+// bits, and the operations that change a lane's width. Moved from the
+// `nikaia-std` unit tests `simd::tests::*` (#2082).
+use std::simd
+
+// The same bits, as the shortest text that reads back as them.
+fn same(lane: f64, scalar: f64) -> String {
+    if f"{lane}" == f"{scalar}" {
+        return "="
+    }
+    return f"{lane} is not {scalar}"
+}
+
+fn hit_of(hit: i64?) -> String {
+    return if hit == null { "none" } else { f"{hit ?? -1}" }
+}
+
+fn first8(hit: i64?) -> String {
+    let mut lanes: Array[u8, 8] = [0, 0, 0, 0, 0, 0, 0, 0]
+    let at = hit ?? -1
+    if at >= 0 && at < 8 {
+        lanes[at] = 7
+        lanes[7] = 7
+    }
+    let v: simd::Fixed[u8, 8] = simd::Fixed::from(lanes)
+    let m = v.eq(simd::splat(7))
+    let signed: simd::Fixed[i8, 8] = simd::splat(-1)
+    return f"{hit_of(m.first())}/{signed.eq(signed).first() ?? -1}"
+}
+
+fn first16(hit: i64?) -> String {
+    let mut lanes: Array[u8, 16] = [0; 16]
+    let at = hit ?? -1
+    if at >= 0 {
+        lanes[at] = 7
+        lanes[15] = 7
+    }
+    let v: simd::Fixed[u8, 16] = simd::Fixed::from(lanes)
+    let m = v.eq(simd::splat(7))
+    let signed: simd::Fixed[i8, 16] = simd::splat(-1)
+    return f"{hit_of(m.first())}/{signed.eq(signed).first() ?? -1}"
+}
+
+fn first32(hit: i64?) -> String {
+    let mut lanes: Array[u8, 32] = [0; 32]
+    let at = hit ?? -1
+    if at >= 0 {
+        lanes[at] = 7
+        lanes[31] = 7
+    }
+    let v: simd::Fixed[u8, 32] = simd::Fixed::from(lanes)
+    let m = v.eq(simd::splat(7))
+    let signed: simd::Fixed[i8, 32] = simd::splat(-1)
+    return f"{hit_of(m.first())}/{signed.eq(signed).first() ?? -1}"
+}
+
+fn first64(hit: i64?) -> String {
+    let mut lanes: Array[u8, 64] = [0; 64]
+    let at = hit ?? -1
+    if at >= 0 {
+        lanes[at] = 7
+        lanes[63] = 7
+    }
+    let v: simd::Fixed[u8, 64] = simd::Fixed::from(lanes)
+    let m = v.eq(simd::splat(7))
+    let signed: simd::Fixed[i8, 64] = simd::splat(-1)
+    return f"{hit_of(m.first())}/{signed.eq(signed).first() ?? -1}"
+}
+
+fn main() throws {
+    // The build's width: a `u64` lane is eight `u8` lanes.
+    let v: simd::Lanes[u8] = simd::splat(1)
+    let w: simd::Lanes[u64] = simd::splat(1)
+    let f: simd::Lanes[f64] = simd::splat(1.0)
+    println(f"width {v.count() == w.count() * 8} {f.count() == w.count()} {v.count() >= 16}")
+
+    // A byte mask answers its first lane at every width.
+    let hits: Vec[i64?] = [null, 0, 5, 15]
+    for hit in hits {
+        println(f"{hit_of(hit)}: {first8(hit)} {first16(hit)} {first32(hit)} {first64(hit)}")
+    }
+    println(f"{first32(31)} {first64(63)}")
+
+    // A load reads least significant byte first.
+    let nine = "\u{1}\u{0}\u{2}\u{0}\u{3}\u{0}\u{4}\u{0}\t"
+    let l: simd::Fixed[u16, 4] = simd::load(nine.bytes, 0)
+    println(f"load {l.lane(0)} {l.lane(1)} {l.lane(2)} {l.lane(3)}")
+
+    // Integer lanes.
+    let a: simd::Fixed[u8, 4] = simd::Fixed::from([250, 1, 2, 3])
+    let ten: simd::Fixed[u8, 4] = simd::splat(10)
+    let sum = a.wrapping_add(ten)
+    let sat = a.saturating_add(ten)
+    println(f"wrapping {sum.lane(0)} {sum.lane(1)} {sum.lane(2)} {sum.lane(3)}")
+    println(f"saturating {sat.lane(0)} {sat.lane(1)} {sat.lane(2)} {sat.lane(3)}")
+    let below: Vec[i64] = a.lt(ten).positions().collect()
+    println(f"below {below.len()} {below[0]} {below[1]} {below[2]} {a.eq(ten).first() == null}")
+    let pick = simd::select(a.gt(ten), a, ten)
+    println(f"select {pick.lane(0)} {pick.lane(1)} {pick.lane(2)} {pick.lane(3)}")
+    let shifted = (a << 1) >> 1
+    println(f"shift {shifted.lane(0)} {shifted.lane(1)} {shifted.lane(2)} {shifted.lane(3)}")
+    println(f"{a.wrapping_sum()} {a.max_lane()}")
+    let turned = a.shuffle(simd::Fixed::from([3, 2, 1, 0]))
+    println(f"shuffle {turned.lane(0)} {turned.lane(1)} {turned.lane(2)} {turned.lane(3)}")
+
+    // Float lanes keep the scalar bits.
+    let xs = [1.0, 4.0, 9.0, 0.1]
+    let x: simd::Fixed[f64, 4] = simd::Fixed::from([1.0, 4.0, 9.0, 0.1])
+    let y: simd::Fixed[f64, 4] = simd::splat(0.3)
+    let plus = x + y
+    let over = x / y
+    for i in 0..<4 {
+        println(f"{i}: {same(plus.lane(i), xs[i] + 0.3)} {same(over.lane(i), xs[i] / 0.3)}")
+    }
+    let m = x.gt(y)
+    let up: Vec[i64] = m.positions().collect()
+    println(f"{x.sqrt().lane(2)} {x.sum() == (1.0 + 4.0) + (9.0 + 0.1)} {up.len()} {up[0]} {up[2]} {simd::select(m, x, y).lane(3)} {x.min_lane()}")
+
+    // Pairs multiplied and added, and lanes widened and narrowed.
+    let p: simd::Fixed[u8, 4] = simd::Fixed::from([1, 2, 255, 255])
+    let q: simd::Fixed[i8, 4] = simd::Fixed::from([10, 1, 127, 127])
+    let d = p.dot_pairs(q)
+    println(f"dot {d.lane(0)} {d.lane(1)}")
+    let r: simd::Fixed[i16, 2] = simd::Fixed::from([3, 4])
+    let t: simd::Fixed[i16, 2] = simd::Fixed::from([5, 6])
+    let e = r.dot_pairs(t)
+    println(f"dot {e.lane(0)}")
+    let bytes: simd::Fixed[u8, 2] = simd::Fixed::from([1, 255])
+    let wide = bytes.widen()
+    println(f"widen {wide.lane(0)} {wide.lane(1)}")
+    let shorts: simd::Fixed[i16, 2] = simd::Fixed::from([300, -300])
+    let narrow = shorts.narrow_saturating()
+    println(f"narrow {narrow.lane(0)} {narrow.lane(1)}")
+}
