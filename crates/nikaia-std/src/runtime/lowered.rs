@@ -30,6 +30,17 @@ use nikaia_std::text;
 use nikaia_std::time;
 
 #[allow(unsafe_code)]
+mod cli_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/cli.rs");
+}
+#[allow(unused_imports)]
+pub use cli_lowered::*;
+
+#[allow(unsafe_code)]
 mod env_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -39,6 +50,28 @@ mod env_lowered {
 }
 #[allow(unused_imports)]
 pub use env_lowered::*;
+
+#[allow(unsafe_code)]
+mod error_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/error.rs");
+}
+#[allow(unused_imports)]
+pub use error_lowered::*;
+
+#[allow(unsafe_code)]
+mod fixed_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/fixed.rs");
+}
+#[allow(unused_imports)]
+pub use fixed_lowered::*;
 
 #[allow(unsafe_code)]
 mod http1_lowered {
@@ -117,6 +150,18 @@ mod text_normal_lowered {
 #[allow(unused_imports)]
 pub use text_normal_lowered::*;
 
+pub mod cli {
+    #[allow(unused_imports)]
+    pub use super::{an};
+}
+pub mod error {
+    #[allow(unused_imports)]
+    pub use super::{indented};
+}
+pub mod fixed {
+    #[allow(unused_imports)]
+    pub use super::{fnv, displace};
+}
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
@@ -149,4 +194,4 @@ pub mod text_normal {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "aad0b963f11cd8e5a7c0eac8566775e71f38a3cfec9db351fdfe3e70f865cba1";
+pub const LOWERED_DIGEST: &str = "a384a7164b2eea057d8ef55dd589f6a044ffd950cc481f21e5330a37b13a1678";

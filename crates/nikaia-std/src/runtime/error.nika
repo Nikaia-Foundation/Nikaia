@@ -1,0 +1,18 @@
+// crates/nikaia-std/src/runtime/error.nika
+//
+// **How an error's secondaries are indented** (ADR-292 D3, D8), written in
+// Nikaia: `src/error.rs` calls `indented` for each joined failure it prints
+// under the one it joined. The formatters around it stay in Rust: they read
+// Rust error types.
+
+/// One joined failure, under the one it joined (ADR-292 D8): a header line
+/// `and then:`, then every line of `full` moved right by two spaces, not only
+/// the first, so a secondary that has secondaries of its own reads as the
+/// tree D3 makes it: the depth on the page is the depth in the list.
+pub fn indented(full: String) -> String sync {
+    let mut out = "\n  and then:"
+    for line in full.lines() {
+        out = out + "\n  " + line
+    }
+    return out
+}

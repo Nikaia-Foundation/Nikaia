@@ -316,6 +316,10 @@ pub trait ProjectCheckHost {
     /// The findings at the boundary of the build (`foreign::check`): it needs
     /// the manifest rather than a ledger.
     fn foreign_check(ref self) -> Vec[CheckFinding] sync
+    /// **Each index, overflow and division the walk does not prove**, as
+    /// `NK1313` (`bounds_report_unproved`, ADR-306 D29), over the facts
+    /// `check_against` kept; asked only at `unproved-checks = "error"`.
+    fn unproved_checks(ref self, source: ref String) -> Vec[CheckFinding] sync
     /// How many calls a `sync` function may not make (`contracts::sync`); the
     /// host keeps them, named by their index.
     fn sync_violations(ref self) -> i64 sync
@@ -349,7 +353,11 @@ pub struct ProjectCheckSaid {
 /// §1 Group B); the switch changes only whether a refusal is about *this*
 /// build, which is a question about severity
 /// (`project_check_lint_where_nothing_crosses`).
-pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, building_a_library: bool) -> ProjectCheckSaid {
+///
+/// `unproved_checks` is the package's `unproved-checks`: at `error` each
+/// check the walk does not prove is refused (ADR-306 D29); a dependency is
+/// checked at `allow`.
+pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against()
     // **`NK1238` is the checker's answer for a build it knows nothing of**
     // (ADR-284 D4): a library build exports its entry points.
@@ -360,6 +368,9 @@ pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, sourc
     // separate: it asks about the **boundary** of the build rather than about a
     // type, and it needs the manifest rather than a ledger.
     all.extend(host.foreign_check())
+    if unproved_checks == "error" {
+        all.extend(host.unproved_checks(source))
+    }
     all.sort_by_key(fn(finding) { finding.span.start })
     project_check_lint_where_nothing_crosses(all, user_parallelism)
     project_check_let_refuted_claims_through(all, refuted_claims)

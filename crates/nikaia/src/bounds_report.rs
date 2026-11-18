@@ -157,3 +157,47 @@ pub fn derived(
     );
     nikaia_std::compiler::bounds_report::bounds_report_derived(&proven.derived, source)
 }
+
+/// **`unproved-checks = "error"`'s refusals** (ADR-306 D29, `NK1313`): each
+/// index, overflow and division of the file the walk does not prove, over
+/// the facts of a check the caller ran. What the checker refuses does not
+/// depend on an optimization (ADR-361 D10), so the walk does not prove
+/// through loops here.
+pub fn unproved(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    source: &str,
+    facts: &crate::check::CheckFacts,
+    own: &Ledger,
+    library: &Ledger,
+) -> Vec<crate::check::Finding> {
+    let published = crate::prove::with_published(own, &facts.published);
+    let proven = crate::bounds::proven(
+        parsed,
+        beside,
+        facts,
+        &[&published, library],
+        &std::collections::BTreeSet::new(),
+        false,
+    );
+    let facts = BoundsReportFacts {
+        lists: facts.list_indices.clone(),
+        arithmetic: facts.arithmetic.clone(),
+        divisions: facts.divisions.clone(),
+        negations: facts.negations.clone(),
+        proven_indices: proven.indices.iter().copied().collect(),
+        proven_arithmetic: proven.arithmetic.iter().copied().collect(),
+        proven_negations: proven.negations.iter().copied().collect(),
+        derived: proven.derived,
+        gates: proven.gates,
+        outside: facts.outside_indices.clone(),
+        unproved_warn: false,
+    };
+    nikaia_std::compiler::bounds_report::bounds_report_unproved(
+        &parsed.program,
+        &parsed.interner,
+        source,
+        &facts,
+        &mut |e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
+    )
+}

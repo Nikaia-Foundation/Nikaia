@@ -1,0 +1,69 @@
+// #1497 (ADR-306 D29): a package that sets `[build] unproved-checks =
+// "error"` is refused while an index, an overflow or a division remains that
+// the compiler does not prove (`NK1313`), each with the walk's reason and the
+// guard where the value arrives. With the guard it builds, and the same
+// unguarded program builds unchanged at the default `allow`;
+// `--unproved-checks=error` asks the same of a single build.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn project(tmp: String, name: String, build: String, main: String) throws {
+	process::run("mkdir", ["-p", f"{tmp}/{name}/src"])
+	fs::write(f"{tmp}/{name}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{build}")
+	fs::write(f"{tmp}/{name}/src/main.nika", fs::Root::Anywhere, main)
+}
+
+fn checked(tmp: String, name: String, flags: Vec[String]) throws {
+	let mut args: Vec[String] = ["check", "src/main.nika"]
+	args.extend(flags)
+	let out = process::run(toolchain(), args; dir: f"{tmp}/{name}")
+	println(f"== {name}")
+	println(shown(tmp, f"{out.stdout}{out.stderr}"))
+	println(f"exit {out.code}")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let error = "\n[build]\nunproved-checks = \"error\"\n"
+	let index = "fn main(i: i64) throws {\n\tlet xs = [1, 2, 3]\n\tprintln(f\"{xs[i]}\")\n}\n"
+	let guarded = "fn main(i: i64) throws {\n\tlet xs = [1, 2, 3]\n\treturn if i < 0 || i >= xs.len()\n\tprintln(f\"{xs[i]}\")\n}\n"
+	let sum = "fn main(a: i64, b: i64) throws {\n\tlet c = a + b\n\tprintln(f\"{c}\")\n}\n"
+	let divide = "fn main(a: i64, b: i64) throws {\n\tlet c = a / b\n\tprintln(f\"{c}\")\n}\n"
+	project(tmp, "index", error, index)
+	project(tmp, "guarded", error, guarded)
+	project(tmp, "sum", error, sum)
+	project(tmp, "divide", error, divide)
+	project(tmp, "allow", "", index)
+	project(tmp, "flag", "", sum)
+	checked(tmp, "index", [])
+	checked(tmp, "guarded", [])
+	checked(tmp, "sum", [])
+	checked(tmp, "divide", [])
+	checked(tmp, "allow", [])
+	checked(tmp, "flag", ["--unproved-checks=error"])
+	process::run("rm", ["-rf", tmp])
+}

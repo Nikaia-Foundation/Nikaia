@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1430] — 2026-11-18
+
+**Builders' changes (#2011, #2048)**
+- The solver counts only theory checks that did work toward its case budget: a partial check that pivots or ends in a conflict, and every final check. QF_LIA c_inference 30_30_86_7 is now refuted; the prover's figure is unchanged.
+- The solver's search budget counts theory checks: each check costs one case and two more for each simplex pivot, so the c_inference files end unknown (cases) within 30 s instead of timing out (#2048).
+
 ## [0.0.1429] — 2026-11-18
 
 **Builders' changes (#2033, #2034)**

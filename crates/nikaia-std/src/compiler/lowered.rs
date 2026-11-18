@@ -35,6 +35,8 @@ use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::process;
 #[allow(unused_imports)]
+use nikaia_std::runtime;
+#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
@@ -3357,7 +3359,7 @@ pub mod bounds_proven {
 pub mod bounds_reasons {}
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_unproved, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
@@ -3790,7 +3792,7 @@ pub mod fix {
 }
 pub mod fixed {
     #[allow(unused_imports)]
-    pub use super::{HASHED_FROM, Table, fnv, displace, build};
+    pub use super::{HASHED_FROM, Table, build};
 }
 pub mod fmt {
     #[allow(unused_imports)]
@@ -3992,7 +3994,7 @@ pub mod project_members {
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, unproved_checks, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_unproved_checks, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
@@ -4251,4 +4253,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c869e819599613581120e84e60a85c58b81e10495fbb3824af462f055e105abd";
+pub const LOWERED_DIGEST: &str = "4aad03fee866399781da419ef4458089e2f487cd7fffb64b893ae7d389e905f5";

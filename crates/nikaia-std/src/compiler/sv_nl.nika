@@ -463,7 +463,7 @@ test "non-linear terms are abstracted and refined with lemmas" {
 		"sat-abstraction.smt2: refuted 1; lemmas []",
 		"unsat-abstraction.smt2: proved 1; lemmas []",
 		"sat-repaired.smt2: refuted 2; lemmas []",
-		"sat-refined.smt2: refuted 5; lemmas [pow2-low]",
+		"sat-refined.smt2: refuted 9; lemmas [pow2-low]",
 		"arguments.smt2: proved 3; lemmas [tangent]; changed tangent: refused",
 		"square.smt2: proved 2; lemmas [square]",
 		"division.smt2: proved 1; lemmas [division]; changed division: refused",

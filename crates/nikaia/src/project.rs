@@ -224,6 +224,15 @@ impl Settings {
         Ok(())
     }
 
+    /// **The command line's `--unproved-checks` over the manifest's**
+    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D29).
+    pub fn checks(&mut self, unproved: Option<&str>) -> Result<()> {
+        self.words.unproved_checks =
+            project_settings::project_settings_unproved_checks(&self.words, unproved)
+                .map_err(refusal)?;
+        Ok(())
+    }
+
     /// **The command line's `--raw-sinks` over the manifest's, and each
     /// `--allow` after the manifest's `[allow]`** (ADR-raw-sinks-1 D3-D5).
     pub fn sinks(&mut self, raw_sinks: Option<&str>, allow: &[String]) -> Result<()> {
@@ -1515,6 +1524,12 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                     &settings.words.user_parallelism,
                     &settings.words.refuted_claims,
                     &settings.words.unproved_claims,
+                    // A dependency is built at `allow` (ADR-306 D29).
+                    if unit.package.is_none() {
+                        &settings.words.unproved_checks
+                    } else {
+                        "allow"
+                    },
                     settings.library(),
                     (keep || lsp).then_some(&mut facts),
                 )
@@ -1770,6 +1785,7 @@ pub fn check(
     user_parallelism: &str,
     refuted_claims: &str,
     unproved_claims: &str,
+    unproved_checks: &str,
     building_a_library: bool,
     // Where the walk's facts go, for an emitter that would ask the same.
     facts_out: Option<&mut Option<check::CheckFacts>>,
@@ -1802,6 +1818,7 @@ pub fn check(
         user_parallelism,
         refuted_claims,
         unproved_claims,
+        unproved_checks,
         building_a_library,
     );
     if let (Some(out), Some(facts)) = (facts_out, host.facts.into_inner()) {
@@ -1853,6 +1870,20 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
         }
         *self.facts.borrow_mut() = Some(checked.facts);
         checked.findings
+    }
+
+    fn unproved_checks(&self, source: &str) -> Vec<check::Finding> {
+        match &*self.facts.borrow() {
+            Some(facts) => crate::bounds_report::unproved(
+                self.parsed,
+                self.beside,
+                source,
+                facts,
+                self.own,
+                &self.library,
+            ),
+            None => Vec::new(),
+        }
     }
 
     fn foreign_check(&self) -> Vec<check::Finding> {
