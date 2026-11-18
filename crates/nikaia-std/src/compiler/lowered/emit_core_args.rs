@@ -146,7 +146,7 @@ pub(crate) fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, in
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let params = call_arguments(signature);
     if i >= params.len() as i64 { return None; }
-    let ty = nikaia_std::index::get(&params, nikaia_std::index::at(i)).1.clone();
+    let ty = unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1.clone();
     if inside {
         return match ty {
             Ty::Nullable(ref item) => { let item = nikaia_std::boxed::open(item); emit_rust_crossing(item, true, 0) },
@@ -1733,7 +1733,7 @@ impl EmitState {
                 let to_err = text.starts_with('e');
                 let newline = text.ends_with("ln");
                 out.push("nikaia_std::io::print_bytes(&(");
-                self.emit_expr(world, walk, out, host, &given, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, given, depth, flow, scope)?;
                 out.push(&format!("), {}, {})", to_err, newline));
                 if !fails { out.push(".unwrap_or(())"); }
                 return Ok(());
