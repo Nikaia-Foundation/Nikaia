@@ -79,7 +79,7 @@ security-framework-sys = ["2.17.0"]
 shared-bytes = ["0.1.0"]
 shlex = ["2.0.1"]
 simdutf8 = ["0.1.5"]
-smallvec = ["1.16.6"]
+smallvec = ["1.16.5"]
 subtle = ["2.6.1"]
 syn = ["2.0.119"]
 task-block = ["0.1.0"]
@@ -117,4 +117,4 @@ zerocopy-derive = ["0.8.63"]
 zeroize = ["1.9.2"]
 
 [units."src/main.nika"]
-source = "e1608225593a431f70ba3772fd82288c379dff18da72887fe5b7bd3bd02ce78b"
+source = "c76cab10365701ade28e535f399276363a00846bc81650de63b3d2db85e93266"

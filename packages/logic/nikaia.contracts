@@ -4630,8 +4630,8 @@ sync = "inferred"
 locks = "?"
 panics = true
 places = true
-views = ["arena: borrowed", "facts: borrowed", "budget: borrowed", "cnf: borrowed", "p: borrowed"]
-signature = "(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget, cnf: ref SvCnf, p: ref SvParams) -> SvEngineRun"
+views = ["arena: borrowed", "facts: borrowed", "given: borrowed", "cnf: borrowed", "p: borrowed"]
+signature = "(arena: ref TermArena, facts: ref Vec[i64], goal: i64, given: ref LgBudget, cnf: ref SvCnf, p: ref SvParams) -> SvEngineRun"
 
 [fn."sv_strategy_simplex"]
 sync = "inferred"
@@ -5551,7 +5551,7 @@ copies = true
 
 [type."SvParams"]
 pub = true
-fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64"]
+fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64", "pub cases: i64"]
 compares = true
 equates = true
 hashes = true

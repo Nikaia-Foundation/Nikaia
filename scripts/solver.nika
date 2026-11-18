@@ -31,10 +31,13 @@
 //
 // `compare` (#1338 items 3-4) answers each file with ours (the rod), z3 and
 // cvc5 (`$Z3`, `$CVC5` or `PATH`), all under the same wall-clock limit
-// (default 10 s): one line per file (a disagreement marked `DISAGREE`), then
-// per directory and solver: solved, wrong (against the status), PAR-2 in
-// seconds (an unsolved file counts twice the limit), peak and median memory
-// (never below the runner's own, which the header names). `--instructions`
+// (default 10 s), and ours under nothing else (ADR-270 D17, #2090): its case
+// budget is `solver_rod_cases()`, which the limit reaches first, not the
+// build-time one (D25), so a file ours would prove past 1024 cases is not
+// scored `unknown (cases)`. One line per file (a disagreement marked
+// `DISAGREE`), then per directory and solver: solved, wrong (against the
+// status), PAR-2 in seconds (an unsolved file counts twice the limit), peak
+// and median memory (never below the runner's own, which the header names). `--instructions`
 // runs each solver under callgrind and adds the mean instructions per solved
 // file; time is then not the figure, and the limit is a hundred times wider.
 //
@@ -74,10 +77,21 @@ use std::fs
 use std::process
 use std::text
 
-// The work budget PAR-2 doubles: `lg_budget().cases`, the branches
-// Fourier-Motzkin's search may look at.
+// The work budget PAR-2 doubles in `run` and `tune`, which measure the
+// answers asked while a program is built: `lg_budget().cases`, the build-time
+// budget (ADR-270 D25), the branches the search may look at.
 fn solver_budget() -> i64 {
 	return 1024
+}
+
+// The case budget of ours in `compare`, which scores every solver under the
+// same time limit and nothing else (ADR-270 D17, #2090): 2^40 cases, which
+// no limit `compare` sets reaches (a million take ours tens of seconds), and
+// small enough that the walk after the search counts its moves without
+// overflow (`sv_strategy_run`); the walk first keeps its share of
+// `lg_budget()`.
+fn solver_rod_cases() -> i64 {
+	return 1099511627776
 }
 
 fn solver_toolchain(repo: String) -> String throws {
@@ -1483,7 +1497,7 @@ fn solver_command(
 	path: String,
 	timeout: i64,
 ) -> (String, Vec[String]) {
-	if solver == "ours" { return (f"{bin}", ["new", path]) }
+	if solver == "ours" { return (f"{bin}", [f"new:cases={solver_rod_cases()}", path]) }
 	if solver == "z3" { return (f"{exe}", ["-smt2", f"-T:{timeout}", path]) }
 	return (f"{exe}", [f"--tlimit={timeout * 1000}", path])
 }
