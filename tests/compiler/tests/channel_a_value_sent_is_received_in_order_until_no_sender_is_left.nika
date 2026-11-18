@@ -10,7 +10,7 @@ fn main() throws {
     tx.send(7)
     println(rx.recv() ?? -1)
     spawn fn {
-        for n in 1..3 {
+        for n in 1..<4 {
             tx.send(n)
         }
     }

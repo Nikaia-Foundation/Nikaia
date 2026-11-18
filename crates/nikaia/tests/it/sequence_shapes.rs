@@ -92,7 +92,7 @@ fn a_range_written_in_place_stays_the_language_belows() {
         Build::default(),
     );
     assert!(rust.contains("for i in 0..2 "), "{rust}");
-    assert!(rust.contains("nikaia_std::range::span(0, 2)"), "{rust}");
+    assert!(rust.contains("nikaia_std::range::span(0i64, 2)"), "{rust}");
     assert!(
         !rust.contains("span(i"),
         "a slice's range is not a value: {rust}"
