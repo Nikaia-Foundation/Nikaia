@@ -538,6 +538,14 @@ jobs:
                 name=$(basename "$unit")
                 case " $(echo $names) " in *" ${name%-*} "*) rm -rf "$unit" && echo "not saved, built from other sources: $unit" ;; esac
               done
+            # Cargo 1.100's layout (#2136): a unit is `build/<crate>/<hash>/`,
+            # its fingerprint and its `out/` in it.
+            find "$tree" -mindepth 6 -maxdepth 7 -path '*/build/*/*/fingerprint/invoked.timestamp' ! -newer "$RUNNER_TEMP/checked-out" |
+              while read -r stamp; do
+                unit=$(dirname "$(dirname "$stamp")")
+                name=$(basename "$(dirname "$unit")")
+                case " $(echo $names) " in *" $name "*) rm -rf "$unit" && echo "not saved, built from other sources: $unit" ;; esac
+              done
           done
           du -sh target/nikaia-project-tests/rlib/* || true
 

@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1441] — 2026-11-18
+
+**Builders' changes (#2090, #2136)**
+- The solver's compare scores ours under the time limit alone, not under the build-time case budget (ADR-270 D17); nikaia test --filter runs the test it names
+- `nikaia test --filter` runs the tests it names; before, it could run another test in their place and report it passed.
+- Fixed: `nikaia run` and build-time code work with Cargo 1.100. Its always-on build-dir layout puts each crate in its own `build/<crate>/<hash>/out`, and the bundle now hands rustc every one of those directories (#2136).
+
 ## [0.0.1440] — 2026-11-18
 
 **Builders' changes (#1967, #1968, #1972)**

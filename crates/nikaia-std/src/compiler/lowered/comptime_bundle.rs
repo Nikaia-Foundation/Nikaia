@@ -5,7 +5,7 @@
 pub struct ComptimeBundle {
     pub dylib: fs::Path,
     pub rlibs: Vec<(String, fs::Path)>,
-    pub deps: fs::Path,
+    pub deps: Vec<fs::Path>,
     pub stamp: String,
     pub libdir: fs::Path,
 }
@@ -20,6 +20,7 @@ pub enum ComptimeBundleFlavour {
 pub struct ComptimeBundleArtifacts {
     pub dylib: Option<fs::Path>,
     pub rlibs: Vec<(String, fs::Path)>,
+    pub dirs: Vec<fs::Path>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -75,10 +76,19 @@ pub(crate) const COMPTIME_BUNDLE_NAMED: [&str; 3] = ["nikaia_std", "winnow", "wi
 pub(crate) fn comptime_bundle_artifacts(messages: &str, named: &[String], library: &str) -> ComptimeBundleArtifacts {
     let mut dylib: Option<fs::Path> = None;
     let mut rlibs: Vec<(String, fs::Path)> = vec![];
+    let mut dirs: Vec<fs::Path> = vec![];
     for message in cargo_json_lines(messages) {
         if !cargo_json_an_artifact(&message) { continue; }
         let files = cargo_json_filenames(&message);
         let name = match cargo_json_text((cargo_json_member((cargo_json_member(Some(&message), "target")).as_ref(), "name")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if name != library {
+            for file in files.iter() {
+                match nikaia_std::fs::path::parent(&(file)) {
+                    None => { },
+                    Some(dir) => { if !dirs.contains(&dir) { dirs.push(dir); } },
+                }
+            }
+        }
         if named.iter().any(|each| { AsRef::<str>::as_ref(&(each)) == AsRef::<str>::as_ref(&(name)) }) {
             let rlib = match files.iter().find(|&file| { cargo_json_extension(file) == "rlib" }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             rlibs.push((name, nikaia_std::fs::path::clone(&(rlib))));
@@ -92,7 +102,7 @@ pub(crate) fn comptime_bundle_artifacts(messages: &str, named: &[String], librar
             };
         }
     }
-    ComptimeBundleArtifacts { dylib, rlibs }
+    ComptimeBundleArtifacts { dylib, rlibs, dirs }
 }
 
 pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { nikaia_std::block::Text::from(name.to_string()) }).collect::<Vec<_>>() }
@@ -129,8 +139,9 @@ pub(crate) async fn comptime_bundle_recorded<H: ComptimeBundleHost>(flavour: &Co
         Some(bundle) => { return Ok(bundle); },
     }
     let bundle = comptime_bundle_bundle_of(&flavour, host).await?;
-    let mut text = format!("{}\n{}\n{}\n{}\n", fingerprint, nikaia_std::fs::path::display(&(bundle.dylib)), nikaia_std::fs::path::display(&(bundle.deps)), nikaia_std::fs::path::display(&(bundle.libdir)));
+    let mut text = format!("{}\n{}\n{}\n", fingerprint, nikaia_std::fs::path::display(&(bundle.dylib)), nikaia_std::fs::path::display(&(bundle.libdir)));
     for (name, rlib) in bundle.rlibs.iter() { text.push_str(&format!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }
+    for dir in bundle.deps.iter() { text.push_str(&format!("{}\n", nikaia_std::fs::path::display(&(dir)))); }
     comptime_bundle_write_if_changed(&record, &text, &host.unique_beside(&record)).await?;
     Ok(bundle)
 }
@@ -194,8 +205,8 @@ pub(crate) fn comptime_bundle_path_dependency(line: &str) -> Option<&str> {
 }
 
 pub(crate) fn comptime_bundle_tree_of(text: &str) -> Option<fs::Path> {
-    let deps: fs::Path = std::path::PathBuf::from(match text.lines().nth(2) { Some(__nikaia_value) => __nikaia_value, None => return None });
-    match (match (match nikaia_std::fs::path::parent(&(deps)).as_ref() {
+    let dylib: fs::Path = std::path::PathBuf::from(match text.lines().nth(1) { Some(__nikaia_value) => __nikaia_value, None => return None });
+    match (match (match nikaia_std::fs::path::parent(&(dylib)).as_ref() {
         Some(__nikaia_it) => nikaia_std::fs::path::parent(&(__nikaia_it)),
         None => None,
     }).as_ref() {
@@ -207,28 +218,19 @@ pub(crate) fn comptime_bundle_tree_of(text: &str) -> Option<fs::Path> {
     }
 }
 
-pub fn comptime_bundle_host_deps(deps: &std::path::Path) -> Option<fs::Path> {
-    let tree: fs::Path = match match (match nikaia_std::fs::path::parent(&(deps)).as_ref() {
-        Some(__nikaia_it) => nikaia_std::fs::path::parent(&(__nikaia_it)),
-        None => None,
-    }).as_ref() {
-        Some(__nikaia_it) => nikaia_std::fs::path::parent(&(__nikaia_it)),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(tree), std::path::Path::new(&("debug")))), std::path::Path::new(&("deps"))))
-}
-
 pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Option<ComptimeBundle> {
     let lines: Vec<&str> = text.lines().collect::<Vec<_>>();
-    if lines.len() < 4 || *unsafe { nikaia_std::proven::read(&lines, (0) as usize) } != fingerprint { return None; }
+    if lines.len() < 3 || *unsafe { nikaia_std::proven::read(&lines, (0) as usize) } != fingerprint { return None; }
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
-    let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
-    let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14125| {
-        let (name, rlib) = __nikaia_tuple14125;
+    let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
+    let named = COMPTIME_BUNDLE_NAMED.len() as i64;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(3).take(nikaia_std::count::of(named)).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14833| {
+        let (name, rlib) = __nikaia_tuple14833;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
-    if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }
+    if (rlibs.len() as i64) != named { return None; }
+    let deps: Vec<fs::Path> = lines.iter().skip(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(3, named) })).map(|line| { comptime_bundle_path(nikaia_std::either_text::either(nikaia_std::block::Text::from(line.to_string()))) }).collect::<Vec<_>>();
+    if deps.is_empty() { return None; }
     let stamp = match comptime_bundle_stamp_of(&dylib, &rlibs, &libdir) {
         Ok(value) => value,
         Err(_error) => { return None; },
@@ -314,7 +316,9 @@ pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &C
     let found = comptime_bundle_artifacts(&built.stdout, &comptime_bundle_named(), &comptime_bundle_library(&flavour));
     if (found.rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")); }
     let dylib = match found.dylib { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")) };
-    let deps = match nikaia_std::fs::path::parent(&(unsafe { nikaia_std::proven::read(&found.rlibs, (0) as usize) }.1)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("no directory for std")), &"comptime_bundle_bundle_of")) };
+    let std_dir = match nikaia_std::fs::path::parent(&(unsafe { nikaia_std::proven::read(&found.rlibs, (0) as usize) }.1)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("no directory for std")), &"comptime_bundle_bundle_of")) };
+    let mut deps: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(std_dir))];
+    for dir in found.dirs.iter() { if !nikaia_std::fs::path::same(&(dir), &(std_dir)) { deps.push(nikaia_std::fs::path::clone(&(dir))); } }
     let libdir = comptime_bundle_path(nikaia_std::either_text::either(host.target_libdir()));
     let stamp = comptime_bundle_stamp_of(&dylib, &found.rlibs, &libdir)?;
     Ok(ComptimeBundle { dylib, rlibs: found.rlibs, deps, stamp, libdir })
@@ -370,14 +374,9 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         args.push(String::from("--extern"));
         args.push(format!("{}={}", crate_name, nikaia_std::fs::path::display(&(rlib))));
     }
-    args.push(String::from("-L"));
-    args.push(format!("dependency={}", nikaia_std::fs::path::display(&(bundle.deps))));
-    match comptime_bundle_host_deps(&bundle.deps) {
-        None => { },
-        Some(ref host_deps) => {
-            args.push(String::from("-L"));
-            args.push(format!("dependency={}", nikaia_std::fs::path::display(&(host_deps))));
-        },
+    for dir in bundle.deps.iter() {
+        args.push(String::from("-L"));
+        args.push(format!("dependency={}", nikaia_std::fs::path::display(&(dir))));
     }
     args.push(String::from("-o"));
     args.push(nikaia_std::fs::path::display(&(binary)));
@@ -400,7 +399,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         None => { },
         Some(parent) => { libraries.push(parent); },
     }
-    libraries.push(nikaia_std::fs::path::clone(&(bundle.deps)));
+    for dir in bundle.deps.iter().take(1) { libraries.push(nikaia_std::fs::path::clone(&(dir))); }
     libraries.push(comptime_bundle_path(nikaia_std::either_text::either(host.target_libdir())));
     let ran = match host.run_child(&binary, &named, &libraries, name) {
         Ok(value) => value,

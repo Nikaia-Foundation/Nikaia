@@ -1204,8 +1204,11 @@ pub fn sweep_programs(tree: &Path, tag: &str, project: &Path) {
 }
 
 /// The profile directories of a Cargo target directory - `debug/` and
-/// `<triple>/debug/` and their kin: the ones that hold a `deps/`.
+/// `<triple>/debug/` and their kin: the ones that hold a `deps/`, or a
+/// `build/` under the layout Cargo 1.100 always uses (#2136), where each
+/// crate is in `build/<crate>/<hash>/`.
 fn profile_dirs(tree: &Path) -> Vec<PathBuf> {
+    let profile = |dir: &Path| dir.join("deps").is_dir() || dir.join("build").is_dir();
     let children = |dir: &Path| -> Vec<PathBuf> {
         std::fs::read_dir(dir)
             .into_iter()
@@ -1217,14 +1220,10 @@ fn profile_dirs(tree: &Path) -> Vec<PathBuf> {
     };
     let mut out = Vec::new();
     for dir in children(tree) {
-        if dir.join("deps").is_dir() {
+        if profile(&dir) {
             out.push(dir);
         } else {
-            out.extend(
-                children(&dir)
-                    .into_iter()
-                    .filter(|d| d.join("deps").is_dir()),
-            );
+            out.extend(children(&dir).into_iter().filter(|d| profile(d)));
         }
     }
     out

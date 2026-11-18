@@ -3335,7 +3335,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -3912,4 +3912,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "253822a502cfb6738f14bea4d908b0dfb9208abf41ff434b1010b182f303d75d";
+pub const LOWERED_DIGEST: &str = "17a77c8928ebac31f6c7a619aecb683cd73b2302706b5f49e6f7eeabe150b4bb";

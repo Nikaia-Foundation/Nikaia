@@ -116,23 +116,16 @@ fn optimized_std() -> &'static [String] {
             "std did not build optimised:\n{}",
             String::from_utf8_lossy(&built.stderr)
         );
-        let deps = target.join("release/deps");
+        // Its `deps/`, or each crate's `build/<crate>/<hash>/out/` (#2136).
+        let deps = common::dependency_dirs(&target.join("release"));
         let newest = |name: &str| {
-            let prefix = format!("lib{name}-");
-            let mut found: Vec<PathBuf> = std::fs::read_dir(&deps)
-                .expect("read the deps directory")
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| {
-                    let file = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-                    file.starts_with(&*prefix) && file.ends_with(".rlib")
-                })
-                .collect();
+            let mut found = common::rlibs_in(&deps, name);
             found.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
             found
                 .pop()
-                .unwrap_or_else(|| panic!("no {name} rlib in {}", deps.display()))
+                .unwrap_or_else(|| panic!("no {name} rlib in {}", target.display()))
         };
-        let mut args = vec!["-L".to_text(), format!("dependency={}", deps.display())];
+        let mut args = common::dependency_args(&deps);
         for name in ["nikaia_std", "winnow_grammar", "winnow"] {
             args.push("--extern".to_text());
             args.push(format!("{name}={}", newest(name).display()));

@@ -729,8 +729,9 @@ pub(crate) struct Bundle {
     /// so that a path `nikaia_std::…` resolves in every module; the code is
     /// the library's.
     pub(crate) rlibs: Vec<(String, PathBuf)>,
-    /// Where the libraries it was built from are.
-    pub(crate) deps: PathBuf,
+    /// Where the libraries it was built from are: each directory Cargo put
+    /// one in, `std`'s first (#2136).
+    pub(crate) deps: Vec<PathBuf>,
     /// What changes when the library is rebuilt: part of every key.
     pub(crate) stamp: String,
     /// Where the toolchain's own `std` is, which a program linked with

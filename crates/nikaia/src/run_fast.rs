@@ -20,7 +20,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 
 use crate::comptime_run::{run_bundle, rustc, unique_beside, write_if_changed};
-use nikaia_std::compiler::comptime_bundle::comptime_bundle_host_deps;
 use nikaia_std::compiler::emit_program::EMIT_PROGRAM_COUNTING_HEAP;
 
 /// What compiling the program came to.
@@ -123,14 +122,13 @@ pub(crate) fn compile(
             bundle.rlibs.iter().flat_map(|(name, rlib)| {
                 ["--extern".to_text(), format!("{name}={}", rlib.display())]
             }),
-        )
-        .arg("-L")
-        .arg(format!("dependency={}", bundle.deps.display()));
-    // The proc macros the bundle's crates use, built for the host (#1705).
-    if let Some(host_deps) = comptime_bundle_host_deps(&bundle.deps) {
+        );
+    // Each directory Cargo built one of the bundle's crates in, the proc
+    // macros' for the host among them (#1705, #2136).
+    for dir in &bundle.deps {
         command
             .arg("-L")
-            .arg(format!("dependency={}", host_deps.display()));
+            .arg(format!("dependency={}", dir.display()));
     }
     // **Found where it was built**, by the path written into the program: the
     // program is `exec`ed as it is (#281), with nothing set around it.
@@ -138,7 +136,7 @@ pub(crate) fn compile(
     if let Some(parent) = bundle.dylib.parent() {
         libraries.push(parent.to_path_buf());
     }
-    libraries.push(bundle.deps.clone());
+    libraries.extend(bundle.deps.first().cloned());
     libraries.push(bundle.libdir.clone());
     for library in libraries {
         command
