@@ -35,6 +35,8 @@ use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::process;
 #[allow(unused_imports)]
+use nikaia_std::runtime;
+#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
@@ -3790,7 +3792,7 @@ pub mod fix {
 }
 pub mod fixed {
     #[allow(unused_imports)]
-    pub use super::{HASHED_FROM, Table, fnv, displace, build};
+    pub use super::{HASHED_FROM, Table, build};
 }
 pub mod fmt {
     #[allow(unused_imports)]
@@ -4251,4 +4253,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e54b9ce45ec9fc9fb020e0d973ccd9b074a5ba9682d2fa353bd8f8e16722d099";
+pub const LOWERED_DIGEST: &str = "4bbfa57066eefbf86e1b75723953bc6e23ba6fc2032a2ed681f6b0e8fddf9e0c";

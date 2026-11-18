@@ -79,10 +79,10 @@ impl<V> Fixed<V> {
                 .iter()
                 .position(|held| held.len() == key.len() && *held == key)?,
             false => {
-                let hash = fnv(key, self.seed);
+                let hash = crate::runtime::fnv(key, self.seed);
                 let (g, f1, f2) = ((hash >> 32) as u32, hash as u32, (hash >> 16) as u32);
                 let (d1, d2) = self.disps[(g as usize) % self.disps.len()];
-                let at = (displace(f1, f2, d1, d2) as usize) % self.keys.len();
+                let at = (crate::runtime::displace(f1, f2, d1, d2) as usize) % self.keys.len();
                 // **A perfect hash still compares.** It says *if this key is in
                 // the table it is in this slot*, which is not the same as
                 // saying it is there.
@@ -113,31 +113,4 @@ impl<V> Fixed<V> {
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
     }
-}
-
-/// FNV-1a, and **not** SipHash, for
-/// [ADR-010](../../../docs/specification/adr/adr-010.md)'s reason one construct
-/// over: these keys are the compiler's own, so there is no remote peer to be
-/// protected from and the faster hash is the honest choice.
-///
-/// The compiler's generator computes the same function over the same bytes, and
-/// what holds the two together is `crates/nikaia/tests/fixed_map.rs` **running a
-/// program**. That file also compares the two directly, which is the weaker
-/// half of the pair and is there for the message it gives when it fails — on
-/// its own it would say only that they agree with each other, and they could
-/// agree while both being wrong.
-#[inline]
-pub fn fnv(key: &str, seed: u64) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325u64 ^ seed;
-    for byte in key.as_bytes() {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
-/// CHD's displacement, as the `phf` crate writes it.
-#[inline]
-pub fn displace(f1: u32, f2: u32, d1: u32, d2: u32) -> u32 {
-    d2.wrapping_add(f1.wrapping_mul(d1)).wrapping_add(f2)
 }
