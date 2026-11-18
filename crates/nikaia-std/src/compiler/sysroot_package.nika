@@ -424,7 +424,9 @@ pub fn sysroot_package_with_dependencies(package: Vec[(String, String)], depende
 /// (`modules_test_wrappers`) and each dependency's under `<name>::`, and
 /// `nikaia_run_tests` runs those whose name holds one of `filters` (all, with
 /// none), one line each and a summary, as `nikaia test --std` prints them; it
-/// answers whether every one passed. `package` is as
+/// answers whether every one passed. Its `more` are the lists of std's other
+/// packages, which this one does not depend on (`runtime`, ADR-403 D3), run
+/// with its own. `package` is as
 /// `sysroot_package_assemble` gives it, each dependency as
 /// `sysroot_package_with_dependencies` takes it. A package without tests, and
 /// without a dependency that has some, gets neither.
@@ -451,9 +453,9 @@ fn sysroot_package_tests(package: ref Vec[(String, String)], dependencies: ref V
     text.push_str(f"pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, {run})> {{\n    let mut all: std::vec::Vec<(std::string::String, {run})> = std::vec::Vec::new();\n")
     text.push_str(calls)
     text.push_str("    all\n}\n")
-    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names. Whether every test run passed and one was run at all.\n")
-    text.push_str("pub fn nikaia_run_tests(filters: &[std::string::String], list: bool) -> bool {\n")
-    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n")
+    text.push_str("\n/// **Runs the `test` blocks whose name holds one of `filters`** (#2082), all of\n/// them with none, and prints one line each and a summary; `list` prints\n/// only the names; `more` are std's other packages' lists (ADR-403 D3), run\n/// with this one. Whether every test run passed and one was run at all.\n")
+    text.push_str(f"pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::vec::Vec<(std::string::String, {run})>) -> bool {{\n")
+    text.push_str("    let wanted: std::vec::Vec<_> = nikaia_tests().into_iter().chain(more).filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()))).collect();\n")
     text.push_str("    if list {\n        for (name, _) in &wanted {\n            println!(\"{name}\");\n        }\n        return !wanted.is_empty();\n    }\n")
     text.push_str("    let (mut passed, mut failed) = (0usize, 0usize);\n")
     text.push_str("    for (name, run) in &wanted {\n")

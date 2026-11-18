@@ -67,3 +67,10 @@ pub fn writes_float(text: String) -> bool sync {
     }
     return stop == b.len()
 }
+
+test "a float word is read in any case and nothing else is one" {
+    assert(is_float_word("-InF".bytes, 1, "inf"))
+    assert(is_float_word("nan".bytes, 0, "nan"))
+    assert(!is_float_word("infinity".bytes, 0, "inf"))
+    assert(!is_float_word("1.5".bytes, 0, "nan"))
+}

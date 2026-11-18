@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1444] — 2026-11-18
+
+**std's runtime package runs its own test blocks under nikaia test --std (#2146)**
+- std's runtime package tests its private names: a `test` block in a runtime/*.nika file runs under `nikaia test --std` (named runtime::FILE::TEST) beside the compiler's (ADR-403 D3)
+
+## [0.0.1443] — 2026-11-18
+
+**Grammar: emit statement for @stream entries, checked (NK1371, NK1370, NK1349)**
+- Grammar actions get `emit item`: the rules a `@stream` entry reaches hand items to its walk; emit outside such a rule is NK1371, an emit the parse could still undo is NK1370 (checked; running it follows).
+
 ## [0.0.1442] — 2026-11-18
 
 **Builders' changes (#2129)**

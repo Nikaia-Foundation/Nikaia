@@ -792,7 +792,13 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         } => {
             let filters: std::vec::Vec<std::string::String> =
                 filters.iter().map(|f| std::format!("{f}")).collect();
-            let passed = nikaia_std::compiler::nikaia_run_tests(&filters, *list);
+            // Every std package's list (ADR-403 D3): `runtime` is no
+            // dependency of the compiler's package, so its list is handed in.
+            let runtime = nikaia_std::runtime::nikaia_tests()
+                .into_iter()
+                .map(|(name, run)| (std::format!("runtime::{name}"), run))
+                .collect();
+            let passed = nikaia_std::compiler::nikaia_run_tests(&filters, *list, runtime);
             std::process::exit(if passed { 0 } else { 1 });
         }
         Command::Test {
