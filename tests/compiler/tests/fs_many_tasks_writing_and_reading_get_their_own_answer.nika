@@ -1,0 +1,29 @@
+// Eight tasks on the pool, each writing then reading its own file 300 times,
+// each get their own answer back (a lost ring slot in the runtime's reads
+// once answered another task's operation). Joined with `drain()` (ADR-094 D4).
+use std::fs
+
+fn rounds(t: i64, root: fs::Root) -> i64 throws {
+    let name = f"file-{t}"
+    let mut right = 0
+    for round in 0..<300 {
+        let text = f"{t}:{round}\n"
+        fs::write(name, root, text.clone())
+        if fs::read_to_string(name, root) == text { right += 1 }
+    }
+    return right
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    let mut tasks = []
+    for t in 0..<8 {
+        let mine = root.clone()
+        tasks.push(spawn fn { rounds(t, mine) })
+    }
+    let mut right = 0
+    for task in tasks.drain() {
+        right += task.join()
+    }
+    println(f"answers that came back right: {right}")
+}

@@ -1,0 +1,50 @@
+// Three failures joined in one `overlap` (ADR-280 D1, ADR-292 D8): the long
+// form lists them in the order they joined, two `and then:`, the note once.
+// A handler that passes the error on with `throw error` keeps the list, so
+// its caller prints the same text.
+enum StepError {
+	Failed(String),
+}
+
+impl Error for StepError {
+	fn message(ref self) -> String {
+		match self {
+			StepError::Failed(w) => { return f"{w} failed" }
+		}
+	}
+}
+
+fn step(which: String) -> String throws {
+	throw StepError::Failed(which)
+}
+
+fn three() -> String throws {
+	let all = overlap {
+		step("first")
+		step("second")
+		step("third")
+	}
+	return all.0 + all.1 + all.2
+}
+
+fn passed_on() -> String throws {
+	return three() catch {
+		throw error
+	}
+}
+
+fn main() throws {
+	let mut direct: String = ""
+	let a = three() catch {
+		direct = error.full()
+		""
+	}
+	println(direct)
+	let mut relayed: String = ""
+	let b = passed_on() catch {
+		relayed = error.full()
+		""
+	}
+	println(f"passed on, the same text: {relayed == direct}")
+	println(f"{a}{b}after")
+}

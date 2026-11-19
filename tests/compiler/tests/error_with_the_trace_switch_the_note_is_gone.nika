@@ -1,0 +1,24 @@
+// With `NIKAIA_TRACE=1` a failure captures a trace and keeps it in its cold
+// box (ADR-280), so the long form prints the trace instead of the note that
+// names the switch. The trace differs from run to run, so this prints counts:
+// the child program runs once with the switch and once without, the control (`0` is off).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, "enum LoadError {\n\tBoom,\n}\n\nimpl Error for LoadError {\n\tfn message(ref self) -> String {\n\t\treturn \"boom\"\n\t}\n}\n\nfn load() -> String throws {\n\tthrow LoadError::Boom\n}\n\nfn main() throws {\n\tlet text = load() catch {\n\t\tprintln(error.full())\n\t\t\"\"\n\t}\n\tprintln(text)\n}\n")
+    for switch in ["1", "0"] {
+        let out = process::run(toolchain(), ["run", "main.nika"]; dir: tmp.clone(), env: [("NIKAIA_TRACE", switch.clone())])
+        let site = out.stdout.matches("raised at load").count()
+        let named = out.stdout.matches("NIKAIA_TRACE=1").count()
+        println(f"NIKAIA_TRACE={switch}: raised at {site}, the switch named {named} times, exit {out.code}")
+    }
+    process::run("rm", ["-rf", tmp])
+}

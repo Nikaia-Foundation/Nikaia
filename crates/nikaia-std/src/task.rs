@@ -1299,30 +1299,6 @@ racing!(
     F: RF: Sixth, G: RG: Seventh, H: RH: Eighth
 );
 
-/// One half of a [`crate::fs::read_both`], finished as `fs::read_to_string`
-/// would have finished it.
-///
-/// `fs::read_to_string` is a read and then a UTF-8 check, and the pair performs
-/// the read - so this is the check, on exactly the bytes that came back,
-/// reporting exactly the failure the sequential program would have reported. It
-/// is `std`'s own function and not a line written twice into every program that
-/// reads two files at once.
-///
-/// **`what` is the path**, because since
-/// [ADR-280](../../../docs/specification/adr/adr-280.md) D5 the failure names
-/// what it was about, and the pair's own read does not carry it. Without it
-/// the claim above stops being true: `read_to_string` would say which file and
-/// this would not.
-pub fn as_text(
-    bytes: Result<Vec<u8>, std::io::Error>,
-    what: &str,
-) -> Result<String, crate::io::IoError> {
-    match bytes {
-        Ok(bytes) => crate::fs::text(bytes, what),
-        Err(error) => Err(crate::io::IoError::of(error, what)),
-    }
-}
-
 /// **What a scope's task hands back** ([ADR-346](../../../docs/specification/adr/adr-346.md)
 /// D7): nothing, or its body's error in the scope's channel `E`.
 pub trait Outcome<E> {

@@ -1,0 +1,5 @@
+from .: b.rs src/a.rs src/deep/c.txt
+from src: a.rs deep/c.txt up/b.rs
+Anywhere: b.rs out/secret src/a.rs src/deep/c.txt
+from ..: Outside
+from nope: NotFound

@@ -1,0 +1,9 @@
+read back: Hamburg;12.0
+replaced: Bremen
+bytes: 3 255 0 254
+as text: NotText
+missing directory: NotFound
+appended: one|two|
+create false on a missing file: NotFound
+exists after: false
+create false on an existing file: three

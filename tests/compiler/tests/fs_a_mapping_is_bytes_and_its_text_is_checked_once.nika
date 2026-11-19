@@ -1,0 +1,24 @@
+// A mapping is bytes (ADR-373 D3): a file with a byte that is not UTF-8 maps,
+// a cut before the byte is text, and `text()` names the byte on every call
+// (ADR-016 D5); a text file gives the same text twice, an empty one `""`.
+use std::fs
+
+fn main() throws {
+    let root = fs::scratch()
+    let data: Vec[u8] = [97, 98, 1, 0, 0, 0, 0, 0, 59, 255]
+    fs::write("bad", root, data)
+    fs::write("good", root, "Oslo;3\n")
+    fs::write("empty", root, "")
+    let bad = fs::map("bad", root)
+    println(f"len {bad.len()}")
+    println(f"byte 9: {bad[9]}")
+    println(f"cut: {bad[0..<2].text()}")
+    bad.text() catch { println(f"text: {error.message()}") }
+    bad.text() catch { println(f"again: {error.message()}") }
+    let good = fs::map("good", root)
+    let one = good.text()
+    let two = good.text()
+    println(f"same text twice: {one == two && one == "Oslo;3\n"}")
+    let empty = fs::map("empty", root)
+    println(f"empty: {empty.len()} \"{empty.text()}\"")
+}

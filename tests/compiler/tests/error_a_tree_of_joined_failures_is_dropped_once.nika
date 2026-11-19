@@ -1,0 +1,46 @@
+// A tree of joined failures (ADR-280): an `overlap` of two `overlap`s, each of
+// two throws. Each error is dropped exactly once when the handler is done
+// with it: a leak or a double drop of the cold box shows as a wrong count.
+struct Named {
+	name: String,
+}
+
+impl Error for Named {
+	fn message(ref self) -> String {
+		return self.name.clone()
+	}
+}
+
+impl Drop for Named {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn fail(name: String) -> String throws {
+	throw Named { name: name }
+}
+
+fn pair(a: String, b: String) -> String throws {
+	let both = overlap {
+		fail(a)
+		fail(b)
+	}
+	return both.0 + both.1
+}
+
+fn tree() -> String throws {
+	let both = overlap {
+		pair("one", "two")
+		pair("three", "four")
+	}
+	return both.0 + both.1
+}
+
+fn main() throws {
+	let text = tree() catch {
+		println(f"caught {error}")
+		"fallback"
+	}
+	println(f"after {text}")
+}

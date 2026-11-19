@@ -1,0 +1,17 @@
+walk: 2
+display: caf�.txt caf�
+ends_with .txt: true
+starts_with stem: true
+same as itself: true
+same as text: false
+to_text: NotText
+to_text a.txt: a.txt a.txt
+read: hallo
+listed: caf�
+listed: caf�.bak
+listed: caf�.txt
+listed: caf�.txt.bak
+0000000   c   a   f 351  \n   c   a   f 351   .   b   a   k  \n   c   a
+0000020   f 351   .   t   x   t  \n   c   a   f 351   .   t   x   t   .
+0000040   b   a   k  \n
+0000044
