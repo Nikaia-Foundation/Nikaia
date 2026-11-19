@@ -215,6 +215,7 @@ read the record in the right-hand column.
 | [async-2](adr-async-2.md) | Fan-Out Over a Collection Is the `par_iter` Chain, Whose Lambdas May Pause; the Compiler Picks Pieces or One Task per Element, Under One Rule Set; the `async` Loop Is Removed | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D24, D2→D25, D3→D26, D4→D27, D5→D32, D6→D28, D7→D30, D8→D30, D9→D29 |
 | [async-3](adr-async-3.md) | Every Task Is Started in a Group and Lives at Most as Long as It; One Word, `async`, Starts Every Task, and `spawn` Becomes Its Option | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D13, D6→D4, D7→D16 |
 | [async-4](adr-async-4.md) | `async` Is an Expression Prefix; `async e` Is Waited Where Its Value Is First Needed, `async(handle)` Gives a Handle Bound to the Group, and Only a Handle Is Cancelled | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D5, D2→D6, D3→D7, D4→D11, D5→D12, D6→D13, D7→D9, D8→D31, D9→D10, D10→D14, D11→D22, D12→D33, D13→D34, D14→D17, D15→D16 |
+| [decision-records-1](adr-decision-records-1.md) | A Record Is Named by Its Topic and a Number, `ADR-<topic>-<n>`; the Numbered Records Keep Their Numbers Until a Consolidation Replaces Them | [ADR-decision-records-v2](../../specification/adr/adr-decision-records-v2.md) | D1→D1 (a version `v<n>`, not a count of records), D2→D2 (one live record per topic; changes no longer in place), D3→D4 (consolidated when changed), D4→D5, D5→D6 |
 
 ## What the archived records displaced in one another
 
