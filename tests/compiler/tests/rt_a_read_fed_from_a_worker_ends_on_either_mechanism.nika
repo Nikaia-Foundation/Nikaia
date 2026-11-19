@@ -1,0 +1,50 @@
+// A read fed from an I/O worker ends the park on either I/O mechanism
+// (ADR-121 D1, D3): the reply wakes the waiting task on the completion ring
+// and on the blocking path alike. `io-method` in the runtime config named by
+// `NIKAIA_RUNTIME_CONFIG` picks the mechanism (ADR-303 D5), and the user pool
+// is started only at `user-parallelism = yes`, at the configured size
+// (ADR-303 D4): `task::cores()` is 1 at `no` and 3 at `yes`. The child
+// accepts a connection, a spawned task writes one byte after 5 ms, and `main`
+// reads it, 20 rounds. A hang is the failure (ADR-121 D3). Moved from the
+// `nikaia-std` unit tests `a_worker_operation_wakes_the_park_on_either_path`,
+// `a_future_fed_from_a_worker_finishes_under_block_on`,
+// `a_sequential_build_starts_no_pool_for_user_code` and
+// `a_concurrent_build_starts_one` (#2210).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::net\nuse std::task\nuse std::time\n\nfn main() throws {\n\tlet listener = net::listen(\"127.0.0.1:0\")\n\tlet at = listener.address()\n\tlet mut rounds = 0\n\tlet mut bytes = 0\n\twhile rounds < 20 {\n\t\tlet mut client = net::connect(at)\n\t\tlet mut conn = listener.accept()\n\t\tlet writer = spawn fn {\n\t\t\ttime::sleep(5.millis())\n\t\t\tconn.write(\"x\")\n\t\t}\n\t\tlet got = client.read()\n\t\twriter.join()\n\t\tbytes = bytes + got.len()\n\t\trounds = rounds + 1\n\t}\n\tlet cores = task::cores()\n\tprintln(f\"rounds {rounds}, bytes {bytes}, cores {cores}\")\n}\n",
+	)
+	for method in ["auto", "blocking"] {
+		fs::write(
+			f"{tmp}/runtime.toml",
+			fs::Root::Anywhere,
+			f"io-method = \"{method}\"\nuser-pool = 3\n",
+		)
+		for setting in ["no", "yes"] {
+			let out = process::run(
+				toolchain(),
+				["run", "--user-parallelism", setting.clone(), "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+			)
+			println(f"{method}, {setting}: {out.stdout.trim()}")
+		}
+	}
+	process::run("rm", ["-rf", tmp])
+}
