@@ -1833,6 +1833,10 @@ The standard library provides types for groups of values.
     list whose order cannot be shown is checked once where it arrives
     (`return … if !xs.is_sorted()`) or vouched for with
     `unsafe { assume(xs.is_sorted()) }` (Part III 14.2).
+    `xs.is_sorted_by_key(f)` and `xs.binary_search_by_key(k, f)` do the same
+    by the key `f` hands back for each element, and the search **requires
+    `xs.is_sorted_by_key(f)`** with the same `f`, a named function: no
+    closure can be shown to be the one that sorted the list.
     **A chain runs element by element** ([ADR-342](adr/adr-342.md)). A list's
     `map` hands back a list, but where its result goes straight into the next
     step - another `map`, `iter()`, a `for`, `len()` - no list is built between

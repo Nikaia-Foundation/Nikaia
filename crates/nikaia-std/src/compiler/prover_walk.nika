@@ -1596,12 +1596,12 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 let cond = args[0]
                 // **A type's rule holds where a value of it is read** (ADR-369
                 // D3): a fact, never a claim to prove or check.
-                prover_read_properties(cond, scope, program, words)
+                prover_read_properties(cond, scope, walk.state, program, words)
                 if prover_a_given_rule(config, words) {
                     let given = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                     if given != null {
                         scope.facts.push(given ?? 0)
-                        prover_properties_from(cond, f"the rule of `{prover_rule_type(config, words)}`", scope, program, words)
+                        prover_properties_from(cond, f"the rule of `{prover_rule_type(config, words)}`", scope, walk.state, program, words)
                     }
                     walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved)
                     return false
@@ -1621,7 +1621,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 // The `message:` a failure says, where it is text as written:
                 // a precondition checked elsewhere says it too.
                 let message = prover_message(config, words)
-                let names = prover_without_callees(claim_names_in(cond, words, holes_of), cond, scope, program, words)
+                let names = prover_without_callees(claim_names_in(cond, words, holes_of), cond, scope, walk.state, program, words)
                 let mut leaned: Vec[String] = []
                 if !walk.state.in_test {
                     // **A call inside the claim is a whole number of its own**,
@@ -1636,7 +1636,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 let mut held = outcome.held.clone()
                 // **A claim proved by a named property says where it is known
                 // from** (ADR-381 D2); from here the claim is a source itself.
-                let from = prover_known_from(cond, scope, program, words)
+                let from = prover_known_from(cond, scope, walk.state, program, words)
                 let plain = match held {
                     ClaimHeld::Proved => true,
                     else => false,
@@ -1644,7 +1644,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 if from != null && plain {
                     held = ClaimHeld::ProvedThrough(f"proved: known from {from ?? ""}")
                 }
-                prover_properties_from(cond, f"`assert({written_of(cond)})`", scope, program, words)
+                prover_properties_from(cond, f"`assert({written_of(cond)})`", scope, walk.state, program, words)
                 let mut findings: Vec[Finding] = []
                 for found in outcome.findings {
                     let mut one = found.clone()
@@ -1704,9 +1704,13 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
         Expr::Unsafe(block, _) => {
             prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             for cond in prover_assumed_in_unsafe(block, words) {
+                // **A named property it vouches for is known** (ADR-381
+                // D2): a name of the proof, as after an `assert`.
+                prover_read_properties(cond, scope, walk.state, program, words)
                 let vouched = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                 if vouched != null {
                     scope.facts.push(vouched ?? 0)
+                    prover_properties_from(cond, f"`assume({written_of(cond)})`", scope, walk.state, program, words)
                 }
             }
             return false
@@ -1724,7 +1728,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     prover_condition_lengths(walk, cond, scope, words)
     // **A guard on a named property makes it known** (ADR-381 D2): `return
     // if !p(xs)` leaves `p(xs)` after it, as a comparison's guard does.
-    prover_read_properties(cond, scope, program, words)
+    prover_read_properties(cond, scope, walk.state, program, words)
     let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut fails: i64? = null
     if holds != null {
@@ -1757,7 +1761,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
         scope.facts.extend(else_facts)
         if fails != null {
             scope.guards.insert(fails ?? 0, (span.start as i64, written_of(cond)))
-            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, program, words)
+            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, walk.state, program, words)
         }
         scope.on_the_path(walk.arena, fails)
         scope.exact = scope.exact && fails != null && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased)
@@ -1765,7 +1769,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
         scope.facts.extend(then_facts)
         if holds != null {
             scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
-            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, program, words)
+            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, walk.state, program, words)
         }
         scope.on_the_path(walk.arena, holds)
         scope.exact = scope.exact && holds != null && !leaves_block(then_branch, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
@@ -2342,7 +2346,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
             }
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
-            prover_a_method_call(walk, receiver, method, args, config, span, scope, at, program, words, ask, model, escape, written_of)
+            prover_a_method_call(walk, receiver, method, node_key(expr), args, config, span, scope, at, program, words, library, ask, model, escape, written_of, condition)
             prover_calls_in(walk, receiver, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             for arg in args {
                 prover_calls_in(walk, arg, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -3133,9 +3137,9 @@ fn prover_call_precondition(mut walk: ProverWalk, callee: ref String, call: i64,
 /// function's is at a call by name, or carried back to the caller's entry.
 /// **A call on any other receiver** reaches the method its type resolves
 /// to (ADR-269 D20, #2225).
-fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync) {
+fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     if (prover_variable_named(receiver, words) ?? "") != "self" {
-        prover_a_call_on(walk, receiver, method, args, config, span, scope, at, program, words, ask, model, escape, written_of)
+        prover_a_call_on(walk, receiver, method, call, args, config, span, scope, at, program, words, library, ask, model, escape, written_of, condition)
         return
     }
     let function = carrying_function(at.function) ?? return
@@ -3163,12 +3167,17 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
 /// `self`** (ADR-269 D20): called through its type's ledger entry the way a
 /// free function is, the checker's `method_callees` naming the entry. The
 /// receiver is put in for `self`, so a claim on `self.k` reads `x.k`.
-fn prover_a_call_on(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync) {
+fn prover_a_call_on(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     let callee: String = walk.state.method_callees.get(id_of(receiver) as i64)?.clone() ?? return
     let cut = callee.rfind("::") ?? return
     let owner = callee[0..<cut].clone()
     let name = words.resolve(method).clone()
-    let target = own_method(program, words, owner, name) ?? return
+    let mine = own_method(program, words, owner, name)
+    if mine == null {
+        prover_std_method_call(walk, callee, call, receiver, args, span, scope, at, words, library, ask, model, escape, written_of, condition)
+        return
+    }
+    let target = mine ?? return
     let caller = carrying_function(at.function)
     if caller != null {
         walk.state.edges.insert((caller ?? "", callee.clone()))
@@ -3188,6 +3197,17 @@ fn prover_a_call_on(mut walk: ProverWalk, receiver: ref Expr, method: winnow_gra
     } else if walk.findings.len() == told {
         prover_unwritten_call(walk, callee, params, all, span, scope, words, ask, model)
     }
+}
+
+/// **A call `x.m(…)` to a `std` method with a precondition** (ADR-269 D5,
+/// ADR-381 D5): held to `std`'s ledger as a call by name is, the receiver
+/// put in for `self` - `xs.binary_search(v)` asks `xs.is_sorted()` - and,
+/// as there, a claim of the program at the call, keyed by `call`.
+fn prover_std_method_call(mut walk: ProverWalk, callee: ref String, call: i64, receiver: ref Expr, args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
+    let std = prover_std_requires(walk, callee, library, condition) ?? return
+    let mut all: Vec[Expr] = [receiver.clone()]
+    all.extend(args.clone())
+    prover_record_call(walk, callee, std.params, std.requires, all, call, span, scope, at, words, ask, model, escape, written_of)
 }
 
 /// **What a call's arguments show of the checks nobody writes in its
@@ -3267,12 +3287,29 @@ fn prover_std_requires(mut walk: ProverWalk, key: ref String, library: ref Ledge
     if contract.requires.is_empty() {
         return null
     }
-    let shape = foreign_shape(contract)
+    let mut shape = foreign_shape(contract)
+    let owner = key[0..<(key.rfind("::") ?? 0)].clone()
     let mut requires: Vec[i64] = []
     for text in contract.requires {
+        let property = prover_std_property_named(text, owner, walk.state.std_properties)
+        if property != null {
+            shape.names.insert(property ?? "")
+        }
         requires.push(prover_condition_term(walk.arena, text, shape.names, condition))
     }
     return foreign_from(contract, shape, requires, [])
+}
+
+/// **The named property a `std` precondition asks of its receiver**
+/// (ADR-381 D1, D5): `self.prop@.is_sorted()` of `self.is_sorted()`, where
+/// `owner`'s method is one of `std`'s properties; else `null`.
+fn prover_std_property_named(text: ref String, owner: ref String, properties: ref collections::BTreeSet[String]) -> String? {
+    let called = text.strip_prefix("self.") ?? return null
+    let open = called.find("(") ?? return null
+    if !called.ends_with(")") || !properties.contains(f"{owner}::{called[0..<open]}") {
+        return null
+    }
+    return f"self.{property_mark()}.{called}"
 }
 
 /// **How a `std` precondition at one call is held**, from how each of its
@@ -3452,13 +3489,13 @@ fn prover_a_claim_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContex
 /// changes none of its arguments, has no options and does not throw, or
 /// `x.m(…)` of such a method, each argument a path; with the prover's name
 /// for it (`prove_terms.nika`, `property_name`) and its first path.
-fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, mut out: Vec[(String, String)]) {
+fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext, mut out: Vec[(String, String)]) {
     match expr {
         Expr::Binary { lhs, rhs, .. } => {
-            prover_properties_in(lhs, scope, program, words, out)
-            prover_properties_in(rhs, scope, program, words, out)
+            prover_properties_in(lhs, scope, state, program, words, out)
+            prover_properties_in(rhs, scope, state, program, words, out)
         },
-        Expr::Unary { expr, .. } => prover_properties_in(expr, scope, program, words, out),
+        Expr::Unary { expr, .. } => prover_properties_in(expr, scope, state, program, words, out),
         Expr::Call { func, args, .. } => {
             let callee = prover_variable_named(func, words) ?? return
             if scope.locals.contains(callee) || !prover_a_property(program, words, callee) {
@@ -3469,7 +3506,8 @@ fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, program: ref Pro
             out.push((name, on))
         },
         Expr::MethodCall { receiver, method, .. } => {
-            if !prover_a_method_property(program, words, words.resolve(method)) {
+            let callee = state.method_callees.get(id_of(receiver) as i64) ?? ""
+            if !state.std_properties.contains(callee) && !prover_a_method_property(program, words, words.resolve(method)) {
                 return
             }
             let name = property_name(expr, words) ?? return
@@ -3504,9 +3542,9 @@ fn prover_property_facts(mut walk: ProverWalk, mut scope: ProverScope, bound: re
 }
 
 /// Each named property of `cond` not known yet is known from `source`.
-fn prover_properties_from(cond: ref Expr, source: String, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
+fn prover_properties_from(cond: ref Expr, source: String, mut scope: ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) {
     let mut found: Vec[(String, String)] = []
-    prover_properties_in(cond, scope, program, words, found)
+    prover_properties_in(cond, scope, state, program, words, found)
     for (name, _) in found {
         if !scope.known_from.contains_key(name) {
             scope.known_from.insert(name.clone(), source.clone())
@@ -3515,9 +3553,9 @@ fn prover_properties_from(cond: ref Expr, source: String, mut scope: ProverScope
 }
 
 /// Where the named properties `cond` reads are known from, where each is.
-fn prover_known_from(cond: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> String? {
+fn prover_known_from(cond: ref Expr, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> String? {
     let mut found: Vec[(String, String)] = []
-    prover_properties_in(cond, scope, program, words, found)
+    prover_properties_in(cond, scope, state, program, words, found)
     let mut sources: Vec[String] = []
     for (name, _) in found {
         let source = scope.known_from[name] ?? return null
@@ -3560,6 +3598,36 @@ fn prover_a_property(program: ref Program, words: ref winnow_grammar::InternerCo
     return false
 }
 
+/// **The `std` methods a named property may call** (ADR-381 D1, D5), by
+/// their ledger keys: each that takes a receiver and hands back a `bool`,
+/// is `sync` (or as `sync` as the function it is handed), changes neither
+/// its receiver nor an argument, takes no options, touches nothing and
+/// fails with nothing, as the ledger writes it: `Vec::is_sorted`,
+/// `Vec::is_sorted_by_key`.
+fn prover_std_properties(library: ref Ledger) -> collections::BTreeSet[String] {
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, contract) in library.functions {
+        let signature = contract.signature ?? continue
+        if !signature.takes_a_receiver() || !signature.mutable.is_empty() || !signature.config.is_empty() || contract.mutates || !contract.fails_with.is_empty() || !contract.touches_known || !contract.touches.is_empty() {
+            continue
+        }
+        let pure = match contract.sync_claim {
+            Sync::No => false,
+            Sync::Unpromised => false,
+            else => true,
+        }
+        let result = signature.result ?? continue
+        let answers_bool = match result {
+            Ty::Named { name, args, view } => name == "bool" && args.is_empty() && !view,
+            else => false,
+        }
+        if pure && answers_bool {
+            found.insert(key.clone())
+        }
+    }
+    return found
+}
+
 /// **Whether `wanted` is a method a named property calls** (ADR-381 D1):
 /// every method of that name the program's types have is `sync`, hands
 /// back a `bool`, changes neither its receiver nor an argument, has no
@@ -3595,33 +3663,57 @@ fn prover_a_method_property(program: ref Program, words: ref winnow_grammar::Int
 /// **Whether `stmt` may change the argument `base` of a named property**
 /// (ADR-381 D1, D2): `elements_change`, but the condition of an `if` that
 /// hands `base` only to named properties changes nothing, since a property
-/// changes nothing, so a guard `return if !p(xs)` keeps what it made known.
-fn prover_property_changed(stmt: ref Stmt, base: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+/// changes nothing, so a guard `return if !p(xs)` keeps what it made known,
+/// and so does an `unsafe` block of `assume`s.
+fn prover_property_changed(stmt: ref Stmt, base: ref String, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
     let expr = match stmt {
         Stmt::Expr(e) => e,
         else => return elements_change(stmt, base, words),
     }
     return match expr {
         Expr::If { cond, then_branch, else_branch, .. } => {
-            if prover_condition_changes(cond, base, scope, program, words) || !elements_stay(then_branch, base, words) {
+            if prover_condition_changes(cond, base, scope, state, program, words) || !elements_stay(then_branch, base, words) {
                 return true
             }
             let other = else_branch ?? return false
             !elements_stay(other, base, words)
+        },
+        // **Nor does an `assume` of one** (ADR-376 D1): `unsafe {
+        // assume(xs.is_sorted()) }` keeps what it vouches for.
+        Expr::Unsafe(block, _) => {
+            let assumed = prover_assumed_in_unsafe(block, words)
+            if assumed.is_empty() {
+                return elements_change(stmt, base, words)
+            }
+            for cond in assumed {
+                if prover_condition_changes(cond, base, scope, state, program, words) {
+                    return true
+                }
+            }
+            false
         },
         else => elements_change(stmt, base, words),
     }
 }
 
 /// Whether the condition `cond` may change `base`: a named property of it
-/// does not (ADR-381 D1), anything else as `seek_expr` says.
-fn prover_condition_changes(cond: ref Expr, base: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+/// does not (ADR-381 D1), in either form, anything else as `seek_expr`
+/// says.
+fn prover_condition_changes(cond: ref Expr, base: ref String, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
     match cond {
-        Expr::Unary { expr, .. } => return prover_condition_changes(expr, base, scope, program, words),
-        Expr::Binary { lhs, rhs, .. } => return prover_condition_changes(lhs, base, scope, program, words) || prover_condition_changes(rhs, base, scope, program, words),
+        Expr::Unary { expr, .. } => return prover_condition_changes(expr, base, scope, state, program, words),
+        Expr::Binary { lhs, rhs, .. } => return prover_condition_changes(lhs, base, scope, state, program, words) || prover_condition_changes(rhs, base, scope, state, program, words),
         Expr::Call { func, .. } => {
             let callee = prover_variable_named(func, words) ?? ""
             if !scope.locals.contains(callee) && prover_a_property(program, words, callee) && property_name(cond, words) != null {
+                return false
+            }
+        },
+        // **A property in method form changes nothing either** (ADR-381
+        // D1): `return if !xs.is_sorted()` keeps `xs.is_sorted()` known.
+        Expr::MethodCall { receiver, method, .. } => {
+            let callee = state.method_callees.get(id_of(receiver) as i64) ?? ""
+            if (state.std_properties.contains(callee) || prover_a_method_property(program, words, words.resolve(method))) && property_name(cond, words) != null {
                 return false
             }
         },
@@ -3632,9 +3724,9 @@ fn prover_condition_changes(cond: ref Expr, base: ref String, scope: ref ProverS
 
 /// **A claim's named properties are names of the proof from here**
 /// (ADR-381 D1): known where a fact says them, open where none does.
-fn prover_read_properties(cond: ref Expr, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
+fn prover_read_properties(cond: ref Expr, mut scope: ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) {
     let mut found: Vec[(String, String)] = []
-    prover_properties_in(cond, scope, program, words, found)
+    prover_properties_in(cond, scope, state, program, words, found)
     for (name, _) in found {
         scope.ints.insert(name.clone())
         scope.loose.insert(name.clone())
@@ -3643,9 +3735,9 @@ fn prover_read_properties(cond: ref Expr, mut scope: ProverScope, program: ref P
 
 /// The names a claim reads without the functions its named properties
 /// call, which are no values (ADR-381 D1).
-fn prover_without_callees(names: collections::BTreeSet[String], cond: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn prover_without_callees(names: collections::BTreeSet[String], cond: ref Expr, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found: Vec[(String, String)] = []
-    prover_properties_in(cond, scope, program, words, found)
+    prover_properties_in(cond, scope, state, program, words, found)
     if found.is_empty() {
         return names
     }
@@ -3675,7 +3767,7 @@ fn prover_entry_properties(mut walk: ProverWalk, mut scope: ProverScope, mut par
             else => continue,
         }
         let mut found: Vec[(String, String)] = []
-        prover_properties_in(cond, scope, program, words, found)
+        prover_properties_in(cond, scope, walk.state, program, words, found)
         for (name, on) in found {
             if !kept.contains(on) || !property_carried(name) {
                 continue
@@ -3929,7 +4021,13 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
                 if bound.contains(path_root(base)) {
                     continue
                 }
-                if prover_property_changed(stmt, base, scope, program, words) || rebinds_in_statement(stmt, path_root(base), words) {
+                // A function of the program handed to it, `by_id` of
+                // `xs.is_sorted_by_key(by_id)`, is no value and never
+                // changes (ADR-381 D1).
+                if !scope.locals.contains(base) && free_function(program, words, base) != null {
+                    continue
+                }
+                if prover_property_changed(stmt, base, scope, walk.state, program, words) || rebinds_in_statement(stmt, path_root(base), words) {
                     gone.push(n.clone())
                     break
                 }
