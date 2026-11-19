@@ -893,8 +893,8 @@ mod tests {
     /// and one word of payload. That is the success path, which every call
     /// that can fail pays whether it fails or not.
     ///
-    /// Kept as Rust (#2082): a size is layout, and no test block can name
-    /// `size_of`.
+    /// Kept as Rust (#2304): a size is layout, and no test block can name
+    /// `size_of` (`std::mem` has none).
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn a_result_around_an_envelope_is_as_small_as_around_the_bare_error() {
@@ -916,7 +916,7 @@ mod tests {
     /// **The common case allocates nothing**: a site and nothing else lives in
     /// the word, tagged.
     ///
-    /// Kept as Rust (#2082): whether the tail is the word or a cold box is
+    /// Kept as Rust (#2304): whether the tail is the word or a cold box is
     /// layout, which no program sees.
     #[test]
     fn a_site_alone_is_the_tagged_word() {
