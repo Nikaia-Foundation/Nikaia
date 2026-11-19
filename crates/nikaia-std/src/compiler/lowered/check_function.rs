@@ -43,7 +43,7 @@ pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '
                 let at = *at;
                 if segments.len() == 2 && !called.contains(&at.get()) {
                     let member = here.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
-                    if here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == parameter && (member == "kind" || member == "name") { return true; }
+                    if here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == parameter && (member == "kind" || member == "name" || member == "access" || member == "doc") { return true; }
                 }
             },
             _ => { },

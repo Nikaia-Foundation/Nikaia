@@ -209,6 +209,8 @@ impl EmitState {
         match side {
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
+                let access = self.reflected_field_type(world, walk, base, name, "ty::access");
+                if access.is_some() { return emit_access_of(nikaia_std::index::or(access.as_deref(), || "")); }
                 let ty = match self.reflected_field_type(world, walk, base, name, "ty::kind") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 return nikaia_std::block::Text::from(nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -218,6 +220,7 @@ impl EmitState {
             Expr::Path(segments, _) => {
                 if segments.len() == 3 { return emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (2) as usize) }); }
                 let ty = self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)));
+                if emit_text(world, *nikaia_std::index::get(&segments, 1)) == "access" { return emit_access_of(&ty); }
                 return nikaia_std::block::Text::from(nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -378,5 +381,11 @@ impl EmitState {
         }
         format!("{} {{ {} }}", name, nikaia_std::block::Text::from(fields.join(", ")))
     }
+}
+
+pub(crate) fn emit_access_of(written: &str) -> String {
+    if written.starts_with("SharedMut[") { return String::from("SharedMut"); }
+    if written.starts_with("Shared[") { return String::from("Shared"); }
+    String::from("Owned")
 }
 

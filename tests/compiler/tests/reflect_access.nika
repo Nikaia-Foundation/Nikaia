@@ -1,0 +1,31 @@
+// `T::access` says how a value is reached, decided per copy while the
+// program is built (ADR-330 D8): `Shared[A]` is `Shared`, a plain type `Owned`.
+
+struct Holder {
+    name: String,
+    count: Shared[i64],
+}
+
+fn reached[T](_v: T) -> String {
+    if T::access == meta::Access::Shared {
+        return "shared"
+    }
+    if T::access != meta::Access::Owned {
+        return "other"
+    }
+    return "owned"
+}
+
+fn fields[T: Struct](_v: T) throws {
+    for field in T::fields {
+        println(f"{field.name}: shared {field.ty::access == meta::Access::Shared}")
+    }
+}
+
+fn main() throws {
+    println(reached("text"))
+    println(reached(Shared(1)))
+    let h = Holder { name: "a", count: Shared(2) }
+    println(reached(h.name.clone()))
+    fields(h)
+}
