@@ -1,0 +1,21 @@
+// An `f"…"` with a file's name in a hole is text where its use asks for text,
+// and the hole is refused there (ADR-319 D4, #2328): as a list item where a
+// `Vec[String]` is asked, and as a `let` whose first use asks for text, never
+// the mismatch of a `Vec[fs::Path]` or an `fs::Path`.
+use std::fs
+
+fn take(s: String) {}
+
+fn many(s: Vec[String]) {}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let dir = tmp.path()
+    many([f"{dir}/p.txt"])
+    let arg = f"{dir}/q.txt"
+    many([arg])
+    let one = f"{tmp.path()}/r.txt"
+    take(one)
+    let all: Vec[String] = [f"{dir}/s.txt"]
+    many(all)
+}

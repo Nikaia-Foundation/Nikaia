@@ -15,6 +15,24 @@ pub(crate) fn check_name_wants_text(want: &Ty) -> bool {
     }
 }
 
+pub(crate) fn check_name_element_wanted(want: &Ty) -> Option<Ty> {
+    match want {
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && !args.is_empty() { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None },
+        Ty::Pointed { item, slice, .. } => { let item = nikaia_std::boxed::open(item); let slice = *slice; if slice { Some(item.clone()) } else { None } },
+        _ => None,
+    }
+}
+
+pub(crate) fn check_name_shown_hole(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr) -> (String, String) {
+    let written = written_expression(world.words, hole);
+    let shown = match hole {
+        Expr::Variable(_, _) => nikaia_std::block::Text::from(written.to_string()),
+        Expr::Field { .. } => nikaia_std::block::Text::from(written.to_string()),
+        _ => format!("({})", written),
+    };
+    (written, shown)
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -91,19 +109,60 @@ impl CheckState {
                 }
                 true
             },
+            Expr::ListLit { items, .. } => {
+                let element = match check_name_element_wanted(want) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let mut answered = false;
+                for item in items.iter() { if self.a_name_in_text(world, &element, Some(item), span) { answered = true; } }
+                answered
+            },
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                if !check_name_wants_text(want) { return false; }
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let holes = match match *nikaia_std::index::get(&self.flow.path_lets, &found.id) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return false };
+                for (written, shown) in holes.iter() { self.a_name_written_in_a_hole(written, shown, span); }
+                true
+            },
             _ => false,
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
-        let written = written_expression(world.words, hole);
-        let shown = match hole {
-            Expr::Variable(_, _) => nikaia_std::block::Text::from(written.to_string()),
-            Expr::Field { .. } => nikaia_std::block::Text::from(written.to_string()),
-            _ => format!("({})", written),
-        };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![], edit: None });
+    pub(crate) fn a_let_of_names_in_holes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, id: i64, value: &Expr) {
+        match value {
+            Expr::LitInterpolated { parts, .. } => {
+                let names = match match *nikaia_std::index::get(&self.facts.path_holes, &(id_of(value) as i64)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return };
+                let mut holes: Vec<(String, String)> = vec![];
+                let mut index: i64 = 0;
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            if index < names.len() as i64 && *unsafe { nikaia_std::proven::read(&names, (index) as usize) } { holes.push(check_name_shown_hole(world, expr)); }
+                            index = index + 1;
+                        },
+                        _ => { },
+                    }
+                }
+                self.flow.path_lets.insert(id, holes);
+            },
+            _ => { },
+        }
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
+        let (written, shown) = check_name_shown_hole(world, hole);
+        self.a_name_written_in_a_hole(&written, &shown, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_name_written_in_a_hole(&mut self, written: &str, shown: &str, span: &Span) { self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![], edit: None }); }
 }
 

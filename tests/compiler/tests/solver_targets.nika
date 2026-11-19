@@ -1,0 +1,52 @@
+// A target of `scripts/solver.nika` that does not exist stops it at once,
+// before the rod is built or any file answered (#2006): the probe
+// `compare --files target/smtlib/ qflra/sal/F.smt2` answered the whole
+// fetched set past twenty minutes, its directory a target of its own. The
+// refusal names the missing path and, where joining it to the argument
+// before it gives one that exists, that path. `oracle` checks its targets the same
+// way, but only after it finds z3, so it is left out here.
+use std::fs
+use std::process
+
+// The running `nikaia`: the nearest ancestor whose executable has that name.
+// `nikaia run` replaces itself with its program, so the compiler is not
+// always the parent (#1305). No path is guessed: without one the test stops
+// and says why.
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain()
+	for args in [["compare", "--files", "tests/solver/", "smoke/sat-interval.smt2"], ["run", "--timeout", "5", "tests/solver/smoke", "tests/solver/no-such.smt2"]] {
+		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
+		for a in args { all.push(a.clone()) }
+		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
+		println(f"solver.nika {args.join(" ")}: exit {out.code}")
+		println(f"stdout: {out.stdout.trim()}")
+		println(out.stderr.trim())
+	}
+}

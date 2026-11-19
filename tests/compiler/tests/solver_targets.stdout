@@ -1,0 +1,7 @@
+solver.nika compare --files tests/solver/ smoke/sat-interval.smt2: exit 2
+stdout: 
+no such file or directory: smoke/sat-interval.smt2
+  did you mean `tests/solver/smoke/sat-interval.smt2`, one argument? `tests/solver/` alone is a target of its own: every file below it
+solver.nika run --timeout 5 tests/solver/smoke tests/solver/no-such.smt2: exit 2
+stdout: 
+no such file or directory: tests/solver/no-such.smt2

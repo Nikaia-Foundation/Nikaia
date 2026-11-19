@@ -12,6 +12,14 @@
 //   nikaia run scripts/solver.nika -- compare [--timeout S] [--instructions] --files DIR|FILE...
 //   nikaia run scripts/solver.nika -- build
 //
+// A target of `run`, `compare` or `oracle` is a whole path: one that does
+// not exist stops the script at once, before any build (#2006). The names
+// `run` prints are below the parent of the directory it was given, so
+// `run target/smtlib/qflra` prints `qflra/sal/F.smt2`, and one file of it is
+// `compare --files target/smtlib/qflra/sal/F.smt2`. Run by hand outside the
+// repository's own build (a `git archive` copy), the script takes its
+// `nikaia` from `$NIKAIA`.
+//
 // `build` builds the program `run` answers with (see `solver_build`) and
 // prints the kept binary's path: CI runs it before the tests (#2023), so the
 // tests that run this script find the binary built and spend their time
@@ -109,12 +117,16 @@ fn solver_toolchain(repo: String) -> String throws {
 		],
 	).stdout.trim().clone()
 	if exe.len() == 0 {
+		// `$NIKAIA` first: a copy of the repository (a `git archive` tree for
+		// an instrumented solver) has no build of its own (#2006).
+		let named = env::var("NIKAIA") ?? ""
+		if named != "" { return named }
 		// Run by hand from a shell (`nikaia run` replaced itself with this
 		// program): the repository's own build, only where it exists (#1305).
 		for built in [f"{repo}/target/fast/nikaia", f"{repo}/target/release/nikaia"] {
 			if fs::exists(built.clone(), fs::Root::Anywhere) { return built }
 		}
-		eprintln(f"no nikaia found: none among this program's ancestors, none in {repo}/target/fast or target/release (#1305)")
+		eprintln(f"no nikaia found: none among this program's ancestors, no `$NIKAIA`, none in {repo}/target/fast or target/release (#1305)")
 		process::exit(2)
 	}
 	return exe
@@ -344,6 +356,32 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	return out
 }
 
+// The `.smt2` files of the targets of `run`, `compare` and `oracle`, after a
+// check that each target exists. A target that does not stops the script
+// before the rod is built or any file answered (#2006): written
+// `target/smtlib/ qflra/sal/F.smt2`, the directory alone was a target of
+// its own and answered the whole fetched set past twenty minutes, while the
+// path meant was the two joined.
+fn solver_targets(targets: Vec[String]) -> Vec[(String, String)] throws {
+	let mut missing = false
+	for k in 0..<targets.len() {
+		let t = targets[k]
+		if fs::exists(t.clone(), fs::Root::Anywhere) { continue }
+		missing = true
+		eprintln(f"no such file or directory: {t}")
+		if k > 0 {
+			let joined = f"{targets[k - 1].trim_end_matches("/")}/{t}"
+			if fs::exists(joined.clone(), fs::Root::Anywhere) {
+				eprintln(f"  did you mean `{joined}`, one argument? `{targets[k - 1]}` alone is a target of its own: every file below it")
+			}
+		}
+	}
+	if missing { process::exit(2) }
+	let mut files: Vec[(String, String)] = []
+	for t in targets { files.extend(solver_files(t)) }
+	return files
+}
+
 // The engine's answer to one file: `answer work`, from the built binary.
 // The work is a count, after a fast path's answer followed by `/` and the
 // path's name; the third part is the work as written.
@@ -512,8 +550,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		let head = if budget > 0 { f"{answering}," } else { f"{engine}:" }
 		answering = f"{head}cases={cases}"
 	}
-	let mut files: Vec[(String, String)] = []
-	for t in targets { files.extend(solver_files(t)) }
+	let files = solver_targets(targets)
 	if files.len() == 0 {
 		println("no .smt2 files")
 		return
@@ -684,14 +721,12 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 	}
 	let rlimit = solver_flag(args.clone(), "--rlimit", solver_rlimit())
 	let mut write = false
-	let mut paths: Vec[String] = []
+	let mut targets: Vec[String] = []
 	for a in solver_plain(args) {
-		if a == "--write" {
-			write = true
-		} else {
-			for (_, p) in solver_files(a) { paths.push(p) }
-		}
+		if a == "--write" { write = true } else { targets.push(a) }
 	}
+	let mut paths: Vec[String] = []
+	for (_, p) in solver_targets(targets) { paths.push(p) }
 	let mut checked = 0
 	let mut disagree = 0
 	let mut unknown = 0
@@ -1743,8 +1778,7 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 		}
 		i += 1
 	}
-	let mut files: Vec[(String, String)] = []
-	for t in targets { files.extend(solver_files(t)) }
+	let files = solver_targets(targets)
 	if files.len() == 0 {
 		println("no .smt2 files")
 		return

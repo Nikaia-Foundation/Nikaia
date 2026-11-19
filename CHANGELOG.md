@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1475] — 2026-11-19
+
+**An f"…" with a file's name in a hole is text where its use asks for text, as a list item or a let's first use (ADR-319 D4) (#2328)**
+- An `f"…"` with a file's name in a hole, used as text as a list item or through a `let`, is refused at the hole with NK1201 (write `.to_text()` or `.display()`), not with a `Vec[fs::Path]` mismatch (ADR-319 D4).
+
+## [0.0.1474] — 2026-11-19
+
+**solver.nika: a target that does not exist stops run, compare and oracle at once, with the joined path as a hint; $NIKAIA names the toolchain of a copy (#2006)**
+- `scripts/solver.nika` stops at once when a target of `run`, `compare` or `oracle` does not exist, and suggests the joined path for `DIR/ FILE` split into two arguments (it used to answer every file under `DIR` first); `$NIKAIA` names the toolchain when the script runs from a copy of the repository.
+
 ## [0.0.1473] — 2026-11-19
 
 **The decisions on what a rule's action may do and how a parse fails live in one record, ADR-grammar-actions-v1 (#2266)**
