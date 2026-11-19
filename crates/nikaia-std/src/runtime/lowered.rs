@@ -31,8 +31,6 @@ use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
-use nikaia_std::process;
-#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
@@ -137,17 +135,6 @@ mod run_config_lowered {
 pub use run_config_lowered::*;
 
 #[allow(unsafe_code)]
-mod shell_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/shell.rs");
-}
-#[allow(unused_imports)]
-pub use shell_lowered::*;
-
-#[allow(unsafe_code)]
 mod target_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -228,15 +215,11 @@ pub mod line_breaks {
 }
 pub mod raw_sinks {
     #[allow(unused_imports)]
-    pub use super::{is_word, is_plain};
+    pub use super::{is_plain};
 }
 pub mod run_config {
     #[allow(unused_imports)]
     pub use super::{Method, Config, ConfigRead, config_default, config_keys, method_named, method_spelled, config_read};
-}
-pub mod shell {
-    #[allow(unused_imports)]
-    pub use super::{shell};
 }
 pub mod target {
     #[allow(unused_imports)]
@@ -306,4 +289,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a420e908d58ae5deff5ab816dcc839c489f891cc16b2908a69619905df510edc";
+pub const LOWERED_DIGEST: &str = "dcffb92689994433d7533b374436898a8abaa97ce64e3868ce801218eea7128b";

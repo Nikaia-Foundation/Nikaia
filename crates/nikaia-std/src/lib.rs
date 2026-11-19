@@ -144,8 +144,8 @@ pub mod text {
 ///
 /// `unnecessary_cast`, as in `tools` below: a proved index at a literal is
 /// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27). `too_many_arguments`
-/// and `useless_conversion`, as there too: `process::shell` takes `run`'s
-/// options, and a `?? default` is lowered `index::or(x, || d.into())` (#1253).
+/// and `useless_conversion`, as there too: a `?? default` is lowered
+/// `index::or(x, || d.into())` (#1253).
 /// `needless_borrow`, as there too: a `Bytes` local is lowered a `&[u8]` and
 /// still handed on and indexed as `&b` (`text_float.nika`, #2024).
 /// `question_mark` and `comparison_to_empty`, as there too: `?? return null`
