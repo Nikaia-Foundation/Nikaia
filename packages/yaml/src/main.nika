@@ -1301,10 +1301,13 @@ pub grammar Yaml {
 	rule PlainChar(flow: bool; after_space: bool = false) =
 		":" peek(PlainSafe(flow)) -> { }
 		| x:any if(plain_char(x, flow, after_space)) -> { }
-	// What may follow inside the scalar: a character, spaces and a
-	// character, or a line break and a further line (`s-ns-plain-next-line`).
+	// What may follow inside the scalar: a run of characters, matched as one
+	// repetition rather than a rule call per character; a `:` a safe
+	// character follows; spaces and a character; or a line break and a
+	// further line (`s-ns-plain-next-line`).
 	rule PlainMore(n: i64, flow: bool, multi: bool) =
-		PlainChar(flow) -> { }
+		(x:any if(plain_char(x, flow, false)))+ -> { }
+		| ":" peek(PlainSafe(flow)) -> { }
 		| (" " | "\t")+ PlainChar(flow; after_space: true) -> { }
 		| if(multi) (" " | "\t")* "\n" Empty* not(Marker) m:count(" ") if(m > n) (" " | "\t")* PlainChar(flow; after_space: true) -> { }
 	rule Empty = (" " | "\t")* "\n" -> { }

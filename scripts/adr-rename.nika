@@ -1,0 +1,315 @@
+// Moves ADR citations to their new record from a table of old and new
+// decisions (#2262; ADR-decision-records-v2 D3, D4: a consolidation moves
+// every live citation of the records it replaces in the same change).
+//
+//     nikaia run scripts/adr-rename.nika -- TABLE [--dry-run] [--root DIR]
+//
+// TABLE holds one mapping per line (blank lines and `#` lines are skipped):
+//
+//     296 D33 -> grammar-syntax-v1 D12     one decision
+//     339 -> grammar-syntax-v1             the whole record
+//
+// The left side names an old record (`296`, `grammar-1`), the right side its
+// new record. A record with a whole line and no decision lines moves whole:
+// its decisions keep their numbers. A record with decision lines moves only
+// the decisions they name, and its whole line, where there is one, moves the
+// citations that name no decision.
+//
+// It rewrites, in the files check-adr-refs.py searches except `docs/history/`
+// and build output, a bare citation with its decisions (`D33`, a list
+// `D33, D34`, a range `D33-D34` or `D33–D34`, after `'s` too) and a link to
+// the record (`[ADR-OLD](adr-OLD.md) D33`, `[OLD](adr-OLD.md) D33`) whose path
+// resolves, from the file it stands in, to `docs/specification/adr/`; a link
+// elsewhere (`../history/adr/`) stays as it is. A list whose decisions all
+// land in one record becomes one citation of it, with the new numbers; a
+// range stays a range where the new numbers follow each other.
+//
+// What it does not rewrite it lists as `file:line: <citation>: <reason>`:
+// decisions that land in different records, a `§` citation, a decision the
+// table does not name, a citation of a whole record the table moves only by
+// decision. The consolidation edits those by hand. It prints one line per
+// changed file with its count of citations, then that list; `--dry-run`
+// prints the same and writes nothing.
+
+use std::cli
+use std::fs
+use std::process
+use std::regex
+use std::text
+
+struct Move {
+    old: String,
+    // 0 for a line that moves the whole record
+    dec: i64,
+    new: String,
+    new_dec: i64,
+}
+
+// Where a citation of OLD's decision DEC goes: the new record and decision,
+// or an empty record where the table does not say.
+struct Target {
+    record: String,
+    dec: i64,
+}
+
+fn rename_table(text: String) -> Vec[Move] throws {
+    let mut out: Vec[Move] = []
+    let side = regex::dynamic("^([a-z0-9][a-z0-9-]*)(?: D([0-9]+))?$")
+    let mut n = 0
+    for raw in text.split("\n") {
+        n += 1
+        let line = raw.trim()
+        if line.len() == 0 || line.starts_with("#") { continue }
+        let halves: Vec[String] = line.split("->").collect()
+        if halves.len() != 2 {
+            eprintln(f"table line {n}: no single `->`: {line}")
+            process::exit(2)
+        }
+        let left = side.captures(halves[0].trim())
+        let right = side.captures(halves[1].trim())
+        if left == null || right == null {
+            eprintln(f"table line {n}: not `OLD [Dn] -> NEW [Dn]`: {line}")
+            process::exit(2)
+            return out
+        }
+        let old = (left.group(1) ?? return out).text().clone()
+        let new = (right.group(1) ?? return out).text().clone()
+        let dec = left.group(2)
+        let new_dec = right.group(2)
+        if (dec == null) != (new_dec == null) {
+            eprintln(f"table line {n}: a decision on one side only: {line}")
+            process::exit(2)
+        }
+        let mut d = 0
+        let mut nd = 0
+        if dec != null {
+            d = text::parse_i64((dec ?? return out).text()) ?? 0
+            nd = text::parse_i64((new_dec ?? return out).text()) ?? 0
+        }
+        out.push(Move { old: old, dec: d, new: new, new_dec: nd })
+    }
+    return out
+}
+
+fn rename_target(table: Vec[Move], old: String, dec: i64) -> Target {
+    let mut whole = String()
+    let mut by_decision = false
+    for m in table {
+        if m.old != old { continue }
+        if m.dec == 0 {
+            whole = m.new.clone()
+        } else {
+            by_decision = true
+            if m.dec == dec { return Target { record: m.new.clone(), dec: m.new_dec } }
+        }
+    }
+    if dec == 0 || !by_decision { return Target { record: whole, dec: dec } }
+    return Target { record: "", dec: 0 }
+}
+
+// Whether FILE (relative to the root) is one check-adr-refs.py searches,
+// outside the history and build output.
+fn rename_searched(file: String) -> bool {
+    if file.starts_with("docs/history/") || file.starts_with("target/") || file.contains("/target/") { return false }
+    if file == "scripts/adr-rename.nika" { return false }
+    if file.starts_with("crates/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with("/Cargo.toml") }
+    for dir in ["tests/", "examples/", "benches/", "scripts/", "editors/"] {
+        if file.starts_with(dir) { return true }
+    }
+    if file.starts_with("docs/") || file.starts_with("guide/") { return file.ends_with(".md") }
+    for name in ["README.md", "manifesto.md", "rust-toolchain.toml", "index.html", "Cargo.toml"] {
+        if file == name { return true }
+    }
+    return file.ends_with("/Cargo.toml")
+}
+
+// The files under DIR (ROOT/DIR; DIR "" for the root itself), relative to ROOT.
+fn rename_walk(root: String, dir: String, mut out: Vec[String]) throws {
+    let mut here = root.clone()
+    if dir.len() > 0 { here = f"{root}/{dir}" }
+    for entry in fs::read_dir(here, fs::Root::Anywhere) {
+        let parts: Vec[String] = entry.to_text().split("/").collect()
+        let name = parts[parts.len() - 1]
+        if name == ".git" || name == "target" { continue }
+        let mut rel = name.clone()
+        if dir.len() > 0 { rel = f"{dir}/{name}" }
+        if fs::metadata(f"{root}/{rel}", fs::Root::Anywhere).is_dir() {
+            rename_walk(root, rel, out)
+        } else if rename_searched(rel) {
+            out.push(rel)
+        }
+    }
+}
+
+// The directory a link's PREFIX (`../specification/adr/`) names from FILE.
+fn rename_resolved(file: String, prefix: String) -> String {
+    let mut parts: Vec[String] = []
+    let segments: Vec[String] = file.split("/").collect()
+    for i in 0..<segments.len() - 1 { parts.push(segments[i].clone()) }
+    for s in prefix.split("/") {
+        if s.len() == 0 || s == "." { continue }
+        if s == ".." {
+            if parts.len() == 0 { return "" }
+            parts.pop()
+        } else {
+            parts.push(s.clone())
+        }
+    }
+    let mut out = String()
+    for p in parts {
+        if out.len() > 0 { out.push_str("/") }
+        out.push_str(p)
+    }
+    return out
+}
+
+// The new decisions written as a citation's tail: a range where the old one
+// was a range (DASH) and the new numbers follow each other, else a list.
+fn rename_decisions(decs: Vec[i64], dash: String) -> String {
+    let mut follows = decs.len() > 1
+    for i in 1..<decs.len() {
+        if decs[i] != decs[i - 1] + 1 { follows = false }
+    }
+    if dash.len() > 0 && follows { return f"D{decs[0]}{dash}D{decs[decs.len() - 1]}" }
+    let mut out = String()
+    for d in decs {
+        if out.len() > 0 { out.push_str(", ") }
+        out.push_str(f"D{d}")
+    }
+    return out
+}
+
+// The text a citation becomes, or `!` and the reason it stays.
+fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic], item: regex::Regex[regex::Dynamic], cited: String) -> String throws {
+    let caps = whole.captures(cited) ?? return "!not a citation"
+    let bare = caps.named("bare")
+    let old = (bare ?? caps.named("fname") ?? return "!").text().clone()
+    let mut prefix: String = ""
+    let mut label: String = ""
+    if bare == null {
+        prefix = (caps.named("path") ?? return "!").text().clone()
+        label = (caps.named("label") ?? return "!").text().clone()
+        // A link to the record elsewhere, the history's copy, stays.
+        if rename_resolved(file, prefix) != "docs/specification/adr" { return "" }
+    }
+    if caps.named("sect") != null { return "!a § citation" }
+    let mut poss: String = ""
+    if caps.named("poss") != null { poss = "'s" }
+    let mut decs: Vec[i64] = []
+    let mut dash: String = ""
+    let tail = caps.named("tail")
+    if tail != null {
+        for one in item.find_all((tail ?? return "!").text()) {
+            let parts = item.captures(one.text()) ?? return "!"
+            let first = text::parse_i64((parts.group(1) ?? return "!").text()) ?? 0
+            let mut last = first
+            let to = parts.group(3)
+            if to != null {
+                last = text::parse_i64((to ?? return "!").text()) ?? 0
+                dash = (parts.group(2) ?? return "!").text().clone()
+            }
+            for d in first..<last + 1 { decs.push(d) }
+        }
+    }
+    let mut record: String = ""
+    let mut moved: Vec[i64] = []
+    if decs.len() == 0 {
+        let t = rename_target(table, old, 0)
+        if t.record.len() == 0 { return "!the table moves this record only by decision" }
+        record = t.record.clone()
+    }
+    for d in decs {
+        let t = rename_target(table, old, d)
+        if t.record.len() == 0 { return f"!D{d} is not in the table" }
+        if record.len() > 0 && record != t.record { return f"!the decisions land in different records ({record}, {t.record})" }
+        record = t.record.clone()
+        moved.push(t.dec)
+    }
+    let mut out = f"ADR-{record}"
+    if bare == null {
+        let mut shown = record.clone()
+        if label.starts_with("ADR-") { shown = f"ADR-{record}" }
+        out = f"[{shown}]({prefix}adr-{record}.md)"
+    }
+    out.push_str(poss)
+    if moved.len() > 0 { out.push_str(f" {rename_decisions(moved, dash)}") }
+    return out
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut table_file: String = ""
+    let mut root: String = "."
+    let mut dry = false
+    let mut k = 0
+    while k < args.len() {
+        if args[k] == "--dry-run" {
+            dry = true
+        } else if args[k] == "--root" && k + 1 < args.len() {
+            root = args[k + 1].clone()
+            k += 1
+        } else {
+            table_file = args[k].clone()
+        }
+        k += 1
+    }
+    if table_file.len() == 0 {
+        eprintln("usage: nikaia run scripts/adr-rename.nika -- TABLE [--dry-run] [--root DIR]")
+        process::exit(2)
+    }
+    let table = rename_table(fs::read_to_string(table_file, fs::Root::Anywhere))
+    if table.len() == 0 { return }
+    let mut names = String()
+    for m in table {
+        if names.len() > 0 { names.push_str("|") }
+        names.push_str(m.old)
+    }
+    let pattern = f"(?:\\[(?P<label>(?:ADR-)?(?:{names}))\\]\\((?P<path>[^)\\s]*?)adr-(?P<fname>{names})\\.md\\)|ADR-(?P<bare>{names})\\b)(?P<poss>'s)?(?P<tail> D[0-9]+(?:(?:, ?| ?[-–] ?)D[0-9]+)*)?(?P<sect> ?§[0-9]+(?:\\.[0-9]+)*)?"
+    let found = regex::dynamic(pattern)
+    let whole = regex::dynamic(f"^(?:{pattern})$")
+    let item = regex::dynamic("D([0-9]+)(?: ?([-–]) ?D([0-9]+))?")
+    let mut files: Vec[String] = []
+    rename_walk(root, "", files)
+    files.sort()
+    let mut listed: Vec[String] = []
+    for file in files {
+        let path = f"{root}/{file}"
+        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere) catch { continue }
+        if !found.is_match(text) { continue }
+        let mut out = String()
+        let mut count = 0
+        let mut n = 0
+        let mut first = true
+        for line in text.split("\n") {
+            n += 1
+            if !first { out.push_str("\n") }
+            first = false
+            // The pieces between the citations, and the citations, in turn.
+            let pieces: Vec[String] = found.split(line).collect()
+            let mut i = 0
+            for m in found.find_all(line) {
+                out.push_str(pieces[i])
+                i += 1
+                let cited = m.text().clone()
+                let now = rename_one(table, file, whole, item, cited.clone())
+                if now.starts_with("!") {
+                    let why = now.strip_prefix("!") ?? ""
+                    listed.push(f"{file}:{n}: {cited}: {why}")
+                    out.push_str(cited)
+                } else if now.len() == 0 || now == cited {
+                    out.push_str(cited)
+                } else {
+                    count += 1
+                    out.push_str(now)
+                }
+            }
+            out.push_str(pieces[i])
+        }
+        if count > 0 {
+            println(f"{file}: {count}")
+            if !dry { fs::write(path, fs::Root::Anywhere, out) }
+        }
+    }
+    for l in listed { println(l) }
+}

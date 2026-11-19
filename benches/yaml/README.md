@@ -11,7 +11,7 @@ the tuned Rust YAML libraries, at three levels:
 
 ## The table
 
-Nikaia at `a3c121c41` (0.0.1424), rustc 1.97.0, serde_yaml 0.9.34 over
+Nikaia at `c06fa0aa`, rustc 1.97.0, serde_yaml 0.9.34 over
 unsafe-libyaml 0.2.11, saphyr and saphyr-parser 0.0.6; an Intel Xeon at
 2.10 GHz; large input 10 MB. Millions of instructions and of mispredicted
 branches; the last column is the instructions with checks off over those of
@@ -19,37 +19,37 @@ the fastest Rust program of the row's input.
 
 | input | program | instructions, checks on | mispredicted, on | instructions, checks off | mispredicted, off | off / fastest Rust |
 |---|---|---:|---:|---:|---:|---:|
-| small | yaml::events | 1.0 | 0.0 | 0.9 | 0.0 | 1.52 |
+| small | yaml::events | 1.2 | 0.0 | 1.1 | 0.0 | 1.79 |
 | small | unsafe-libyaml | 0.7 | 0.0 | 0.7 | 0.0 | 1.10 |
 | small | saphyr-parser | 0.6 | 0.0 | 0.6 | 0.0 | 1.00 |
-| large | yaml::events | 6030.3 | 43.6 | 5479.2 | 42.8 | 1.80 |
+| large | yaml::events | 8852.0 | 63.8 | 7873.6 | 50.9 | 2.59 |
 | large | unsafe-libyaml | 3537.4 | 23.8 | 3562.5 | 22.5 | 1.17 |
 | large | saphyr-parser | 3142.4 | 24.5 | 3040.4 | 21.9 | 1.00 |
-| deep | yaml::events | 197.6 | 0.5 | 177.8 | 0.5 | 2.20 |
+| deep | yaml::events | 384.5 | 0.9 | 340.3 | 0.7 | 4.20 |
 | deep | unsafe-libyaml | 191.1 | 0.3 | 188.6 | 0.3 | 2.33 |
 | deep | saphyr-parser | 88.3 | 0.2 | 80.9 | 0.2 | 1.00 |
-| scalars | yaml::events | 231.1 | 1.3 | 221.3 | 1.2 | 1.42 |
+| scalars | yaml::events | 293.0 | 1.5 | 278.3 | 1.4 | 1.79 |
 | scalars | unsafe-libyaml | 363.6 | 0.3 | 378.4 | 0.3 | 2.43 |
 | scalars | saphyr-parser | 162.8 | 0.3 | 155.6 | 0.3 | 1.00 |
-| suite | yaml::events | 15.5 | 0.2 | 14.6 | 0.2 | 2.78 |
-| suite | unsafe-libyaml | 6.5 | 0.1 | 6.6 | 0.1 | 1.25 |
+| suite | yaml::events | 20.1 | 0.3 | 18.5 | 0.2 | 3.52 |
+| suite | unsafe-libyaml | 6.6 | 0.1 | 6.6 | 0.1 | 1.25 |
 | suite | saphyr-parser | 5.4 | 0.1 | 5.3 | 0.1 | 1.00 |
-| small | yaml::load | 1.0 | 0.0 | 1.0 | 0.0 | 1.38 |
+| small | yaml::load | 1.2 | 0.0 | 1.1 | 0.0 | 1.56 |
 | small | serde_yaml::Value | 0.8 | 0.0 | 0.8 | 0.0 | 1.20 |
 | small | saphyr::Yaml | 0.7 | 0.0 | 0.7 | 0.0 | 1.00 |
-| large | yaml::load | 6264.8 | 49.0 | 5754.0 | 43.3 | 1.42 |
+| large | yaml::load | 8550.6 | 58.4 | 7629.8 | 52.0 | 1.88 |
 | large | serde_yaml::Value | 5756.9 | 39.3 | 5769.3 | 36.3 | 1.42 |
 | large | saphyr::Yaml | 4410.3 | 34.1 | 4054.4 | 30.9 | 1.00 |
-| deep | yaml::load | 204.2 | 0.6 | 184.9 | 0.5 | 1.55 |
+| deep | yaml::load | 382.5 | 0.9 | 339.1 | 0.7 | 2.84 |
 | deep | serde_yaml::Value | 240.0 | 0.4 | 237.3 | 0.3 | 1.99 |
 | deep | saphyr::Yaml | 130.9 | 0.3 | 119.5 | 0.3 | 1.00 |
-| scalars | yaml::load | 234.3 | 1.3 | 221.3 | 1.2 | 1.50 |
+| scalars | yaml::load | 290.8 | 1.5 | 277.9 | 1.4 | 1.89 |
 | scalars | serde_yaml::Value | 356.2 | 0.4 | 370.9 | 0.4 | 2.52 |
 | scalars | saphyr::Yaml | 165.5 | 0.6 | 147.1 | 0.4 | 1.00 |
-| suite | yaml::load | 14.8 | 0.2 | 13.9 | 0.2 | 2.36 |
+| suite | yaml::load | 18.8 | 0.2 | 17.3 | 0.2 | 2.93 |
 | suite | serde_yaml::Value | 8.7 | 0.1 | 8.7 | 0.1 | 1.47 |
 | suite | saphyr::Yaml | 6.4 | 0.1 | 5.9 | 0.1 | 1.00 |
-| large | nikaia_yaml::from_str | 5327.8 | 36.5 | 4731.6 | 37.0 | 1.15 |
+| large | nikaia_yaml::from_str | 8147.3 | 53.0 | 7262.3 | 48.4 | 1.77 |
 | large | serde_yaml::from_str | 4085.5 | 26.4 | 4107.7 | 24.9 | 1.00 |
 
 | program | tokens |
@@ -70,11 +70,12 @@ package's conformance is `packages/yaml/tests`, not this table).
 
 ## Where yaml is behind
 
-yaml is behind saphyr on every row: 1.8 to 2.2 times saphyr-parser's
-instructions for the events on large and deep, 1.4 on scalars, 1.4 to 1.6
-times saphyr's for a tree, 1.15 times serde_yaml for typed records; it is
-ahead of unsafe-libyaml on deep and scalars and level with serde_yaml::Value
-on large. #1548 asks for at most 1.5 times saphyr-parser on the events; its
+yaml is behind saphyr on every row: 2.6 times saphyr-parser's instructions
+for the events on large, 4.2 on deep, 1.8 on scalars, 1.9 to 2.8 times
+saphyr's for a tree, 1.8 times serde_yaml for typed records; it is ahead of
+unsafe-libyaml only on scalars. Large and deep lost ground since 0.0.1424
+(5,479 and 178 million for the events then), which the edge tracking below
+explains. #1548 asks for at most 1.5 times saphyr-parser on the events; its
 causes, from `callgrind_annotate` of the
 inputs at a tenth, checks off:
 
@@ -101,11 +102,25 @@ inputs at a tenth, checks off:
   and from 6,857 to 5,754 million for a tree (1.42 times saphyr);
   `list::chars` (243 million) and a third of `malloc` / `free` went,
   `from_utf8` of the slices' `text()` grew by 53 million.
-* **Per character in the grammar**: open. Plain scalars go through
-  `parse_PlainChar` a character at a time, where saphyr scans a run of
-  bytes; the grammar macro now scopes a label in a repeated group for its
-  guard (#1561), so a guarded repetition over a run can be written; the
-  package does not use it yet.
+* **Per character in the grammar**: fixed (#1548). `PlainMore` takes a
+  run of plain characters as one guarded repetition (#1561), not a
+  `parse_PlainChar` call per character; scalars went from 282.8 to 278.3
+  million (events, checks off), deep and large barely moved: the cost per
+  character is now the guard and the edge tracking below, not the call.
+* **Edge tracking of the `@stream` entry**: open. Since `Yaml::events`
+  (#1443) the grammar has a `@stream` rule, and winnow-grammar then wraps
+  every parser of the grammar in `rt::edge_reach` (its ADR 27 §3), the
+  parse `yaml::documents` drives too: deep went from 177.8 to 340.8 million
+  (events, checks off), and the same package without the `@stream` entry
+  counts 186.2 million, output byte-identical; `edge_reach` is 26 % of deep
+  and 9 % of large (its own instructions; `malloc` and `free` are 16 %,
+  `from_utf8` 3 %).
+* **The streaming entry itself**: `for e in yaml::Yaml::events(input)`
+  prints the same events at 40,360 million on deep and 5,464 million on
+  scalars, against 340 and 278 million through `documents` and `events`;
+  the stream's driver parses the rule's prefix again in its diagnosing pass
+  (`Stream::record_chunk`, 98 %), and the prefix holds the whole first
+  document. The bench keeps `documents` and `events` until that is fixed.
 
 The typed row is the tree row: `nikaia_yaml::from_str` counts 4,732 million
 against `yaml::load`'s 5,754 million on the same input, so the gap is the
