@@ -1,0 +1,44 @@
+crates/a/src/lib.rs: 2
+docs/notes.md: 7
+docs/specification/adr/adr~903.md: 3
+docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
+docs/notes.md:7: ADR~901 §2: a § citation
+docs/notes.md:8: ADR~901 D9: D9 is not in the table
+exit 0
+--- docs/notes.md
+One: ADR~901 D3.
+List: ADR~901 D3, D4.
+Range: ADR~901 D3-D4, ADR~901 D3–D4.
+Own: ADR~901's D4.
+Whole: ADR~902, and ADR~902 D6.
+Split: ADR~901 D3, D5.
+Section: ADR~901 §2.
+Unknown: ADR~901 D9.
+History: [ADR~901](../docs/history/adr/adr~901.md) D3.
+Astray: [ADR~901](adr~901.md) D3.
+crates/a/src/lib.rs: 2
+docs/notes.md: 7
+docs/specification/adr/adr~903.md: 3
+docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
+docs/notes.md:7: ADR~901 §2: a § citation
+docs/notes.md:8: ADR~901 D9: D9 is not in the table
+exit 0
+--- docs/notes.md
+One: ADR~moved-v1 D1.
+List: ADR~moved-v1 D1, D2.
+Range: ADR~moved-v1 D1-D2, ADR~moved-v1 D1–D2.
+Own: ADR~moved-v1's D2.
+Whole: ADR~moved-v1, and ADR~moved-v1 D6.
+Split: ADR~901 D3, D5.
+Section: ADR~901 §2.
+Unknown: ADR~901 D9.
+History: [ADR~901](../docs/history/adr/adr~901.md) D3.
+Astray: [ADR~901](adr~901.md) D3.
+--- docs/specification/adr/adr-903.md
+Links: [ADR~moved-v1](adr~moved-v1.md) D1, [moved-v1](adr~moved-v1.md) D2, [moved-v1](adr~moved-v1.md).
+--- crates/a/src/lib.rs
+// ADR~moved-v1 D2 and ADR~other-v1 D7
+--- docs/history/adr/README.md
+ADR~901 D3 is archived.
+--- src/main.nika
+// ADR~901 D3 outside the searched files

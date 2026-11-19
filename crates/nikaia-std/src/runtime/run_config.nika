@@ -1,0 +1,187 @@
+// crates/nikaia-std/src/runtime/run_config.nika
+//
+// **The runtime configuration file's four settings, out of its text**
+// ([ADR-303](../../../../docs/specification/adr/adr-303.md) D5), written in
+// Nikaia. `src/rt/config.rs` keeps what touches the machine: where the file
+// is (`FILE`, `PATH_VAR`, `path`) and reading it (`load`), and hands the text
+// to `config_read` here; `src/rt/mod.rs` reads the fields of the `Config` it
+// gets back and matches its `Method` (ADR-rust-boundary-1 D16, D17).
+//
+// A hand-written reader rather than a TOML library, and that is a decision:
+// the runtime is linked into every program, and four `key = value` lines are
+// not worth a parser in every binary. The shape it accepts is the shape the
+// documented file has: comments, blank lines, and `key = value` with an
+// optionally quoted value.
+
+use std::text
+use std::time
+
+/// Which mechanism serves a file operation (ADR-303 D3).
+pub enum Method {
+    /// Feature-detect at startup: completion where the machine has it,
+    /// blocking where it does not. Never a compile-time decision: a binary
+    /// built on a machine with `io_uring` still runs on one without.
+    Auto,
+    /// Pinned to completion. Refuses to start where there is none.
+    Uring,
+    /// Pinned to the blocking path, whatever the machine offers.
+    Blocking,
+}
+
+/// The four settings, resolved.
+pub struct Config {
+    /// How many I/O threads run. At least one: ADR-303 D4 says one always
+    /// starts.
+    io_workers: i64,
+    /// How large the pool for user code is at `user_parallelism = yes`. `0`
+    /// means as many as the machine has, which is not the same as a count
+    /// somebody typed. Read at every setting and ignored at `no`: a file that
+    /// silently drops a key the operator wrote is worse than one that reads a
+    /// key it will not use.
+    user_pool: i64,
+    /// Which mechanism serves a file.
+    io_method: Method,
+    /// How long shutdown drains (ADR-297 D6). No time disables draining.
+    cleanup_deadline: time::Duration,
+}
+
+/// What `config_read` hands back: the settings, or why the text is not a
+/// configuration (`refused`, empty where it is one).
+pub struct ConfigRead {
+    config: Config,
+    refused: String,
+}
+
+/// The settings of a file nobody wrote: one I/O thread (ADR-303 D4), a pool
+/// as large as the machine, `auto`, and ADR-297 D6's generous 30 seconds.
+pub fn config_default() -> Config sync {
+    return Config { io_workers: 1, user_pool: 0, io_method: Method::Auto, cleanup_deadline: 30.seconds() }
+}
+
+/// The keys the file may carry. A key outside them is a typo until proven
+/// otherwise, and saying so beats a setting that silently stayed at its
+/// default, as `nikaia.toml`'s `[build]` says it.
+pub fn config_keys() -> Vec[String] sync {
+    return ["io-workers", "user-pool", "io-method", "cleanup-deadline"]
+}
+
+/// The mechanism an operator's word names, or nothing.
+pub fn method_named(word: String) -> Method? sync {
+    if word == "auto" {
+        return Method::Auto
+    }
+    if word == "uring" {
+        return Method::Uring
+    }
+    if word == "blocking" {
+        return Method::Blocking
+    }
+    return null
+}
+
+/// The word an operator writes for `method`, for a report that has to name
+/// it back.
+pub fn method_spelled(method: Method) -> String sync {
+    return match method {
+        Method::Auto => "auto",
+        Method::Uring => "uring",
+        Method::Blocking => "blocking",
+    }
+}
+
+/// A count, as `io-workers` and `user-pool` take it: digits, nothing below
+/// zero.
+fn config_count(value: String) -> i64? sync {
+    let n = text::parse_i64(value) ?? return null
+    if n < 0 {
+        return null
+    }
+    return n
+}
+
+/// `30s`, `500ms`, `2m` or a bare number of seconds. `0` disables draining,
+/// ADR-297 D6's own word for it.
+fn config_deadline(value: String) -> time::Duration? sync {
+    if value.ends_with("ms") {
+        let n = config_count(value.strip_suffix("ms") ?? "") ?? return null
+        return n.millis()
+    }
+    if value.ends_with("s") {
+        let n = config_count(value.strip_suffix("s") ?? "") ?? return null
+        return n.seconds()
+    }
+    if value.ends_with("m") {
+        let n = config_count(value.strip_suffix("m") ?? "") ?? return null
+        return n.minutes()
+    }
+    let n = config_count(value) ?? return null
+    return n.seconds()
+}
+
+/// The text refused at line `number`, the settings left as they were.
+fn config_refused(number: i64, why: String) -> ConfigRead sync {
+    return ConfigRead { config: config_default(), refused: f"line {number}: {why}" }
+}
+
+/// The four settings, out of the text of the file.
+pub fn config_read(text: String) -> ConfigRead sync {
+    let keys = config_keys()
+    let listed = keys.join(", ")
+    let mut config = config_default()
+    let mut number = 0
+    for whole in text.lines() {
+        number += 1
+        let (before, _) = whole.split_once("#") ?? (whole, "")
+        let line = before.trim()
+        if line.is_empty() {
+            continue
+        }
+        let (named, written) = line.split_once("=") ?? return config_refused(number, f"`{line}` is not `key = value` (the file has four keys: {listed})")
+        let key = named.trim()
+        let value = written.trim().trim_start_matches("\"").trim_end_matches("\"")
+        if key == "io-workers" {
+            let n = config_count(value) ?? return config_refused(number, f"`{key}` is `{value}`, which is not a count")
+            if n == 0 {
+                return config_refused(number, "`io-workers` is 0, and one I/O thread always runs (ADR-303 D4)")
+            }
+            config.io_workers = n
+        } else if key == "user-pool" {
+            config.user_pool = config_count(value) ?? return config_refused(number, f"`{key}` is `{value}`, which is not a count")
+        } else if key == "io-method" {
+            config.io_method = method_named(value) ?? return config_refused(number, f"`io-method` is `{value}`, which names no mechanism (expected auto, uring or blocking)")
+        } else if key == "cleanup-deadline" {
+            config.cleanup_deadline = config_deadline(value) ?? return config_refused(number, f"`cleanup-deadline` is `{value}`, which is not a duration (expected `30s`, `500ms`, `2m` or `0`)")
+        } else {
+            return config_refused(number, f"unknown key `{key}` (expected one of: {listed})")
+        }
+    }
+    return ConfigRead { config: config, refused: "" }
+}
+
+test "nothing written is the documented defaults" {
+    let read = config_read("")
+    assert(read.refused == "")
+    assert(read.config.io_workers == 1)
+    assert(read.config.user_pool == 0)
+    assert(read.config.io_method == Method::Auto)
+    assert(read.config.cleanup_deadline == 30.seconds())
+}
+
+test "a duration takes seconds, thousandths and minutes" {
+    assert(config_read("cleanup-deadline = \"30s\"\n").config.cleanup_deadline == 30.seconds())
+    assert(config_read("cleanup-deadline = \"0\"\n").config.cleanup_deadline == 0.seconds())
+    assert(config_read("cleanup-deadline = \"250ms\"\n").config.cleanup_deadline == 250.millis())
+    assert(config_read("cleanup-deadline = \"2m\"\n").config.cleanup_deadline == 120.seconds())
+    assert(config_read("cleanup-deadline = \"45\"\n").config.cleanup_deadline == 45.seconds())
+    assert(config_read("cleanup-deadline = \"soon\"\n").refused != "")
+}
+
+test "the file knows four keys and no others" {
+    let keys = config_keys()
+    assert(keys.contains("io-workers"))
+    assert(keys.contains("user-pool"))
+    assert(keys.contains("io-method"))
+    assert(keys.contains("cleanup-deadline"))
+    assert(!keys.contains("ordering"))
+    assert(!keys.contains("user-parallelism"))
+}

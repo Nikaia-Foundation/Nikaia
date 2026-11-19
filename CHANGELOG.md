@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1466] — 2026-11-19
+
+**A tool moves ADR citations to their new record from a table of old and new decisions (scripts/adr-rename.nika) (#2262)**
+- New `scripts/adr-rename.nika`: a consolidation writes a table of old and new decisions, and the tool moves every live ADR citation and link, listing what it must leave for hand editing.
+
+## [0.0.1465] — 2026-11-19
+
+**benches/yaml: the table and the causes after the walk and properties fixes**
+- yaml: events 2.2-2.7x saphyr-parser (deep 5.4 -> 2.5) — the event walk appends to one list and a node's properties are read once; text tiers: a field read off a grammar rule's struct value keeps its tier
+
+## [0.0.1464] — 2026-11-19
+
+**Builders' changes (#2211, #2253, #2256)**
+- The runtime configuration file's four settings are read by Nikaia code (`runtime/run_config.nika`); its Rust unit tests are `test` blocks that `nikaia test --std` runs (#2211).
+- Driver: when a conflicted merge fails to re-lower from their side of the lowered files, it tries again from our side before it escalates (#2253)
+- The driver's merge re-lowers a conflict in the runtime's lowered files: the lowered directories are read from the tree (every crates/nikaia-std/src/<part>/lowered), not only the compiler's, so such a conflict no longer aborts the merge as a source conflict.
+
 ## [0.0.1463] — 2026-11-19
 
 **Builders' changes**

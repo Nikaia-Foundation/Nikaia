@@ -17,6 +17,8 @@
 // A package's alias is resolved by the compiler too (`unaliased`, ADR-286 D12),
 // because the manifest key is the only name the declaration has.
 
+use std::collections
+
 /// What the walk has met so far, and whether it was asked for names.
 struct Walked {
     seen: Vec[Seen],
@@ -464,4 +466,47 @@ fn a_named_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
         })
     }
     found.seen.push(Seen::Call { name: name, wrote: wrote, span: span.clone(), literals: literals, trusted: says_trusted(names, config) })
+}
+
+/// **The calls into the package's own Rust that no entry may answer**
+/// (ADR-rust-boundary-1 D24-D27), among `written`, each qualified name the
+/// unit writes beside its statement's span: a name under one of `own`'s
+/// heads with no entry in `contracts/crate.contracts` is `NK2504`, once per
+/// item, and so is one whose entry says `pub = true` (D26); and where a Rust
+/// file moved since the entries were reviewed, the first call is `NK2505`.
+/// Each names `nikaia describe crate`.
+pub fn foreign_own_refused(written: ref Vec[(String, Span)], own: ref ProjectMembersOwnRust) -> Vec[CheckFinding] {
+    let mut out: Vec[CheckFinding] = []
+    if own.heads.is_empty() {
+        return out
+    }
+    let mut met: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut stale = own.moved.is_empty()
+    for (name, span) in written {
+        let head = name.split("::").next() ?? continue
+        if head == name || !own.heads.contains(head) || met.contains(name) {
+            continue
+        }
+        met.insert(name.clone())
+        if own.published.contains(name) {
+            let notes: Vec[String] = ["What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them."]
+            out.push(check_refusal("NK2504", span, f"`{name}` is described with `pub = true`, and the package's own Rust stays the package's.", notes, "Write `pub = false` in its entry in `contracts/crate.contracts`."))
+            continue
+        }
+        if !own.described.contains(name) {
+            let notes: Vec[String] = ["Nikaia needs to know what a Rust function does: whether it pauses, can fail, reaches locks, or moves values between threads.", "`nikaia describe crate` drafts entries for the package's own Rust that its Nikaia code calls, for you to review and commit as `contracts/crate.contracts`."]
+            out.push(check_refusal("NK2504", span, f"`{name}` is the package's own Rust and has no description yet.", notes, "Run `nikaia describe crate`."))
+            continue
+        }
+        if !stale {
+            stale = true
+            let which = match own.moved.len() {
+                1 => f"`{own.moved[0]}`",
+                n => f"{n} files, among them `{own.moved[0]}`",
+            }
+            let notes: Vec[String] = [f"`contracts/crate.contracts` describes an older version of the package's Rust: {which} changed since.", "A description is written by a person, so it has to be reviewed again, not just regenerated."]
+            out.push(check_refusal("NK2505", span, "The package's own Rust has changed since its description was reviewed.", notes, "Run `nikaia describe crate` and review the diff before committing it."))
+        }
+    }
+    return out
 }

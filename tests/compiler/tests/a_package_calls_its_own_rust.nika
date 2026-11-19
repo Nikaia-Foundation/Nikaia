@@ -1,0 +1,51 @@
+// A package with Rust of its own calls it from its Nikaia code
+// (ADR-rust-boundary-1 D24-D27, #2233): `nikaia check` reads
+// `contracts/crate.contracts` for `words::twice` and passes; a call no entry
+// covers is `NK2504`, once per item; an entry saying `pub = true` is refused
+// (D26); and a Rust file that moved since the entries were reviewed is
+// `NK2505`. Each names `nikaia describe crate`.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn checked(nikaia: String, tmp: String, case: String) throws {
+    let ran = process::run(nikaia, ["check", "src/demo.nika"]; dir: f"{tmp}/demo")
+    println(f"--- {case}: exit {ran.code}")
+    print(ran.stdout.replace(tmp, "TMP"))
+    print(ran.stderr.replace(tmp, "TMP"))
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/demo", tmp.clone()])
+    let demo = f"{tmp}/demo"
+    checked(nikaia.clone(), tmp.clone(), "described")
+    let source = fs::read_to_string(f"{demo}/src/demo.nika", fs::Root::Anywhere)
+    let nine: String = "\n/// Nine times: `words::thrice` has no entry.\npub fn nine(x: i64) -> i64 sync {\n    return words::thrice(words::thrice(x))\n}\n"
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"{source}{nine}")
+    checked(nikaia.clone(), tmp.clone(), "no entry")
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, source)
+    let entries = fs::read_to_string(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere)
+    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, entries.replace("pub = false", "pub = true"))
+    checked(nikaia.clone(), tmp.clone(), "pub = true")
+    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, entries)
+    let rust = fs::read_to_string(f"{demo}/rust/words.rs", fs::Root::Anywhere)
+    fs::write(f"{demo}/rust/words.rs", fs::Root::Anywhere, f"{rust}\n// Changed since the review.\n")
+    checked(nikaia, tmp.clone(), "moved")
+    process::run("rm", ["-rf", tmp])
+}

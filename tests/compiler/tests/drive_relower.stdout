@@ -30,9 +30,11 @@ old
 
 local
 == lowering fails
-MERGE timing build Ns, round 1 build Ns, lower-std Ns, total Ns
-ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
-WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
+MERGE re-lowering from theirs failed (lower-std), trying ours
+
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, ours, build Ns, round 1 build Ns, lower-std Ns, total Ns
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std from theirs, lower-std from ours), merge aborted
+WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std from theirs, lower-std from ours), merge aborted
 exit ok: false
 ours
 1
@@ -155,4 +157,59 @@ base
 theirs-side
 pub const LOWERED_DIGEST: &str = "round 2";
 a.nika b.nika 
+local
+== runtime index only
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
+MERGE SHA re-lowered crates/nikaia-std/src/runtime/lowered.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
+crates/nikaia-std/src/runtime/lowered.rs
+base
+theirs-side
+index
+2
+a.nika b.nika 
+local
+== theirs fails, ours builds
+error[E0603]: function `file` is private
+MERGE re-lowering from theirs failed (the build of the re-lowered files), trying ours
+MERGE timing build Ns, old lower-std Ns, round 1 build Ns, ours, build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
+MERGE SHA re-lowered from ours crates/nikaia-std/src/compiler/lowered/a.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
+base
+theirs-side
+index
+a.nika b.nika 
+local
+== both sides fail
+error: broken
+MERGE re-lowering from theirs failed (the build of the re-lowered files), trying ours
+error: broken
+MERGE timing build Ns, old lower-std Ns, round 1 build Ns, ours, build Ns, old lower-std Ns, round 1 build Ns, total Ns
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (the build of the re-lowered files from theirs, the build of the re-lowered files from ours), merge aborted
+WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (the build of the re-lowered files from theirs, the build of the re-lowered files from ours), merge aborted
+exit ok: false
+ours
+1
+no merge open
+ M notes.txt
+crates/nikaia-std/src/compiler/lowered/a.rs
+ours.txt
+ours
+index
+old
+
 local
