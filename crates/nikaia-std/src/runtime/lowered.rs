@@ -134,6 +134,17 @@ mod line_breaks_lowered {
 pub use line_breaks_lowered::*;
 
 #[allow(unsafe_code)]
+mod meta_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/meta.rs");
+}
+#[allow(unused_imports)]
+pub use meta_lowered::*;
+
+#[allow(unsafe_code)]
 mod paths_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -257,6 +268,10 @@ pub mod line_breaks {
     #[allow(unused_imports)]
     pub use super::{LineBreaks, line_breaks};
 }
+pub mod meta {
+    #[allow(unused_imports)]
+    pub use super::{Access};
+}
 pub mod paths {
     #[allow(unused_imports)]
     pub use super::{is_component, is_below, root_join, root_path};
@@ -341,4 +356,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4ac6d4e3365ba2a7ac328d7d42aa832d3c2e65a47bf490d439ed896f4f03f119";
+pub const LOWERED_DIGEST: &str = "799c5f97dfa9913e5112a0fa5691f3255ae8964f5558b7a8b43adb0ac056f052";
