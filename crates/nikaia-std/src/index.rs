@@ -1030,8 +1030,7 @@ pub trait GivenText {
 impl GivenText for crate::block::Text {
     #[inline]
     fn given(mut self, (start, end): (usize, usize)) -> crate::block::Text {
-        self.truncate(end);
-        self.drain(..start);
+        self.keep_only(start, end);
         self
     }
 
