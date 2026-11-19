@@ -595,14 +595,58 @@ pub trait ComptimeComputeHost {
     fn leave_ahead(&self, bound: &str);
     fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<BuildValue>;
     fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &BuildValue);
+    fn value_key(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> String;
+    fn user_cache_dir(&self) -> fs::Path;
+    fn use_entry(&self, at: &std::path::Path);
+    fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
     fn comptimes_of(&self, at: i64) -> Vec<ComptimeDeclared>;
     fn folded(&self, at: i64, value: &Expr, known: &mut impl FnMut(&str) -> Option<BuildValue>) -> Option<BuildValue>;
     fn ty_of(&self, at: i64, written: &Type) -> Ty;
 }
 
+pub async fn comptime_value_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut impl FnMut(&str) -> Option<BuildValue>, typed: &mut impl FnMut(&str) -> Option<Ty>) -> CheckComputed {
+    match host.remembered(here, bound, value, ty) {
+        None => { },
+        Some(value) => { return CheckComputed::Value(value); },
+    }
+    let mut answered: String = String::from("");
+    let key = host.value_key(here, bound, value, ty);
+    if key.is_empty() { return comptime_computed(host, here, bound, value, ty, &mut *known, &mut *typed, &mut answered); }
+    let bytes: Vec<u8> = key.bytes().collect::<Vec<_>>();
+    let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(host.user_cache_dir()), std::path::Path::new(&(COMPTIME_VALUE_DIR)))), std::path::Path::new(&(hash::sha256_hex(&bytes))));
+    let kept = nikaia_std::fs::path::join(&(entry), std::path::Path::new(&("answer")));
+    host.use_entry(&entry);
+    match match fs::read_to_string(&kept, &fs::Root::Anywhere).await {
+        Ok(value) => Some(value),
+        Err(_error) => { None },
+    } {
+        None => { },
+        Some(ref text) => {
+            match host.decode(text) {
+                None => { },
+                Some(found) => {
+                    host.remember(here, bound, value, ty, &found);
+                    return CheckComputed::Value(found);
+                },
+            }
+        },
+    }
+    let computed = comptime_computed(host, here, bound, value, ty, &mut *known, &mut *typed, &mut answered);
+    if !answered.is_empty() {
+        match comptime_bundle_write_if_changed(&kept, &answered, &host.unique_beside(&kept)).await {
+            Ok(_) => {},
+            Err(_error) => { },
+        };
+    }
+    computed
+}
+
+pub const COMPTIME_VALUE_DIR: &str = "comptime-value";
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>) -> CheckComputed {
+#[allow(clippy::too_many_arguments)]
+pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>, answered: &mut String) -> CheckComputed {
     #[allow(unused_mut)] let mut not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
     match host.remembered(here, bound, value, ty) {
         None => { },
@@ -647,7 +691,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
                 None => None,
             })
         };
-        return comptime_computed(host, here, bound, value, ty, &mut known, &mut &mut *typed);
+        return comptime_computed(host, here, bound, value, ty, &mut known, &mut &mut *typed, answered);
     }
     let home = host.unit_package(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     let others: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u).is_some() && host.unit_package(u) != home }).collect::<Vec<_>>();
@@ -672,6 +716,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
         None => not_here(COMPTIME_NOT_READ),
         Some(computed) => {
             host.remember(here, bound, value, ty, &computed);
+            *answered = nikaia_std::block::Text::from(answer.to_string());
             CheckComputed::Value(computed)
         },
     } };
@@ -745,7 +790,8 @@ pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound:
                     None => None,
                     Some(ref written) => {
                         let ty = host.ty_of(at, written);
-                        match comptime_computed(host, at, named, &item.value, &ty, &mut &mut *known, &mut &mut *typed) {
+                        let mut answered: String = String::from("");
+                        match comptime_computed(host, at, named, &item.value, &ty, &mut &mut *known, &mut &mut *typed, &mut answered) {
                             CheckComputed::Value(value) => Some(value),
                             _ => None,
                         }

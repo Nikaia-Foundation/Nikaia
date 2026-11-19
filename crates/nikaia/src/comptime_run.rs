@@ -308,8 +308,9 @@ pub(crate) fn compute(
                 build_time_dir,
                 bounds,
                 program: std::cell::OnceCell::new(),
+                sources: std::cell::OnceCell::new(),
             };
-            tree::comptime_computed(
+            block_on(tree::comptime_value_computed(
                 &host,
                 here as i64,
                 bound,
@@ -317,7 +318,7 @@ pub(crate) fn compute(
                 ty,
                 &mut &known,
                 &mut &typed,
-            )
+            ))
         })
     })
 }
@@ -334,6 +335,40 @@ struct ComputeHost<'a> {
     bounds: Bounds,
     /// The program's files as one number, worked out at the first question.
     program: std::cell::OnceCell<u64>,
+    /// The program's files as their digest on disk, read from the names and
+    /// not the interner's numbers, worked out at the first question.
+    sources: std::cell::OnceCell<String>,
+}
+
+/// **`what` as `Debug` prints it, each `Symbol(N)` written as the name it
+/// stands for in `parsed`**: the numbers an interner hands out depend on the
+/// order the names were met, which differs between processes, and its map
+/// prints in an order its random hasher chose; the names do not.
+fn named_print(parsed: &Parsed, what: &impl std::fmt::Debug) -> String {
+    const SYMBOL: &str = "Symbol(";
+    let printed = format!("{what:?}");
+    let mut out = String::with_capacity(printed.len());
+    let mut rest = printed.as_str();
+    while let Some(at) = rest.find(SYMBOL) {
+        out.push_str(&rest[..at + SYMBOL.len()]);
+        rest = &rest[at + SYMBOL.len()..];
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        let number = rest[..digits].parse::<usize>().ok();
+        match number {
+            Some(number)
+                if number >= 1
+                    && number <= parsed.interner.len()
+                    && rest[digits..].starts_with(')') =>
+            {
+                let symbol = winnow_grammar::Symbol::from_index(number as u32 - 1);
+                out.push_str(&format!("{:?}", parsed.text(symbol)));
+            }
+            _ => out.push_str(&rest[..digits]),
+        }
+        rest = &rest[digits..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// **A hasher written to as text**: what `Debug` prints goes into the hash
@@ -561,6 +596,47 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<Value> {
         let key = self.remembered_key(here, bound, value, ty);
         REMEMBERED.with(|held| held.borrow().get(&key).cloned())
+    }
+
+    fn value_key(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> String {
+        let Some(stamp) = self.build_time_dir.bundle_stamp() else {
+            return String::new();
+        };
+        let sources = self.sources.get_or_init(|| {
+            let mut printed = String::new();
+            for parsed in self.files {
+                printed.push_str(&format!("{:?}\n", parsed.package));
+                printed.push_str(&named_print(parsed, &parsed.program));
+                printed.push('\n');
+            }
+            nikaia_std::hash::sha256_hex(printed.as_bytes()).to_text()
+        });
+        let file = self.files[here as usize];
+        let level = CPU_LEVEL
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default();
+        format!(
+            "{sources}\n{here}\n{bound}\n{}\n{}\n{}\n{}\n{}\n{}\n{stamp}\n{level}",
+            named_print(file, value),
+            named_print(file, ty),
+            self.bounds.steps,
+            self.bounds.bytes,
+            crate::compiler_identity(),
+            toolchain(),
+        )
+    }
+
+    fn user_cache_dir(&self) -> PathBuf {
+        orchestrator::cache::Layout::user_cache_dir()
+    }
+
+    fn use_entry(&self, at: &Path) {
+        orchestrator::cache::use_entry(at);
+    }
+
+    fn unique_beside(&self, path: &Path) -> PathBuf {
+        unique_beside(path)
     }
 
     fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &Value) {
