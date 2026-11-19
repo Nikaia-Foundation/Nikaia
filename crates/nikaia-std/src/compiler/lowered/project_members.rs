@@ -80,6 +80,7 @@ pub struct ProjectMembersManifest {
     pub uses_in: Option<fs::Path>,
     pub within_std: bool,
     pub described: Option<fs::Path>,
+    pub rust_root: Option<String>,
 }
 
 pub trait ProjectMembersHost {
@@ -444,9 +445,20 @@ pub struct ProjectMembersForeign {
     pub beneath: collections::BTreeSet<String>,
     pub within_std: bool,
     pub over_std: Ledger,
+    pub own: ProjectMembersOwnRust,
 }
 
-pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank() } }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectMembersOwnRust {
+    pub heads: collections::BTreeSet<String>,
+    pub described: collections::BTreeSet<String>,
+    pub published: collections::BTreeSet<String>,
+    pub moved: Vec<String>,
+}
+
+pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeSet::new(), moved: vec![] } }
+
+pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank(), own: project_members_no_own_rust() } }
 
 pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::HashSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
     let manifest = match manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -494,7 +506,57 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
         Some(path) => nikaia_std::index::or(host.read_beside(path), || host.empty_ledger().into()),
     };
     let within_std = nikaia_std::index::or(manifest.as_ref().map(|__nikaia_it| __nikaia_it.within_std), || false);
-    ProjectMembersForeign { declared, described, descriptions, moved, beneath, within_std, over_std }
+    let own = match manifest.as_ref().and_then(|__nikaia_it| __nikaia_it.rust_root.as_deref()) {
+        None => project_members_no_own_rust(),
+        Some(rust_root) => project_members_own_rust(root, rust_root, &mut descriptions, host).await,
+    };
+    ProjectMembersForeign { declared, described, descriptions, moved, beneath, within_std, over_std, own }
+}
+
+pub(crate) async fn project_members_own_rust<H: ProjectMembersForeignHost>(root: &std::path::Path, rust_root: &str, descriptions: &mut Ledger, host: &H) -> ProjectMembersOwnRust {
+    let mut own = project_members_no_own_rust();
+    let hand = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(rust_root)));
+    let text = match fs::read_to_string(&hand, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    };
+    let items = match nikaia_std::grammar::parse(&*text, Rust::parse_file()) {
+        Ok(value) => value,
+        Err(_error) => { vec![] },
+    };
+    for item in items.iter() {
+        match item {
+            RustItem::Group(group) => { if group.what == "mod" { own.heads.insert(nikaia_std::block::Text::from(group.name.to_string())); } },
+            _ => { },
+        }
+    }
+    let mut ledger = match host.read_beside(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&("crate.contracts")))) { Some(__nikaia_value) => __nikaia_value, None => return own };
+    let functions: Vec<String> = ledger.functions.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+    for function in functions.iter() {
+        let contract = match ledger.functions.get_mut(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.described = true;
+        if contract.public { own.published.insert(nikaia_std::block::Text::from(function.to_string())); }
+        contract.public = true;
+        own.described.insert(nikaia_std::block::Text::from(function.to_string()));
+        match function.split("::").next() {
+            None => { },
+            Some(head) => { if head != function { own.heads.insert(nikaia_std::block::Text::from(head.to_string())); } },
+        }
+    }
+    for (name, _) in ledger.types.iter() { own.described.insert(nikaia_std::block::Text::from(name.to_string())); }
+    let from = nikaia_std::index::or(nikaia_std::fs::path::parent(&(hand)), || nikaia_std::fs::path::clone(&(root)).into());
+    for (file, recorded) in ledger.sources.iter() {
+        let bytes = match fs::read(&nikaia_std::fs::path::join(&(from), std::path::Path::new(&(file))), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        let mut read: Vec<u8> = vec![];
+        for b in bytes.iter().copied() { read.push(b); }
+        if hash::sha256_hex(&read) != *recorded { own.moved.push(nikaia_std::block::Text::from(file.to_string())); }
+    }
+    let none: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    absorb_into(descriptions, None, &none, &ledger);
+    own
 }
 
 impl ProjectMembersForeign {
@@ -503,6 +565,7 @@ impl ProjectMembersForeign {
         out.extend(self.described.iter().cloned());
         out.extend(self.declared.iter().cloned());
         out.extend(self.beneath.iter().cloned());
+        out.extend(self.own.heads.iter().cloned());
         out
     }
 }

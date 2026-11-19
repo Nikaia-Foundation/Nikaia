@@ -463,7 +463,11 @@ contract enters the dependent's view, no name is published, and the Rust item
 may change without a version raise, as [ADR-403](adr-403.md) D2 says of a
 private name a test reaches. `pub = true` in this file is refused: what the
 package publishes is its Nikaia API and, for a rust-library, what D23's `root`
-re-exports, both already described by the ledger.
+re-exports, both already described by the ledger. The refusal is `NK2508`,
+once per entry, naming the entry and its line: it is a mistake in the
+description, not a missing one, so it is not D27's `NK2504`, whose fix is to
+run `nikaia describe crate` (the supervisor, 2026-11-19, on the question of
+the first build of D24-D28, #2233).
 
 ### D27 — `nikaia describe crate` drafts the entries, and an undescribed call names it.
 

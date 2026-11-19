@@ -239,7 +239,7 @@ pub(crate) fn ring_the_bell() {
 /// the process has one runtime either way.
 pub fn start(user_code: UserCode) -> Started {
     let _ =
-        RUNTIME.get_or_init(|| Runtime::build(user_code, Config::load().unwrap_or_else(report)));
+        RUNTIME.get_or_init(|| Runtime::build(user_code, config::load().unwrap_or_else(report)));
     Started::new()
 }
 
@@ -252,7 +252,7 @@ pub fn start(user_code: UserCode) -> Started {
 pub fn handle() -> &'static Runtime {
     RUNTIME.get_or_init(|| {
         let user_code = ON_DEMAND.get().copied().unwrap_or_default();
-        Runtime::build(user_code, Config::load().unwrap_or_else(report))
+        Runtime::build(user_code, config::load().unwrap_or_else(report))
     })
 }
 
@@ -289,9 +289,9 @@ pub fn user_cores() -> usize {
     }
     *ASKED.get_or_init(|| match ON_DEMAND.get().copied().unwrap_or_default() {
         UserCode::Sequential => 1,
-        UserCode::Concurrent => match Config::load().unwrap_or_else(report).user_pool {
+        UserCode::Concurrent => match config::load().unwrap_or_else(report).user_pool {
             0 => std::thread::available_parallelism().map_or(1, |n| n.get()),
-            n => n,
+            n => n as usize,
         },
     })
 }
@@ -303,7 +303,7 @@ pub fn user_cores() -> usize {
 fn report(why: String) -> Config {
     eprintln!("nikaia: {why}");
     eprintln!("nikaia: the runtime is starting on its default settings");
-    Config::default()
+    crate::runtime::run_config::config_default()
 }
 
 /// What [`start`] hands back: the drain, as a value a generated `main` holds.
@@ -447,7 +447,7 @@ pub const EXIT_CLEANUP_EXPIRED: i32 = 70;
 
 impl Runtime {
     fn build(user_code: UserCode, config: Config) -> Runtime {
-        let workers = worker::Workers::start(config.io_workers);
+        let workers = worker::Workers::start(config.io_workers as usize);
 
         #[cfg(all(target_os = "linux", feature = "async-io"))]
         let ring = match config.io_method {
@@ -481,7 +481,7 @@ impl Runtime {
 
         let user_pool = match user_code {
             UserCode::Sequential => None,
-            UserCode::Concurrent => Some(pool::Pool::start(config.user_pool)),
+            UserCode::Concurrent => Some(pool::Pool::start(config.user_pool as usize)),
         };
 
         // Read out of the ring before the lock closes over it: a `write` may
@@ -545,7 +545,7 @@ impl Runtime {
         format!(
             "io-workers={} io-method={} (chose {}) user-pool={} cleanup-deadline={:?} user-code={}",
             self.config.io_workers,
-            self.config.io_method.as_str(),
+            crate::runtime::run_config::method_spelled(&self.config.io_method),
             self.files.as_str(),
             match self.user_pool.as_ref() {
                 Some(pool) => pool.threads().to_string(),
@@ -1579,7 +1579,7 @@ mod tests {
                 Config {
                     io_method: method,
                     io_workers: 2,
-                    ..Config::default()
+                    ..crate::runtime::run_config::config_default()
                 },
             );
             assert_eq!(read_through(&runtime, &a), b"eins", "{method:?}");
@@ -1610,7 +1610,7 @@ mod tests {
                 Config {
                     io_method: method,
                     io_workers: 2,
-                    ..Config::default()
+                    ..crate::runtime::run_config::config_default()
                 },
             );
             // Through the public surface, which is what a lowered program
@@ -1635,7 +1635,10 @@ mod tests {
     /// What the `--runtime` line has to be able to say.
     #[test]
     fn the_description_names_the_mechanism_that_was_chosen() {
-        let runtime = Runtime::build(UserCode::Sequential, Config::default());
+        let runtime = Runtime::build(
+            UserCode::Sequential,
+            crate::runtime::run_config::config_default(),
+        );
         let said = runtime.describe();
         assert!(said.contains("io-method=auto"), "{said}");
         assert!(

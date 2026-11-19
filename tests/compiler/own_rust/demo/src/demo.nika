@@ -1,0 +1,6 @@
+// Calls into the package's own Rust, `rust/words.rs` (ADR-rust-boundary-1 D24).
+
+/// Four times, through the package's own Rust.
+pub fn quad(x: i64) -> i64 sync {
+    return words::twice(words::twice(x))
+}
