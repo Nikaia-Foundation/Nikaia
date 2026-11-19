@@ -50,7 +50,7 @@ const KNOWN: &[(&str, &str)] = &[
     // Left to `rustc` on purpose.
     (
         "2a5e3432c2390622",
-        "fold_lambdas: `par_fold` over a rule that is not a frame, the grammar backend's refusal (ADR-296 D9)",
+        "fold_lambdas: `par_fold` over a rule that is not a frame, the grammar backend's refusal (ADR-grammar-parallel-v1 D1)",
     ),
     (
         "6d50da730c46510d",

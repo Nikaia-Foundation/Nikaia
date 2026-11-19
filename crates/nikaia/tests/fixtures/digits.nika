@@ -2,7 +2,7 @@
 //
 // A grammar with no frame and no fold. There is nothing to cut and nothing to
 // merge, so `dsl … from …` drives the rule's own parser over the whole input -
-// the other half of ADR-296 D19.
+// the other half of ADR-grammar-parallel-v1 D5.
 
 grammar Digits {
     entry rule pair -> Pair =
