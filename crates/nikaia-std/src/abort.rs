@@ -244,8 +244,9 @@ mod tests {
     ];
 
     /// The half that keeps a program from being worse off: a line the table does
-    /// not know is not answered wrongly. Kept as Rust (#2082): the emitter maps
-    /// every line a stop can name, so no program reaches an unknown one.
+    /// not know is not answered wrongly. Kept as Rust (#2304): a test block's
+    /// `Vec[(u32, String, u32)]` reaches the language below as a list of
+    /// `(u32, Text, u32)`, not this table of `&'static str` (rustc E0308).
     #[test]
     fn an_unknown_line_is_not_guessed_at() {
         assert_eq!(lookup(TABLE, 11), None);
