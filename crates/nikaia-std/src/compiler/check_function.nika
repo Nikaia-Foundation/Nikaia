@@ -346,6 +346,9 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
     for rule in gram.rules {
         if rule.stream {
             let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), rules)
+            if emitted {
+                state.facts.emitting_entries.insert(f"{named}::{world.words.resolve(rule.name)}")
+            }
             match grammar_stream_refused(world, rule, state.rule_results, rules, emitted) {
                 refused => state.findings.push(refused),
                 null => {},

@@ -255,6 +255,7 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
     for rule in gram.rules.iter() {
         if rule.stream {
             let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), &rules);
+            if emitted { state.facts.emitting_entries.insert(format!("{}::{}", named, world.words.resolve(rule.name))); }
             match grammar_stream_refused(world, rule, &state.rule_results, &rules, emitted) {
                 Some(refused) => { state.findings.push(refused); },
                 None => { },
