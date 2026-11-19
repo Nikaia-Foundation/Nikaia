@@ -1,0 +1,28 @@
+// **A named property an `assume` vouches for is known past its `unsafe`**
+// (ADR-376 D1, ADR-381 D2): the `assert` after each is proved - the walk
+// pushed the vouched fact without making the property a name of the
+// proof, so the fact read nothing.
+
+struct Bag {
+    items: Vec[i64],
+}
+
+impl Bag {
+    fn full(self) -> bool sync {
+        return self.items.len() > 2
+    }
+}
+
+fn sorted(v: ref Vec[i64]) -> bool sync {
+    return v.is_sorted()
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    unsafe { assume(sorted(xs)) }
+    assert(sorted(xs))
+    let b = Bag { items: [1, 2, 3] }
+    unsafe { assume(b.full()) }
+    assert(b.full())
+    println("vouched")
+}

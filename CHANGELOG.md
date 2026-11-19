@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1454] — 2026-11-19
+
+**Builders' changes (#2158, #2163, #2175, #2225, #2231, #2234)**
+- A list's search by halving requires its order: `xs.binary_search(v)` requires `xs.is_sorted()` and `xs.binary_search_by_key(k, f)` requires `xs.is_sorted_by_key(f)` with the same named `f`; shown by a guard, an assert or `unsafe { assume(...) }`, else refused with NK1300 (Part I 4.5, ADR-381 D5).
+- Named properties (ADR-381 D2): a guard that leaves when a property is false (`return if !is_sorted(xs)`, `if !p(xs) { return }`, an `else` that leaves) makes it known after it; `--asserts` says "known from the guard".
+- A named property may have several arguments or be a method: `assert(within(xs, n))` or `assert(b.holds(n))` proves the same claim after it until any of its arguments may change (ADR-381 D1).
+- Fixed: a method's precondition is now held at a call on any receiver, not only `self` (ADR-269 D20): `b.take(n)` with an unproved `n` is NK1300 where it ran and panicked in the checked entry before
+- A method's top-of-body `assert` over its receiver's fields is now a precondition its callers prove (ADR-269 D15); a `pub` method's claim on a private field still is not (D16).
+- `xs.sort()` now makes `xs.is_sorted()` known, and `xs.sort_by_key(f)` makes `xs.is_sorted_by_key(f)` known for the same named `f`, so a search by halving right after owes nothing; a change of the list in between loses it (ADR-381 D5).
+
 ## [0.0.1453] — 2026-11-19
 
 **Builders' changes (#2203, #2204, #2205, #2210)**

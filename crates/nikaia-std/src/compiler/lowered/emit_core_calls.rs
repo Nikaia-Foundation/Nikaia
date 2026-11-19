@@ -1164,6 +1164,8 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.counted.contains(&node_key(on)) { out.push(".map(|at| at as i64)"); }
         }
+        let callee = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.method_callees, &on_node), || "");
+        if callee == "Vec::binary_search" || callee == "Vec::binary_search_by_key" { out.push(".ok().map(|at| at as i64)"); }
         if name == "enumerate" && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.counted.contains(&node_key(on)) { out.push(".map(|(at, item)| (at as i64, item))"); }
@@ -1401,8 +1403,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple103628| {
-        let (i, word) = __nikaia_tuple103628;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple103988| {
+        let (i, word) = __nikaia_tuple103988;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
