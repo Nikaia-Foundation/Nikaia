@@ -225,61 +225,66 @@ follows from what it depends on, and the guarantees belong to the language
 
 ### What it looks like in the language
 
-The two build settings are described in [Getting started](guide/getting-started.md#the-two-build-settings).
-Below are the main design choices. Each is specified, and each links to the decision record
-that argues it.
+The main design choices follow. Each is specified, and each links to the decision record or the
+part of the specification that argues it. The two build settings are described in
+[Getting started](guide/getting-started.md#the-two-build-settings).
 
-**1. Functions have no colour.**
+#### Where a function waits
+
 Any function may pause on I/O, and the compiler builds the state machine. The program waits
-where it needs a value: at the call itself, or, for work started with `async`, where the
-value is first used. So there is no split of the ecosystem into a sync half and an async half,
-where every library has to exist twice.
-→ [Spec Part I](docs/specification/10-nikaia-light.md)
+where it needs a value, at the call itself or, for work started with `async`, where the value is
+first used. A function that starts to wait leaves its callers as they are, so libraries are
+written once and not in a waiting and a non-waiting version
+([Spec Part I](docs/specification/10-nikaia-light.md)).
 
-**2. Ownership without lifetime annotations.**
-Lifetimes are not written in the source. Borrow contracts are inferred over the whole program, checked by
-Nikaia's compiler and written to a ledger you can read; on today's path the Rust that comes out
-passes Rust's borrow checker as well, a second opinion on ours. Cases that safe Rust cannot
-express directly (a slice stored in a struct, a task borrowing from its parent) get their own
-language constructs.
-→ [ADR-005](docs/specification/adr/adr-005.md), [ADR-283](docs/specification/adr/adr-283.md)
+#### Ownership and borrows
 
-**3. One source, every runtime.**
-You write `Shared[T]`. What it becomes underneath is the compiler's: the atomic reference count
-is the default, and a value it can prove never crosses a thread gets the plain one instead,
-decided per value ([ADR-037](docs/specification/adr/adr-037.md) D7), and where the build runs
-your code on one thread every count is plain ([ADR-312](docs/specification/adr/adr-312.md) D10). The
-lock in `Locked[T]` is decided the same way and off the same answer
-([ADR-281](docs/specification/adr/adr-281.md) D5-D7), and so is where `spawn`'s tasks run.
-Your source file does not encode the deployment decision, so changing it is a line in
-`nikaia.toml`, not a refactor.
+Lifetimes are not written in the source. Borrow contracts are inferred over the whole program,
+checked by Nikaia's compiler and written to a ledger you can read, and on today's path the Rust
+that comes out passes Rust's borrow checker as well, a second opinion on ours. Cases that safe
+Rust does not express directly, such as a slice stored in a struct or a task borrowing from its
+parent, get their own language constructs ([ADR-005](docs/specification/adr/adr-005.md),
+[ADR-283](docs/specification/adr/adr-283.md)).
 
-**4. No lock-order deadlocks.**
-Several resources are requested together, with `access_all(a, b)`, and the runtime always
-takes them in address order. A deadlock cycle between two `access_all` callers cannot
-form. The lambda must be `sync` (provably non-pausing), so a lock can never be
-held across an I/O suspension point.
-→ [Spec Part II](docs/specification/20-nikaia-advance.md)
+#### Which reference count and lock a value gets
 
-**5. Grammars are part of the language.**
-`dsl` is an expression. A scannerless grammar can be parsed at compile time or at run time
-with the same syntax, and an embedded DSL (SQL, JavaScript, x86) gets its own syntax instead
-of string interpolation. A grammar rule marked `@frame` can be folded in parallel with
-`par_fold`, and the compiler checks that the input can be cut at its boundary. Parsing
-benchmarks are therefore a main target.
-→ [ADR-296](docs/specification/adr/adr-296.md)
+You write `Shared[T]`, and what it becomes underneath is the compiler's choice. The atomic
+reference count is the default, a value the compiler proves stays on one thread gets the plain
+one instead, decided per value ([ADR-037](docs/specification/adr/adr-037.md) D7), and where the
+build runs your code on one thread every count is plain
+([ADR-312](docs/specification/adr/adr-312.md) D10). The lock in `Locked[T]` is decided the same
+way and from the same answer ([ADR-281](docs/specification/adr/adr-281.md) D5-D7), and so is
+where the tasks of `spawn` run. Your source file does not encode the deployment decision, so
+changing it is a line in `nikaia.toml` and not a refactor.
 
-**6. The compiler tracks where your data came from.**
-Trust is a property of where data comes from: bytes off a socket are untrusted, your own
-config file is not, and that provenance travels with the value. The compiler picks a
-DoS-resistant hasher where untrusted data is hashed and a fast one elsewhere, so a program
-does not pay for the worst case everywhere, and you do not have to remember which is which.
-→ [ADR-010](docs/specification/adr/adr-010.md)
+#### Taking several locks at once
 
-**7. No garbage collector.**
-Deterministic teardown through ownership and RAII, also in functions that pause, where
-"when does this file close" is otherwise a hard question.
-→ [ADR-297](docs/specification/adr/adr-297.md)
+Several resources are requested together with `access_all(a, b)`, and the runtime takes them in
+address order, so two callers of `access_all` do not wait on each other in a cycle. The lambda
+has to be `sync`, which the compiler shows does not pause, so a lock is not held across a wait
+for I/O ([Spec Part II](docs/specification/20-nikaia-advance.md)).
+
+#### Grammars in the language
+
+`dsl` is an expression. A scannerless grammar can be parsed at compile time or at run time with
+the same syntax, and an embedded language such as SQL, JavaScript or x86 assembly gets its own
+syntax in place of string interpolation. A grammar rule marked `@frame` can be folded in
+parallel with `par_fold`, and the compiler checks that the input can be cut at its boundary.
+Parsing benchmarks are therefore a main target ([ADR-296](docs/specification/adr/adr-296.md)).
+
+#### Where data came from
+
+Trust follows where data comes from. Bytes off a socket are untrusted, your own config file is
+not, and that origin travels with the value. The compiler picks a hasher that resists
+denial-of-service attacks where untrusted data is hashed and a fast one elsewhere, so a program
+does not pay for the worst case everywhere, and you do not have to remember which is which
+([ADR-010](docs/specification/adr/adr-010.md)).
+
+#### When memory is released
+
+Memory and other resources are released through ownership, at a point the code shows, without a
+garbage collector. That holds also in functions that pause, where the question of when a file
+closes is otherwise a hard one ([ADR-297](docs/specification/adr/adr-297.md)).
 
 ### How it is built today
 
