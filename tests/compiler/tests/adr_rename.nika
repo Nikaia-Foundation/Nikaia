@@ -1,0 +1,74 @@
+// scripts/adr-rename.nika moves ADR citations to their new record from a
+// table (#2262, ADR-decision-records-v2 D3). Shown on a fixture tree given
+// with `--root`: a single decision, a list, a range (`-` and `–`), a `'s`
+// citation, a link from inside the records' directory, a record moved whole
+// (its decisions keep their numbers), and what it lists instead of
+// rewriting: a list split over two records, a `§` citation, a decision the
+// table does not name. A link to the history's copy, a link that does not
+// reach `docs/specification/adr/` and `docs/history/` stay as they are.
+// `--dry-run` prints the same and writes nothing.
+//
+// The fixture is written here, with `~` for the `-` of its citations, and
+// what is shown is written back so: the made-up records 901 and 902 would
+// otherwise be dangling citations to check-adr-refs.py, which reads tests/.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn masked(s: String) -> String {
+    return s.replace("ADR-", "ADR~").replace("adr-", "adr~")
+}
+
+fn put(dir: String, file: String, text: String) throws {
+    let path = f"{dir}/{file}".replace("~", "-")
+    process::run("mkdir", ["-p", process::run("dirname", [path.clone()]).stdout.trim().clone()])
+    fs::write(path, fs::Root::Anywhere, text.replace("~", "-"))
+}
+
+fn show(dir: String, file: String) throws {
+    println(f"--- {file}")
+    print(masked(fs::read_to_string(f"{dir}/{file}", fs::Root::Anywhere)))
+}
+
+fn run(repo: String, nikaia: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["run", "scripts/adr-rename.nika", "--"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo)
+    println(masked(out.stdout.trim()))
+    if out.stderr.trim().len() > 0 { println(masked(out.stderr.trim())) }
+    println(f"exit {out.code}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tree = f"{dir}/tree"
+    let table = f"{dir}/table.txt"
+    fs::write(table.clone(), fs::Root::Anywhere, "# the decisions of 901 move apart; 902 moves whole\n901 D3 -> moved-v1 D1\n901 D4 -> moved-v1 D2\n901 D5 -> other-v1 D7\n902 -> moved-v1\n")
+    put(tree.clone(), "docs/notes.md", "One: ADR~901 D3.\nList: ADR~901 D3, D4.\nRange: ADR~901 D3-D4, ADR~901 D3–D4.\nOwn: ADR~901's D4.\nWhole: ADR~902, and ADR~902 D6.\nSplit: ADR~901 D3, D5.\nSection: ADR~901 §2.\nUnknown: ADR~901 D9.\nHistory: [ADR~901](../docs/history/adr/adr~901.md) D3.\nAstray: [ADR~901](adr~901.md) D3.\n")
+    put(tree.clone(), "docs/specification/adr/adr~903.md", "Links: [ADR~901](adr~901.md) D3, [901](adr~901.md) D4, [902](adr~902.md).\n")
+    put(tree.clone(), "crates/a/src/lib.rs", "// ADR~902 D2 and ADR~901 D5\n")
+    put(tree.clone(), "docs/history/adr/README.md", "ADR~901 D3 is archived.\n")
+    put(tree.clone(), "src/main.nika", "// ADR~901 D3 outside the searched files\n")
+    run(repo.clone(), nikaia.clone(), [table.clone(), "--root", tree.clone(), "--dry-run"])
+    show(tree.clone(), "docs/notes.md")
+    run(repo, nikaia, [table, "--root", tree.clone()])
+    for file in ["docs/notes.md", "docs/specification/adr/adr~903.md", "crates/a/src/lib.rs", "docs/history/adr/README.md", "src/main.nika"] {
+        show(tree.clone(), file.replace("~", "-"))
+    }
+    process::run("rm", ["-rf", dir])
+}
