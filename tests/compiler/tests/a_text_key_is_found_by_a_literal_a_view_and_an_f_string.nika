@@ -1,0 +1,84 @@
+// A text key hashes as its text (ADR-010 D5, ADR-296 D42, #2315): a
+// `String` key of a trusted map is found by a literal, a view (`trim`, a line
+// of `lines()`) and an `f"…"` string, at every length from 0 to 39, across
+// the word-at-a-time steps at 8 and 16. Were the forms hashed apart, a lookup
+// would miss. Was map.rs's Rust test `a_text_key_hashes_as_its_text`.
+use std::collections
+
+fn word(len: i64) -> String {
+	let letters: Vec[scalar] = "abcdefghijklmnopqrstuvwxyz".scalars.collect()
+	let mut s = String()
+	for i in 0..<len {
+		s.push(letters[i % 26])
+	}
+	return s
+}
+
+fn main() throws {
+	let literals = [
+		"",
+		"a",
+		"ab",
+		"abc",
+		"abcd",
+		"abcde",
+		"abcdef",
+		"abcdefg",
+		"abcdefgh",
+		"abcdefghi",
+		"abcdefghij",
+		"abcdefghijk",
+		"abcdefghijkl",
+		"abcdefghijklm",
+		"abcdefghijklmn",
+		"abcdefghijklmno",
+		"abcdefghijklmnop",
+		"abcdefghijklmnopq",
+		"abcdefghijklmnopqr",
+		"abcdefghijklmnopqrs",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrstu",
+		"abcdefghijklmnopqrstuv",
+		"abcdefghijklmnopqrstuvw",
+		"abcdefghijklmnopqrstuvwx",
+		"abcdefghijklmnopqrstuvwxy",
+		"abcdefghijklmnopqrstuvwxyz",
+		"abcdefghijklmnopqrstuvwxyza",
+		"abcdefghijklmnopqrstuvwxyzab",
+		"abcdefghijklmnopqrstuvwxyzabc",
+		"abcdefghijklmnopqrstuvwxyzabcd",
+		"abcdefghijklmnopqrstuvwxyzabcde",
+		"abcdefghijklmnopqrstuvwxyzabcdef",
+		"abcdefghijklmnopqrstuvwxyzabcdefg",
+		"abcdefghijklmnopqrstuvwxyzabcdefgh",
+		"abcdefghijklmnopqrstuvwxyzabcdefghi",
+		"abcdefghijklmnopqrstuvwxyzabcdefghij",
+		"abcdefghijklmnopqrstuvwxyzabcdefghijk",
+		"abcdefghijklmnopqrstuvwxyzabcdefghijkl",
+		"abcdefghijklmnopqrstuvwxyzabcdefghijklm",
+	]
+	let mut m: collections::HashMap[String, i64] = collections::HashMap()
+	let mut joined = String()
+	for len in 0..<40 {
+		let w = word(len)
+		joined.push_str(w)
+		joined.push_str("\n")
+		m.insert(w, len)
+	}
+	let lines: Vec[ref String] = joined.lines().collect()
+	let mut found = 0
+	for len in 0..<40 {
+		let w = word(len)
+		let padded = f"  {w}  "
+		let by_literal = m[literals[len]] ?? -1
+		let by_trim = m[padded.trim()] ?? -1
+		let by_line = m[lines[len]] ?? -1
+		let by_format = m[f"{w}"] ?? -1
+		if by_literal == len && by_trim == len && by_line == len && by_format == len {
+			found += 1
+		} else {
+			println(f"length {len}: literal {by_literal}, trim {by_trim}, line {by_line}, f-string {by_format}")
+		}
+	}
+	println(f"{found} of {m.len()} lengths found by a literal, a trim, a line and an f-string")
+}

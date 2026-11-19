@@ -1,0 +1,13 @@
+len 8
+"a" 0
+"b" 1
+"ab" 2
+"ba" 3
+"" 4
+"abcdefgh" 5
+"abcdefgi" 6
+"abcdefghijklmnopq" 7
+ba 30, ab 2, len 8
+removed ab: 2
+ab -1, ba 30, len 7
+abcdefgi 6, missing -1
