@@ -135,6 +135,14 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let runtime = rt::Runtime::build(rt::UserCode::Sequential, config_default());
+    let said = runtime.describe();
+    if !(said.contains("io-method=auto")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"io-method=auto\"))", None, &[]) };
+    if !(said.contains("chose completion") || said.contains("chose blocking")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"chose completion\") || said.contains(\"chose blocking\"))", None, &[]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
@@ -142,5 +150,6 @@ pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(),
         ("run_config::nothing_written_is_the_documented_defaults", __nikaia_test_0),
         ("run_config::a_duration_takes_seconds_thousandths_and_minutes", __nikaia_test_1),
         ("run_config::the_file_knows_four_keys_and_no_others", __nikaia_test_2),
+        ("run_config::the_description_names_the_mechanism_that_was_chosen", __nikaia_test_3),
     ]
 }

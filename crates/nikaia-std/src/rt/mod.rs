@@ -446,7 +446,7 @@ fn ended_by_the_deadline(said: String) {
 pub const EXIT_CLEANUP_EXPIRED: i32 = 70;
 
 impl Runtime {
-    fn build(user_code: UserCode, config: Config) -> Runtime {
+    pub(crate) fn build(user_code: UserCode, config: Config) -> Runtime {
         let workers = worker::Workers::start(config.io_workers as usize);
 
         #[cfg(all(target_os = "linux", feature = "async-io"))]
@@ -1479,13 +1479,13 @@ pub mod io {
 mod tests {
     use super::*;
 
-    // Kept as Rust (#2082), for "Unobservable std tests" (#2088): no program
-    // sees what these check. The ring's generation counter and the runtime's
-    // pointer identity have no Nikaia surface; the pair path behind
+    // Kept as Rust (#2304), for "Unobservable std tests" (#2088): no test
+    // block reaches what these check. The ring's generation counter and the
+    // runtime's pointer identity have no Nikaia surface; the pair path behind
     // `fs::read_both` cannot be called from a program (NK1171) and stays for
-    // `benches/overlap` (ADR-303); `describe` has no Nikaia surface, and
-    // `it/runtime.rs` does not check that `auto` names its choice. The tests a
-    // program observes moved to `tests/compiler/tests/rt_*.nika` (#2210).
+    // `benches/overlap` (ADR-303). The tests a program observes moved to
+    // `tests/compiler/tests/rt_*.nika` (#2210); `describe` is a test block of
+    // `runtime/run_config.nika` (#2304).
 
     /// **An answer another thread reaps moves the generation** (0.0.259).
     ///
@@ -1630,21 +1630,5 @@ mod tests {
             runtime.workers.drain(std::time::Duration::from_secs(5));
         }
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    /// What the `--runtime` line has to be able to say.
-    #[test]
-    fn the_description_names_the_mechanism_that_was_chosen() {
-        let runtime = Runtime::build(
-            UserCode::Sequential,
-            crate::runtime::run_config::config_default(),
-        );
-        let said = runtime.describe();
-        assert!(said.contains("io-method=auto"), "{said}");
-        assert!(
-            said.contains("chose completion") || said.contains("chose blocking"),
-            "the report has to name which one detection picked: {said}"
-        );
-        runtime.workers.drain(std::time::Duration::from_secs(5));
     }
 }

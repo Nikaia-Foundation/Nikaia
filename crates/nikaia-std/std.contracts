@@ -591,6 +591,7 @@ panics = false
 sync = true
 touches = []
 signature = "(markup: ?) -> ?"
+
 # `text`, escaped: the safe way to build markup out of what is not markup yet.
 # `std`'s own, for its test blocks (ADR-rust-boundary-1 D24, D26, #2304).
 [fn."html::Raw::escaped"]
@@ -608,6 +609,33 @@ sync = true
 touches = []
 signature = "(self: ref html::Raw) -> ref String"
 
+# The runtime a program starts with, and whether user code runs on a pool.
+# `std`'s own (#2304): a program finds the one runtime, never builds one.
+[type."rt::Runtime"]
+pub = false
+
+[type."rt::UserCode"]
+pub = false
+copies = true
+compares = true
+variants = ["Sequential", "Concurrent"]
+
+# A runtime of its own, built from `config`, so a test block can ask one
+# that is not the process's. `std`'s own (#2304).
+[fn."rt::Runtime::build"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(user_code: rt::UserCode, config: ?) -> rt::Runtime"
+
+# One line naming what started and how, for `--runtime`. `std`'s own (#2304).
+[fn."rt::Runtime::describe"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref rt::Runtime) -> String"
 
 # The whole of standard input, as bytes.
 #
