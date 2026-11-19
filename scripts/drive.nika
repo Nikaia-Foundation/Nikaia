@@ -1483,7 +1483,7 @@ fn drive_merge_in_way(said: String) -> Vec[String] {
 
 // True for a file the toolchain writes and the merge's regeneration writes
 // again: the lowered files, the badges, and the ledgers of a package.
-fn drive_is_generated(path: String) -> bool {
+fn drive_is_generated(path: String) -> bool throws {
 	if drive_is_lowered(path.clone()) || path.starts_with("assets/badges/") { return true }
 	for ledger in ["nikaia.lock", "nikaia.proofs", "nikaia.contracts"] {
 		if path == ledger || path.ends_with("/" + ledger) { return true }
@@ -1491,7 +1491,7 @@ fn drive_is_generated(path: String) -> bool {
 	return false
 }
 
-fn drive_all_generated(paths: Vec[String]) -> bool {
+fn drive_all_generated(paths: Vec[String]) -> bool throws {
 	for p in paths {
 		if !drive_is_generated(p.clone()) { return false }
 	}
@@ -1543,20 +1543,55 @@ fn drive_merge_generates(paths: Vec[String]) -> bool {
 	return false
 }
 
-fn drive_lowered_dir() -> String {
-	return "crates/nikaia-std/src/compiler/lowered"
+// The directory whose parts `lower-std` lowers: each `<part>/lowered/` and
+// its index `<part>/lowered.rs` under it is output (`SYSROOT_COMPILER` and
+// `SYSROOT_RUNTIME` in sysroot_cache.nika name the parts today).
+fn drive_lowered_root() -> String {
+	return "crates/nikaia-std/src"
 }
 
-// True for a file the lowering writes: one under the lowered directory, or
+// The lowered directories, read from the tree rather than named (#2256: the
+// runtime's were missed): each part of drive_lowered_root that holds a
+// lowered index `lowered.rs` or a directory `lowered/`, so a third part
+// `lower-std` lowers is not missed either.
+fn drive_lowered_dirs() -> Vec[String] throws {
+	let root = drive_lowered_root()
+	let mut parts: Vec[String] = []
+	if !fs::exists(root.clone(), fs::Root::Anywhere) { return parts }
+	for entry in fs::read_dir(root.clone(), fs::Root::Anywhere) {
+		let path = entry.to_text()
+		let names: Vec[String] = path.split("/").collect()
+		let name = names[names.len() - 1]
+		// Only a part's directory can hold a lowered index or directory; a
+		// file such as `abort.rs` is no part (`abort.rs/lowered.rs` throws
+		// "Not a directory" rather than answering false).
+		if !fs::metadata(f"{root}/{name}", fs::Root::Anywhere).is_dir() { continue }
+		let dir = f"{root}/{name}/lowered"
+		if fs::exists(dir.clone() + ".rs", fs::Root::Anywhere) || fs::exists(dir.clone(), fs::Root::Anywhere) { parts.push(dir) }
+	}
+	parts.sort()
+	return parts
+}
+
+// True for a file the lowering writes: one under a lowered directory, or
 // its index `lowered.rs` beside it (a conflict only in the index's digest line
-// escalated on 2026-11-16 before this).
-fn drive_is_lowered(path: String) -> bool {
-	return path.starts_with(drive_lowered_dir() + "/") || path == drive_lowered_dir() + ".rs"
+// escalated on 2026-11-16 before this; one in the runtime's on 2026-11-19,
+// #2256).
+fn drive_is_lowered(path: String) -> bool throws {
+	for dir in drive_lowered_dirs() {
+		if path.starts_with(dir.clone() + "/") || path == dir.clone() + ".rs" { return true }
+	}
+	return false
 }
 
-// The lowered files the lowering writes: the directory and its index.
-fn drive_lowered_paths() -> Vec[String] {
-	return [drive_lowered_dir(), drive_lowered_dir() + ".rs"]
+// The lowered files the lowering writes: each directory and its index.
+fn drive_lowered_paths() -> Vec[String] throws {
+	let mut paths: Vec[String] = []
+	for dir in drive_lowered_dirs() {
+		paths.push(dir.clone())
+		paths.push(dir.clone() + ".rs")
+	}
+	return paths
 }
 
 // A fingerprint of the lowered files' contents under DIR, to see the lowering
@@ -1576,8 +1611,9 @@ fn drive_lowered_print(dir: String) -> String throws {
 // A merge that conflicted only in the generated lowered files (#1430): they
 // are output of `lower-std`, so the conflict has one mechanical resolution.
 // Takes their side of each conflicted file, then drive_merge_regenerate
-// lowers, regenerates the badges and commits. Prints `MERGE <sha8> re-lowered
-// <paths>`. Any failure aborts the merge and escalates
+// lowers (from our side when theirs fails, #2253), regenerates the badges and
+// commits. Prints `MERGE <sha8> re-lowered [from ours ]<paths>`. Any other
+// failure, or both sides failing, aborts the merge and escalates
 // (drive_merge_abort_paths): a partly resolved merge is never left behind.
 fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	for p in unmerged.split(" ") {
@@ -1597,7 +1633,10 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // 2026-11-15 that binary lowered a clean merge into code that did not
 // compile), then BUILD and LOWER until the lowered files stop changing (the old
 // binary emits with the old emitter, 2026-11-08: one round reverted unrelated
-// files). BUILD and LOWER run in the tree worktree moved to the merged index
+// files). When that fails for a conflict, the conflicted lowered paths take
+// our side instead and it all runs again (#2253: their lowered emitter lacked
+// our unpushed emitter change and lowered our `.nika` into code rustc
+// refused); only both sides failing aborts, each side's tail printed. BUILD and LOWER run in the tree worktree moved to the merged index
 // (drive_tree_move, #1916), never on the shared checkout's working tree, which
 // holds the other agents' modified sources. The lowered paths they changed
 // there are copied into the checkout and staged, nothing else, and runs BADGES
@@ -1606,7 +1645,7 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // tree (drive_ledgers_refresh, #1591), staging the changed ledger files. Then
 // commits the merge, with the
 // regenerated files in it (the autostash is applied after that commit), and
-// prints `MERGE <sha8> re-lowered <paths>` for a conflict, `MERGE <sha8>
+// prints `MERGE <sha8> re-lowered [from ours ]<paths>` for a conflict, `MERGE <sha8>
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
 // documentation only is committed as it is. Any failure aborts the merge and
 // escalates.
@@ -1628,62 +1667,91 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		for p in unmerged.split(" ") { theirs.push(p.clone()) }
 		if !process::run("git", theirs).ok { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (git add of their side)") }
 	}
-	let merged = process::run("git", ["write-tree"])
-	if !merged.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
-	// BUILD and LOWER run in the tree worktree moved to the merged index
-	// (#1916): the shared checkout holds the other agents' modified `.nika`,
-	// which a `lower-std` there lowered into the merge (`bounds_walk.rs`
-	// E0502), and a builder may write them again while the merge runs.
-	let wt = drive_tree_move(merged.stdout.trim().clone(), "MERGE not regenerated")
-	if wt == "" { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (no worktree of the merged tree)") }
-	// The binary there is about to be rebuilt from other sources than its stamp names.
-	process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 	let mut failed: String = ""
 	// Each step's seconds, for `MERGE timing` (#2154).
 	let began = drive_now()
 	let mut times: Vec[String] = []
 	let mut at = drive_now()
-	let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
-	times.push(f"build {drive_now() - at}s")
-	if !first.ok {
+	// The side of the conflicted lowered paths the regeneration starts from:
+	// theirs first; when that fails, ours (#2253: their lowered emitter lacks
+	// our unpushed emitter change, so the binary built from it lowers our
+	// merged `.nika` into code that does not compile).
+	let mut side = "theirs"
+	let mut failed_theirs: String = ""
+	let mut wt: String = ""
+	while true {
+		let merged = process::run("git", ["write-tree"])
+		if !merged.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
+		// BUILD and LOWER run in the tree worktree moved to the merged index
+		// (#1916): the shared checkout holds the other agents' modified `.nika`,
+		// which a `lower-std` there lowered into the merge (`bounds_walk.rs`
+		// E0502), and a builder may write them again while the merge runs.
+		wt = drive_tree_move(merged.stdout.trim().clone(), "MERGE not regenerated")
+		if wt == "" { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (no worktree of the merged tree)") }
+		// The binary there is about to be rebuilt from other sources than its stamp names.
+		process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 		at = drive_now()
-		let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
-		times.push(f"old lower-std {drive_now() - at}s")
-		if !old_lowered.ok {
-			failed = "lower-std before the build"
-			println(drive_tail(first.stdout + old_lowered.stdout, 30))
+		let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+		times.push(f"build {drive_now() - at}s")
+		if !first.ok {
+			at = drive_now()
+			let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
+			times.push(f"old lower-std {drive_now() - at}s")
+			if !old_lowered.ok {
+				failed = "lower-std before the build"
+				println(drive_tail(first.stdout + old_lowered.stdout, 30))
+			}
 		}
-	}
-	let mut rounds = 0
-	let mut settled = false
-	while failed == "" && !settled {
-		if rounds == 5 {
-			failed = "lower-std did not settle after 5 rounds"
-			break
+		let mut rounds = 0
+		let mut settled = false
+		while failed == "" && !settled {
+			if rounds == 5 {
+				failed = "lower-std did not settle after 5 rounds"
+				break
+			}
+			rounds += 1
+			at = drive_now()
+			let built = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+			times.push(f"round {rounds} build {drive_now() - at}s")
+			if !built.ok {
+				failed = "the build of the re-lowered files"
+				println(drive_tail(built.stdout, 30))
+				break
+			}
+			let old = drive_lowered_print(wt.clone())
+			at = drive_now()
+			let lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
+			times.push(f"lower-std {drive_now() - at}s")
+			if !lowered.ok {
+				failed = "lower-std"
+				println(drive_tail(lowered.stdout, 30))
+				break
+			}
+			settled = drive_lowered_print(wt.clone()) == old
 		}
-		rounds += 1
-		at = drive_now()
-		let built = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
-		times.push(f"round {rounds} build {drive_now() - at}s")
-		if !built.ok {
-			failed = "the build of the re-lowered files"
-			println(drive_tail(built.stdout, 30))
-			break
+		if failed == "" || unmerged == "" || side == "ours" { break }
+		// Their side failed: the conflicted lowered paths take our side (HEAD's
+		// copy, or none where HEAD has none) into the index and the checkout,
+		// and the regeneration starts again from that tree.
+		println(f"MERGE re-lowering from theirs failed ({failed}), trying ours")
+		failed_theirs = failed
+		failed = ""
+		side = "ours"
+		times.push("ours")
+		for p in unmerged.split(" ") {
+			let ours_has = process::run("git", ["cat-file", "-e", f"HEAD:{p}"]).ok
+			let took = if ours_has {
+				process::run("git", ["checkout", "HEAD", "--", p.clone()])
+			} else {
+				process::run("git", ["rm", "-q", "-f", "--ignore-unmatch", "--", p.clone()])
+			}
+			if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed from theirs ({failed_theirs}), and taking our side of {p} failed") }
 		}
-		let old = drive_lowered_print(wt.clone())
-		at = drive_now()
-		let lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
-		times.push(f"lower-std {drive_now() - at}s")
-		if !lowered.ok {
-			failed = "lower-std"
-			println(drive_tail(lowered.stdout, 30))
-			break
-		}
-		settled = drive_lowered_print(wt.clone()) == old
 	}
 	if failed != "" {
 		println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
-		drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})")
+		let why = if failed_theirs == "" { failed } else { f"{failed_theirs} from theirs, {failed} from ours" }
+		drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({why})")
 	}
 	// The lowered paths the regeneration rewrote, wrote new or removed in the
 	// worktree, against the merged index, are copied into the checkout and
@@ -1755,7 +1823,8 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
-		println(f"MERGE {drive_short(merge)} re-lowered {unmerged}")
+		let from = if side == "ours" { "from ours " } else { "" }
+		println(f"MERGE {drive_short(merge)} re-lowered {from}{unmerged}")
 		return
 	}
 	let what = if changed.len() == 0 { "nothing changed" } else { changed.join(" ") }
@@ -3226,7 +3295,7 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 	}
 	body = body
 		+ "\n## To build\n\n- [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
-- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`; a lowered file that differs, with an uncached `lower-std` of a `git archive HEAD` copy, `NIKAIA_LOWER_CACHE_SALT` fresh and `--sysroot COPY/crates`, its `lowered/` diffed against the copy's, never the shared working tree's, #1793), a defect in `docs/`, `guide/`, `website/` or `scripts/` (a stale example, a wrong rule) with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it in the file where it lives: a compiler, lowering or `std` defect in the compiler, a stale page example or rule in its page or `docs/` file, a script defect in the script. Add a test in `tests/compiler/tests/` unless a check that already runs turns red on it (name it: pre-push's `page-examples` for `guide/` and `website/`, `check-adr-refs.py` for a docs citation).\n"
+- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`; a lowered file that differs, with an uncached `lower-std` of a `git archive HEAD` copy, `NIKAIA_LOWER_CACHE_SALT` fresh and `--sysroot COPY/crates`, its `lowered/` diffed against the copy's, never the shared working tree's, #1793), a defect in `docs/`, `guide/`, `website/` or `scripts/` (a stale example, a wrong rule) with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it in the file where it lives: a compiler, lowering or `std` defect in the compiler, a stale page example or rule in its page or `docs/` file, a script defect in the script. Add a test in `tests/compiler/tests/` unless a check that already runs turns red on it (name it: pre-push's `page-examples` for `guide/` and `website/`, `check-adr-refs.nika` for a docs citation).\n"
 	body = body + "\n## Done when\n\nThe probe or check gives the expected output the first item names from its ADR or Part I-III section, and a `tests/compiler/tests/` test (or the named check) that failed on the unfixed tree is green; or the probe already passes on `develop` and a test pins it, naming the commit that fixed it; or the issue is closed as by design, naming the function or ADR.\n"
 	return body + drive_footer()
 }

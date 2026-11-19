@@ -248,6 +248,19 @@ impl Text {
         taken
     }
 
+    /// **Keep only the bytes `start..end`** (on characters' boundaries), in
+    /// this buffer: one move of the kept part to the front, and nothing
+    /// copied out, as [`Text::drain`] does (ADR-text-reuse-1 D2, #1589).
+    #[inline]
+    pub fn keep_only(&mut self, start: usize, end: usize) {
+        assert!(
+            start <= end && self.is_char_boundary(start) && self.is_char_boundary(end),
+            "assertion failed: a cut on characters' boundaries"
+        );
+        self.bytes.truncate(end);
+        self.bytes.drain(..start);
+    }
+
     /// The text from byte `at` on, as new text in the same place.
     #[inline]
     pub fn split_off(&mut self, at: usize) -> Text {

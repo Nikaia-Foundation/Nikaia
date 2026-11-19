@@ -11,7 +11,7 @@ reached, no version that built it and no progress report.
 the next version states all the topic's decisions in their current form, the
 previous version moves to [`docs/history/adr/`](../../history/adr/), and every
 live citation moves with it; nothing live cites an archived record
-(`scripts/check-adr-refs.py` refuses it). A decision that stays keeps its `Dn`.
+(`scripts/check-adr-refs.nika` refuses it). A decision that stays keeps its `Dn`.
 Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
@@ -67,7 +67,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [registry-1](adr-registry-1.md) | Nikaia packages leave crates.io for a registry of their own: a Git index whose versions arrive by pull request (metadata only, checked by `nikaia registry check` building the pinned commit); a canonical `nkpkg` archive hashed with SHA-256; ownership proved by the commit and kept by a signing key in the index; the newest compatible version solved with ADR-270's logic package, semver checked from API and ledger, a cooling period; mirrors are a file layout anyone hosts; two versions of a package side by side where no public edge joins them; replaces ADR-286 D23-D27 if accepted | Open | no |
-| [decision-records-v2](adr-decision-records-v2.md) | A topic has one live record, `ADR-<topic>-v<n>` (one to three lowercase words, general first; `n` its version); a change in substance makes the next version, the previous goes to the history, a decision that stays keeps its `Dn`; earlier records are consolidated when changed; names are claimed under Reserved numbers; `check-adr-refs.py` refuses two live versions of a topic | Accepted | partly: the rename tool and the move of `check-adr-refs` to Nikaia (#904) |
+| [decision-records-v2](adr-decision-records-v2.md) | A topic has one live record, `ADR-<topic>-v<n>` (one to three lowercase words, general first; `n` its version); a change in substance makes the next version, the previous goes to the history, a decision that stays keeps its `Dn`; earlier records are consolidated when changed; names are claimed under Reserved numbers; `check-adr-refs.nika` refuses two live versions of a topic | Accepted | partly: the rename tool and the move of `check-adr-refs` to Nikaia (#904) |
 | [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [382](adr-382.md) | A test that proves a local, a parameter or a path of fields from one (`p.name`, `self.cache`) is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write to the name, or an assignment or `mut` hand-over of the path or a prefix, takes it back (`NK1102` names it); not a path: `v[i].f`, `f().x`; an enum's value is bound by `match` only | Accepted | built |
@@ -427,7 +427,7 @@ what the decision is. Delete the row in the same commit that adds the record.
 A claim whose branch is abandoned is deleted by whoever notices.
 
 **When a record has to move to another name, its citations move with it.**
-`check-adr-refs.py` catches a citation of a decision that does not exist and a
+`check-adr-refs.nika` catches a citation of a decision that does not exist and a
 number held by two records, but not a citation that still resolves and now
 points at the record that took the old number. Every sentence that cited the old
 number is checked by hand.

@@ -3517,7 +3517,7 @@ pub mod fold_bound {
 }
 pub mod foreign {
     #[allow(unused_imports)]
-    pub use super::{Seen, written_in};
+    pub use super::{Seen, written_in, foreign_own_refused};
 }
 pub mod grammar_decode {
     #[allow(unused_imports)]
@@ -3675,7 +3675,7 @@ pub mod project_lower {
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, ProjectMembersOwnRust, project_members_no_own_rust, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
 }
 pub mod project_settings {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a3fb91db6557ce72b3bdfe823007092499c2787e63b9b2db2814bb382ccd5a5c";
+pub const LOWERED_DIGEST: &str = "a6ad031e0ef01a184848350942c24ef3e64d511a7bc1d34e79a6b9dc71112933";

@@ -1,0 +1,11 @@
+# The package's own Rust (ADR-rust-boundary-1 D25), reviewed against
+# `rust/words.rs`: its entries are `pub = false` (D26).
+version = 4
+
+[fn."words::twice"]
+pub = false
+sync = true
+touches = []
+locks = false
+threads = false
+signature = "(x: i64) -> i64"

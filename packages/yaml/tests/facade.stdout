@@ -24,7 +24,7 @@ ok test_tag_resolution
 ok test_parse_number
 ok test_one_document
   b: invalid type: string "x", expected u8 at line 2 column 4
-  unexpected end of input, expected one of: `m > n`, `plain_char(x, flow, after_space)` at line 2 column 1 (2:1)
+  unexpected end of input, expected one of: `m > n`, `plain_char(x, flow, false)`, a line indented past its parent at line 2 column 1 (2:1)
 ok test_location
 ok value::test_nan
 ok value::test_digits

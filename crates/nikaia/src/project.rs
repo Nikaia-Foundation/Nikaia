@@ -486,6 +486,11 @@ fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
         uses_in: None,
         within_std: manifest.within_std(),
         described: manifest.described(),
+        rust_root: manifest
+            .file()
+            .rust_library
+            .as_ref()
+            .and_then(|t| t.root.clone()),
     }
 }
 
@@ -1929,12 +1934,14 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
     }
 
     fn foreign_check(&self) -> Vec<check::Finding> {
-        crate::foreign::check(
+        let mut found = crate::foreign::check(
             self.parsed,
             &self.foreign.declared,
             &self.foreign.described,
             &self.foreign.moved,
-        )
+        );
+        found.extend(crate::foreign::own_rust(self.parsed, &self.foreign.own));
+        found
     }
 
     fn sync_violations(&self) -> i64 {
