@@ -32,31 +32,30 @@ of what one person can hold in their head. This is not a war, and nobody has to 
 it. Nikaia tries to move that complexity into the compiler.
 
 ## 2. Not a Compromise
-The ancient city of Nikaia is known for its **council**: a place where people who disagreed
-sat down at one table. Programming has its own two camps today:
+The ancient city of Nikaia is known for its council, a place where people who disagreed sat
+down at one table. Programming has its own two camps today. The scripting camp, with Python,
+JavaScript, PHP and Ruby, is direct, flexible and fast to write, and often fragile. The systems
+camp, with C, C++, Rust and Zig, is fast and in control of the machine, in its newer members also
+safe, and often heavy to carry.
 
-* The **scripting camp** (Python, JavaScript, PHP, Ruby): direct, flexible, fast to write. And often
-  fragile.
-* The **systems camp** (C, C++, Rust, Zig): fast, in control of the machine, and in its newer
-  members safe. And often heavy to carry.
+The usual reading is a scale with simple at one end and safe and fast at the other, and every
+language a point somewhere on it. A language that wants more safety pays in effort, and one that
+wants less effort pays in guarantees or in speed. Somewhere along the way that stopped being a
+description of today's languages and became a law.
 
-The usual reading is a scale: simple at one end, safe and fast at the other, and every language
-a point somewhere on it. A language that wants more safety pays in effort, one that wants less
-effort pays in guarantees or in speed. Somewhere along the way that stopped being a description
-of today's languages and became a law.
+We do not think it is a law. A council is not where each side gives up half of what it wanted.
+It is where the table finds an answer both sides can sign. Nikaia does not aim for a point in the
+middle of the scale. It aims to be safer than the languages that already join safety and speed,
+faster than them, and still simpler than they are. That is the claim this language exists to
+prove, and §6 says why we think it can be done.
 
-We do not think it is a law. A council is not where each side gives up half of what it wanted;
-it is where the table finds an answer both sides can sign. Nikaia is not a point in the middle
-of the scale. Its aim is to be **safer** than the languages that already join safety and speed,
-**faster** than them, and still **simpler** than they are. That is the claim this language exists
-to prove, and §6 says why we think it can be done.
-
-Nikaia's home is application development: the backends, the web services, the tools and
+Nikaia's home is application development, with the backends, the web services, the tools and
 programs that have to be fast and right at the same time. That is what it is built for
 first.
 
-From there it reaches out in both directions. Toward the machine: systems programming, down to
-bare metal. Toward the script: the small programs we reach for a scripting language to write.
+From there it reaches out in both directions, toward the machine with systems programming down
+to bare metal, and toward the script with the small programs we reach for a scripting language
+to write.
 Out there, Nikaia may serve you well. But this is a young language, and at the edges we make
 fewer promises. Close to the hardware, there may be cases where we cannot yet give you full
 control over how a structure is laid out in memory, or exactly when it is freed. Close to the
@@ -148,73 +147,81 @@ the economic argument for the project.
 The same technology is behind both halves of it. AI is why a growing share of code is no
 longer typed by a human, and a generator needs guarantees more than comfort. It is also why
 the compute that code runs on stopped being cheap. §8 below covers this. And it is the reason a
-compiler that carries this much can be built at all (§6, point 4).
+compiler that carries this much can be built at all, as §6 explains.
 
 ---
 
 ## 6. How It Can Be All Three
 
-Saying "safe, fast and simple" is easy; every new language says it. What matters is why it
-should hold this time, when careful people have tried for decades. We see five reasons, and
-none of them is a single trick.
+Every new language says it is safe, fast and simple. What matters is why it should hold this
+time, when careful people have tried for decades. We see five reasons, and none of them is a
+single trick.
 
-**1. The weight moves into the compiler.**
-Every decision a programmer makes by hand to get safety or speed (which pointer type, which lock
-order, how long a borrow lives, whether a function may pause) is a decision the compiler can
-make instead, if it sees enough of the program. Nikaia's compiler looks at the whole program and
-makes them. The programmer writes less, and because the compiler decides from facts rather than
-from a guess written down early, it can often decide better: the cheap reference count where
-nothing runs at once, the cheap hasher where no untrusted data is hashed, no index check where
-the index is proved in range. Simplicity and speed come from the same place here, which is why
-they do not have to be traded against each other.
+### Where the decisions are made
 
-**2. One tree, not a chain of representations.**
-Compilers have long been built as a chain: the source is lowered into one intermediate
-representation after another, and each analysis or optimisation runs on whichever layer suits it.
-That was a sound answer to a hard problem, and it has a cost: by the time an optimiser runs, much
-of what the program said is gone, and has to be rediscovered: whether an index is in range,
-whether two references overlap, whether a call touches anything.
+Much of what a programmer decides by hand to get safety or speed is a decision the compiler can
+make instead, if it sees enough of the program. Which pointer type a value needs, in which order
+locks are taken, how long a borrow lives and whether a function may pause are such decisions.
+Nikaia's compiler looks at the whole program and makes them. The programmer writes less, and
+because the compiler decides from facts rather than from a guess written down early, it can often
+decide better. It picks the cheap reference count where nothing runs at once, the cheap hasher
+where no untrusted data is hashed, and no index check where the index is proved in range.
+Simplicity and speed come from the same place here, which is why they do not have to be traded
+against each other.
+
+### Proofs and optimisation on the same tree
+
+Compilers have long been built as a chain. The source is lowered into one intermediate
+representation after another, and each analysis or optimisation runs on whichever layer suits
+it. That was a sound answer to a hard problem, and it has a cost. By the time an optimiser runs,
+much of what the program said is gone and has to be found again, such as whether an index is in
+range, whether two references overlap or whether a call touches anything.
 
 We are convinced the work can be done on the tree the programmer wrote. Nikaia's compiler infers,
 proves and decides on its checked syntax tree, and the optimiser we are building reduces that
 tree onto a smaller subset of Nikaia itself and rewrites it there, tree to tree. Each rewrite is a
-rule "this construct means the same as that one where this condition holds", and the condition is
+rule that one construct means the same as another where a condition holds, and the condition is
 shown by the same prover that checks your contracts. What is proved and what is optimised are the
 same program, so a proof turns directly into speed, and every step can be printed as Nikaia, read
-and checked again. A solver that needs a logic of its own is asked a question; the program does
-not pass through it as a stage. → [#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235),
+and checked again. Where a solver needs a logic of its own, the compiler asks it a question, and
+the program does not pass through that logic as a stage
+([#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235),
 [#1593](https://github.com/Nikaia-Foundation/Nikaia/issues/1593),
-[ADR-270](docs/specification/adr/adr-270.md)
+[ADR-270](docs/specification/adr/adr-270.md)).
 
-**3. Free to break with the past.**
-Most of the ideas in this manifesto are not new on their own. What existing languages cannot do is
-adopt them without breaking the code already written in them. A language with a garbage collector
-cannot take it out; a language whose functions are coloured cannot make the colour disappear; a
-language whose programs write lifetimes and pick `Rc` or `Arc` by hand cannot take those decisions
-back from millions of lines that made them. Each of these languages is held where it stands by
-its own success. Nikaia has no installed base to protect, so it can choose each concept on its
-merits and build the language around the ones that fit together.
+### Why existing languages stay where they are
 
-**4. The mountain can be climbed now.**
+Most of the ideas in this manifesto are not new on their own. What an established language finds
+hard is to adopt them without breaking the code already written in it. A language built around a
+garbage collector keeps it, a language whose functions are coloured keeps the colour, and a
+language whose programs write lifetimes and pick `Rc` or `Arc` by hand keeps those decisions in
+millions of lines that made them. Each is held where it stands by its own success. Nikaia has no
+installed base to protect, so it can choose each concept on its merits and build the language
+around the ones that fit together.
+
+### Why such a compiler can be built now
+
 A compiler that infers ownership over a whole program, builds the state machines, orders the
 locks, proves contracts through loops and optimises from those proofs is a very large piece of
-work. For a long time that was the honest reason not to try: language designers and researchers
-knew most of the parts, and putting all of them into one language was more work than a team
-could carry. That has changed. AI agents now write a large share of the code under human
-direction, and the work that was out of reach for a small team is within it. This project is the
-test of that claim: its specification is argued in a few hundred decision records, and its
-compiler is being rewritten in Nikaia, a module at a time.
+work. For a long time that was the honest reason not to try. Language designers and researchers
+knew most of the parts, and putting all of them into one language was more than a team could
+carry. That has changed. AI agents now write a large share of the code under human direction, and
+work that was out of reach for a small team is within it. This project is the test of that
+claim. Its specification is argued in a few hundred decision records, and its compiler is being
+rewritten in Nikaia, a module at a time.
 
-**5. An ecosystem from the first day.**
+### The ecosystem Nikaia stands on
+
 New languages often start from zero and wait years for their libraries. Nikaia stands on an
-existing one instead: it builds through Cargo, finds a dependency by version through crates.io,
-and calls a Rust crate once its interface is described. Today the compiler writes Rust and
-`rustc` builds it. That is the path we have, not the definition of the language: a program of
-Nikaia alone may later go to machine code directly (copy-and-patch is one candidate), while a
-program that uses Rust crates keeps a bridge to them. Which backend a program takes is a property
-of what it depends on; the guarantees are the language's.
-→ [ADR-002](docs/specification/adr/adr-002.md), [ADR-rust-boundary-1](docs/specification/adr/adr-rust-boundary-1.md),
-[#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235)
+existing ecosystem instead. It builds through Cargo, finds a dependency by version through
+crates.io, and calls a Rust crate once its interface is described. Today the compiler writes Rust
+and `rustc` builds it. That is the path we have, not the definition of the language. A program
+of Nikaia alone may later go to machine code directly, with copy-and-patch as one candidate,
+while a program that uses Rust crates keeps a bridge to them. Which backend a program takes
+follows from what it depends on, and the guarantees belong to the language
+([ADR-002](docs/specification/adr/adr-002.md),
+[ADR-rust-boundary-1](docs/specification/adr/adr-rust-boundary-1.md),
+[#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235)).
 
 ### What it looks like in the language
 
@@ -230,7 +237,7 @@ where every library has to exist twice.
 → [Spec Part I](docs/specification/10-nikaia-light.md)
 
 **2. Ownership without lifetime annotations.**
-You never write `'a`. Borrow contracts are inferred over the whole program, checked by
+Lifetimes are not written in the source. Borrow contracts are inferred over the whole program, checked by
 Nikaia's compiler and written to a ledger you can read; on today's path the Rust that comes out
 passes Rust's borrow checker as well, a second opinion on ours. Cases that safe Rust cannot
 express directly (a slice stored in a struct, a task borrowing from its parent) get their own
@@ -278,9 +285,9 @@ Deterministic teardown through ownership and RAII, also in functions that pause,
 
 Today the frontend lowers a `.nika` file to Rust source text, and `rustc` compiles that like any
 other Rust. That gives every Nikaia program the Rust ecosystem and a mature code generator from
-the first day, and the generated Rust is kept readable on purpose: it is the text that is
-compiled, so a compiler bug can be inspected there. The interface is text and nothing else, so
-the path behind it can change without the language changing (§6, point 5).
+the first day. The generated Rust is kept readable on purpose, because it is the text that is
+compiled and a compiler bug can be inspected there. The interface between the two is text and
+nothing else, so the path behind it can change without the language changing.
 
 What you need installed is an ordinary stable Rust toolchain. The Rust
 that comes out uses no unstable feature, no `-Z` flag is passed anywhere, and no crate in the
@@ -310,23 +317,20 @@ In the last row Nikaia is behind, and only time changes that.
 
 ### A goal, and the evidence so far
 
-This manifesto says what Nikaia wants and why. It is not a report of what works today: that is in
+This manifesto says what Nikaia wants and why. It does not report what works today, which is in
 the [status and roadmap](docs/project_status_and_roadmap.md) and in the
 [open issues](https://github.com/Nikaia-Foundation/Nikaia/issues). The claim of §2 is a goal the
-language has to prove, and it will be proved or refuted by measurements, not by this page.
+language has to prove, and measurements will prove or refute it, not this page.
 
-There is evidence that it can be reached, and soon:
-
-* **Faster and simpler at once.** On the One Billion Row Challenge, counted with callgrind,
-  Nikaia's fastest program runs about a third fewer instructions than the fastest human-written
-  Rust we measured on one thread, in a sixth of its tokens, with no `unsafe` and every index and
-  overflow checked or proved. → [benches/brc](benches/brc/README.md)
-* **Safer without more writing.** The compiler proves `assert`s through loops and recursion
-  without loop invariants written by hand, and drops the run-time checks it has proved.
-  → [Contracts](guide/contracts.md)
-* **Concurrency checked by construction.** Two `access_all` callers cannot form a lock-order
-  cycle, a lock cannot be held across a pause, and two tasks that would change the same value at
-  once are refused at compile time. → [Spec Part II](docs/specification/20-nikaia-advance.md)
+There is evidence that it can be reached, and soon. On the One Billion Row Challenge, counted with
+callgrind, Nikaia's fastest program runs about a third fewer instructions on one thread than the
+fastest human-written Rust we measured, in a sixth of its tokens, without `unsafe` and with every
+index and overflow checked or proved ([benches/brc](benches/brc/README.md)). The compiler proves
+`assert`s through loops and recursion without loop invariants written by hand, and leaves out
+the run-time checks it has proved ([Contracts](guide/contracts.md)). And two callers of
+`access_all` take their locks in one order, a lock held across a pause is refused, and two tasks
+that would change the same value at once are refused at compile time
+([Spec Part II](docs/specification/20-nikaia-advance.md)).
 
 Where Nikaia loses a measurement, the measurement says so and names what is known of the cause
 ([benches/game](benches/game/README.md)).
