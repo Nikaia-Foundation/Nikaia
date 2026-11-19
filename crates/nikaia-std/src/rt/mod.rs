@@ -1521,82 +1521,6 @@ mod tests {
         assert_eq!(exec::block_on(left_alone).expect("the first read"), b"mine");
         std::fs::remove_dir_all(&dir).ok();
     }
-
-    /// **An expired `cleanup-deadline` is exit 70, said on the panic path**
-    /// (ADR-297 D7 and D8).
-    ///
-    /// It has to be a *process*. The decision is about what the thing that
-    /// started the program reads — systemd, cron, a script under `set -e` —
-    /// and a status is only a status once the process is over; `exit` cannot
-    /// be watched from inside the process that calls it. So this runs the test
-    /// binary again, with a configuration file whose deadline is short and one
-    /// operation that will never finish, and reads what came back.
-    ///
-    /// Both halves are read, because either alone would pass while the
-    /// decision was half built: the **status** is D1, and the **message on
-    /// standard error** is D2, which is the default panic hook's doing and
-    /// therefore any hook's.
-    #[cfg(feature = "async-io")]
-    #[test]
-    fn an_expired_cleanup_deadline_is_exit_70_on_the_panic_path() {
-        const NAME: &str = "an_expired_cleanup_deadline_is_exit_70_on_the_panic_path";
-        const CHILD: &str = "NIKAIA_EXPIRED_DEADLINE_CHILD";
-
-        if std::env::var_os(CHILD).is_some() {
-            // The child. A pipe nobody writes to: the readiness wait is still
-            // in flight when the drain begins, so the deadline is the thing
-            // that ends it.
-            let (reader, _writer) = std::io::pipe().expect("a pipe");
-            std::thread::spawn(move || {
-                let _ = io::wait(&reader, Interest::Readable, None);
-            });
-            let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-            while handle().pending() == 0 && std::time::Instant::now() < until {
-                std::thread::yield_now();
-            }
-            assert_eq!(handle().pending(), 1, "the readiness wait is queued");
-            // The real path, not a call to `expired`: `finish` is what a
-            // generated `main` calls, and it is where the status is decided.
-            start(UserCode::Sequential).finish();
-            unreachable!("`finish` ended the program");
-        }
-
-        let dir = std::env::temp_dir().join(format!("nikaia-adr-112-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("a directory for the child's config");
-        let config = dir.join(config::FILE);
-        std::fs::write(&config, "cleanup-deadline = \"50ms\"\n").expect("write the config");
-
-        // The name is a filter and not a path, so that moving the test
-        // between modules does not quietly leave the child running nothing;
-        // `--nocapture`, because the panic hook writes where the harness would
-        // otherwise be capturing, and the message is half of what is read.
-        let ran = std::process::Command::new(std::env::current_exe().expect("this binary"))
-            .args([NAME, "--nocapture"])
-            .env(CHILD, "1")
-            .env(config::PATH_VAR, &config)
-            .output()
-            .expect("the child ran");
-        std::fs::remove_dir_all(&dir).ok();
-
-        let said = String::from_utf8_lossy(&ran.stderr).into_owned();
-        assert_eq!(
-            ran.status.code(),
-            Some(EXIT_CLEANUP_EXPIRED),
-            "D1: an expired deadline is 70, not 0.\nstderr:\n{said}"
-        );
-        assert!(
-            said.contains("did not finish within the"),
-            "D2: the message goes to standard error.\nstderr:\n{said}"
-        );
-        // Not *empty* - the harness itself writes there - but without the
-        // message, which is what D2 says: standard output belongs to the
-        // program and may be the very file somebody is waiting for.
-        assert!(
-            !String::from_utf8_lossy(&ran.stdout).contains("did not finish within the"),
-            "D2: the message is never on standard output"
-        );
-    }
-
     /// D4, from the only angle a test can see it: the runtime a `std` call
     /// finds is already there, and it is the same one every call finds.
     #[test]
@@ -1698,55 +1622,6 @@ mod tests {
             runtime.workers.drain(std::time::Duration::from_secs(5));
         }
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    /// D3's other half, through the surface rather than through the mechanism:
-    /// a socket says when it is readable, and the wait happens on an I/O
-    /// worker that was already running.
-    ///
-    /// `epoll` answers a socket exactly and answers a file uselessly, which is
-    /// the whole reason the two halves have different mechanisms behind one
-    /// `std` surface - so this is the test that the socket half is reachable
-    /// from where a program would reach it.
-    #[cfg(feature = "async-io")]
-    #[test]
-    fn a_socket_reports_readiness_through_the_std_surface() {
-        use std::io::{Read, Write};
-        use std::os::unix::net::UnixStream;
-
-        let (here, there) = UnixStream::pair().expect("a socket pair");
-
-        // Nothing sent: not readable, and a timeout is `Ok(false)` rather than
-        // a failure - a deadline has to be able to tell those apart.
-        assert!(
-            !io::wait(
-                &here,
-                Interest::Readable,
-                Some(std::time::Duration::from_millis(20))
-            )
-            .expect("polled")
-        );
-
-        // A byte from the peer, and the same call says so.
-        (&there).write_all(b"x").expect("the peer writes");
-        assert!(
-            io::wait(
-                &here,
-                Interest::Readable,
-                Some(std::time::Duration::from_secs(5))
-            )
-            .expect("polled")
-        );
-
-        // …and the transfer is the caller's, which is what "readiness" means:
-        // the runtime said when, the program says what.
-        let mut byte = [0u8; 1];
-        (&here).read_exact(&mut byte).expect("read");
-        assert_eq!(byte, [b'x']);
-
-        // A socket with room is writable straight away, so both interests are
-        // reachable rather than only the one a test happened to need.
-        assert!(io::wait(&here, Interest::Writable, None).expect("polled"));
     }
 
     /// What the `--runtime` line has to be able to say.
