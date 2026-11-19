@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1476] — 2026-11-19
+
+**The decisions on frames and folds, and how fast a grammar scans, live in one record, ADR-grammar-parallel-v1 (#2267)**
+- The decisions on frames and folds and how fast a grammar scans (@frame checked never rewritten, par_fold written never inferred, the blind cut and seam repair, the word-at-a-time scan, user_parallelism, a fold's lambdas walked as ordinary code) live in one record, ADR-grammar-parallel-v1; ten decisions of ADR-296 moved.
+
 ## [0.0.1475] — 2026-11-19
 
 **An f"…" with a file's name in a hole is text where its use asks for text, as a list item or a let's first use (ADR-319 D4) (#2328)**

@@ -34,7 +34,7 @@ Rust's with different words:
 | `Vec[i64]`, `HashMap[&str, Stats]` | Part I 4.6 | square brackets, never angle |
 | `grammar Name { … }` | Part II 10.1 | see below |
 | `dsl <target> { … } eod` | Part II 10.5 | see below |
-| `@frame(boundary: "\n", unchecked)`, `@detached`, `@immediate` | ADR-296 D9 | attributes, with `unchecked` given a scope of its own because it is an assertion you make rather than a question you ask. `@borrowed` was here and is gone ([ADR-283](../docs/specification/adr/adr-283.md) D4); `@tethers` replaces it and is not built (D3), so the grammar takes neither |
+| `@frame(boundary: "\n", unchecked)`, `@detached`, `@immediate` | ADR-grammar-parallel-v1 D1 | attributes, with `unchecked` given a scope of its own because it is an assertion you make rather than a question you ask. `@borrowed` was here and is gone ([ADR-283](../docs/specification/adr/adr-283.md) D4); `@tethers` replaces it and is not built (D3), so the grammar takes neither |
 | numbers | Part I 2.2 | an integer, or a float with an optional exponent. **Nothing else**: this language has no digit separators, no radix prefixes and no literal suffixes, so `1_000`, `0xFF` and `1i64` are each something other than a number and the grammar colours them as what they are |
 | comments | parser `rule COMMENT = "//" until(line_ending)` | `//` to the end of the line, and that is the only comment there is — no block comment, no doc comment |
 

@@ -698,7 +698,7 @@ impl EmitState {
                 },
                 null => {
                     // The one body that needs no action: a `par_fold` is the
-                    // whole rule (ADR-296 D10), so the value of the rule is
+                    // whole rule (ADR-grammar-parallel-v1 D2), so the value of the rule is
                     // the value of the fold. The binding the backend wants is
                     // supplied here rather than demanded from the user.
                     if rule.ret_type != null {

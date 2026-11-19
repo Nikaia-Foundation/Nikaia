@@ -2219,7 +2219,7 @@ grammar! {
           | "@frame" -> { 0 }
           | "@stream" -> { 0 }
 
-        // ADR-296 D9: the attribute is keyed. `@frame`, `@frame(boundary: "\n")`,
+        // ADR-grammar-parallel-v1 D1: the attribute is keyed. `@frame`, `@frame(boundary: "\n")`,
         // `@frame(boundary: "\n", unchecked)`; the positional form is withdrawn,
         // so that every future cut-point key (quote, start, escape, scan) has
         // room without changing what the existing ones mean.
@@ -2265,7 +2265,7 @@ grammar! {
         //
         // An action block is required today (Part II, 10.1, note) - with one
         // exception that is not an omission: a `par_fold` must be the whole
-        // body of its rule (ADR-296 D10), so there is nothing for an action to
+        // body of its rule (ADR-grammar-parallel-v1 D2), so there is nothing for an action to
         // add. The emitter supplies the binding such a rule needs.
         //
         // **The form without the arrow is refused by name** and not by
@@ -2563,7 +2563,7 @@ grammar! {
 
         rule g_choice_tail -> Spanned<Pattern> = "|" p:g_seq -> { p }
 
-        // ADR-296 D10: parallel parsing is a frame plus a monoid. `fold` is the
+        // ADR-grammar-parallel-v1 D2: parallel parsing is a frame plus a monoid. `fold` is the
         // accumulator; the merge is what makes it parallelisable, and asking
         // for it is how the user says a different chunk count is the same
         // answer to them.

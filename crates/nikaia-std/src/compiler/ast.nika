@@ -1416,7 +1416,7 @@ pub struct GrammarRule {
     pub generics: Vec[GenericParam],
 }
 
-/// The keyed attribute of ADR-296 D9: `@frame`, `@frame(boundary: "\n")`,
+/// The keyed attribute of ADR-grammar-parallel-v1 D1: `@frame`, `@frame(boundary: "\n")`,
 /// `@frame(boundary: "\n", unchecked)`. A bare `@frame` leaves `boundary`
 /// empty and the boundary is inferred downstream from the trailing literal.
 pub struct FrameAttr {
@@ -1558,7 +1558,7 @@ pub enum Repeat {
 
 /// `fold(rule, init, step)` and `par_fold(rule, init, step, merge)`.
 ///
-/// The merge is what separates them: ADR-296 D10 - parallel parsing is a frame
+/// The merge is what separates them: ADR-grammar-parallel-v1 D2 - parallel parsing is a frame
 /// plus a monoid, and the monoid is exactly this merge.
 pub struct FoldSpec {
     pub parallel: bool,
