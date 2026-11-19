@@ -212,25 +212,28 @@ pub fn replacen_in<N: TextNeedle + ?Sized>(
 }
 
 /// **A `replace` on the text another `replace` made works in that text's
-/// buffer** (ADR-text-reuse-1 D4): the link after the first of a chain.
+/// buffer** (ADR-text-reuse-1 D4): the link after the first of a chain, or
+/// a `let`'s text at its last use (a view is copied).
 #[inline]
-pub fn replaced<N: TextNeedle + ?Sized>(
-    mut text: crate::block::Text,
+pub fn replaced<G: crate::index::GivenText, N: TextNeedle + ?Sized>(
+    text: G,
     from: &N,
     to: &str,
 ) -> crate::block::Text {
+    let mut text = text.given_whole();
     replace_in(&mut text, from, to);
     text
 }
 
 /// `replaced` of the first `count` matches.
 #[inline]
-pub fn replacedn<N: TextNeedle + ?Sized>(
-    mut text: crate::block::Text,
+pub fn replacedn<G: crate::index::GivenText, N: TextNeedle + ?Sized>(
+    text: G,
     from: &N,
     to: &str,
     count: i64,
 ) -> crate::block::Text {
+    let mut text = text.given_whole();
     replacen_in(&mut text, from, to, count);
     text
 }

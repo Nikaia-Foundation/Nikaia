@@ -854,6 +854,45 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_replace_seen(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, args: &[Expr], span: &Span) {
+        if self.reading_only || !self.task_bindings.is_empty() { return; }
+        let name = match receiver {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
+            _ => return,
+        };
+        if !self.flow.lone_texts.contains(&name) || self.flow.mixed_text.contains(&name) { return; }
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !clone_of_a_let(&local) || !self.flow.clone_owners.contains(&local.id) || local.view_of != "" || local.lent || local.ty.is_a_view() || self.lent_here(&name) { return; }
+        for arg in args.iter() {
+            for each in visited_in_expr(arg) {
+                match each {
+                    Expr::Variable(v, _) => {
+                        let v = *v;
+                        if world.words.resolve(v) == name { return; }
+                    },
+                    _ => { },
+                }
+            }
+        }
+        let bound = self.frame_of(&name);
+        for repeat in self.repeats.iter() { if repeat.frame > bound { return; } }
+        let node = id_of(receiver) as i64;
+        self.flow.replaces.push(CheckClone { name, binding: Some(local.id), seq: self.read_seq, choices: self.branch.copy_owned(), node, span: span.clone(), edit: None });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn replaces_at_last_use_said(&mut self) {
+        let replaces = self.flow.replaces.copy_owned();
+        self.flow.replaces = vec![];
+        for one in replaces.iter() {
+            if self.a_clone_read_after(one) { continue; }
+            let mut lent = false;
+            for loan in self.flow.clone_loans.iter() { if loan.1 == one.binding && self.a_view_read_after(&loan.0, one) { lent = true; } }
+            if !lent { self.facts.replaced_last_uses.insert(one.node); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_clone_that_copies(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, copy: &Ty) -> bool {
         match copy {
             Ty::Named { name, view, .. } => {

@@ -150,6 +150,72 @@ pub(crate) fn check_function_grown_in(words: &winnow_grammar::InternerContext, b
 
 pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
 
+pub(crate) fn lone_texts_of(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
+    let seen = visited_in_block(body);
+    let mut plain: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for each in seen.iter() {
+        let each = *each;
+        match each {
+            Expr::MethodCall { receiver, method, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if lone_reads_only(words.resolve(method)) { plain.insert(id_of(receiver) as i64); }
+            },
+            Expr::Binary { lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                plain.insert(id_of(lhs) as i64);
+                plain.insert(id_of(rhs) as i64);
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr, .. } => { plain.insert(id_of(expr) as i64); },
+                        _ => { },
+                    }
+                }
+            },
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let printed = match func {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        let called = words.resolve(name);
+                        called == "print" || called == "println" || called == "eprint" || called == "eprintln"
+                    },
+                    _ => false,
+                };
+                if printed { for arg in args.iter() { plain.insert(id_of(arg) as i64); } }
+            },
+            _ => { },
+        }
+    }
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for each in seen.iter() {
+        let each = *each;
+        match each {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let written = nikaia_std::block::Text::from(words.resolve(name).to_string());
+                if plain.contains(&(id_of(each) as i64)) { named.insert(written); } else { lent.insert(written); }
+            },
+            _ => { },
+        }
+    }
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in named.iter() { if !lent.contains(name) { out.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    out
+}
+
+pub(crate) fn lone_reads_only(method: &str) -> bool {
+    for one in LONE_READS.iter() {
+        let one = *one;
+        if one == method { return true; }
+    }
+    false
+}
+
+pub(crate) const LONE_READS: [&str; 17] = ["len", "is_empty", "contains", "starts_with", "ends_with", "find", "rfind", "replace", "replacen", "clone", "to_uppercase", "to_lowercase", "repeat", "push_str", "push", "parse", "compare"];
+
 pub(crate) fn grown_text_of(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_grown_in(words, body, &mut out);
@@ -725,6 +791,8 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.grown_text = check_function_grown_text(&world.here, body);
     let outer_mixed = state.flow.mixed_text.copy_owned();
     state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
+    let outer_lone = state.flow.lone_texts.copy_owned();
+    state.flow.lone_texts = lone_texts_of(world.here.words, body);
     let tail = check_core_block(state, world, host, body);
     state.flow.grown_text = outer_grown;
     state.flow.mixed_text = outer_mixed;
@@ -755,6 +823,8 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.handles_read_again();
     state.needless_place_clones_said();
     state.data_handed_over_is_used_again();
+    state.replaces_at_last_use_said();
+    state.flow.lone_texts = outer_lone;
     state.needless_clones_said();
     state.reads_on_paths.clear();
     state.flow.read_index.clear();
