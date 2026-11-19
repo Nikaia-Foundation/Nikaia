@@ -21,11 +21,11 @@ fn root() -> String throws {
 }
 
 fn ran(nikaia: String, tmp: String, case: String, args: Vec[String]) throws {
-    let done = process::run(nikaia, args; dir: f"{tmp}/demo")
+    let done = process::run(nikaia, args; dir: f"{tmp}/demo", env: [("CARGO_TERM_COLOR", "never")])
     println(f"--- {case}: exit {done.code}")
     let text = f"{done.stdout}{done.stderr}".replace(tmp, "TMP")
     for line in text.lines() {
-        // Cargo's progress varies by run and by machine.
+        // Cargo's progress varies by run and by machine; CI colours it, so it is asked not to.
         let word = line.trim_start().split(" ").next() ?? ""
         if ["Updating", "Locking", "Adding", "Downloading", "Downloaded", "Compiling", "Finished", "Running", "Blocking"].contains(word) { continue }
         println(line)
