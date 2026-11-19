@@ -713,6 +713,10 @@ pub struct CheckFacts {
     /// (ADR-text-reuse-1 D2, #1589): `let mut rest = line[m..]` with `rest`
     /// grown takes `line`'s buffer where `line` owns one, and copies a view.
     pub given_cuts: collections::BTreeSet[i64],
+    /// The given cuts whose source hands its own buffer over (not a view's
+    /// copy, not a refused loan): a view of the source still read after one
+    /// is refused (`NK2305`, ADR-text-reuse-1 D2, #2243).
+    pub cut_gives: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -1041,6 +1045,7 @@ impl CheckFacts {
             dropped_catches: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
             given_cuts: collections::BTreeSet(),
+            cut_gives: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

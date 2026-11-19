@@ -548,6 +548,7 @@ pub(crate) fn check_core_stmt_given_cut(state: &mut CheckState, world: &CheckWor
         return;
     }
     if held.ty.is_a_view() { return; }
+    state.facts.cut_gives.insert(node_key(value));
     state.hands_over_name(world, &source, &to, span);
 }
 

@@ -3786,6 +3786,14 @@ pub(crate) fn late_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '
             late_given(first, ask, late, &mut out);
             late_given(fallback, ask, late, &mut out);
         },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match index {
+                Expr::Range { .. } => { late_given(base, ask, late, &mut out); },
+                _ => { },
+            }
+            late_read_off(value, ask, late, &mut out);
+        },
         _ => { late_read_off(value, ask, late, &mut out); },
     }
     out

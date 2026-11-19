@@ -5352,6 +5352,16 @@ fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[St
             late_given(first, ask, late, out)
             late_given(fallback, ask, late, out)
         }
+        // **A cut views what it cuts** (ADR-293 D23, #2243): `line[..m]`
+        // points into `line`, as `line.trim()` does, so moving `line` while
+        // the cut is still read hands over a view of it.
+        Expr::Index { base, index, .. } => {
+            match index {
+                Expr::Range { .. } => late_given(base, ask, late, out),
+                else => {}
+            }
+            late_read_off(value, ask, late, out)
+        }
         else => late_read_off(value, ask, late, out),
     }
     return out

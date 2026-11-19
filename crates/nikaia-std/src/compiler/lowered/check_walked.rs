@@ -240,7 +240,7 @@ pub trait CheckWalkedPasses {
     fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved;
     fn outside(&self, facts: &CheckFacts) -> ProverOutside;
     fn view_findings(&self) -> Vec<CheckFinding>;
-    fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>, receiver_views: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
+    fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>, receiver_views: &collections::BTreeSet<i64>, cut_gives: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
     fn tethered(&self) -> (Option<Vec<BufferPlan>>, Vec<CheckFinding>);
     fn trait_findings(&self) -> Vec<CheckFinding>;
     fn type_findings(&self) -> Vec<CheckFinding>;
@@ -271,7 +271,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
         state.findings.extend(passes.view_findings());
         let coalesced = vc_coalesced(&state.facts);
         let mut_viewed = vc_mut_viewed(&state.facts);
-        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed, &state.facts.receiver_views));
+        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed, &state.facts.receiver_views, &state.facts.cut_gives));
         let (plans, refused) = passes.tethered();
         if plans.is_some() { state.facts.keep_plans = std::convert::identity(plans); }
         state.findings.extend(refused);
