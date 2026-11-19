@@ -515,14 +515,14 @@ touches = []
 signature = "(self: ref fs::Root, part: ref fs::Path) -> fs::Root"
 
 # The directory of a `Dir`, for a program's argument (ADR-raw-sinks-1 D12);
-# `null` for `Anywhere`. Written in Nikaia, `src/runtime/paths.nika`
+# `.` for `Anywhere`. Written in Nikaia, `src/runtime/paths.nika`
 # (`root_path`).
 [fn."fs::Root::path"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "(self: ref fs::Root) -> fs::Path?"
+signature = "(self: ref fs::Root) -> fs::Path"
 
 # Write data to a file.
 #
@@ -8256,7 +8256,7 @@ sync = true
 touches = []
 signature = "(ref self) -> ref(self) String"
 
-# **The table a grammar interns its names into** (ADR-388 D1, D3): the caller
+# **The table a grammar interns its names into** (ADR-grammar-input-v1 D10, D12): the caller
 # makes it and hands it to an entry that reaches `ident` or `intern(p)` as
 # `words:`; every `winnow_grammar::Symbol` the parse yields reads its text
 # here after the call. One table handed to several parses gives one spelling

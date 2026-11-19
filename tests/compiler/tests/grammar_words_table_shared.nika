@@ -1,5 +1,5 @@
-// The caller hands an entry that interns its table as `words:` (ADR-388 D1,
-// D3, #1198): the names of two parses land in one table, so a `Symbol` of the
+// The caller hands an entry that interns its table as `words:` (ADR-grammar-input-v1
+// D10, D12, #1198): the names of two parses land in one table, so a `Symbol` of the
 // result reads back as its text, and a spelling interned twice is one name.
 
 use std::winnow_grammar

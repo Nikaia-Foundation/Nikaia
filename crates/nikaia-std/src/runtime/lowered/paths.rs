@@ -47,10 +47,11 @@ pub fn root_join(root: &fs::Root, part: &std::path::Path) -> fs::Root {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn root_path(root: &fs::Root) -> Option<fs::Path> {
+pub fn root_path(root: &fs::Root) -> fs::Path {
+    let here: fs::Path = std::path::PathBuf::from(".");
     match root {
-        fs::Root::Dir(dir) => Some(nikaia_std::fs::path::clone(&(dir))),
-        fs::Root::Anywhere => None,
+        fs::Root::Dir(dir) => nikaia_std::fs::path::clone(&(dir)),
+        fs::Root::Anywhere => here,
     }
 }
 
