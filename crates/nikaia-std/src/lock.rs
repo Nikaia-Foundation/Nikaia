@@ -819,57 +819,6 @@ mod tests {
         assert_eq!(lock.get(), 7);
     }
 
-    /// The message a door panicked with.
-    fn panicked_with(run: impl FnOnce()) -> String {
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run));
-        std::panic::set_hook(hook);
-        let said = said.expect_err("the door panics");
-        said.downcast_ref::<&str>()
-            .map(|s| s.to_string())
-            .or_else(|| said.downcast_ref::<String>().cloned())
-            .unwrap_or_default()
-    }
-
-    /// **A value a panicking block held is never read again**
-    /// ([ADR-327](../../../docs/specification/adr/adr-327.md) D1, D2), on both
-    /// shapes alike: the next door panics, and a value nobody broke is
-    /// untouched.
-    #[test]
-    fn a_poisoned_value_is_never_read() {
-        let local = Local::new(1_i64);
-        let untouched = Local::new(7_i64);
-        panicked_with(|| {
-            local.update(|n| {
-                *n = 99;
-                panic!("half-way");
-            })
-        });
-        assert!(
-            panicked_with(|| {
-                local.get();
-            })
-            .contains("never read again")
-        );
-        assert!(panicked_with(|| local.set(2)).contains("never read again"));
-        assert_eq!(untouched.get(), 7);
-
-        let crossing = Crossing::new(1_i64);
-        panicked_with(|| {
-            crossing.update(|n| {
-                *n = 99;
-                panic!("half-way");
-            })
-        });
-        assert!(
-            panicked_with(|| {
-                crossing.get();
-            })
-            .contains("never read again")
-        );
-    }
-
     /// The four doors, on both shapes
     /// ([ADR-281](../../../docs/specification/adr/adr-281.md)).
     #[test]

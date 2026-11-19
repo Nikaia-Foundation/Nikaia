@@ -1,0 +1,38 @@
+// A value a panicking block held is never read again (ADR-327 D1, D2): the
+// list's `update` panics half-way in a task, and a `get` and a `set` in the
+// tasks after it stop as well, while a value nobody broke still reads. The
+// list crosses to a `spawn`, so at `user_parallelism = yes` it is the
+// crossing shape and at `no` the plain one.
+fn grow(list: SharedMut[Vec[i64]]) -> i64 {
+	list.update fn(mut v) {
+		v.push(99)
+		if v.len() > 1 { panic("half-way") }
+	}
+	return 1
+}
+
+fn read(list: SharedMut[Vec[i64]]) -> i64 {
+	return list.get().len()
+}
+
+fn write(list: SharedMut[Vec[i64]]) -> i64 {
+	list.set([2])
+	return 1
+}
+
+fn main() throws {
+	let list: SharedMut[Vec[i64]] = SharedMut([1])
+	let other: SharedMut[Vec[i64]] = SharedMut([7])
+	let crossed = spawn fn { list.get().len() + other.get().len() }
+	println(f"crossed: {crossed.join()}")
+	let a = async grow(list) catch { 0 }
+	println("the first task runs")
+	println(f"the update panicked: {a == 0}")
+	let b = async read(list) catch { -1 }
+	println("the second task runs")
+	println(f"get: {b}")
+	let c = async write(list) catch { -1 }
+	println("the third task runs")
+	println(f"set: {c}")
+	println(f"the other value: {other.get().len()}")
+}

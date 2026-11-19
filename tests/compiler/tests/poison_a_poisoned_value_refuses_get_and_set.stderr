@@ -1,0 +1,3 @@
+tests/poison_a_poisoned_value_refuses_get_and_set.nika:9: a task stopped: half-way
+tests/poison_a_poisoned_value_refuses_get_and_set.nika:15: a task stopped: a task panicked while it held this lock, so the value may be half-changed: it is never read again
+tests/poison_a_poisoned_value_refuses_get_and_set.nika:19: a task stopped: a task panicked while it held this lock, so the value may be half-changed: it is never read again
