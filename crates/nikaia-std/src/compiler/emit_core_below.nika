@@ -378,7 +378,9 @@ impl EmitState {
         // and so does a grammar's entry rule (ADR-296 D24).
         let parts: Vec[ref String] = name.splitn(2, "::").collect()
         let a_grammar = self.grammars.contains_key(parts[0])
-        if a_grammar {
+        // A grammar of another file of `std` is known by its ledger entry
+        // only (#2233: `describe.nika` catching `Rust::file` of `rust.nika`).
+        if a_grammar || self.a_package_grammar_entry(name) {
             return false
         }
         return self.named_error(world, name) != 0

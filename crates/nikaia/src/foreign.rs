@@ -106,7 +106,12 @@ pub fn own_rust(
     parsed: &Parsed,
     own: &nikaia_std::compiler::project_members::ProjectMembersOwnRust,
 ) -> Vec<Finding> {
-    nikaia_std::compiler::foreign::foreign_own_refused(&written(parsed), own)
+    nikaia_std::compiler::foreign::foreign_own_refused(
+        &written(parsed),
+        &parsed.program,
+        &parsed.interner,
+        own,
+    )
 }
 
 /// `NK2505`: the crate moved and its description did not

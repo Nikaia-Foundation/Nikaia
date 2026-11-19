@@ -246,6 +246,86 @@ pub fn describe_descriptions_digest(directory: ref fs::Path) -> String {
 /// the build's to report, not this command's.
 pub fn describe_names_the_program_writes[H: DescribeHost](root: ref fs::Path, crate_word: String, contracts: String, host: ref H) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for qualified in describe_qualified_written(root, contracts, host) {
+        let rest = qualified.strip_prefix(f"{crate_word}::") ?? continue
+        out.insert(rest.clone())
+    }
+    return out
+}
+
+/// What `nikaia describe crate` drafts (ADR-rust-boundary-1 D27): the
+/// entries, the hand Rust's files by hash, and what the code calls that the
+/// Rust keeps narrower than `pub(crate)` (D24).
+pub struct DescribeOwn {
+    pub drafted: Drafted,
+    /// Each `.rs` file beside `[rust-library] root`, by its path from that
+    /// directory, and its hash (D25).
+    pub sources: collections::BTreeMap[String, String],
+    /// The calls to a private or `pub(super)` function, which get no entry.
+    pub narrow: Vec[String],
+}
+
+/// **The package's own Rust, drafted** (ADR-rust-boundary-1 D24-D27): every
+/// `pub(crate)` or wider function the package's Nikaia code calls, under the
+/// path it writes (`words::twice`), `pub = false` (D26). The Rust is read
+/// from the directory holding `rust_root`, as the crate build copies it
+/// (D23).
+pub fn describe_own[H: DescribeHost](root: ref fs::Path, rust_root: ref String, contracts: String, host: ref H) -> DescribeOwn throws {
+    let hand = root.join(rust_root)
+    let dir = hand.parent() ?? root.clone()
+    let hand_name = (hand.file_name()?.text_of() ?? "").clone()
+    let root_text = fs::read_to_string(hand, fs::Root::Anywhere) catch { throw Refused::Because(f"reading {hand.display()}: {error}") }
+    let heads = project_members_rust_heads(root_text)
+    let mut surface = empty()
+    let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let files = fs::walk(dir, fs::Root::Anywhere) catch { throw Refused::Because(f"reading {dir.display()}: {error}") }
+    for name in files.iter() {
+        let relative = name.display()
+        if !relative.ends_with(".rs") {
+            continue
+        }
+        let bytes = fs::read(dir.join(name), fs::Root::Anywhere) catch { continue }
+        let mut read: Vec[u8] = []
+        for b in bytes.iter() {
+            read.push(b)
+        }
+        sources.insert(relative.clone(), hash::sha256_hex(read))
+        let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { continue }
+        let items = Rust::file(text) catch { throw Refused::Because(f"{relative}: {error}") }
+        let module = if relative == hand_name { "src/lib.rs" } else { f"src/{relative}" }
+        read_items(surface, module, items)
+    }
+    let mut functions: collections::BTreeMap[String, FnContract] = collections::BTreeMap()
+    let mut unanswered: Vec[String] = []
+    let mut narrow: Vec[String] = []
+    let mut named_types: collections::BTreeSet[String] = collections::BTreeSet()
+    let crate_word: String = "crate"
+    for name in describe_qualified_written(root, contracts, host) {
+        let head = name.split("::").next() ?? continue
+        if head == name || !heads.contains(head) {
+            continue
+        }
+        match surface.functions[name] {
+            null => unanswered.push(name.clone()),
+            function => {
+                if surface.within.contains(name) || surface.offers.contains(name) {
+                    let mut entry = contract_of(function, crate_word, surface.types, named_types)
+                    entry.public = false
+                    functions.insert(name.clone(), entry)
+                } else {
+                    narrow.push(name.clone())
+                }
+            },
+        }
+    }
+    let types: collections::BTreeMap[String, TypeContract] = collections::BTreeMap()
+    return DescribeOwn { drafted: Drafted { functions: functions, types: types, unanswered: unanswered, notes: Notes::empty() }, sources: sources, narrow: narrow }
+}
+
+/// Every qualified name the package's `.nika` files write, under `root`,
+/// leaving out `target` and the `contracts` directory.
+fn describe_qualified_written[H: DescribeHost](root: ref fs::Path, contracts: String, host: ref H) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     let mut pending: Vec[fs::Path] = [root.clone()]
     while true {
         let directory = pending.pop() ?? break
@@ -266,8 +346,7 @@ pub fn describe_names_the_program_writes[H: DescribeHost](root: ref fs::Path, cr
             let text = fs::read_to_string(path, fs::Root::Anywhere) catch { continue }
             let written = host.qualified_names(text) ?? continue
             for qualified in written {
-                let rest = qualified.strip_prefix(f"{crate_word}::") ?? continue
-                out.insert(rest.clone())
+                out.insert(qualified.clone())
             }
         }
     }

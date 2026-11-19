@@ -452,11 +452,13 @@ pub struct ProjectMembersForeign {
 pub struct ProjectMembersOwnRust {
     pub heads: collections::BTreeSet<String>,
     pub described: collections::BTreeSet<String>,
-    pub published: collections::BTreeSet<String>,
+    pub published: collections::BTreeMap<String, i64>,
+    pub narrow: collections::BTreeSet<String>,
+    pub files: collections::BTreeMap<String, String>,
     pub moved: Vec<String>,
 }
 
-pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeSet::new(), moved: vec![] } }
+pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeMap::new(), narrow: collections::BTreeSet::new(), files: collections::BTreeMap::new(), moved: vec![] } }
 
 pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank(), own: project_members_no_own_rust() } }
 
@@ -513,29 +515,91 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
     ProjectMembersForeign { declared, described, descriptions, moved, beneath, within_std, over_std, own }
 }
 
-pub(crate) async fn project_members_own_rust<H: ProjectMembersForeignHost>(root: &std::path::Path, rust_root: &str, descriptions: &mut Ledger, host: &H) -> ProjectMembersOwnRust {
-    let mut own = project_members_no_own_rust();
-    let hand = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(rust_root)));
-    let text = match fs::read_to_string(&hand, &fs::Root::Anywhere).await {
-        Ok(value) => value,
-        Err(_error) => { String::from("") },
-    };
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn project_members_rust_heads(text: &str) -> Vec<String> {
+    let mut heads: Vec<String> = vec![];
     let items = match nikaia_std::grammar::parse(&*text, Rust::parse_file()) {
         Ok(value) => value,
         Err(_error) => { vec![] },
     };
     for item in items.iter() {
         match item {
-            RustItem::Group(group) => { if group.what == "mod" { own.heads.insert(nikaia_std::block::Text::from(group.name.to_string())); } },
+            RustItem::Group(group) => { if group.what == "mod" { heads.push(nikaia_std::block::Text::from(group.name.to_string())); } },
             _ => { },
         }
     }
-    let mut ledger = match host.read_beside(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&("crate.contracts")))) { Some(__nikaia_value) => __nikaia_value, None => return own };
+    heads
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn project_members_rust_file(dir: &std::path::Path, head: &str) -> fs::Path {
+    let flat = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.rs", head))));
+    if match fs::exists(&flat, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { false },
+    } { return flat; }
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(head)))), std::path::Path::new(&("mod.rs")))
+}
+
+pub(crate) fn project_members_narrow(items: &[RustItem<'_>], at: &str, narrow: &mut collections::BTreeSet<String>) {
+    for item in items.iter() {
+        match item {
+            RustItem::Hidden(f) => { narrow.insert(format!("{}::{}", at, f.name)); },
+            RustItem::Group(group) => { if group.what == "mod" { project_members_narrow(&group.items, &format!("{}::{}", at, group.name), narrow); } },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn project_members_entry_line(text: &str, function: &str) -> i64 {
+    let quoted = format!("[fn.\"{}\"]", function);
+    let bare = format!("[fn.{}]", function);
+    let mut at: i64 = 0;
+    for line in text.lines() {
+        at += 1;
+        let trimmed = line.trim();
+        if trimmed == quoted || trimmed == bare { return at; }
+    }
+    0
+}
+
+pub(crate) async fn project_members_own_rust<H: ProjectMembersForeignHost>(root: &std::path::Path, rust_root: &str, descriptions: &mut Ledger, host: &H) -> ProjectMembersOwnRust {
+    #[allow(unused_mut)] let mut own = project_members_no_own_rust();
+    let hand = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(rust_root)));
+    let text = match fs::read_to_string(&hand, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut own = own;
+    let dir = nikaia_std::index::or(nikaia_std::fs::path::parent(&(hand)), || nikaia_std::fs::path::clone(&(root)).into());
+    for head in project_members_rust_heads(&text) {
+        let file = project_members_rust_file(&dir, &head);
+        let read = match fs::read_to_string(&file, &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { String::from("") },
+        };
+        let items = match nikaia_std::grammar::parse(&*read, Rust::parse_file()) {
+            Ok(value) => value,
+            Err(_error) => { vec![] },
+        };
+        project_members_narrow(&items, &head, &mut own.narrow);
+        let shown = nikaia_std::fs::path::display(&(file));
+        let prefix = format!("{}/", nikaia_std::fs::path::display(&(root)));
+        own.files.insert(nikaia_std::block::Text::from(head.to_string()), if shown.starts_with(&*prefix) { nikaia_std::search::replacen(&shown, &prefix, &"", 1) } else { shown });
+        own.heads.insert(head);
+    }
+    let entries = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&("crate.contracts")));
+    let written = match fs::read_to_string(&entries, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut own = own;
+    let mut ledger = match host.read_beside(&entries) { Some(__nikaia_value) => __nikaia_value, None => return own };
     let functions: Vec<String> = ledger.functions.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
     for function in functions.iter() {
         let contract = match ledger.functions.get_mut(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
         contract.described = true;
-        if contract.public { own.published.insert(nikaia_std::block::Text::from(function.to_string())); }
+        if contract.public { own.published.insert(nikaia_std::block::Text::from(function.to_string()), project_members_entry_line(&written, function)); }
         contract.public = true;
         own.described.insert(nikaia_std::block::Text::from(function.to_string()));
         match function.split("::").next() {

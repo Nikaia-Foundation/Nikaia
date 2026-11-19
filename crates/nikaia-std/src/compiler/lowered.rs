@@ -3363,7 +3363,7 @@ pub mod declared {
 }
 pub mod describe {
     #[allow(unused_imports)]
-    pub use super::{Drafted, drafted, DescribeHost, describe_adopt_refusal, describe_rust_dependency, describe_unanswered, describe_descriptions_digest, describe_names_the_program_writes, describe_without_dots, DescribeSources, describe_crate_sources, describe_crate_root};
+    pub use super::{Drafted, drafted, DescribeHost, describe_adopt_refusal, describe_rust_dependency, describe_unanswered, describe_descriptions_digest, describe_names_the_program_writes, DescribeOwn, describe_own, describe_without_dots, DescribeSources, describe_crate_sources, describe_crate_root};
 }
 pub mod diagnostics {
     #[allow(unused_imports)]
@@ -3663,7 +3663,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_hand_modules, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -3675,7 +3675,7 @@ pub mod project_lower {
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, ProjectMembersOwnRust, project_members_no_own_rust, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, ProjectMembersOwnRust, project_members_no_own_rust, project_members_no_foreign, project_members_foreign_of, project_members_rust_heads, project_members_rust_file, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
 }
 pub mod project_settings {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a6ad031e0ef01a184848350942c24ef3e64d511a7bc1d34e79a6b9dc71112933";
+pub const LOWERED_DIGEST: &str = "394cf14b3f66d731b152be802fa41e37a6831c9755f88eb966a0a86ea6ad166f";
