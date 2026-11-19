@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1459] — 2026-11-19
+
+**std runs no shell: process::shell and process::is_word leave std, a call is refused with NK1314 (ADR-raw-sinks-1 D9) (#2197)**
+- std runs no shell (ADR-raw-sinks-1 D9): `process::shell` and `process::is_word` are gone from std, and a call to `process::shell` is refused with NK1314, whose help writes the command as `process::run("PROGRAM", ["ARG", ...])`.
+
 ## [0.0.1458] — 2026-11-19
 
 **A privileged start ends before main unless the environment is untrusted (ADR-397 D3), the check in crates/unsafe/privileged-start (#2239)**
