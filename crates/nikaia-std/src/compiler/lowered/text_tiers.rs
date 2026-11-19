@@ -4122,6 +4122,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); field_kinds(expr, base, ask, walk) },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            walk.read_here = a_range(index);
             let received = tier_expr(base, ask, walk);
             tier_expr(index, ask, walk);
             if a_range(index) && walk.late_cuts.contains(&node_key(expr)) && only_own_text(&received) {
