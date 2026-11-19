@@ -1,0 +1,40 @@
+// A type and a reflected field answer their `///` lines as text (ADR-329 D2,
+// ADR-330 D2): `T::doc`, `field.doc` and `field.ty::doc`, empty where there
+// are none.
+
+/// Where a user lives.
+struct Address {
+	/// The street and the number.
+	street: String,
+}
+
+/// A user of the service.
+/// Two lines, kept as written.
+struct User {
+	/// The name shown.
+	name: String,
+	age: i64,
+	/// The home.
+	home: Address,
+}
+
+/// How a user is reached.
+enum Contact { Mail, Phone }
+
+fn describe[T: Struct](T) throws {
+	println(f"{T::name}: [{T::doc}]")
+	for field in T::fields {
+		println(f"  {field.name}: [{field.doc}] of type [{field.ty::doc}]")
+	}
+}
+
+fn kind_doc[T](T) throws {
+	println(f"{T::name}: [{T::doc}]")
+}
+
+fn main() throws {
+	describe(User)
+	describe(Address)
+	kind_doc(Contact)
+	kind_doc(i64)
+}

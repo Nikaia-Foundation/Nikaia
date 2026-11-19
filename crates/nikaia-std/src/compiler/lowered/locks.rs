@@ -62,7 +62,7 @@ pub(crate) fn unit_reaches(items: &[Spanned<Item>], names: &winnow_grammar::Inte
     }
 }
 
-pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, stored: &collections::BTreeMap<String, CheckStoredCode>, holes_of: &mut impl FnMut(i64, &Expr) -> Vec<Expr>) {
+pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, stored: &collections::BTreeMap<String, CheckStoredCode>, holes_of: &mut impl FnMut(i64, &Expr) -> Vec<Expr>) {
     let calls: collections::BTreeMap<String, BodyCalls> = resolved.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), outside_a_task(entry.1)) }).collect();
     let mut graph: collections::BTreeMap<String, Reaches> = collections::BTreeMap::new();
     for (field, code) in stored.iter() { stored_reaches(field, &code.resolved, code.unresolved, &code.free, &mut graph); }

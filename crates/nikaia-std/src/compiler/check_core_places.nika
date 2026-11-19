@@ -202,6 +202,12 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
         if field == "name" {
             return check_core_places_str_view()
         }
+        // **`field.doc`, its `///` lines as text** (ADR-329 D2), known
+        // while building as its name is.
+        if field == "doc" {
+            state.facts.reflected_docs.insert(id_of(expr) as i64)
+            return check_core_places_str_view()
+        }
         // **`field.default`, its default as a `T?`** (ADR-331 D5).
         if field == "default" {
             return check_core_places_unrolled_default(state.flow.unrolling)

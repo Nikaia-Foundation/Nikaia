@@ -247,11 +247,19 @@ impl EmitState {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let handle = walk.async_handles.get(&emit_text(world, name));
-                if handle.is_some() { out.push(nikaia_std::index::or(handle, || "")); } else { self.emit_expr_variable(world, walk, out, host, node, name, depth, &flow, scope)?; }
+                if handle.is_some() { out.push(nikaia_std::index::or(handle, || "")); } else if self.facts.shrunk_leaves.contains(&at) {
+                    out.push("nikaia_std::index::shrunk(");
+                    self.emit_expr_variable(world, walk, out, host, node, name, depth, &flow, scope)?;
+                    out.push(")");
+                } else { self.emit_expr_variable(world, walk, out, host, node, name, depth, &flow, scope)?; }
             },
             Expr::Path(segments, _) => {
                 if self.facts.reflected_names.contains(&at) {
                     out.push(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))).quoted());
+                    return Ok(());
+                }
+                if self.facts.reflected_docs.contains(&at) {
+                    out.push(&self.doc_text(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)))));
                     return Ok(());
                 }
                 if self.emit_expr_kept_function(world, walk, out, host, node, depth, &flow, scope)? { return Ok(()); }
@@ -310,7 +318,18 @@ impl EmitState {
                 let base = nikaia_std::boxed::open(base); let name = *name;
                 if self.facts.plain_reaches.contains(&at) { self.emit_core_field(world, walk, out, host, node, base, name, depth, flow, scope)?; } else { self.emit_core_safe_field(world, walk, out, host, node, base, name, depth, flow, scope)?; }
             },
-            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?; },
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if self.facts.pushed_cuts.contains(&at) {
+                    out.push("nikaia_std::index::shrunk({ let __cut = ");
+                    self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?;
+                    out.push("; let __span = nikaia_std::index::cut_span(&");
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
+                    out.push(", __cut); nikaia_std::index::given_cut(");
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
+                    out.push(", __span) })");
+                } else { self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?; }
+            },
             Expr::Cast { expr, ty, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_core_cast(world, walk, out, host, expr, ty, depth, flow, scope)?; },
             Expr::StructLit { name, fields, .. } => { let name = *name; self.emit_core_struct_lit(world, walk, out, host, node, name, fields, depth, flow, scope)?; },
             Expr::With { base, fields, at: written_at, .. } => { let base = nikaia_std::boxed::open(base); let written_at = *written_at; self.emit_core_with(world, walk, out, host, node, base, fields, written_at, depth, flow, scope)?; },

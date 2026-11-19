@@ -130,6 +130,14 @@ pub struct CheckFacts {
     pub kind_compares: collections::BTreeSet[i64],
     /// The paths that are `T::name` (ADR-330 D2).
     pub reflected_names: collections::BTreeSet[i64],
+    /// **The paths and members that are a documentation** (ADR-329 D2,
+    /// ADR-330 D2): `T::doc`, `field.doc` and `field.ty::doc`, each text
+    /// known while building.
+    pub reflected_docs: collections::BTreeSet[i64],
+    /// **The `///` lines of each type the package declares**, keyed by its
+    /// name, and of each of its fields, keyed `Type.field` (ADR-329 D2).
+    /// A type without them, or without source here, has none.
+    pub docs: collections::BTreeMap[String, String],
     pub fallible_loops: collections::BTreeSet[i64],
     pub pausing_walks: collections::BTreeSet[i64],
     pub pausing_loops: collections::BTreeSet[i64],
@@ -713,6 +721,23 @@ pub struct CheckFacts {
     /// (ADR-text-reuse-1 D2, #1589): `let mut rest = line[m..]` with `rest`
     /// grown takes `line`'s buffer where `line` owns one, and copies a view.
     pub given_cuts: collections::BTreeSet[i64],
+    /// The given cuts whose source hands its own buffer over (not a view's
+    /// copy, not a refused loan): a view of the source still read after one
+    /// is refused (`NK2305`, ADR-text-reuse-1 D2, #2243).
+    pub cut_gives: collections::BTreeSet[i64],
+    /// The bindings (`CheckLocal::id`) a `let mut` of a giving cut made: the
+    /// text in them sits in the whole source's buffer (ADR-text-reuse-1 D2).
+    pub given_names: collections::BTreeSet[i64],
+    /// **The uses of a given name where its text leaves** (returned, pushed,
+    /// stored in a place, the body's last value): the emitter shrinks the
+    /// buffer there when the text fills less than half of it
+    /// (`index::shrunk`, ADR-text-reuse-1 D2, #1589). A local is not shrunk.
+    pub shrunk_leaves: collections::BTreeSet[i64],
+    /// **A cut of a local that dies where it is pushed into a parameter's
+    /// list, given the local's buffer** (ADR-text-reuse-1 D2, #2291): the
+    /// tier pass took it as text of its own (`given_pushes`), so the element
+    /// owns it, shrunk as it leaves, and nothing tethers the local.
+    pub pushed_cuts: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -811,6 +836,8 @@ impl CheckFacts {
             kind_matches: collections::BTreeSet(),
             kind_compares: collections::BTreeSet(),
             reflected_names: collections::BTreeSet(),
+            reflected_docs: collections::BTreeSet(),
+            docs: collections::BTreeMap(),
             fallible_loops: collections::BTreeSet(),
             pausing_walks: collections::BTreeSet(),
             pausing_loops: collections::BTreeSet(),
@@ -1041,6 +1068,10 @@ impl CheckFacts {
             dropped_catches: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
             given_cuts: collections::BTreeSet(),
+            cut_gives: collections::BTreeSet(),
+            given_names: collections::BTreeSet(),
+            shrunk_leaves: collections::BTreeSet(),
+            pushed_cuts: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

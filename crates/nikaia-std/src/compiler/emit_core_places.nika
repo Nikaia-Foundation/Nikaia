@@ -87,6 +87,13 @@ impl EmitState {
 
     /// `field.default` as a `T?` (ADR-331 D5): the value the ledger recorded,
     /// written as an option's is, or `None`.
+    /// **A documentation as a literal** (ADR-329 D2): the `///` lines kept
+    /// under `key`, empty where there are none.
+    fn doc_text(ref self, key: ref String) -> String {
+        let found: String = self.facts.docs.get(key)?.clone() ?? ""
+        return found.quoted()
+    }
+
     fn emit_place_default(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> String {
         let found = self.field_contract(world, owner, field)
         let contract = found ?? return "None"
@@ -354,6 +361,25 @@ impl EmitState {
         if typed != null {
             out.push((typed ?? "").quoted())
             return
+        }
+        // **`field.doc` and `field.ty::doc` are `///` lines as text**
+        // (ADR-329 D2, ADR-330 D2): the field's own, and its type's.
+        if self.facts.reflected_docs.contains(node_key(node)) {
+            let doc_of = walk.reflected(world, base, name, "doc")
+            if doc_of != null {
+                let owner: String = match base {
+                    Expr::Variable(binding, _) => walk.field_owners.get(emit_text(world, binding))?.clone() ?? walk.specialised_to() ?? "",
+                    else => "",
+                }
+                let field = doc_of ?? ""
+                out.push(self.doc_text(f"{owner}.{field}"))
+                return
+            }
+            let type_doc = self.reflected_field_type(world, walk, base, name, "ty::doc")
+            if type_doc != null {
+                out.push(self.doc_text(type_doc ?? ""))
+                return
+            }
         }
         // **`field.default` is its default as a `T?`** (ADR-331 D5).
         let default_of = walk.reflected(world, base, name, "default")

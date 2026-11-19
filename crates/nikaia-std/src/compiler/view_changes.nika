@@ -66,6 +66,9 @@ pub struct VcAsk {
     /// The calls of a text method whose result is a view of the text it is
     /// called on, by the call's node (`receiver_views`, #1478).
     pub receiver_views: ref collections::BTreeSet[i64],
+    /// The cuts a `let mut` changes that take their source's own buffer, by
+    /// the node of the cut (`cut_gives`, ADR-text-reuse-1 D2, #2243).
+    pub cut_gives: ref collections::BTreeSet[i64],
 }
 
 struct VcView {
@@ -1192,6 +1195,15 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
     for mut view in views {
         view.roots.remove(name)
     }
+    // **A changed cut takes its source's text only where no other view of
+    // it is still read** (ADR-text-reuse-1 D2, #2243): `let mut rest =
+    // line[m..]` gives `rest` the buffer of `line`, so a `head = line[..m]`
+    // read afterwards would read text that is gone. Refused at the cut, as a
+    // hand-over is (ADR-views-3 D9).
+    if ask.cut_gives.contains(node_key(value)) {
+        let source = given_cut_source(value, ask.names) ?? ""
+        vc_refuse_given_cut(source, name, at, views, walk)
+    }
     match vc_view_of(at, name, value, views, ask) {
         null => {}
         view => {
@@ -1414,6 +1426,25 @@ fn vc_refuse_hand_over(root: ref String, callee: ref String, at: ref Span, views
         call => help.push_str(f" Or copy `{name}` itself: `let {name} = {call}.clone()`."),
     }
     walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{callee}` gets `{root}`, but `{name}` still reads its text afterwards.", notes: notes, help: help, warning: false, labels: labels })
+}
+
+/// D2 of ADR-text-reuse-1: the cut bound to `name` takes the text of `root`
+/// while another view of `root` is still read.
+fn vc_refuse_given_cut(root: ref String, name: ref String, at: ref Span, views: ref Vec[VcView], mut walk: VcWalk) {
+    let held = vc_last_viewing(views, root)
+    if held < 0 {
+        return
+    }
+    let view = views[held]
+    let viewer = view.name.clone()
+    let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{name}` is changed later, so it takes the text of `{root}` here", true), vc_label(view.made.clone(), viewer, f"`{viewer}` may be the text of `{root}`", false)]
+    match view.used {
+        null => {}
+        used => labels.push(vc_label(used.clone(), viewer, f"`{viewer}` is read here", false)),
+    }
+    let notes: Vec[String] = [f"A cut that is changed takes the buffer of the text it is cut from and cuts it down in place (ADR-text-reuse-1 D2), which `{viewer}` still points into."]
+    let help = f"Read `{viewer}` before `{name}` is cut, or make `{name}` a copy: add `.clone()` after the cut."
+    walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{name}` gets the text of `{root}`, but `{viewer}` still reads it afterwards.", notes: notes, help: help, warning: false, labels: labels })
 }
 
 fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: VcWalk) {

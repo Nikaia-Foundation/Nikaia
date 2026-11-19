@@ -1,0 +1,26 @@
+// A `return` inside an expression hands a `keep` parameter back as a
+// `return` statement does (ADR-views-3 D2, #2285).
+
+fn moved(keep line: String) -> String {
+    let m = line.find(";") ?? return line
+    return f"{m}"
+}
+
+fn trimmed(keep line: String) -> String {
+    let t = line.trim()
+    let m = t.find(";") ?? return line
+    return f"{m}"
+}
+
+fn make(s: String) -> String {
+    let mut o = String()
+    o.push_str(s)
+    return o
+}
+
+fn main() throws {
+    println(moved(make("ab;c")))
+    println(moved(make("xyz")))
+    println(trimmed(make(" a;b")))
+    println(trimmed(make(" none ")))
+}

@@ -264,7 +264,7 @@ pub struct ComputedAt {
     pub field: bool,
 }
 
-pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
+pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
     let declared: collections::BTreeSet<String> = units.iter().flat_map(|u| { types_declared_in(u.items, u.words) }).collect();
     let mut defaults: Vec<ComputedAt> = vec![];
     for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
@@ -332,7 +332,7 @@ pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrow
     defaults
 }
 
-pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64, item: i64, method: Option<i64>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, function: &Item) {
+pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64, item: i64, method: Option<i64>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, function: &Item) {
     let config = match function {
         Item::Fn { config, .. } => config,
         _ => return,
@@ -340,7 +340,7 @@ pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64
     for at in computed_options(function) { into.push(ComputedAt { key: nikaia_std::block::Text::from(key.to_string()), at, unit, item, method, option: view.text(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name), field: false }); }
 }
 
-pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) {
+pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) {
     let mut found: Vec<(String, i64, i64, String)> = vec![];
     for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         for item in view.items.iter() {
@@ -360,7 +360,7 @@ pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_,
     for (owner, kind, place, text) in found.into_iter() { apply_attribute(ledger, &owner, kind, place, text); }
 }
 
-pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedView<'_, '_, '_, '_, '_, '_>, unit: i64, attributes: &[Attribute], computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) -> Vec<String> {
+pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, unit: i64, attributes: &[Attribute], computed: &mut impl FnMut(i64, &Ty, &Expr) -> Option<String>) -> Vec<String> {
     attributes.iter().filter_map(|attribute| {
         let named = view.unaliased(&view.text(attribute.name));
         if named == check_attributes_mark_name() { return None; }
@@ -445,7 +445,7 @@ pub trait LedgerInferHost {
     fn computed_literal(&self, unit: i64, name: &str, expr: &Expr, ty: &Ty) -> Option<String>;
 }
 
-pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], library: &Ledger, host: &H) {
+pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], library: &Ledger, host: &H) {
     let defaults = declare_items(units, borrowing, ledger);
     host.check_units(&ledger);
     ledger_untrusted_results(ledger, &host.outside_results());
@@ -477,7 +477,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
 
 pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &mut |own| { host.result_package(own) }, &mut |unit, own, package| { host.result_sources(unit, own, package) }, &mut |unit, own, package| { host.places_stored(unit, own, package) }); }
 
-pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], host: &H) {
+pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], host: &H) {
     for view in units.iter() {
         for item in view.items.iter() {
             let published = match expression_ensures(&item.node, view.words, &ledger, &mut |condition, readable| { host.reads_back(condition, readable) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -488,7 +488,7 @@ pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger,
     }
 }
 
-pub(crate) fn ledger_evaluate_defaults<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], defaults: &[ComputedAt], host: &H) {
+pub(crate) fn ledger_evaluate_defaults<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], defaults: &[ComputedAt], host: &H) {
     for computed in defaults.iter() {
         if !computed.field {
             match host.known_default(computed.unit, &computed.key, computed.at) {
@@ -504,7 +504,7 @@ pub(crate) fn ledger_evaluate_defaults<H: LedgerInferHost>(ledger: &mut Ledger, 
     }
 }
 
-pub(crate) fn ledger_computed_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_>, computed: &ComputedAt, host: &H) -> Option<String> {
+pub(crate) fn ledger_computed_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, computed: &ComputedAt, host: &H) -> Option<String> {
     let item = match view.items.get(nikaia_std::count::of(computed.item)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if computed.field {
         let fields = match &item.node {
@@ -527,7 +527,7 @@ pub(crate) fn ledger_computed_default<H: LedgerInferHost>(view: &ParsedView<'_, 
     }
 }
 
-pub(crate) fn ledger_option_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_>, computed: &ComputedAt, function: &Item, host: &H) -> Option<String> {
+pub(crate) fn ledger_option_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, computed: &ComputedAt, function: &Item, host: &H) -> Option<String> {
     let config = match function {
         Item::Fn { config, .. } => config,
         _ => return None,

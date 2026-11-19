@@ -1,7 +1,7 @@
 // #1589: `.to_string()` on text is refused (NK1301, ADR-text-reuse-1 D1): a
 // view is a `String` already. A number keeps its text form.
 fn tail(line: String) -> String {
-    let m = line.find(";") ?? return line
+    let m = line.find(";") ?? return ""
     return line[m + 1..].to_string()
 }
 
