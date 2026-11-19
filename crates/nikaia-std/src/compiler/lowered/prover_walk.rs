@@ -2615,8 +2615,7 @@ pub(crate) fn prover_properties_in(expr: &Expr, scope: &ProverScope, state: &Pro
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_properties_in(expr, scope, state, program, words, out); },
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
-            let callee = match prover_variable_named(Some(func), words) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if scope.locals.contains(&callee) || !prover_a_property(program, words, &callee) { return; }
+            if !prover_a_property_callee(func, scope, state, program, words) { return; }
             let name = match property_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return };
             let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push((name, on));
@@ -2679,6 +2678,18 @@ pub(crate) fn prover_rule_type(config: &[ConfigArg], words: &winnow_grammar::Int
     String::from("")
 }
 
+pub(crate) fn prover_a_property_callee(func: &Expr, scope: &ProverScope, state: &ProverState, program: &Program, words: &winnow_grammar::InternerContext) -> bool {
+    match func {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let callee = words.resolve(name);
+            !scope.locals.contains(callee) && prover_a_property(program, words, callee)
+        },
+        Expr::Path(segments, _) => state.std_properties.contains(&path_text(segments, words)),
+        _ => false,
+    }
+}
+
 pub(crate) fn prover_a_property(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> bool {
     for item in program.items.iter() {
         match &item.node {
@@ -2699,7 +2710,7 @@ pub(crate) fn prover_std_properties(library: &Ledger) -> collections::BTreeSet<S
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (key, contract) in library.functions.iter() {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !signature.takes_a_receiver() || !signature.mutable.is_empty() || !signature.config.is_empty() || contract.mutates || !contract.fails_with.is_empty() || !contract.touches_known || !contract.touches.is_empty() { continue; }
+        if !signature.takes_a_receiver() && signature.params.is_empty() || !signature.mutable.is_empty() || !signature.config.is_empty() || contract.mutates || !contract.fails_with.is_empty() || !contract.touches_known || !contract.touches.is_empty() { continue; }
         let pure = !matches!(contract.sync_claim, Sync::No | Sync::Unpromised);
         let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let answers_bool = match result {
@@ -2817,8 +2828,7 @@ pub(crate) fn prover_condition_changes(cond: &Expr, base: &str, scope: &ProverSc
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return prover_condition_changes(lhs, base, scope, state, program, words) || prover_condition_changes(rhs, base, scope, state, program, words); },
         Expr::Call { func, .. } => {
             let func = nikaia_std::boxed::open(func);
-            let callee = nikaia_std::index::or(prover_variable_named(Some(func), words), || "".into());
-            if !scope.locals.contains(&callee) && prover_a_property(program, words, &callee) && property_name(cond, words).is_some() { return false; }
+            if prover_a_property_callee(func, scope, state, program, words) && property_name(cond, words).is_some() { return false; }
         },
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;

@@ -189,6 +189,7 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
             if args.is_empty() || !config.is_empty() { return None; }
             let callee = match func {
                 Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+                Expr::Path(segments, _) => path_text(segments, words),
                 _ => return None,
             };
             let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -204,6 +205,11 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
         },
         _ => None,
     }
+}
+
+pub(crate) fn path_text(segments: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext) -> String {
+    let parts: Vec<String> = segments.iter().map(|segment| { nikaia_std::block::Text::from(words.resolve(*segment).to_string()) }).collect::<Vec<_>>();
+    nikaia_std::block::Text::from(parts.join("::"))
 }
 
 pub(crate) fn property_paths(args: &[Expr], from: i64, words: &winnow_grammar::InternerContext) -> Option<String> {

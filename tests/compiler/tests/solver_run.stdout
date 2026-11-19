@@ -20,3 +20,6 @@ pre/unsat-gcd.smt2 proved 0/pre
 pre/unsat-repeated-unit.smt2 proved 0/pre
 pre/unsat-tighten.smt2 proved 0/pre:l3f0
 pre: 5 files, solved 5 (proved 4, refuted 1), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 1.6, certificates checked 4, models evaluated 1
+malformed/pysmt-issue_159.smt2 refused (a is unbound: a parallel let binds its names only in its body, in assertion 1) 0
+malformed/regress0-parser-issue10813-1.smt2 refused (the literal 5/0 has a zero denominator, in assertion 3) 0
+malformed: 2 files, solved 2 (proved 0, refuted 0, refused 2), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 0.0, certificates checked 0, models evaluated 0

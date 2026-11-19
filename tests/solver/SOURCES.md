@@ -14,6 +14,7 @@ its `; EXPECT:` line.
 | `sample/` | the fixed 50-file sample of the SMT-LIB set below (25 QF_LIA, 25 QF_LRA), run in CI by `tests/compiler/tests/solver_sample.nika` (#1338) | `scripts/solver.nika sample target/smtlib tests/solver/sample 25` | per family, see below |
 | `compiler/` | the compiler's own questions (D9's set, #1285 item 3): 4884 distinct normal forms the bounds walk and the prover ask over the tools package, 3014 `unsat`, 1854 `sat`, 16 with no status (unknown to both engines); file name the `nikaia.proofs` key | `NIKAIA_DUMP_QUERIES=DIR nikaia lower-std --bounds`, status the compiler's checked answer (Fourier-Motzkin, then the new engine) | the repository's |
 | `regress/` | files of the SMT-LIB set below that a fix brought within the limit, run under a 10 s wall-clock limit by `tests/compiler/tests/solver_regress.nika` (#1961), `sal-` and `spider_benchmarks-` also alone under 1 s (#1967, #1968); `rings_preprocessed-` also alone under a case budget of 65536 (`--cases`, #1962), past the build-time 1024; the file name is `FAMILY-` and the set's name | the SMT-LIB set below, unchanged | per family, see below |
+| `malformed/` | files that are not well-formed SMT-LIB, each with `; EXPECT: error` and no `:status`; `scripts/solver.nika run` counts one solved (`refused`) when our engine answers it malformed, wrong otherwise (#2258); the oracle skips them | `pysmt-issue_159` (an unbound name in a parallel `let`) from `qflia/`, `regress0-parser-issue10813-1` (`5/0`) from `qflra/`, both from the sources below | per family, see below |
 | `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with the expected status (z3's, or for a status-keeping mutant the original's); none committed | generated | the repository's |
 
 ## Checked against z3, nightly (#1989)
@@ -28,12 +29,25 @@ million), with `-T:30` as an outer guard. A query past the limit is
 
 * `scripts/solver.nika oracle tests/solver` asks z3 about every file that
   states a status. Each disagreement is printed and the run exits 1; z3's
-  `unknown` and `error` are only counted. An error means z3 dropped a
-  command, so its answer does not count. With 4.15.4, 12 of the 5029 files
-  draw one: cvc5 options z3 does not know (`ite_simp`, `produce_abducts`),
-  nonlinear terms in a linear logic, and a sequential `let` in
-  `pysmt-issue_159`. First run by hand (2026-11-17): 0 disagreements, 0
-  unknown; `fuzz 300 1`: 1800 questions, 0 disagreements, all decided.
+  `unknown` and `error` are only counted. An error means z3 refuses a
+  command of the file, so its answer is to another query and does not
+  count. Each file z3 refuses is printed with z3's reason and our engine's
+  answer (`PATH z3 refuses: REASON; ours: ANSWER`, #2258), and the closing
+  line splits them: ours agrees with the status, ours refuses too, ours
+  otherwise. With 4.15.4, z3 refused 12 of the 5029 files: cvc5 options
+  z3 does not know (`ite_simp`, `produce_abducts`, `incremental`,
+  `approx_branch_depth`, `replay_early_close_depth`), cvc5's own `int.pow2`,
+  nonlinear terms in a linear logic, and an unbound name: in
+  `pysmt-issue_159` the second binding of a parallel `let` reads the first
+  (`(let ((a x) (b (+ a x))) ...)`, where `a` is not bound), and in cvc5's
+  `regress0-parser-issue10813-1` z3 reads the literal `5/0` (a zero
+  denominator) as `5` and an unknown `/0`. Our engine refuses these 2 as
+  malformed, which they are: they moved to `malformed/` (#2258), which the
+  oracle skips. The other 10, all in `qflia/` and `qflra/`, our engine
+  answers as their status says (`oracle tests/solver/qflia
+  tests/solver/qflra`, 2026-11-19: `10 refused by z3 (ours agrees with the
+  status 10, ours refuses too 0, ours otherwise 0)`). First run by hand
+  (2026-11-17): 0 disagreements, 0 unknown; `fuzz 300 1`: 1800 questions, 0 disagreements, all decided.
 * `scripts/solver.nika fuzz N SEED` (the seed is the run number) generates N
   random queries. Their size budget (variables, assertions, coefficients,
   right-hand sides) grows from 1 to `--size` (default 8). Each query gets
@@ -58,14 +72,17 @@ ci lane checks each run and files what it finds (`docs/supervisor.md`,
   `push`, `pop` or `check-sat-assuming`, and under 64 KiB. The file name is
   the path below `cli/` with `/` written `-`. Status: the file's own
   `:status` or `; EXPECT:` line; where it had neither (`regress0-nl-issue8755-*`,
-  `regress0-expect-scrub.*`, `regress0-parser-issue10813-1`,
+  `regress0-expect-scrub.*`, `regress0-parser-issue10813-1` (now in
+  `malformed/`, its status and cvc5's tester lines replaced by a comment and
+  `; EXPECT: error`, #2258),
   `regress1-arith-div.09`, `regress1-arith-mult.02`), z3's answer was written
   as `(set-info :status ...)` by `scripts/solver.nika oracle --write`, the only
   change to the files. z3 agrees with every stated status.
 * **pysmt**: <https://github.com/pysmt/pysmt>, commit
   `c97c1894745f4fd4f737a3e7c452a2f3d7675203` (2026-10-06),
   `pysmt/test/smtlib/small_set/QF_LIA/`, Apache-2.0. Taken: `issue_159.smt2`
-  (decompressed, as `pysmt-issue_159.smt2`, status from z3). Not taken: the 12
+  (decompressed, as `pysmt-issue_159.smt2`, status from z3; now in
+  `malformed/`, its status removed, since the file is ill-formed, #2258). Not taken: the 12
   `prp-*.smt2` (SMT-LIB's own), 150-190 KiB each decompressed, over the
   64 KiB limit.
 * **Not reachable**: the SMT-LIB release on zenodo answers 403 through this

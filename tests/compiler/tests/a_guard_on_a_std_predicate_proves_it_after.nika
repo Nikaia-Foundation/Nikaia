@@ -1,0 +1,20 @@
+// A free function of `std` that answers a `bool` and changes nothing is a
+// named property (ADR-381 D1, D5), as a program's own one is: after the
+// guard `return if !html::is_plain(name)`, `html::is_plain(name)` is a fact,
+// so the `assert` after it is proved (the precondition of `html::Raw`,
+// ADR-raw-sinks-1 D2, #2242).
+use std::html
+
+fn shown(name: String) throws {
+    if !html::is_plain(name) {
+        println(f"refused, {name.len()} characters")
+        return
+    }
+    assert(html::is_plain(name))
+    println(name)
+}
+
+fn main() throws {
+    shown("plain")
+    shown("<b>")
+}

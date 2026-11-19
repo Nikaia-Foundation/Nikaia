@@ -9,8 +9,9 @@
 //
 // `oracle` (#1989 item 1) is run with `$Z3` a stub that answers only when
 // given `rlimit=123`: `sat`, `unknown` for `unsat-gcd`, an `(error ...)` for
-// `unsat-fixed`. Each file stating `unsat` is then a disagreement and the
-// run exits 1; a file stating `sat` alone exits 0.
+// `unsat-fixed`, printed with the stub's reason and our engine's answer
+// (#2258). Each file stating `unsat` is then a disagreement and the run
+// exits 1; a file stating `sat` alone exits 0.
 use std::fs
 use std::process
 
