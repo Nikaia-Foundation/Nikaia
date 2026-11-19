@@ -334,7 +334,7 @@ impl EmitState {
             return false
         }
         let signature = contract.signature?.clone() ?? return false
-        // The values after the input are an entry's too (ADR-grammar-1 D2, #1512).
+        // The values after the input are an entry's too (ADR-grammar-syntax-v1 D12, #1512).
         return signature.params.len() >= 1 && signature.params[0].0 == "input"
     }
 

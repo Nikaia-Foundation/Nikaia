@@ -179,7 +179,7 @@ impl FbWidths {
             Pattern::Cut => return 0,
             Pattern::Fold(_) => return 0,
             // A bound this walk cannot evaluate takes at least none
-            // (ADR-grammar-1 D3); a guard matches nothing.
+            // (ADR-grammar-syntax-v1 D13); a guard matches nothing.
             Pattern::Counted { .. } => return 0,
             Pattern::Choose { .. } => return 0,
             Pattern::Members { .. } => return 0,

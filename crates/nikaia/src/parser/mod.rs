@@ -1233,7 +1233,7 @@ grammar! {
 
         rule kw_sync -> () = KW_SYNC -> { () }
         rule kw_pub -> () = KW_PUB -> { () }
-        // `entry rule file` (ADR-296 D25). A word of the grammar sublanguage,
+        // `entry rule file` (ADR-grammar-syntax-v1 D6). A word of the grammar sublanguage,
         // like `rule`: a name everywhere else.
         rule kw_entry -> () = KW_ENTRY -> { () }
 
@@ -2051,7 +2051,7 @@ grammar! {
 
         rule grammar_item -> Item =
             // **`pub grammar` offers every entry to other packages**
-            // (ADR-296 D25, #520), as a `pub enum` offers its variants.
+            // (ADR-grammar-syntax-v1 D6, #520), as a `pub enum` offers its variants.
             KW_PUB KW_GRAMMAR name:NAME
             "{" rules:grammar_rule* "}"
             -> { Item::Grammar(GrammarDef { name, rules, public: true }) }
@@ -2060,7 +2060,7 @@ grammar! {
             -> { Item::Grammar(GrammarDef { name, rules, public: false }) }
 
         rule grammar_rule -> GrammarRule @=
-            // **A rule is not `pub` on its own** (ADR-296 D25): whether the
+            // **A rule is not `pub` on its own** (ADR-grammar-syntax-v1 D6): whether the
             // program may enter it is what `entry` says, and offering a
             // grammar to other packages is `pub grammar`'s, for all its
             // entries at once.
@@ -2140,8 +2140,8 @@ grammar! {
             "="
             alts:g_alts
             -> {
-                // **A rule takes values as a function does** (ADR-grammar-1
-                // D2), Subject ; Config; a receiver has nothing to stand for.
+                // **A rule takes values as a function does** (ADR-grammar-syntax-v1
+                // D12), Subject ; Config; a receiver has nothing to stand for.
                 let values = values.unwrap_or_else(FnParams::none);
                 GrammarRule {
                     name,
@@ -2252,8 +2252,8 @@ grammar! {
         rule g_alt_tail -> GrammarAlt = "|" a:g_alt -> { a }
 
         // **The action stands after an arrow**: `pattern -> { action }`
-        // ([ADR-grammar-1](../../../../docs/specification/adr/adr-grammar-1.md)
-        // D1, Part II 10.8, withdrawing ADR-296 D33). Without the arrow a brace
+        // ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md)
+        // D9, Part II 10.8). Without the arrow a brace
         // after a pattern was a bound or an action by one space alone, and with
         // values in a bound (`" "{m}`) both readings would be programs.
         //
@@ -2287,8 +2287,8 @@ grammar! {
             ) -> {
                 GrammarAlt { pattern: p, action: None }
             }
-          // **A body that ends without its action** (Part II 10.1, ADR-296
-          // D33): only an `@stream` entry and a `par_fold` go without one.
+          // **A body that ends without its action** (Part II 10.1, ADR-grammar-syntax-v1
+          // D9): only an `@stream` entry and a `par_fold` go without one.
           | p:g_seq peek(g_body_ends) fail(
                 "This rule's body ends without an action: write `pattern -> { action }`. \
                  Only an `@stream` entry or a `par_fold` goes without one."
@@ -2406,7 +2406,7 @@ grammar! {
             }
 
         rule g_postfix -> Spanned<Pattern> @=
-            // **A bound is an expression** (ADR-grammar-1 D3): integers
+            // **A bound is an expression** (ADR-grammar-syntax-v1 D13): integers
             // written out stay a `Repeat`, anything else is `Counted`.
             a:g_atom "{" low:expr high:g_bound_high? "}" -> {
                 let (comma, high) = match high {
@@ -2422,7 +2422,7 @@ grammar! {
                 }
             }
 
-        // ADR-296 D13: a bounded repetition is how a format states a fixed
+        // ADR-grammar-syntax-v1 D11: a bounded repetition is how a format states a fixed
         // width. `*` and `+` say "unbounded" and mean it.
         rule g_repeat -> Repeat =
             "*" -> { Repeat::Star }
@@ -2492,7 +2492,7 @@ grammar! {
                 Spanned::new(Pattern::Group(Box::new(p)), Span::from(_span))
             }
 
-        // **`if(cond)`, `if(cond, "what was expected")`** (ADR-grammar-1 D4).
+        // **`if(cond)`, `if(cond, "what was expected")`** (ADR-grammar-syntax-v1 D14).
         rule g_guard -> Spanned<Pattern> @=
             KW_IF "(" => cond:expr expected:g_guard_expected? ")" -> {
                 Spanned::new(Pattern::Guard { cond, expected }, Span::from(_span))
@@ -2501,7 +2501,7 @@ grammar! {
         rule g_guard_expected -> String = "," text:STRING -> { text }
 
         // **A built-in takes patterns, a rule of the grammar values**
-        // (ADR-grammar-1 D2): `until(";")`, `list(item, sep)`, but
+        // (ADR-grammar-syntax-v1 D12): `until(";")`, `list(item, sep)`, but
         // `Block(n + 1; c: Ctx::BlockOut)`. The words of Part II 10.8 that take
         // arguments are the built-ins; every other name is a rule.
         rule g_ref -> Spanned<Pattern> @=
@@ -4211,10 +4211,10 @@ grammar! {
 
         rule dsl_grammar -> Symbol = "::" name:NAME -> { name }
 
-        // **The form that is gone** ([ADR-296](../../../docs/specification/adr/adr-296.md)
-        // D1). A grammar is entered by an ordinary call — `Json::value(input)`,
+        // **The form that is gone** ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md)
+        // D5). A grammar is entered by an ordinary call — `Json::value(input)`,
         // through a path since ADR-140 D3, the dot being `NK1147` — and every
-        // `entry` rule is an entry (D2), which is what took the silent choice
+        // `entry` rule is an entry (D6), which is what took the silent choice
         // away: the emitter used to pick the *first* `entry` rule, a `par_fold`
         // one beating an earlier one.
         //

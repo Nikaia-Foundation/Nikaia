@@ -36,7 +36,7 @@ fn findings(source: &str) -> Vec<check::Finding> {
 /// that the real examples write as `Summary::new`.
 fn program(rule: &str) -> String {
     // **The entry is named at the call** now
-    // ([ADR-296](../../../docs/specification/adr/adr-296.md) D24), so this
+    // ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5), so this
     // fixture has to name it too — and which rule it is varies per test, so it
     // is read off the rule being planted rather than written twice.
     let entry = rule

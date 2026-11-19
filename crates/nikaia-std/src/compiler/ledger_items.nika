@@ -109,7 +109,7 @@ fn declared_extern(words: ref winnow_grammar::InternerContext, aliases: ref coll
     return out
 }
 
-/// **Every `entry` rule of a grammar is an entry** (ADR-296 D25): it is entered
+/// **Every `entry` rule of a grammar is an entry** (ADR-grammar-syntax-v1 D6): it is entered
 /// by an ordinary call, so it has an ordinary contract. The grammar's `pub` is
 /// each entry's; it is driven in pieces where its body is a `par_fold`
 /// (D19, #521); it fails with `ParseError` (D38); and an action may not pause
@@ -146,7 +146,7 @@ fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref col
             let item = result ?? Ty::Unknown
             result = Ty::Seq { item: item, is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() }
         }
-        // **The values the entry takes**, after its input (ADR-grammar-1 D2).
+        // **The values the entry takes**, after its input (ADR-grammar-syntax-v1 D12).
         let mut params: Vec[(String, Ty)] = [("input", Ty::Unknown)]
         for arg in rule.args {
             params.push((words.resolve(arg.name).clone(), written_ty(words, aliases, arg.ty)))
@@ -484,7 +484,7 @@ fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections::BTr
                     }
                     ledger.types.insert(key, contract)
                 },
-                // **Every `entry` rule of a grammar is an entry** (ADR-296 D25).
+                // **Every `entry` rule of a grammar is an entry** (ADR-grammar-syntax-v1 D6).
                 Item::Grammar(def) => {
                     for entry in declared_grammar(view.words, view.aliases, def) {
                         ledger.functions.insert(entry.key, entry.contract)

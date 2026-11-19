@@ -1,5 +1,5 @@
-// An `@stream` entry walks a repetition counted by a value (ADR-grammar-1
-// D3, ADR-grammar-2 D7, #1459): `item{n}` takes exactly `n` items, read where
+// An `@stream` entry walks a repetition counted by a value (ADR-grammar-syntax-v1
+// D13, ADR-grammar-2 D7, #1459): `item{n}` takes exactly `n` items, read where
 // the parser reaches the repetition, and `item{1, n}` stops after the `n`-th.
 
 struct Item {

@@ -110,7 +110,7 @@ fn not_text(bytes: &[u8], at: usize) -> ParseError {
 }
 
 /// **What the whitespace a parser last skipped held** (#557,
-/// [ADR-339](../../../docs/specification/adr/adr-339.md) D2): every entry
+/// [ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D17): every entry
 /// hands it to the parser as its state, and a grammar that writes `same_line`
 /// declares it (`state`), records each `WS` run in it and asks it. A grammar
 /// that does not write `same_line` declares no state and never touches it.
@@ -273,7 +273,7 @@ pub fn parse_bytes_pieces<'a, O: Send>(
 }
 
 /// **The bytes a grammar's `span(p)` covered** (Part II 10.8,
-/// [ADR-339](../../../docs/specification/adr/adr-339.md) D1): two byte
+/// [ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D16): two byte
 /// offsets into the input, as `std::text` offers it. `here` is its `start`
 /// where nothing was covered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -290,8 +290,10 @@ impl Span {
     /// as an overflow does.
     #[doc(hidden)]
     pub fn of(range: std::ops::Range<usize>) -> Span {
-        let offset =
-            |at: usize| u32::try_from(at).expect("a grammar's position fits a `u32` (ADR-339 D1)");
+        let offset = |at: usize| {
+            u32::try_from(at)
+                .expect("a grammar's position fits a `u32` (ADR-grammar-syntax-v1 D16)")
+        };
         Span {
             start: offset(range.start),
             end: offset(range.end),

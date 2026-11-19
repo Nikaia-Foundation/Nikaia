@@ -263,7 +263,7 @@ impl CheckState {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
             else => return,
         }
-        // A grammar's name stands where a callee stands (ADR-296 D24), so it is
+        // A grammar's name stands where a callee stands (ADR-grammar-syntax-v1 D5), so it is
         // declared in exactly the way a module is.
         let declared = self.lookup(name) != null || resolve_call(world, name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name)
         if declared {

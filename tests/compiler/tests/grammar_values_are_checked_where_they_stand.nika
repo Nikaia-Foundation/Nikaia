@@ -1,5 +1,5 @@
 // What a grammar computes is checked as Nikaia, where it stands
-// (ADR-grammar-1 D2-D4): a rule's values by count, type and option name, a
+// (ADR-grammar-syntax-v1 D12-D14): a rule's values by count, type and option name, a
 // bound as an `i64`, a guard as a `bool`, a rule with values not called bare.
 
 grammar G {

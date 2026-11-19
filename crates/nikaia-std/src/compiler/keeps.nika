@@ -1927,7 +1927,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                     }
                 },
                 // **A `entry` rule is an entry, and its one parameter is the
-                // text** (ADR-296 D1). Whether it keeps that text is not a
+                // text** (ADR-grammar-syntax-v1 D1). Whether it keeps that text is not a
                 // question about an action block at all: a parse keeps its
                 // input exactly when what it hands back holds a view **into**
                 // the input, which is ADR-283's tether read off the rule's
@@ -1951,7 +1951,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                             uses.kept.insert(INPUT_POSITION.clone())
                         }
                         // **The values an entry takes after its input are
-                        // kept** (ADR-grammar-1 D2, #1041): the rule's parser
+                        // kept** (ADR-grammar-syntax-v1 D12, #1041): the rule's parser
                         // takes each by value and holds it for the whole
                         // parse, so a caller hands it over as it would to an
                         // ordinary function that keeps it. A copied type is
