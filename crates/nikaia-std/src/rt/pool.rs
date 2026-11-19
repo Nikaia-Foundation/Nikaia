@@ -443,44 +443,13 @@ impl Pool {
     }
 }
 
+// Kept as Rust (#2082): no program can observe what these two check. A
+// wake from inside a task's own poll needs a hand-written future, which
+// Nikaia has no form for; the idle pool's quiet is read from `rang`, which
+// only the test build has. Their move waits for #2088.
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// **Four tasks on four threads take about as long as one**, which is the
-    /// whole of what `user_parallelism = yes` buys and the one thing the `no`
-    /// executor cannot do however long it is given.
-    #[test]
-    fn tasks_run_at_the_same_time_and_not_in_turn() {
-        fn spin(until: std::time::Instant) {
-            while std::time::Instant::now() < until {
-                std::hint::spin_loop();
-            }
-        }
-        let threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1);
-        if threads < 4 {
-            return;
-        }
-        let pool = Pool::start(4);
-        let slice = std::time::Duration::from_millis(300);
-        let began = std::time::Instant::now();
-        for _ in 0..4 {
-            pool.start_task(async move { spin(std::time::Instant::now() + slice) });
-        }
-        let until = began + std::time::Duration::from_secs(10);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::yield_now();
-        }
-        let took = began.elapsed();
-        assert_eq!(pool.live(), 0, "every task finished");
-        assert!(
-            took < slice * 3,
-            "four 300ms tasks on four threads took {took:?}: they ran in turn"
-        );
-        pool.close();
-    }
 
     /// **A wake that arrives while the task is being polled is not lost.**
     ///
