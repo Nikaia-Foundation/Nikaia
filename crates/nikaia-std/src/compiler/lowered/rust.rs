@@ -41,6 +41,7 @@ pub enum RustItem<'a> {
     Rec(Rec<'a, 'a, 'a, 'a>),
     Group(Group<'a, 'a, 'a, 'a>),
     Hidden(Fun<'a, 'a, 'a, 'a, 'a, 'a>),
+    Crate(Fun<'a, 'a, 'a, 'a, 'a, 'a>),
     Used(&'a str),
     Export(&'a str),
 }
@@ -94,6 +95,8 @@ grammar! {
         rule found -> Found<'a> =
             i:item
             -> { Found::One(i) }
+          | f:crate_function
+            -> { Found::One(RustItem::Crate(f)) }
           | f:method
             -> { Found::One(RustItem::Hidden(f)) }
           | JUNK
@@ -141,6 +144,12 @@ grammar! {
 
         rule function -> Fun<'a, 'a, 'a, 'a, 'a, 'a> =
             PUB f:method
+            -> { f }
+
+        rule crate_function -> Fun<'a, 'a, 'a, 'a, 'a, 'a> =
+            "pub" "(" CRATE ")" f:method
+            -> { f }
+          | "pub" "(" IN CRATE ")" f:method
             -> { f }
 
         rule method -> Fun<'a, 'a, 'a, 'a, 'a, 'a> =
@@ -522,6 +531,14 @@ grammar! {
 
         rule FN =
             "fn" not(WORD)
+            -> { }
+
+        rule CRATE =
+            "crate" not(WORD)
+            -> { }
+
+        rule IN =
+            "in" not(WORD)
             -> { }
 
         rule ASYNC =

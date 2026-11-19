@@ -46,15 +46,16 @@ error[NK2202]: `nine` is `sync`, but it calls `words::thrice`, which can pause.
     = help: Remove `sync` from `nine`, or move the call out of it.
 2 type errors, 1 Rust crate nothing describes, 2 calls a `sync` function may not make
 --- pub = true: exit 1
-error[NK2504]: `words::twice` is described with `pub = true`, and the package's own Rust stays the package's.
+error[NK2508]: `words::twice` is described with `pub = true`, and the package's own Rust stays the package's.
   --> src/demo.nika:5:5
    |
  5 |     return words::twice(words::twice(x))
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
+   = note: Its entry is at `contracts/crate.contracts:5`.
    = note: What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.
    = help: Write `pub = false` in its entry in `contracts/crate.contracts`.
-1 Rust crate nothing describes
+1 entry of the package's own Rust marked `pub = true`
 --- moved: exit 1
 error[NK2505]: The package's own Rust has changed since its description was reviewed.
   --> src/demo.nika:5:5

@@ -330,9 +330,32 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     found.seen.push(Seen::Call { name, wrote, span: span.clone(), literals, trusted: says_trusted(names, config) });
 }
 
-pub fn foreign_own_refused(written: &[(String, Span)], own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
+pub fn foreign_own_refused(written: &[(String, Span)], program: &Program, names: &winnow_grammar::InternerContext, own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
     let mut out: Vec<CheckFinding> = vec![];
     if own.heads.is_empty() { return out; }
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Import { path, alias } => {
+                let alias = *alias;
+                let mut parts: Vec<String> = vec![];
+                for p in path.iter() {
+                    let p = *p;
+                    parts.push(nikaia_std::block::Text::from(names.resolve(p).to_string()));
+                }
+                let prefix = match alias {
+                    None => nikaia_std::index::or(match parts.last() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || "".into()),
+                    Some(a) => nikaia_std::block::Text::from(names.resolve(a).to_string()),
+                };
+                let file = match own.files.get(&prefix) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let notes: Vec<String> = vec![format!("The package's Rust declares `mod {}` in `{}`, and this file names `{}` `{}`: a path such as `{}::f` would mean both.", prefix, file, nikaia_std::block::Text::from(parts.join("::")), prefix, prefix)];
+                out.push(check_refusal("NK2507", &item.span, format!("`{}` is both a Rust module of this package and a Nikaia one.", prefix), notes, Some(format!("Rename one of them: the Rust module in `{}`, or this `use` with `as`.", file))));
+            },
+            _ => { },
+        }
+    }
     let mut met: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut stale = own.moved.is_empty();
     for (name, span) in written.iter() {
@@ -340,9 +363,19 @@ pub fn foreign_own_refused(written: &[(String, Span)], own: &ProjectMembersOwnRu
         let head = match name.split("::").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if head == name || !own.heads.contains(head) || met.contains(name) { continue; }
         met.insert(nikaia_std::block::Text::from(name.to_string()));
-        if own.published.contains(name) {
-            let notes: Vec<String> = vec![String::from("What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.")];
-            out.push(check_refusal("NK2504", &span, format!("`{}` is described with `pub = true`, and the package's own Rust stays the package's.", name), notes, Some(String::from("Write `pub = false` in its entry in `contracts/crate.contracts`."))));
+        match own.published.get(name) {
+            None => { },
+            Some(line) => {
+                let notes: Vec<String> = vec![format!("Its entry is at `contracts/crate.contracts:{}`.", line), String::from("What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.")];
+                out.push(check_refusal("NK2508", &span, format!("`{}` is described with `pub = true`, and the package's own Rust stays the package's.", name), notes, Some(String::from("Write `pub = false` in its entry in `contracts/crate.contracts`."))));
+                continue;
+            },
+        }
+        if !own.described.contains(name) && own.narrow.contains(name) {
+            let head = nikaia_std::index::or(name.split("::").next(), || "");
+            let file = nikaia_std::block::Text::from(nikaia_std::index::or(own.files.get(head), || "its file").to_string());
+            let notes: Vec<String> = vec![String::from("The package's Nikaia code reaches its Rust from the crate root, so an item it calls must be visible there: `pub(crate)` or wider. A private or `pub(super)` item is not widened for the call.")];
+            out.push(check_refusal("NK2504", &span, format!("`{}` is the package's own Rust, and it isn't visible at the crate root.", name), notes, Some(format!("Declare it `pub(crate)` in `{}`, then run `nikaia describe crate`.", file))));
             continue;
         }
         if !own.described.contains(name) {
