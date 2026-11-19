@@ -1,5 +1,5 @@
 // A guard reads a label bound before it in its own repeated group
-// (ADR-grammar-1 D4, #1561): the scan of plain scalars in #1548.
+// (ADR-grammar-syntax-v1 D14, #1561): the scan of plain scalars in #1548.
 fn ok(x: scalar, flow: bool) -> bool sync {
 	return x != ':' && !(flow && x == ',')
 }

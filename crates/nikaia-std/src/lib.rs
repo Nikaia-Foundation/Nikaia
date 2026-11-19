@@ -69,6 +69,11 @@ pub mod net;
 pub mod node_id;
 pub mod num;
 pub mod par;
+/// `std::path`: a path from outside proved by a property of its own
+/// (ADR-raw-sinks-1 D14), written in Nikaia, `runtime/paths.nika`.
+pub mod path {
+    pub use crate::runtime::{is_below, is_component};
+}
 pub mod process;
 pub mod range;
 pub mod regex;
@@ -127,7 +132,7 @@ pub mod text {
     pub use lowered::*;
     include!("text_float.rs");
     include!("text_normal.rs");
-    /// The bytes a grammar's `span(p)` covered (ADR-339 D1).
+    /// The bytes a grammar's `span(p)` covered (ADR-grammar-syntax-v1 D16).
     pub use crate::grammar::Span;
     /// One match of a search, a view of the searched text (ADR-374, without
     /// its positions until that is built): what `std::regex` hands back.
@@ -151,10 +156,15 @@ pub mod text {
 /// `question_mark` and `comparison_to_empty`, as there too: `?? return null`
 /// is lowered a `match` that returns `None`, and `s == ""` stays a comparison
 /// (`run_config.nika`, #2211).
+/// `explicit_counter_loop` and `manual_range_contains`, as there too: a
+/// counter beside a `for` and `c >= 'a' && c <= 'z'` stay as written
+/// (`paths.nika`, #2300).
 #[doc(hidden)]
 #[allow(
     clippy::question_mark,
     clippy::comparison_to_empty,
+    clippy::explicit_counter_loop,
+    clippy::manual_range_contains,
     clippy::unnecessary_cast,
     clippy::too_many_arguments,
     clippy::useless_conversion,
@@ -301,6 +311,9 @@ pub mod runtime {
 /// (`trust.nika`'s `first_literal`, #2216); `.first()` there lowers a
 /// `ref` binding Rust refuses under a reference.
 ///
+/// **And `manual_unwrap_or`**: `fs::exists(p) catch { false }` lowers as a
+/// `match` (`project_members.nika`'s `project_members_rust_file`, #2233).
+///
 /// **And `result_large_err`**: an error enum a `.nika` throws holds its values
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
@@ -357,6 +370,7 @@ pub mod runtime {
     clippy::double_ended_iterator_last,
     clippy::precedence,
     clippy::manual_unwrap_or_default,
+    clippy::manual_unwrap_or,
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
     clippy::map_clone,
@@ -592,6 +606,10 @@ pub mod prelude {
     pub use crate::grammar::ParseError;
     pub use crate::hash::{TrustedMap, TrustedSet};
     pub use crate::html;
+    // `path::is_component(name)` (ADR-raw-sinks-1 D14). Here for `net`'s
+    // reason: a module reached through its prefix has to be in scope in the
+    // generated file.
+    pub use crate::path;
     pub use std::cmp::Ordering;
     // **What an `impl Hash`'s `hash` feeds** (ADR-010 D12): any hasher of the
     // standard library's, behind the `mut` reference the parameter lowers to.

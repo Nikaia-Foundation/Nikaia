@@ -87,6 +87,7 @@ pub struct CliDescribed {
     pub unanswered: Vec<String>,
     pub promises: bool,
     pub proposed: i64,
+    pub narrow: Vec<String>,
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -124,6 +125,11 @@ pub fn cli_commands_described(crate_name: &str, written: &CliDescribed) -> Strin
     if unanswered > 0 {
         said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("\n{} name{} the program uses that no `pub` signature covers. Each is a `?` \nfor you to fill in, or a name a macro wrote:\n", unanswered, cli_commands_plural(unanswered))));
         for name in written.unanswered.iter() { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("    {}\n", name))); }
+    }
+    let narrow = written.narrow.len() as i64;
+    if narrow > 0 {
+        said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("\n{} function{} the package's Nikaia code calls {} narrower than `pub(crate)` in its \nRust, and got no entry. Declare {} `pub(crate)`, then describe again:\n", narrow, cli_commands_plural(narrow), if narrow == 1 { "is" } else { "are" }, if narrow == 1 { "it" } else { "each" })));
+        for name in written.narrow.iter() { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("    {}\n", name))); }
     }
     if written.promises { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, "\nThis crate makes a promise the compiler can't check, and the file says \nwhere. Check yourself whether the promise is true.\n")); }
     let proposed = written.proposed;

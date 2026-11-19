@@ -7,7 +7,7 @@ pub(crate) fn item_last_segment(written: &str) -> String {
     last
 }
 
-pub(crate) fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item) -> String {
+pub(crate) fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item) -> String {
     match item {
         Item::Struct { name, .. } => { let name = *name; view.text(name) },
         Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -17,13 +17,13 @@ pub(crate) fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &I
     }
 }
 
-pub(crate) fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     if name == "" { return false; }
     for item in view.items.iter() { if item_type_name(view, &item.node) == name { return true; } }
     false
 }
 
-pub(crate) fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+pub(crate) fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
     let seen = ty.unseen();
     let name = match seen {
         Ty::Named { name, .. } => name,
@@ -40,21 +40,21 @@ pub(crate) fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, 
     None
 }
 
-pub(crate) fn item_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item, own: &str, at: i64) -> bool {
+pub(crate) fn item_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, node: &Item, own: &str, at: i64) -> bool {
     match node {
         Item::Fn { name, args, .. } => { let name = *name; item_fn_takes_either(view, name, args, own, at) },
         _ => false,
     }
 }
 
-pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
+pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
     (unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either)
 }
 
-pub(crate) fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
+pub(crate) fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut target: String = String::from("");
@@ -71,13 +71,13 @@ pub(crate) fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str,
     false
 }
 
-pub(crate) fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
+pub(crate) fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
     if view.text(t.name) != target { return false; }
     for method in methods.iter() { if item_takes_either(view, &method.node, own, at) { return true; } }
     false
 }
 
-pub(crate) fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub(crate) fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     let owner = item_last_segment(owner);
     for item in view.items.iter() {
         let found = match &item.node {
@@ -89,12 +89,12 @@ pub(crate) fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &st
     false
 }
 
-pub(crate) fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, fields: &[FieldDef], field: &str) -> bool {
+pub(crate) fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, fields: &[FieldDef], field: &str) -> bool {
     for f in fields.iter() { if f.ty.either && view.text(f.name) == field { return true; } }
     false
 }
 
-pub(crate) fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, alias } => { let alias = *alias; item_import_is(view, path, alias, name) },
@@ -105,13 +105,13 @@ pub(crate) fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name:
     false
 }
 
-pub(crate) fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
+pub(crate) fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
     if alias.is_some() { return view.text(match alias { Some(__nikaia_value) => __nikaia_value, None => return false }) == name; }
     if path.is_empty() { return false; }
     view.text(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }) == name
 }
 
-pub(crate) fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) -> bool {
+pub(crate) fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, head: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, .. } => path.len() == 1 && view.text(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == head,
@@ -122,7 +122,7 @@ pub(crate) fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &
     false
 }
 
-pub(crate) fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub(crate) fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     for item in view.items.iter() {
         match &item.node {
             Item::Struct { name, fields, .. } => {
@@ -135,7 +135,7 @@ pub(crate) fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub(crate) fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -147,7 +147,7 @@ pub(crate) fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub(crate) fn item_c_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item, name: &str) -> bool {
+pub(crate) fn item_c_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, node: &Item, name: &str) -> bool {
     match node {
         Item::Enum { name: declared, variants, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; view.text(declared) == name && (is_extern || item_all_unit(variants)) },
         Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -163,7 +163,7 @@ pub(crate) fn item_all_unit(variants: &[EnumVariant]) -> bool {
     true
 }
 
-pub(crate) fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
+pub(crate) fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || (*ty.code).is_some() { return false; }
     let name = view.text(ty.name);
     if ty.generics.is_empty() {
@@ -175,13 +175,13 @@ pub(crate) fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) ->
     false
 }
 
-pub(crate) fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], ty: &str) -> bool {
+pub(crate) fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], ty: &str) -> bool {
     if item_implements_error(here, ty) { return true; }
     for unit in beside.iter() { if item_implements_error(unit, ty) { return true; } }
     false
 }
 
-pub(crate) fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str) -> bool {
+pub(crate) fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; item_is_error_impl(unit, trait_name, target, ty) },
@@ -192,20 +192,20 @@ pub(crate) fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, t
     false
 }
 
-pub(crate) fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
+pub(crate) fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     unit.text(symbol) == "Error" && unit.text(target.name) == ty
 }
 
 impl CheckState {
-    pub(crate) fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
+    pub(crate) fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
         let name = view.text(target);
         if name == "html" || self.grammars.contains_key(&name) { return false; }
         if !imports_a_package(view, &name) { return false; }
         self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec![String::from("A grammar from a package is named with its package, as every name from one is.")], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
-    pub(crate) fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             Expr::Path(_, _) => expr,
@@ -274,7 +274,7 @@ pub(crate) fn item_plain_name(subject: &Ty) -> Option<String> {
     }
 }
 
-pub(crate) fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub(crate) fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     for item in view.items.iter() {
         match &item.node {
             Item::Enum { name, variants, .. } => {
@@ -299,7 +299,7 @@ pub(crate) fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &s
     None
 }
 
-pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
+pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
     let mut best: Option<String> = None;
     let mut best_size: i64 = -1;
     for variant in variants.iter() {
@@ -347,7 +347,7 @@ pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>
     best
 }
 
-pub(crate) fn item_enum_placeholder_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> Option<String> {
+pub(crate) fn item_enum_placeholder_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<String> {
     for item in view.items.iter() {
         let found: Option<String> = match &item.node {
             Item::Enum { name: declared, variants, .. } => { let declared = *declared; if view.text(declared) == name { item_placeholder_of_enum(view, name, variants) } else { None } },
@@ -383,7 +383,7 @@ pub(crate) fn item_placeholder_of_contract(name: &str, contract: &TypeContract) 
     best
 }
 
-pub(crate) fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
+pub(crate) fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
     for item in view.items.iter() {
         let found: Option<Vec<String>> = match &item.node {
             Item::Enum { name, variants, .. } => { let name = *name; if view.text(name) == on { Some(item_variant_names(view, variants)) } else { None } },
@@ -394,7 +394,7 @@ pub(crate) fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_>, 
     None
 }
 
-pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
+pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for v in variants.iter() { out.push(view.text(v.name)); }
     out
@@ -432,7 +432,7 @@ impl CheckState {
         if item_has_a_default(ty) { return Some(String::from("")); }
         self.a_placeholder(world, ty)
     }
-    pub(crate) fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
+    pub(crate) fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
         #[allow(unused_mut)] let mut variants: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -452,7 +452,7 @@ impl CheckState {
         for variant in variants.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(variant.to_string()), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
-    pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
@@ -467,7 +467,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec![String::from("A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.")], Some(help)));
     }
-    pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
+    pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
         if at.is_some() {
             let head = nikaia_std::block::Text::from(nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_string());
@@ -488,7 +488,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }
-    pub(crate) fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
+    pub(crate) fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
         let head = view.unaliased(head);
         let prefix = format!("{}::", head);
         let mut declared = self.structs.contains_key(&head) || self.enums.contains_key(&head);
@@ -528,7 +528,7 @@ pub(crate) fn item_contract_variants(contract: &TypeContract) -> Vec<String> {
 
 #[derive(Debug, Clone)]
 pub struct ItemGeneric<'a> {
-    pub file: ParsedView<'a, 'a, 'a, 'a, 'a, 'a>,
+    pub file: ParsedView<'a, 'a, 'a, 'a, 'a, 'a, 'a>,
     pub params: Vec<String>,
     pub members: Vec<Type>,
 }
@@ -545,7 +545,7 @@ pub(crate) struct ItemInline {
     pub(crate) inline: collections::BTreeSet<String>,
 }
 
-pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if ty.is_view || (*ty.code).is_some() { return; }
     if ty.is_tuple {
         for part in ty.generics.iter() { item_held_inline(parsed, part, generics, out); }
@@ -566,7 +566,7 @@ pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: 
     for member in generic.members.iter() { item_held_through(generic, member, parsed, &ty.generics, generics, out); }
 }
 
-pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if member.is_view || (*member.code).is_some() { return; }
     if member.is_tuple {
         for part in member.generics.iter() { item_held_through(generic, part, at, arguments, generics, out); }
@@ -603,7 +603,7 @@ pub(crate) fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<S
     false
 }
 
-pub(crate) fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
+pub(crate) fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
     let mut out: Vec<ItemMember> = vec![];
     match node {
         Item::Struct { fields, .. } => { for f in fields.iter() { out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() }); } },
@@ -622,7 +622,7 @@ pub(crate) fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &
     out
 }
 
-pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item) -> Option<String> {
+pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, node: &Item) -> Option<String> {
     match node {
         Item::Struct { name, .. } => { let name = *name; Some(file.text(name)) },
         Item::Enum { name, .. } => { let name = *name; Some(file.text(name)) },
@@ -631,8 +631,8 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_>,
 }
 
 impl CheckState {
-    pub(crate) fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
-        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
+    pub(crate) fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) {
+        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
         for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
         for file in files.iter() {

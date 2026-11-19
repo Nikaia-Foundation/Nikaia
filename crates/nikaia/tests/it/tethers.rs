@@ -206,7 +206,7 @@ const COUNTING: &str = "grammar Calc {\n\
                         }\n";
 
 /// **A parse hands back views into the text it was given**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24,
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5,
 /// [ADR-186](../../../docs/specification/adr/adr-186.md) D1).
 ///
 /// The buffer is the caller's `input`, which outlives the call — the same

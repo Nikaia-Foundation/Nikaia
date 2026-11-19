@@ -572,7 +572,7 @@ fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: ref C
 /// entry run on the block's text while the program is built, as
 /// `comptime … = G::entry("…")` would be. The value is recorded for the
 /// emitter under the block's own node: two blocks in one statement are two
-/// values. Only a grammar with one entry (ADR-296 D25).
+/// values. Only a grammar with one entry (ADR-grammar-syntax-v1 D6).
 fn check_core_a_block_over_a_grammar[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Expr, target: winnow_grammar::Symbol, content: ref String, span: ref Span) -> Ty sync {
     let owner = world.words.resolve(target).clone()
     let mut entry: String = ""

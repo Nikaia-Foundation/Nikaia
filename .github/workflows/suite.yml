@@ -590,6 +590,9 @@ jobs:
             echo "::endgroup::"
           done
           (cd tests/page-examples && nikaia test)
+          # A decision is only citable if its number is stable, so a dangling
+          # `ADR-023 D7` is as much a defect as a dangling link.
+          env -u NIKAIA_DUMP_ACCEPTED nikaia run scripts/check-adr-refs.nika
           # The ledgers of tests/compiler are committed like a lockfile
           # (ADR-268 D2, D6): a change to its src/ that leaves them stale fails.
           (cd tests/compiler && nikaia build --locked)

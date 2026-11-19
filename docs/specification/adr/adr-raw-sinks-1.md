@@ -5,7 +5,9 @@
 (no shell in `std`) added November 19, 2026 (owner's decision on
 [#1937](https://github.com/Nikaia-Foundation/Nikaia/issues/1937)); D10
 (a program from outside at `process::run`) added November 19, 2026 (owner's
-decision on [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938))
+decision on [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938)); D11-D16 (proof in
+place of `trusted:`) added November 19, 2026 (owner's decision on
+[#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242)), which change D8
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -171,10 +173,10 @@ written, a call that throws.
 ### D8 — It is switched on when our own code builds under it.
 
 As ADR-396 D4: the build that adds `NK1308` and `NK1309` also makes every site
-in the compiler, `packages/`, `examples/`, `tools/` and `scripts/` build. A
-path the operator typed is read with `cli::args(trusted: true)` (ADR-399),
-which states who chose it. No `[allow]` line goes into our own code to get a
-site through.
+in the compiler, `packages/`, `examples/`, `tools/` and `scripts/` build.
+Changed by D16: a site builds by a proof of D11-D15, not by `trusted:`;
+the only `[allow]` lines in our own code are the narrow ones of D15, where
+taking a path from outside is what the tool is for.
 
 ### D9 — `std` runs no shell; `process::shell` is refused, `NK1314`.
 
@@ -238,6 +240,115 @@ A privileged start of a program that has not declared its environment
 untrusted ends before `main` (ADR-397 D3), so an operator's `EDITOR` never
 reaches a setuid program unchecked.
 
+### D11 — The root of `Dir` is a part of the path.
+
+`fs::Root::Dir(dir)` keeps a name inside `dir` (ADR-108 D3), but it keeps it
+inside a directory a stranger may have chosen. So `dir` is judged as a part
+of the path under D2: a `dir` from outside makes the call a raw sink with no
+precondition, as `Anywhere` does, `NK1308` under `untrusted-paths-anywhere`
+or the operation's key of D15. A literal, a constant, a directory the
+operator chose (the environment, ADR-397), a root `std` made (D12) and a
+root built by `Root::join` from one of these (D13) pass.
+
+### D12 — A directory `std` made is a root, and it replaces `mktemp`.
+
+`fs::scratch()` (ADR-247 D5) makes a fresh, empty directory and hands it
+back as a `Root`. Nobody but the program chose it, so it is not outside and
+what is written under it with names that are not outside is proved. It is
+the form for a temporary directory: `process::run("mktemp", ["-d"])` hands
+back standard output, which is outside, and a path joined to it under
+`Anywhere` is refused. Where the directory's name is needed as text, for a
+program's argument, `Root::path(root)` gives it; an argument is not a raw
+sink (D10). `Root::path` returns `fs::Path`, never `null` (supervisor,
+2026-11-19, #2326): for `Dir(d)` it is `d`; for `Anywhere`, which opens a
+relative path as given, against the working directory, it is `"."`, so
+`f"{root.path()}/x"` names the file `root` opens for `"x"` under either
+root. A test of `fs::scratch()` thus writes no fallback for a case that
+cannot occur.
+
+### D13 — A name from `fs::read_dir` is opened under its directory.
+
+`fs::read_dir(path, root)` hands back names the file system chose: outside
+data. Each is one component, with no separator, never `.` or `..`, so it
+cannot climb, but it may be a symlink to anywhere, planted by whoever can
+write into the directory. The form that proves it is a root for the
+directory, `root.join(path)`, which is a `Root::Dir` under the same check,
+and the name opened under it:
+
+```nika
+let packages = root.join("packages")
+for name in fs::read_dir(".", packages) {
+    let manifest = fs::read_to_string(name.join("Cargo.toml"), packages)
+}
+```
+
+`Dir`'s check resolves symlinks (ADR-108 D3), so a planted link out of the
+directory is `io::IoError::Outside` at the call. The same name joined to a
+text and opened under `Anywhere` stays outside, `NK1308`: it follows the
+link wherever it points.
+
+### D14 — A path from outside is proved by a property of its own.
+
+Where a program does take a name from outside and opens it, the guard where
+it arrives proves one of two predicates of `std::path`, and the proof holds
+after the guard as `html::is_plain`'s does (ADR-396 D2):
+
+| Predicate | Holds when | What it admits |
+|---|---|---|
+| `path::is_component(p)` | one component, no separator, not `.` or `..` | `p` under a `Dir` whose root passes D11, or joined to a part that is not outside |
+| `path::is_below(p)` | relative, no root, no drive, no `..` component | the same |
+
+Neither proves where a symlink points; under `Dir` the run time check does
+(ADR-108 D3), under `Anywhere` nothing does, as for a literal. A check of the
+file system (`fs::exists`, a `metadata` call) proves nothing: the answer is
+about the moment of the call, not the moment the file is opened.
+
+### D15 — The sink is the operation, and an exception names its sources.
+
+A path's danger depends on what is done with it. A path in `std::fs` and
+`http::File` is one of three sinks, each with its own key:
+
+| Operation | Calls | `[allow]` key |
+|---|---|---|
+| read | `read_to_string`, `read`, `map`, `open` for reading, `read_dir`, `metadata`, `exists`, `canonical`, the source of `copy`, `http::File` | `untrusted-paths-read` |
+| write | `write`, `create`, `open` for writing, `create_dir`, the target of `copy` and `rename` | `untrusted-paths-write` |
+| remove | `remove`, the source of `rename` | `untrusted-paths-remove` |
+
+`untrusted-paths-anywhere` is kept and means all three. A key takes `true`,
+every source, or the list of sources it admits, named as `--trust` names
+them (ADR-010 D7): `args`, `stdin`, `env` (an untrusted environment,
+ADR-397 D4), `request`, `file`, `process`, `network`.
+
+```toml
+[allow]
+untrusted-paths-read = ["args"]
+```
+
+A checksum tool built with this line reads every file named on its command
+line. The same name at `fs::write` or `fs::remove` is still `NK1308`, and a
+file name read from standard input is still `NK1308` at `fs::read`: each
+operation and each source is admitted on its own. D5 holds per key and per
+source: `[allow.packages.NAME]` names the same keys with the same lists.
+
+### D16 — `trusted:` is not the way a raw sink is passed.
+
+The owner's direction on #2242: an option that says *trusted* at the source
+is boilerplate where it is needed and dangerous where it is written by
+habit; the program proves what it does instead. So:
+
+1. A value marked `trusted: true` at its source still counts as not outside
+   under D2 (ADR-010 D3, ADR-399), but no further source gets a `trusted:`
+   option for a raw sink's sake. The `trusted:` of `io::read_line` and
+   `io::read_exact`, added by #2242, is taken out again.
+2. Our own code passes its raw sinks by D11-D15: `fs::scratch()` for a
+   temporary directory, a root per directory it walks, the predicates of
+   D14 where a name arrives, and a D15 line in the manifest of a tool whose
+   job is to read the files its command line names (`nikaia` itself reads
+   the program it is given). The line names the operation and the sources,
+   never `true`, and the manifest says in a comment why.
+3. A site none of these covers is a finding: it is filed and decided, not
+   written around (CLAUDE.md, *Fix, do not work around*).
+
 ## 4. Not decided here
 
 * **Names and codes** are confirmed by the supervisor (2026-11-16, #1253):
@@ -249,6 +360,9 @@ reaches a setuid program unchecked.
 * **An argument that starts with `-`.** An outside word passed as an argument
   can be read as an option, by the shell and by `process::run` alike. A
   precondition against it is open.
+* **A tool list in the manifest** for `process::run`'s program. A `match`
+  over literals (D10) names the programs where they are used; a list beside
+  it would be a second place. It is taken up if a case shows the need.
 * **A response header.** `http`'s response has no header setter yet; when it
   gets one, a CR or LF in a header value is refused by the encoder (D1).
 * **A library and `raw-sinks = "warn"`.** This record reads it from the
@@ -290,4 +404,8 @@ own precondition, and only a proof of that one admits the value.
 * Built by [#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253); D9 by
   [#2197](https://github.com/Nikaia-Foundation/Nikaia/issues/2197); D10 by
   [#2217](https://github.com/Nikaia-Foundation/Nikaia/issues/2217); the environment by
-  [#2216](https://github.com/Nikaia-Foundation/Nikaia/issues/2216).
+  [#2216](https://github.com/Nikaia-Foundation/Nikaia/issues/2216); D11-D16 by the issues
+  listed on [#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242).
+* Part III 13.3 names the keys of D15 and their source lists; Part III 17
+  (`std::fs`, `std::path`) gives `Root::join`, `Root::path`,
+  `path::is_component` and `path::is_below`.

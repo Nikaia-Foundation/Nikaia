@@ -154,8 +154,8 @@ fn unit_reaches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::Intern
                     }
                 }
             }
-            // **A `entry` rule is an entry, so it gets the walk too** (ADR-296
-            // D24). Its body is every action block in the grammar: a rule's
+            // **A `entry` rule is an entry, so it gets the walk too** (ADR-grammar-syntax-v1
+            // D5). Its body is every action block in the grammar: a rule's
             // pattern names other rules of the same grammar and their actions
             // run with it, so the grammar is the unit - which is the safe
             // direction here, because a lock this walk does not see is a

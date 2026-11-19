@@ -229,7 +229,7 @@ pub struct EmitWalk {
     /// or `here` is the grammar's own, not the built-in (#557).
     pub grammar_rules: collections::BTreeSet[String],
     /// Each rule of the grammar being written that takes values, by name: a
-    /// call writes its parameters in the rule's order (ADR-grammar-1 D2).
+    /// call writes its parameters in the rule's order (ADR-grammar-syntax-v1 D12).
     pub grammar_values: collections::BTreeMap[String, GrammarRule],
     /// Each `members[S]` of the grammar being written, in the order its
     /// call `__nikaia_members_N` was written: its rules follow the

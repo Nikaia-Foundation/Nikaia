@@ -29,7 +29,7 @@ pub(crate) fn mem_also(head: &str) -> Vec<&'static str> {
 
 pub(crate) fn mem_a_said_code(code: &str) -> bool { code == "NK1189" || code == "NK1126" || code == "NK1210" }
 
-pub(crate) fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Trait { name: declared, .. } => { let declared = *declared; unit.text(declared) == name },
@@ -46,7 +46,7 @@ pub(crate) fn mem_a_trait_is_declared(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
     false
 }
 
-pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
+pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     for item in unit.items.iter() {
         let implemented = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; mem_an_impl_provides(world, unit, trait_name, target, head, member) },
@@ -57,7 +57,7 @@ pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub(crate) fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
+pub(crate) fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if unit.text(target.name) != head { return false; }
     let written = unit.text(symbol);

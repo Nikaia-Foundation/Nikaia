@@ -19,6 +19,7 @@ use crate::parser::Parsed;
 pub type GiveUps = nikaia_std::compiler::view_changes::VcGiveUps;
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
+#[allow(clippy::too_many_arguments)]
 pub fn analyse(
     parsed: &Parsed,
     own: &Ledger,
@@ -27,6 +28,7 @@ pub fn analyse(
     coalesced: &BTreeSet<i64>,
     mut_viewed: &BTreeSet<i64>,
     receiver_views: &BTreeSet<i64>,
+    cut_gives: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
     use nikaia_std::compiler::view_changes::{VcAsk, vc_analyse};
     let ask = VcAsk {
@@ -38,6 +40,7 @@ pub fn analyse(
         coalesced,
         mut_viewed,
         receiver_views,
+        cut_gives,
         refused: &parsed.refused_moves,
         viewed: &parsed.viewed_arms,
     };

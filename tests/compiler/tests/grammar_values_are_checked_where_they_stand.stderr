@@ -4,7 +4,7 @@ error[NK1101]: `Item` takes 1 value before the `;`, but you passed 2.
  9 |     entry rule a -> i64 = v:Item(1, 2) -> { v }
    |                             ^^^^^^^^^^
    |
-   = note: A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).
+   = note: A rule takes its values as a function takes its arguments (ADR-grammar-syntax-v1 D12).
    = help: Give one value for each, by position; an option goes after the `;` by name.
 error[NK1102]: The value for `n` here is a view of a `String`, but it has to be `i64`.
    --> tests/grammar_values_are_checked_where_they_stand.nika:10:29
@@ -41,6 +41,6 @@ error[NK1101]: `Item` takes 1 value before the `;`, but none is given.
  14 |     entry rule f -> i64 = v:Item -> { v }
     |                             ^^^^
     |
-    = note: A rule declared with values is called with them, as a function is (ADR-grammar-1 D2).
+    = note: A rule declared with values is called with them, as a function is (ADR-grammar-syntax-v1 D12).
     = help: Write `Item(…)` with a value for each.
 6 type errors

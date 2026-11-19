@@ -78,6 +78,10 @@ pub(crate) fn emit_call_span_function(callee: &str) -> String {
         let ty = nikaia_std::index::or(callee.strip_suffix("::nanos"), || "");
         return format!("span_nanos_{}", ty);
     }
+    if callee == "fs::Root::join" || callee == "fs::Root::path" {
+        let named = nikaia_std::index::or(callee.strip_prefix("fs::Root::"), || "");
+        return format!("root_{}", named);
+    }
     let name = match callee.strip_prefix("time::Duration::") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     if name == "saturating_add" || name == "saturating_sub" || name == "saturating_mul" || name == "min" || name == "max" { return format!("span_{}", name); }
     String::from("")
@@ -751,14 +755,19 @@ impl EmitState {
             None => None,
         }, || "".into()));
         if spanned != "" {
+            let rooted = spanned.starts_with("root_");
             out.push(&format!("nikaia_std::runtime::{}(", spanned));
+            if rooted { out.push("&("); }
             if receiver.is_none() { out.push("__nikaia_it"); } else {
                 let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 self.emit_core_nested(world, walk, out, host, on, 0, depth, flow, scope)?;
             }
+            if rooted { out.push(")"); }
             if !args.is_empty() {
                 out.push(", ");
+                if rooted { out.push("std::path::Path::new(&("); }
                 self.emit_core_args(world, walk, out, host, &name, args, &vec![], depth, flow, scope)?;
+                if rooted { out.push("))"); }
             }
             out.push(")");
             return Ok(());
@@ -1422,8 +1431,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple105581| {
-        let (i, word) = __nikaia_tuple105581;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple106477| {
+        let (i, word) = __nikaia_tuple106477;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

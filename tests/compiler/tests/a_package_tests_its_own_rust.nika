@@ -1,0 +1,59 @@
+// A package's `test` block calls the package's own Rust (ADR-rust-boundary-1
+// D24, #2233): `nikaia test` splices the Rust root's modules into the test
+// build. A `use` whose prefix is a module of the Rust root is `NK2507` (D28),
+// and a call to an item narrower than `pub(crate)` is `NK2504`, named as
+// such. `nikaia describe crate` drafts beside the reviewed file (D27).
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn ran(nikaia: String, tmp: String, case: String, args: Vec[String]) throws {
+    let done = process::run(nikaia, args; dir: f"{tmp}/demo", env: [("CARGO_TERM_COLOR", "never")])
+    println(f"--- {case}: exit {done.code}")
+    let text = f"{done.stdout}{done.stderr}".replace(tmp, "TMP")
+    for line in text.lines() {
+        // Cargo's progress varies by run and by machine; CI colours it, so it is asked not to.
+        let word = line.trim_start().split(" ").next() ?? ""
+        if ["Updating", "Locking", "Adding", "Downloading", "Downloaded", "Compiling", "Finished", "Running", "Blocking"].contains(word) { continue }
+        println(line)
+    }
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/demo", tmp.clone()])
+    let demo = f"{tmp}/demo"
+    let source = fs::read_to_string(f"{demo}/src/demo.nika", fs::Root::Anywhere)
+    let tested: String = "\ntest \"quad goes through the package's own Rust\" {\n    assert(words::twice(5) == 10)\n    assert(quad(3) == 12)\n}\n"
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"{source}{tested}")
+    // A package's entry is `src/main.nika` (Part III 13.3), a library's too.
+    fs::write(f"{demo}/src/main.nika", fs::Root::Anywhere, "// The entry of the package.\n")
+    ran(nikaia.clone(), tmp.clone(), "test block", ["test"])
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"use std::fs as words\n{source}")
+    ran(nikaia.clone(), tmp.clone(), "same name", ["check", "src/demo.nika"])
+    let rust = fs::read_to_string(f"{demo}/rust/words.rs", fs::Root::Anywhere)
+    let hidden: String = "\n/// Not visible at the crate root.\nfn hidden(x: i64) -> i64 {\n    x\n}\n"
+    fs::write(f"{demo}/rust/words.rs", fs::Root::Anywhere, f"{rust}{hidden}")
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"{source}\npub fn same(x: i64) -> i64 {{\n    return words::hidden(x)\n}}\n")
+    ran(nikaia.clone(), tmp.clone(), "narrow", ["check", "src/demo.nika"])
+    fs::write(f"{demo}/rust/words.rs", fs::Root::Anywhere, rust)
+    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"{source}\npub fn six(x: i64) -> i64 {{\n    return words::thrice(words::twice(x))\n}}\n")
+    ran(nikaia, tmp.clone(), "describe crate", ["describe", "crate"])
+    print(fs::read_to_string(f"{demo}/contracts/crate.draft.contracts", fs::Root::Anywhere) catch { "no draft\n" })
+    process::run("rm", ["-rf", tmp])
+}

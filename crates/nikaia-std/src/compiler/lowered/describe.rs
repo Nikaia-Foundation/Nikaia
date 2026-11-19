@@ -151,6 +151,84 @@ pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String
 
 pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path::Path, crate_word: &str, contracts: &str, host: &H) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for qualified in describe_qualified_written(root, contracts, host).await {
+        let rest = match qualified.strip_prefix(&*format!("{}::", crate_word)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        out.insert(nikaia_std::block::Text::from(rest.to_string()));
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DescribeOwn {
+    pub drafted: Drafted,
+    pub sources: collections::BTreeMap<String, String>,
+    pub narrow: Vec<String>,
+}
+
+pub async fn describe_own<H: DescribeHost>(root: &std::path::Path, rust_root: &str, contracts: &str, host: &H) -> Result<DescribeOwn, nikaia_std::error::Thrown<Refused>> {
+    let hand = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(rust_root)));
+    let dir = nikaia_std::index::or(nikaia_std::fs::path::parent(&(hand)), || nikaia_std::fs::path::clone(&(root)).into());
+    let hand_name = nikaia_std::block::Text::from(nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(hand)).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+        None => None,
+    }, || "".into()).to_string());
+    let root_text = match fs::read_to_string(&hand, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("reading {}: {}", nikaia_std::fs::path::display(&(hand)), error)), &"describe_own")) },
+    };
+    let heads = project_members_rust_heads(&root_text);
+    let mut surface = empty();
+    let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let files = match fs::walk(&dir, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("reading {}: {}", nikaia_std::fs::path::display(&(dir)), error)), &"describe_own")) },
+    };
+    for name in files.iter() {
+        let relative = nikaia_std::fs::path::display(&(name));
+        if !relative.ends_with(".rs") { continue; }
+        let bytes = match fs::read(&nikaia_std::fs::path::join(&(dir), name), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        let mut read: Vec<u8> = vec![];
+        for b in bytes.iter().copied() { read.push(b); }
+        sources.insert(nikaia_std::block::Text::from(relative.to_string()), hash::sha256_hex(&read));
+        let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), name), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        let items = match nikaia_std::grammar::parse(&*text, Rust::parse_file()) {
+            Ok(value) => value,
+            Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}: {}", relative, error)), &"describe_own")) },
+        };
+        let module = if relative == hand_name { String::from("src/lib.rs") } else { format!("src/{}", relative) };
+        read_items(&mut surface, &module, &items);
+    }
+    let mut functions: collections::BTreeMap<String, FnContract> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let heads = heads;
+    #[allow(unused_mut)] let mut unanswered: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let heads = heads;
+    #[allow(unused_mut)] let mut narrow: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let heads = heads; #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered;
+    let mut named_types: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let heads = heads; #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered; #[allow(unused_mut, clippy::redundant_locals)] let mut narrow = narrow;
+    let crate_word: String = String::from("crate"); #[allow(clippy::redundant_locals)] let heads = heads; #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered; #[allow(unused_mut, clippy::redundant_locals)] let mut narrow = narrow;
+    for name in describe_qualified_written(root, contracts, host).await {
+        let head = match name.split("::").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if head == name || !nikaia_std::list::contains(&heads, &head) { continue; }
+        match *nikaia_std::index::get(&surface.functions, &name) {
+            None => { unanswered.push(nikaia_std::block::Text::from(name.to_string())); },
+            Some(function) => {
+                if surface.within.contains(&name) || surface.offers.contains(&name) {
+                    let mut entry = contract_of(function, &crate_word, &surface.types, &mut named_types);
+                    entry.public = false;
+                    functions.insert(nikaia_std::block::Text::from(name.to_string()), entry);
+                } else { narrow.push(nikaia_std::block::Text::from(name.to_string())); }
+            },
+        }
+    }
+    let types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered; #[allow(unused_mut, clippy::redundant_locals)] let mut narrow = narrow;
+    Ok(DescribeOwn { drafted: Drafted { functions, types, unanswered, notes: Notes::empty() }, sources, narrow })
+}
+
+pub(crate) async fn describe_qualified_written<H: DescribeHost>(root: &std::path::Path, contracts: &str, host: &H) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut pending: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(root))], nikaia_std::block::Place::Block);
     loop {
         let directory = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
@@ -178,10 +256,7 @@ pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path
                 Err(_error) => { continue; },
             };
             let written = match host.qualified_names(&text) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for qualified in written.iter() {
-                let rest = match qualified.strip_prefix(&*format!("{}::", crate_word)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                out.insert(nikaia_std::block::Text::from(rest.to_string()));
-            }
+            for qualified in written.iter() { out.insert(nikaia_std::block::Text::from(qualified.to_string())); }
         }
     }
     out

@@ -7,7 +7,7 @@
 // follow; nothing here calls it.
 //
 // **What the Rust grammar needed from outside, and how this one says it**
-// (ADR-339):
+// (ADR-grammar-syntax-v1):
 //
 // * `same_line` and `here` are built-ins of the grammar language (D1, D2):
 //   the lowering keeps the line breaks the trivia ran over, so no rule here
@@ -73,7 +73,7 @@ grammar ParserGrammar {
         | w:text(NAME) -> { PgKind::Name(w.clone()) }
         | c:text(any) -> { PgKind::Other(c.clone()) }
 
-    // ---- trivia (ADR-135 D3, ADR-307, ADR-339 D4) -----------------------
+    // ---- trivia (ADR-135 D3, ADR-307, ADR-grammar-syntax-v1 D19) -----------------------
 
     rule WSE = multispace1 -> { }
     rule WS = (WSE | COMMENT | BLOCK_COMMENT)* -> { }

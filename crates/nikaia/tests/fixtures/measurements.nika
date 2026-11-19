@@ -19,7 +19,7 @@ grammar Measurements {
     // compiler rejects that rather than quietly repairing it (ADR-296 D9).
     rule NAME -> ref String = s:until(";" | frame_end) -> { s }
 
-    // The width the format fixes, stated (ADR-296 D13): -99.9 ..= 99.9.
+    // The width the format fixes, stated (ADR-grammar-syntax-v1 D11): -99.9 ..= 99.9.
     rule TENTHS -> i32 =
         neg:"-"? whole:digit{1,2} "." frac:digit
         -> {

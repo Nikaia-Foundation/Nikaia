@@ -721,6 +721,7 @@ fn describe(crate_name: &str, project: Option<PathBuf>) -> Result<i32> {
         unanswered: written.unanswered,
         promises: !written.notes.about_the_crate.is_empty(),
         proposed: written.notes.about_a_function.len() as i64,
+        narrow: written.narrow,
     };
     print!(
         "{}",
