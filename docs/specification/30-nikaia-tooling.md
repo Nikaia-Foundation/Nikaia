@@ -74,9 +74,11 @@ The build options live in `[build]`. `--target` and `--user-parallelism` overrid
 
 The manifest carries what the **compiler** must know. How the program behaves on the machine it runs on — the number of I/O workers, the size of the pool for user code, the I/O mechanism, the shutdown drain — is runtime configuration (13.3b), read at startup by whoever runs the program.
 
+`environment` says who chose the environment ([ADR-397](adr/adr-397.md) D4): at `"operator"`, the default, a variable is trusted except the names a CGI host fills, and a start with more rights than the caller (setuid, setgid, file capabilities) ends before `main`; at `"untrusted"` every variable is untrusted and such a start runs. It is read from the program only, is a cache-key dimension, and `--environment=untrusted` sets it for one build.
+
 `reentrancy-check` is a build option. It changes what the compiler emits and is a cache-key dimension like `target` and `user-parallelism`. `refuted-claims` is one too ([ADR-269](adr/adr-269.md) D8): at `error`, the default, a claim the compiler shows false with values (`NK1207`, 14.2) refuses the program, and so does an index or an arithmetic operation it shows fails for a value the program reaches; at `warn` the program builds, each such claim a warning and a check where it is reached. `--refuted-claims` overrides it for a single build. It is the bypass for the day a better prover refutes what an older one built, and for that emergency only: a claim newly refuted in code is fixed in that code ([ADR-359](adr/adr-359.md) D9). `unproved-claims` is a cache-key dimension as well ([ADR-380](adr/adr-380.md) D2): at `error`, the default, an `assert` the compiler does not prove refuses the program (`NK1300`, 14.2), and so does an index reached by data from outside the program that it does not prove in bounds (`NK1302`, [ADR-396](adr/adr-396.md) D3), or a divisor or an overflow it does not prove safe (`NK1303`, D7); at `warn` the program builds, each such claim a warning and a check where it is reached. `--unproved-claims` overrides it for a single build. `unproved-checks` is a cache-key dimension as well ([ADR-306](adr/adr-306.md) D29): at `allow`, the default, an index, an overflow or a division the compiler does not prove builds with its check; at `error` each such site, every one `nikaia check --bounds` reports as checked, refuses the program (`NK1313`, 14.2) with the walk's reason and the guard that proves it where the value arrives. `--unproved-checks` overrides it for a single build. It applies to the package built; its dependencies, `std` and the toolchain are built at `allow` (D27). `raw-sinks` is a cache-key dimension too ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D3): at `error`, the default, data from outside the program at a raw sink that no `[allow]` key admits and the compiler does not prove refuses the program (`NK1308`, 14.2); at `warn` the program builds, each such site a warning and a check where it is reached. `--raw-sinks` overrides it for a single build. `cleanup-deadline` is runtime configuration. It changes what a running program waits for; the compiler does not read it.
 
-**`[allow]`** names the raw sinks a package passes data from outside the program to without a proof ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D4, D5): `untrusted-shell` (no sink yet: kept for a shell library, D9), `untrusted-sql` (`db::raw`), `untrusted-markup` (`html::Raw`) and `untrusted-paths-anywhere` (a path under `fs::Root::Anywhere` or `Dir("/")`), each `= true`. A key admits every such call of the package's own code, with no check. `--allow=KEY` admits one key for a single build and may be given more than once. A dependency's keys hold in a program only where the program's manifest repeats them under `[allow.packages.NAME]`, or `--allow=NAME:KEY` gives them; otherwise the dependency's call is refused, `NK1309`. `--trust` lists every call a key admits, with its place and its key.
+**`[allow]`** names the raw sinks a package passes data from outside the program to without a proof ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D4, D5): `untrusted-shell` (no sink yet: kept for a shell library, D9), `untrusted-sql` (`db::raw`), `untrusted-markup` (`html::Raw`) `untrusted-paths-anywhere` (a path under `fs::Root::Anywhere` or `Dir("/")`) and `untrusted-program` (an outside `program` of `process::run`, D10), each `= true`. A key admits every such call of the package's own code, with no check. `--allow=KEY` admits one key for a single build and may be given more than once. A dependency's keys hold in a program only where the program's manifest repeats them under `[allow.packages.NAME]`, or `--allow=NAME:KEY` gives them; otherwise the dependency's call is refused, `NK1309`. `--trust` lists every call a key admits, with its place and its key.
 
 **`[features]`** names the parts of a rust-library a Rust user may choose ([ADR-393](adr/adr-393.md)). Each feature lists roots: a module, standing for all its `pub` items, or one `pub` item by its path; `default` lists features. Every item a root reaches is in its feature, and a `pub` item no feature reaches is the core, always present; without `[features]` everything `pub` is core. The compiler derives the rest and records it in the ledger: an item several features reach is written under `#[cfg(any(…))]`, a feature that reaches all of another's roots implies it, and a dependency that only a feature's items use is `optional` and listed `dep:<name>` in each feature that reaches it. The source holds no condition. A feature only adds items. A root names a `@stream` entry of a `pub grammar` by its path, `<package>::<Grammar>::<rule>`, or all of a grammar's such entries as `<package>::<Grammar>`; the feature adds the entry's reader, `<Grammar>::<rule>_reader(r)`, which takes `impl std::io::Read + Send + 'static` and returns an iterator of `Result<Item, ParseError>`. Without such a feature the crate holds no reader. A rust-library build compiles the core alone, each feature alone and all features together; a combination that does not build is `NK1345` on the feature's root. A root that names nothing or an item that is not `pub` is `NK1344`, `[features]` in a program is `NK1346`, and a list that names an undeclared feature or a name Cargo does not accept is `NK1347`. `nikaia bind` takes a set of features (13.2); a C library is built whole.
 
@@ -135,6 +137,14 @@ reentrancy-check = "on"
 #   "warn"            - it builds; the sink checks the value and throws
 # Read from the program only; a dependency's is ignored.
 raw-sinks = "error"
+
+# Who chose the environment (ADR-397).
+#   "operator" (default) - the operator; only the names a CGI host fills are
+#                          untrusted, and a privileged start (setuid,
+#                          capabilities) ends before main
+#   "untrusted"          - every variable is untrusted; a privileged start runs
+# Read from the program only; a dependency's is ignored.
+environment = "operator"
 
 [allow]
 # The raw sinks this package's code passes data from outside to without a
@@ -524,7 +534,7 @@ Each test runs under the `user_parallelism` the project names. `nikaia test --bo
 
 **A claim about data from outside the program is refused** (`NK1202`, ADR-269 D6; standard input and files are such data unless marked `trusted: true`, [ADR-365](adr/adr-365.md)): it is not a defect when such data is wrong, so it is checked where it arrives, with a guard the program handles (ADR-010); after the guard, the claim is proved. **`main`'s parameters are such data, and the check is made for them** (Part I 5.5, [ADR-360](adr/adr-360.md) D3, D4): `main`'s preconditions are derived as any function's are, carried back to its entry, and are checked after the words the program was started with are read and before the body runs; a breach ends the program with exit status 2 (A.2). `--asserts` reports each as a precondition of `main` checked where the words arrive. **An index reached by data from outside the program is refused unless it is proved** (`NK1302`, [ADR-396](adr/adr-396.md) D1, D2): a list, string or slice index whose value depends on such data, followed through every call whose body the compiler reads. The refusal stands at the call where the outside value enters, or at the index when both are in one function; it names the source and a value that breaks the index, and the help writes the guard to put where the value arrives, a `return if` or a `match`, not an `assert`. An index with no outside data behind it keeps `NK1207` and `NK1300` as before. `unproved-claims = "warn"` makes it a warning and a check where the index is reached (13.3).
 
-**Data from outside the program at a raw sink is proved, or admitted by `[allow]`** (`NK1308`, [ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D2-D6). The raw sinks are `db::raw`, `html::Raw` and a path under `fs::Root::Anywhere` or `Dir("/")`; each states its precondition where its module is described (17). The parts of the sink's text are each hole of an f-string and each operand of `+` on `String` where the text is built in the function, a value built out of sight being one part, followed through every call whose body the compiler reads, as for `NK1302`. A part passes when it is not outside data, when its type is a whole number, a float, a `bool` or an `enum`, or when the compiler proves the precondition from a guard where the value arrives. A `pub` function's parameter at a sink is outside data; a guard in the body or an `assert` of the precondition, published as `requires`, passes it. Any other part refuses the program at the sink, unless the package's `[allow]` names the sink's key (13.3); the message names the part and its source, and the help writes the guard, the escaping form (a parameter, an argument list, a `Dir`, `html::escape`) and the `[allow]` line. `raw-sinks = "warn"` makes it a warning and a check at the call that throws the sink's error, `io::IoError::Outside` for a path (13.3).
+**Data from outside the program at a raw sink is proved, or admitted by `[allow]`** (`NK1308`, [ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D2-D6). The raw sinks are `db::raw`, `html::Raw`, a path under `fs::Root::Anywhere` or `Dir("/")` and the `program` of `process::run`; each states its precondition where its module is described (17). The parts of the sink's text are each hole of an f-string and each operand of `+` on `String` where the text is built in the function, a value built out of sight being one part, followed through every call whose body the compiler reads, as for `NK1302`. A part passes when it is not outside data, when its type is a whole number, a float, a `bool` or an `enum`, or when the compiler proves the precondition from a guard where the value arrives. A `pub` function's parameter at a sink is outside data; a guard in the body or an `assert` of the precondition, published as `requires`, passes it. Any other part refuses the program at the sink, unless the package's `[allow]` names the sink's key (13.3); the message names the part and its source, and the help writes the guard, the escaping form (a parameter, an argument list, a `Dir`, `html::escape`) and the `[allow]` line. `raw-sinks = "warn"` makes it a warning and a check at the call that throws the sink's error, `io::IoError::Outside` for a path (13.3).
 
 **A claim the program vouches for is `unsafe { assume(claim) }`** ([ADR-376](adr/adr-376.md)). Written only inside `unsafe` (`NK1294`) and never in `std` (`NK1295`), it is read as an `assert`'s claim is, may speak of data from outside the program, and is a fact from where it stands. In a build with `remove-bounds-checks:off` and `remove-overflow-checks:off` it is checked as an `assert` is; in a build with either `on` it is not checked, and a false claim is undefined behaviour. `nikaia check --asserts` lists every `assume`, and `--bounds` and `--asserts` name a check or claim proved only with an `assume`'s fact as *proved from an assume*, with its line ([ADR-381](adr/adr-381.md) D6).
 
@@ -1513,8 +1523,8 @@ it means.
 
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
-* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, the environment ([ADR-397](adr/adr-397.md)) and the command line, `cli::args()` and `main`'s parameters ([ADR-399](adr/adr-399.md)).
-* **Trusted**: the build or the operator chose these bytes. The project's assets read while building (`asset("…")`) and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
+* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, the variables of the environment a CGI host fills (`HTTP_*` and RFC 3875's meta-variables) and the whole environment where the manifest declares it untrusted ([ADR-397](adr/adr-397.md)), and the command line, `cli::args()` and `main`'s parameters ([ADR-399](adr/adr-399.md)).
+* **Trusted**: the build or the operator chose these bytes. The project's assets read while building (`asset("…")`), the rest of the environment ([ADR-397](adr/adr-397.md) D1) and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
 
 A value inherits the provenance of the buffer it comes from, and a collection takes the most cautious provenance of everything put into it. Where the compiler cannot tell, across a dynamic call or from a foreign library, the answer is Untrusted.
 
@@ -1576,14 +1586,20 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   `env::vars("")` lists all of them, and says so. It sees what `env::var` sees: a variable that is empty
   or not Unicode is left out, never a panic, so the list holds no name `env::var` calls null. All five are
   `sync`, and none has a `touches` line, so a read of the environment orders against every other effect
-  (13.5). A variable's value is untrusted, as standard input is (17.1, [ADR-397](adr/adr-397.md)):
-  `env::var(name; trusted: true)` and `env::vars(prefix; trusted: true)` say the operator chose it, and
-  the ledger records the marker. `std` does not change the environment of the running program (no
+  (13.5). A variable's value is the operator's, trusted, with no marker at the call
+  ([ADR-397](adr/adr-397.md) D1), except where a stranger is known to choose it: a name a CGI host
+  fills (`HTTP_*`, `QUERY_STRING`, `REMOTE_ADDR` and RFC 3875's other meta-variables), a name the
+  compiler does not know while building, and an `env::vars` prefix such a name can start with are
+  untrusted, as standard input is (17.1, D2); `[build] environment = "untrusted"` (13.3) makes every
+  value untrusted (D4). A program started with more rights than its caller (setuid, setgid, file
+  capabilities: `AT_SECURE` on Linux, `issetugid()` on macOS and the BSDs) ends before `main` with
+  exit status 1 unless its manifest declares the environment untrusted (D3). `std` does not change the environment of the running program (no
   `set_var`): a child gets another one through `process::run`'s `env:`, `env_clear:` and `env_remove:`
   ([ADR-243](adr/adr-243.md) D5).
   **The values may be secrets** (tokens, passwords, keys): do not print, log or send the list as it
-  is. A program started by a CGI-style host, or with more rights than its caller, gets an environment the
-  caller chose.
+  is. A job runner that sets variables from a stranger's input controls the program before `main`
+  (`LD_PRELOAD`, `PATH`), and `sudo` with `env_keep` starts no privileged start: neither is caught by
+  provenance (ADR-397 §5).
 * **`std::net`**: low-level TCP sockets for building custom protocols — `listen`,
   `connect`, `accept`, `read`, `write`. Everything that waits gives the thread up,
   so one thread serves many connections at either setting of `user_parallelism`.
@@ -1632,7 +1648,11 @@ Some modules are available, or behave restrictively, depending on the target and
   String)] = []` is set in the order written, a later pair replacing an
   earlier one of the same name, and a name both removed and set is set. Names
   are compared as the platform does: byte for byte on Unix, without regard to
-  case on Windows. A `program` with no path separator is looked up on the
+  case on Windows. **The program is a raw sink**
+  ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D10): a `program` from outside the
+  program is refused, `NK1308`, unless `[allow] untrusted-program` admits it; a
+  literal, a constant and a value of the operator's environment pass, and the
+  help writes a `match` over literal names. A `program` with no path separator is looked up on the
   **caller's** `PATH` as it is at the call, never on the child's, and started
   by the full name found. A name that is empty or holds `=` or a NUL, or a
   value that holds a NUL, is invalid: every entry is checked before anything
