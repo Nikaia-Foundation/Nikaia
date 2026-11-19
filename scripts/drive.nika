@@ -1765,6 +1765,11 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		if l == "" { continue }
 		let words = l.split(" ").collect()
 		let path = words[words.len() - 1].clone()
+		// A file the worktree's stale HEAD has and the merged index lacks shows
+		// as deleted there; where the checkout lacks it too, there is nothing to
+		// stage, and `git add -A` refuses the unknown path (2026-11-19, twice:
+		// `runtime/lowered/shell.rs`, "pathspec did not match any files").
+		if l.starts_with("D") && !process::run("git", ["ls-files", "--error-unmatch", "--", path.clone()]).ok && !fs::exists(path.clone(), fs::Root::Anywhere) { continue }
 		let copied = if l.starts_with("D") {
 			process::run("rm", ["-f", path.clone()]).ok
 		} else {
