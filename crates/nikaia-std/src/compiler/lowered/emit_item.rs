@@ -532,6 +532,7 @@ impl EmitState {
                     written = emit_fn_code_that_changes(&written);
                     reference = "&mut ";
                 }
+                if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(&key, &emit_text(world, arg.name)) { written = emit_fn_code_that_crosses(&written); }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
                 let mut viewed = arg.ty.clone();
                 viewed.is_view = true;

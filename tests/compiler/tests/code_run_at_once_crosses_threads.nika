@@ -1,0 +1,37 @@
+// **Code a function runs from tasks at once crosses threads** (ADR-views-3
+// D17, ADR-292 D6): at `user-parallelism = "yes"` its parameter is lowered
+// `Send + Sync`, by a function, a function handing it on, and a trait
+// method alike; before, rustc refused `par_iter().for_each(f)` (NK1343).
+trait Spread {
+    fn spread(ref self, xs: Vec[i64], f: fn(i64) sync) sync
+}
+
+struct Pool {
+    n: i64,
+}
+
+impl Spread for Pool {
+    fn spread(ref self, xs: Vec[i64], f: fn(i64) sync) sync {
+        xs.par_iter().for_each(f)
+    }
+}
+
+fn each_at_once(xs: Vec[i64], f: fn(i64) sync) {
+    xs.par_iter().for_each(f)
+}
+
+fn hands_on(xs: Vec[i64], g: fn(i64) sync) {
+    each_at_once(xs, g)
+}
+
+fn quiet(x: i64) sync {
+    let y = x + 1
+}
+
+fn main() throws {
+    each_at_once([1, 2, 3], quiet)
+    hands_on([4, 5], quiet)
+    let p = Pool { n: 1 }
+    p.spread([6, 7], quiet)
+    println("ran")
+}
