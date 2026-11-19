@@ -27,7 +27,7 @@ fn check_specialised(function: ref String, on: ref String) -> String {
 /// whether it can fail comes from the contract (a rule past a commit point is
 /// an entry in the ledger with `throws = ["?"]`, ADR-023 D9), and what it comes
 /// to is the contract's result. **An entry takes a `String` or a `Bytes`**
-/// (ADR-366 D1): the argument decides, and a `Bytes` one is kept in
+/// (ADR-grammar-input-v1 D1): the argument decides, and a `Bytes` one is kept in
 /// `bytes_entries` and its grammar in `bytes_grammars`, for the lowering to
 /// compile the grammar over bytes too. The result and `throws` are as for text.
 fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
@@ -65,7 +65,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                         state.expect_type(world, given, o.ty, span, "argument", fn(was, wanted) { f"The option `{option}` is `{was}`, but `{key}` takes `{wanted}`." })
                     }
                 }
-                // **The table an entry that interns is handed** (ADR-388 D1):
+                // **The table an entry that interns is handed** (ADR-grammar-input-v1 D10):
                 // `words:` after its input, a `ref winnow_grammar::InternerContext`;
                 // a table the caller owns is lent, as to a `ref` parameter.
                 if !found && option == "words" && (check_grammar_entry_interns(world, key) ?? false) {
@@ -78,7 +78,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                 }
             }
             // **An entry whose result can hold a symbol is handed the table**
-            // (ADR-388 D2): its symbols would point into a table nobody can
+            // (ADR-grammar-input-v1 D11): its symbols would point into a table nobody can
             // reach. One that interns only on the way keeps a table of its own.
             let handed = config.iter().any(fn(c) { world.words.resolve(c.name) == "words" })
             let declares_words = signature.config.iter().any(fn(o) { o.name == "words" })
@@ -86,7 +86,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                 let result = signature.result ?? Ty::Unknown
                 let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
                 if check_holds_a_symbol(state, world, result, seen) {
-                    state.findings.push(check_refusal("NK1330", span, f"`{key}` hands back `{result.shown()}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", ["Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2)."], f"Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{key}(input; words: table)`; `table.resolve(symbol)` reads a name back."))
+                    state.findings.push(check_refusal("NK1330", span, f"`{key}` hands back `{result.shown()}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", ["Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-grammar-input-v1 D11)."], f"Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{key}(input; words: table)`; `table.resolve(symbol)` reads a name back."))
                 }
             }
         },
@@ -134,8 +134,8 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
     return signature.result ?? Ty::Unknown
 }
 
-/// **Whether a value of `ty` can hold a `winnow_grammar::Symbol`** (ADR-388
-/// D2): itself, or in a field, an element, a variant's payload, a part of a
+/// **Whether a value of `ty` can hold a `winnow_grammar::Symbol`** (ADR-grammar-input-v1
+/// D11): itself, or in a field, an element, a variant's payload, a part of a
 /// tuple or behind `?`, at any depth. `seen` keeps a type that holds itself
 /// from being walked twice.
 fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
@@ -187,7 +187,7 @@ fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: ref Ty
     }
 }
 
-/// **Whether the entry `key` (`Grammar::rule`) interns** (ADR-388 D1): its
+/// **Whether the entry `key` (`Grammar::rule`) interns** (ADR-grammar-input-v1 D10): its
 /// pattern, or a rule it reaches, calls `ident` or `intern(p)`. `null` where
 /// the grammar is in none of this program's files.
 fn check_grammar_entry_interns(world: ref CheckWorld, key: ref String) -> bool? {
@@ -428,7 +428,7 @@ fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, wo
 }
 
 /// `NK1282`: an entry handed neither text (a `String`, or a mapping, which is
-/// checked text, ADR-016 D1) nor a `Bytes` (ADR-366 D1).
+/// checked text, ADR-016 D1) nor a `Bytes` (ADR-grammar-input-v1 D1).
 fn check_core_grammar_input_refused(key: ref String, given: ref Ty, span: ref Span) -> CheckFinding {
     let message = f"`{key}` parses a `String` or a `Bytes`, and is handed a `{given.shown()}`."
     let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which."]

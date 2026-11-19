@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1472] — 2026-11-19
+
+**The decisions on what a grammar reads and how it holds it live in one record, ADR-grammar-input-v1 (#2265)**
+- The decisions on what a grammar reads and how it holds it (Bytes or String input, UTF-8 checked where text is made, views and symbols, the caller's interning table, teardown at exit) live in one record, ADR-grammar-input-v1; ADR-366 and ADR-388 archived, five decisions of ADR-296 moved.
+
 ## [0.0.1471] — 2026-11-19
 
 **Builders' changes (#2300)**

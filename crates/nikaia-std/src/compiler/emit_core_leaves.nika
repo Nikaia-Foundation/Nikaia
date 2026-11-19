@@ -45,7 +45,7 @@ fn emit_leaf_has_holes(parts: ref Vec[FPart]) -> bool {
 }
 
 /// Whether the entry declares an option `words` of its own, which is then a
-/// value like any other and not the table of ADR-388.
+/// value like any other and not the table of ADR-grammar-input-v1.
 fn emit_leaf_declares_words(world: ref EmitWorld, entered: ref GrammarRule?) -> bool {
     match entered {
         null => return false,
@@ -543,7 +543,7 @@ impl EmitState {
             }
             throw EmitRefused { message: f"Grammar `{name}` has no entry called `{rule}`.", at: flow.statement }
         }
-        // **A `Bytes` argument enters the grammar's copy over bytes** (ADR-366
+        // **A `Bytes` argument enters the grammar's copy over bytes** (ADR-grammar-input-v1
         // D1), which the file holds beside the text one.
         let mut over = ""
         let mut lowered: String = name.clone()
@@ -551,7 +551,7 @@ impl EmitState {
             over = "_bytes"
             lowered = emit_bytes_grammar(name)
         }
-        // **The caller's table, where it hands one** (ADR-388 D1): `words:`
+        // **The caller's table, where it hands one** (ADR-grammar-input-v1 D10): `words:`
         // is no option the rule declares, and the checker let it through only
         // for an entry that interns.
         let mut table: Expr? = null
@@ -593,7 +593,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)
             out.push(").to_vec(); ")
             // **The values, the options and the table are taken before the
-            // reader starts** (ADR-grammar-syntax-v1 D12, ADR-388 D1): each is owned,
+            // reader starts** (ADR-grammar-syntax-v1 D12, ADR-grammar-input-v1 D10): each is owned,
             // as an entry's parameter is, and moves to the reader's thread;
             // the table is the caller's own, shared, not a copy of it.
             let mut handed = String()
@@ -826,7 +826,7 @@ impl EmitState {
 }
 
 /// **The name the copy of grammar `name` over bytes is lowered under**
-/// (ADR-366 D1): the backend's grammar is one input, so a grammar entered with
+/// (ADR-grammar-input-v1 D1): the backend's grammar is one input, so a grammar entered with
 /// both is two.
 fn emit_bytes_grammar(name: ref String) -> String {
     return f"{name}OverBytes"

@@ -18,7 +18,7 @@ build-time value, the build's budget, a result type from a `comptime`
 parameter); [ADR-299](adr-299.md) D15-D18 (a row is the struct the block
 names, columns matched by name); [ADR-331](adr-331.md) D5, D6 (field defaults,
 attributes read as members); [ADR-304](adr-304.md) D6 (a generic original is
-not emitted); [ADR-366](adr-366.md) (an entry reads `String` or `Bytes`);
+not emitted); [ADR-grammar-input-v1](adr-grammar-input-v1.md) (an entry reads `String` or `Bytes`);
 [ADR-298](adr-298.md) (no macros)
 
 ## 1. Question
@@ -109,7 +109,7 @@ original is not emitted (ADR-304 D6), and the copies count against the build's
 budget (ADR-specialization-1 D5). A bound may stand on a parameter
 (`[S: Struct]`); a value where a type belongs is `NK1230`. The lowered rules
 take no type parameter (`Value__Contact`), so the engine needs no generics. The
-input is `String` or `Bytes` (ADR-366); a read of an `asset` in a `comptime`
+input is `String` or `Bytes` (ADR-grammar-input-v1); a read of an `asset` in a `comptime`
 works as any build-time call does (Part II 10.2).
 
 ### D2 — In a rule body, a `match` on a kind chooses the pattern, and only the arm the type takes is emitted.

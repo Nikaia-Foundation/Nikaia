@@ -8,7 +8,7 @@ inference = "described"
 
 # `winnow_grammar::Symbol`, the table it is interned into,
 # `winnow_grammar::InternerContext`, and its `new` and `resolve` are `std`'s
-# (ADR-388 D3): a program makes the table its grammar interns into and reads
+# (ADR-grammar-input-v1 D12): a program makes the table its grammar interns into and reads
 # its symbols back.
 
 # A name interned into the table (#1592): the text tiers declare a `let`

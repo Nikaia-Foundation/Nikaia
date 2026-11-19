@@ -87,7 +87,6 @@ implementation.
 | [385](adr-385.md) | Every length is at most 2^63 - 1 for a proof, whether or not its elements take space; a `std` sequence's ledger entry may state its count (`ensures_count`: `split` at least one piece, `chars` between a quarter of the bytes and all of them, `bytes` all of them), read where a `collect()`, `count()` or `for` makes it a length | Accepted | no (#1053) |
 | [386](adr-386.md) | `drain()` is on every map and set (`BTreeMap`, `HashSet`, `BTreeSet`) as on `Vec` and `HashMap`: the receiver is taken, a `for` binds owned elements, the sorted ones in key order | Accepted | no (#1130) |
 | [387](adr-387.md) | A view of a type that copies is copied wherever the value is wanted (a typed `let`, an argument, a `return`, a field, a `push`), not only at a call by a name (ADR-233 D4); a view of a type that does not copy is still refused | Accepted | no (#1107) |
-| [388](adr-388.md) | The table a grammar interns into is the caller's: an entry whose grammar reaches `ident` or `intern` takes it after its input as `words:` (a `ref winnow_grammar::InternerContext`, made by `InternerContext::new()`), and one whose result can hold a `Symbol` is refused without it (`NK1330`) | Accepted | yes |
 | [389](adr-389.md) | `immutable` binds a value nothing reachable from it ever changes (a `SharedMut`, `Locked` or channel end in its reach is refused, `NK1331`); a task reads it without a copy or a count; at item level it is evaluated once, on first access, thread-safe, and its initializer may not throw | Accepted | no |
 | [390](adr-390.md) | A subtraction's `-` is on the line of what it subtracts from: a `-` at the start of a line begins what is written there (a negative number, a negation), the rule ADR-135 D3 and ADR-317 made for `[` and `(`. | Accepted | yes |
 | [391](adr-391.md) | The compiler derives what it can and keeps it: a function no other package calls takes, as facts, what all its callers prove about its arguments (checked at each call); every function's frame (what it may write through `mut self` and `mut` parameters) is derived from its body, so a call forgets only those facts; the proofs are kept in `nikaia.proofs`; nothing derived is published or checked at run time | Accepted | no |
@@ -123,7 +122,6 @@ implementation.
 | [363](adr-363.md) | The toolchain's own Nikaia package (`src/compiler`, formerly `src/tools`) is lowered at `user_parallelism = yes`, so the compiler may use `par_iter` and `task::scope`; `std`'s modules still lower the same at both settings; later the toolchain gets a crate of its own | Accepted | no |
 | [364](adr-364.md) | A tuple may be nullable: `(A, B)?` is written as any `T?` is, `?.0` reaches a part, a fallback is a tuple; `NK1254` retired | Accepted | no |
 | [365](adr-365.md) | Standard input and every file read while the program runs are untrusted unless marked `trusted: true`; only the project's own assets (`asset("…")`) are trusted without a marker | Accepted | no |
-| [366](adr-366.md) | A grammar reads `Bytes` as readily as text; what becomes text is checked as UTF-8 where it becomes text, a bad byte is a parse error at its offset | Accepted | no |
 | [367](adr-367.md) | A fold over a grammar's input takes no more steps than the input has room for; a counter that grows by a fixed amount a step is proved from that, a sum is checked once before the fold; only where the input's length is known, never over a stream | Accepted | no |
 | [368](adr-368.md) | A program can measure time and what another program used: `time::now()` and `Instant`, `Duration::in_nanos`, and `process::run`'s `elapsed`, `user_time`, `system_time`, `max_rss_kib` for that one child | Accepted | no |
 | [369](adr-369.md) | A type's invariant: an `assert` after a struct's fields, proved or checked at every construction, at the end of every method that changes the value and after every outside write, and a fact wherever the value is read; where none is written, the compiler may find one over private fields and use it as a fact only | Accepted | no |
@@ -222,8 +220,9 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()`, D14's prefix hash, D15's skipped teardown |
+| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()` |
 | [grammar-syntax-v1](adr-grammar-syntax-v1.md) | How a grammar is written: scannerless, a DSL block ends with `} eod`, a grammar is parsed, comments are whitespace and strings Nikaia's own; entered by an ordinary call to any `entry rule` (`Json::value(x)`, no `parse` alias, `pub` belongs to the grammar); Part II 10.8 lists every element; an action stands after `->` and a brace after a pattern is a bound; a rule takes values as a function does (Subject ; Config), a bound may be a value, a guard `if(cond)`, `count(p)` an `i64`; `span(p)`, `here`, `same_line`, `///` a rule, no state and no `extern rule`; hardware instructions leave the core, auto-AST and regex terminals are goals | Accepted | no |
+| [grammar-input-v1](adr-grammar-input-v1.md) | What a grammar reads and how it holds it: an entry takes a `String` or a `Bytes`, the argument decides; over `Bytes` what becomes text is checked as UTF-8 where it becomes text (a map's key only where the map misses), a bad byte is a parse error at its offset, `bytes(p)` hands back the bytes; `asset("…")` says where the bytes come from; identifiers are interned and bulk text is a view with the input's lifetime; a view key may be hashed from a prefix, never compared by one; the interning table is the caller's, handed as `words:` (`NK1330` where the result can hold a `Symbol`), made in `std`; a read-only buffer's teardown may be skipped at exit | Accepted | no |
 | [016](adr-016.md) | The UTF-8 check is divided across frames, never skipped, and each piece is checked with SIMD (`simdutf8`), answering as the standard library does; it is made where a mapping becomes text (`m.text()`), not where the file is mapped (D5). | Accepted | yes |
 
 ### Diagnostics
@@ -401,7 +400,7 @@ makes the next version of the changed topic instead. Records replaced as a whole
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-input`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -411,7 +410,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| grammar-input-v1 | what a grammar reads and how it holds it (ADR-296, ADR-366, ADR-388) | #904 |
 | grammar-actions-v1 | what a rule's action may do (ADR-296, grammar-1) | #904 |
 | grammar-parallel-v1 | frames and folds (ADR-296) | #904 |
 | grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
