@@ -57,7 +57,50 @@ pub fn report(
     through_loops: bool,
     unproved_warn: bool,
 ) -> String {
-    let checked = crate::check::check(parsed, own, library);
+    report_built(
+        parsed,
+        beside,
+        &[],
+        &crate::assets::Reads::none(),
+        source,
+        path,
+        own,
+        library,
+        bounds,
+        overflow,
+        through_loops,
+        unproved_warn,
+    )
+}
+
+/// [`report`], **checked as the build checks it** (#2161): with the
+/// program's files and what the build may read and compile, so that a
+/// `comptime` a call computes is the value it is in the build (ADR-359 D7),
+/// as `--asserts` checks it.
+#[allow(clippy::too_many_arguments)]
+pub fn report_built(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    program: &[&Parsed],
+    reads: &crate::assets::Reads,
+    source: &str,
+    path: &str,
+    own: &Ledger,
+    library: &Ledger,
+    bounds: BoundsChecks,
+    overflow: OverflowChecks,
+    through_loops: bool,
+    unproved_warn: bool,
+) -> String {
+    let checked = crate::check::check_against(
+        parsed,
+        program,
+        own,
+        library,
+        &std::collections::BTreeSet::new(),
+        &crate::check::Newly::new(),
+        reads,
+    );
     report_checked(
         parsed,
         beside,

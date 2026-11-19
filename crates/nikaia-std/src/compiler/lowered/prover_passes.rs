@@ -101,7 +101,7 @@ pub(crate) fn checked_entries(walk: &ProverWalk, escape: &mut impl FnMut(&str) -
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(claim.term, &mut read);
             let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((nikaia_std::block::Text::from(name.to_string()), rust_of_name(name, &mut *escape))); }
+            for name in read.iter() { operands.push((property_shown(name), rust_of_name(name, &mut *escape))); }
             checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, &mut *escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
         }
         entries.insert(nikaia_std::block::Text::from(function.to_string()), checks);

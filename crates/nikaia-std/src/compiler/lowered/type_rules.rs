@@ -139,6 +139,17 @@ pub(crate) fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base:
             let inner = match tr_on(words, expr, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(Expr::Cast { expr: std::boxed::Box::new(inner), ty: ty.clone(), id: node_id::NodeId::fresh() });
         },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if !config.is_empty() { return None; }
+            let callee = match func {
+                Expr::Variable(name, _) => { let name = *name; name },
+                _ => return None,
+            };
+            if fields.contains(words.resolve(callee)) { return None; }
+            let all = match tr_all_on(args, words, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(Expr::Call { func: std::boxed::Box::new(Expr::Variable(callee, node_id::NodeId::fresh())), args: all, config: vec![], id: node_id::NodeId::fresh() });
+        },
         _ => None,
     }
 }
@@ -436,6 +447,23 @@ pub(crate) fn tr_mark(words: &winnow_grammar::InternerContext, ruled: &collectio
     for (name, fields) in ruled.iter() { if fields.contains(text) { changed.insert(nikaia_std::block::Text::from(name.to_string())); } }
 }
 
+pub(crate) fn tr_readers_of(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], func: &Expr) -> Vec<bool> {
+    let called = match func {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+        _ => return vec![],
+    };
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                let name = *name;
+                if receiver.is_none() && named_as((name).as_ref(), words, &called) { return args.iter().map(|arg| { !arg.mutable }).collect::<Vec<_>>(); }
+            },
+            _ => { },
+        }
+    }
+    vec![]
+}
+
 pub(crate) fn tr_mark_arg(words: &winnow_grammar::InternerContext, ruled: &collections::BTreeMap<String, collections::BTreeSet<String>>, in_impl: bool, arg: &Expr, changed: &mut collections::BTreeSet<String>) {
     match arg {
         Expr::Field { base, name, .. } => {
@@ -477,7 +505,14 @@ pub fn tr_changed_outside(words: &winnow_grammar::InternerContext, ruled: &colle
                         }
                         for arg in args.iter() { tr_mark_arg(words, ruled, in_impl, arg, &mut changed); }
                     },
-                    Expr::Call { args, .. } => { for arg in args.iter() { tr_mark_arg(words, ruled, in_impl, arg, &mut changed); } },
+                    Expr::Call { func, args, .. } => {
+                        let func = nikaia_std::boxed::open(func);
+                        let readers = tr_readers_of(words, items, func);
+                        for at in 0..args.len() as i64 {
+                            if ((at) as usize) < readers.len() && *unsafe { nikaia_std::proven::read(&readers, (at) as usize) } { continue; }
+                            tr_mark_arg(words, ruled, in_impl, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, &mut changed);
+                        }
+                    },
                     _ => { },
                 }
             }
@@ -530,6 +565,7 @@ pub(crate) fn tr_reads(words: &winnow_grammar::InternerContext, claim: &Expr, na
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tr_reads(words, expr, names) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tr_reads(words, expr, names) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tr_reads(words, base, names) },
+        Expr::Call { args, .. } => args.iter().any(|arg| { tr_reads(words, arg, names) }),
         Expr::MethodCall { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             if tr_reads(words, receiver, names) { return true; }
@@ -578,6 +614,7 @@ pub(crate) fn tr_rule_reads(words: &winnow_grammar::InternerContext, claim: &Exp
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tr_rule_reads(words, expr, fields, names, full); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tr_rule_reads(words, expr, fields, names, full); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tr_rule_reads(words, base, fields, names, full); },
+        Expr::Call { args, .. } => { for arg in args.iter() { tr_rule_reads(words, arg, fields, names, full); } },
         _ => { },
     }
 }

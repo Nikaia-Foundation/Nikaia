@@ -1,0 +1,2 @@
+bounds in tests/a_computed_comptime_bounds_an_index.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+     7  xs[AT]  proved

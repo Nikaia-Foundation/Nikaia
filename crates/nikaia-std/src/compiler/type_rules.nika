@@ -19,8 +19,8 @@
 //     rules a method cannot break (`tr_kept_by`).
 //
 // A rule is one `assert(claim)` or `assert(claim; message: ...)` whose claim
-// reads the fields by name, paths and pure methods from them, `comptime`
-// values and literals; anything else is `NK1288`, handed back as a
+// reads the fields by name, paths and pure methods from them, calls by name
+// of them (ADR-381 D2), `comptime` values and literals; anything else is `NK1288`, handed back as a
 // `TrRefusal` for the adapter to raise.
 
 use std::collections
@@ -192,6 +192,22 @@ fn tr_on(words: ref winnow_grammar::InternerContext, claim: ref Expr, base: ref 
         Expr::Cast { expr, ty, .. } => {
             let inner = tr_on(words, expr, base, fields, renew) ?? return null
             return Expr::Cast { expr: inner, ty: ty.clone(), id: node_id::NodeId::fresh() }
+        },
+        // **A named property of the fields** (ADR-381 D2): `is_sorted(items)`,
+        // a call by name the claim's purity rule judges (ADR-269 D3).
+        Expr::Call { func, args, config, .. } => {
+            if config.len() > 0 {
+                return null
+            }
+            let callee = match func {
+                Expr::Variable(name, _) => name,
+                else => return null,
+            }
+            if fields.contains(words.resolve(callee)) {
+                return null
+            }
+            let all = tr_all_on(args, words, base, fields, renew) ?? return null
+            return Expr::Call { func: Expr::Variable(callee, node_id::NodeId::fresh()), args: all, config: [], id: node_id::NodeId::fresh() }
         },
         else => null,
     }
@@ -554,6 +570,28 @@ fn tr_mark(words: ref winnow_grammar::InternerContext, ruled: ref collections::B
     }
 }
 
+/// For each parameter of the file's free function `func` names, whether it
+/// only reads what it is handed: a parameter without `mut` gets a value the
+/// callee cannot change in the caller (ADR-381 D2). Empty for any other
+/// callee.
+fn tr_readers_of(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], func: ref Expr) -> Vec[bool] {
+    let called = match func {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => return [],
+    }
+    for item in items {
+        match item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                if receiver == null && named_as(name, words, called) {
+                    return args.iter().map(fn(arg) { !arg.mutable }).collect()
+                }
+            },
+            else => {},
+        }
+    }
+    return []
+}
+
 /// A field read off something other than `self` in a type's own method.
 fn tr_mark_arg(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], in_impl: bool, arg: ref Expr, mut changed: collections::BTreeSet[String]) {
     match arg {
@@ -615,9 +653,13 @@ pub fn tr_changed_outside(words: ref winnow_grammar::InternerContext, ruled: ref
                             tr_mark_arg(words, ruled, in_impl, arg, changed)
                         }
                     },
-                    Expr::Call { args, .. } => {
-                        for arg in args {
-                            tr_mark_arg(words, ruled, in_impl, arg, changed)
+                    Expr::Call { func, args, .. } => {
+                        let readers = tr_readers_of(words, items, func)
+                        for at in 0..<args.len() {
+                            if at < readers.len() && readers[at] {
+                                continue
+                            }
+                            tr_mark_arg(words, ruled, in_impl, args[at], changed)
                         }
                     },
                     else => {},
@@ -685,6 +727,8 @@ fn tr_reads(words: ref winnow_grammar::InternerContext, claim: ref Expr, names: 
         Expr::Unary { expr, .. } => tr_reads(words, expr, names),
         Expr::Cast { expr, .. } => tr_reads(words, expr, names),
         Expr::Field { base, .. } => tr_reads(words, base, names),
+        // A named property reads what it is handed (ADR-381 D2).
+        Expr::Call { args, .. } => args.iter().any(fn(arg) { tr_reads(words, arg, names) }),
         Expr::MethodCall { receiver, args, .. } => {
             if tr_reads(words, receiver, names) {
                 return true
@@ -738,6 +782,12 @@ fn tr_rule_reads(words: ref winnow_grammar::InternerContext, claim: ref Expr, fi
         Expr::Unary { expr, .. } => tr_rule_reads(words, expr, fields, names, full),
         Expr::Cast { expr, .. } => tr_rule_reads(words, expr, fields, names, full),
         Expr::Field { base, .. } => tr_rule_reads(words, base, fields, names, full),
+        // A named property reads each field it is handed whole (ADR-381 D2).
+        Expr::Call { args, .. } => {
+            for arg in args {
+                tr_rule_reads(words, arg, fields, names, full)
+            }
+        },
         else => {},
     }
 }

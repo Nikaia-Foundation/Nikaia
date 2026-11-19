@@ -182,6 +182,36 @@ pub(crate) fn divisor_name(divisor: &Expr) -> String { format!("divisor@{}", nod
 
 pub(crate) fn call_result_name(call: &Expr) -> String { format!("result@{}", node_key(call)) }
 
+pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if args.len() != 1 || !config.is_empty() { return None; }
+            let callee = match func {
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+                _ => return None,
+            };
+            let on = match path_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}.{}{}()", on, property_mark(), callee))
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn property_mark() -> String { String::from("prop@") }
+
+pub(crate) fn property_base(name: &str) -> Option<String> {
+    let at = match nikaia_std::search::find(&name, &format!(".{}", property_mark()), 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string()))
+}
+
+pub(crate) fn property_shown(name: &str) -> String {
+    let on = match property_base(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    let called = match name.strip_prefix(&*format!("{}.{}", on, property_mark())) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    let callee = nikaia_std::index::or(called.strip_suffix("()"), || std::convert::AsRef::<str>::as_ref(called));
+    format!("{}({})", callee, on)
+}
+
 pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mut dyn FnMut(&str) -> bool, pinned: &mut dyn FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(built(logic::SolverTerm::Bool(b), out)) },
@@ -192,6 +222,13 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mu
             let named = built(logic::SolverTerm::Var(nikaia_std::block::Text::from(n.to_string())), out);
             let one = built(logic::SolverTerm::Int(1), out);
             Some(built(logic::SolverTerm::Ge(named, one), out))
+        },
+        Expr::Call { .. } => {
+            let name = match property_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !var(&name) { return None; }
+            let named = built(logic::SolverTerm::Var(name), out);
+            let one = built(logic::SolverTerm::Int(1), out);
+            Some(built(logic::SolverTerm::Eq(named, one), out))
         },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;

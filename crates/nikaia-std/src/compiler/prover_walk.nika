@@ -272,6 +272,13 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                     prover_parameter_fields(walk, scope, params, arg_name, ty, true, program, words)
                 }
             }
+            let mut unchanged: collections::BTreeSet[String] = collections::BTreeSet()
+            for arg in args {
+                if !arg.mutable {
+                    unchanged.insert(words.resolve(arg.name).clone())
+                }
+            }
+            prover_entry_properties(walk, scope, params, unchanged, body, program, words)
             // **An option is a parameter** (Part I 5.1): a claim about it is
             // a precondition as one about a subject parameter is (#651).
             for option in config {
@@ -615,6 +622,22 @@ fn prover_literal_fields(mut walk: ProverWalk, mut scope: ProverScope, name: ref
                 let fact = walk.arena.equal(named, known)
                 scope.facts.push(fact)
             }
+        } else {
+            // **A list written in the literal counts its items** (ADR-306
+            // D17): `Tree { nodes: [n], root: 0 }`.
+            let written = field.value ?? continue
+            let counted = match written {
+                Expr::ListLit { .. } => length_given(walk.arena, words, written, scope, walk.state.pinned),
+                Expr::ListRepeat { .. } => length_given(walk.arena, words, written, scope, walk.state.pinned),
+                else => null,
+            }
+            if counted != null {
+                let length = length_of(path)
+                scope.ints.insert(length.clone())
+                let named = walk.arena.var(length)
+                let fact = walk.arena.equal(named, counted ?? 0)
+                scope.facts.push(fact)
+            }
         }
     }
 }
@@ -789,6 +812,11 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         scope.loose.insert(name.clone())
         prover_chosen_value(walk, name, value, scope, words)
         prover_found_value(walk, name, value, scope, words, library, condition)
+    }
+    // **What a call ensures of its result's named properties** holds of the
+    // name it binds (ADR-381 D2), whatever the result's type.
+    if called && !called_whole {
+        prover_property_facts(walk, scope, name, called_facts, written_of(value))
     }
     if called && called_whole {
         for fact in called_facts {
@@ -1568,10 +1596,12 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 let cond = args[0]
                 // **A type's rule holds where a value of it is read** (ADR-369
                 // D3): a fact, never a claim to prove or check.
+                prover_read_properties(cond, scope, program, words)
                 if prover_a_given_rule(config, words) {
                     let given = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                     if given != null {
                         scope.facts.push(given ?? 0)
+                        prover_properties_from(cond, f"the rule of `{prover_rule_type(config, words)}`", scope, program, words)
                     }
                     walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved)
                     return false
@@ -1591,7 +1621,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 // The `message:` a failure says, where it is text as written:
                 // a precondition checked elsewhere says it too.
                 let message = prover_message(config, words)
-                let names = claim_names_in(cond, words, holes_of)
+                let names = prover_without_callees(claim_names_in(cond, words, holes_of), cond, scope, program, words)
                 let mut leaned: Vec[String] = []
                 if !walk.state.in_test {
                     // **A call inside the claim is a whole number of its own**,
@@ -1604,6 +1634,17 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 }
                 let outcome = walk.state.an_assert(walk.arena, words, cond, written_of(cond), names, message, span, scope, at, ask, model)
                 let mut held = outcome.held.clone()
+                // **A claim proved by a named property says where it is known
+                // from** (ADR-381 D2); from here the claim is a source itself.
+                let from = prover_known_from(cond, scope, program, words)
+                let plain = match held {
+                    ClaimHeld::Proved => true,
+                    else => false,
+                }
+                if from != null && plain {
+                    held = ClaimHeld::ProvedThrough(f"proved: known from {from ?? ""}")
+                }
+                prover_properties_from(cond, f"`assert({written_of(cond)})`", scope, program, words)
                 let mut findings: Vec[Finding] = []
                 for found in outcome.findings {
                     let mut one = found.clone()
@@ -3367,6 +3408,170 @@ fn prover_a_claim_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContex
     }
 }
 
+/// **The named properties a claim reads** (ADR-381 D1): each call `p(x)`
+/// of a `sync` function of the program that hands back a `bool`, takes one
+/// argument it does not change, has no options and does not throw, on a
+/// path `x`; with the prover's name for it (`prove_terms.nika`,
+/// `property_name`) and the path.
+fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, mut out: Vec[(String, String)]) {
+    match expr {
+        Expr::Binary { lhs, rhs, .. } => {
+            prover_properties_in(lhs, scope, program, words, out)
+            prover_properties_in(rhs, scope, program, words, out)
+        },
+        Expr::Unary { expr, .. } => prover_properties_in(expr, scope, program, words, out),
+        Expr::Call { func, args, .. } => {
+            let callee = prover_variable_named(func, words) ?? return
+            if scope.locals.contains(callee) || !prover_a_property(program, words, callee) {
+                return
+            }
+            let name = property_name(expr, words) ?? return
+            let on = path_of(args[0], words) ?? return
+            out.push((name, on))
+        },
+        else => {},
+    }
+}
+
+/// The facts of `facts` that read only named properties of `bound`, which
+/// become names of the proof (ADR-381 D2).
+fn prover_property_facts(mut walk: ProverWalk, mut scope: ProverScope, bound: ref String, facts: ref Vec[i64], call: String) {
+    for fact in facts {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(fact, read)
+        let mut only = !read.is_empty()
+        for n in read {
+            if (property_base(n) ?? "") != bound {
+                only = false
+            }
+        }
+        if only {
+            scope.ints.extend(read.clone())
+            scope.loose.extend(read.clone())
+            scope.facts.push(fact)
+            for n in read {
+                scope.known_from.insert(n.clone(), f"what `{call}` ensures")
+            }
+        }
+    }
+}
+
+/// Each named property of `cond` not known yet is known from `source`.
+fn prover_properties_from(cond: ref Expr, source: String, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    let mut found: Vec[(String, String)] = []
+    prover_properties_in(cond, scope, program, words, found)
+    for (name, _) in found {
+        if !scope.known_from.contains_key(name) {
+            scope.known_from.insert(name.clone(), source.clone())
+        }
+    }
+}
+
+/// Where the named properties `cond` reads are known from, where each is.
+fn prover_known_from(cond: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> String? {
+    let mut found: Vec[(String, String)] = []
+    prover_properties_in(cond, scope, program, words, found)
+    let mut sources: Vec[String] = []
+    for (name, _) in found {
+        let source = scope.known_from[name] ?? return null
+        if !sources.contains(source) {
+            sources.push(source.clone())
+        }
+    }
+    if sources.is_empty() {
+        return null
+    }
+    return sources.join(" and ")
+}
+
+/// The type a given rule's `assert` is of (`tr_given`).
+fn prover_rule_type(config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext) -> String {
+    for c in config {
+        if words.resolve(c.name) == "rule of the type" {
+            match c.value {
+                Expr::LitStr { text, .. } => return text.clone(),
+                else => {},
+            }
+        }
+    }
+    return ""
+}
+
+/// Whether `wanted` is a function a named property calls (ADR-381 D1).
+fn prover_a_property(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> bool {
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, receiver, args, config, ret_type, can_throw, is_sync, .. } => {
+                if receiver == null && named_as(name, words, wanted) {
+                    let ty = ret_type ?? return false
+                    return is_sync && args.len() == 1 && !args[0].mutable && config.is_empty() && !can_throw && words.resolve(ty.name) == "bool" && ty.generics.is_empty()
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// **A claim's named properties are names of the proof from here**
+/// (ADR-381 D1): known where a fact says them, open where none does.
+fn prover_read_properties(cond: ref Expr, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    let mut found: Vec[(String, String)] = []
+    prover_properties_in(cond, scope, program, words, found)
+    for (name, _) in found {
+        scope.ints.insert(name.clone())
+        scope.loose.insert(name.clone())
+    }
+}
+
+/// The names a claim reads without the functions its named properties
+/// call, which are no values (ADR-381 D1).
+fn prover_without_callees(names: collections::BTreeSet[String], cond: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found: Vec[(String, String)] = []
+    prover_properties_in(cond, scope, program, words, found)
+    if found.is_empty() {
+        return names
+    }
+    let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+    for n in names {
+        if scope.locals.contains(n) || !prover_a_property(program, words, n) {
+            kept.insert(n.clone())
+        }
+    }
+    return kept
+}
+
+/// **A named property of a parameter is known at the entry** (ADR-381 D2,
+/// ADR-269 D15): the claims at the top of the body that read one of a
+/// parameter the body does not change make it a name with its value at
+/// the entry, so a claim over it is a precondition.
+fn prover_entry_properties(mut walk: ProverWalk, mut scope: ProverScope, mut params: collections::BTreeSet[String], kept: ref collections::BTreeSet[String], body: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    for stmt in body.stmts {
+        if !prover_a_claim_stmt(stmt.node, words) {
+            return
+        }
+        let cond = match stmt.node {
+            Stmt::Expr(inner) => match inner {
+                Expr::Call { args, .. } => args[0].clone(),
+                else => continue,
+            },
+            else => continue,
+        }
+        let mut found: Vec[(String, String)] = []
+        prover_properties_in(cond, scope, program, words, found)
+        for (name, on) in found {
+            if !kept.contains(on) {
+                continue
+            }
+            scope.ints.insert(name.clone())
+            scope.loose.insert(name.clone())
+            params.insert(on.clone())
+            let at_entry = walk.arena.var(name)
+            scope.entry.insert(name.clone(), at_entry)
+        }
+    }
+}
+
 /// Whether a block is `assert`s and then one expression, which binds and
 /// changes nothing.
 fn prover_claims_then_value(block: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
@@ -3592,6 +3797,25 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
 /// `xs[i] == v` of each item whose value is a term.
 fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
     let mut gone: Vec[String] = []
+    // **A named property goes where its argument may change** (ADR-381 D1):
+    // a call that holds it, a write, binding it again. A claim changes
+    // nothing (ADR-269 D3); a `let` bound the name again itself, before
+    // what its call ensures (`prover_let`).
+    let bound: Vec[String] = match stmt {
+        Stmt::Let { names, .. } => names.iter().map(fn(name) { words.resolve(name).clone() }).collect(),
+        else => [],
+    }
+    if !prover_a_claim_stmt(stmt, words) {
+        for n in scope.ints {
+            let base = property_base(n) ?? continue
+            if bound.contains(path_root(base)) {
+                continue
+            }
+            if elements_change(stmt, base, words) || rebinds_in_statement(stmt, path_root(base), words) {
+                gone.push(n.clone())
+            }
+        }
+    }
     for n in scope.ints {
         let inner = n.strip_suffix("]") ?? continue
         let parts: Vec[ref String] = inner.split("[").collect()
@@ -3643,6 +3867,13 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
 /// (`prover_loop_keeps`); its elements are not.
 fn prover_loop_elements(mut walk: ProverWalk, body: ref Block, counters: ref Vec[winnow_grammar::Symbol], mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
     let mut gone: Vec[String] = []
+    // A named property a loop's body may change goes before it (ADR-381 D1).
+    for n in scope.ints {
+        let base = property_base(n) ?? continue
+        if !elements_stay(body, base, words) || rebinds(body, path_root(base), words) {
+            gone.push(n.clone())
+        }
+    }
     for n in scope.ints {
         let inner = n.strip_suffix("]") ?? continue
         let parts: Vec[ref String] = inner.split("[").collect()
