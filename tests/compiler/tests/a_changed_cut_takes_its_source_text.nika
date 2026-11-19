@@ -1,0 +1,24 @@
+// A cut bound `let mut` and then grown takes its source's text and changes
+// it in that buffer (ADR-text-reuse-1 D2, #1589): before, the cut stayed a
+// view and `rest += "!"` became `+=` on a `&str` that rustc refused (NK1343).
+// A source owned here is handed over.
+
+fn tail_of(keep line: String) -> String {
+    let m = line.find(";") ?? return line
+    let mut rest = line[m + ";".len()..]
+    rest += "!"
+    return rest
+}
+
+fn own() -> String {
+    let line = f"Hamburg;{12}"
+    let m = line.find(";") ?? return line
+    let mut rest = line[m..]
+    rest += "?"
+    return rest
+}
+
+fn main() throws {
+    println(tail_of(f"Hamburg;{12}"))
+    println(own())
+}

@@ -606,7 +606,7 @@ impl EmitState {
                                     let escaped_type = escaped_name(&emit_text(world, t.name));
                                     let before = format!("{}<{}>", escaped_type, self.lifetime_args(&emit_text(world, t.name), "'r"));
                                     let after = format!("{}<{}>", escaped_type, nikaia_std::block::Text::from(found.fields.join(", ")));
-                                    returned = nikaia_std::search::replacen(&returned, &before, &after, 1);
+                                    nikaia_std::search::replacen_in(&mut returned, &before, &after, 1);
                                 },
                                 None => { },
                             }

@@ -767,7 +767,7 @@ pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Resu
 
 pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str, root: &std::path::Path) -> String {
     let package = format!("{}/", nikaia_std::fs::path::display(&(project_members_canonical(root))));
-    nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(said.text_lossy().replace(&*nikaia_std::fs::path::display(&(entry)), &*written)).replace(&*nikaia_std::fs::path::display(&(project_members_canonical(entry))), &*written)).replace(&*package, &*""))
+    nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(said.text_lossy().replace(&*nikaia_std::fs::path::display(&(entry)), &*written)), &nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written), &package, &"")
 }
 
 pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {

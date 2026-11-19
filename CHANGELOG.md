@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1457] — 2026-11-19
+
+**Builders' changes (#2152)**
+- Replacing text reuses its buffer: `x = x.replace(a, b)` and every `replace` after the first in a chain write into the existing text instead of allocating a new one (ADR-text-reuse-1 D4).
+- Replacing text reuses its buffer: x = x.replace(a, b) and every link after the first of a replace chain write into the existing text instead of making a new one (ADR-text-reuse-1 D4).
+- A cut that is changed reuses its text's buffer: `let mut rest = line[m..]; rest += "!"` cuts `line` down in place instead of copying, and a later read of `line` is refused as a use of a value given away (ADR-text-reuse-1 D2, D3).
+- Faster first comptime: the build-time bundle a `comptime` links against leaves out std's sockets and TLS (rustls, ring, rustls-native-certs, polled, file-ring), 55 rlibs instead of 75; the program that computes a value leaves out what names `std::net`, so a file that uses sockets still computes its comptime values.
+- Driver merges: a `MERGE timing` line per merge; a round that changed only LOWERED_DIGEST counts as settled, which saves a build and a cold lower-std; the ledgers reuse the settled binary
+
 ## [0.0.1456] — 2026-11-19
 
 **Code a function runs from tasks at once is Send + Sync where user code overlaps (ADR-292 D6) (#2158, #2165)**

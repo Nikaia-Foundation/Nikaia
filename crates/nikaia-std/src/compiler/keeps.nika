@@ -71,11 +71,15 @@ struct KeepsWalk {
     uses: Uses,
     aliases: collections::BTreeMap[String, collections::BTreeSet[String]],
     views: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// The names the body grows (`grown_text_of`): a cut of a parameter
+    /// bound `mut` to one is given the parameter's text (ADR-text-reuse-1 D2).
+    grown: collections::BTreeSet[String],
 }
 
 /// What `body` does with each of its function's parameters.
 pub fn uses_in(body: ref Block, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> Uses {
-    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap() }
+    let grown = grown_text_of(interner, body)
+    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap(), grown: grown }
     keeps_block(body, interner, holes_of, context, own, library, walk)
     // **The value a body ends in leaves the call**, as a `return` does.
     if context.hands_back_its_last && body.stmts.len() > 0 {
@@ -134,6 +138,21 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                 for name in reached_of(value, interner, context, own, library, walk, false) {
                     if !context.lent.contains(name) {
                         walk.uses.kept.insert(name.clone())
+                    }
+                }
+                // **A grown cut of a text parameter is given its text**
+                // (ADR-text-reuse-1 D2, #1589): `let mut rest = line[m..]`,
+                // then `rest += ".."`, changes `line`'s buffer, so `line` is
+                // kept where the author wrote `keep`; lent, the checker asks
+                // for `.clone()` or `keep` (D3).
+                if names.len() == 1 && walk.grown.contains(interner.resolve(names[0])) {
+                    match given_cut_source(value, interner) {
+                        source => {
+                            if context.parameters.contains(source) && !context.lent.contains(source) {
+                                walk.uses.kept.insert(source.clone())
+                            }
+                        },
+                        null => {},
                     }
                 }
             }

@@ -451,6 +451,18 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => false,
     };
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") { state.facts.text_finds.insert(id_of(receiver) as i64); }
+    let replacing = name == "replace" || name == "replacen";
+    if text && replacing {
+        state.facts.text_replaces.insert(id_of(receiver) as i64);
+        match receiver {
+            Expr::MethodCall { receiver: made_on, method: made_by, .. } => {
+                let made_on = nikaia_std::boxed::open(made_on); let made_by = *made_by;
+                let made = world.words.resolve(made_by);
+                if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(&(id_of(made_on) as i64)) { state.facts.replaced_in_place.insert(id_of(receiver) as i64); }
+            },
+            _ => { },
+        }
+    }
     if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {
         Ty::Named { ref name, ref args, .. } => args.len() == 1 && (name == "Vec" || name == "List" || name == "HashSet" || name == "BTreeSet" || name == "Set" || name == "collections::HashSet" || name == "collections::BTreeSet"),
