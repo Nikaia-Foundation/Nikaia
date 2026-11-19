@@ -14,7 +14,7 @@ has no heading here; `CLAUDE.md` draws the line.
 - A `comptime` that calls a function and whose program did not change since the last check is read from the user cache (`comptime-value/`) before its build-time program is written: a second `nikaia check` of the issue's probe costs 170 M instructions instead of 424 M.
 - A `comptime` whose value is not in the cache derives its build-time program's ledger once: `nikaia check` of a one-file computed `comptime` costs 347 M instructions instead of 462 M.
 - A check whose comptime answers are on disk starts no rustc: the toolchain's answers are kept under the user cache with a stamp of what selects the toolchain, read with a few stat calls (#2151).
-- A comptime's build-time bundle is built without std's sockets, TLS and file ring (new default feature async-io): a fresh workshop compiles 55 rlibs instead of 75, its cache is 278M instead of 371M, and a program's own build keeps the whole std.
+- std has a new default feature async-io that carries its sockets, TLS and file ring. The build-time bundle still takes the whole std: building it without them was reverted, since a comptime in a file that uses `std::net` no longer built (#2152 stays open).
 
 ## [0.0.1451] — 2026-11-19
 
