@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1451] — 2026-11-19
+
+**Builders' changes (#2189, #2190, #2192)**
+- The lock tests of std are Nikaia programs: six new programs in tests/compiler/tests/ cover re-entry, poison, supervised rebuilds, the doors of one and two values, racing set after, and the word shape. lock.rs keeps only the two tests that observe a buffer's address (#2088).
+- A cut of a `Bytes` that is kept (returned, pushed, a map's key) shares the owner at a count instead of copying, so a cut of a mapped file keeps the file mapped while it lives (ADR-373 D1, D3).
+- The Rust unit tests of `std::fs` are Nikaia programs now: file names that are not text, a writer's cleanup, mappings and their cuts, writes, many tasks at once, roots and walks; the unused `task::as_text` is gone.
+
 ## [0.0.1450] — 2026-11-19
 
 **Builders' changes (#1962, #2108, #2161, #797)**
