@@ -204,165 +204,6 @@ pub(crate) fn comptime_note_own(words: &winnow_grammar::InternerContext, item: &
     }
 }
 
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn comptime_unbuilt() -> collections::BTreeSet<String> {
-    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    out.insert(String::from("net"));
-    out
-}
-
-pub fn comptime_drop_unbuilt(items: &mut Vec<Spanned<Item>>, words: &winnow_grammar::InternerContext, gone: &collections::BTreeSet<String>, keep: &collections::BTreeSet<String>) -> Vec<String> {
-    let mut dropped: Vec<String> = vec![];
-    let mut kept: Vec<Spanned<Item>> = vec![];
-    for item in items.drain(..) {
-        match item.node {
-            Item::Impl { trait_name, target, ref methods } => {
-                let owner = a_symbols_text(words, Some(target.name));
-                let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
-                comptime_type_names(&target, words, &mut named);
-                if trait_name.is_some() { named.insert(a_symbols_text(words, std::convert::identity(trait_name))); }
-                if comptime_any_gone(&named, gone) && !keep.contains(&owner) {
-                    dropped.push(format!("{}::", owner));
-                    continue;
-                }
-                let whole = methods.len() as i64;
-                let mut left: Vec<Spanned<Item>> = vec![];
-                for method in methods.iter() { if comptime_names_unbuilt(words, &method.node, gone, keep) { dropped.push(format!("{}::{}", owner, comptime_own_name(words, &method.node))); } else { left.push(method.clone()); } }
-                if trait_name.is_some() && (left.len() as i64) != whole { continue; }
-                let node = Item::Impl { trait_name, target, methods: left };
-                kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
-            },
-            other => { if comptime_names_unbuilt(words, &other, gone, keep) { dropped.push(comptime_own_name(words, &other)); } else { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); } },
-        }
-    }
-    items.extend(kept);
-    dropped
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn comptime_reach<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr) -> collections::BTreeSet<String> {
-    let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
-    names_in(value, host.file_words(here), &mut reached);
-    loop {
-        let before = reached.len() as i64;
-        for at in 0..host.file_count() { comptime_reach_in(host.file_items(at), host.file_words(at), &mut reached); }
-        if (reached.len() as i64) == before { return reached; }
-    }
-}
-
-pub(crate) fn comptime_reach_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, reached: &mut collections::BTreeSet<String>) {
-    let mut more: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for item in items.iter() {
-        match &item.node {
-            Item::Impl { trait_name, target, methods } => {
-                let trait_name = *trait_name;
-                let whole = trait_name.is_some() && reached.contains(&a_symbols_text(words, Some(target.name)));
-                for method in methods.iter() {
-                    if whole || reached.contains(&comptime_own_name(words, &method.node)) {
-                        comptime_type_names(target, words, &mut more);
-                        comptime_item_names(words, &method.node, &mut more);
-                    }
-                }
-            },
-            other => { if reached.contains(&comptime_own_name(words, other)) { comptime_item_names(words, other, &mut more); } },
-        }
-    }
-    reached.extend(more);
-}
-
-pub(crate) fn comptime_own_name(words: &winnow_grammar::InternerContext, item: &Item) -> String {
-    match item {
-        Item::Fn { name, .. } => { let name = *name; match name {
-            None => String::from("::"),
-            Some(name) => a_symbols_text(words, Some(name)),
-        } },
-        Item::Struct { name, .. } => { let name = *name; a_symbols_text(words, Some(name)) },
-        Item::Enum { name, .. } => { let name = *name; a_symbols_text(words, Some(name)) },
-        Item::Trait { name, .. } => { let name = *name; a_symbols_text(words, Some(name)) },
-        _ => String::from("::"),
-    }
-}
-
-pub(crate) fn comptime_any_gone(named: &collections::BTreeSet<String>, gone: &collections::BTreeSet<String>) -> bool { named.iter().any(|name| { gone.contains(nikaia_std::index::as_text(&name)) }) }
-
-pub(crate) fn comptime_names_unbuilt(words: &winnow_grammar::InternerContext, item: &Item, gone: &collections::BTreeSet<String>, keep: &collections::BTreeSet<String>) -> bool {
-    match item {
-        Item::Fn { name, .. } => {
-            let name = *name;
-            let own = a_symbols_text(words, name);
-            if own == "main" || own == VALUE_FN || keep.contains(&own) { return false; }
-        },
-        _ => { if keep.contains(&comptime_own_name(words, item)) { return false; } },
-    }
-    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
-    comptime_item_names(words, item, &mut named) && comptime_any_gone(&named, gone)
-}
-
-pub(crate) fn comptime_item_names(words: &winnow_grammar::InternerContext, item: &Item, named: &mut collections::BTreeSet<String>) -> bool {
-    match item {
-        Item::Fn { generics, args, config, ret_type, body, .. } => {
-            names_in_block(body, words, named);
-            comptime_signature_names(generics, args, config, (ret_type).as_ref(), words, named);
-        },
-        Item::Struct { generics, fields, rules, .. } => {
-            comptime_generic_names(generics, words, named);
-            comptime_field_names(fields, words, named);
-            for rule in rules.iter() { names_in(&rule.node, words, named); }
-        },
-        Item::Enum { variants, .. } => {
-            for variant in variants.iter() {
-                match &variant.fields {
-                    VariantFields::Unit => { },
-                    VariantFields::Tuple(tys) => { for ty in tys.iter() { comptime_type_names(ty, words, named); } },
-                    VariantFields::Named(fields) => { comptime_field_names(fields, words, named); },
-                }
-            }
-        },
-        Item::Trait { methods, .. } => { for method in methods.iter() { comptime_signature_names(&method.node.generics, &method.node.args, &method.node.config, (method.node.ret_type).as_ref(), words, named); } },
-        _ => { return false; },
-    }
-    true
-}
-
-pub(crate) fn comptime_signature_names(generics: &[GenericParam], args: &[FnArg], config: &[ConfigParam], ret_type: Option<&Type>, words: &winnow_grammar::InternerContext, named: &mut collections::BTreeSet<String>) {
-    comptime_generic_names(generics, words, named);
-    for arg in args.iter() { comptime_type_names(&arg.ty, words, named); }
-    for option in config.iter() {
-        comptime_type_names(&option.ty, words, named);
-        names_in(&option.default, words, named);
-    }
-    match ret_type {
-        None => { },
-        Some(ty) => { comptime_type_names(ty, words, named); },
-    }
-}
-
-pub(crate) fn comptime_generic_names(generics: &[GenericParam], words: &winnow_grammar::InternerContext, named: &mut collections::BTreeSet<String>) {
-    for generic in generics.iter() {
-        for bound in generic.bounds.iter() {
-            let bound = *bound;
-            named.insert(a_symbols_text(words, Some(bound)));
-        }
-    }
-}
-
-pub(crate) fn comptime_field_names(fields: &[FieldDef], words: &winnow_grammar::InternerContext, named: &mut collections::BTreeSet<String>) {
-    for field in fields.iter() {
-        comptime_type_names(&field.ty, words, named);
-        match &field.default {
-            None => { },
-            Some(default) => { names_in(&default.value, words, named); },
-        }
-    }
-}
-
-pub(crate) fn comptime_type_names(ty: &Type, words: &winnow_grammar::InternerContext, named: &mut collections::BTreeSet<String>) {
-    for segment in a_symbols_text(words, Some(ty.name)).split("::") { named.insert(nikaia_std::block::Text::from(segment.to_string())); }
-    for argument in ty.generics.iter() { comptime_type_names(argument, words, named); }
-}
-
 pub(crate) fn comptime_reads_any(words: &winnow_grammar::InternerContext, item: &Item, gone: &collections::BTreeSet<String>) -> bool {
     let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
     match item {
@@ -739,7 +580,6 @@ pub trait ComptimeComputeHost {
     fn constants_of_files(&self) -> collections::BTreeSet<String>;
     fn constants_of_units(&self, units: &[i64]) -> collections::BTreeSet<String>;
     fn drop_readers(&self, unit: i64, gone: &collections::BTreeSet<String>) -> Vec<String>;
-    fn drop_unbuilt(&self, unit: i64, gone: &collections::BTreeSet<String>, keep: &collections::BTreeSet<String>) -> Vec<String>;
     fn value_fn_names(&self, unit: i64) -> collections::BTreeSet<String>;
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
@@ -865,8 +705,6 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
             return CheckComputed::Forbidden { callee, because };
         },
     }
-    let reach = comptime_reach(host, here, value);
-    comptime_readers_dropped(units.len() as i64, comptime_unbuilt(), &mut |at, gone| { host.drop_unbuilt(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone, &reach) });
     let program = match comptime_driven(host, &units, here, &derived, &packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),

@@ -40,7 +40,7 @@ static HEAP: Heap = Heap;
 ")
 }
 
-pub(crate) fn cr_bundle_manifest(name: &str, dependencies: &[(String, String)], whole_std: bool) -> String {
+pub(crate) fn cr_bundle_manifest(name: &str, dependencies: &[(String, String)]) -> String {
     let mut manifest: String = String::from("# GENERATED. The library build-time code links against (ADR-321 D3).
 
 [workspace]
@@ -49,22 +49,9 @@ pub(crate) fn cr_bundle_manifest(name: &str, dependencies: &[(String, String)], 
 ");
     manifest.push_str(&format!("name = \"{}\"\n", name));
     manifest.push_str("version = \"0.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\n");
-    for (dependency, value) in dependencies.iter() {
-        let declared = match whole_std || dependency != "\"nikaia-std\"" {
-            true => nikaia_std::block::Text::from(value.to_string()),
-            false => cr_bundle_std_without_io(value),
-        };
-        manifest.push_str(&format!("{} = {}\n", dependency, declared));
-    }
+    for (dependency, value) in dependencies.iter() { manifest.push_str(&format!("{} = {}\n", dependency, value)); }
     manifest.push_str(CR_DEPENDENCY_PROFILE);
     manifest
-}
-
-pub(crate) fn cr_bundle_std_without_io(value: &str) -> String {
-    let open = match value.trim_end().strip_suffix('}') { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(value.to_string()) };
-    let mut declared: String = nikaia_std::block::Text::from(open.trim_end().to_string());
-    declared.push_str(", default-features = false, features = [\"reentrancy-check\"] }");
-    declared
 }
 
 pub const CR_DEPENDENCY_PROFILE: &str = "\n[profile.dev]\noverflow-checks = false\ndebug-assertions = false\ndebug = 0\npanic = \"unwind\"\n";
