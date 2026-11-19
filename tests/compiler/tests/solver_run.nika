@@ -4,7 +4,8 @@
 // counts of the day, unknowns included (the baseline and cross-check of the
 // engine issues); then the default engine, CDCL(T) (#1283), on the smoke
 // files, the preprocessing's, and the files that must be refused (#2258):
-// each `refused` and solved.
+// each `refused` and solved; and two sums of fractions whose cross products
+// leave `i64` while the reduced sum fits (#2013).
 use std::fs
 use std::process
 
@@ -41,7 +42,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	for args in [["run", "--engine", "fm", "tests/solver/smoke"], ["run", "--engine", "fm", "--summary", "tests/solver/stress"], ["run", "tests/solver/smoke"], ["run", "tests/solver/pre"], ["run", "tests/solver/malformed"]] {
+	for args in [["run", "--engine", "fm", "tests/solver/smoke"], ["run", "--engine", "fm", "--summary", "tests/solver/stress"], ["run", "tests/solver/smoke"], ["run", "tests/solver/pre"], ["run", "tests/solver/malformed"], ["run", "tests/solver/exact"]] {
 		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
 		for a in args { all.push(a.clone()) }
 		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())

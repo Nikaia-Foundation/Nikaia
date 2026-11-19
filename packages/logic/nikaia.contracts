@@ -3881,6 +3881,13 @@ touches = []
 views = ["a: borrowed", "b: borrowed"]
 signature = "(a: ref SvRat, b: ref SvRat) -> SvRat?"
 
+[fn."sv_rat_add_wide"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRat?"
+
 [fn."sv_rat_ceil"]
 sync = "inferred"
 panics = true
