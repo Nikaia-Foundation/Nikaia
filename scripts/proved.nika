@@ -57,7 +57,7 @@ fn panics_in(text: String) -> (i64, i64) {
     let mut calls = 0
     for line in text.lines() {
         let (code, _) = line.split_once("//") ?? (line, "")
-        let parts: Vec[String] = code.split("panic(").map(fn(p) { p.to_string() }).collect()
+        let parts: Vec[String] = code.split("panic(").map(fn(p) { p }).collect()
         for k in 0..<parts.len() - 1 {
             // `a_panic(` is another function's name, not the call.
             let before = parts[k].scalars.last() ?? ' '
@@ -112,7 +112,7 @@ fn main() throws {
         if line.starts_with("bounds in ") {
             files += 1
             let (head, counts) = line.split_once(": ") ?? continue
-            let path = (head.strip_prefix("bounds in ") ?? continue).to_string()
+            let path = (head.strip_prefix("bounds in ") ?? continue)
             let (index_part, operation_part) = counts.split_once("; ") ?? continue
             let i = number_before(index_part, "indexes,")
             let ip = number_before(index_part, "proved")

@@ -513,7 +513,7 @@ impl CheckState {
         let collapsed = collapsed_doubled_braces(text)
         if collapsed != null {
             let single = collapsed ?? ""
-            self.warn_migration(span, "`{{{{` in a plain string is now two braces.", f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
+            self.warn_migration(span, "`{{` in a plain string is now two braces.", f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
             return
         }
         for hole in brace_groups(text) {

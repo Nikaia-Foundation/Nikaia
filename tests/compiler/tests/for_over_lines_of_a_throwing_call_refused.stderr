@@ -1,8 +1,8 @@
 error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
-   --> tests/for_over_lines_of_a_throwing_call_refused.nika:16:61
+   --> tests/for_over_lines_of_a_throwing_call_refused.nika:16:49
     |
- 16 |             if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
-    |                                                             ^^^^^^^^^^^^^^^^
+ 16 |             if !uses.contains(line) { uses.push(line) }
+    |                                                 ^^^^
     |
     = note: This is a view: it points into text that something else owns.
     = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.

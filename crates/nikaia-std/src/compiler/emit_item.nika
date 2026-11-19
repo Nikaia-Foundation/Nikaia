@@ -483,7 +483,7 @@ impl EmitState {
             // the source said (ADR-324 D6).
             Item::Extern { abi, declarations, opaque, .. } => {
                 if abi != null {
-                    throw EmitRefused { message: "[NK1227] `extern` takes no convention: write `extern {{ … }}`.", at: at }
+                    throw EmitRefused { message: "[NK1227] `extern` takes no convention: write `extern { … }`.", at: at }
                 }
                 // **A handle is a type of its own, outside the block** (ADR-302
                 // D7), written before the declarations, because they name it.

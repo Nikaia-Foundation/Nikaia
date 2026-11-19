@@ -149,6 +149,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [views-3](adr-views-3.md) | A parameter that keeps its argument says `keep`, a plain one is lent, the body is checked against it; `ref` leaves the language outside `extern "C"`; views in fields, elements and lets are inferred; a result's source is inferred and may be written `-> T from a \| b`, required where there is no body; `Array[T]` is a view of a run where it does not own; a returned parameter is a view, not kept; `keep` and `from` are not reserved | Accepted | no |
+| [text-reuse-1](adr-text-reuse-1.md) | A copy is written, a give is not: `.to_string()` on text is refused (`NK1301`), a type parameter keeps it; a changed view takes its source's buffer where the source can be given, and a later read of the source is the use-after-give error; `replace` on a source not read again works in its buffer; the ledger narrates each give | Accepted | partly: D1 |
 | [shared-handle-cycles-1](adr-shared-handle-cycles-1.md) | No cycle of handles is built: a store through a `SharedMut` door or into a `Locked` field that can close one is refused (`NK1352`) unless a back field is proved, which is lowered as non-owning; types reaching no `SharedMut` or `Locked`, and `immutable` values, are free of cycles; summaries carry it across functions and packages; graphs use indices; no runtime detection | Accepted | no |
 | [views-2](adr-views-2.md) | `mut` on a `for` binding means what it means on a `let`: `mut` in front of the whole head (`for mut x`, `for mut (a, b)`); over a list or an array the element is a view that writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused with their reason; the list is not used in the body. `mut` on one name of a tuple, and so map values in place, refused now, possible later (`NK1307`) | Accepted | no |
 | [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
@@ -304,6 +305,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [failure-return-1](adr-failure-return-1.md) | A failing call's status travels beside the value: the throw path (`throwing` and every envelope constructor on it) is cold and never inlined, a failing function stays inlinable; on the Rust backend two scalars where value and error fit a word each (after a count of non-inlined failing calls), on the direct backend a status register; ADR-023 D10 is stated per backend; the carry flag is a measurement | Accepted | no |
 | [error-sets-1](adr-error-sets-1.md) | A code parameter the body does not keep is `from(p)` in the set of every function, public or not, replaced at each call by what that call hands it; a kept one stays a place with its storage's union (ADR-351 D8); nothing is written | Accepted | no |
 | [357](adr-357.md) | A `catch` whose `match` names every non-fatal error type arriving is complete, with no `else`; `"?"` or an open `from(p)` needs `else`; a grown set refuses such a `match` (`NK1151`, narrated), and the author of a `pub` function is warned when its set grows (`NK2404`) | Accepted | partly: D1, D2, D5 built; D3 (the ledger narrating a grown set) and D4 (`NK2404`) not; a fatal type no arm names is still asked for |
 | [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's; kept code's set belongs to its storage, the ledger's `code` says what a function puts there, lowered without a box (D8) | Accepted | no |
@@ -334,6 +336,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [282](adr-282.md) D8, D30 | [text-reuse-1](adr-text-reuse-1.md) D1 | `.to_string()` on a receiver written as text is `NK1301`; on a type parameter it is the text form of a value |
 | [292](adr-292.md) D2-D4, D9, D15, D16 | [async-5](adr-async-5.md) D5-D9, D21 | `overlap` is removed; `async` tasks are checked against their window and each other, failures kept at the group's end |
 | [235](adr-235.md) D2 | [async-5](adr-async-5.md) D24-D26 | a `par_iter` lambda of `map`, `filter`, `for_each` may pause; `NK2104` is asked of it |
 | [346](adr-346.md) D2-D6 | [async-5](adr-async-5.md) D13 | `spawn fn { … }` is written `async(detached) fn { … }`; the handle rules hold for it |
@@ -391,7 +394,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `lambdas`, `raw-sinks`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `lambdas`, `raw-sinks`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 

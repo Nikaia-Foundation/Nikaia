@@ -1,3 +1,11 @@
+error[NK1301]: `.to_string()` on text adds nothing.
+  --> tests/owned_after_view_chain_returns_refused.nika:5:16
+   |
+ 5 |     let rest = s.replace(")", "").trim().to_string()
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A view is a `String` already, and the compiler decides whether text is a view or text of its own (Part I 2.3).
+   = help: Drop `.to_string()`, or write `.clone()` where a copy is meant; `nikaia fix` drops it.
 error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
   --> tests/owned_after_view_chain_returns_refused.nika:6:12
    |
@@ -8,4 +16,4 @@ error[NK1104]: You're returning a view of a `String`, but the function is declar
    = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
    = help: Write `.clone()` to copy it here.
-1 type error
+2 type errors

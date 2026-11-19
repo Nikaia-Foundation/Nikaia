@@ -43,7 +43,7 @@ fn mine_lowered(line: String, copy: String) -> String {
 	if rest == "" { return "" }
 	let path = rest.trim()
 	let prefix = copy + "/"
-	return (path.strip_prefix(prefix) ?? "").to_string()
+	return (path.strip_prefix(prefix) ?? "")
 }
 
 // `DIR/X.nika` -> `DIR/lowered/X.rs`, or "" for a FILE that is no `.nika`.

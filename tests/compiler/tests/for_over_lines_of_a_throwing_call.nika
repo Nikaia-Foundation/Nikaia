@@ -21,7 +21,7 @@ fn main() throws {
     let mut uses: Vec[String] = []
     for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
         if line.starts_with("use ") {
-            if !uses.contains(line.to_string()) { uses.push(line.clone()) }
+            if !uses.contains(line) { uses.push(line.clone()) }
         }
     }
     println(uses.len())

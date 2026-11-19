@@ -10,11 +10,11 @@ fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
 }
 
 fn main() throws {
-    let g: String = "hi ".trim().to_string()
+    let g: String = "hi ".trim()
     println(apply(same, g))
-    let h = "ho ".trim().to_string()
+    let h = "ho ".trim()
     println(apply(same, h))
     let f: fn(s: String) -> String from s = same
-    let k: String = " ha".trim().to_string()
+    let k: String = " ha".trim()
     println(f(k))
 }

@@ -136,6 +136,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn a_text_form_of_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], on: &Ty, span: &Span) {
+        if !args.is_empty() || world.words.resolve(method) != "to_string" || !check_core_method_text_receiver(on) { return; }
+        let literal = matches!(receiver, Expr::LitStr { .. });
+        if literal || !ledger_candidates(world.own, world.own_methods, "to_string").is_empty() { return; }
+        let at = check_span_at(world, call, span);
+        for said in self.findings.iter() { if said.code == "NK1301" && said.span.start == at.start { return; } }
+        let mut refused = check_refusal("NK1301", &at, String::from("`.to_string()` on text adds nothing."), vec![String::from("A view is a `String` already, and the compiler decides whether text is a view or text of its own (Part I 2.3).")], Some(String::from("Drop `.to_string()`, or write `.clone()` where a copy is meant; `nikaia fix` drops it.")));
+        refused.edit = a_call_dropped(world, call, receiver, ".to_string()");
+        self.findings.push(refused);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
         let at = check_span_at(world, call, span);
         for said in self.findings.iter() { if said.code == "NK1353" && said.span.start == at.start { return; } }
@@ -163,6 +176,17 @@ pub(crate) fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: 
         if takes_self(entry_value) { out.push(nikaia_std::block::Text::from(entry_name.to_string())); }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, written: &str) -> Option<CheckEdit> {
+    let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") }); }
+    let size = u32::try_from(written.as_bytes().len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
+    if of.start > whole.start && of.end + size < whole.end { return Some(CheckEdit { span: Span { start: whole.end - size, end: whole.end }, text: String::from("") }); }
+    None
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -428,10 +428,10 @@ fn gate_full(args: Vec[String]) throws {
     if dry { println("changed: " + if changed.len() == 0 { "none" } else { changed.join(" ") }) }
     let mut red: Vec[String] = []
     for step in ["build", "lower-std", "fmt", "clippy", "pre-push", "test", "guards"] {
-        let result = gate_step(step.to_string(), dry, tools, whole, kept.clone(), all, changed.clone())
+        let result = gate_step(step, dry, tools, whole, kept.clone(), all, changed.clone())
         println(f"{step} {result}")
         if result.starts_with("red") {
-            red.push(step.to_string())
+            red.push(step)
             if !keep { break }
         }
     }

@@ -8,7 +8,7 @@ fn count(s: String) -> i64 {
 
 fn main() throws {
     let t = Tools { measure: count }
-    let g = "four ".trim().to_string()
+    let g = "four ".trim()
     println(t.measure(g))
     println(g)
 }

@@ -18,7 +18,7 @@ shape decides whether two builders can run side by side.
 | :--- | ---: | :--- |
 | `crates/nikaia/src` (Rust, one crate, 37 top modules) | 48 k lines | yes: it depends on `nikaia-std` |
 | `crates/nikaia-std/src`, hand-written runtime | 25 k lines | yes, same crate as the package (incremental reuses most) |
-| `tools/*.nika` (213 files, one namespace) | 80 k lines | the one file, through `lower-std` |
+| `crates/nikaia-std/src/compiler/*.nika` (271 files, one namespace; was `tools/`) | 196 k lines (#1625) | the one file, through `lower-std` |
 | `tools/package.rs`, their lowering | 73 k lines, 3.9 MB, **one module** | all of it, see below |
 | `crates/nikaia/tests` | 267 `.rs`, now 1 test binary `it` (files in `tests/it/`), 97 k lines | every one relinks |
 

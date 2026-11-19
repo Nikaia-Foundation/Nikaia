@@ -94,6 +94,10 @@ the proofs.
   and the code it cannot type drops out. The rest keep their checks: a defect
   there stops the compiler, it does not miscompile silently. The `unsafe` in `tools/` is
   text the lowering writes, not code the tools run.
+* How often the checks speak on the whole compiler, and how often they are
+  wrong: `docs/analysis-at-scale.md` (#1625). 3,569 warnings over 195,939
+  lines; the seeded sample found no false alarm outside NK1111's migration
+  notices.
 * Where the bounds walk stops today (prover lane, 2026-10-31; work in #1053):
   it states a goal only below 2^62 (`solvable()` in `bounds_walk.nika`, #444),
   so a bound like `n <= 2^63 - 1` cannot prove `i + 1`; what proves it is the

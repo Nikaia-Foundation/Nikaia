@@ -8,6 +8,21 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1449] — 2026-11-19
+
+**NK1301 refuses .to_string() on text, with a fix edit; the sites are migrated (ADR-text-reuse-1 D1)**
+- `.to_string()` on text is refused (NK1301): a view is a String already; drop it, or write `.clone()` for a copy, and `nikaia fix` drops it. A type parameter keeps it (ADR-text-reuse-1 D1). benches/lowering/source.nika is unchanged (it has its own check errors, so fix skipped it)
+
+## [0.0.1448] — 2026-11-19
+
+**ADR-failure-return-1 §6: non-inlined failing calls counted, too few for the two-scalar lowering (D2)**
+- A call to a failing function that does not fail pays no frame of its own: the throw path is cold and never inlined (ADR-failure-return-1 D1)
+
+## [0.0.1447] — 2026-11-19
+
+**A list map whose result goes into a for, a map or len runs element by element (ADR-342 D1)**
+- Faster list chains: a list map whose result goes into a for, another map or len runs element by element and builds no list in between, when its lambda touches nothing (ADR-342 D1)
+
 ## [0.0.1446] — 2026-11-18
 
 **Builders' changes (#2153)**

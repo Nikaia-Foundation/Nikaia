@@ -511,6 +511,10 @@ pub struct CheckFacts {
     /// lowering lends the others the function lends in a closure around it.
     pub named_fn_values: collections::BTreeMap[i64, Vec[bool]],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
+    /// **The list `map`s that may run element by element with the step their
+    /// result goes into** (ADR-342 D1), by the call's id: the receiver is a
+    /// list and the lambda touches nothing and changes no name outside it.
+    pub fused_maps: collections::BTreeSet[i64],
     pub paused_scopes: collections::BTreeSet[i64],
     /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
     /// its scope's channel.
@@ -914,6 +918,7 @@ impl CheckFacts {
             infallible_fn_values: collections::BTreeMap(),
             named_fn_values: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
+            fused_maps: collections::BTreeSet(),
             paused_scopes: collections::BTreeSet(),
             scope_tasks: collections::BTreeSet(),
             witnessed_sets: collections::BTreeSet(),

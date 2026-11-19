@@ -179,7 +179,7 @@ fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
 			continue
 		}
 		let (name, value) = part.split_once("=") ?? return false
-		if !sv_params_set(p, name.to_string(), value.to_string()) {
+		if !sv_params_set(p, name, value) {
 			return false
 		}
 	}

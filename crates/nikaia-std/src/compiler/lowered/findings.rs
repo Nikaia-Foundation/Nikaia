@@ -14,3 +14,21 @@ pub struct Finding {
 
 pub fn refusal(code: &str, span: Span, message: String, notes: Vec<String>, help: String) -> Finding { Finding { code: nikaia_std::block::Text::from(code.to_string()), span, message, notes, help: Some(help), warning: false, labels: vec![] } }
 
+pub fn findings_report(findings: &[CheckFinding], source: &str, path: &str) -> String {
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for finding in findings.iter() {
+        if finding.severity != CheckSeverity::Warning { continue; }
+        let mut end = finding.span.start as i64;
+        if end > source.as_bytes().len() as i64 { end = source.as_bytes().len() as i64; }
+        let mut line = 1;
+        for c in nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter() {
+            let c = nikaia_std::num::value(c);
+            if c == b'\x0a' { line = line + 1; }
+        }
+        lines.push(format!("  {}:{}  {}  {}\n", path, line, finding.code, nikaia_std::block::Text::from(finding.message.replace("\n", " "))));
+    }
+    let mut out = format!("findings in {}: {}\n", path, lines.len() as i64);
+    for each in lines.iter() { out.push_str(each); }
+    out
+}
+

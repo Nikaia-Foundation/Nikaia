@@ -482,7 +482,7 @@ fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMember
         null => {},
         handed => {
             for line in handed.lines() {
-                let parts: Vec[String] = line.splitn(2, "=").map(fn(part) { part.to_string() }).collect()
+                let parts: Vec[String] = line.splitn(2, "=").collect()
                 if parts.len() == 2 {
                     out.insert(parts[0].clone(), cargo_json_path(parts[1].clone()))
                 }

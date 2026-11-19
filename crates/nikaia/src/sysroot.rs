@@ -658,14 +658,16 @@ fn check_tools_file(
 /// `scripts/proved.nika` can count the claims left at run time too. The
 /// claims are read as the tools build reads them: an unproved one is
 /// refused (`check_against` refuses it, ADR-380 D1).
-#[allow(clippy::too_many_arguments)]
+///
+/// **`--findings`** (#1625) adds each file's warnings, one line each with
+/// its code (`findings_report`), after the other blocks; a refused file
+/// stays the one `refused:` line.
 pub fn bounds_tools(
     sysroot: &Sysroot,
     bounds: crate::bounds::BoundsChecks,
     overflow: crate::bounds::OverflowChecks,
     through_loops: bool,
-    bounds_report: bool,
-    asserts_report: bool,
+    [bounds_report, asserts_report, findings_report]: [bool; 3],
 ) -> Result<String> {
     let paths = tools_sources(&sysroot.tools_dir())?;
     let (sizes, texts, parsed, _) = read_tools_package(&paths)?;
@@ -739,6 +741,13 @@ pub fn bounds_tools(
                 &derived,
                 false,
                 true,
+            ));
+        }
+        if findings_report {
+            out.push_str(&nikaia_std::compiler::findings::findings_report(
+                &checked.findings,
+                &texts[at],
+                &path,
             ));
         }
         out

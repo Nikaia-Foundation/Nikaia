@@ -1,0 +1,179 @@
+// How often the compiler's own checks speak on a large program, the tools
+// package (#1625): every warning and refusal `lower-std` gives its files,
+// summed by code and by file, against the lines checked, and a fixed sample
+// of the warnings to review by hand (`docs/analysis-at-scale.md`).
+//
+//     nikaia run scripts/analysis_scale.nika [-- [REPORT] [--seed N] [--per-code N]]
+//
+// Without REPORT it runs `target/fast/nikaia lower-std --findings` from the
+// checkout's root (a few minutes: every file is checked with the package
+// beside it); REPORT is that command's saved output. A report line is
+// `findings in PATH: N`, then one `  PATH:LINE  NKnnnn  headline` per
+// warning, or `refused: PATH` for a file the check refuses (the table
+// counts it under `refused`; `lower-std` itself shows its codes). The lines
+// checked are the lines of the files the report names, read from where it
+// runs. The sample takes up to `--per-code` sites of each code (20), chosen
+// by `--seed` (1625), so the same sites come back on every run while the
+// code at them stays.
+
+use std::cli
+use std::collections
+use std::fs
+use std::process
+use std::text
+
+// `text` right-aligned in `width` columns.
+fn right(text: String, width: i64) -> String {
+    if text.len() >= width { return text }
+    return f"{" ".repeat(width - text.len())}{text}"
+}
+
+// `n` per thousand lines of `lines`, two decimals, without a float: `1.25`.
+fn per_thousand(n: i64, lines: i64) -> String {
+    if lines == 0 { return "-" }
+    let hundredths = (n * 100000 + lines / 2) / lines
+    let rest = hundredths % 100
+    if rest < 10 { return f"{hundredths / 100}.0{rest}" }
+    return f"{hundredths / 100}.{rest}"
+}
+
+// A number for `site` that the seed decides, the same on every run: the
+// sample takes the sites with the smallest.
+fn rank(site: String, seed: i64) -> i64 {
+    let mut h = seed % 2147483647
+    for b in site.bytes {
+        h = (h * 31 + (b as i64) + 1) % 2147483647
+    }
+    return h
+}
+
+// The lines of the file at `path`, 0 where it cannot be read.
+fn lines_of(path: String) -> i64 throws {
+    if !fs::exists(path.clone(), fs::Root::Anywhere) { return 0 }
+    return fs::read_to_string(path, fs::Root::Anywhere).lines().count()
+}
+
+// The report saved at `path`, or where `path` is empty, the output of
+// `lower-std --findings` run here.
+fn read_report(path: String) -> String throws {
+    if path.len() > 0 { return fs::read_to_string(path, fs::Root::Anywhere) }
+    let out = process::run("sh", ["-c", "NIKAIA_CACHE_LIMIT=2G target/fast/nikaia lower-std --findings"])
+    if out.code != 0 {
+        eprintln(out.stderr)
+        eprintln(f"lower-std --findings: exit {out.code}")
+        process::exit(1)
+    }
+    return out.stdout.clone()
+}
+
+fn main() throws {
+    let mut args: Vec[String] = Vec()
+    for a in cli::args() { args.push(a) }
+    let mut report_path: String = ""
+    let mut seed = 1625
+    let mut per_code = 20
+    let mut k = 1
+    while k < args.len() {
+        let word = args[k].clone()
+        if (word == "--seed" || word == "--per-code") && k + 1 < args.len() {
+            let n = text::parse_i64(args[k + 1]) ?? -1
+            if n < 0 {
+                eprintln(f"{word} takes a number, not `{args[k + 1]}`")
+                process::exit(2)
+            }
+            if word == "--seed" { seed = n } else { per_code = n }
+            k += 2
+            continue
+        }
+        if word.starts_with("-") {
+            eprintln("usage: nikaia run scripts/analysis_scale.nika [-- [REPORT] [--seed N] [--per-code N]]")
+            process::exit(2)
+        }
+        report_path = word
+        k += 1
+    }
+    let here = process::run("pwd", []).stdout.trim().clone()
+    let report = read_report(report_path)
+    let prefix = f"{here}/"
+    let mut files = 0
+    let mut refused = 0
+    let mut lines = 0
+    let mut warnings = 0
+    // code -> its sites, each (rank, site, headline).
+    let mut sites: collections::BTreeMap[String, Vec[(i64, String, String)]] = collections::BTreeMap()
+    // code -> the files it is in.
+    let mut code_files: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    let mut by_file: Vec[(i64, String)] = Vec()
+    for line in report.lines() {
+        if line.starts_with("refused: ") {
+            let path = (line.strip_prefix("refused: ") ?? continue).strip_prefix(prefix) ?? line.strip_prefix("refused: ") ?? ""
+            files += 1
+            refused += 1
+            lines += lines_of(path)
+            continue
+        }
+        if line.starts_with("findings in ") {
+            let (head, count) = line.split_once(": ") ?? continue
+            let full = head.strip_prefix("findings in ") ?? continue
+            let path = full.strip_prefix(prefix) ?? full
+            files += 1
+            lines += lines_of(path.clone())
+            let n = text::parse_i64(count) ?? 0
+            if n > 0 { by_file.push((n, path)) }
+            continue
+        }
+        // `  PATH:LINE  NKnnnn  headline`
+        let body = line.strip_prefix("  ") ?? continue
+        let (full, rest) = body.split_once("  ") ?? continue
+        let (code, headline) = rest.split_once("  ") ?? (rest, "")
+        if !code.starts_with("NK") { continue }
+        let site = full.strip_prefix(prefix) ?? full
+        warnings += 1
+        let mut these = sites.remove(code) ?? Vec()
+        these.push((rank(site.clone(), seed), site.clone(), headline.clone()))
+        sites.insert(code, these)
+        let (path, _) = site.split_once(":") ?? (site, "")
+        let mut named = code_files.remove(code) ?? collections::BTreeSet()
+        named.insert(path.clone())
+        code_files.insert(code, named)
+    }
+    println(f"checked: {files} files, {lines} lines, {refused} refused, {warnings} warnings ({per_thousand(warnings, lines)} per 1000 lines)")
+    println("")
+    println("by code (count, files, per 1000 lines):")
+    let mut by_code: Vec[(i64, String)] = Vec()
+    for (code, these) in sites { by_code.push((these.len(), code.clone())) }
+    by_code.sort()
+    by_code.reverse()
+    for (count, code) in by_code {
+        let in_files = match code_files.get(code) {
+            null => 0,
+            named => named.len(),
+        }
+        println(f"{right(f"{count}", 7)}  {code}  {right(f"{in_files}", 5)} files  {per_thousand(count, lines)}")
+    }
+    if refused > 0 { println(f"{right(f"{refused}", 7)}  refused files") }
+    println("")
+    println("files with the most warnings:")
+    by_file.sort()
+    by_file.reverse()
+    for (count, path) in by_file.iter().take(15) {
+        println(f"{right(f"{count}", 7)}  {path}")
+    }
+    println("")
+    println(f"sample (seed {seed}, up to {per_code} sites per code):")
+    println("")
+    println("| Code | Site | Headline | Verdict |")
+    println("| :--- | :--- | :--- | :--- |")
+    for (code, these) in sites {
+        let mut ordered = these.clone()
+        ordered.sort()
+        let mut chosen: Vec[(String, String)] = Vec()
+        for (_, site, headline) in ordered.iter().take(per_code) {
+            chosen.push((site.clone(), headline.clone()))
+        }
+        chosen.sort()
+        for (site, headline) in chosen {
+            println(f"| {code} | `{site}` | {headline.replace("|", "\\|")} | |")
+        }
+    }
+}
