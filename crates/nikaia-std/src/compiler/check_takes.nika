@@ -1324,6 +1324,69 @@ impl CheckState {
         self.flow.clones.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: at, edit: clone_deleted(world, expr, receiver) })
     }
 
+    /// **A text `replace` on a `let`'s own text** (ADR-text-reuse-1 D4,
+    /// #1589): held to the body's end, where it works in the text's buffer
+    /// if no read of the name follows it. As a clone's last use is asked
+    /// (`a_clone_seen`), and only of a name no view is ever taken of
+    /// (`lone_texts`) and that no argument of the call reads.
+    fn a_replace_seen(ref mut self, world: ref CheckWorld, receiver: ref Expr, args: ref Vec[Expr], span: ref Span) sync {
+        if self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let name = match receiver {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        if !self.flow.lone_texts.contains(name) || self.flow.mixed_text.contains(name) {
+            return
+        }
+        let local = self.binding(name) ?? return
+        if !clone_of_a_let(local) || !self.flow.clone_owners.contains(local.id) || local.view_of != "" || local.lent || local.ty.is_a_view() || self.lent_here(name) {
+            return
+        }
+        for arg in args {
+            for each in visited_in_expr(arg) {
+                match each {
+                    Expr::Variable(v, _) => {
+                        if world.words.resolve(v) == name {
+                            return
+                        }
+                    },
+                    else => {}
+                }
+            }
+        }
+        let bound = self.frame_of(name)
+        for repeat in self.repeats {
+            if repeat.frame > bound {
+                return
+            }
+        }
+        let node = id_of(receiver) as i64
+        self.flow.replaces.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: span.clone(), edit: null })
+    }
+
+    /// **The `replace`s no read followed** work in their text's buffer
+    /// (`replaced_last_uses`), asked where the body ends.
+    fn replaces_at_last_use_said(ref mut self) sync {
+        let replaces = self.flow.replaces.clone()
+        self.flow.replaces = []
+        for one in replaces {
+            if self.a_clone_read_after(one) {
+                continue
+            }
+            let mut lent = false
+            for loan in self.flow.clone_loans {
+                if loan.1 == one.binding && self.a_view_read_after(loan.0, one) {
+                    lent = true
+                }
+            }
+            if !lent {
+                self.facts.replaced_last_uses.insert(one.node)
+            }
+        }
+    }
+
     /// Whether a clone's value copies by itself: a number, a `bool`, a
     /// `char`, a type of the package or the ledger that copies, and an
     /// option, a tuple or an array of such. Not a handle, a type parameter

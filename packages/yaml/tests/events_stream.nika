@@ -1,0 +1,38 @@
+// `Yaml::events`: the stream walked as it is parsed (ADR-grammar-2 D7,
+// #1443), each event handed over one at a time, owned. Every block of
+// `events.nika` again, with the same output: the events and spans of the
+// tree's walk, `events(documents(input))`.
+use yaml
+
+fn show(text: String) throws {
+	println(f"# {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	for e in yaml::Yaml::events(input) {
+		println(yaml::event_line(e))
+	}
+}
+
+fn spans(text: String) throws {
+	println(f"# spans of {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	for e in yaml::Yaml::events(input) {
+		println(f"{e.start}-{e.end} {yaml::event_line(e)}")
+	}
+}
+
+fn main() throws {
+	show("")
+	show("a\n")
+	show("--- a\n...\n")
+	show("a\n---\nb\n")
+	show("- a\n- b\n")
+	show("k: v\nl:\n  - x\n  - y: z\n")
+	show("[a, [b, c], {d: e}]\n")
+	show("{a: 1, b: [x]}\n")
+	show("- plain\n- 'single'\n- \"double\\tq\"\n- |\n  lit\\x\n  line\n- >\n  fold\n  ed\n")
+	show("- ~\n- null\n- True\n- !!int \"1\"\n- 1.5\n- \n- \"a\\\\b\\rc\\bd\"\n")
+	show("- &a x\n- *a\n- &m !!map {k: v}\n- !local [1]\n- !<tag:yaml.org,2002:str> s\n")
+	show("? a\n: b\n? c\n")
+	show("a: {b: [c, {d: e}]}\n...\n--- !!seq\n- &s f\n")
+	spans("k: [a, b]\n--- x\n...\n")
+}

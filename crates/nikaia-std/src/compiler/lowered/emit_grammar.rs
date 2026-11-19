@@ -315,12 +315,18 @@ impl EmitState {
             out.push(&format!("\n        rule WS -> () =\n          w:{} @ at\n", skipped));
             out.push(&format!("            -> {{ _state.user().ran(at.start as i64, at.end as i64, {}) }}\n", newline));
         }
+        let grammar_name = emit_text(world, def.name);
+        let mut emitters: Vec<String> = vec![];
+        for rule in def.rules.iter() {
+            let name = emit_text(world, rule.name);
+            if self.facts.emitting_rules.contains(&format!("{}::{}", grammar_name, name)) { emitters.push(name); }
+        }
         for rule in def.rules.iter() {
             out.push("\n");
             let st = out.mark();
             let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" };
             let emitting = rule.stream && rule.is_entry && self.facts.emitting_entries.contains(&format!("{}::{}", emit_text(world, def.name), emit_text(world, rule.name)));
-            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting)?;
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting, &emitters)?;
             if !bytes { out.record(&rule.span, st); }
         }
         let mut lists = false;
@@ -383,7 +389,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, renamed: &str, bytes: bool, emitting: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, renamed: &str, bytes: bool, emitting: bool, emitters: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         match &rule.frame {
             Some(frame) => { out.push(&format!("        {}\n", frame_attribute(frame))); },
             None => { },
@@ -415,7 +421,7 @@ impl EmitState {
         let taken = if values.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(values.join(", "))) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { nikaia_std::block::Text::from(renamed.to_string()) };
         if rule.stream && rule.is_entry {
-            self.emit_stream_rule(world, walk, out, host, rule, &rule_name, &taken, &label, emitting)?;
+            self.emit_stream_rule(world, walk, out, host, rule, &rule_name, &taken, &label, emitting, emitters)?;
             return Ok(());
         }
         out.push(&format!("        {}rule {}{}{}{} =\n", vis, rule_name, taken, ret, label));
@@ -464,28 +470,43 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stream_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, rule_name: &str, taken: &str, label: &str, emitting: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_stream_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, rule_name: &str, taken: &str, label: &str, emitting: bool, emitters: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let item = match &rule.ret_type {
             Some(ty) => host.ty_named(walk, ty)?,
             None => return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")),
         };
+        let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for arg in rule.args.iter() {
+            let name = emit_text(world, arg.name);
+            handed.push(format!("{} = {}", name, name));
+        }
+        for option in rule.config.iter() {
+            let name = emit_text(world, option.name);
+            handed.push(format!("{} = {}", name, name));
+        }
+        let passed = if handed.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(handed.join(", "))) };
+        let folded = if emitting { format!("::std::option::Option<{}>", item) } else { nikaia_std::block::Text::from(item.to_string()) };
         if rule.alts.len() != 1 || unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.action.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
         let pattern = &unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.pattern;
         let parts: Vec<Spanned<Pattern>> = match &pattern.node {
             Pattern::Seq(seq) => seq.copy_owned(),
             _ => vec![pattern.clone()],
         };
+        let mut chosen: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut folds = 0;
-        for part in parts.iter() { if stream_fold(world, &part.node).is_some() { folds += 1; } }
+        for part in parts.iter() {
+            let fold = stream_fold(world, &part.node).is_some() && (!emitting || stream_item_emits(world, &part.node, emitters));
+            chosen.push(fold);
+            if fold { folds += 1; }
+        }
         if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
-        if emitting && !taken.is_empty() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry that takes values and whose items are emitted yet."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
-        let folded = if emitting { format!("::std::option::Option<{}>", item) } else { nikaia_std::block::Text::from(item.to_string()) };
         let mut wrapped: Option<Spanned<Pattern>> = None;
         out.push("        #[stream(each)]\n");
         out.push(&format!("        pub(crate) rule {}{} -> usize{} =\n          ", rule_name, taken, label));
         for i in 0..parts.len() as i64 {
             if i > 0 { out.push(" "); }
-            match stream_fold(world, &unsafe { nikaia_std::proven::read(&parts, (i) as usize) }.node) {
+            let found = if *unsafe { nikaia_std::proven::read(&chosen, (i) as usize) } { stream_fold(world, &unsafe { nikaia_std::proven::read(&parts, (i) as usize) }.node) } else { None };
+            match found {
                 Some(ref fold) => {
                     match fold.max {
                         Some(most) => { if most < 1 || most < fold.min { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("This `@stream` entry's repetition matches no item: its upper bound is 0 or below its lower one."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); } },
@@ -493,7 +514,7 @@ impl EmitState {
                     }
                     out.push("__wg_n:fold(");
                     if emitting {
-                        out.push(&format!("__wg_{}_item", rule_name));
+                        out.push(&format!("__wg_{}_item{}", rule_name, passed));
                         wrapped = Some(fold.item.clone());
                     } else { self.emit_pattern(world, walk, out, host, &fold.item)?; }
                     out.push(&format!(", || 0usize, |n: usize, _item: {}| n + 1", folded));
@@ -533,13 +554,30 @@ impl EmitState {
         out.push("\n            -> { __wg_n }\n");
         match wrapped {
             Some(ref repeated) => {
-                out.push(&format!("\n        rule __wg_{}_item -> {} =\n          ", rule_name, folded));
+                out.push(&format!("\n        rule __wg_{}_item{} -> {} =\n          ", rule_name, taken, folded));
                 self.emit_pattern(world, walk, out, host, repeated)?;
                 out.push("\n            -> { ::std::option::Option::None }\n");
             },
             None => { },
         }
         Ok(())
+    }
+}
+
+pub(crate) fn stream_item_emits(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, emitters: &[String]) -> bool {
+    let fold = match stream_fold(world, pattern) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match stream_item_rule(world, &fold.item.node) {
+        Some(ref name) => nikaia_std::list::contains(&emitters, &name),
+        None => false,
+    }
+}
+
+pub(crate) fn stream_item_rule(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern) -> Option<String> {
+    match pattern {
+        Pattern::Ref { name, .. } => { let name = *name; Some(emit_text(world, name)) },
+        Pattern::Call { name, .. } => { let name = *name; Some(emit_text(world, name)) },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); stream_item_rule(world, &inner.node) },
+        _ => None,
     }
 }
 

@@ -1,0 +1,22 @@
+// A trim that is grown takes its source's text (ADR-text-reuse-1 D2, #1589),
+// so a read of the source after it is a use of a value given away (NK2105),
+// and a parameter only lent is not the body's to give: NK2302 asks for
+// `keep` or for a copy of the trim (D3).
+
+fn after(keep line: String) -> String throws {
+    let mut rest = line.trim()
+    rest += "!"
+    println(line)
+    return rest
+}
+
+fn lent(line: String) -> String {
+    let mut rest = line.trim_end()
+    rest += "."
+    return rest
+}
+
+fn main() throws {
+    println(after(f" Hamburg{12} "))
+    println(lent(f"Bremen{3} "))
+}

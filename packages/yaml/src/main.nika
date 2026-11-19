@@ -333,7 +333,10 @@ fn plain_char(x: scalar, flow: bool, after_space: bool) -> bool sync {
 	return plain_safe(x, flow) && x != ':' && !(after_space && x == '#')
 }
 
-grammar Yaml {
+// The grammar is public for its `@stream` entry: `for ev in
+// yaml::Yaml::events(input)` walks the stream's events as the parse reaches
+// them (D7, ADR-grammar-2 D7).
+pub grammar Yaml {
 	// Whitespace is structure: nothing is skipped, every space is written.
 	rule WS = "" -> { }
 
@@ -345,6 +348,44 @@ grammar Yaml {
 	// `c-byte-order-mark` (YAML 1.2.2 5.2): it may start the stream and each
 	// document's prefix; it is not content.
 	rule Bom = "\u{feff}" Blanks -> { }
+
+	// `l-yaml-stream` as events (ADR-grammar-2 D7, amended 2026-11-18): the
+	// stream's start at once, then each document's events, its end and, after
+	// the last, the stream's end, handed over with `emit` as soon as the parse
+	// has read the document and what follows it. A block node stays open to
+	// the alternatives around it until its document is read (a key is one
+	// only at its `:`), so a document is the unit handed over. The events are
+	// those of `events(documents(input))`; a `break` in the walk stops the
+	// parse, and the documents after it are never read.
+	@stream entry rule events(limits: Limits = default_limits()) -> Event =
+		Opened Bom? Blanks DocEnd* FirstEvents(limits.depth) NextEvents(limits.depth)* DocEnd* eof
+	rule Opened = "" -> { emit bare(EventKind::StreamStart, 0, 0) }
+	// The first document, as `Docs` reads it, or none: then the stream ends.
+	rule FirstEvents(left: i64) =
+		d:AnyDoc(left) e:Ended z:AtEnd -> {
+			let mut all = handed_over(d, e, z)
+			for ev in all.drain() {
+				emit ev
+			}
+		}
+		| peek(eof) -> { emit bare(EventKind::StreamEnd, 0, 0) }
+	// A further document, as `NextDoc` reads it.
+	rule NextEvents(left: i64) =
+		DocEnd+ Bom? d:AnyDoc(left) e:Ended z:AtEnd -> {
+			let mut all = handed_over(d, e, z)
+			for ev in all.drain() {
+				emit ev
+			}
+		}
+		| Bom? v:Explicit([], left) e:Ended z:AtEnd -> {
+			let mut all = handed_over(Document { root: v, start: true, end: e, directives: [] }, e, z)
+			for ev in all.drain() {
+				emit ev
+			}
+		}
+	// Whether `...` ends the document just read, and whether it is the last.
+	rule Ended -> bool = peek(DocEnd) -> { true } | "" -> { false }
+	rule AtEnd -> bool = peek(DocEnd* eof) -> { true } | "" -> { false }
 
 	// A bare document (no `---`) comes first or after `...` (`l-yaml-stream`).
 	// A `...` belongs to the document before it: each further document says
@@ -2391,11 +2432,13 @@ pub enum EventKind {
 // span (a document its root's), an end event the empty span at the node's
 // end, the stream's start 0 and its end the last document's end. `explicit`:
 // `---` written before the document (its start), `...` after it (its end).
-// `flow`: a flow collection's start. `anchor` as the tree keeps it (a view),
-// `tag` resolved to its full name by the document's directives (`!!int` is
-// `tag:yaml.org,2002:int`, a verbatim `!<t>` is `t`); `style` and `value` a scalar's as written (`Node.raw`, a
-// view), and `text` a `Value::Str`'s value through `text()` (null for every
-// other event); `value` is an alias's name; `""` and `Plain` elsewhere.
+// `flow`: a flow collection's start. `anchor` as the tree has it, `tag`
+// resolved to its full name by the document's directives (`!!int` is
+// `tag:yaml.org,2002:int`, a verbatim `!<t>` is `t`); `style` and `value` a
+// scalar's as written (`Node.raw`), and `text` a `Value::Str`'s value through
+// `text()` (null for every other event); `value` is an alias's name; `""` and
+// `Plain` elsewhere. An event owns its text (ADR-grammar-2 D7, as amended
+// 2026-11-08): it outlives the input, so a walk of `Yaml::events` may keep it.
 pub struct Event {
 	pub kind: EventKind,
 	pub start: u32,
@@ -2501,7 +2544,7 @@ fn opening(kind: EventKind, n: ref Node, ds: ref Vec[Dir]) -> Event sync {
 		end: n.end,
 		explicit: false,
 		flow: n.flow,
-		anchor: n.anchor,
+		anchor: n.anchor?.clone(),
 		tag: resolved(ds, n.tag),
 		style: Style::Plain,
 		value: "",
@@ -2538,7 +2581,7 @@ fn walk(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event]) sync {
 			anchor: null,
 			tag: null,
 			style: Style::Plain,
-			value: a,
+			value: a.clone(),
 			text: null,
 		})
 		Value::Str(s) => out.push(Event {
@@ -2547,10 +2590,10 @@ fn walk(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event]) sync {
 			end: n.end,
 			explicit: false,
 			flow: false,
-			anchor: n.anchor,
+			anchor: n.anchor?.clone(),
 			tag: resolved(ds, n.tag),
 			style: s.style,
-			value: n.raw,
+			value: n.raw.clone(),
 			text: text(s),
 		})
 		else => out.push(Event {
@@ -2559,10 +2602,10 @@ fn walk(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event]) sync {
 			end: n.end,
 			explicit: false,
 			flow: false,
-			anchor: n.anchor,
+			anchor: n.anchor?.clone(),
 			tag: resolved(ds, n.tag),
 			style: n.style,
-			value: n.raw,
+			value: n.raw.clone(),
 			text: null,
 		})
 	}
@@ -2574,12 +2617,29 @@ pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
 	let mut out: Vec[Event] = [bare(EventKind::StreamStart, 0, 0)]
 	let mut last: u32 = 0
 	for d in docs {
-		out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
-		walk(d.root, d.directives, out)
-		out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, d.end))
+		document_events(d, d.end, out)
 		last = d.root.end
 	}
 	out.push(bare(EventKind::StreamEnd, last, last))
+	return out
+}
+
+// A document's events, pushed onto `out`: its start, its root's events and
+// its end, `ended` by a `...`.
+fn document_events(d: ref Document, ended: bool, mut out: Vec[Event]) sync {
+	out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
+	walk(d.root, d.directives, out)
+	out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, ended))
+}
+
+// What `Yaml::events` hands over for a document it has read: the document's
+// events and, after the `last` one, the stream's end.
+fn handed_over(d: ref Document, ended: bool, last: bool) -> Vec[Event] sync {
+	let mut out: Vec[Event] = []
+	document_events(d, ended, out)
+	if last {
+		out.push(bare(EventKind::StreamEnd, d.root.end, d.root.end))
+	}
 	return out
 }
 

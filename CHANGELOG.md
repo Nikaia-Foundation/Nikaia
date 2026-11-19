@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1461] — 2026-11-19
+
+**A changed trim takes its source's text too, and NK2302 offers the copy**
+- A trimmed text that is changed reuses its buffer too: `let mut rest = line.trim(); rest += "?"` trims `line` in place instead of failing to build, and NK2302 on a lent parameter now offers `.clone()` beside `keep` (ADR-text-reuse-1 D2, D3).
+
+## [0.0.1460] — 2026-11-19
+
+**Builders' changes**
+- `yaml::Yaml::events(bytes; limits:)` walks a YAML stream's events one at a time (`for ev in ...`); a `break` ends the parse there, so a later error is never read. Event's strings are owned.
+- A rule that commits after a `count(p)` or `here` is no longer refused with NK1370. An emitting `@stream` entry may take values and options and have more than one repetition (the one whose items emit is folded); a cross-package walk takes its options by value; a bound `text(p)` in a streamed parse reads the right bytes.
+
 ## [0.0.1459] — 2026-11-19
 
 **std runs no shell: process::shell and process::is_word leave std, a call is refused with NK1314 (ADR-raw-sinks-1 D9) (#2197)**
