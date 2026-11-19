@@ -1,0 +1,6 @@
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:21: a task stopped: boom
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:21: a task stopped: boom
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:27: a task stopped: this value is being rebuilt after a task panicked while it held it: try again after the delay
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:21: a task stopped: boom
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:27: a task stopped: this value was rebuilt too often and its policy gave up: it stays poisoned
+tests/a_supervised_value_is_rebuilt_until_its_policy_gives_up.nika:27: a task stopped: this value was rebuilt too often and its policy gave up: it stays poisoned
