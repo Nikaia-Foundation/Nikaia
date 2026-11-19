@@ -584,6 +584,11 @@ own driver run:
   parameters, `from`, the views of text and lists, the ownership matrix), and
   every program of that kind that the checker accepts and `rustc` refuses
   (NK1343). Its decisions follow *Language decisions*.
+* **ADR lane, `docs/briefs/adr/`** (owner, 2026-11-19): the issues
+  labelled `adr`: the consolidation of the earlier records into one record per
+  topic (ADR-decision-records-v2, #904), the rename tool and the citation check
+  in Nikaia. The steps run strictly in the order of #904, each `Needs` the one
+  before.
 * **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
