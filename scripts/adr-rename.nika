@@ -208,7 +208,7 @@ fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic
                 last = text::parse_i64((to ?? return "!").text()) ?? 0
                 dash = (parts.group(2) ?? return "!").text().clone()
             }
-            for d in first..last { decs.push(d) }
+            for d in first..<last + 1 { decs.push(d) }
         }
     }
     let mut record: String = ""
