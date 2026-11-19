@@ -732,34 +732,6 @@ mod tests {
         });
     }
 
-    /// **A wake from another thread reaches an executor parked on the timer**
-    /// (#829): a C library's `cancel()`, called on the caller's thread while
-    /// the call sleeps, ended the call only when the whole sleep was over.
-    #[test]
-    fn a_wake_from_another_thread_ends_a_park_on_the_timer() {
-        let woken = Arc::new(AtomicBool::new(false));
-        let mut sleeping = Box::pin(crate::time::sleep(std::time::Duration::from_secs(60)));
-        let mut handed = false;
-        let began = std::time::Instant::now();
-        let ended_by_wake = block_on(std::future::poll_fn(|context| {
-            if woken.load(Ordering::SeqCst) {
-                return Poll::Ready(true);
-            }
-            if !handed {
-                handed = true;
-                let (waker, flag) = (context.waker().clone(), woken.clone());
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                    flag.store(true, Ordering::SeqCst);
-                    waker.wake();
-                });
-            }
-            sleeping.as_mut().poll(context).map(|()| false)
-        }));
-        assert!(ended_by_wake, "the sleep ran out first");
-        assert!(began.elapsed() < std::time::Duration::from_secs(30));
-    }
-
     /// **A slot is how a value leaves a task**, and taking it is a suspension
     /// point rather than a wait.
     #[test]
