@@ -1479,6 +1479,14 @@ pub mod io {
 mod tests {
     use super::*;
 
+    // Kept as Rust (#2082), for "Unobservable std tests" (#2088): no program
+    // sees what these check. The ring's generation counter and the runtime's
+    // pointer identity have no Nikaia surface; the pair path behind
+    // `fs::read_both` cannot be called from a program (NK1171) and stays for
+    // `benches/overlap` (ADR-303); `describe` has no Nikaia surface, and
+    // `it/runtime.rs` does not check that `auto` names its choice. The tests a
+    // program observes moved to `tests/compiler/tests/rt_*.nika` (#2210).
+
     /// **An answer another thread reaps moves the generation** (0.0.259).
     ///
     /// The ring is one per process and every thread's poll and park takes all
