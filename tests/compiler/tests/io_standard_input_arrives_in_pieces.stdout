@@ -1,0 +1,27 @@
+== lines, at once
+[one]
+[]
+[three]
+end
+== lines, split across a pause
+[one]
+[two]
+[three]
+end
+== lines, empty input
+end
+== lines, one newline
+[]
+end
+== lines, bytes that are not text
+[fine]
+failed: not valid UTF-8: standard input
+[last]
+end
+== each, bytes that are not text
+[fine]
+failed: not valid UTF-8: standard input
+== whole, written late
+READ[eins
+zwei
+]

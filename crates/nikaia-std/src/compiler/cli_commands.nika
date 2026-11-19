@@ -117,7 +117,7 @@ pub struct CliDescribed {
     pub proposed: i64,
 }
 
-/// **The project `nikaia describe` describes a crate for** (ADR-290 D1):
+/// **The project `nikaia describe` describes a crate for** (ADR-rust-boundary-1 D1):
 /// the nearest folder from `start` up that holds a `nikaia.toml`, the walk
 /// `nikaia lower` makes from a file.
 pub fn cli_commands_describe_root(start: fs::Path) -> fs::Path sync throws {
@@ -135,7 +135,7 @@ fn cli_commands_is_file(path: ref fs::Path) -> bool sync {
     return meta.is_file()
 }
 
-/// **What `nikaia describe` says** ([ADR-290](../../../../docs/specification/adr/adr-290.md)
+/// **What `nikaia describe` says** ([ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D2): what a reviewer does next, which is the whole reason the command
 /// exists rather than the file appearing during a build. The two things the
 /// describer saw and did not claim (D8, D10) are in the file as comments and

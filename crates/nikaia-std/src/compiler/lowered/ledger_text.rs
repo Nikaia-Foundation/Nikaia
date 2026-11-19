@@ -35,7 +35,7 @@ pub fn derived_text(ledger: &Ledger) -> String {
 pub fn description_text(ledger: &Ledger, crate_name: &str, version: &str, notes: &Notes) -> String {
     let mut out: String = String::from("");
     out.push_str(&format!("# The boundary of `{}`, described before it is called\n", crate_name));
-    out.push_str("# ([ADR-290](../../docs/specification/adr/adr-290.md) D2).\n");
+    out.push_str("# ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D2).\n");
     out.push_str("#\n");
     out.push_str(&format!("# Written by `nikaia describe {}` from the crate's `pub` signatures,\n", crate_name));
     out.push_str("# translated by Part III 15.2's table. **Committed and reviewed like code**,\n");

@@ -563,7 +563,7 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
         &Ledger::infer(&parsed),
         &std::collections::BTreeSet::new(),
         // Nothing declared and nothing described, which is a loose file's own
-        // state: ADR-290 D1 asks a question about the *build*'s boundary and
+        // state: ADR-rust-boundary-1 D1 asks a question about the *build*'s boundary and
         // this one has none. And nothing has gained an error since a committed
         // ledger, which is every build but the one after a change (ADR-308 D11).
         nikaia::project::Around {

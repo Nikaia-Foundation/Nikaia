@@ -10,7 +10,8 @@
 //! D5). A number, a `char`, a `bool` arrive through `write_u64` and its
 //! siblings and are one Fx step each: the hash `rustc` used on its own tables
 //! for years. Text arrives through `write`, at any length, and is first folded
-//! into one word by the byte hash of `rustc-hash` 2 (`hash_bytes` below), which
+//! into one word by the byte hash of `rustc-hash` 2 (`hash_bytes`, written in
+//! Nikaia in `runtime/hash.nika`), which
 //! reads a short key as two overlapping words instead of branching on its
 //! length piece by piece. On 1BRC's names that halved the mispredictions a row
 //! (3.42 to 1.62) and took 19 instructions off it; on `k-nucleotide`'s keys of
@@ -26,6 +27,7 @@
 //! a barrier in the provenance analysis widens to untrusted rather than to
 //! here.
 
+use crate::runtime::hash::{fx_add, fx_finish, hash_bytes, hash_long, hash_short};
 use std::hash::{BuildHasherDefault, Hasher};
 
 /// **A map**: `std`'s own type over `hashbrown`'s table (`map.rs`,
@@ -62,12 +64,9 @@ pub trait Seed: std::hash::BuildHasher + Default + Clone {}
 
 impl<S: std::hash::BuildHasher + Default + Clone> Seed for S {}
 
-/// The constant `rustc`'s hash multiplies by: the 64-bit odd number closest to
-/// `2^64 / φ`, so that the multiply spreads a change in any bit across the
-/// whole word.
-const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
-
-/// A fast, non-cryptographic hash with a fixed seed.
+/// A fast, non-cryptographic hash with a fixed seed: the shell Rust's
+/// `Hasher` asks for, around the steps written in Nikaia
+/// (`runtime/hash.nika`: `fx_add`, `fx_finish`, `hash_bytes`).
 ///
 /// One multiply and one rotate per number written, and one more for text once
 /// `hash_bytes` has made a word of it; no allocation, no state beyond the
@@ -82,7 +81,7 @@ pub struct FxHasher {
 impl FxHasher {
     #[inline]
     fn add(&mut self, word: u64) {
-        self.hash = (self.hash.rotate_left(5) ^ word).wrapping_mul(SEED);
+        self.hash = fx_add(self.hash, word);
     }
 }
 
@@ -117,83 +116,12 @@ impl Hasher for FxHasher {
         self.add(n as u64);
     }
 
-    /// The multiply leaves the most entropy in the top bits, but a table picks
-    /// the bucket from the bottom ones: the rotation brings the top down, as
-    /// `rustc-hash` 2 does, so keys on a power-of-two stride (`i * 1024`,
-    /// `i << 32`) do not crowd into a few buckets.
+    /// The rotation that brings the multiply's top bits down to the ones a
+    /// table picks its bucket from (`fx_finish`).
     #[inline]
     fn finish(&self) -> u64 {
-        self.hash.rotate_left(26)
+        fx_finish(self.hash)
     }
-}
-
-// `hash_bytes` and what it calls are `rustc-hash` 2.1.1's (`src/lib.rs`),
-// MIT or Apache-2.0, by Orson Peters; the 64-bit half only, since `nikaia-std`
-// targets 64-bit. Copied rather than depended on, for the reasons at the top.
-
-// Digits of pi.
-const SEED1: u64 = 0x243f_6a88_85a3_08d3;
-const SEED2: u64 = 0x1319_8a2e_0370_7344;
-const PREVENT_TRIVIAL_ZERO_COLLAPSE: u64 = 0xa409_3822_299f_31d0;
-
-/// The full 64 x 64 -> 128 product, its halves xor-ed: the middle bits, which
-/// move most with a small change in either input, end up everywhere.
-#[inline]
-fn multiply_mix(x: u64, y: u64) -> u64 {
-    let full = (x as u128) * (y as u128);
-    (full as u64) ^ ((full >> 64) as u64)
-}
-
-#[inline]
-fn word(bytes: &[u8]) -> u64 {
-    u64::from_le_bytes(bytes[..8].try_into().expect("eight"))
-}
-
-#[inline]
-fn half(bytes: &[u8]) -> u64 {
-    u32::from_le_bytes(bytes[..4].try_into().expect("four")) as u64
-}
-
-/// Any number of bytes as one word.
-///
-/// Up to 16 bytes, the key is read as its first and its last 8 (or 4) bytes,
-/// which overlap where the key is shorter than both: one branch on the length's
-/// class rather than one per piece of the tail. Longer keys are read 16 bytes a
-/// step, and the last 16 overlap the step before. The length is xor-ed in at
-/// the end, so two lengths of one overlapping pattern do not collide.
-///
-/// **Out of line on purpose** (#695): a map's `entry` with this inlined into
-/// it is too big for LLVM to inline into a fold's loop, and whether it was
-/// inlined depended on how the codegen units were cut - 1BRC ran 274
-/// instructions a row at one unit and 231 at sixteen, where the hash happened
-/// to stay a call. Kept a call, the table's `entry` is inlined at both: 244 and
-/// 223, for the cost of one call a key.
-#[inline(never)]
-fn hash_bytes(bytes: &[u8]) -> u64 {
-    if bytes.len() <= 16 {
-        hash_short(bytes)
-    } else {
-        hash_long(bytes)
-    }
-}
-
-/// [`hash_bytes`] of up to 16 bytes, inline: the first and the last word.
-#[inline(always)]
-fn hash_short(bytes: &[u8]) -> u64 {
-    let len = bytes.len();
-    let mut s0 = SEED1;
-    let mut s1 = SEED2;
-    if len >= 8 {
-        s0 ^= word(bytes);
-        s1 ^= word(&bytes[len - 8..]);
-    } else if len >= 4 {
-        s0 ^= half(bytes);
-        s1 ^= half(&bytes[len - 4..]);
-    } else if len > 0 {
-        s0 ^= bytes[0] as u64;
-        s1 ^= ((bytes[len - 1] as u64) << 8) | bytes[len / 2] as u64;
-    }
-    multiply_mix(s0, s1) ^ len as u64
 }
 
 /// **What [`FxHasher`] gives a text** (`str`'s `Hash`: the bytes, then the
@@ -207,35 +135,7 @@ pub(crate) fn fx_text(bytes: &[u8]) -> u64 {
     } else {
         hash_long(bytes)
     };
-    let mut h = FxHasher::default();
-    h.add(word);
-    h.add(0xff);
-    h.finish()
-}
-
-/// [`hash_bytes`] of more than 16 bytes.
-#[inline(never)]
-fn hash_long(bytes: &[u8]) -> u64 {
-    let len = bytes.len();
-    let mut s0 = SEED1;
-    let mut s1 = SEED2;
-    {
-        let mut off = 0;
-        while off < len - 16 {
-            let x = word(&bytes[off..]);
-            let y = word(&bytes[off + 8..]);
-            // Two independent streams, s0 and s1, so the loop unrolls; the
-            // constant keeps a run of zeros from collapsing the state.
-            let t = multiply_mix(s0 ^ x, PREVENT_TRIVIAL_ZERO_COLLAPSE ^ y);
-            s0 = s1;
-            s1 = t;
-            off += 16;
-        }
-        let suffix = &bytes[len - 16..];
-        s0 ^= word(suffix);
-        s1 ^= word(&suffix[8..]);
-    }
-    multiply_mix(s0, s1) ^ len as u64
+    fx_finish(fx_add(fx_add(0, word), 0xff))
 }
 
 /// **One CRC-32C step over a word** (ADR-371 D5): the CRC-32C of `word`'s
@@ -308,8 +208,8 @@ fn crc32c_by_table(crc: u32, word: u64) -> u32 {
 
 /// **The SHA-256 digest of `data` as 64 lowercase hex characters** (FIPS
 /// 180-4), the same text `orchestrator::cache::sha256_hex` writes. Written
-/// out here rather than taken from `sha2`, for the reason `hash_bytes` copies
-/// rustc-hash: `std` is built into every program, and its dependency graph
+/// out here rather than taken from `sha2`, for the reason `runtime/hash.nika`
+/// copies rustc-hash: `std` is built into every program, and its dependency graph
 /// stays small (ADR-002 D4).
 pub fn sha256_hex(data: &[u8]) -> crate::block::Text {
     let mut state = SHA256_START;
@@ -400,157 +300,5 @@ fn sha256_block(state: &mut [u32; 8], block: &[u8; 64]) {
     }
     for (slot, v) in state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
         *slot = slot.wrapping_add(v);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // CRC-32C against its definition and its check value is
-    // `tests/compiler/tests/hash_crc32c_is_the_castagnoli_crc.nika` (#2082).
-    // What stays here no program reaches: the fixed-seed hasher of a trusted
-    // map, which a program never calls by name.
-
-    use super::*;
-    use std::collections::HashMap;
-
-    fn hash_of(bytes: &[u8]) -> u64 {
-        let mut h = FxHasher::default();
-        h.write(bytes);
-        h.finish()
-    }
-
-    /// A hash function is only useful if the same key hashes the same way every
-    /// time, in the same process and the next one. That is what "fixed seed"
-    /// means and it is the whole difference from the map `std` gives by
-    /// default.
-    #[test]
-    fn the_same_key_hashes_the_same_way() {
-        assert_eq!(hash_of(b"Hamburg"), hash_of(b"Hamburg"));
-        assert_ne!(hash_of(b"Hamburg"), hash_of(b"Bulawayo"));
-    }
-
-    /// Order matters inside a key: `ab` is not `ba`, and a compound key's parts
-    /// do not commute.
-    #[test]
-    fn the_order_of_the_bytes_matters() {
-        assert_ne!(hash_of(b"ab"), hash_of(b"ba"));
-
-        let mut first = FxHasher::default();
-        first.write_u32(1);
-        first.write_u32(2);
-        let mut second = FxHasher::default();
-        second.write_u32(2);
-        second.write_u32(1);
-        assert_ne!(first.finish(), second.finish());
-    }
-
-    /// Every length is reached: a key one byte longer hashes differently,
-    /// across the short reads (1-3, 4-7, 8-16 bytes) and the 16-byte steps.
-    /// The empty key and the single zero byte differ too, since the length is
-    /// mixed in. Not injectivity - a 64-bit non-cryptographic hash does not
-    /// promise that, and a map compares keys in full (ADR-010 D5).
-    #[test]
-    fn every_length_is_covered() {
-        let mut seen = std::collections::HashSet::new();
-        for len in 0..80usize {
-            let key: Vec<u8> = (0..len).map(|i| (i % 251 + 1) as u8).collect();
-            assert!(seen.insert(hash_of(&key)), "collision at length {len}");
-        }
-        assert_ne!(hash_of(b""), hash_of(&[0]));
-    }
-
-    /// The overlapping reads see one pattern at two lengths, and still tell
-    /// them apart: a run of one byte, every length up to 40.
-    #[test]
-    fn a_repeated_byte_at_every_length_differs() {
-        let mut seen = std::collections::HashSet::new();
-        for len in 0..40usize {
-            assert!(seen.insert(hash_of(&vec![b'a'; len])), "length {len}");
-        }
-    }
-
-    /// The copy answers as `rustc-hash` 2 does, read back out of its hasher:
-    /// from a zero state, one `write` leaves `hash_bytes(b) * K` rotated left
-    /// by 26, so undoing the rotation and the multiply gives `hash_bytes(b)`.
-    #[test]
-    fn hash_bytes_is_the_one_copied() {
-        const K: u64 = 0xf135_7aea_2e62_a9c5;
-        // K is odd, so it has an inverse mod 2^64: Newton's iteration doubles
-        // the correct bits each step, from the 3 that `K` itself gets right.
-        let mut inverse = K;
-        for _ in 0..5 {
-            inverse = inverse.wrapping_mul(2u64.wrapping_sub(K.wrapping_mul(inverse)));
-        }
-        assert_eq!(K.wrapping_mul(inverse), 1);
-        for len in 0..80usize {
-            let key: Vec<u8> = (0..len).map(|i| (i * 37 % 256) as u8).collect();
-            let mut theirs = rustc_hash::FxHasher::default();
-            theirs.write(&key);
-            let back = theirs.finish().rotate_right(26).wrapping_mul(inverse);
-            assert_eq!(back, hash_bytes(&key), "length {len}");
-        }
-    }
-
-    /// Integer keys on a power-of-two stride spread over the buckets a
-    /// 4096-bucket table picks from the low 12 bits: 2941 of them for
-    /// `i * 1024` and 1985 for `i << 32` (random keys reach about 2589), where
-    /// without the rotation in `finish` they share 4 and 1. Keyed again, they
-    /// hash the same way.
-    #[test]
-    fn strided_integers_spread_over_the_low_bits() {
-        let hash_u64 = |n: u64| {
-            let mut h = FxHasher::default();
-            h.write_u64(n);
-            h.finish()
-        };
-        for (name, key) in [
-            ("i * 1024", (|i: u64| i * 1024) as fn(u64) -> u64),
-            ("i << 32", |i: u64| i << 32),
-        ] {
-            let buckets: std::collections::HashSet<u64> =
-                (0..4096u64).map(|i| hash_u64(key(i)) & 0xfff).collect();
-            assert!(
-                buckets.len() >= 4096 / 4,
-                "{name}: {} buckets",
-                buckets.len()
-            );
-            for i in 0..4096u64 {
-                assert_eq!(hash_u64(key(i)), hash_u64(key(i)), "{name}");
-            }
-        }
-    }
-
-    /// What it is for: a table that answers, over the keys a data format
-    /// actually has.
-    #[test]
-    fn it_works_as_a_map_hasher() {
-        let mut map: TrustedMap<&str, i32> = TrustedMap::default();
-        for (i, name) in ["Hamburg", "Bulawayo", "Palembang", "St. John's", "東京"]
-            .iter()
-            .enumerate()
-        {
-            map.insert(name, i as i32);
-        }
-        assert_eq!(map.len(), 5);
-        assert_eq!(map["東京"], 4);
-        assert_eq!(map.get("nowhere"), None);
-
-        // …and it agrees with the map it stands in for.
-        let plain: HashMap<&str, i32> = map.iter().map(|(k, v)| (*k, *v)).collect();
-        assert_eq!(plain.len(), map.len());
-    }
-
-    /// The keys of a real aggregation, spread over a table of the size one
-    /// would have: no bucket may hold a tenth of them.
-    #[test]
-    fn it_spreads_the_keys_of_an_aggregation() {
-        let keys: Vec<String> = (0..413).map(|i| format!("Station{i:03}")).collect();
-        let buckets = 1024u64;
-        let mut counts = vec![0usize; buckets as usize];
-        for key in &keys {
-            counts[(hash_of(key.as_bytes()) % buckets) as usize] += 1;
-        }
-        let worst = counts.iter().copied().max().expect("non-empty");
-        assert!(worst < keys.len() / 10, "worst bucket held {worst}");
     }
 }

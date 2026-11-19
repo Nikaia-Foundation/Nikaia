@@ -3,7 +3,7 @@
 // **What `nikaia.toml` may say, and what each key does** (ADR-037 D5,
 // ADR-002 D1, ADR-286 D15, Part III 13.3).
 //
-// The seventh piece of the compiler moved from Rust to Nikaia, by ADR-290's
+// The seventh piece of the compiler moved from Rust to Nikaia, by ADR-rust-boundary-1's
 // route and on ADR-294's road: lowered ahead of time by `nikaia lower-std` to
 // `manifest.rs` beside it, `include!`d as `nikaia_std::compiler::manifest`, and
 // called from the compiler's `Manifest::parse`.
@@ -164,7 +164,7 @@ pub fn dependency(name: ref String, typed: bool, kind: ref String, has_path: boo
 }
 
 /// The name a program writes for the crate a manifest key declares
-/// (ADR-290 D1): `hyper-shim` is `hyper_shim::serve_once`, because that is the
+/// (ADR-rust-boundary-1 D1): `hyper-shim` is `hyper_shim::serve_once`, because that is the
 /// crate name Cargo makes of the key.
 pub fn crate_name(key: ref String) -> String {
     let mut name: String = ""
@@ -283,7 +283,7 @@ pub struct ManifestFile {
     pub libraries: collections::BTreeMap[String, String],
     /// `[features]` (ADR-393 D2): read only for a rust-library build.
     pub features: Vec[ManifestFeature],
-    /// `[rust-library]` (ADR-393 D7), where the manifest has the table: the
+    /// `[rust-library]` (ADR-rust-boundary-1 D23), where the manifest has the table: the
     /// hand-written crate root spliced in, and the module the lowered items
     /// move to.
     pub rust_library: ManifestRustLibrary?,
@@ -334,7 +334,7 @@ pub struct ManifestFeature {
     pub listed: bool,
 }
 
-/// **`[rust-library]`** (ADR-393 D7, Part III 13): a hand-written Rust file
+/// **`[rust-library]`** (ADR-rust-boundary-1 D23, Part III 13): a hand-written Rust file
 /// that becomes the crate root, and the module the lowered `pub` items go to.
 /// Whether `root` names a file, and whether the artifact is a rust-library,
 /// is `NK1348`, decided where the crate is written (`tools/project_drive.nika`).
@@ -536,7 +536,7 @@ pub fn manifest_has_build_section(manifest: ref ManifestFile) -> bool {
 }
 
 /// **The Rust crates this build declares**, under the name a program writes
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1).
 ///
 /// `hyper-shim = { type = "rust", … }` is written `hyper_shim::serve_once`
 /// in a program, because that is the crate name Cargo makes of the key and

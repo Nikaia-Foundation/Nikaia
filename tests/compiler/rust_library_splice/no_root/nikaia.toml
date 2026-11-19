@@ -1,4 +1,4 @@
-# `[rust-library]` without `root`: NK1348 (ADR-393 D7).
+# `[rust-library]` without `root`: NK1348 (ADR-rust-boundary-1 D23).
 [package]
 name = "no_root"
 version = "0.1.0"

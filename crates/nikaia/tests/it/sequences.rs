@@ -227,7 +227,7 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 ///
 /// **It rose to 50, and `examples/rust-signatures.nika` is all of it** — the
 /// first Nikaia program in this tree that parses another language
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md)), and a grammar with
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)), and a grammar with
 /// twelve actions that call a method on what a pattern bound. Ten of the twelve
 /// are the sentence above, unchanged: `s.trim()` on a `text(…)` binding,
 /// `tail.drain()` on a repetition's.
@@ -246,7 +246,7 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 ///
 /// **51 at 0.0.162**, and the one that arrived is the sentence above again: the
 /// grammar's `where_clause` rule keeps its text now
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D9 needs the bounds),
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D9 needs the bounds),
 /// and `w.trim()` on what a pattern bound is a method call on an untyped
 /// receiver like the ten before it.
 ///

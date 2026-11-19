@@ -126,7 +126,7 @@ impl EmitState {
 
     /// The path to a generated sum from inside a function: from the package's
     /// root in a program, whose modules import nothing of it (`crate`, or
-    /// `crate::<native>` under a hand-written root, ADR-393 D7, #1447); bare
+    /// `crate::<native>` under a hand-written root, ADR-rust-boundary-1 D23, #1447); bare
     /// in a file of `std` or the tools package, whose modules import the
     /// package root, where the sum's own file puts it (`emit_sums_written`,
     /// #1360).

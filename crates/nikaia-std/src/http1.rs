@@ -5,7 +5,7 @@
 //! chunked transfer and no TLS. That record's own scope, and its own staging:
 //! **the parser was Rust here and is a Nikaia grammar now** (0.0.248,
 //! [ADR-303](../../../docs/specification/adr/adr-303.md) D6), by
-//! [ADR-290](../../../docs/specification/adr/adr-290.md)'s route:
+//! [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)'s route:
 //! `src/runtime/http1.nika`. What stays here is the bytes - the buffer a socket
 //! fills, where a head ends, whether it is text - and the `Head` a program is
 //! handed.

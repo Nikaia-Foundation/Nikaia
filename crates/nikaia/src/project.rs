@@ -361,7 +361,7 @@ impl Settings {
     }
 
     /// **The same settings with the package's items below `crate_root`**
-    /// (`Build::crate_root`, ADR-393 D7, #1447). The path is kept once per
+    /// (`Build::crate_root`, ADR-rust-boundary-1 D23, #1447). The path is kept once per
     /// distinct text for the life of the process: `Build` is `Copy`, and a
     /// build names one or two roots.
     pub fn rooted_at(&self, crate_root: &str) -> Settings {
@@ -1059,7 +1059,7 @@ fn with_lower_host<R>(
         None => settings.choices(),
     };
     // **And what this build's boundaries say**
-    // ([ADR-290](../../docs/specification/adr/adr-290.md) D5). A description is
+    // ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D5). A description is
     // a file a person edits, so an edit has to reach the next build - which it
     // did not, and failed open while it did not.
     let choices = choices.describing(crate::describe::descriptions_digest(&layout.root));
@@ -1420,7 +1420,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // own: `utils::double` is a name `main.nika` may write, and the
         // type checker resolves it in the one place any name is resolved.
         let modules = program.package_names();
-        // **Read once per lowering and not per unit** (ADR-290 D1): the
+        // **Read once per lowering and not per unit** (ADR-rust-boundary-1 D1): the
         // boundary is the build's, and every unit of it stands at the same
         // one. `layout.root` is the project this input belongs to, and
         // outside a project there is no manifest and therefore nothing
@@ -1612,7 +1612,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .take()
             .expect("the program is read first");
         // **The described crates' boundary reaches the emitter**
-        // (ADR-290 D20), which the checker above already read it for.
+        // (ADR-rust-boundary-1 D20), which the checker above already read it for.
         program.described = self
             .foreign
             .borrow()
@@ -1680,7 +1680,7 @@ pub const DERIVED: &str = "derived";
 pub const WARNINGS: &str = "warnings";
 
 /// **What this build links against, and what has been described**
-/// ([ADR-290](../../docs/specification/adr/adr-290.md) D1): the struct, how a
+/// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D1): the struct, how a
 /// build reads it and what it gives a program's packages are
 /// `ProjectMembersForeign` in `tools/project_members.nika` (P4b).
 pub use nikaia_std::compiler::project_members::ProjectMembersForeign as Foreign;
@@ -1714,7 +1714,7 @@ impl ProjectMembersForeignHost for ForeignHost {
 }
 
 /// **`std`'s ledger and every described crate's, in one**
-/// ([ADR-290](../../docs/specification/adr/adr-290.md) D1). A described
+/// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D1). A described
 /// boundary is a library boundary: the analyses ask a ledger what a callee
 /// takes, hands back, pauses on and keeps, and where the callee is foreign
 /// the answer comes from the file the reader was told to write.
@@ -1762,7 +1762,7 @@ pub fn base_library(foreign: &Foreign) -> Ledger {
 ///
 /// Two facts, and both are about the *build* rather than about the file being
 /// checked — what the manifest links against and what was described beside it
-/// ([ADR-290](../../docs/specification/adr/adr-290.md) D1), and what a callee
+/// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D1), and what a callee
 /// has newly gained since the ledger committed beside it
 /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Neither can be read
 /// from a `Parsed`, and neither belongs to it.
@@ -2732,7 +2732,7 @@ impl Project {
         // for is refused here and the backend's message never arrives.
         let layout = Layout::resolve(&self.entry());
         let reads = reads_for(&layout, allowlist)?;
-        // …and the same descriptions (ADR-290 D20), for the same reason.
+        // …and the same descriptions (ADR-rust-boundary-1 D20), for the same reason.
         let foreign = match layout.in_project {
             true => foreign_of(&layout.root),
             false => project_members::project_members_no_foreign(),
@@ -2756,7 +2756,7 @@ impl Project {
             .filter(diagnostics::is_about_the_program)
             .collect();
         // **A boundary mismatch is said as a stale ledger** (ADR-100 D6,
-        // ADR-290 D21): the packages this program depends on and the crates it
+        // ADR-rust-boundary-1 D21): the packages this program depends on and the crates it
         // describes are where a ledger the lowering believed can disagree with
         // the code below it.
         let boundaries: Vec<diagnostics::Boundary> = self
@@ -3765,7 +3765,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         let project = self.project;
         let members = self.members.borrow();
         let member = &members[at as usize];
-        // **Below a hand-written root** (ADR-393 D7, #1447) the member's
+        // **Below a hand-written root** (ADR-rust-boundary-1 D23, #1447) the member's
         // items are `crate::<native>`, and the lowering is asked for that.
         let rooted;
         let mut settings = if crate_root == project.settings.build.crate_root {

@@ -1,0 +1,12 @@
+-- trusted: --trust
+let mut names: collections::TrustedMap<&'static str, i64> = collections::TrustedMap::default();
+-- trusted: run
+5
+東京: 4
+nowhere: none
+-- keyed: --trust
+let mut names: collections::HashMap<String, i64> = collections::HashMap::<_, _>::default();
+-- keyed: run
+5
+東京: 4
+nowhere: none

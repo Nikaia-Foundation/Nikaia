@@ -2,7 +2,7 @@
 //
 // **A ledger as it is written out** (Part III 13.5) - `nikaia.contracts`,
 // the record beside it of what it was derived from (ADR-251 D1), and a
-// description of a foreign crate's boundary (ADR-290 D5) - moved from the
+// description of a foreign crate's boundary (ADR-rust-boundary-1 D5) - moved from the
 // compiler's `contracts` module (ADR-294, #125). `ledger.nika` reads the same
 // format back, so the two halves of one file format stand side by side.
 //
@@ -53,14 +53,14 @@ pub fn derived_text(ledger: ref Ledger) -> String {
     return out
 }
 
-/// The same file under a **description's** header (ADR-290 D5): written once,
+/// The same file under a **description's** header (ADR-rust-boundary-1 D5): written once,
 /// **reviewed like code**, and hand-edited where a signature could not say
 /// what a field does - so the header says that, where `ledger_text`'s says not
 /// to edit it.
 pub fn description_text(ledger: ref Ledger, crate_name: ref String, version: ref String, notes: ref Notes) -> String {
     let mut out: String = ""
     out.push_str(f"# The boundary of `{crate_name}`, described before it is called\n")
-    out.push_str("# ([ADR-290](../../docs/specification/adr/adr-290.md) D2).\n")
+    out.push_str("# ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D2).\n")
     out.push_str("#\n")
     out.push_str(f"# Written by `nikaia describe {crate_name}` from the crate's `pub` signatures,\n")
     out.push_str("# translated by Part III 15.2's table. **Committed and reviewed like code**,\n")
@@ -74,7 +74,7 @@ pub fn description_text(ledger: ref Ledger, crate_name: ref String, version: ref
     out.push_str("# silence as nothing at all is the polarity ADR-010 D1 forbids.\n")
     out.push_str("#\n")
     out.push_str(f"# crate: {crate_name} {version}\n")
-    // **What the describer saw and did not claim** (ADR-290 D8, D10), before
+    // **What the describer saw and did not claim** (ADR-rust-boundary-1 D8, D10), before
     // the entries because it is about the crate rather than one of them.
     if notes.about_the_crate.len() > 0 {
         out.push_str("#\n")
@@ -118,7 +118,7 @@ fn ledger_escaped(value: ref String) -> String {
 /// The header line and everything after it, with the describer's notes
 /// spliced above the entries they are about.
 ///
-/// **A note is a comment and not a column** (ADR-290 D3): what the describer
+/// **A note is a comment and not a column** (ADR-rust-boundary-1 D3): what the describer
 /// saw does not *entail* an answer, so writing it as a claim could refuse a
 /// correct program. It is never parsed back.
 pub fn contract_text(ledger: ref Ledger, notes: ref Notes) -> String {
@@ -228,7 +228,7 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     if contract.places {
         out.push_str("places = true\n")
     }
-    // Claims about what a body does that no signature shows (ADR-290 D6).
+    // Claims about what a body does that no signature shows (ADR-rust-boundary-1 D6).
     match contract.threads {
         Threads::Undecided => {}
         Threads::May => out.push_str("threads = true\n"),

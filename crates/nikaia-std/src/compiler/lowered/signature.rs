@@ -172,3 +172,63 @@ pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTre
     entry
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    types.insert(String::from("Conn"));
+    let params: Vec<String> = vec![String::from("T")];
+    let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let params = params;
+    let view = translate("&str", "db", &params, &types, &mut mentioned);
+    if !(view.ty.text() == "ref String") { nikaia_std::abort::assertion_failed("assert(view.ty.text() == \"ref String\")", None, &[("view.ty.text()", (&&nikaia_std::abort::Operand(&(view.ty.text()))).shown()), ]) };
+    if !(!view.kept) { nikaia_std::abort::assertion_failed("assert(!view.kept)", None, &[]) };
+    let own = translate("Vec<Conn>", "db", &params, &types, &mut mentioned);
+    if !(own.ty.text() == "Vec[db::Conn]") { nikaia_std::abort::assertion_failed("assert(own.ty.text() == \"Vec[db::Conn]\")", None, &[("own.ty.text()", (&&nikaia_std::abort::Operand(&(own.ty.text()))).shown()), ]) };
+    if !(own.kept) { nikaia_std::abort::assertion_failed("assert(own.kept)", None, &[]) };
+    let variable = translate("Option<T>", "db", &params, &types, &mut mentioned);
+    if !(variable.ty.text() == "$T?") { nikaia_std::abort::assertion_failed("assert(variable.ty.text() == \"$T?\")", None, &[("variable.ty.text()", (&&nikaia_std::abort::Operand(&(variable.ty.text()))).shown()), ]) };
+    if !(variable.kept) { nikaia_std::abort::assertion_failed("assert(variable.kept)", None, &[]) };
+    let small = translate("u8", "db", &params, &types, &mut mentioned);
+    if !(small.ty.text() == "u8") { nikaia_std::abort::assertion_failed("assert(small.ty.text() == \"u8\")", None, &[("small.ty.text()", (&&nikaia_std::abort::Operand(&(small.ty.text()))).shown()), ]) };
+    if !(!small.kept) { nikaia_std::abort::assertion_failed("assert(!small.kept)", None, &[]) };
+    let lent = translate("&mut u8", "db", &params, &types, &mut mentioned);
+    if !(lent.ty.text() == "?") { nikaia_std::abort::assertion_failed("assert(lent.ty.text() == \"?\")", None, &[("lent.ty.text()", (&&nikaia_std::abort::Operand(&(lent.ty.text()))).shown()), ]) };
+    if !(!lent.kept) { nikaia_std::abort::assertion_failed("assert(!lent.kept)", None, &[]) };
+    let foreign = translate("other::Thing", "db", &params, &types, &mut mentioned);
+    if !(foreign.kept) { nikaia_std::abort::assertion_failed("assert(foreign.kept)", None, &[]) };
+    let noted = mentioned.contains("Conn");
+    if !(noted) { nikaia_std::abort::assertion_failed("assert(noted)", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    types.insert(String::from("Error"));
+    let none: Vec<String> = vec![];
+    let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let none = none;
+    let own = result_of("Result<u8, Error>", "db", &none, &types, &mut mentioned);
+    if !(nikaia_std::index::or(own.fails.as_deref(), || "none") == "db::Error") { nikaia_std::abort::assertion_failed("assert((own.fails ?? \"none\") == \"db::Error\")", None, &[("own.fails ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(own.fails.as_deref(), || "none")))).shown()), ]) };
+    let other = result_of("Result<(), io::Error>", "db", &none, &types, &mut mentioned);
+    if !(nikaia_std::index::or(other.fails.as_deref(), || "none") == "?") { nikaia_std::abort::assertion_failed("assert((other.fails ?? \"none\") == \"?\")", None, &[("other.fails ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(other.fails.as_deref(), || "none")))).shown()), ]) };
+    let plain = result_of("u8", "db", &none, &types, &mut mentioned);
+    if !(plain.fails.is_none()) { nikaia_std::abort::assertion_failed("assert(plain.fails == null)", None, &[("plain.fails", (&&nikaia_std::abort::Operand(&(plain.fails))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let variables = sends("T: Send + 'static, U: Clone, 'a: 'b");
+    if !(variables == vec!["T"]) { nikaia_std::abort::assertion_failed("assert(variables == [\"T\"])", None, &[("variables", (&&nikaia_std::abort::Operand(&(variables))).shown()), ("[\"T\"]", (&&nikaia_std::abort::Operand(&(vec!["T"]))).shown()), ]) };
+    let names: Vec<String> = vec![String::from("job"), String::from("name"), String::from("f")];
+    let types: Vec<String> = vec![String::from("&mut T"), String::from("&str"), String::from("impl FnOnce() + Send")]; #[allow(clippy::redundant_locals)] let names = names;
+    let sent = sent_across(&names, &types, "T: Send, ");
+    if !(sent == vec!["job", "f"]) { nikaia_std::abort::assertion_failed("assert(sent == [\"job\", \"f\"])", None, &[("sent", (&&nikaia_std::abort::Operand(&(sent))).shown()), ("[\"job\", \"f\"]", (&&nikaia_std::abort::Operand(&(vec!["job", "f"]))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn signature_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("signature::a_rust_type_reads_as_the_ledgers", __nikaia_test_0),
+        ("signature::a_result_names_what_it_throws", __nikaia_test_1),
+        ("signature::a_send_bound_reaches_its_parameters", __nikaia_test_2),
+    ]
+}

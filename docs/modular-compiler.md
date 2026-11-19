@@ -83,7 +83,7 @@ Facts behind the table:
 | A. One Rust module per `.nika` in `package.rs` (#667 step 4): `mod x_body { use super::*; ... }` and `pub use x_body::*;` | a one-file step re-optimises one unit, not half the crate; 4 cores used | lowering in `sysroot.rs`; items another file reads must lower `pub(crate)`; names are already unique |
 | A2. One generated file per `.nika` (`compiler/lowered/x.rs`, `include!`d by A's modules) | `git` diffs and merges per file: two builders on two files no longer conflict in generated code | same place as A; CI's freshness check and `self_hosting.py` read the new layout |
 | B. One integration-test binary | 267 links -> 1; ~4.5 GB -> ~20 MB per profile, so a second `target/` fits on disk | moves 267 files; `--test a` becomes a filter (`--test it a::`); tests now share a process |
-| C. `nikaia-tools` crate beside `nikaia-std` | a program's `std` and the runtime never rebuild for a tools change | path `nikaia_std::tools` moves (ADR-290 D16, `use std::tools`); small gain once A is in |
+| C. `nikaia-tools` crate beside `nikaia-std` | a program's `std` and the runtime never rebuild for a tools change | path `nikaia_std::tools` moves (ADR-rust-boundary-1 D16, `use std::tools`); small gain once A is in |
 | D. Split `crates/nikaia` into crates | nothing until the cycles are broken | breaking them is large work on code that is leaving: **not recommended** |
 | E. `dylib` / `prefer-dynamic` | links shrink | B gives the same without ABI questions; no compile saved: **not recommended** |
 | F. `cdylib` plugin boundary | a part truly prebuilt | needs a serialised interface over the shared types: **not recommended** now |

@@ -232,7 +232,7 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // (ADR-371 D6), so the lowering is kept per level.
     let cpu = if words.cpu != null { f"/cpu:{cpu_key}" } else { "" }
     // The package's items under a hand-written root are written below
-    // another path (ADR-393 D7, #1447).
+    // another path (ADR-rust-boundary-1 D23, #1447).
     let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
     // A dependency's lowering writes no allocator (ADR-327 D9).
     let heap = if counts_heap { "" } else { "/dependency" }

@@ -374,7 +374,7 @@ error[NK2401]: a change in `longest` broke its caller `report`
 | `iterates` | type | a `for` over a value of it can **fail**, so the function holding the loop declares `throws` ([ADR-025](adr/adr-025.md) D6) |
 | `ends_by_length` | fn | a sequence entry's result can be walked from the back only where every input's length is known (below) |
 | `pieces` | fn | a grammar entry whose body is a `par_fold`: a caller in another package drives it in pieces (Part II 10.7) |
-| `threads` | fn | a described foreign call **may start threads of its own** (`true`), **may not** (`false`), or nobody said (absent); `NK2502` fires on the claim, never on its absence ([ADR-290](adr/adr-290.md) D6) |
+| `threads` | fn | a described foreign call **may start threads of its own** (`true`), **may not** (`false`), or nobody said (absent); `NK2502` fires on the claim, never on its absence ([ADR-rust-boundary-1](adr/adr-rust-boundary-1.md) D6) |
 | `provenance` | fn | the function is a **source**: its result is bytes that entered the program from outside, and this names who chose them ([ADR-010](adr/adr-010.md) D2). Absent means *not a source*, which is what almost every function is |
 | `trusted` | fn | every call in its body that writes `trusted: true` at a source (17.1, [ADR-365](adr/adr-365.md) D2), each as the source and its place, `trusted = ["fs::read_to_string at main.nika:7"]`, the file named as `[sources]` names it, sorted by place. The marker makes the bytes the operator's, so a diff of the ledger shows each new one as a review item, as `--trust` names it ([ADR-010](adr/adr-010.md) D3). **Absent means it writes none** |
 | `trait."…"` | table | a trait, with its methods as ordinary `fn` entries (signature, `sync`, `throws`) and no `fields`; a bound and an `impl … for` must name one. The table carries the name and nothing else. The methods are the `fn` entries beside it, under `Handler::handle`, the key shape `NK1130` compares against. |
@@ -791,7 +791,7 @@ The compiler verifies safety properties at the boundary with a Rust crate.
 
 The rule reaches as far as the Rust signature is true. Where the compiler reads the signature, a value is crossable by declaration. A narrowing shim is reviewed like the boundary it is.
 
-**A package is offered to Rust as a crate.** With `artifact = "rust-library"` (13.3), `nikaia build` writes an ordinary lib crate named `nikaia_<name>` ([ADR-286](adr/adr-286.md) D23) to `target/rust-library/nikaia_<name>/` and prints the path. Its public API is the package's `pub` items, lowered as they are for a Nikaia program that depends on the package; it depends on `nikaia-std` and the package's own dependencies, and a Rust crate takes it as a path dependency. It is generated: the next build overwrites it. `[features]` (13.3) become the crate's Cargo features ([ADR-393](adr/adr-393.md)). A `[rust-library]` table splices hand-written Rust in (ADR-393 D7): `root` names a file in the package that becomes the crate root, the directory holding it is copied in unchanged, and the lowered items move under the module `native` names (default `native`); a `root` that does not exist, or the table where the artifact is not a rust-library, is `NK1348`.
+**A package is offered to Rust as a crate.** With `artifact = "rust-library"` (13.3), `nikaia build` writes an ordinary lib crate named `nikaia_<name>` ([ADR-286](adr/adr-286.md) D23) to `target/rust-library/nikaia_<name>/` and prints the path. Its public API is the package's `pub` items, lowered as they are for a Nikaia program that depends on the package; it depends on `nikaia-std` and the package's own dependencies, and a Rust crate takes it as a path dependency. It is generated: the next build overwrites it. `[features]` (13.3) become the crate's Cargo features ([ADR-393](adr/adr-393.md)). A `[rust-library]` table splices hand-written Rust in (ADR-rust-boundary-1 D23): `root` names a file in the package that becomes the crate root, the directory holding it is copied in unchanged, and the lowered items move under the module `native` names (default `native`); a `root` that does not exist, or the table where the artifact is not a rust-library, is `NK1348`.
 
 **A call into foreign code is judged by what its arguments can reach.** Where no lock is reachable from the arguments, transitively and through the fields of a struct, the call is allowed. Otherwise the call is refused with `NK2503` (C.3, worked through in C.6); the way out is to keep the lock out of the call's reach and hand over a copy of what it needs. A lambda among the arguments is its captures, so whether it touches a lock is read off its body (Part II, 12.3). A foreign function a ledger describes is not subject to this rule.
 
@@ -842,7 +842,7 @@ disagrees at a call into a described crate (*not a future*, a `?` on what is
 not a `Result`, a `Result` where none was expected), the build says *the
 description of `X` does not match the crate*, keeps the backend's words as a
 note, and the way out is the same command and another review
-([ADR-290](adr/adr-290.md) D21).
+([ADR-rust-boundary-1](adr/adr-rust-boundary-1.md) D21).
 
 **A crate may ship its reviewed description.** A crate that keeps a
 `nikaia.contracts` beside its `Cargo.toml`, with the `[sources]` it was reviewed
@@ -854,7 +854,7 @@ and copies both files to `contracts/<crate>.contracts` and
 `contracts/<crate>.derived`, saying so. A shipped description that names
 another version, or whose sources hash differently, is refused, and the way out
 is another review in the crate. The project's copy is the one the build
-believes, under the rule above ([ADR-290](adr/adr-290.md) D22).
+believes, under the rule above ([ADR-rust-boundary-1](adr/adr-rust-boundary-1.md) D22).
 
 **Thread Safety (Send/Sync)**
 Whether a value may cross into foreign code is decided from the Nikaia type of
@@ -883,6 +883,18 @@ fn process() {
     let img = image::open("test.png")
 }
 ```
+
+**A package may call its own Rust** ([ADR-rust-boundary-1](adr/adr-rust-boundary-1.md)
+D24-D28). The Rust a package splices in with `[rust-library]` (D23) is reached
+from its Nikaia code, test blocks included, by a plain call whose path starts at
+the crate root: `rt::config::Config::parse(text)`. The item must be `pub(crate)`
+or wider. Like any Rust it is described before it is called, in
+`contracts/crate.contracts` with `contracts/crate.derived` beside it, under the
+rules of a foreign crate's description; each entry carries `pub = false`, so a
+dependent sees none of it. `nikaia describe crate` drafts the entries, and a call
+with no entry is `NK2504`. `std` keeps these entries in `std.contracts`. The file
+is separate from `nikaia.contracts` because that ledger is regenerated on every
+build (13.5) and these entries are written and reviewed like code.
 
 ### 15.3. WebAssembly (WASM) Synergy
 WebAssembly runs in a single-threaded host with a linear memory. `user_parallelism = no` matches that host.
@@ -1407,7 +1419,7 @@ removed with it (14.1); elsewhere it is a new directory under the system's tempo
 
 **A directory walk.** `walk(path, root)` hands back every file under the directory `path`, as
 names relative to it with `/` between the parts, sorted, so two runs over one tree agree
-([ADR-290](adr/adr-290.md) D14). Directories are not listed, and each is visited once, so a link
+([ADR-rust-boundary-1](adr/adr-rust-boundary-1.md) D14). Directories are not listed, and each is visited once, so a link
 back up the tree ends the walk. Under `Dir(store)` the root holds for every name the walk finds:
 an entry that leads out of it, a symlink pointing away, is left out rather than failing the walk.
 It throws where the directory itself cannot be read; a name that is not text is handed back

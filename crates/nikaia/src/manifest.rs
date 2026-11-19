@@ -186,7 +186,7 @@ impl Manifest {
     }
 
     /// **The Rust crates this build declares**, under the name a program writes
-    /// (`manifest_foreign_crates`, ADR-290 D1).
+    /// (`manifest_foreign_crates`, ADR-rust-boundary-1 D1).
     pub fn foreign_crates(&self) -> std::collections::BTreeSet<String> {
         decide::manifest_foreign_crates(&self.file)
     }

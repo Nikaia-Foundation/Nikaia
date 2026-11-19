@@ -96,7 +96,7 @@ child-usage = { path = "../unsafe/child-usage" }
 # metadata rather than guessing among the copies in the deps directory.
 winnow-grammar = { workspace = true }
 # Named directly because a `grammar` **in this crate** expands to code that
-# writes `winnow::…` (`src/compiler/rust.nika`, ADR-290 D16). A generated program declares
+# writes `winnow::…` (`src/compiler/rust.nika`, ADR-rust-boundary-1 D16). A generated program declares
 # it for the same reason; until `std` held a grammar of its own, this crate
 # reached it only through `winnow-grammar` and never by name.
 winnow = { workspace = true }
@@ -153,6 +153,3 @@ required-features = ["compiler"]
 name = "sockets"
 required-features = ["async-io"]
 
-[dev-dependencies]
-# `hash.rs` copies its byte hash; a test holds the copy to it.
-rustc-hash = "=2.1.1"

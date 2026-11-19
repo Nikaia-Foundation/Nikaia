@@ -6566,7 +6566,7 @@ pub = true
 
 # --- `process`: another program, started and waited for (ADR-243) ----------
 #
-# [ADR-290](../../docs/specification/adr/adr-290.md) D14 put a subprocess in
+# [ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D14 put a subprocess in
 # `std` on the socket's own argument: an operating-system resource, not a
 # protocol. **No `touches`**, which is the claim that it touches everything: a
 # child may write any file this program reads, so it keeps its place against
@@ -7071,7 +7071,7 @@ signature = "(self: Connection)"
 #
 # **The parser is Rust and moving it into a Nikaia grammar is a later step**
 # (D5): self-hosting the protocol is not the MVP, and the route it will take is
-# ADR-290 D17's.
+# ADR-rust-boundary-1 D17's.
 #
 # `sync = true` on all of it: this is text handling over bytes that are already
 # there. It cannot pause and it reaches no resource, which is what lets a server

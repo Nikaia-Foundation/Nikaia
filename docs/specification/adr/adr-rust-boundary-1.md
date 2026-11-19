@@ -1,0 +1,563 @@
+# ADR-rust-boundary-1: A Rust Crate Is Described Before It Is Called, the Package's Own Rust Included, the Description Is Reviewed Like Code, and `nikaia describe` Drafts It as a Nikaia Program Reached From Rust as an Ordinary Module
+
+**Status:** Accepted
+**Date:** November 19, 2026 (D1-D22: October 3, 2026, in the record they consolidate; D23: November 8, 2026, as ADR-393 D7)
+**History:** the records this one replaces are archived in [`docs/history/adr`](../../history/adr/README.md); read them only for how the decision was reached
+**Consolidates:** everything said about the boundary between a package's Nikaia code and Rust code, in one record:
+the record of October 3, 2026 on describing a Rust crate entire, as D1-D22 with the same numbers (archived; the archive's README maps it);
+[ADR-393](adr-393.md) D7, the splice of hand-written Rust into a rust-library, as D23 (moved; ADR-393 keeps a pointer);
+[ADR-403](adr-403.md) D3's amendment of November 18, 2026 (#2147: a std package's lowered code calls `pub(crate)` Rust beside it), made the general rule in D24-D28.
+Corrected on the way: the paths of the moved compiler package (#1600) and of the sysroot test; nothing else of the archived text is changed
+**Answers:** what a Nikaia program knows about a Rust crate it calls
+([#100](https://github.com/Nikaia-Foundation/Nikaia/issues/100));
+the former `open-decisions.md`'s *does a described foreign
+function say whether it puts its argument on a thread?* (A with D, the owner's
+choice) and *is `nikaia describe` written in Nikaia?* (option A, for the
+owner's reason) ([#195](https://github.com/Nikaia-Foundation/Nikaia/issues/195),
+[#124](https://github.com/Nikaia-Foundation/Nikaia/issues/124)); how a piece
+written in Nikaia reaches the Rust program that calls it; *the boundary
+translation for a hand-edited hash*, [ADR-100](adr-100.md) D6
+([#194](https://github.com/Nikaia-Foundation/Nikaia/issues/194));
+and [ADR-403](adr-403.md) §4's open *way for Rust code's private items to be
+reached from Nikaia*: how a package's Nikaia code, its `test` blocks among it,
+calls the Rust of the same package (owner, 2026-11-19: a plain call, no
+annotation, described like any crate)
+**Related:**
+[ADR-020](adr-020.md) D5 (entries a compiler cannot infer are written and reviewed like code — this is that rule for every crate);
+[ADR-288](adr-288.md) D11 (an entry is written and reviewed, not copied from Rust);
+[ADR-100](adr-100.md) D3 and D6 (a ledger believed while its hashes hold; a backend mismatch at a package boundary named);
+[ADR-251](adr-251.md) D1 (what a contract was derived from is a file beside it);
+[ADR-123](adr-123.md) (`crosses`, three values, filled by the describer from a type's fields);
+[ADR-303](adr-303.md) D6 and D7 (the HTTP/1.1 parser moving into Nikaia; `NK2502`'s wording);
+[ADR-312](adr-312.md) D8, D9 (what a foreign call may be handed);
+[ADR-001](adr-001.md) D1 (stable toolchain only);
+[ADR-002](adr-002.md) D4 (the committed pre-lowering);
+[ADR-005](adr-005.md) D7 (the crossing message this closes the second half of);
+[ADR-010](adr-010.md) D1 (absence is never a claim);
+[ADR-014](adr-014.md) D1 (the first Nikaia module inside a Rust crate);
+[ADR-289](adr-289.md) D2 and D6 (an operating-system resource belongs in `std`), D15 (HTTP/1.1's parser);
+[ADR-296](adr-296.md) D12 (*measure before choosing a shape*, and where it does not apply);
+[ADR-243](adr-243.md) (`std::process`, the subprocess D14 asks for);
+[ADR-294](adr-294.md) (the road on which the compiler itself moves to Nikaia);
+[ADR-393](adr-393.md) D1 and D6 (the rust-library artifact D23 splices into);
+[ADR-403](adr-403.md) D1-D4 (what a package's own tests see; nothing is published for a test);
+Part III 13.5 (the ledger), 15.2 (the type mapping) and C.1, C.4
+
+## 1. Question
+
+**What does a Nikaia program know about a Rust crate it calls, who writes it
+down, and what is the tool that writes the draft?**
+
+A call into a Rust crate is a call no ledger describes: the compiler reads no
+Rust, hands the program to `rustc`, and whatever `rustc` refuses arrives in
+Rust's words about a file nobody wrote. That is the one place Part III C.1's
+promise — an untranslated backend error is a compiler bug — could not be kept,
+and the place where every analysis (`sync`, `throws`, `keeps`, `touches`, the
+crossing verdict) fails closed at once: safe, and blind.
+
+The answer has seven parts:
+
+1. a call into an undescribed crate, and what a description holds (D1-D5);
+2. whether a description says that a call threads, and how the describer helps
+   (D6-D10);
+3. what language the describer is written in (D11-D15);
+4. how that Nikaia code reaches the Rust compiler that calls it (D16-D19);
+5. what the emitter and the diagnostics do with a described call (D20-D21);
+6. a crate that ships its own description (D22), and hand-written Rust that
+   calls a package's Nikaia items from inside the same crate (D23);
+7. the other direction inside one package: its Nikaia code, and above all its
+   `test` blocks, calling the package's own Rust, private items included
+   (D24-D28).
+
+Part 7 was asked when the std crate's Rust tests moved into Nikaia ("The std
+crate's Rust unit tests move into Nikaia, so nikaia-std has no cfg(test)
+build", #2082): a test of `rt::config::Config::parse` is a few lines in a
+`test` block, but the function is Rust, and ADR-403 left open how Nikaia
+reaches a package's Rust that the package does not publish.
+
+## 2. How others do it
+
+The comparison is of tools and routes rather than of other languages.
+
+| Tool / route | Its answer | What it costs | Source |
+| :--- | :--- | :--- | :--- |
+| **rustdoc-JSON** | the crate's public surface as data, from the compiler | unstable: reading it gives up the stable-only toolchain | D4 |
+| **`syn`** | a real Rust parser | a Rust dependency, and still blind to what a macro generates | D9, D13 |
+| **`-Zunpretty=expanded`** | macro expansion | nightly — the same [ADR-001](adr-001.md) D1 wall | D9 |
+| **`cargo metadata`** | the resolved version's own sources | a subprocess | D9 |
+| **a process** (one language calls the other's binary) | a wire format between them | a second binary to build, find and install | D16 |
+| **the C ABI** (`cdylib`, `extern "C"`) | a boundary every language can call | every type reduced to what C names, and `unsafe` | D16 |
+| **the same compilation** (lower ahead of time, link as a module) | plain calls with plain types | a committed `.rs` that must not drift from its `.nika` | D16, [ADR-014](adr-014.md) |
+
+
+For part 7, the bridges that let one language call a second language's code
+**inside one build**:
+
+| Tool | Where the boundary is written | What it costs | Source |
+| :--- | :--- | :--- | :--- |
+| **`cxx`** (Rust and C++) | a `#[cxx::bridge]` module that declares both sides' signatures | a macro and a code generator; the declaration is a second copy of each signature | D24 |
+| **PyO3**, **wasm-bindgen** | an attribute on each Rust item (`#[pyfunction]`, `#[wasm_bindgen]`) | the exported language's code carries the other language's marks; a proc macro | D24 |
+| **Swift's bridging header** | a header listing the C and Objective-C declarations Swift may see | a file kept by hand beside the code | D24 |
+| **JNI** (`native` in Java, `external` in Kotlin) | a declaration at the calling side, by name | nothing checks the declaration against the native side until it is called | D24 |
+
+What transfers: every one of them writes the boundary down once, in one place a
+reviewer reads, and none of them guesses it from the other side's sources at
+the call. What does not: a description here is checked against the Rust
+sources by hash (D5), which none of these does, and it carries what a
+signature does not say (`threads`, `crosses`), which none of these carries.
+
+What does not transfer: none of these says what a call *may do* — block,
+fail, put its argument on a thread. That is a claim a person makes, which is
+why the description is reviewed ([ADR-020](adr-020.md) D5).
+
+## 3. Options, weighed
+
+| Option | Rejected because | Was |
+| :--- | :--- | :--- |
+| An undescribed foreign call compiles, and the analyses fail closed | a silent third answer; every analysis is blind exactly at the boundary, and C.1 cannot be kept there | D1 |
+| Describe the crate's whole surface | the review would be proportional to the crate, not to what the program uses | D2 |
+| Wait for rustdoc-JSON | it is unstable; the stable-only toolchain is not given up for it | D4 |
+| On a hash mismatch, derive the description again (a ledger's rule) | a description holds a reviewer's judgement — a `crosses` read off a field, a lying signature corrected — which a derivation would erase | D5 |
+| `threads` with two values | a hopeful `false` is a false silence, [ADR-010](adr-010.md) D1's vulnerability generator | D6 |
+| The describer **fills** `threads`, as it fills `crosses` | its licence for `crosses` is soundness; a `Send + 'static` bound only says *may*, and as a claim it refuses correct programs (C.4) | D8 |
+| `syn` as the parser | the command is a Nikaia program, so its parser is a grammar; the macro limit survives either | D13 (narrowing D9) |
+| Write the grammar first *as a measurement that settles it* | the choice rests on a project principle, which no number moves | D15 |
+| The describer as a separate process, or behind the C ABI | a second binary, or every type thrown away, for a boundary neither side needs | D16 |
+| `std`'s walk and subprocess before the grammar ships | the Rust half can do the I/O and hand the grammar text | D19 |
+| Merge the descriptions into `std`'s ledger for the emitter | a described `sync = false` means *may block*; a `std` entry's means *await it* | D20 |
+| Leave the backend's words at a boundary mismatch | C.1: the mismatch is a stale description or ledger, and the build can name which | D21 |
+
+| An annotation at the call that marks it as a call into Rust (`@rust config::parse(text)`) | it says only *this is Rust*, which the path already says; what the analyses need (`throws`, `sync`, `keeps`) would still have to come from somewhere, and a mark at every call is a second place to say it | D24 |
+| An attribute on the Rust item (`#[nikaia]`, as PyO3 does) | a proc macro and a dependency for every crate, and the claim sits in Rust, where the reviewer of the Nikaia call does not look | D24 |
+| The package's entries for its own Rust in its generated `nikaia.contracts` | Part III 13.5 regenerates that file on every build and resolves a merge conflict by regenerating it; a reviewed entry would be lost or would make the file half generated | D25 |
+| Make the Rust item `pub` so the Nikaia code may call it | it publishes the item to every dependent for the sake of the package's own code, which ADR-403 D4 refuses for a test (#2142) | D26 |
+| Move each Rust function into Nikaia before a test may call it | right where the code can move (CLAUDE.md, *Written in Nikaia only*), but a test should not wait on a move, and some Rust stays Rust (a system call, the runtime) | D24 |
+**The number that decided something:** on one crate the hand-written scanner
+reported **four** items that do not exist, and the grammar reports none on the
+same text (D13).
+
+## 4. Decision
+
+### D1 — A call into a crate no description covers is refused, and the message names the command.
+
+There is no silent third answer for a foreign call. A call — or a written
+**type** — reaching into a crate the manifest declares with `type = "rust"`
+and no `contracts/<crate>.contracts` describes is `NK2504`: *`regex` is not
+described; run `nikaia describe regex`*. Three things about its shape are the
+rule: it fires **only where the manifest declared the crate** (a name nobody
+declared keeps whatever message it had, C.4); **once per crate**, with the
+caret on the first call; and the crate is named as a program writes it
+(`hyper-shim` in the manifest is `hyper_shim`).
+
+What every analysis then reads at the boundary is an entry, never an absence:
+the signature types the call and what it hands back, `throws` makes it a place
+that can fail, `sync` makes it one a `sync` function may not make. A described
+crate is a **package** by the spelling rule, not one of `std`'s modules, so
+nothing about it is imported.
+
+### D2 — `nikaia describe <crate>` writes a draft for the functions the program uses.
+
+The command finds the crate's calls in the program's sources, reads the
+crate's `pub` signatures, and writes an entry for each called function and for
+the types those signatures name — not the whole surface, because every entry
+is a claim a person reviews ([ADR-288](adr-288.md) D11), and a review is
+proportional to use. A later call to an undescribed function meets D1 and
+the same command.
+
+### D3 — The draft is translated by Part III 15.2's table, and what a signature does not say fails closed.
+
+| Rust | the entry |
+| :--- | :--- |
+| `&T` | a view; `T` by value is kept |
+| `&mut T` | changed in place (`mut`) |
+| `Result<T, E>` | `throws`; the error type where 15.2 can name it |
+| `async fn` | may pause; a plain `fn` is `sync` |
+| `Option<T>` | `T?` |
+| `Send` on a type | may cross a thread |
+| `touches`, `locks` | absent — *touches everything* ([ADR-292](adr-292.md)) and the column's third answer — because the signature cannot say |
+
+`crosses` itself is [ADR-123](adr-123.md)'s column: the describer reads a
+`pub struct`'s fields — `false` for an `Rc` or a raw pointer, `true` where every
+field is plainly sendable, nothing where it cannot tell.
+
+### D4 — rustdoc-JSON is read where the toolchain offers it, and the crate's sources where it does not.
+
+Both produce the same draft, and the file records which. A stable-only
+toolchain ([ADR-001](adr-001.md) D1) is not given up for the JSON, so the
+source reader is the one that runs. Whatever neither can read — a macro-generated
+function, a signature over a trait object — is written `?` and left to D5: the
+absence of a claim, never a guess. A version dependency, whose sources are in
+Cargo's registry cache under a layout [ADR-002](adr-002.md) D1 leaves to
+Cargo, is refused with that reason and the hand-written file named instead.
+
+### D5 — The description is committed and reviewed like code, believed while its sources hash as recorded, and reviewed again — never derived again — when they do not.
+
+`contracts/<crate>.contracts`, beside the program's own ledger, with
+`contracts/<crate>.derived` beside it holding the crate's name, version and
+source hashes ([ADR-251](adr-251.md) D1). A hand edit is expected: a Rust
+signature that lies — `unsafe impl Send` on a type that is not — is caught by
+the reviewer or by nobody, and the file is where the correction lives.
+
+Where the files a description was derived from hash differently, the build
+refuses with `NK2505`, once per crate, with the command in the message. That
+is [ADR-100](adr-100.md) D3's second row turned into a refusal, because what a
+description says is a person's judgement and cannot be derived again. It fires
+only where a recorded hash disagrees: a crate declared by version and a
+description that recorded no sources answer *nothing moved*, as
+[ADR-281](adr-281.md) D34 keeps an absence from refusing.
+
+### D6 — `threads` is a column of a description, hand-written, with three values.
+
+`true`, `false`, and **absent**, like `crosses` ([ADR-123](adr-123.md) D1). The
+absence is *nobody said*, never *it does not*: a `threads = false` written by a
+hopeful hand is a false silence, and silence read as *no* is the polarity
+[ADR-010](adr-010.md) D1 calls a vulnerability generator.
+
+### D7 — `NK2502` asks a described call too, and fires on the claim, never on its absence.
+
+A description that does not say was not asked, and the program keeps the
+answer it has otherwise — `rustc`'s `Send` bound, reported on the `.nika` line
+by [ADR-005](adr-005.md) D7's translation. So the crossing message moves into
+this compiler's words only where somebody wrote the word.
+
+### D8 — The describer proposes `threads` and never claims it; it may propose `true`, never `false`.
+
+`nikaia describe` writes what it saw as a reviewable comment above the entry,
+naming the evidence — *the parameter `f` is bound `Send + 'static`; does this
+put it on a thread?* — and the person writes `threads`, or does not. Nothing a
+signature shows entails *does not thread* (a function may spawn something it
+built itself), so where it cannot see it stays silent. A note, not the column,
+because a bound says *may*, and only soundness licenses the describer to fill a
+column ([ADR-123](adr-123.md) D2).
+
+### D9 — What the describer reads: the signature scan for safe Rust, a call graph and a `use` table for the unchecked row, `cargo metadata` for the files, a grammar for the parse, and no cache.
+
+* **The signature scan** carries the safe half on its own: every safe way of
+  reaching another thread carries the `Send` bound, so the answer surfaces in
+  the signature.
+* **An intra-crate call graph** is for the row where an `unsafe impl Send` took
+  the bound away (`across_a_thread_unchecked` reaches `tokio::spawn` only
+  through `on_one_worker`).
+* **A `use` table per file**, so `use tokio::spawn; spawn(x)` is the same sink
+  as `tokio::spawn(x)`.
+* **`cargo metadata`** names the files, replacing a guess with the resolved
+  version's own sources.
+* **The parser is a grammar** (D13). Of the old scanner's three limits the
+  `mod`-path one closes, the signature one narrows, and the macro one stays —
+  expanding a macro needs nightly, the [ADR-001](adr-001.md) D1 wall that also
+  keeps rustdoc-JSON out.
+* **No cache**: the committed description is already the artifact that keeps
+  the answer.
+
+A sink reached through a call says *this function threads something*, never
+*this function threads your argument*; connecting the two is dataflow, which
+this does not do, and that is the second reason the output is a note.
+
+### D10 — The describer flags `unsafe impl Send` and `unsafe impl Sync`.
+
+One syntactic pattern, and sound: the item is in the text or it is not. It is
+the most useful sentence the tool can write about a foreign crate — *this crate
+makes a promise the toolchain cannot check* — and the note says what no tool can
+do: see whether the promise is true. That is why the column stays a person's.
+
+### D11 — `nikaia describe` is written in Nikaia, because this language has to be written in.
+
+A language whose own toolchain is written in another one has no user forced to
+live with its gaps, and every gap this tree has found was found by running
+something. `describe` is the first tool that could be written in Nikaia without
+anything else moving, so it goes first. This is a decision about the project,
+not the shape, which is why no number stands behind it.
+
+### D12 — Nothing bootstraps through it, and it ships by the committed pre-lowering.
+
+The compiler compiles without `describe`: `NK2504` names the command and a
+person runs it, so there is no cycle. It ships by [ADR-002](adr-002.md) D4's
+route — the `.nika` kept beside the `.rs`, lowered at release by
+`nikaia lower-std` — so a binary install needs no compiler to build it.
+
+### D13 — The reading half is a grammar.
+
+The parser is a Nikaia grammar over the subset of Rust `describe` needs (`pub
+fn`, `pub struct`, `impl` headers and the type grammar under them), and it
+replaces the `syn` step of D9. The grammar removes the class of the scanner's
+errors, not the instance; the one limit that survives — an item a macro
+generates — survives `syn` too.
+
+### D14 — `std` gains a directory walk and a subprocess, and neither is on the reading half's critical path.
+
+Both are operating-system resources of the kind [ADR-289](adr-289.md) D6 put
+the socket in `std` for, so [ADR-289](adr-289.md) D2's subtraction covers them.
+On D16's route the Rust half may keep the I/O and hand the grammar the text, so
+the grammar waits on neither. The subprocess is [ADR-243](adr-243.md)'s
+`std::process`; the walk is `fs::walk`.
+
+### D15 — A measurement decides between options; where the choice rests on a project principle, a number is a diagnosis.
+
+[ADR-296](adr-296.md) D12's *measure before choosing a shape* applies where two
+shapes are genuinely on the table. Here the choice is made on a reason about
+the project, so if the Nikaia `describe` is slower than the scanner, that is a
+finding about this compiler and work owed — not a reason to go back. A
+measurement that cannot change the decision is still worth taking; calling it
+the reason is what this rule refuses.
+
+### D16 — A Nikaia piece reaches a Rust program by the committed pre-lowering, and the call across is an ordinary Rust call.
+
+Not a process, not the C ABI, not a dynamic library. The `.nika` is the source,
+the release step writes the `.rs` beside it, the `.rs` joins whatever crate
+wants it as a module, and every call is a plain Rust call with plain Rust types
+— no wire format, no serialisation, no `unsafe`, no second binary, and no
+interface to design, because a boundary whose types are Rust's own is one
+nothing has to agree about.
+
+### D17 — It holds wherever a piece has callers on both sides.
+
+Two such pieces: `describe`'s reading half, and HTTP/1.1's text half
+([ADR-303](adr-303.md) D6, [ADR-289](adr-289.md) D15). Because the lowered form is
+an ordinary Cargo module, a thing written in Nikaia is available to Rust
+programs that have never heard of Nikaia. What qualifies: a piece whose input
+is text or bytes and whose output is data, with a caller on each side. What
+does not: anything the compiler needs in order to compile itself, which stays
+out (D12).
+
+### D18 — The compiler takes `nikaia-std` as an ordinary dependency, and the graph stays acyclic.
+
+A lowered grammar is needed at run time, so `crates/nikaia`'s dev-dependency on
+`nikaia-std` becomes a real one. There is no cycle: `nikaia-std` has no build
+dependency on the compiler and must not grow one ([ADR-002](adr-002.md) D4).
+
+### D19 — The split D14 leaves is a staging with a written end, and its stalled state is named.
+
+A route that makes a partial move cheap makes a permanent one cheap too, and a
+`describe` whose parser is Nikaia and whose everything else is Rust would meet
+the letter of D11 and none of it. So the walk and the subprocess land in
+`std`, and the rest of the command crosses after them. The sign that the
+staging has stalled: `fs` has a directory walk and the Rust half is still doing
+the walking. It is a thing to look for, not a gate.
+
+### D20 — The emitter reads the descriptions, for `throws`.
+
+The described crates' ledger reaches the emitter beside the program's, and a
+call the description says can fail gets its `?`. It is read for that question only and not
+merged into `std`'s ledger: a described `sync = false` means *may block*, and a
+`std` entry's means *await it*.
+
+### D21 — A boundary the backend disagrees with is named as a stale description or ledger.
+
+A program never meets a `Result` or a future; both are this compiler's lowering
+of `throws` and of a pause. So where the backend says *is not a future*, that
+`?` needs a `Try`, or names a `Result`, the build names the boundary — the one
+the line calls, else a described crate whose sources moved, else the only one
+the file calls:
+
+* a described crate: *the description of `fremd` does not match the crate* —
+  run `nikaia describe fremd` again and review the diff;
+* a package: *the ledger of `util` does not match its sources* — build it again.
+
+The backend's words are kept as a note. Where no boundary answers, the message
+is left as the backend said it, and it is this compiler's defect. D21 covers
+what D5 cannot see: a description **edited** to say something the crate does
+not do.
+
+### D22 — A crate may ship its reviewed description, and `describe` adopts it.
+
+A crate may keep its reviewed description as `nikaia.contracts` beside its
+`Cargo.toml`, with its `[sources]` in `nikaia.derived`. For a `path` dependency,
+`nikaia describe` adopts that file instead of drafting: it checks the crate
+version the file names and the hash of every source, and copies both files into
+the project's `contracts/`. Without a shipped file it drafts, as before.
+
+The description is a judgement about the crate, so the crate's authors are the
+ones placed to make it once: they know which `unsafe` use is sound, which
+function is `cfg`-gated, what a signature hides. Every project that calls the
+crate would otherwise repeat a review of code it did not write, and each repeat
+is another chance to get it wrong. The checks are D5's rule applied at the
+copy: a shipped file that names another version or hashes differently
+describes code that is no longer there, and is refused rather than believed.
+
+The project keeps its own copy, and the build believes only that copy. The
+build stays a function of the project's tree, a description changes in the
+project's diff where a reviewer sees it, and the lockfile rule is unchanged.
+
+Rejected:
+
+* **Every project drafts again.** It is today's rule for crates that ship
+  nothing. As the only rule it throws away the one review made by the people
+  who know the crate, and multiplies the reviews nobody checks.
+* **The build reads the crate's file directly, with no copy in the project.**
+  A change in the crate would then change what the project's build believes
+  without anything changing in the project, so no diff in the project would show
+  it to a reviewer. It would also be a second place for D5's check, and a
+  version dependency, whose sources this compiler does not resolve, would have
+  no file to read.
+
+### D23 — `[rust-library]` may splice hand-written Rust into the crate: `root` becomes the crate root, and the lowered items move under `native`.
+
+*Added November 8, 2026 (owner's decision on #1427, option A), as
+[ADR-393](adr-393.md) D7; moved here unchanged. "D1" and "D6" below are
+ADR-393's.*
+
+```toml
+[rust-library]
+root   = "rust/lib.rs"   # hand-written; becomes the crate root
+native = "native"        # the lowered `pub` items go to nikaia_<name>::native
+```
+
+The build copies the directory that holds `root` (here `rust/`, all of it)
+into the generated crate unchanged, writes the lowered package under
+`src/<native>/`, and makes `root` the crate's `lib.rs`. The crate keeps one
+name and one version, and nothing generated is edited by hand (D1). The
+hand-written Rust names the package's items as `crate::native::…` and decides
+what it re-exports; their names cannot clash with its own. It is part of the
+crate for D6: every feature alone and all together build with it. Without the
+table, the lowered items stay at the crate root (D1). `native` defaults to
+`"native"`.
+
+* `NK1348`: `[rust-library] root` names a file that does not exist, or
+  `[rust-library]` where the artifact is not a rust-library.
+
+### D24 — A package's Nikaia code calls the package's own Rust with a plain call, and the path starts at the crate root.
+
+*Added November 19, 2026 (owner's decision, answering ADR-403 §4's first
+item).*
+
+A function, method or `test` block of a package that has Rust of its own (a
+rust-library with D23's `root`, or std) calls an item of that Rust as it calls
+any other: `rt::config::Config::parse(text)` in std, with no mark at the call. The path is
+read from the crate root, the directory that holds `[rust-library] root`, or
+`nikaia-std`'s `src/` for std, so `rt::config::Config::parse` is the Rust
+`crate::rt::config::Config::parse`. The item must be visible at the crate root:
+`pub(crate)` or wider. A narrower item (`pub(super)`, private) is not
+widened for the call; the describer (D27) names it and the call stays refused
+until the Rust says `pub(crate)`.
+
+That is the same reach a `test` block already has over the package's Nikaia
+names (ADR-269, [ADR-403](adr-403.md) D3), carried to the half of the package
+written in Rust. A Rust program may not reach more than this either: what is
+`pub(crate)` in the crate is visible to every module of the crate, which the
+lowered package is (D23).
+
+### D25 — The package describes its own Rust in `contracts/crate.contracts`, reviewed like D5's descriptions.
+
+The entries for the package's own Rust sit in `contracts/crate.contracts`,
+with `contracts/crate.derived` beside it holding the hashes of the Rust files
+the entries were drafted from. `crate` is the name Rust gives a crate's own
+root and no dependency can carry it, so the file cannot meet a dependency's
+description. Everything D1-D5 say of a description holds: an entry is what
+every analysis reads at the boundary, a hand edit is expected, and where a
+recorded hash disagrees the build refuses with `NK2505` and names the
+command.
+
+*Corrected on the way.* The owner's question was answered first with "in its
+`nikaia.contracts`". That file is the package's ledger, generated: Part III
+13.5 regenerates it on every build, resolves a merge conflict by regenerating
+it, and makes it a pure function of the source tree and the toolchain, which
+`--locked` checks. A reviewed entry in it would be lost or would make the
+ledger half generated, so the description has its own file, which is where
+D5 already puts one.
+
+### D26 — The entries are `pub = false`: the package's own Rust stays the package's.
+
+An entry of `contracts/crate.contracts` carries `pub = false`, as std's own
+entries for its `pub(crate)` Rust already do. A dependent sees none of them: no
+contract enters the dependent's view, no name is published, and the Rust item
+may change without a version raise, as [ADR-403](adr-403.md) D2 says of a
+private name a test reaches. `pub = true` in this file is refused: what the
+package publishes is its Nikaia API and, for a rust-library, what D23's `root`
+re-exports, both already described by the ledger.
+
+### D27 — `nikaia describe crate` drafts the entries, and an undescribed call names it.
+
+`nikaia describe crate` reads the package's own Rust with the grammar of
+D11-D15 and drafts an entry for every `pub(crate)` or wider function the
+package's Nikaia code calls, by D2-D4: a signature translated where it
+answers, `?` where it does not, and D9's note where a bound says the call
+threads. It writes the draft beside the reviewed file and never over it (D5).
+A call into the package's own Rust that no entry covers is `NK2504`, the
+refusal D1 gives a declared crate, once per item, and its message names
+`nikaia describe crate`. A call to an item narrower than `pub(crate)` is
+named by the describer and by the refusal as such (D24). No undescribed call
+compiles: D1 holds for the package's own Rust as for any other.
+
+### D28 — A Rust module whose name a Nikaia module of the package also has is refused, and std keeps its own entries where they are.
+
+A Rust module and a Nikaia module of the same package with the same name
+would make a path such as `config::parse` mean two things, so the build
+refuses the pair and names both files; the build of this decision reserves
+the code. Nothing is resolved by order or by preference.
+
+std's description is `std.contracts`, written by hand as a whole rather than
+generated, so the entries for its own Rust stay in it, `pub = false`, as
+`env::pairs` and the others are (the supervisor's amendment to ADR-403 D3,
+#2147, which found that std's lowered packages call `pub(crate)` Rust beside
+them). D24-D27 give that use its rule: what std did for its runtime is the
+general way, and std's file is the one place where D25's file and the ledger
+are one.
+
+## 5. Consequences
+
+* **Every analysis reaches the boundary and reads an entry there.** The
+  crossing verdict, `keeps`, `sync` and `throws` stop failing closed where a
+  signature answers plainly, and C.1 becomes keepable at the one place it was
+  not.
+* **`NK2502` reaches a described call** where `threads` says `true`, so the
+  crossing experiments under `examples/foreign-runtime/` are refused by this
+  compiler, not `rustc` — including one made through `unsafe impl Send`, which
+  defeats a bound and cannot touch a line a person wrote in a description.
+* **A second hand-written claim exists**, and that is the price; the
+  describer's note makes it less likely to be skipped, not safer to get wrong.
+  A note that cried wolf is the failure mode, which is why one names the
+  parameter and the bound and is never written on weaker evidence.
+* **The first tool written in the language**, and the right first one: its
+  output is reviewed by a person (D5), which is where a security-adjacent
+  tool's risk is bearable.
+* **The route is general.** Pieces of the compiler take D16's route, and
+  [ADR-294](adr-294.md) is the road the rest of the compiler takes; the
+  grammar lives under `crates/nikaia-std/src/compiler/`, which `std` does not
+  publish (Part III `NK1186`). *Corrected on the way:* the archived text named
+  `crates/nikaia-std/src/tools/`, the directory's name before #1600.
+* **What it costs:** a review per crate, proportional to what the program
+  calls; a file pair per crate under version control; and a committed `.rs`
+  that must not drift from its `.nika` — `crates/nikaia/tests/it/sysroot.rs`
+  fails on that, and anything on the route joins that test. *Corrected on the
+  way:* the archived text named `crates/nikaia/tests/sysroot.rs`, before the
+  integration tests moved under `tests/it/`.
+* **What it does not change:** what a foreign call may be handed. A lock and a
+  `Shared` still do not cross into foreign code ([ADR-312](adr-312.md) D8,
+  D9); an entry says what the callee takes, not that the
+  rule bends.
+* **A package's Rust is tested from Nikaia** (D24-D28). The tests of
+  `rt::config` (#2082) become `test` blocks that call `rt::config::Config::parse`
+  and compare what it answers, with no new public API and no move of the
+  function first. The same holds for a rust-library's hand-written Rust.
+* **ADR-403 §4's first item is closed**; its second (one std package reaching
+  another's private names) stays open there.
+
+## 6. What this does not decide
+
+* **A described crate's own dependencies.** A type from a transitive crate in a
+  signature is named in the entry and described when a program reaches for it.
+* **Regenerating a draft without losing the edits.** A regeneration writes a
+  fresh draft and shows the diff against the reviewed file; merging is the
+  reviewer's, and a merge the command makes is not decided here.
+* **A method's entry.** What an `impl`'s `pub fn` is at a foreign boundary;
+  the grammar reads methods and the draft does not write them. For D24 this
+  means a method of the package's own Rust (`Config::parse` is an associated
+  function, which is read; `config.get(..)` on a value is a method) waits for
+  the same answer.
+* **Whether the argument is the thing that threads** (D9's last paragraph): the
+  dataflow that would answer it is a third tool, and no program has asked.
+* **`threads` for a Nikaia function** — a `spawn` in a `.nika` body is
+  `NK2101`'s — and **a `threads` that depends on a type parameter**, which
+  `crosses` also does without ([ADR-123](adr-123.md) §4).
+* **How much of Rust the grammar covers** beyond what `describe` needs; what it
+  cannot translate is `?` (D4).
+* **Whether a Nikaia-written module is published to crates.io on its own.** The
+  lowered form would work; whether the project carries that promise is not
+  asked.
+* **Rust narrower than `pub(crate)`** reached from Nikaia (D24): no case has
+  asked, and widening it for a test would be a second visibility rule.
+* **One package reaching another package's Rust** that the other does not
+  publish: D26 refuses it, and a case that needs it is a new question.
+
+Not open here: *whether the compiler itself is ever written in Nikaia* is
+[ADR-294](adr-294.md)'s.

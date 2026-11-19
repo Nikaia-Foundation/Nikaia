@@ -72,7 +72,7 @@ pub trait ProjectDriveHost {
     /// The entry package as `cargo publish` takes it:
     /// `project_drive_publishable` over its root and its manifest.
     fn write_publishable(ref self) sync throws
-    /// The entry package's crate with its hand-written root (ADR-393 D7):
+    /// The entry package's crate with its hand-written root (ADR-rust-boundary-1 D23):
     /// `project_drive_spliced` over its root and its manifest, into the
     /// crate's `src` with the `lowered` package.
     fn write_spliced(ref self, src: ref fs::Path, lowered: ref String) sync throws
@@ -107,7 +107,7 @@ pub trait ProjectDriveHost {
     fn member_manifest(ref self, at: i64, rust: ref String) -> String sync throws
     /// `[features]` of the manifest (ADR-393 D2), as read.
     fn features(ref self) -> Vec[ManifestFeature] sync
-    /// `[rust-library]` of the manifest (ADR-393 D7), where it has the table.
+    /// `[rust-library]` of the manifest (ADR-rust-boundary-1 D23), where it has the table.
     fn rust_library(ref self) -> ManifestRustLibrary? sync
     /// The path of `nikaia.toml` and its text, for a refusal shown in it.
     fn manifest_text(ref self) -> (String, String) sync
@@ -226,7 +226,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
         }
     }
-    // **`[rust-library]` is a rust-library's** (ADR-393 D7, `NK1348`), and
+    // **`[rust-library]` is a rust-library's** (ADR-rust-boundary-1 D23, `NK1348`), and
     // its `root` a file of the package.
     if !host.tests_build() && (subcommand == "build" || subcommand == "run") {
         let splice_refused = project_drive_splice_checked(host, rust_library)
@@ -1012,7 +1012,7 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     return 0
 }
 
-/// **`[rust-library]` checked** (ADR-393 D7): `NK1348` where the artifact
+/// **`[rust-library]` checked** (ADR-rust-boundary-1 D23): `NK1348` where the artifact
 /// is not a rust-library, or `root` names no file of the package, shown at
 /// the table or at `root`; the exit code, 0 where nothing is refused.
 fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: bool) -> i32 sync {
@@ -1072,7 +1072,7 @@ fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
 
 /// **The path of a member's root in its crate** (#1447): `crate::<native>`
 /// for the entry of a rust-library build whose `[rust-library] root` splices
-/// it under a hand-written root (ADR-393 D7, `project_drive_spliced`),
+/// it under a hand-written root (ADR-rust-boundary-1 D23, `project_drive_spliced`),
 /// `crate` for every other.
 fn project_drive_crate_root[H: ProjectDriveHost](host: ref H, spliced: bool) -> String sync {
     if !spliced {
@@ -1082,7 +1082,7 @@ fn project_drive_crate_root[H: ProjectDriveHost](host: ref H, spliced: bool) -> 
     return f"crate::{table.native}"
 }
 
-/// **The crate with a hand-written root** (ADR-393 D7), under the package
+/// **The crate with a hand-written root** (ADR-rust-boundary-1 D23), under the package
 /// `root` whose manifest is `file`: the directory holding `[rust-library]
 /// root` copied into `src` as it is, the `lowered` package written as
 /// `src/<native>/mod.rs`, and `root` made `src/lib.rs` with `pub mod

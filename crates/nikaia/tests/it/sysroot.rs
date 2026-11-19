@@ -35,7 +35,7 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
         "std has a Nikaia half, and this test is about it (ADR-014 D1)"
     );
     // **And the toolchain's own**, which rides the same release step
-    // ([ADR-290](../../../docs/specification/adr/adr-290.md) D16): the `.rs` is
+    // ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D16): the `.rs` is
     // committed, so a change to the `.nika` that is not re-lowered is a silent
     // divergence, and that is as true of `tools/` as of `std`. The tools are
     // one package, lowered into one file (ADR-294).
@@ -45,7 +45,7 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
             .tool_modules()
             .expect("the toolchain's Nikaia modules")
             .is_empty(),
-        "`src/compiler` holds the reading half of `nikaia describe` (ADR-290 D13)"
+        "`src/compiler` holds the reading half of `nikaia describe` (ADR-rust-boundary-1 D13)"
     );
     // **And `std`'s run-time package** (#723), lowered the same way into a
     // file of its own: the half every program compiles.

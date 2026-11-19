@@ -473,7 +473,7 @@ pub enum Command {
         sysroot: Option<PathBuf>,
     },
     /// Write a draft ledger for a Rust crate's boundary
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D2).
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D2).
     ///
     /// The command `NK2504` names. It reads the crate's `pub` signatures,
     /// translates them by Part III 15.2's table, and writes
@@ -686,7 +686,7 @@ fn lower_std_bounds(
     Ok(0)
 }
 
-/// `nikaia describe <crate>` ([ADR-290](../../../docs/specification/adr/adr-290.md) D2).
+/// `nikaia describe <crate>` ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D2).
 ///
 /// **What it prints is what a reviewer does next**, which is the whole reason
 /// the command exists rather than the file appearing during a build: the draft

@@ -4,7 +4,7 @@
 // program is built.
 //
 // The fourth piece of the compiler moved from Rust to Nikaia (0.0.250), by
-// ADR-290's route: lowered ahead of time by `nikaia lower-std` to `fixed.rs`
+// ADR-rust-boundary-1's route: lowered ahead of time by `nikaia lower-std` to `fixed.rs`
 // beside it, `include!`d as `nikaia_std::compiler::fixed`, and called from the
 // compiler's `fixed` module. It is the program ADR-285 was decided for: FNV-1a
 // is a `u64`, `^` and a wrapping multiply over a text's bytes, and CHD cuts the

@@ -1,6 +1,6 @@
 //! **A Rust file's public surface, read by a Nikaia grammar** — driven from
 //! Rust, which is the whole of what
-//! [ADR-290](../../../docs/specification/adr/adr-290.md) D16 decided.
+//! [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D16 decided.
 //!
 //! `src/compiler/rust.nika` is the source; `src/compiler/rust.rs` beside it is what
 //! `nikaia lower-std` made of it and what this links against. There is no
@@ -109,7 +109,7 @@ fn lines(items: &[RustItem<'_>], path: &str, out: &mut Vec<String>) {
             }
             // A `fn` that is not `pub`. Reported rather than skipped, because
             // the call graph goes through it
-            // ([ADR-290](../../../docs/specification/adr/adr-290.md) D9), and
+            // ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D9), and
             // shown here so a test that asserts what is *not* an item can see
             // that this one is not an offer either.
             RustItem::Hidden(f) => out.push(format!("{path}{}() (private)", f.name)),
@@ -141,7 +141,7 @@ fn read(text: &str) -> Vec<String> {
 /// **The four items that are not items, and the fifth that is in the wrong
 /// place.**
 ///
-/// This is the measurement [ADR-290](../../../docs/specification/adr/adr-290.md)
+/// This is the measurement [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D3 rests on, written as an assertion rather than as a sentence: run
 /// `nikaia describe` over the same text and it reports `spectre`, `phantom`,
 /// `hidden` and `buried` as functions of the crate, and puts `seen` at the
@@ -161,7 +161,7 @@ fn nothing_that_is_not_an_item_is_reported() {
 
     // **And these are items the crate does not offer**, reported and marked
     // rather than dropped: a private `fn` is on the way to a public one, and
-    // [ADR-290](../../../docs/specification/adr/adr-290.md) D9's call graph
+    // [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D9's call graph
     // goes through it. `pub(crate)` is on this list because it is not `pub`.
     for hidden in ["republish", "secret", "not_public"] {
         let line = found
@@ -234,7 +234,7 @@ fn a_signature_is_read_with_its_types_and_its_path() {
 }
 
 /// **`unsafe impl Send for …`**, which is
-/// [ADR-290](../../../docs/specification/adr/adr-290.md) D10's flag and the most
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D10's flag and the most
 /// useful sentence a tool can write about a foreign crate. It arrives free with
 /// the parser: the word is part of the item header, so reading the header reads
 /// it.

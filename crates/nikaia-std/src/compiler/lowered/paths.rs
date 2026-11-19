@@ -153,3 +153,78 @@ pub(crate) fn stands_at(c: &[scalar], at: i64, w: &[scalar]) -> bool {
     true
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let lib = module_of("src/lib.rs");
+    if !(nikaia_std::index::or(lib.as_deref(), || "none") == "") { nikaia_std::abort::assertion_failed("assert((lib ?? \"none\") == \"\")", None, &[("lib ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(lib.as_deref(), || "none")))).shown()), ]) };
+    let nested = module_of("src/a/b.rs");
+    if !(nikaia_std::index::or(nested.as_deref(), || "none") == "a::b") { nikaia_std::abort::assertion_failed("assert((nested ?? \"none\") == \"a::b\")", None, &[("nested ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(nested.as_deref(), || "none")))).shown()), ]) };
+    let dir = module_of("src/a/mod.rs");
+    if !(nikaia_std::index::or(dir.as_deref(), || "none") == "a") { nikaia_std::abort::assertion_failed("assert((dir ?? \"none\") == \"a\")", None, &[("dir ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(dir.as_deref(), || "none")))).shown()), ]) };
+    let main = module_of("src/main.rs");
+    if !(main.is_none()) { nikaia_std::abort::assertion_failed("assert(main == null)", None, &[("main", (&&nikaia_std::abort::Operand(&(main))).shown()), ]) };
+    let bin = module_of("src/bin/tool.rs");
+    if !(bin.is_none()) { nikaia_std::abort::assertion_failed("assert(bin == null)", None, &[("bin", (&&nikaia_std::abort::Operand(&(bin))).shown()), ]) };
+    let build = module_of("build.rs");
+    if !(build.is_none()) { nikaia_std::abort::assertion_failed("assert(build == null)", None, &[("build", (&&nikaia_std::abort::Operand(&(build))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let group = exported("m", "inner::{a, b as c}");
+    if !(group.len() == 2) { nikaia_std::abort::assertion_failed("assert(group.len() == 2)", None, &[("group.len()", (&&nikaia_std::abort::Operand(&(group.len() as i64))).shown()), ]) };
+    if !(unsafe { nikaia_std::proven::read(&group, (0) as usize) }.prefix == "inner") { nikaia_std::abort::assertion_failed("assert(group[0].prefix == \"inner\")", None, &[("group[0].prefix", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&group, (0) as usize) }.prefix))).shown()), ]) };
+    let a: Option<Named> = Some(Named { name: String::from("a"), alias: String::from("a") });
+    if !(unsafe { nikaia_std::proven::read(&group, (0) as usize) }.name == a) { nikaia_std::abort::assertion_failed("assert(group[0].name == a)", None, &[("group[0].name", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&group, (0) as usize) }.name))).shown()), ("a", (&&nikaia_std::abort::Operand(&(a))).shown()), ]) };
+    let c: Option<Named> = Some(Named { name: String::from("b"), alias: String::from("c") });
+    if !(unsafe { nikaia_std::proven::read(&group, (1) as usize) }.name == c) { nikaia_std::abort::assertion_failed("assert(group[1].name == c)", None, &[("group[1].name", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&group, (1) as usize) }.name))).shown()), ("c", (&&nikaia_std::abort::Operand(&(c))).shown()), ]) };
+    let glob = exported("", "crate::inner::*");
+    if !(nikaia_std::index::get(&glob, 0).prefix == "crate::inner") { nikaia_std::abort::assertion_failed("assert(glob[0].prefix == \"crate::inner\")", None, &[("glob[0].prefix", (&&nikaia_std::abort::Operand(&(nikaia_std::index::get(&glob, 0).prefix))).shown()), ]) };
+    if !(unsafe { nikaia_std::proven::read(&glob, (0) as usize) }.name.is_none()) { nikaia_std::abort::assertion_failed("assert(glob[0].name == null)", None, &[("glob[0].name", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&glob, (0) as usize) }.name))).shown()), ]) };
+    let single = exported("", " self::x::Y as Z ");
+    if !(nikaia_std::index::get(&single, 0).prefix == "self::x") { nikaia_std::abort::assertion_failed("assert(single[0].prefix == \"self::x\")", None, &[("single[0].prefix", (&&nikaia_std::abort::Operand(&(nikaia_std::index::get(&single, 0).prefix))).shown()), ]) };
+    let z: Option<Named> = Some(Named { name: String::from("Y"), alias: String::from("Z") });
+    if !(unsafe { nikaia_std::proven::read(&single, (0) as usize) }.name == z) { nikaia_std::abort::assertion_failed("assert(single[0].name == z)", None, &[("single[0].name", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&single, (0) as usize) }.name))).shown()), ("z", (&&nikaia_std::abort::Operand(&(z))).shown()), ]) };
+    let bare = exported("", "spawn");
+    let one: Option<Named> = Some(Named { name: String::from("spawn"), alias: String::from("spawn") });
+    if !(nikaia_std::index::get(&bare, 0).name == one) { nikaia_std::abort::assertion_failed("assert(bare[0].name == one)", None, &[("bare[0].name", (&&nikaia_std::abort::Operand(&(nikaia_std::index::get(&bare, 0).name))).shown()), ("one", (&&nikaia_std::abort::Operand(&(one))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let rooted = bases(&Export { at: String::from("a::b"), prefix: String::from("crate::x"), name: None });
+    if !(rooted == vec!["x"]) { nikaia_std::abort::assertion_failed("assert(rooted == [\"x\"])", None, &[("rooted", (&&nikaia_std::abort::Operand(&(rooted))).shown()), ("[\"x\"]", (&&nikaia_std::abort::Operand(&(vec!["x"]))).shown()), ]) };
+    let root = bases(&Export { at: String::from("a::b"), prefix: String::from("crate"), name: None });
+    if !(root == vec![""]) { nikaia_std::abort::assertion_failed("assert(root == [\"\"])", None, &[("root", (&&nikaia_std::abort::Operand(&(root))).shown()), ("[\"\"]", (&&nikaia_std::abort::Operand(&(vec![""]))).shown()), ]) };
+    let own = bases(&Export { at: String::from("a::b"), prefix: String::from("self::x"), name: None });
+    if !(own == vec!["a::b::x"]) { nikaia_std::abort::assertion_failed("assert(own == [\"a::b::x\"])", None, &[("own", (&&nikaia_std::abort::Operand(&(own))).shown()), ("[\"a::b::x\"]", (&&nikaia_std::abort::Operand(&(vec!["a::b::x"]))).shown()), ]) };
+    let parent = bases(&Export { at: String::from("a::b"), prefix: String::from("super::x"), name: None });
+    if !(parent == vec!["a::x"]) { nikaia_std::abort::assertion_failed("assert(parent == [\"a::x\"])", None, &[("parent", (&&nikaia_std::abort::Operand(&(parent))).shown()), ("[\"a::x\"]", (&&nikaia_std::abort::Operand(&(vec!["a::x"]))).shown()), ]) };
+    let bare = bases(&Export { at: String::from("a::b"), prefix: String::from("x"), name: None });
+    if !(bare == vec!["a::b::x", "x"]) { nikaia_std::abort::assertion_failed("assert(bare == [\"a::b::x\", \"x\"])", None, &[("bare", (&&nikaia_std::abort::Operand(&(bare))).shown()), ("[\"a::b::x\", \"x\"]", (&&nikaia_std::abort::Operand(&(vec!["a::b::x", "x"]))).shown()), ]) };
+    let longer = after("crated", "crate");
+    if !(longer.is_none()) { nikaia_std::abort::assertion_failed("assert(longer == null)", None, &[("longer", (&&nikaia_std::abort::Operand(&(longer))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let parts = split_top_level("a: Vec<(u8, u8)>, b: [u8; 2] ,");
+    if !(parts == vec!["a: Vec<(u8, u8)>", "b: [u8; 2]"]) { nikaia_std::abort::assertion_failed("assert(parts == [\"a: Vec<(u8, u8)>\", \"b: [u8; 2]\"])", None, &[("parts", (&&nikaia_std::abort::Operand(&(parts))).shown()), ("[\"a: Vec<(u8, u8)>\", \"b: [u8; 2]\"]", (&&nikaia_std::abort::Operand(&(vec!["a: Vec<(u8, u8)>", "b: [u8; 2]"]))).shown()), ]) };
+    let only_name = joined("", "x");
+    if !(only_name == "x") { nikaia_std::abort::assertion_failed("assert(only_name == \"x\")", None, &[("only_name", (&&nikaia_std::abort::Operand(&(only_name))).shown()), ]) };
+    let only_at = joined("a", "");
+    if !(only_at == "a") { nikaia_std::abort::assertion_failed("assert(only_at == \"a\")", None, &[("only_at", (&&nikaia_std::abort::Operand(&(only_at))).shown()), ]) };
+    let both = joined("a", "x");
+    if !(both == "a::x") { nikaia_std::abort::assertion_failed("assert(both == \"a::x\")", None, &[("both", (&&nikaia_std::abort::Operand(&(both))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn paths_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("paths::a_file_is_the_module_its_path_names", __nikaia_test_0),
+        ("paths::a_pub_use_offers_what_it_names", __nikaia_test_1),
+        ("paths::a_use_path_resolves_from_where_it_was_written", __nikaia_test_2),
+        ("paths::only_the_outer_commas_split", __nikaia_test_3),
+    ]
+}

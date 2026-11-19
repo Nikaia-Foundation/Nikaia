@@ -1406,8 +1406,8 @@ pub(crate) fn bounding_mixed_fits(walk: &mut BoundsWalk, linear: &Expr, ranged: 
     let mut least = a;
     let mut most = b;
     if subtracts {
-        least = 0 - b;
-        most = 0 - a;
+        least = match b.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        most = match a.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return false };
     }
     let least_term = walk.arena.int(least);
     let most_term = walk.arena.int(most);

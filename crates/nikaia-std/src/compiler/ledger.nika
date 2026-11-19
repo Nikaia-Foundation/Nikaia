@@ -3,7 +3,7 @@
 // **How a ledger is written down, read back** (Part III 13.5, ADR-251).
 //
 // The sixth piece of the compiler moved from Rust to Nikaia (0.0.258), by
-// ADR-290's route and on ADR-294's road: lowered ahead of time by
+// ADR-rust-boundary-1's route and on ADR-294's road: lowered ahead of time by
 // `nikaia lower-std` to `ledger.rs` beside it, `include!`d as
 // `nikaia_std::compiler::ledger`, and called from the compiler's
 // `Ledger::parse`, which is left holding what each key *means*.

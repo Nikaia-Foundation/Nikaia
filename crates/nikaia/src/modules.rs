@@ -423,8 +423,8 @@ pub struct Program {
     /// every unit by its path.
     pub entry_shown_as: Option<String>,
     /// **What the manifest's described crates say about their boundary**
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1,
-    /// [ADR-290](../../../docs/specification/adr/adr-290.md) D20): read by the
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1,
+    /// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D20): read by the
     /// emitter for one question, whether a call into one can fail. Empty
     /// outside a project and for a project that declares no crate.
     pub described: crate::contracts::Ledger,

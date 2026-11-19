@@ -57,7 +57,7 @@ pub struct EmitState {
     pub own_methods: MethodIndex,
     /// The library's functions by a method's name.
     pub library_methods: MethodIndex,
-    /// A described crate's contracts (ADR-290).
+    /// A described crate's contracts (ADR-rust-boundary-1).
     pub described: Ledger,
     /// The structs and enums that hold a view, and so take a lifetime.
     pub borrowing: collections::BTreeSet[String],
@@ -164,7 +164,7 @@ pub struct EmitState {
     /// `on_block_types`.
     pub package_grammar: bool,
     /// The path of the package's root a generated sum is written below:
-    /// `crate`, or `crate::<native>` under a hand-written root (ADR-393 D7,
+    /// `crate`, or `crate::<native>` under a hand-written root (ADR-rust-boundary-1 D23,
     /// #1447).
     pub crate_root: String,
     /// **The package is offered to Rust** (`artifact = "rust-library"`,
