@@ -1,0 +1,22 @@
+// An index into what a lock handed out (ADR-281 D22, D23, D24, #2208): a
+// `Seen[Vec[T]]` is indexed as the list it stamps, by an entry, a range or a
+// map's key, with no type written down.
+use std::collections
+
+fn main() throws {
+    let order: SharedMut[Vec[i64]] = SharedMut([7, 8])
+    let seen = order.get()
+    println(f"{seen.len()}")
+    println(f"{seen[0]}")
+    println(f"{order.get()[1]}")
+    let start: Vec[String] = ["ada", "grace"]
+    let names: SharedMut[Vec[String]] = SharedMut(start)
+    let read = names.get()
+    println(read[1])
+    let part = seen[0..1]
+    println(f"{part.len()}")
+    let ages: SharedMut[collections::HashMap[String, i64]] = SharedMut(collections::HashMap())
+    let kept = ages.get()
+    let age = kept["ada"] ?? 36
+    println(f"{age}")
+}
