@@ -1,12 +1,15 @@
 // `root.path()` is the directory of a root as an `fs::Path`, never `null`:
-// `f"{tmp.path()}/p.txt"` names the file a scratch root opens for
-// `"p.txt"`, and `Anywhere` gives `.` (ADR-raw-sinks-1 D12, #2326).
+// `f"{tmp.path().to_text()}/p.txt"` names, as a program's argument, the file
+// a scratch root opens for `"p.txt"`, and `Anywhere` gives `.`
+// (ADR-raw-sinks-1 D12, ADR-319 D4, #2326).
 
 use std::fs
+use std::process
 
 fn main() throws {
     let tmp = fs::scratch()
     fs::write("p.txt", tmp, "hi")
-    println(fs::read_to_string(f"{tmp.path()}/p.txt", fs::Root::Anywhere))
+    let r = process::run("cat", [f"{tmp.path().to_text()}/p.txt"])
+    println(r.stdout)
     println(f"{fs::Root::Anywhere.path()}")
 }
