@@ -1,0 +1,26 @@
++STR
++DOC ---
+=VAL <tag:yaml.org,2002:str> :a
+-DOC ...
+first document: 4 events
++STR
++DOC ---
+=VAL <tag:yaml.org,2002:str> :a
+-DOC ...
++DOC ---
+=VAL :b
+-DOC
+to the end: -1
++STR
++DOC
++SEQ
++SEQ
++SEQ
+=VAL :x
+-SEQ
+-SEQ
+-SEQ
+-DOC
+-STR
+default limits: 11
+depth 2: -1

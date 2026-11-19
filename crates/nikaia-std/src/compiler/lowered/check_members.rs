@@ -101,6 +101,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_member_is_refused(&mut self, head: &str, member: &str, method: bool, members: &[String], span: &Span) {
+        if !method && head == "process" && member == "shell" {
+            self.findings.push(check_refusal("NK1314", span, String::from("no shell is configured: `std` runs no shell (ADR-raw-sinks-1 D9)."), vec![String::from("A shell reads its text as code, and a check of that text holds only for the one shell that reads it, so `std` starts none, on any platform.")], Some(String::from("Write the command as `process::run(\"PROGRAM\", [\"ARG\", ...])`, whose arguments reach the program one by one and are never read as code."))));
+            return;
+        }
         let mut shown: String = nikaia_std::block::Text::from(head.to_string());
         if head == "str" { shown = String::from("String"); }
         let mut written: String = format!("{}::{}", head, member);

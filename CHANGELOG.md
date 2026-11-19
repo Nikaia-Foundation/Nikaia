@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1460] — 2026-11-19
+
+**Builders' changes**
+- `yaml::Yaml::events(bytes; limits:)` walks a YAML stream's events one at a time (`for ev in ...`); a `break` ends the parse there, so a later error is never read. Event's strings are owned.
+- A rule that commits after a `count(p)` or `here` is no longer refused with NK1370. An emitting `@stream` entry may take values and options and have more than one repetition (the one whose items emit is folded); a cross-package walk takes its options by value; a bound `text(p)` in a streamed parse reads the right bytes.
+
+## [0.0.1459] — 2026-11-19
+
+**std runs no shell: process::shell and process::is_word leave std, a call is refused with NK1314 (ADR-raw-sinks-1 D9) (#2197)**
+- std runs no shell (ADR-raw-sinks-1 D9): `process::shell` and `process::is_word` are gone from std, and a call to `process::shell` is refused with NK1314, whose help writes the command as `process::run("PROGRAM", ["ARG", ...])`.
+
 ## [0.0.1458] — 2026-11-19
 
 **A privileged start ends before main unless the environment is untrusted (ADR-397 D3), the check in crates/unsafe/privileged-start (#2239)**

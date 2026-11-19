@@ -802,16 +802,21 @@ enum GrammarUndo {
     Passed(bool),
 }
 
-/// Whether a pattern can fail: a `*` or `?` repetition, a cut, and what holds
-/// only those cannot; anything else may.
-fn grammar_can_fail(pattern: ref Pattern) -> bool sync {
+/// Whether a pattern can fail: a `*` or `?` repetition, a cut, the position
+/// `here`, a `count(p)` (zero times is a count, #1443), and what holds only
+/// those cannot; anything else may.
+fn grammar_can_fail(world: ref CheckWorld, pattern: ref Pattern) -> bool sync {
     return match pattern {
         Pattern::Repeat { rep, .. } => rep != Repeat::Star && rep != Repeat::Optional,
         Pattern::Cut => false,
-        Pattern::Group(inner) => grammar_can_fail(inner.node),
-        Pattern::Bind { pat, .. } => grammar_can_fail(pat.node),
-        Pattern::Seq(parts) => parts.iter().any(fn(part) { grammar_can_fail(part.node) }),
-        Pattern::Choice(parts) => parts.iter().all(fn(part) { grammar_can_fail(part.node) }),
+        Pattern::Ref { name, args, .. } => {
+            let called = world.words.resolve(name)
+            !((called == "here" && args.len() == 0) || (called == "count" && args.len() == 1))
+        },
+        Pattern::Group(inner) => grammar_can_fail(world, inner.node),
+        Pattern::Bind { pat, .. } => grammar_can_fail(world, pat.node),
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { grammar_can_fail(world, part.node) }),
+        Pattern::Choice(parts) => parts.iter().all(fn(part) { grammar_can_fail(world, part.node) }),
         else => true,
     }
 }
@@ -851,7 +856,7 @@ fn grammar_undo_in(world: ref CheckWorld, pattern: ref Pattern, target: ref Stri
                                     Pattern::Cut => break,
                                     else => {},
                                 }
-                                if grammar_can_fail(parts[j].node) {
+                                if grammar_can_fail(world, parts[j].node) {
                                     after = true
                                 }
                                 j += 1
