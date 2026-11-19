@@ -482,7 +482,8 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     };
     if bytes && name == "split" && args.len() == 1 { state.facts.bytes_splits.insert(id_of(receiver) as i64); }
     let std_type = check_core_method_ledger_type(&on, bytes);
-    if std_type == "" && name == "widening_mul" && args.len() == 1 {
+    let wide = name == "widening_mul" && args.len() == 1 || name == "narrowing_div_rem" && args.len() == 2;
+    if std_type == "" && wide {
         let numbers = state.open_numbers_in(world, receiver);
         if !numbers.is_empty() { state.flow.open_wides.insert(id_of(expr) as i64, *unsafe { nikaia_std::proven::read(&numbers, (0) as usize) }); }
     }

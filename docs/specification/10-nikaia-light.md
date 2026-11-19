@@ -596,6 +596,18 @@ the result is the exact value, and past `high == 0` with the low half within
 the receiver's type it is the product, so an index computed from it is proved
 there.
 
+`narrowing_div_rem` is the way back (#2013): `high.narrowing_div_rem(low,
+divisor)` divides the double-width value `high * 2^w + low` (the halves as
+`widening_mul` gives them) by a `divisor` of the receiver's type and gives
+`(quotient, rest)?`, rounded as `/` and `%` round: the quotient toward zero,
+the rest with the sign of the dividend. It is `null` where the divisor is `0`
+or the quotient does not fit the receiver's type; the rest always fits, it is
+smaller than the divisor. It is on the same five types.
+
+```nika
+let (q, r) = high.narrowing_div_rem(low, d) ?? return   // q * d + r == high * 2^64 + low
+```
+
 Two conversions lose digits without anything failing:
 
 * **An `f64` to an `f32`** rounds to the nearest `f32` where it is within the

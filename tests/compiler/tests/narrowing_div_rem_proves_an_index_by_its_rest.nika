@@ -1,0 +1,33 @@
+// What `let (q, r) = high.narrowing_div_rem(low, d) ?? return` tells the
+// bounds walk (#2013): the rest is smaller than the divisor, so `xs[r]` past
+// `r >= 0` is proved where `xs` holds `d` elements; and for a type of at most
+// 32 bits with a constant divisor `d * q + r == high * 2^w + low`, so a
+// bounded dividend bounds the quotient.
+pub fn rest_index(xs: ref Vec[i64], high: i64, low: u64) -> i64 {
+    if xs.len() < 10 {
+        return 0
+    }
+    let (q, r) = high.narrowing_div_rem(low, 10) ?? return 0
+    if r >= 0 {
+        return xs[r] + q
+    }
+    return 0
+}
+
+pub fn exact_index(xs: ref Vec[i64], low: u32) -> i64 {
+    if xs.len() < 20 {
+        return 0
+    }
+    let zero: i32 = 0
+    let (q, r) = zero.narrowing_div_rem(low, 10) ?? return 0
+    if low <= 100 && r >= 0 && q >= 0 {
+        return xs[q] + xs[r]
+    }
+    return 0
+}
+
+fn main() throws {
+    let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    println(rest_index(xs, 0, 13))
+    println(exact_index(xs, 57))
+}
