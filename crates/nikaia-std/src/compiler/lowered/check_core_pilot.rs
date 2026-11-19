@@ -383,6 +383,7 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
     if segments.len() == 3 {
         let case = world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) });
         if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_bare_kind(case) { return Some(nikaia_std::block::Text::from(case.to_string())); }
+        if check_reflect_no_case(world, segments) { return Some(String::from("!")); }
         return None;
     }
     if segments.len() != 2 || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "kind" { return None; }
@@ -396,11 +397,16 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> Option<Ty> {
+pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr, span: &Span) -> Option<Ty> {
     let equality = matches!(op, BinaryOp::Eq | BinaryOp::Ne);
     if !equality { return None; }
     let left = match check_reflect_kind_of(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let right = match check_reflect_kind_of(state, world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if left == "!" || right == "!" {
+        check_reflect_refuse_no_case(state, world, lhs, span);
+        check_reflect_refuse_no_case(state, world, rhs, span);
+        return Some(Ty::Named { name: String::from("bool"), args: vec![], view: false });
+    }
     if left == "" || right == "" { return None; }
     state.facts.kind_compares.insert(id_of(expr) as i64);
     Some(Ty::Named { name: String::from("bool"), args: vec![], view: false })
@@ -415,15 +421,23 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
             state.a_kind_kept_at_run_time(&format!("meta::Type::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })), span);
             return Some(meta);
         }
+        if check_reflect_no_case(world, segments) {
+            state.a_kind_arm_names_no_case(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) }), span);
+            return Some(Ty::Unknown);
+        }
         return None;
     }
     if segments.len() != 2 { return None; }
     let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
     let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }).to_string());
-    if member != "kind" && member != "name" { return None; }
+    if member != "kind" && member != "name" && member != "doc" { return None; }
     if state.is_variant(&ty, &member) || resolve_call(world, &format!("{}::{}", ty, member)).is_some() || !check_reflect_a_type(&state, &ty) { return None; }
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64);
+        return Some(Ty::Named { name: String::from("str"), args: vec![], view: true });
+    }
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Some(Ty::Named { name: String::from("str"), args: vec![], view: true });
     }
     state.a_kind_kept_at_run_time(&format!("{}::kind", ty), span);
@@ -435,6 +449,10 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
 pub(crate) fn check_reflect_field_type(state: &mut CheckState, expr: &Expr, member: &str, span: &Span) -> Ty {
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64);
+        return Ty::Named { name: String::from("str"), args: vec![], view: true };
+    }
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Ty::Named { name: String::from("str"), args: vec![], view: true };
     }
     if member == "kind" {
@@ -552,6 +570,17 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
         state.facts.type_fields.insert(nikaia_std::block::Text::from(written.to_string()), fields);
     }
     for part in parts.iter() { check_reflect_record(state, world, part); }
+}
+
+pub(crate) fn check_reflect_no_case(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool { segments.len() == 3 && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_case_parts(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) < 0 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reflect_refuse_no_case(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, span: &Span) {
+    match side {
+        Expr::Path(segments, _) => { if check_reflect_no_case(world, segments) { state.a_kind_arm_names_no_case(world.words.resolve(*nikaia_std::index::get(&segments, 2)), span); } },
+        _ => { },
+    }
 }
 
 pub(crate) fn check_reflect_case_parts(case: &str) -> i64 {

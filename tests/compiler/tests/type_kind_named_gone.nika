@@ -1,0 +1,10 @@
+// `Named` is no case of `meta::Type` (ADR-330 D7): compared with it, a kind
+// is refused with `NK1171`, as a `match` arm naming it is.
+
+fn named[T](_value: T) -> bool {
+	return T::kind == meta::Type::Named
+}
+
+fn main() throws {
+	println(named(1))
+}

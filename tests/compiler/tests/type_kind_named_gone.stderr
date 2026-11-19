@@ -1,0 +1,9 @@
+error[NK1171]: `meta::Type` has no variant called `Named`.
+  --> tests/type_kind_named_gone.nika:5:17
+   |
+ 5 | 	return T::kind == meta::Type::Named
+   |                 ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `meta::Type` is `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool`, `Text`, `Bytes`, `Scalar`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Array(A, N)`, `Tuple(parts)`, `Struct(T)`, `Enum(T)`, `Fn(F)` or `Opaque(T)`.
+   = help: Name one of its cases, or `else`.
+1 type error

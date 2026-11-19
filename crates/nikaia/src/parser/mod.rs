@@ -1685,8 +1685,8 @@ grammar! {
         // field, and the nearest span the walk around it has is a statement's
         // (ADR-298 D4).
         rule field_def -> FieldDef @=
-            attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref default:field_default? -> {
-                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default, attributes }
+            doc:doc_here attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref default:field_default? -> {
+                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default, attributes, doc }
             }
 
         // `size: i64 = 50` (ADR-331 D5): the default and where it is written,
@@ -1709,10 +1709,10 @@ grammar! {
                 "A variant's field has no default; only a struct's field may have one \
                  (Part I 4.1). Remove the `= …`."
             ) -> {
-                FieldDef { name, ty, is_public: false, span: Span::from(_span), default: None, attributes: Vec::new() }
+                FieldDef { name, ty, is_public: false, span: Span::from(_span), default: None, attributes: Vec::new(), doc: None }
             }
           | attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref -> {
-                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default: None, attributes }
+                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default: None, attributes, doc: None }
             }
 
         // --- Argumente & Typen ---

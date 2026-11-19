@@ -242,7 +242,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             ty
         },
         Expr::Unary { op, expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_expr_unary(state, world, host, expr, op, inner, span) },
-        Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, op, lhs, rhs), || check_core_ops_binary(state, world, host, op, lhs, rhs, at, span).into()) },
+        Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, op, lhs, rhs, at), || check_core_ops_binary(state, world, host, op, lhs, rhs, at, span).into()) },
         Expr::Cast { expr: inner, ty, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_cast(state, world, host, inner, ty, span) },
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),

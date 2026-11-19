@@ -1302,6 +1302,9 @@ pub struct FieldDef {
     pub default: FieldDefault?,
     /// Its `@` lines (ADR-331 D1).
     pub attributes: Vec[Attribute],
+    /// The run of `///` lines standing before it, as an item's
+    /// [`Spanned::doc`]: what `field.doc` answers (ADR-329 D2).
+    pub doc: String?,
 }
 
 /// A field's default and where it is written (ADR-331 D5).

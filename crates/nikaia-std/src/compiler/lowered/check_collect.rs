@@ -71,6 +71,23 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn collect_docs(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Spanned<Item>) {
+        match &item.node {
+            Item::Struct { name, fields, .. } => {
+                let name = *name;
+                let owner = file.text(name);
+                for field in fields.iter() { if field.doc.is_some() { self.facts.docs.insert(format!("{}.{}", owner, file.text(field.name)), nikaia_std::block::Text::from(nikaia_std::index::or(field.doc.as_deref(), || "").to_string())); } }
+                if item.doc.is_some() { self.facts.docs.insert(owner, nikaia_std::block::Text::from(nikaia_std::index::or(item.doc.as_deref(), || "").to_string())); }
+            },
+            Item::Enum { name, .. } => {
+                let name = *name;
+                if item.doc.is_some() { self.facts.docs.insert(file.text(name), nikaia_std::block::Text::from(nikaia_std::index::or(item.doc.as_deref(), || "").to_string())); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
         #[allow(unused_mut)] let mut order: Vec<String> = vec![];
         let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
@@ -133,8 +150,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
-        for other in world.beside.iter() { for item in other.items.iter() { self.collect_types_beside(other, &item.node); } }
+        for other in world.beside.iter() {
+            for item in other.items.iter() {
+                self.collect_types_beside(other, &item.node);
+                self.collect_docs(other, item);
+            }
+        }
         for item in world.here.items.iter() {
+            self.collect_docs(&world.here, item);
             match &item.node {
                 Item::Struct { name, generics, fields, .. } => { let name = *name; self.collect_struct(world, &world.parts_beside, name, generics, fields, &item.span); },
                 Item::Enum { name, variants, .. } => { let name = *name; self.collect_enum(world, &world.parts_beside, name, variants, &item.span); },

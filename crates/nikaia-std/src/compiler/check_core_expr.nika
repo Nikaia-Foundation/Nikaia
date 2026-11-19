@@ -303,7 +303,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             ty
         },
         Expr::Unary { op, expr: inner, .. } => check_core_expr_unary(state, world, host, expr, op, inner, span),
-        Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
+        Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs, at) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
         Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),

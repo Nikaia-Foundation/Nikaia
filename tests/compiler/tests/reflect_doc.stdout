@@ -1,0 +1,9 @@
+User: [A user of the service.
+Two lines, kept as written.]
+  name: [The name shown.] of type []
+  age: [] of type []
+  home: [The home.] of type [Where a user lives.]
+Address: [Where a user lives.]
+  street: [The street and the number.] of type []
+Contact: [How a user is reached.]
+i64: []

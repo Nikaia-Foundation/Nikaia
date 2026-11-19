@@ -53,6 +53,13 @@ impl EmitState {
             FactViewed::Plain => emit_place_plain_reach(place, flattens),
         }
     }
+    pub(crate) fn doc_text(&self, key: &str) -> String {
+        let found: String = nikaia_std::index::or(match self.facts.docs.get(key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        found.quoted()
+    }
     pub(crate) fn emit_place_default(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> String {
         let found = self.field_contract(world, owner, field);
         let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("None") };
@@ -238,6 +245,26 @@ impl EmitState {
         if typed.is_some() {
             out.push(&nikaia_std::index::or(typed, || "".into()).quoted());
             return Ok(());
+        }
+        if self.facts.reflected_docs.contains(&node_key(node)) {
+            let doc_of = walk.reflected(world, base, name, "doc");
+            if doc_of.is_some() {
+                let owner: String = match base {
+                    Expr::Variable(binding, _) => { let binding = *binding; nikaia_std::index::or(match walk.field_owners.get(&emit_text(world, binding)) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || nikaia_std::index::or(walk.specialised_to(), || "".into()).into()) },
+                    _ => String::from(""),
+                };
+                let field = nikaia_std::index::or(doc_of, || "".into());
+                out.push(&self.doc_text(&format!("{}.{}", owner, field)));
+                return Ok(());
+            }
+            let type_doc = self.reflected_field_type(world, &walk, base, name, "ty::doc");
+            if type_doc.is_some() {
+                out.push(&self.doc_text(nikaia_std::index::or(type_doc.as_deref(), || "")));
+                return Ok(());
+            }
         }
         let default_of = walk.reflected(world, base, name, "default");
         let on = walk.specialised_to();

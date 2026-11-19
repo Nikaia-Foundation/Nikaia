@@ -545,6 +545,11 @@ fn check_reflect_kind_of(mut state: CheckState, world: ref CheckWorld, side: ref
         if world.words.resolve(segments[0]) == "meta" && world.words.resolve(segments[1]) == "Type" && check_reflect_bare_kind(case) {
             return case.clone()
         }
+        // **A case `meta::Type` does not have**, `Named` among them
+        // (ADR-330 D7): `NK1171`, said once, and the comparison decided.
+        if check_reflect_no_case(world, segments) {
+            return "!"
+        }
         return null
     }
     if segments.len() != 2 || world.words.resolve(segments[1]) != "kind" {
@@ -565,7 +570,7 @@ fn check_reflect_kind_of(mut state: CheckState, world: ref CheckWorld, side: ref
 /// **`T::kind == meta::Type::X`, decided while the program is built**
 /// (ADR-330 D3, D6): both sides are kinds, and the comparison is a `bool` the
 /// emitter writes per copy. `null` where it is not such a comparison.
-fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> Ty? sync {
+fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, span: ref Span) -> Ty? sync {
     let equality = match op {
         BinaryOp::Eq | BinaryOp::Ne => true,
         else => false,
@@ -575,6 +580,12 @@ fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: re
     }
     let left = check_reflect_kind_of(state, world, lhs) ?? return null
     let right = check_reflect_kind_of(state, world, rhs) ?? return null
+    if left == "!" || right == "!" {
+        // The side that names no case is refused where its path is checked.
+        check_reflect_refuse_no_case(state, world, lhs, span)
+        check_reflect_refuse_no_case(state, world, rhs, span)
+        return Ty::Named { name: "bool", args: [], view: false }
+    }
     if left == "" || right == "" {
         return null
     }
@@ -592,6 +603,10 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
             state.a_kind_kept_at_run_time(f"meta::Type::{world.words.resolve(segments[2])}", span)
             return meta
         }
+        if check_reflect_no_case(world, segments) {
+            state.a_kind_arm_names_no_case(world.words.resolve(segments[2]), span)
+            return Ty::Unknown
+        }
         return null
     }
     if segments.len() != 2 {
@@ -599,7 +614,7 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
     }
     let ty = world.words.resolve(segments[0]).clone()
     let member = world.words.resolve(segments[1]).clone()
-    if member != "kind" && member != "name" {
+    if member != "kind" && member != "name" && member != "doc" {
         return null
     }
     if state.is_variant(ty, member) || resolve_call(world, f"{ty}::{member}") != null || !check_reflect_a_type(state, ty) {
@@ -607,6 +622,12 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
     }
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64)
+        return Ty::Named { name: "str", args: [], view: true }
+    }
+    // **`T::doc`, the `///` lines before its declaration** (ADR-330 D2,
+    // ADR-329 D2): text known while building, empty where there are none.
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64)
         return Ty::Named { name: "str", args: [], view: true }
     }
     state.a_kind_kept_at_run_time(f"{ty}::kind", span)
@@ -619,6 +640,10 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
 fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: ref String, span: ref Span) -> Ty sync {
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64)
+        return Ty::Named { name: "str", args: [], view: true }
+    }
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64)
         return Ty::Named { name: "str", args: [], view: true }
     }
     if member == "kind" {
@@ -760,6 +785,24 @@ fn check_reflect_record(mut state: CheckState, world: ref CheckWorld, ty: ref Ty
 
 /// **The cases of `meta::Type`, and how many types each carries** (ADR-330
 /// D3, ADR-332 D1); `-1` where it is no case.
+/// **`meta::Type::X` where `X` is no case of it** (ADR-330 D3, D7):
+/// `Named` left it, and a misspelt case was never in it.
+fn check_reflect_no_case(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> bool {
+    return segments.len() == 3 && world.words.resolve(segments[0]) == "meta" && world.words.resolve(segments[1]) == "Type" && check_reflect_case_parts(world.words.resolve(segments[2])) < 0
+}
+
+/// `NK1171` for a side of a comparison of kinds that names no case.
+fn check_reflect_refuse_no_case(mut state: CheckState, world: ref CheckWorld, side: ref Expr, span: ref Span) sync {
+    match side {
+        Expr::Path(segments, _) => {
+            if check_reflect_no_case(world, segments) {
+                state.a_kind_arm_names_no_case(world.words.resolve(segments[2]), span)
+            }
+        },
+        else => {},
+    }
+}
+
 fn check_reflect_case_parts(case: ref String) -> i64 {
     if check_reflect_bare_kind(case) {
         return 0

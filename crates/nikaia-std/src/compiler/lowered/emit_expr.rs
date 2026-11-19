@@ -258,6 +258,10 @@ impl EmitState {
                     out.push(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))).quoted());
                     return Ok(());
                 }
+                if self.facts.reflected_docs.contains(&at) {
+                    out.push(&self.doc_text(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)))));
+                    return Ok(());
+                }
                 if self.emit_expr_kept_function(world, walk, out, host, node, depth, &flow, scope)? { return Ok(()); }
                 let mut path: Vec<String> = vec![];
                 for s in segments.iter() {
