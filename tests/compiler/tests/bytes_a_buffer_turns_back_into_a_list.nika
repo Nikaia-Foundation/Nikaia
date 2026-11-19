@@ -1,0 +1,12 @@
+// A `Bytes` gives its bytes back as a list when one is asked for, and a
+// sequence of bytes collects into one (#2215; it was a Rust test of
+// `bytes.rs`).
+fn main() throws {
+    let bytes = Bytes([7, 8])
+    let back: Vec[u8] = bytes.iter().collect()
+    println(f"{back.len()} bytes: {back[0]} {back[1]}")
+    let made: Vec[u8] = [1, 2, 3]
+    let collected = Bytes(made.iter().collect())
+    let again: Vec[u8] = collected.iter().collect()
+    println(f"{again.len()} bytes, the last {again[2]}, still held: {collected.len()}")
+}
