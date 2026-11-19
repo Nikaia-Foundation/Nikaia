@@ -164,7 +164,7 @@ impl EmitState {
     /// One struct per parameter list, a field per `:name`, and **generic in
     /// every field**: nothing in `… WHERE id = :id …` says what `:id` is, so
     /// the type comes from the argument at the call site and is monomorphised
-    /// there. Inventing `i32` here is exactly the guess ADR-296 D17 forbids an
+    /// there. Inventing `i32` here is exactly the guess ADR-grammar-lowering-v1 D2 forbids an
     /// emitter to make. A plain struct, passed by value: D5 asks for the
     /// parameters on the stack.
     fn emit_program_shadow_types(ref self, world: ref EmitWorld, mut out: EmitOut) {

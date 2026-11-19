@@ -314,7 +314,7 @@ pub struct Parsed {
     ///
     /// **Here because every consumer holds a `Parsed` and none of them should
     /// have to know about aliasing.** An alias is a name local to one file, so
-    /// resolving it is not name resolution in ADR-296 D17's sense - it is reading
+    /// resolving it is not name resolution in ADR-grammar-lowering-v1 D2's sense - it is reading
     /// the file's own dictionary, and the dictionary is part of what was parsed.
     /// The alternative was the same lookup at fourteen call sites in three
     /// modules, where the fifteenth would have been the one that forgot.
@@ -1995,7 +1995,7 @@ grammar! {
         // A type may be named by a path: `postgres::Connection`, `html::Raw`.
         //
         // The whole path is interned as one name, because that is what the name
-        // *is* to a compiler that lowers name for name (ADR-296 D17) - nothing
+        // *is* to a compiler that lowers name for name (ADR-grammar-lowering-v1 D2) - nothing
         // here resolves a module, and a path can therefore never collide with a
         // struct this file declares, which is correct.
         rule type_name -> Symbol =
@@ -2168,7 +2168,7 @@ grammar! {
 
         // `rule expr -> Expr # "expression" = …`: what the rule is called when
         // it fails where it began. Spelled as the backend spells it, because
-        // the lowering is name for name (ADR-296 D17) and a second spelling for
+        // the lowering is name for name (ADR-grammar-lowering-v1 D2) and a second spelling for
         // the same thing would be one more thing to know.
         rule rule_label -> String = "#" text:STRING -> { text }
 

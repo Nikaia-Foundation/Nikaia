@@ -385,7 +385,7 @@ fn returns_a_view(ret_type: ref Type?) -> bool {
 
 /// A default, written back the way the source wrote it: only a literal
 /// reaches here, and Nikaia spells every one of them the way the language
-/// below does (ADR-296 D17). A default of `null` is `None`.
+/// below does (ADR-grammar-lowering-v1 D2). A default of `null` is `None`.
 fn default_text(expr: ref Expr) -> String {
     return match expr {
         Expr::LitBool(value, _) => if value { "true" } else { "false" },

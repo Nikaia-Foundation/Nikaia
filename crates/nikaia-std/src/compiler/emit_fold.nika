@@ -65,7 +65,7 @@ impl EmitState {
     /// A fold's step, adapted where the program's own declarations say it has
     /// to be.
     ///
-    /// ADR-296 D17 refused to infer this from the shape of the body, and was
+    /// ADR-grammar-lowering-v1 D2 refused to infer this from the shape of the body, and was
     /// right to: `acc.record(m)` and `acc.merged(m)` look identical. What
     /// changed is that `impl` blocks are lowered now, so this is a lookup in
     /// what the program declares - `record` takes `&mut self` and returns

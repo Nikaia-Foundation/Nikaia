@@ -171,8 +171,8 @@ impl Buffer {
 /// What the head of one request says.
 ///
 /// **`Clone`, because a Nikaia `struct` that holds one derives it.** Every
-/// emitted struct does ([ADR-296](../../../docs/specification/adr/adr-296.md)
-/// D17's lowering), so a `std` type a program puts in a field has to, or `rustc`
+/// emitted struct does ([ADR-grammar-lowering-v1](../../../docs/specification/adr/adr-grammar-lowering-v1.md)
+/// D2's lowering), so a `std` type a program puts in a field has to, or `rustc`
 /// says *the trait bound `Head: Clone` is not satisfied* about a file nobody
 /// wrote ([Part III C.1](../../../docs/specification/30-nikaia-tooling.md)). It
 /// is plain owned data, so the derive costs a copy only where one is written.

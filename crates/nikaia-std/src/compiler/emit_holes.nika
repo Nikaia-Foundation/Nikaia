@@ -282,7 +282,7 @@ fn emit_holes_fold_steps(pattern: ref Pattern) -> Vec[ref Expr] {
 /// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a
 /// function it calls and a method it calls, by name, in any rule of any
 /// grammar this unit declares. By name, because the step's receiver is the
-/// accumulator, whose type this emitter does not know (ADR-296 D17) - and a
+/// accumulator, whose type this emitter does not know (ADR-grammar-lowering-v1 D2) - and a
 /// method of another type with the same name gains a hint, nothing more.
 fn emit_holes_fold_callees[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, grammars: ref collections::BTreeMap[String, GrammarDef]) -> collections::BTreeSet[String] sync {
     let mut found: Vec[String] = []

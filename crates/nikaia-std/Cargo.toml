@@ -34,8 +34,8 @@ compiler = []
 async-io = ["dep:polled", "dep:rustls", "dep:rustls-native-certs", "dep:file-ring"]
 
 [dependencies]
-# **A map is `std`'s own type over `hashbrown`'s table** (#420, #434, ADR-296
-# D42; `src/map.rs`): `std`'s `HashMap` wraps the same table, but its `entry`
+# **A map is `std`'s own type over `hashbrown`'s table** (#420, #434, ADR-grammar-lowering-v1
+# D5; `src/map.rs`): `std`'s `HashMap` wraps the same table, but its `entry`
 # reserves one slot on every call, which cost 1BRC 27 of its 300 instructions
 # a row, and `hashbrown`'s map compares a text key with `memcmp`. Both kinds
 # of map, keyed and trusted, are this one type with their hasher (`hash.rs`);
@@ -81,7 +81,7 @@ low-bits = { path = "../unsafe/low-bits" }
 crc32c = { path = "../unsafe/crc32c" }
 # Whether a map's key type is text, decided per type when compiling, and its
 # bytes where it is: a text key is hashed and compared a word at a time
-# (ADR-296 D42).
+# (ADR-grammar-lowering-v1 D5).
 text-key = { path = "../unsafe/text-key" }
 # A task's memory block, 16 pages of 4 KiB each counting what it holds, and
 # the lists and text whose growth it may refuse (ADR-327 D4, D5, D12;

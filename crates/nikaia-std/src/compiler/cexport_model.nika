@@ -293,7 +293,7 @@ impl CxCode {
     }
 }
 
-/// A source name, written so the language below can read it (ADR-296 D17).
+/// A source name, written so the language below can read it (ADR-grammar-lowering-v1 D2).
 fn cx_escaped(name: ref String) -> String {
     let reserved: Array[ref String, 28] = ["abstract", "async", "await", "become", "box", "const", "do", "dyn", "extern", "final", "gen", "loop", "macro", "mod", "move", "override", "priv", "ref", "static", "trait", "try", "type", "typeof", "unsafe", "unsized", "virtual", "where", "yield"]
     for word in reserved {

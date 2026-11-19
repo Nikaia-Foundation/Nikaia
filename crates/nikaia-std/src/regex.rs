@@ -2,7 +2,7 @@
 //! ([ADR-regex-1](../../../docs/specification/adr/adr-regex-1.md) D3, D8):
 //! `regex::dynamic(pattern)` compiles RE2's dialect (D1) with
 //! `regex-automata`'s `meta::Regex`, as `std`'s maps wrap `hashbrown`'s table
-//! (ADR-296 D42). No type of the crate leaves this file: a program, the ledger
+//! (ADR-grammar-lowering-v1 D5). No type of the crate leaves this file: a program, the ledger
 //! and a message see `regex::Regex[regex::Dynamic]`, `regex::Captures`,
 //! `regex::Error` and `text::Match`.
 //!

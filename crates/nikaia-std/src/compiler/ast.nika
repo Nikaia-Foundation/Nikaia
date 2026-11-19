@@ -667,7 +667,7 @@ pub enum Expr {
     /// the operand's type is the checker's answer rather than the parser's. So
     /// the checker records it under this node's id and the emitter reads it
     /// back, which is the handover a `comptime`'s value already makes
-    /// ([ADR-296](../../../docs/specification/adr/adr-296.md) D17: the emitter
+    /// ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2: the emitter
     /// is told, it does not work it out). `at` is the byte the `with` stands at,
     /// read as a place for a message.
     With {
@@ -1125,7 +1125,7 @@ pub struct PatternField {
 
 /// What an arm matches. Deliberately small: every shape here is one the
 /// language it lowers to spells the same way, so the lowering stays name for
-/// name (ADR-296 D17) and no pattern means something different in the two.
+/// name (ADR-grammar-lowering-v1 D2) and no pattern means something different in the two.
 pub enum MatchPattern {
     /// `else`: the arm taken when none of the others matched
     /// ([ADR-291](../../../docs/specification/adr/adr-291.md) D16).

@@ -403,7 +403,7 @@ impl CheckState {
 
     /// The declared fields of a type by the name a value's type carries: the
     /// program's own, another file's by the exact qualified name, or `std`'s by
-    /// the last segment (ADR-296 D17). Empty where there are none.
+    /// the last segment (ADR-grammar-lowering-v1 D2). Empty where there are none.
     fn fields_seen(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract] sync {
         if self.structs.contains_key(name) {
             return self.structs[name]?.clone() ?? []
