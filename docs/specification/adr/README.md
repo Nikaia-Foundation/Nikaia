@@ -411,6 +411,16 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
+| grammar-syntax-v1 | how a grammar is written (ADR-296, grammar-1, ADR-339) | #904 |
+| grammar-input-v1 | what a grammar reads and how it holds it (ADR-296, ADR-366, ADR-388) | #904 |
+| grammar-actions-v1 | what a rule's action may do (ADR-296, grammar-1) | #904 |
+| grammar-parallel-v1 | frames and folds (ADR-296) | #904 |
+| grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
+| grammar-build-time-v1 | a grammar run at build time and what it hands back (ADR-177, ADR-296, ADR-323) | #904 |
+| grammar-typed-read-v1 | an entry that takes a type (grammar-2) | #904 |
+| database-v1 | database statements (ADR-299) | #904 |
+| views-v4 | views (views-1 to views-3) | #904 |
+| collections-v3 | collections (collections-1, collections-2) | #904 |
 
 A row here is a claim and nothing else: it says the number is spoken for, not
 what the decision is. Delete the row in the same commit that adds the record.
