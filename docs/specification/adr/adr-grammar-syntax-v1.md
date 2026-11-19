@@ -84,7 +84,7 @@ breaking `dsl`.
 The core parser cannot find the end of foreign syntax by counting braces, so it
 scans for the marker, skips the body and parses the rest of the file while the
 DSL parser works. A body that contains the literal `} eod` is read from a file
-and handed to its grammar by a call (D5, [ADR-296](adr-296.md) D27), never by a
+and handed to its grammar by a call (D5, [ADR-grammar-input-v1](adr-grammar-input-v1.md) D6), never by a
 configurable terminator.
 
 ### D3 — A grammar is parsed, not carried as text.

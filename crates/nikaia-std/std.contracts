@@ -8196,7 +8196,7 @@ sync = true
 touches = []
 signature = "(ref self) -> ref(self) String"
 
-# **The table a grammar interns its names into** (ADR-388 D1, D3): the caller
+# **The table a grammar interns its names into** (ADR-grammar-input-v1 D10, D12): the caller
 # makes it and hands it to an entry that reaches `ident` or `intern(p)` as
 # `words:`; every `winnow_grammar::Symbol` the parse yields reads its text
 # here after the call. One table handed to several parses gives one spelling

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1471 (Draft)
+**Version:** 0.0.1472 (Draft)
 **Date:** 2026-11-19
 
 ---
@@ -516,7 +516,7 @@ Nikaia grammars serve tooling that reads large inputs.
 **Zero-Copy Parsing**
 A Nikaia parser never copies the source text. A grammar picks per rule between two mechanisms:
 
-*Identifiers and keywords are interned symbols.* The parser **interns** an identifier: each distinct spelling is stored once in a shared table, and the parser yields a small `Symbol` handle. Comparing two identifiers is an integer comparison. The table is the caller's: an entry whose grammar interns takes it after its input, `G::file(source; words: table)`, and `table.resolve(sym)` reads a symbol's text after the call; an entry whose result can hold a symbol is refused without it (`NK1330`, ADR-388).
+*Identifiers and keywords are interned symbols.* The parser **interns** an identifier: each distinct spelling is stored once in a shared table, and the parser yields a small `Symbol` handle. Comparing two identifiers is an integer comparison. The table is the caller's: an entry whose grammar interns takes it after its input, `G::file(source; words: table)`, and `table.resolve(sym)` reads a symbol's text after the call; an entry whose result can hold a symbol is refused without it (`NK1330`, ADR-grammar-input-v1).
 
 *Bulk text is a tethered slice.* String literals, comments, doc text and DSL bodies are not interned. The parser yields **slices** into the original buffer. Whether a slice stays a plain reference or becomes a **tether**, the source buffer moved into an anchor and the slice a plain reference, follows Part I 6.6: transient is a borrow, escaping is a tether. A token that lives and dies inside the scope holding the source text costs nothing. A token that outlives that scope is tethered automatically. An AST handed back to a caller keeps its source alive; the caller's frame keeps the buffer, and no token carries a handle.
 
@@ -724,7 +724,7 @@ whose body is one `Json::value(text)` is `sync`.
 
 **Text or bytes.** An entry takes a `String` or a `Bytes`, and the argument
 decides which the grammar parses; a grammar called with both is compiled for
-both ([ADR-366](adr/adr-366.md)); an argument that is neither text (a mapping is text, ADR-016 D1) nor a `Bytes` is refused (`NK1282`). Over a `Bytes`, an element that yields text or
+both ([ADR-grammar-input-v1](adr/adr-grammar-input-v1.md)); an argument that is neither text (a mapping is text, ADR-016 D1) nor a `Bytes` is refused (`NK1282`). Over a `Bytes`, an element that yields text or
 a `scalar` checks what it covered as UTF-8; one that matches by comparison (a
 literal, `digit`, whitespace, a frame boundary, `dec[T]`) checks nothing. A
 byte that is not UTF-8 ends the parse there, with no alternative retried: the

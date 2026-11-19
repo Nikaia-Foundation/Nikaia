@@ -1,5 +1,5 @@
 // #1519: another package's entry whose result holds a symbol must be handed
-// the table (NK1330, ADR-388 D2), and one that does not intern takes no
+// the table (NK1330, ADR-grammar-input-v1 D11), and one that does not intern takes no
 // `words:` (NK1109), as for an entry beside the call.
 use std::fs
 use std::process
