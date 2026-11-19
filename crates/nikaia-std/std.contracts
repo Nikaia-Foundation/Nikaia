@@ -515,14 +515,14 @@ touches = []
 signature = "(self: ref fs::Root, part: ref fs::Path) -> fs::Root"
 
 # The directory of a `Dir`, for a program's argument (ADR-raw-sinks-1 D12);
-# `null` for `Anywhere`. Written in Nikaia, `src/runtime/paths.nika`
+# `.` for `Anywhere`. Written in Nikaia, `src/runtime/paths.nika`
 # (`root_path`).
 [fn."fs::Root::path"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "(self: ref fs::Root) -> fs::Path?"
+signature = "(self: ref fs::Root) -> fs::Path"
 
 # Write data to a file.
 #

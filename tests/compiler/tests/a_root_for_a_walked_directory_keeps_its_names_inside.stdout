@@ -1,5 +1,5 @@
 a.txt: x
 out/hostname: Outside
 packages is below the scratch: true
-Anywhere: null
+Anywhere: .
 Anywhere joined: true
