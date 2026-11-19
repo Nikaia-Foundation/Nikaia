@@ -329,7 +329,7 @@ pub(super) fn blocking_write(
     file.write_all(bytes)
 }
 
-// Kept as Rust (#2082), for "Unobservable std tests" (#2088): the I/O worker
+// Kept as Rust (#2304), for "Unobservable std tests" (#2088): the I/O worker
 // flag is read only by a `debug_assert` in `rt/mod.rs`, and `nikaia run`
 // builds programs with debug assertions off, so no program can see it.
 #[cfg(test)]
