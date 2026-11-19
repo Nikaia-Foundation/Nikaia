@@ -40,7 +40,7 @@ note under it. A decision **withdrawn** altogether is removed, with one sentence
 saying what is done instead. When a group of records is **replaced** by one
 record that states all their decisions in their current form, the old records
 move to [`history/adr/`](history/adr) and no live file cites them
-(`scripts/check-adr-refs.py` enforces it).
+(`scripts/check-adr-refs.nika` enforces it).
 
 The route to a decision is history: the archive's
 [README](history/adr/README.md) maps each archived decision to the live one,
