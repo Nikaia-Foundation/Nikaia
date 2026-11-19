@@ -10,7 +10,7 @@
 //
 // The fixture is written here, with `~` for the `-` of its citations, and
 // what is shown is written back so: the made-up records 901 and 902 would
-// otherwise be dangling citations to check-adr-refs.py, which reads tests/.
+// otherwise be dangling citations to check-adr-refs.nika, which reads tests/.
 use std::fs
 use std::process
 

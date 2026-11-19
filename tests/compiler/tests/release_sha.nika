@@ -1,0 +1,30 @@
+// release.nika: a report's `Pushed:` may name its commits after the sha,
+// `local <sha> (<sha> <subject>; ...)`; the release takes the first word, so
+// the version's heading is the commit's subject (0.0.1467 had none).
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    for pushed in ["local 8dd3d1da", "local 8dd3d1da (56c79be2 A check; 8dd3d1da its CI)", "8dd3d1da", "  local  8dd3d1da  "] {
+        let out = process::run(nikaia.clone(), ["run", "scripts/release.nika", "--", "--sha", pushed.clone()]; dir: repo.clone()).stdout.trim().clone()
+        println(f"[{pushed}] -> {out}")
+    }
+}

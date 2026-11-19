@@ -56,7 +56,7 @@ fn main() throws {
     // written and deleted again (13 000 files, the most of this test's time).
     let objects = sh(repo.clone(), "realpath $(git rev-parse --git-path objects)")
     sh(tmp.clone(), f"git init -q -b develop work; echo {objects} > work/.git/objects/info/alternates")
-    sh(work.clone(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
+    sh(work.clone(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/check-adr-refs.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
     sh(work.clone(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
     println("unstaged tools move, a docs file staged:")
     println(steps(nikaia.clone(), work.clone()))

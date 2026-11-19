@@ -28,6 +28,7 @@
 // bullet. Rows the agents added to the Runs table of `docs/tokenspeed.md` go
 // into the version's commit, when nothing else in that file changed (#1886).
 // Test flags: `--heading TITLE... [--fixes #N...]`, `--entries LINE...`,
+// `--sha PUSHED` (the commit a report's `Pushed:` value names),
 // `--rows-added OLD NEW` (prints whether NEW only adds Runs rows to OLD),
 // `--stage-version FILE` (stages HEAD's FILE with the working file's version
 // and date lines, in the current directory's repository).
@@ -105,8 +106,13 @@ fn release_git(args: Vec[String]) -> String throws {
     return out.stdout.trim().clone()
 }
 
+// The first word after `local `: a report may name the commits after it,
+// `Pushed: local <sha> (<sha> <subject>; ...)`.
 fn release_sha(pushed: String) -> String {
-    return (pushed.strip_prefix("local ") ?? pushed).trim().clone()
+    for w in pushed.split(" ") {
+        if w.len() > 0 && w != "local" { return w.clone() }
+    }
+    return pushed.trim().clone()
 }
 
 // The issues the pushed commit's message fixes (`Fixes #N`), each once.
@@ -457,6 +463,10 @@ fn main() throws {
     for a in cli::args() { args.push(a) }
     if args.len() == 2 && args[1] == "--rows" {
         println(release_rows_commit())
+        return
+    }
+    if args.len() == 3 && args[1] == "--sha" {
+        println(release_sha(args[2].clone()))
         return
     }
     if args.len() >= 2 && (args[1] == "--heading" || args[1] == "--entries" || args[1] == "--rows-added" || args[1] == "--stage-version") {

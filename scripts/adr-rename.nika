@@ -15,7 +15,7 @@
 // the decisions they name, and its whole line, where there is one, moves the
 // citations that name no decision.
 //
-// It rewrites, in the files check-adr-refs.py searches except `docs/history/`
+// It rewrites, in the files check-adr-refs.nika searches except `docs/history/`
 // and build output, a bare citation with its decisions (`D33`, a list
 // `D33, D34`, a range `D33-D34` or `D33–D34`, after `'s` too) and a link to
 // the record (`[ADR-OLD](adr-OLD.md) D33`, `[OLD](adr-OLD.md) D33`) whose path
@@ -107,7 +107,7 @@ fn rename_target(table: Vec[Move], old: String, dec: i64) -> Target {
     return Target { record: "", dec: 0 }
 }
 
-// Whether FILE (relative to the root) is one check-adr-refs.py searches,
+// Whether FILE (relative to the root) is one check-adr-refs.nika searches,
 // outside the history and build output.
 fn rename_searched(file: String) -> bool {
     if file.starts_with("docs/history/") || file.starts_with("target/") || file.contains("/target/") { return false }
