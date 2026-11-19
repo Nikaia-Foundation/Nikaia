@@ -22,7 +22,9 @@ pub enum ClaimHeld {
     /// A claim about data from outside the program (D6): `NK1202`.
     Refused,
     /// **Proved through a loop** (ADR-361 D4, D7): no check is emitted; the
-    /// text names the loop's invariant and the strategy that found it.
+    /// text names the loop's invariant and the strategy that found it. Or
+    /// proved by a named property, the text saying where it is known from
+    /// (ADR-381 D2).
     ProvedThrough(String),
 }
 

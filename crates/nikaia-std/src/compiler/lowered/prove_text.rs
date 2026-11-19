@@ -45,6 +45,13 @@ pub(crate) fn rust_of_name(name: &str, escape: &mut impl FnMut(&str) -> String) 
         for k in 0..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 6) } { base.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
         return format!("({}.len() as i128)", escape(&base));
     }
+    let base = property_base(name);
+    if base.is_some() {
+        let on = nikaia_std::index::or(base, || "".into());
+        let called = nikaia_std::index::or(name.strip_prefix(&*format!("{}.{}", on, property_mark())), || std::convert::AsRef::<str>::as_ref(name));
+        let rest = nikaia_std::block::Text::from(nikaia_std::index::or(called.strip_suffix("()"), || std::convert::AsRef::<str>::as_ref(called)).to_string());
+        return format!("(({}(&{})) as i128)", escape(&rest), escape(&on));
+    }
     format!("({}.clone() as i128)", escape(name))
 }
 
