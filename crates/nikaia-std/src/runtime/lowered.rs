@@ -33,6 +33,10 @@ use nikaia_std::env;
 #[allow(unused_imports)]
 use nikaia_std::html;
 #[allow(unused_imports)]
+use nikaia_std::html;
+#[allow(unused_imports)]
+use nikaia_std::supervisor;
+#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
@@ -124,6 +128,17 @@ mod raw_sinks_lowered {
 }
 #[allow(unused_imports)]
 pub use raw_sinks_lowered::*;
+
+#[allow(unsafe_code)]
+mod restart_policy_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/restart_policy.rs");
+}
+#[allow(unused_imports)]
+pub use restart_policy_lowered::*;
 
 #[allow(unsafe_code)]
 mod run_config_lowered {
@@ -219,6 +234,7 @@ pub mod raw_sinks {
     #[allow(unused_imports)]
     pub use super::{is_plain};
 }
+pub mod restart_policy {}
 pub mod run_config {
     #[allow(unused_imports)]
     pub use super::{Method, Config, ConfigRead, config_default, config_keys, method_named, method_spelled, config_read};
@@ -250,6 +266,8 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(raw_sinks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(raw_sinks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(restart_policy_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(run_config_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(text_float_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all
@@ -292,4 +310,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "203d8b5968a087f6a125ea8b811e7280f2f6c66d63d4710c80936941797e93fc";
+pub const LOWERED_DIGEST: &str = "064db40b9034fbd957a759973b16c5b91b29d5ab1371b98f986138ea2c20ed16";
