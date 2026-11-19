@@ -1,0 +1,69 @@
+// A name is checked against the root it was given (ADR-108 D1, D3): `.`, a
+// `..` that stays inside and an absolute name inside pass; a `..` out, an
+// absolute name outside, `store2` beside `store` (a string prefix would let
+// it in) and a link pointing out are `Outside`; the joined name, not the
+// resolved one, is used (`gone/../ok.txt` is `NotFound`); a missing root is
+// refused; `Anywhere` checks nothing. A refused read names what was asked,
+// a refused write makes nothing. The links are made through `sh`: `std::fs`
+// makes none. No absolute name is printed.
+use std::fs
+use std::io
+use std::process
+
+fn answer(error: io::IoError) -> String {
+    match error {
+        io::IoError::NotFound(_) => return "NotFound",
+        io::IoError::Outside(_) => return "Outside",
+        else => return "other",
+    }
+}
+
+fn checked(name: String, root: ref fs::Root) -> String {
+    let there = fs::exists(name, root) catch {
+        return answer(error)
+    }
+    return f"{there}"
+}
+
+fn main() throws {
+    let scratch = fs::scratch()
+    fs::create_dir("store/sub", scratch; recursive: true)
+    fs::create_dir("store2", scratch)
+    fs::write("store/ok.txt", scratch, "inside")
+    fs::write("store/here.txt", scratch, "")
+    fs::write("outside.txt", scratch, "secret")
+    fs::write("store2/near.txt", scratch, "near")
+    let top = fs::canonical(".", scratch).to_text()
+    process::run("sh", ["-c", "ln -s ../outside.txt store/link.txt; ln -s ../outside.txt store/out"]; dir: top.clone())
+    let root = fs::Root::Dir(f"{top}/store")
+    let base = fs::canonical(".", root).to_text()
+    for name in ["ok.txt", "./ok.txt", "sub/deep.txt", "sub/../ok.txt", "../outside.txt", "sub/../../outside.txt", "../store2/near.txt", "link.txt", "gone/../ok.txt"] {
+        println(f"{name}: {checked(name, root)}")
+    }
+    println(f"<root>/ok.txt: {checked(f"{base}/ok.txt", root)}")
+    println(f"<top>/outside.txt: {checked(f"{top}/outside.txt", root)}")
+    println(f"<top>/store2/near.txt: {checked(f"{top}/store2/near.txt", root)}")
+    fs::read_to_string("gone/../ok.txt", root) catch { println(f"read gone/../ok.txt: {answer(error)}") }
+    let nowhere = fs::Root::Dir(f"{top}/no-such-store")
+    println(f"a missing root: {checked("ok.txt", nowhere)}")
+    println(f"Anywhere reads <root>/../outside.txt: {fs::read_to_string(f"{base}/../outside.txt", fs::Root::Anywhere)}")
+
+    fs::read_to_string("../outside.txt", root) catch {
+        match error {
+            io::IoError::Outside(p) => println(f"read refused: Outside {p.display()}, leaves the root: {error.message().contains("leaves the root")}"),
+            else => println("read refused: other"),
+        }
+    }
+    fs::write("../made.txt", root, "x") catch { println(f"write ../made.txt: {answer(error)}") }
+    println(f"made.txt beside the root: {fs::exists("made.txt", scratch)}")
+    fs::write("made.txt", root, "x")
+    println(f"made.txt under the root: {fs::read_to_string("store/made.txt", scratch)}")
+    fs::map("../outside.txt", root) catch { println(f"map outside: {answer(error)}") }
+    fs::read("../outside.txt", root) catch { println(f"read bytes outside: {answer(error)}") }
+
+    println(f"here.txt: {checked("here.txt", root)}")
+    println(f"gone.txt: {checked("gone.txt", root)}")
+    println(f"out: {checked("out", root)}")
+    println(f"<root>/out under Anywhere: {checked(f"{base}/out", fs::Root::Anywhere)}")
+    println(f"<top>/outside.txt under Anywhere: {checked(f"{top}/outside.txt", fs::Root::Anywhere)}")
+}

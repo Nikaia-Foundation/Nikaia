@@ -1,0 +1,41 @@
+// `fs::walk` lists files only, recursively, relative and sorted: a link out
+// of a `Root::Dir` is not listed, a link back up the tree is walked once,
+// `Anywhere` follows the link out; `..` is `Outside`, a missing name
+// `NotFound` (ADR-108 D1). The links are made through `sh`: `std::fs` makes none.
+use std::fs
+use std::io
+use std::process
+
+fn walked(from: String, root: ref fs::Root) -> String {
+    let found = fs::walk(from, root) catch {
+        match error {
+            io::IoError::NotFound(_) => return "NotFound",
+            io::IoError::Outside(_) => return "Outside",
+            else => return "other",
+        }
+    }
+    let mut names: Vec[String] = []
+    for p in found {
+        names.push(p.display())
+    }
+    names.sort()
+    return names.iter().join(" ")
+}
+
+fn main() throws {
+    let scratch = fs::scratch()
+    fs::create_dir("tree/src/deep", scratch; recursive: true)
+    fs::create_dir("away", scratch)
+    fs::write("tree/b.rs", scratch, "")
+    fs::write("tree/src/a.rs", scratch, "")
+    fs::write("tree/src/deep/c.txt", scratch, "")
+    fs::write("away/secret", scratch, "")
+    let top = fs::canonical(".", scratch).to_text()
+    process::run("sh", ["-c", "ln -s ../away tree/out; ln -s .. tree/src/up"]; dir: top.clone())
+    let tree = fs::Root::Dir(f"{top}/tree")
+    println(f"from .: {walked(".", tree)}")
+    println(f"from src: {walked("src", tree)}")
+    println(f"Anywhere: {walked(f"{top}/tree", fs::Root::Anywhere)}")
+    println(f"from ..: {walked("..", tree)}")
+    println(f"from nope: {walked("nope", tree)}")
+}

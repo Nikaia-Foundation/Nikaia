@@ -1,0 +1,55 @@
+// A supervised value is rebuilt when a panic poisons it (ADR-327 D3), as its
+// policy says (ADR-328 D9): `std`'s default `Backoff` rebuilds the first
+// poison at once and the second after a delay, a door during which stops its
+// task; a policy of the program's that gives up leaves the value poisoned for
+// every door after. Both values cross to a `spawn`, so at
+// `user_parallelism = yes` they are the crossing shape and at `no` the plain
+// one.
+use std::time
+
+struct Never {}
+
+impl supervisor::Restart for Never {
+	fn decide(mut self, _history: supervisor::Failures) -> supervisor::Next sync {
+		return supervisor::Next::Escalate
+	}
+}
+
+fn spoil(list: SharedMut[Vec[i64]]) -> i64 {
+	list.update fn(mut v) {
+		v.push(99)
+		if v.len() > 1 { panic("boom") }
+	}
+	return 1
+}
+
+fn first(list: SharedMut[Vec[i64]]) -> i64 {
+	let v: Vec[i64] = list.get()
+	return v[0]
+}
+
+fn main() throws {
+	let cache: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [10] })
+	let kept: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [1] }; policy: Never {})
+	let crossed = spawn fn { cache.get().len() + kept.get().len() }
+	println(f"crossed: {crossed.join()}")
+	cache.set([11])
+	let a = async spoil(cache) catch { 0 }
+	println("the first task runs")
+	println(f"rebuilt at once: {first(cache)} ({a})")
+	let b = async spoil(cache) catch { 0 }
+	println("the second task runs")
+	let c = async first(cache) catch { -1 }
+	println("the third task runs")
+	println(f"a door during the delay panics: {c == -1} ({b})")
+	time::sleep(150.millis())
+	println(f"rebuilt after the delay: {first(cache)}")
+	let d = async spoil(kept) catch { 0 }
+	println("the fourth task runs")
+	let e = async first(kept) catch { -1 }
+	println("the fifth task runs")
+	println(f"gave up: {e == -1} ({d})")
+	let f = async first(kept) catch { -1 }
+	println("the sixth task runs")
+	println(f"stays poisoned: {f == -1}")
+}

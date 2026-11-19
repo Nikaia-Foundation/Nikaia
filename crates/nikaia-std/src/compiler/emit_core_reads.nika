@@ -695,6 +695,90 @@ impl EmitState {
         }
     }
 
+    /// **A cut of a `Bytes` kept is the same owner at a count** (ADR-373 D1,
+    /// D3, #2190): `b.cut(a..c)`, and a cut of a cut cuts the cut, so a
+    /// mapping stays mapped while the cut lives.
+    fn emit_counted_cut[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match node {
+            Expr::Index { base, index, .. } => {
+                if self.facts.bytes_cuts.contains(node_key(base)) {
+                    self.emit_counted_cut(world, walk, out, host, base, depth, flow, scope)
+                } else {
+                    self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+                }
+                out.push(".cut(")
+                self.emit_counted_cut_range(world, walk, out, host, base, index, depth, flow, scope)
+                out.push(")")
+            },
+            else => self.emit_expr_written(world, walk, out, host, node, depth, flow, scope),
+        }
+    }
+
+    /// The range of a counted cut, in `usize`, as the read's is: written in
+    /// literals as it stands, else through `at`, and `b[a..<b.len()]` as `a..`.
+    fn emit_counted_cut_range[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let counts_down = a_negation_inside(index)
+        match index {
+            Expr::Range { start, end, inclusive, .. } => {
+                if !inclusive && emit_read_ends_in_len(world, end, base) {
+                    if only_literals(start) {
+                        self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)
+                        out.push("..")
+                    } else {
+                        out.push("nikaia_std::index::at(")
+                        self.emit_expr(world, walk, out, host, start, depth, flow, scope)
+                        out.push("..)")
+                    }
+                    return
+                }
+            },
+            else => {}
+        }
+        if only_literals(index) && !counts_down {
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+        } else {
+            out.push("nikaia_std::index::at(")
+            if counts_down {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow.widened(), scope)
+            } else {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            }
+            out.push(")")
+        }
+    }
+
+    /// Whether the counted cut `node` is cut from a `Bytes` with its owner:
+    /// not from a `Bytes` parameter the function only reads, which is a
+    /// plain run of bytes (ADR-373 D4) and is copied from. A parameter taken
+    /// by value is copied from too, which costs a copy and is never wrong.
+    fn emit_cut_has_an_owner(ref self, world: ref EmitWorld, node: ref Expr, scope: ref EmitScope) -> bool {
+        let name = match node {
+            Expr::Index { base, .. } => {
+                if self.facts.bytes_cuts.contains(node_key(base)) {
+                    return self.emit_cut_has_an_owner(world, base, scope)
+                }
+                match base {
+                    Expr::Variable(name, _) => emit_text(world, name),
+                    else => return true,
+                }
+            },
+            else => return true,
+        }
+        let c = self.own_contracts.functions.get(scope.function) ?? return true
+        let signature = c.signature ?? return true
+        let mut at = 0
+        while at < signature.params.len() {
+            if signature.params[at].0 == name {
+                return match signature.params[at].1 {
+                    Ty::Named { name: n, args, .. } => !(args.len() == 0 && n == "Bytes") || keeps_its_bytes(c, at),
+                    else => true,
+                }
+            }
+            at += 1
+        }
+        return true
+    }
+
     /// The ordinal a `Race<n>` variant is called: ordinals and not letters, so
     /// the generated `match` reads as the source does.
     fn emit_read_ordinal(ref self, at: i64) -> String {

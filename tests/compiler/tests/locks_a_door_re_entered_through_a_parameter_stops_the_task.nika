@@ -1,0 +1,29 @@
+// A door re-entered by the same task stops that task (ADR-281 D4, D36): the
+// nesting is not refused (NK2203) where it goes through a function parameter
+// (Part III C.4), so a `get` and a `set` called inside `access` reach the
+// lock's own check. The list crosses to a `spawn`, so at
+// `user_parallelism = yes` it is the crossing shape and at `no` the plain
+// one; both say the same thing, and the lock is free again afterwards.
+fn look(list: SharedMut[Vec[i64]], f: fn() -> i64 sync) -> i64 {
+	return list.access fn(v) { v.len() + f() }
+}
+
+fn put(list: SharedMut[Vec[i64]]) -> i64 sync {
+	list.set([4])
+	return 0
+}
+
+fn main() throws {
+	let list: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
+	let crossed = spawn fn { list.get().len() }
+	println(f"crossed: {crossed.join()}")
+	let a = async look(list, fn { list.get().len() }) catch { -1 }
+	println("the first task runs")
+	println(f"get inside access: {a}")
+	let b = async look(list, fn { put(list) }) catch { -1 }
+	println("the second task runs")
+	println(f"set inside access: {b}")
+	let c = async look(list, fn { 0 }) catch { -1 }
+	println("the third task runs")
+	println(f"the lock is free again: {c / 3}")
+}

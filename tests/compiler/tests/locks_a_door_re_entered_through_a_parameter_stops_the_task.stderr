@@ -1,0 +1,2 @@
+tests/locks_a_door_re_entered_through_a_parameter_stops_the_task.nika:20: a task stopped: this lock is already held by the same task: `access` cannot be re-entered
+tests/locks_a_door_re_entered_through_a_parameter_stops_the_task.nika:12: a task stopped: this lock is already held by the same task: `access` cannot be re-entered

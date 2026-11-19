@@ -1,0 +1,19 @@
+// Two tasks store after the same witness (ADR-281 D26): `set(…; after: seen)`
+// compares and stores as one step, so exactly one of them gets through and
+// the other is overtaken, where a `get` and a `set` would let both through
+// and lose one. The list crosses to the two `spawn`s, so at
+// `user_parallelism = yes` it is the crossing shape and at `no` the plain
+// one.
+fn store(list: SharedMut[Vec[i64]], value: i64) -> i64 {
+	list.set([value]; after: [0]) catch { return 0 }
+	return 1
+}
+
+fn main() throws {
+	let list: SharedMut[Vec[i64]] = SharedMut([0])
+	let left = spawn fn { store(list, 1) }
+	let right = spawn fn { store(list, 2) }
+	let wins = left.join() + right.join()
+	let now = list.access fn(v) { v[0] }
+	println(f"one got through: {wins == 1 && (now == 1 || now == 2)}")
+}

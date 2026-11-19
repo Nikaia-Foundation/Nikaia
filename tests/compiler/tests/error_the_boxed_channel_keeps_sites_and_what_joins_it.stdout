@@ -1,0 +1,33 @@
+short: boom
+full:
+boom
+  raised at load
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+joined:
+boom
+  raised at load
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  boom
+    raised at load
+lists:
+boom
+  raised at typed_load
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  boom
+    raised at typed_load
+  and then:
+  boom
+    raised at typed_load
+    and then:
+    boom
+      raised at typed_load
+bare:
+no such file or directory: /nonexistent-2188/no-such-file.txt
+  (raised below Nikaia; no site recorded)
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  boom
+    raised at load
+after

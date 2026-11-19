@@ -1,0 +1,26 @@
+ok.txt: true
+./ok.txt: true
+sub/deep.txt: false
+sub/../ok.txt: true
+../outside.txt: Outside
+sub/../../outside.txt: Outside
+../store2/near.txt: Outside
+link.txt: Outside
+gone/../ok.txt: false
+<root>/ok.txt: true
+<top>/outside.txt: Outside
+<top>/store2/near.txt: Outside
+read gone/../ok.txt: NotFound
+a missing root: Outside
+Anywhere reads <root>/../outside.txt: secret
+read refused: Outside ../outside.txt, leaves the root: true
+write ../made.txt: Outside
+made.txt beside the root: false
+made.txt under the root: x
+map outside: Outside
+read bytes outside: Outside
+here.txt: true
+gone.txt: false
+out: Outside
+<root>/out under Anywhere: true
+<top>/outside.txt under Anywhere: true
