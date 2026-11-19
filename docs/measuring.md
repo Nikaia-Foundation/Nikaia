@@ -54,6 +54,18 @@ quotes a figure.
   callgrind_annotate. Quote the control's count beside the loss (#1614:
   fannkuch-redux 516 against a control of 499 a permutation, Rust #6 81.5).
 
+* **A program build's rustc is counted alone, through a `RUSTC` shim** (#2016):
+  never callgrind a whole `nikaia build` with `--trace-children=yes` (it
+  counts Cargo, every dependency's rustc and the check, prove and lower
+  passes; #2005's such run did not end in two hours). Count the top-level
+  `nikaia build` with `--trace-children=no`, and rustc with a shim script set
+  as `RUSTC`: Cargo hands it to the wrapper, which runs it in rustc's place;
+  the shim runs the real `rustc` under `valgrind --tool=callgrind
+  --trace-children=no` only when its arguments hold `--crate-name NAME` of
+  the program's crate, and plainly otherwise (`-vV` too). About two minutes
+  for the solver program. A store hit runs no rustc at all (ADR-021 D14), so
+  a cold figure needs Rust that changed or the `rustc/` store moved aside.
+
 * **A JVM caller is counted as a difference, with its JIT flags named**
   (#1337). A JVM's own start costs tens of millions of instructions, more
   than any crossing, so one run means nothing: count the same program twice
