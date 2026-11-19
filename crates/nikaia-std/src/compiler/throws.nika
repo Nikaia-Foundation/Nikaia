@@ -374,7 +374,7 @@ fn throws_grow(mut sets: collections::BTreeMap[String, collections::BTreeSet[Str
 
 /// What a callee fails with. **One the walk did not see still has a set**
 /// (ADR-296 D40): a grammar's entry rule is not an `Item::Fn`, and its contract
-/// is written straight into the ledger (ADR-296 D24). Read as nothing, what a
+/// is written straight into the ledger (ADR-grammar-syntax-v1 D5). Read as nothing, what a
 /// parse throws reached no caller, and the caller's channel was inferred
 /// without it - a file `rustc` refused.
 fn theirs(sets: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, callee: ref String) -> Vec[String] {

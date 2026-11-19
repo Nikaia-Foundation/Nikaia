@@ -1,4 +1,4 @@
-// `span(p)` and `here` over a `Bytes` (Part II 10.8, ADR-339 D1, #557): a
+// `span(p)` and `here` over a `Bytes` (Part II 10.8, ADR-grammar-syntax-v1 D16, #557): a
 // span is the bytes its pattern covered and ends at the pattern's last token,
 // not after the whitespace skipped behind it; `here` is a position and
 // consumes nothing.

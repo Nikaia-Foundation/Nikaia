@@ -7338,8 +7338,8 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
     }
 }
 
-/// **A rule's value of a struct is a value of that struct** (ADR-grammar-1
-/// D2, #1548): a rule declares its values as a function does, so `p.anchor`
+/// **A rule's value of a struct is a value of that struct** (ADR-grammar-syntax-v1
+/// D12, #1548): a rule declares its values as a function does, so `p.anchor`
 /// read off `p: Props` is the field `Props.anchor`, with the tier the field
 /// has, as it is off a function's parameter. A value of text or of a
 /// container is not bound here: rules take no positions of their own.

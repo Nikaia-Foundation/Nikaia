@@ -399,7 +399,7 @@ impl CheckState {
                 let name = *name;
                 for arg in args.iter() { self.grammar_values(world, host, gram, arg, rules, scope.copy_owned()); }
                 let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
-                if args.is_empty() && rules.contains(&called) { for rule in gram.rules.iter() { if rule.name == name && !rule.args.is_empty() { self.findings.push(check_refusal("NK1101", &pattern.span, format!("`{}` takes {} before the `;`, but none is given.", called, counted(rule.args.len() as i64, "value")), vec![String::from("A rule declared with values is called with them, as a function is (ADR-grammar-1 D2).")], Some(format!("Write `{}(…)` with a value for each.", called)))); } } }
+                if args.is_empty() && rules.contains(&called) { for rule in gram.rules.iter() { if rule.name == name && !rule.args.is_empty() { self.findings.push(check_refusal("NK1101", &pattern.span, format!("`{}` takes {} before the `;`, but none is given.", called, counted(rule.args.len() as i64, "value")), vec![String::from("A rule declared with values is called with them, as a function is (ADR-grammar-syntax-v1 D12).")], Some(format!("Write `{}(…)` with a value for each.", called)))); } } }
                 return scope;
             },
             Pattern::Counted { pat, low, high, .. } => {
@@ -475,7 +475,7 @@ impl CheckState {
         let grammar_name = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
         for rule in gram.rules.iter() {
             if rule.name != name { continue; }
-            if (args.len() as i64) != rule.args.len() as i64 { self.findings.push(check_refusal("NK1101", span, format!("`{}` takes {} before the `;`, but you passed {}.", called, counted(rule.args.len() as i64, "value"), args.len() as i64), vec![String::from("A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).")], Some(String::from("Give one value for each, by position; an option goes after the `;` by name.")))); }
+            if (args.len() as i64) != rule.args.len() as i64 { self.findings.push(check_refusal("NK1101", span, format!("`{}` takes {} before the `;`, but you passed {}.", called, counted(rule.args.len() as i64, "value"), args.len() as i64), vec![String::from("A rule takes its values as a function takes its arguments (ADR-grammar-syntax-v1 D12).")], Some(String::from("Give one value for each, by position; an option goes after the `;` by name.")))); }
             for i in 0..args.len() as i64 {
                 if ((i) as usize) < rule.args.len() {
                     let want = host.type_of(&unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty);

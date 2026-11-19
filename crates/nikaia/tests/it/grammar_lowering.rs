@@ -645,7 +645,7 @@ grammar Ids {
 }
 
 /// **A grammar with two `pub` rules is entered by either**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D25), which is the
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D6), which is the
 /// defect that record closes rather than a feature it adds.
 ///
 /// The emitter used to pick the entry itself — the first `pub` rule, and a
@@ -757,7 +757,7 @@ fn reach() { let s = Two::N(data) }
 }
 
 /// **The old spelling is refused, and the message names the new one**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24) — the shape
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5) — the shape
 /// [ADR-277](../../../docs/specification/adr/adr-277.md) gave `fn:`: a form the
 /// specification taught deserves a sentence rather than a parse error at
 /// whatever token happens to come next.
@@ -789,7 +789,7 @@ fn the_old_from_form_is_refused_with_the_call_in_the_message() {
     );
 }
 
-/// **A rule is not `pub` on its own** (ADR-296 D25): `entry` says the program
+/// **A rule is not `pub` on its own** (ADR-grammar-syntax-v1 D6): `entry` says the program
 /// may call it, and offering a grammar to other packages is `pub grammar`'s,
 /// for all its entries at once. Every grammar written before 0.0.422 said
 /// `pub rule`, so the refusal names both words rather than failing at `rule`.
@@ -813,7 +813,7 @@ fn pub_rule_is_refused_and_the_message_says_entry() {
     assert!(help.contains("`pub grammar`"), "{finding:#?}");
 }
 
-/// **`pub grammar` offers its entries to other packages** (ADR-296 D25,
+/// **`pub grammar` offers its entries to other packages** (ADR-grammar-syntax-v1 D6,
 /// #520): a consumer calls `lib::Nums::number(…)`, and a grammar without
 /// `pub` stays its package's own (`NK1110`).
 #[test]

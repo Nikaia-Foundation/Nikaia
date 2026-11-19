@@ -504,7 +504,7 @@ impl EmitState {
     }
 
     /// `Measurements.file(data)` - the whole of what a user writes to run a
-    /// grammar (ADR-296 D1, D2). `parallelism` is how the build asks the driver
+    /// grammar (ADR-grammar-syntax-v1 D1, D2). `parallelism` is how the build asks the driver
     /// to cut the input.
     fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, values: ref Vec[Expr], config: ref Vec[ConfigArg], parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **The `?` is the call's, and a `catch` is what takes it away.**
@@ -517,7 +517,7 @@ impl EmitState {
             throw EmitRefused { message: f"There's no grammar called `{name}` in this file.", at: flow.statement }
         }
         let def = self.grammars.get(name.clone()) ?? return
-        // **The rule is named at the call** (ADR-296 D1, D2): every `entry` rule
+        // **The rule is named at the call** (ADR-grammar-syntax-v1 D1, D2): every `entry` rule
         // is an entry, and which one is what the program wrote.
         let mut found = false
         let mut parallel = false
@@ -593,7 +593,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)
             out.push(").to_vec(); ")
             // **The values, the options and the table are taken before the
-            // reader starts** (ADR-grammar-1 D2, ADR-388 D1): each is owned,
+            // reader starts** (ADR-grammar-syntax-v1 D12, ADR-388 D1): each is owned,
             // as an entry's parameter is, and moves to the reader's thread;
             // the table is the caller's own, shared, not a copy of it.
             let mut handed = String()
@@ -664,7 +664,7 @@ impl EmitState {
         }
         out.push(f", {lowered}::parse_{rule_name}(")
         // **The values an entry takes**, in its rule's order, an option left
-        // out by its default (ADR-grammar-1 D2).
+        // out by its default (ADR-grammar-syntax-v1 D12).
         match entered {
             rule => {
                 let mut first = true

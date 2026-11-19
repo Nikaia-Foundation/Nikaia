@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** October 28, 2026
 **Answers:** whether and how `std` offers regular expressions ([#673](https://github.com/Nikaia-Foundation/Nikaia/issues/673)): which dialect, what type a regular expression has, what the build does with a pattern it knows, which engine runs it, and what a pattern that arrives at run time runs on
-**Supersedes / Related:** [ADR-specialization-1](adr-specialization-1.md) (`comptime?`, `@unroll`, branches decided while building, a result type computed from a `comptime` parameter), [ADR-374](adr-374.md) (a position in a text, `text::Match`), [ADR-375](adr-375.md) (`ByteSet`, `Seq`, positions as facts), [ADR-377](adr-377.md) (`std::simd`), [ADR-296](adr-296.md) D7 (a grammar has no regex terminals), D42 (a `std` type over a crate's table), [ADR-318](adr-318.md) D5-D6 (a `std` type crosses into a `comptime` by its `constant` column; a `std` function runs at build time), [ADR-311](adr-311.md) (a build-time value crosses in its view form), [ADR-333](adr-333.md) D3 (a `comptime` parameter), [ADR-287](adr-287.md) (`comptime`), [ADR-295](adr-295.md) (a trait is not a type), [ADR-218](adr-218.md) (`unsafe` lives in `crates/unsafe`), [ADR-188](adr-188.md) (a backslash is written `\\`)
+**Supersedes / Related:** [ADR-specialization-1](adr-specialization-1.md) (`comptime?`, `@unroll`, branches decided while building, a result type computed from a `comptime` parameter), [ADR-374](adr-374.md) (a position in a text, `text::Match`), [ADR-375](adr-375.md) (`ByteSet`, `Seq`, positions as facts), [ADR-377](adr-377.md) (`std::simd`), [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D21 (a grammar has no regex terminals), D42 (a `std` type over a crate's table), [ADR-318](adr-318.md) D5-D6 (a `std` type crosses into a `comptime` by its `constant` column; a `std` function runs at build time), [ADR-311](adr-311.md) (a build-time value crosses in its view form), [ADR-333](adr-333.md) D3 (a `comptime` parameter), [ADR-287](adr-287.md) (`comptime`), [ADR-295](adr-295.md) (a trait is not a type), [ADR-218](adr-218.md) (`unsafe` lives in `crates/unsafe`), [ADR-188](adr-188.md) (a backslash is written `\\`)
 
 ## 1. Question
 
@@ -277,7 +277,7 @@ differ from it.
 
 * **Typed groups.** `dsl regex::Regex { (?P<year>\d{4}) } eod` giving a result
   struct with a field per named group is a record of its own.
-* **Regex terminals in a `grammar`** stay a goal ([ADR-296](adr-296.md) D7).
+* **Regex terminals in a `grammar`** stay a goal ([ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D21).
 * **Engines of our own for a pattern that arrives at run time.**
 * **A raw-string form** (D2), **matching bytes** (D3), **backreferences and
   lookaround** (D1): none is decided against; none is promised.

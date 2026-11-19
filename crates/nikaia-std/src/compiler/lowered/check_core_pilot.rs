@@ -18,7 +18,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
         Some(contract) => {
             let signature = nikaia_std::index::or(contract.signature, || Signature::empty());
             let wanted = unsafe { nikaia_std::proven::sub::<i64>(signature.params.len() as i64, 1) };
-            if wanted >= 0 && unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) } != wanted { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes the input and {}, but you passed {} arguments.", key, counted(wanted, "value"), args.len() as i64), vec![String::from("An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-1 D2).")], Some(String::from("Give the input, then one value for each, by position.")))); }
+            if wanted >= 0 && unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) } != wanted { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes the input and {}, but you passed {} arguments.", key, counted(wanted, "value"), args.len() as i64), vec![String::from("An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-syntax-v1 D12).")], Some(String::from("Give the input, then one value for each, by position.")))); }
             for i in 1..args.len() as i64 {
                 if ((i) as usize) < signature.params.len() {
                     let named = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0.to_string());

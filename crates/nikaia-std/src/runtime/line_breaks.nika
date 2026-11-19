@@ -1,11 +1,11 @@
 // crates/nikaia-std/src/runtime/line_breaks.nika
 //
 // **What the whitespace a generated parser last skipped held** (#557,
-// [ADR-339](../../../../docs/specification/adr/adr-339.md) D2): the record the
+// [ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D17): the record the
 // grammar built-in `same_line` asks.
 //
 // A grammar that writes `same_line` is lowered with this record as its parser's
-// state (ADR-339 D3: the lowering, not the grammar, declares it): its `WS`
+// state (ADR-grammar-syntax-v1 D18: the lowering, not the grammar, declares it): its `WS`
 // calls `ran` with the run it skipped, and `same_line` fails where
 // `began_a_line` says the token at its place came after a line break. The
 // record is by position, so the answer is a fact about the input and an

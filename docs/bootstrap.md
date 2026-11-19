@@ -205,7 +205,7 @@ sub-rule export in `winnow-grammar`), so the two grammars run side by side;
 first the helpers and the actions' logic move (about 680 lines);
 then the rules in chunks into `tools/parser_grammar.nika`, each compared on
 every `tests/compiler` and `tests/errors` program; the last commit removes
-the `grammar!` block and switches (#557 steps 4-5). Decided here (architect, within ADR-339 and ADR-294 D7): the
+the `grammar!` block and switches (#557 steps 4-5). Decided here (architect, within ADR-grammar-syntax-v1 and ADR-294 D7): the
 compiler's own grammar runs over the source as `Bytes`, so `span(p)` gives
 the `Span` of two `u32` the span table needs; the text form (`text::Match`,
 `text::Pos`) waits for #743 and is not on this path.

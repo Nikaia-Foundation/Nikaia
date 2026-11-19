@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1469] — 2026-11-19
+
+**adr-rename: follow a citation whose decisions start on the next line (#2298)**
+- adr-rename follows a citation whose decisions start on the next comment line, and lists a decision list that crosses a line break
+
 ## [0.0.1468] — 2026-11-19
 
 **A package's Nikaia code and test blocks call the package's own Rust (#2233)**

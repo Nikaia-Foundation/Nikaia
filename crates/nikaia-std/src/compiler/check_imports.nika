@@ -195,7 +195,7 @@ impl CheckState {
     /// else is the mistake worth catching: a rule is where a struct literal is
     /// most often typed out in full.
     /// **Two names the engine has and a grammar may not write** (`NK1187`,
-    /// [ADR-296](../../docs/specification/adr/adr-296.md) D34).
+    /// [ADR-grammar-syntax-v1](../../docs/specification/adr/adr-grammar-syntax-v1.md) D10).
     ///
     /// `tag("x")` is `"x"` and `digit1` is `digit+`: each is the engine's
     /// spelling for something the grammar can already say, and D1 makes Part II

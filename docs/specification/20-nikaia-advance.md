@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1468 (Draft)
+**Version:** 0.0.1469 (Draft)
 **Date:** 2026-11-19
 
 ---
@@ -50,8 +50,8 @@ runs the rule `value` of the grammar `Json`. One of them may be written
 `main entry rule`: the one a `dsl` block runs where it names none (10.5). A rule without `entry` is the
 grammar's own, and a call to it is refused. Without `pub`, a grammar is
 entered only from the file that declares it; `pub grammar` offers all of its
-entries to other packages at once - a rule is never `pub` on its own (ADR-296
-D25). The word in front of the binding decides
+entries to other packages at once - a rule is never `pub` on its own (ADR-grammar-syntax-v1
+D6). The word in front of the binding decides
 *when* the call runs.
 
 **The separator is `::`, as it is for every other qualified name.** The dot is
@@ -618,7 +618,7 @@ the result type; the block after the second, after the pattern, is the action, o
 and it may read every binding of that alternative. `entry` before `rule` makes
 the rule an entry a call can reach (`Json::value(input)`).
 **A rule may take values**, declared as a function's parameters are, Subject ;
-Config (Part I 5.1, [ADR-grammar-1](adr/adr-grammar-1.md) D2):
+Config (Part I 5.1, [ADR-grammar-syntax-v1](adr/adr-grammar-syntax-v1.md) D12):
 `rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Yaml = …`. A call hands them over as
 a function call does, `Block(n + 1)`, `Block(m; c: Ctx::BlockOut)`: before the
 `;` by position, after it by name, an option left out taking its default. A
@@ -746,9 +746,9 @@ and `rule WS = "" { }` skips nothing.
 | `p => q` | the **cut**: after `p`, `q` must follow; a failure in `q` is an error and no enclosing alternative is retried | as `p q` |
 | `p?` | `p` or nothing | a `T?` |
 | `p*`, `p+` | zero or more, one or more `p` | a list of what `p` yields, or the text matched where `p` is a character class |
-| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back. A brace after a pattern is always a bound, since an action stands after `->` ([ADR-grammar-1](adr/adr-grammar-1.md) D1). A bound is an `i64` expression over the values in scope, `" "{m}`, `"."{0, n - 1}` (D3); one below zero admits no count, so `{0, n - 1}` with `n` at 0 matches nothing | as `p*` |
+| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back. A brace after a pattern is always a bound, since an action stands after `->` ([ADR-grammar-syntax-v1](adr/adr-grammar-syntax-v1.md) D9). A bound is an `i64` expression over the values in scope, `" "{m}`, `"."{0, n - 1}` (D3); one below zero admits no count, so `{0, n - 1}` with `n` at 0 matches nothing | as `p*` |
 | `( p )` | grouping | as `p` |
-| `[ p ]`, `paren( p )` | the delimiter around `p` in the **input**: `[`, `(`; a brace in the input is written `"{" p "}"` (ADR-grammar-1 D5) | as `p` |
+| `[ p ]`, `paren( p )` | the delimiter around `p` in the **input**: `[`, `(`; a brace in the input is written `"{" p "}"` (ADR-grammar-syntax-v1 D15) | as `p` |
 | `not(p)` | succeeds where `p` does not match, consuming nothing | nothing |
 | `peek(p)` | `p` without consuming it | as `p` |
 | `until(p)` | everything up to `p`, not consuming `p`; an error where `p` never comes | text |
@@ -756,7 +756,7 @@ and `rule WS = "" { }` skips nothing.
 | `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
 | `span(p)` | `p`, handing back the range it covered | over text a `text::Match` of the input; over `Bytes` a `Span` (two `u32`) |
 | `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32` |
-| `count(p)` | `p` as often as it matches | how often, an `i64`, never below 0 (ADR-grammar-1 D5) |
+| `count(p)` | `p` as often as it matches | how often, an `i64`, never below 0 (ADR-grammar-syntax-v1 D15) |
 | `if(cond)`, `if(cond, "what")` | nothing, where the `bool` `cond` holds; otherwise the alternative fails there without consuming, and the next is tried; the message names `"what"`, or the condition as written (D4) | nothing |
 | `same_line` | nothing; fails where the whitespace skipped just before this position held a line break | nothing |
 | `dec[T](p)` | `p`, its text read as the number type `T`; an error where it does not fit | `T` |

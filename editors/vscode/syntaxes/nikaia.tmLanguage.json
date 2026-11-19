@@ -621,7 +621,7 @@
     },
 
     "grammar-block": {
-      "comment": "Part II 10.1. A grammar body is its own little language: rule names decide lexical (uppercase) from syntactic (lowercase), `=>` is a commit point, `->` names a rule's result type, the block after a pattern is its action (ADR-296 D33), and the action block itself is ordinary Nikaia.",
+      "comment": "Part II 10.1. A grammar body is its own little language: rule names decide lexical (uppercase) from syntactic (lowercase), `=>` is a commit point, `->` names a rule's result type, the block after a pattern is its action (ADR-grammar-syntax-v1 D9), and the action block itself is ordinary Nikaia.",
       "name": "meta.grammar.nika",
       "begin": "\\b(grammar)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\{)",
       "beginCaptures": {
@@ -755,7 +755,7 @@
     },
 
     "grammar-repetition": {
-      "comment": "ADR-296 D13: `*` and `+` say unbounded and mean it; a brace group states a fixed width.",
+      "comment": "ADR-grammar-syntax-v1 D11: `*` and `+` say unbounded and mean it; a brace group states a fixed width.",
       "name": "keyword.operator.repetition.nika",
       "match": "[*+?]"
     },

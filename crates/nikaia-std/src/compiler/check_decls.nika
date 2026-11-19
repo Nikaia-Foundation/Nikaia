@@ -261,7 +261,7 @@ impl CheckState {
     /// is silence rather than a guess.
     /// The ledger key `Json.value(input)` enters through, where the receiver
     /// names a grammar of this file and the method one of its `entry` rules
-    /// ([ADR-296](../../docs/specification/adr/adr-296.md) D24, D25).
+    /// ([ADR-grammar-syntax-v1](../../docs/specification/adr/adr-grammar-syntax-v1.md) D5, D6).
     ///
     /// `None` for everything else, which is every other method call: a grammar
     /// name is not a value, so there is nothing to confuse this with.

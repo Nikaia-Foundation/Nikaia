@@ -68,8 +68,8 @@ fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_g
     }
 }
 
-/// **A grammar rule's action, with what its pattern has shown** (ADR-grammar-1
-/// D4, ADR-yaml-1 D11): the rule's whole-number values and the whole numbers
+/// **A grammar rule's action, with what its pattern has shown** (ADR-grammar-syntax-v1
+/// D14, ADR-yaml-1 D11): the rule's whole-number values and the whole numbers
 /// its pattern binds at its top are variables of the proof, and each guard at
 /// the top holds where the action runs. An action has no callers, so a claim
 /// in it is proved there or refused.
@@ -161,7 +161,7 @@ fn prover_action_locals(pattern: ref Pattern, mut scope: ProverScope, words: ref
 
 /// The whole-number type a bound pattern yields, if it yields one: a rule of
 /// the grammar declared so, `count(p)` (an `i64`), `here` (a `u32`) or
-/// `dec[T]` of a whole-number `T` (ADR-grammar-1 D5, ADR-339 D1).
+/// `dec[T]` of a whole-number `T` (ADR-grammar-syntax-v1 D15, ADR-grammar-syntax-v1 D16).
 fn prover_bound_number(def: ref GrammarDef, pattern: ref Pattern, words: ref winnow_grammar::InternerContext) -> String? sync {
     let (called, generics, args) = match pattern {
         Pattern::Ref { name, generics, args } => (words.resolve(name).clone(), generics.clone(), args.len()),
