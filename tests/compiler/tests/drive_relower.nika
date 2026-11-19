@@ -13,7 +13,9 @@
 // merge's BUILD built it in the tree target (#2154). A conflict only in the
 // lowered index `lowered.rs` beside the lowered directory (both sides moved
 // its digest line) is re-lowered too (#1784), and named once; a round that
-// changed only its `LOWERED_DIGEST` line settles the lowering (#2154). Each
+// changed only its `LOWERED_DIGEST` line settles the lowering (#2154). A
+// conflict whose regeneration fails from their side of the lowered files is
+// regenerated from ours (#2253), and escalates only when both fail. Each
 // step's seconds are logged.
 use std::fs
 use std::process
@@ -90,10 +92,15 @@ fn setup(tmp: String, name: String, kind: String) -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, lower: String) throws {
+    case_built(nikaia, repo, tmp, name, kind, lower, "true")
+}
+
+// BUILD, where not "true": a stub build command run in the tree worktree.
+fn case_built(nikaia: String, repo: String, tmp: String, name: String, kind: String, lower: String, stub_build: String) throws {
     let work = setup(tmp.clone(), name.replace(" ", "-"), kind.clone())
     // BUILD: none here, or for "example built" the merge's own, into the tree
     // target, whose binary the ledgers then take unbuilt (#2154).
-    let mut build = "true"
+    let mut build = stub_build
     if kind == "example built" { build = f"CARGO_TARGET_DIR='{work}/target/ledger-target' cargo build -q --profile fast -p nikaia" }
     if kind.starts_with("example") {
         // The stub ledgers script: it rewrites one ledger and says so, run by
@@ -139,6 +146,14 @@ fn main() throws {
     case(nikaia.clone(), repo.clone(), tmp.clone(), "index only", "index", f"{lower}; cat crates/src/*.nika | wc -l > {low}.rs")
     // A lowering that writes a new `LOWERED_DIGEST` line each round (#2154):
     // a set that differs only there is settled, after two rounds, not five.
-    case(nikaia, repo, tmp.clone(), "index digest only", "index", f"{lower}; mkdir -p target; echo $(( $(cat target/rounds 2>/dev/null || echo 0) + 1 )) > target/rounds; echo \"pub const LOWERED_DIGEST: &str = \\\"round $(cat target/rounds)\\\";\" > {low}.rs")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "index digest only", "index", f"{lower}; mkdir -p target; echo $(( $(cat target/rounds 2>/dev/null || echo 0) + 1 )) > target/rounds; echo \"pub const LOWERED_DIGEST: &str = \\\"round $(cat target/rounds)\\\";\" > {low}.rs")
+    // Their lowered emitter lacks our change (#2253): from their side of the
+    // lowered file the build fails and their lowering keeps the broken file;
+    // from ours it builds and settles.
+    let theirs_broken = f"if grep -qx theirs {low}/a.rs; then echo theirs > {low}/a.rs; else cat crates/src/*.nika > {low}/a.rs; fi; echo new > {low}/new.rs"
+    let refuses_theirs = f"if grep -qx theirs {low}/a.rs; then echo 'error[E0603]: function `file` is private'; false; fi"
+    case_built(nikaia.clone(), repo.clone(), tmp.clone(), "theirs fails, ours builds", "lowered", theirs_broken, refuses_theirs)
+    // Both sides fail to build: one escalation, naming both.
+    case_built(nikaia, repo, tmp.clone(), "both sides fail", "lowered", lower, "echo 'error: broken'; false")
     process::run("rm", ["-rf", tmp])
 }
