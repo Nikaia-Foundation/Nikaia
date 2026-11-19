@@ -3665,6 +3665,68 @@ fn prover_std_properties(library: ref Ledger) -> collections::BTreeSet[String] {
     return found
 }
 
+/// **What each `std` method ensures of its receiver's named properties**
+/// (ADR-381 D2, D5), by its ledger key: the parameters' names and each
+/// `ensures` that is one of `properties` on `self`, as its name follows the
+/// receiver's path: `Vec::sort` ensures `prop@.is_sorted()`,
+/// `Vec::sort_by_key` `prop@.is_sorted_by_key(f)`.
+fn prover_std_ensured(library: ref Ledger, properties: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, (Vec[String], Vec[String])] {
+    let mut found: collections::BTreeMap[String, (Vec[String], Vec[String])] = collections::BTreeMap()
+    for (key, contract) in library.functions {
+        if contract.ensures.is_empty() {
+            continue
+        }
+        let signature = contract.signature ?? continue
+        if !signature.takes_a_receiver() {
+            continue
+        }
+        let owner = key[0..<(key.rfind("::") ?? 0)].clone()
+        let mut rests: Vec[String] = []
+        for text in contract.ensures {
+            let named = prover_std_property_named(text, owner, properties) ?? continue
+            rests.push((named.strip_prefix("self.") ?? continue).clone())
+        }
+        if rests.is_empty() {
+            continue
+        }
+        let params: Vec[String] = signature.params.iter().map(fn(param) { param.0.clone() }).collect()
+        found.insert(key.clone(), (params, rests))
+    }
+    return found
+}
+
+/// **What a `std` method ensures of its receiver holds after the call**
+/// (ADR-381 D2, D5): `xs.sort()` makes `xs.is_sorted()` known, and
+/// `xs.sort_by_key(by_id)` `xs.is_sorted_by_key(by_id)`, from here until
+/// the list may change (`prover_follow_elements` drops it there). A
+/// function handed as a closure is no path, so nothing is known of it.
+fn prover_std_ensures_after(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    let expr = match stmt {
+        Stmt::Expr(e) => e,
+        else => return,
+    }
+    match expr {
+        Expr::MethodCall { receiver, args, .. } => {
+            let callee: String = walk.state.method_callees.get(id_of(receiver) as i64)?.clone() ?? return
+            let ensured = walk.state.std_ensured.get(callee)?.clone() ?? return
+            let on = path_of(receiver, words) ?? return
+            let mut all: Vec[Expr] = [receiver.clone()]
+            all.extend(args.clone())
+            for rest in ensured.1 {
+                let given = property_given(rest, ensured.0, all, words) ?? continue
+                let name = f"{on}.{given}"
+                scope.ints.insert(name.clone())
+                scope.loose.insert(name.clone())
+                let named = walk.arena.var(name)
+                let one = walk.arena.int(1)
+                scope.facts.push(walk.arena.equal(named, one))
+                scope.known_from.insert(name.clone(), f"what `{callee}` ensures")
+            }
+        },
+        else => {},
+    }
+}
+
 /// **Whether `wanted` is a method a named property calls** (ADR-381 D1):
 /// every method of that name the program's types have is `sync`, hands
 /// back a `bool`, changes neither its receiver nor an argument, has no
@@ -4084,6 +4146,7 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
     for n in gone {
         scope.rebind(walk.arena, n)
     }
+    prover_std_ensures_after(walk, stmt, scope, words)
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 {

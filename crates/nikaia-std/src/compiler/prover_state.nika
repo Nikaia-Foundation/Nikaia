@@ -88,6 +88,11 @@ pub struct ProverState {
     /// **The `std` methods a named property may call** (ADR-381 D1, D5),
     /// by their ledger keys: `Vec::is_sorted`, `Vec::is_sorted_by_key`.
     pub std_properties: collections::BTreeSet[String],
+    /// **What each `std` method ensures of its receiver's named
+    /// properties** (ADR-381 D2, D5), by its ledger key: its parameters'
+    /// names and each property as its name follows the receiver's path,
+    /// `Vec::sort` with `prop@.is_sorted()`.
+    pub std_ensured: collections::BTreeMap[String, (Vec[String], Vec[String])],
     /// **Each call with arguments the build knows** that a claim or a
     /// binding read (ADR-359 D11), by `call_result_name`: the call as
     /// written, and the callee with its arguments' values.
@@ -171,6 +176,7 @@ impl ProverState {
             unfit_numbers: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
             std_properties: collections::BTreeSet(),
+            std_ensured: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
             call_args: collections::BTreeMap(),
             wanted: collections::BTreeSet(),

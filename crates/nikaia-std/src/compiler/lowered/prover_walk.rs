@@ -2711,6 +2711,59 @@ pub(crate) fn prover_std_properties(library: &Ledger) -> collections::BTreeSet<S
     found
 }
 
+pub(crate) fn prover_std_ensured(library: &Ledger, properties: &collections::BTreeSet<String>) -> collections::BTreeMap<String, (Vec<String>, Vec<String>)> {
+    let mut found: collections::BTreeMap<String, (Vec<String>, Vec<String>)> = collections::BTreeMap::new();
+    for (key, contract) in library.functions.iter() {
+        if contract.ensures.is_empty() { continue; }
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !signature.takes_a_receiver() { continue; }
+        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..nikaia_std::index::or(nikaia_std::search::rfind(&key, &"::"), || 0))).to_string());
+        #[allow(unused_mut)] let mut rests: Vec<String> = vec![];
+        for text in contract.ensures.iter() {
+            let named = match prover_std_property_named(text, &owner, properties) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            rests.push(nikaia_std::block::Text::from(match named.strip_prefix("self.") { Some(__nikaia_value) => __nikaia_value, None => continue }.to_string()));
+        }
+        if rests.is_empty() { continue; }
+        let params: Vec<String> = signature.params.iter().map(|param| { nikaia_std::block::Text::from(param.0.to_string()) }).collect::<Vec<_>>(); #[allow(unused_mut, clippy::redundant_locals)] let mut rests = rests;
+        found.insert(nikaia_std::block::Text::from(key.to_string()), (params, rests));
+    }
+    found
+}
+
+pub(crate) fn prover_std_ensures_after(walk: &mut ProverWalk, stmt: &Stmt, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) {
+    let expr = match stmt {
+        Stmt::Expr(e) => e,
+        _ => return,
+    };
+    match expr {
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let callee: String = match match walk.state.method_callees.get(&(id_of(receiver) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return };
+            let ensured = match match walk.state.std_ensured.get(&callee) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return };
+            let on = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let mut all: Vec<Expr> = vec![receiver.clone()];
+            all.extend(args.iter().cloned());
+            for rest in ensured.1.iter() {
+                let given = match property_given(rest, &ensured.0, &all, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let name = format!("{}.{}", on, given);
+                scope.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+                scope.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+                let named = walk.arena.var(&name);
+                let one = walk.arena.int(1);
+                scope.facts.push(walk.arena.equal(named, one));
+                scope.known_from.insert(nikaia_std::block::Text::from(name.to_string()), format!("what `{}` ensures", callee));
+            }
+        },
+        _ => { },
+    }
+}
+
 pub(crate) fn prover_a_method_property(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> bool {
     let mut found = false;
     for item in program.items.iter() {
@@ -2986,6 +3039,7 @@ pub(crate) fn prover_follow_elements(walk: &mut ProverWalk, stmt: &Stmt, scope: 
         if elements_change(stmt, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, words) || rebinds_in_statement(stmt, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, words) { gone.push(nikaia_std::block::Text::from(n.to_string())); }
     }
     for n in gone.iter() { scope.rebind(&walk.arena, n); }
+    prover_std_ensures_after(walk, stmt, scope, words);
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 { return; }

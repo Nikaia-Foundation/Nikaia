@@ -4443,12 +4443,15 @@ signature = "[T](mut self: ref Vec[T], items: ?)"
 # It is **stable**: elements the order does not separate keep the order they
 # had, which is what lets two passes express a compound order.
 #
-# The elements need an order (`NK1164` otherwise, ADR-341 D4).
+# The elements need an order (`NK1164` otherwise, ADR-341 D4). It **ensures
+# the list sorted** (ADR-381 D5): `xs.is_sorted()` is known after it, until
+# the list may change, so a search by halving right after owes nothing.
 [fn."Vec::sort"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["self.is_sorted()"]
 signature = "[T: Ord](mut self: ref Vec[T])"
 
 # Keep the elements the function says yes to and drop the rest, in place.
@@ -4737,11 +4740,14 @@ locks = true
 # Put the elements in the order of what the function returns, in place.
 #
 # It is **stable**, so a sort by one key after a sort by another leaves the
-# first as the tie-breaker.
+# first as the tie-breaker. It **ensures the list sorted by that function**
+# (ADR-381 D5): `xs.is_sorted_by_key(f)` is known after it for the same named
+# `f`, until the list may change.
 [fn."Vec::sort_by_key"]
 pub = true
 panics = false
 sync = "sync(f)"
+ensures = ["self.is_sorted_by_key(f)"]
 signature = "[T, K](mut self: ref Vec[T], f: fn(ref T) -> K)"
 
 # Whether every element is at most the next in their natural order (Part I
