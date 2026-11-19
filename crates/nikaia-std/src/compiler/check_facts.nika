@@ -696,6 +696,10 @@ pub struct CheckFacts {
     pub dropped_catches: collections::BTreeSet[i64],
     /// `s.bytes` on text: the text's own bytes, borrowed (ADR-320 D11).
     pub text_bytes: collections::BTreeSet[i64],
+    /// **A cut a `let mut` changes, given its source's text**
+    /// (ADR-text-reuse-1 D2, #1589): `let mut rest = line[m..]` with `rest`
+    /// grown takes `line`'s buffer where `line` owns one, and copies a view.
+    pub given_cuts: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -1020,6 +1024,7 @@ impl CheckFacts {
             nullable_catches: collections::BTreeSet(),
             dropped_catches: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
+            given_cuts: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

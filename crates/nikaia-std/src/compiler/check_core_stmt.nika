@@ -676,6 +676,40 @@ fn check_core_stmt_read_viewed(state: ref CheckState, world: ref CheckWorld, fou
 
 /// A field path or an index read as written, for a help: `given[0]`,
 /// `p.a`, `xs[i]`; `…` where it is anything else.
+/// **`let mut rest = line[m..]`, with `rest` grown, gives `rest` the text of
+/// `line`** (ADR-text-reuse-1 D2, D3, #1589): text `line` owns is handed
+/// over, cut down in its own buffer, so a later read of `line` is `NK2105`'s;
+/// text `line` only views (a literal) is copied; and a `line` only lent here
+/// is not ours to give (`NK2106`), so the help asks for a copy or for `keep`.
+fn check_core_stmt_given_cut(mut state: CheckState, world: ref CheckWorld, name: ref String, value: ref Expr, span: ref Span) sync {
+    let source = given_cut_source(value, world.words) ?? return
+    state.facts.given_cuts.insert(node_key(value))
+    let held = state.binding(source) ?? return
+    let shown = match value {
+        Expr::Index { index, .. } => f"{source}[{check_core_stmt_key_shown(world, index)}]",
+        Expr::MethodCall { method, .. } => f"{source}.{world.words.resolve(method)}()",
+        else => source.clone(),
+    }
+    let to = f"given to `{name}`, which changes it"
+    if held.lent || state.a_lent_let(world, check_core_stmt_given_source(value) ?? return) {
+        state.findings.push(check_refusal("NK2106", span, f"`{shown}` is {to}, but `{source}` is only borrowed here.", [f"`{source}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place): a cut that changes takes its text, which is not yours to give (ADR-text-reuse-1 D3).", "Nikaia never makes a copy behind your back."], f"Hand over a copy: `{shown}.clone()`; or, where `{source}` is a parameter, take it as `keep {source}`."))
+        return
+    }
+    if held.ty.is_a_view() {
+        return
+    }
+    state.hands_over_name(world, source, to, span)
+}
+
+/// The name a cut is cut from, as the expression it is.
+fn check_core_stmt_given_source(value: ref Expr) -> ref Expr? {
+    return match value {
+        Expr::Index { base, .. } => base,
+        Expr::MethodCall { receiver, .. } => receiver,
+        else => null,
+    }
+}
+
 fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String sync {
     return match value {
         Expr::Index { base, index, .. } => {
@@ -1083,6 +1117,11 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // wrapped as the assigned values are.
         state.facts.mixed_leaves.insert(node_key(check_peeled(value)), false)
         bound = found.clone()
+    } else if mutable && names.len() == 1 && shape.len() == 0 && state.flow.grown_text.contains(name) && found.is_a_view() && given_cut_source(value, world.words) != null {
+        // **A cut a `let mut` grows is given its source's text**
+        // (ADR-text-reuse-1 D2, D3, #1589): it changes that text from here on.
+        check_core_stmt_given_cut(state, world, name, value, span)
+        bound = check_core_method_named("String")
     } else if mutable && state.flow.grown_text.contains(name) && found.is_a_view() && state.text_literal(world, check_core_method_named("String"), value, true) != null {
         // **A `let mut` of a literal that the body later grows holds text of
         // its own** (0.0.232).

@@ -557,6 +557,22 @@ impl EmitState {
             },
             _ => { },
         }
+        if self.facts.given_cuts.contains(&node_key(value)) {
+            let source = check_core_stmt_given_source(value);
+            if source.is_some() {
+                let from = nikaia_std::index::or(source, || value.into());
+                out.push("{ let __cut = ");
+                self.emit_core_operand(world, walk, out, host, value, false, depth, flow, &inner)?;
+                out.push("; let __span = nikaia_std::index::cut_span(&");
+                self.emit_expr(world, walk, out, host, from, depth, flow, &inner)?;
+                out.push(", __cut); nikaia_std::index::given_cut(");
+                self.emit_expr(world, walk, out, host, from, depth, flow, &inner)?;
+                out.push(", __span) }");
+                out.push(&after);
+                out.push(";");
+                return Ok(());
+            }
+        }
         if self.facts.lent_lets.contains(&at) { out.push("&"); }
         let viewed = match value {
             Expr::Variable(name, _) => { let name = *name; self.facts.viewed_numbers.contains(&(flow.statement, emit_text(world, name))) },

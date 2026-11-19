@@ -115,14 +115,14 @@ pub(crate) fn check_function_grows(op: Option<&BinaryOp>, value: &Expr) -> bool 
     }
 }
 
-pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_function_grown_in(words: &winnow_grammar::InternerContext, block: &Block, out: &mut collections::BTreeSet<String>) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Assign { target, op, value } => {
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
-                        if check_function_grows((op).as_ref(), value) { out.insert(here.text(name)); }
+                        if check_function_grows((op).as_ref(), value) { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string())); }
                     },
                     _ => { },
                 }
@@ -134,7 +134,7 @@ pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>,
                         match receiver {
                             Expr::Variable(name, _) => {
                                 let name = *name;
-                                if changes_its_text(&here.text(method)) { out.insert(here.text(name)); }
+                                if changes_its_text(words.resolve(method)) { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string())); }
                             },
                             _ => { },
                         }
@@ -144,14 +144,33 @@ pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>,
             },
             _ => { },
         }
-        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_grown_in(here, inner, out); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_grown_in(words, inner, out); }
     }
 }
 
-pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
+
+pub(crate) fn grown_text_of(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    check_function_grown_in(here, body, &mut out);
+    check_function_grown_in(words, body, &mut out);
     out
+}
+
+pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match value {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match index {
+                Expr::Range { .. } => { },
+                _ => { return None; },
+            }
+            return match base {
+                Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
+                _ => None,
+            };
+        },
+        _ => return None,
+    }
 }
 
 pub(crate) fn check_function_ends_in(expr: &Expr, grows: bool) -> bool {

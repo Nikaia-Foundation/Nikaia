@@ -533,6 +533,34 @@ pub(crate) fn check_core_stmt_read_viewed(state: &CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_given_cut(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, value: &Expr, span: &Span) {
+    let source = match given_cut_source(value, world.words) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.facts.given_cuts.insert(node_key(value));
+    let held = match state.binding(&source) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let shown = match value {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); format!("{}[{}]", source, check_core_stmt_key_shown(world, index)) },
+        Expr::MethodCall { method, .. } => { let method = *method; format!("{}.{}()", source, world.words.resolve(method)) },
+        _ => nikaia_std::block::Text::from(source.to_string()),
+    };
+    let to = format!("given to `{}`, which changes it", name);
+    if held.lent || state.a_lent_let(world, match check_core_stmt_given_source(value) { Some(__nikaia_value) => __nikaia_value, None => return }) {
+        state.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", shown, to, source), vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place): a cut that changes takes its text, which is not yours to give (ADR-text-reuse-1 D3).", source), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`; or, where `{}` is a parameter, take it as `keep {}`.", shown, source, source))));
+        return;
+    }
+    if held.ty.is_a_view() { return; }
+    state.hands_over_name(world, &source, &to, span);
+}
+
+pub(crate) fn check_core_stmt_given_source(value: &Expr) -> Option<&Expr> {
+    match value {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); Some(base) },
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); Some(receiver) },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_read_shown(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> String {
     match value {
         Expr::Index { base, index, .. } => {
@@ -809,6 +837,9 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     } else if mutable && state.flow.mixed_text.contains(&name) && found.is_a_view() && check_core_stmt_literal(value).is_some() {
         state.facts.mixed_leaves.insert(node_key(check_peeled(value)), false);
         bound = found.clone();
+    } else if mutable && names.len() == 1 && shape.is_empty() && state.flow.grown_text.contains(&name) && found.is_a_view() && given_cut_source(value, world.words).is_some() {
+        check_core_stmt_given_cut(state, world, &name, value, span);
+        bound = check_core_method_named("String");
     } else if mutable && state.flow.grown_text.contains(&name) && found.is_a_view() && state.text_literal(world, &check_core_method_named("String"), value, true).is_some() { bound = check_core_method_named("String"); } else {
         if !(found.is_unknown() && state.number_shaped(world, value)) { state.constant_fits(world, value, None, span); }
         if found.is_unknown() {
