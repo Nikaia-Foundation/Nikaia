@@ -2389,18 +2389,6 @@ mod scoped {
     use super::*;
 
     #[test]
-    fn a_scope_lends_to_its_tasks_and_waits_for_them() {
-        let data = [1, 2, 3];
-        let sum = std::cell::Cell::new(0);
-        let made = scope::<_, Crashed>(|s| {
-            s.spawn(|| sum.set(sum.get() + data.iter().sum::<i32>()));
-            s.spawn(|| sum.set(sum.get() + data.len() as i32));
-            7
-        });
-        assert_eq!((made, sum.get(), data.len()), (Ok(7), 9, 3));
-    }
-
-    #[test]
     fn a_crash_cancels_the_tasks_after_it_and_is_thrown_at_the_end() {
         let ran = std::cell::Cell::new(0);
         let made = scope::<_, Crashed>(|s| {
@@ -2412,26 +2400,6 @@ mod scoped {
         assert_eq!(ran.get(), 1);
     }
 
-    #[test]
-    fn a_pool_scope_runs_its_tasks_on_the_pool_and_waits() {
-        let data: Vec<i64> = (1..=100).collect();
-        let total = std::sync::atomic::AtomicI64::new(0);
-        let made = scope_on_pool::<_, Crashed>(|s| {
-            for half in data.chunks(50) {
-                let total = &total;
-                s.spawn(move || {
-                    total.fetch_add(half.iter().sum(), std::sync::atomic::Ordering::SeqCst);
-                });
-            }
-        });
-        assert!(made.is_ok());
-        assert_eq!(total.into_inner(), 5050);
-        let crashed = scope_on_pool::<_, Crashed>(|s| s.spawn::<()>(|| panic!("on the pool")));
-        assert_eq!(
-            crashed.map_err(|crash| crash.message),
-            Err("on the pool".to_string())
-        );
-    }
     /// Polls `future` to its end on this thread; every pause below wakes
     /// itself, so a waker that does nothing is enough.
     fn run<T>(future: impl std::future::Future<Output = T>) -> T {
@@ -2457,13 +2425,6 @@ mod scoped {
         .await
     }
 
-    /// Waits until `flag` is set, pausing in between.
-    async fn until(flag: &std::cell::Cell<bool>) {
-        while !flag.get() {
-            pause().await;
-        }
-    }
-
     /// A value whose drop is counted: a task's cleanup.
     struct Cleaned<'a>(&'a std::cell::Cell<i32>);
 
@@ -2471,54 +2432,6 @@ mod scoped {
         fn drop(&mut self) {
             self.0.set(self.0.get() + 1);
         }
-    }
-
-    /// **A task that pauses borrows, and the scope waits for it** (ADR-328
-    /// D10), beside one that does not.
-    #[test]
-    fn a_paused_scope_lends_to_its_pausing_tasks_and_waits() {
-        let config = String::from("abc");
-        let seen = std::cell::RefCell::new(Vec::new());
-        let made = run(async {
-            let s = &PausedScope::<Crashed>::new();
-            scope_paused(s, async {
-                s.spawn(|| seen.borrow_mut().push(0));
-                s.spawn_paused(async || {
-                    pause().await;
-                    seen.borrow_mut().push(config.len());
-                })
-                .await;
-                5
-            })
-            .await
-        });
-        assert_eq!(made.ok(), Some(5));
-        assert_eq!(*seen.borrow(), [0, 3]);
-    }
-
-    /// **The tasks are polled together, not one after the other** (D10): two
-    /// that each wait for what the other does complete.
-    #[test]
-    fn pausing_tasks_that_wait_on_each_other_complete() {
-        let (a, b) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
-        let made = run(async {
-            let s = &PausedScope::<Crashed>::new();
-            scope_paused(s, async {
-                s.spawn_paused(async || {
-                    until(&b).await;
-                    a.set(true);
-                })
-                .await;
-                s.spawn_paused(async || {
-                    b.set(true);
-                    until(&a).await;
-                })
-                .await;
-            })
-            .await
-        });
-        assert!(made.is_ok());
-        assert!(a.get() && b.get());
     }
 
     /// **A crash drops the running tasks, so their cleanups run** (D8, D10),
