@@ -6,7 +6,7 @@
 
 fn numbers(n: i64) -> Vec[i64] {
 	let mut xs: Vec[i64] = []
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		xs.push(i)
 	}
 	return xs
