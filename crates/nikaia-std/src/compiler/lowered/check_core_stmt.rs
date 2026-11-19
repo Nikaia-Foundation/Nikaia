@@ -42,7 +42,7 @@ pub(crate) fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Exp
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && state.jumps(world, fallback) },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)) },
         _ => false,
     }
 }

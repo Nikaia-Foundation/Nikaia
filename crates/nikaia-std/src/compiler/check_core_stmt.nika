@@ -74,10 +74,12 @@ fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     }
 }
 
-/// **A value `get` hands back past a jump** (D30).
+/// **A value `get` hands back past a jump** (D30), or one of a chain of
+/// `get`s the last of which jumps: `a.get(k) ?? b.get(k) ?? return` binds
+/// the reference either hands back, as one `get` does.
 fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && state.jumps(world, fallback),
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)),
         else => false,
     }
 }

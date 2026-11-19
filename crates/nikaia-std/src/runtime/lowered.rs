@@ -37,6 +37,8 @@ use nikaia_std::fs;
 #[allow(unused_imports)]
 use nikaia_std::html;
 #[allow(unused_imports)]
+use nikaia_std::process;
+#[allow(unused_imports)]
 use nikaia_std::rt;
 #[allow(unused_imports)]
 use nikaia_std::supervisor;
@@ -311,6 +313,7 @@ pub mod time_spans {
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(abort_lines_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(env_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(raw_sinks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(restart_policy_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -356,4 +359,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "799c5f97dfa9913e5112a0fa5691f3255ae8964f5558b7a8b43adb0ac056f052";
+pub const LOWERED_DIGEST: &str = "342fcea059a923020f4964d140f25eccd395049f40416023bbf3192dc87cbcbf";

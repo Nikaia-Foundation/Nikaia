@@ -1,0 +1,35 @@
+// A `let` bound by a chain of `get`s the last of which jumps,
+// `a.get(k) ?? b.get(k) ?? return 0`, is a reference to the element as one
+// `get` past a jump is (ADR-293 D30): reading an optional field of it with
+// `??` reads it in place. It was a Rust move out of the reference (NK1343)
+// before (#2351).
+
+use std::collections
+
+struct Entry {
+    name: String?,
+}
+
+fn made(t: String) -> String {
+    let mut o = String()
+    o.push_str(t)
+    return o
+}
+
+fn length(a: ref collections::HashMap[String, Entry], b: ref collections::HashMap[String, Entry], k: String) -> i64 {
+    let entry = a.get(k) ?? b.get(k) ?? return 0
+    let name = entry.name ?? return 1
+    return name.len()
+}
+
+fn main() throws {
+    let mut a: collections::HashMap[String, Entry] = collections::HashMap()
+    let mut b: collections::HashMap[String, Entry] = collections::HashMap()
+    a.insert(made("x"), Entry { name: made("abc") })
+    b.insert(made("y"), Entry { name: made("hello") })
+    b.insert(made("z"), Entry { name: null })
+    println(length(a, b, "x"))
+    println(length(a, b, "y"))
+    println(length(a, b, "z"))
+    println(length(a, b, "w"))
+}

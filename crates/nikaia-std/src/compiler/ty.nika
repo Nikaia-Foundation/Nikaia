@@ -1658,6 +1658,10 @@ pub struct FnContract {
     /// time, takes a lambda that changes what it captures; one of these
     /// refuses it (`NK2104`), whichever file or package calls.
     pub at_once: Vec[String],
+    /// **The parameters a Rust entry takes as `&OsStr`** (Part III 13.5
+    /// `os_text`, 15.2): each `ref String` in the signature, handed over as
+    /// `std::ffi::OsStr::new(arg)` (#2351). Empty where none is one.
+    pub os_text: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
     /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
@@ -1737,6 +1741,7 @@ impl FnContract {
             by_value: [],
             keeps: [],
             at_once: [],
+            os_text: [],
             mutates: false,
             touches_a_lock: Lock::No,
             panics: Panics::Unknown,

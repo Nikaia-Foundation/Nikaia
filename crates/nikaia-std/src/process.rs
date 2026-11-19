@@ -343,8 +343,9 @@ pub fn invalid_entries(env: &[(String, String)], env_remove: &[String]) -> Vec<S
 }
 
 /// Whether two environment names are the same variable: byte for byte, or
-/// without regard to ASCII case where `windows` (ADR-243 D5).
-fn same_name(a: &OsStr, b: &OsStr, windows: bool) -> bool {
+/// without regard to ASCII case where `windows` (ADR-243 D5). `std`'s test
+/// blocks call it through `std.contracts` (#2351).
+pub(crate) fn same_name(a: &OsStr, b: &OsStr, windows: bool) -> bool {
     if windows {
         a.as_encoded_bytes()
             .eq_ignore_ascii_case(b.as_encoded_bytes())
