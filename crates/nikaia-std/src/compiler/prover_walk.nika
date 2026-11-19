@@ -369,7 +369,7 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) {
             return true
         }
-        prover_follow_mutables(walk, stmt.node, stmt.span, scope, untracked, pinned, words)
+        prover_follow_mutables(walk, stmt.node, stmt.span, scope, untracked, pinned, program, words)
         // A statement that may leave for some states and not for others
         // narrows what goes on past it, and only an `if` or a `match` the
         // prover reads says how (`prover_expr_stmt`).
@@ -1722,6 +1722,9 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
 fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) -> bool {
     prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     prover_condition_lengths(walk, cond, scope, words)
+    // **A guard on a named property makes it known** (ADR-381 D2): `return
+    // if !p(xs)` leaves `p(xs)` after it, as a comparison's guard does.
+    prover_read_properties(cond, scope, program, words)
     let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut fails: i64? = null
     if holds != null {
@@ -1754,6 +1757,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
         scope.facts.extend(else_facts)
         if fails != null {
             scope.guards.insert(fails ?? 0, (span.start as i64, written_of(cond)))
+            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, program, words)
         }
         scope.on_the_path(walk.arena, fails)
         scope.exact = scope.exact && fails != null && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased)
@@ -1761,6 +1765,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
         scope.facts.extend(then_facts)
         if holds != null {
             scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
+            prover_properties_from(cond, f"the guard `if {written_of(cond)}`", scope, program, words)
         }
         scope.on_the_path(walk.arena, holds)
         scope.exact = scope.exact && holds != null && !leaves_block(then_branch, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
@@ -3513,6 +3518,44 @@ fn prover_a_property(program: ref Program, words: ref winnow_grammar::InternerCo
     return false
 }
 
+/// **Whether `stmt` may change the argument `base` of a named property**
+/// (ADR-381 D1, D2): `elements_change`, but the condition of an `if` that
+/// hands `base` only to named properties changes nothing, since a property
+/// changes nothing, so a guard `return if !p(xs)` keeps what it made known.
+fn prover_property_changed(stmt: ref Stmt, base: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+    let expr = match stmt {
+        Stmt::Expr(e) => e,
+        else => return elements_change(stmt, base, words),
+    }
+    return match expr {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            if prover_condition_changes(cond, base, scope, program, words) || !elements_stay(then_branch, base, words) {
+                return true
+            }
+            let other = else_branch ?? return false
+            !elements_stay(other, base, words)
+        },
+        else => elements_change(stmt, base, words),
+    }
+}
+
+/// Whether the condition `cond` may change `base`: a named property of it
+/// does not (ADR-381 D1), anything else as `seek_expr` says.
+fn prover_condition_changes(cond: ref Expr, base: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+    match cond {
+        Expr::Unary { expr, .. } => return prover_condition_changes(expr, base, scope, program, words),
+        Expr::Binary { lhs, rhs, .. } => return prover_condition_changes(lhs, base, scope, program, words) || prover_condition_changes(rhs, base, scope, program, words),
+        Expr::Call { func, .. } => {
+            let callee = prover_variable_named(func, words) ?? ""
+            if !scope.locals.contains(callee) && prover_a_property(program, words, callee) && property_name(cond, words) != null {
+                return false
+            }
+        },
+        else => {},
+    }
+    return seek_expr(cond, Seek::ElementsChanged(base.clone()), words)
+}
+
 /// **A claim's named properties are names of the proof from here**
 /// (ADR-381 D1): known where a fact says them, open where none does.
 fn prover_read_properties(cond: ref Expr, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
@@ -3733,9 +3776,9 @@ fn prover_binds_mutable(block: ref Block) -> bool {
 /// the block hands it on; a statement that changes one inside it - a branch,
 /// a block - leaves it unknown. A `while`, a `for`, an `if` and an
 /// assignment see to their own (ADR-361 D9).
-fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], pinned: ref collections::BTreeSet[String], program: ref Program, words: ref winnow_grammar::InternerContext) {
     prover_follow_lengths(walk, stmt, span, scope, words)
-    prover_follow_elements(walk, stmt, scope, words)
+    prover_follow_elements(walk, stmt, scope, program, words)
     match stmt {
         Stmt::Let { names, mutable, ty, value, .. } => {
             if mutable && names.len() == 1 {
@@ -3795,7 +3838,7 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
 /// may change its items, the list handed on or bound again (D20, D17), or
 /// `c` bound again drop it. A `let` of a list literal then learns
 /// `xs[i] == v` of each item whose value is a term.
-fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext) {
     let mut gone: Vec[String] = []
     // **A named property goes where its argument may change** (ADR-381 D1):
     // a call that holds it, a write, binding it again. A claim changes
@@ -3811,7 +3854,7 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
             if bound.contains(path_root(base)) {
                 continue
             }
-            if elements_change(stmt, base, words) || rebinds_in_statement(stmt, path_root(base), words) {
+            if prover_property_changed(stmt, base, scope, program, words) || rebinds_in_statement(stmt, path_root(base), words) {
                 gone.push(n.clone())
             }
         }
