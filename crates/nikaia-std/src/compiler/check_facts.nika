@@ -140,6 +140,15 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **The receivers of a text `replace` or `replacen`**, by node.
+    pub text_replaces: collections::BTreeSet[i64],
+    /// **A text `replace` whose receiver is a `replace` itself**, by that
+    /// receiver's node (ADR-text-reuse-1 D4): the emitter replaces in the
+    /// temporary's buffer.
+    pub replaced_in_place: collections::BTreeSet[i64],
+    /// **`x = x.replace(a, b)` on an owned text name**, by the assignment's
+    /// start (ADR-text-reuse-1 D4): replaced in `x`'s own buffer.
+    pub replaced_assigns: collections::BTreeSet[i64],
     /// **`into.add(part)` of an `impl Hash`**, by the receiver's node
     /// (ADR-010 D12): the emitter writes the part's own hash.
     pub hasher_adds: collections::BTreeSet[i64],
@@ -570,6 +579,11 @@ pub struct CheckFacts {
     /// and not a word. The rule takes it as a reference and a call hands it
     /// one, so nothing is cloned per call.
     pub lent_rule_values: collections::BTreeSet[String],
+    /// **A `@stream` entry whose items are handed over by `emit`**
+    /// (ADR-grammar-2 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
+    /// engine items are `Option<Item>`, the repetition's own values `None` and
+    /// each emitted item `Some`, and its walk hands on only the `Some`.
+    pub emitting_entries: collections::BTreeSet[String],
     /// **A value lent into a `ref` field of a struct literal** (D37), by the
     /// value: the counterpart of `lent_args` for a call.
     pub lent_fields: collections::BTreeSet[i64],
@@ -687,6 +701,10 @@ pub struct CheckFacts {
     pub dropped_catches: collections::BTreeSet[i64],
     /// `s.bytes` on text: the text's own bytes, borrowed (ADR-320 D11).
     pub text_bytes: collections::BTreeSet[i64],
+    /// **A cut a `let mut` changes, given its source's text**
+    /// (ADR-text-reuse-1 D2, #1589): `let mut rest = line[m..]` with `rest`
+    /// grown takes `line`'s buffer where `line` owns one, and copies a view.
+    pub given_cuts: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -795,6 +813,9 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            text_replaces: collections::BTreeSet(),
+            replaced_in_place: collections::BTreeSet(),
+            replaced_assigns: collections::BTreeSet(),
             hasher_adds: collections::BTreeSet(),
             receiver_views: collections::BTreeSet(),
             bytes_splits: collections::BTreeSet(),
@@ -954,6 +975,7 @@ impl CheckFacts {
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
             lent_rule_values: collections::BTreeSet(),
+            emitting_entries: collections::BTreeSet(),
             lent_fields: collections::BTreeSet(),
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),
@@ -1008,6 +1030,7 @@ impl CheckFacts {
             nullable_catches: collections::BTreeSet(),
             dropped_catches: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
+            given_cuts: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

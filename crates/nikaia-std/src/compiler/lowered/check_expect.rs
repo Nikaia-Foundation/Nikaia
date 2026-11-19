@@ -108,12 +108,12 @@ impl CheckState {
         let mut help: String = way_out_of_a_mismatch(found, want);
         if what == "catch" && help.ends_with(&*format!(", or change the declaration to `{}`.", found_text)) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
         if !members.is_empty() {
-            said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", found_text), &*format!("an error, one of {}", members_named(&members))));
+            nikaia_std::search::replace_in(&mut said, &format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");
         }
         if what == "returns" && want.is_a_view() {
             let sources = written_from_of(world, nikaia_std::index::or(self.current.as_deref(), || ""));
-            if !sources.is_empty() { said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", want_text), &*format!("`{} from {}`", want.shown(), nikaia_std::block::Text::from(sources.join(" | "))))); }
+            if !sources.is_empty() { nikaia_std::search::replace_in(&mut said, &format!("`{}`", want_text), &format!("`{} from {}`", want.shown(), nikaia_std::block::Text::from(sources.join(" | ")))); }
         }
         said = spoken_in(&said, found, Some(want));
         help = shown_in(&help, found, Some(want));

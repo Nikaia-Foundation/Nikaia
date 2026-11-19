@@ -778,6 +778,12 @@ impl EmitState {
                             spelled = emit_fn_code_that_changes(spelled)
                             reference = f"{reference}mut "
                         }
+                        // **Code run from tasks at once is shared between
+                        // threads** where user code overlaps (ADR-views-3
+                        // D17, ADR-292 D6): `&(impl Fn(..) + Send + Sync)`.
+                        if runs && ty.code != null && !ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(key, pname) {
+                            spelled = emit_fn_code_that_crosses(spelled)
+                        }
                         walk.in_parameter = inside
                         walk.code_parameter_runs = held
                     }
@@ -1500,6 +1506,15 @@ impl EmitState {
         let contract = self.own_contracts.functions.get(key) ?? return false
         return contract.at_once.contains(param)
     }
+}
+
+/// **Code that crosses threads** (ADR-292 D6): the bound gains `Send +
+/// Sync`, in parentheses so that a `&` before it stays unambiguous.
+fn emit_fn_code_that_crosses(spelled: ref String) -> String {
+    if !spelled.starts_with("impl ") && !spelled.starts_with("dyn ") {
+        return spelled.clone()
+    }
+    return f"({spelled} + std::marker::Send + std::marker::Sync)"
 }
 
 fn emit_fn_code_that_changes(spelled: ref String) -> String {

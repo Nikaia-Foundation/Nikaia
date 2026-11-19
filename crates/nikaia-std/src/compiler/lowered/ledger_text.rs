@@ -70,7 +70,7 @@ pub(crate) fn quoted_all(items: &[String]) -> String {
     out
 }
 
-pub(crate) fn ledger_escaped(value: &str) -> String { nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(value.replace("\\", "\\\\")).replace("\"", "\\\"")).replace("\n", "\\n")) }
+pub(crate) fn ledger_escaped(value: &str) -> String { nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(value.replace("\\", "\\\\")), &"\"", &"\\\""), &"\n", &"\\n") }
 
 pub fn contract_text(ledger: &Ledger, notes: &Notes) -> String {
     let mut out = format!("version = {}\n", ledger.version);

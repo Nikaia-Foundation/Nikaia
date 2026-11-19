@@ -728,6 +728,11 @@ impl EmitState {
                     written = emit_fn_code_that_changes(written)
                     reference = "&mut "
                 }
+                // **Run from tasks at once, it is shared between threads**
+                // where user code overlaps, as the impls' is (ADR-292 D6).
+                if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(key, emit_text(world, arg.name)) {
+                    written = emit_fn_code_that_crosses(written)
+                }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, key, at) {
                 // **A by-value data parameter the column runs is lent**
                 // (ADR-277 D17, #1498), as the impl's and the call's are:

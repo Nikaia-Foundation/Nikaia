@@ -251,18 +251,12 @@ pub fn plus<L: Plus<R>, R>(left: L, right: R) -> L::Out {
 mod tests {
     use super::*;
 
-    /// The left side's buffer is kept where it is big enough - the property the
-    /// measurement in this file's head is about, held to rather than described.
-    #[test]
-    fn an_owned_left_side_keeps_its_buffer() {
-        let mut roomy = String::with_capacity(64);
-        roomy.push_str("left-");
-        let before = roomy.as_ptr();
-        let joined = plus(roomy, "right");
-        assert_eq!(joined.as_ptr(), before, "no reallocation, so no copy");
-    }
+    // The left side's buffer kept where it is big enough is
+    // `tests/compiler/tests/std_handing_on_requests_no_memory.nika` (#2215).
 
-    /// And the right side's is, where the left is borrowed.
+    /// The right side's buffer is kept, where the left is borrowed. Kept as
+    /// Rust (#2082): no program's text reaches this impl, since a right side
+    /// `std` builds as a `String` becomes `block::Text` first (#2215).
     #[test]
     fn a_borrowed_left_side_reuses_the_right() {
         let mut roomy = String::with_capacity(64);

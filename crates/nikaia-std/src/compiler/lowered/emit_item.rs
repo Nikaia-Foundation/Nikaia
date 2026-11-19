@@ -215,7 +215,7 @@ impl EmitState {
                 if seeded { emit_seeds_declare_type(&mut walk.place, 0); }
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
-                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")).replace(", Hash", "")); }
+                if by_hand { derives = nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")), &", Eq", &""), &", Hash", &""); }
                 out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
@@ -532,6 +532,7 @@ impl EmitState {
                     written = emit_fn_code_that_changes(&written);
                     reference = "&mut ";
                 }
+                if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(&key, &emit_text(world, arg.name)) { written = emit_fn_code_that_crosses(&written); }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
                 let mut viewed = arg.ty.clone();
                 viewed.is_view = true;

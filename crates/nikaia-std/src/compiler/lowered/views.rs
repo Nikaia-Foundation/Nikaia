@@ -1435,6 +1435,7 @@ pub(crate) struct ResultSrcFlow {
     pub(crate) built: collections::BTreeMap<String, Type>,
     pub(crate) places: collections::BTreeSet<String>,
     pub(crate) stores: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub(crate) grown: collections::BTreeSet<String>,
 }
 
 pub(crate) fn rsrc_none() -> collections::BTreeSet<String> {
@@ -1501,7 +1502,7 @@ pub(crate) fn rsrc_all_loose(entries: &collections::BTreeSet<String>) -> collect
 
 pub(crate) fn rsrc_flow(at: &Span) -> ResultSrcFlow {
     let env: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
-    ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new(), built: collections::BTreeMap::new(), places: rsrc_none(), stores: collections::BTreeMap::new() }
+    ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new(), built: collections::BTreeMap::new(), places: rsrc_none(), stores: collections::BTreeMap::new(), grown: rsrc_none() }
 }
 
 pub(crate) fn rsrc_shadow(asked: &Asked<'_, '_, '_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(nikaia_std::block::Text::from(name.to_string())); } }
@@ -1925,7 +1926,8 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                         _ => { },
                     }
                 }
-                if !own_buffer(value) {
+                let given = names.len() == 1 && flow.grown.contains(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) && given_cut_source(value, asked.names).is_some();
+                if !own_buffer(value) && !given {
                     for name in names.iter() {
                         let name = *name;
                         rsrc_bind(flow, asked.names.resolve(name), &reach);
@@ -2421,6 +2423,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             while rounds < 64 {
                 flow.ways = vec![];
                 flow.depth = 0;
+                flow.grown = grown_text_of(asked.names, body);
                 let tail = rsrc_block(unit, asked, &walked_here, &known, &mut *own_buffer, body, &mut flow);
                 rsrc_tail(body, &tail, &mut flow);
                 let now = rsrc_size(&flow);
@@ -2723,6 +2726,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             while rounds < 64 {
                 flow.ways = vec![];
                 flow.depth = 0;
+                flow.grown = grown_text_of(asked.names, body);
                 let tail = rsrc_block(unit, asked, &here, known, &mut *own_buffer, body, &mut flow);
                 let mut now = rsrc_size(&flow);
                 for (_, kept) in flow.stores.iter() { now += kept.len() as i64; }

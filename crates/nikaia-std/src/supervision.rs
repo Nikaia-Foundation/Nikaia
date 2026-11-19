@@ -480,7 +480,8 @@ mod tests {
     }
 
     /// The first failure restarts at once, then the delay grows, stays under
-    /// the ceiling, and a long cycle gives up.
+    /// the ceiling, and a long cycle gives up. Kept as Rust (#2082): the delays
+    /// are time, and the default gives up only after 300 s of crashes.
     #[test]
     fn the_default_policy_grows_and_gives_up() {
         let mut policy = Backoff::default();
@@ -514,7 +515,8 @@ mod tests {
         );
     }
 
-    /// An attempt that ran long enough starts a new cycle.
+    /// An attempt that ran long enough starts a new cycle. Kept as Rust
+    /// (#2082): a healthy run is 60 s of uptime, which no test program waits.
     #[test]
     fn a_healthy_run_starts_a_new_cycle() {
         let mut policy = Backoff::default();

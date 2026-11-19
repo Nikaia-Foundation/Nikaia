@@ -1,0 +1,45 @@
+// ADR-text-reuse-1 D4: a `replace` whose old text is not read again works
+// in that text's buffer, and answers what a new text would.
+
+fn shorter(s: String) -> String {
+    let mut t = s.replace("a", "b")
+    t = t.replace("cc", "c")
+    return t
+}
+
+fn longer(s: String) -> String {
+    let mut t = s.replace("x", "y")
+    t = t.replace("b", "bbb")
+    return t
+}
+
+fn counted(s: String) -> String {
+    let mut t = s.replace("x", "y")
+    t = t.replacen("o", "0", 2)
+    return t
+}
+
+fn chained(s: String) -> String {
+    return s.replace("a", "b").replace("b", "cd").replacen("d", "", 1)
+}
+
+fn main() throws {
+    println(shorter("accbcc"))
+    println(longer("abcb"))
+    println(counted("foo boo"))
+    println(chained("abab"))
+    let source = "keep me"
+    let mut copy = source.replace("e", "E")
+    copy = copy.replace("E", "")
+    println(f"{source} / {copy}")
+    let mut empty = "ab".replace("q", "")
+    empty = empty.replace("", "-")
+    println(empty)
+    let mut same = "a.b.c".replace("q", "")
+    same = same.replace(".", ",")
+    println(same)
+    let needle = "b"
+    let mut named = "abba".replace("q", "")
+    named = named.replace(needle, needle + needle)
+    println(named)
+}
