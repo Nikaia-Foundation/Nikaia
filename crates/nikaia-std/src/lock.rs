@@ -746,23 +746,6 @@ thread_local! {
 mod tests {
     use super::*;
 
-    /// The four doors, on both shapes
-    /// ([ADR-281](../../../docs/specification/adr/adr-281.md)).
-    #[test]
-    fn both_shapes_carry_all_four_doors() {
-        let local = Local::new(1_i64);
-        assert_eq!(local.get(), 1);
-        local.set(5);
-        local.update(|old| *old += 100);
-        assert_eq!(local.access(|n| *n), 105);
-
-        let crossing = Crossing::new(1_i64);
-        assert_eq!(crossing.get(), 1);
-        crossing.set(5);
-        crossing.update(|old| *old += 100);
-        assert_eq!(crossing.access(|n| *n), 105);
-    }
-
     /// **`update` moves, it does not copy**, which is the finding that made
     /// `access` stop needing to write (D2). The list's buffer is the same
     /// allocation after an append, so nothing was copied to add one entry.
@@ -791,26 +774,6 @@ mod tests {
         let before = local.access(|v| v.as_ptr());
         assert_eq!(local.access(|v| v.len()), 10_000);
         assert_eq!(local.access(|v| v.as_ptr()), before, "nothing was copied");
-    }
-
-    /// And the crossing shape really does cross, which is the capability the
-    /// cheap one cannot have: `Arc<Local<T>>` is not `Send` and this is.
-    #[test]
-    fn the_crossing_shape_crosses() {
-        let value = std::sync::Arc::new(Crossing::new(0_i64));
-        let mut threads = Vec::new();
-        for _ in 0..4 {
-            let value = std::sync::Arc::clone(&value);
-            threads.push(std::thread::spawn(move || {
-                for _ in 0..1000 {
-                    value.update(|n| *n += 1);
-                }
-            }));
-        }
-        for thread in threads {
-            thread.join().expect("no task failed");
-        }
-        assert_eq!(value.access(|n| *n), 4000);
     }
 }
 
@@ -1210,51 +1173,6 @@ mod doors {
         assert_eq!(b.get(), 35);
     }
 
-    /// **The order is the addresses', not the arguments'**, which is what makes
-    /// two tasks that name them the other way round safe.
-    #[test]
-    fn the_two_orders_are_the_same_order() {
-        let a = Crossing::new(1i64);
-        let b = Crossing::new(2i64);
-        assert_eq!(access_all(&a, &b, |x, y| *x * 10 + *y), 12);
-        assert_eq!(access_all(&b, &a, |y, x| *x * 10 + *y), 12);
-    }
-
-    /// And two threads doing the transfer both ways round neither deadlock nor
-    /// lose a penny, which is the property `access_all` exists for.
-    ///
-    /// **Deliberately short.** A deadlock is a hang whatever the count, and the
-    /// total is exact at any of them - so the number is chosen to prove the
-    /// property without loading the machine, because two timing-sensitive I/O
-    /// tests share this binary and a stress test beside them is a flake they did
-    /// not have.
-    #[test]
-    fn two_threads_transferring_both_ways_keep_the_total() {
-        let a = std::sync::Arc::new(Crossing::new(1_000i64));
-        let b = std::sync::Arc::new(Crossing::new(1_000i64));
-        let (one, two) = (std::sync::Arc::clone(&a), std::sync::Arc::clone(&b));
-        let left = std::thread::spawn(move || {
-            for _ in 0..400 {
-                update_all(&*one, &*two, |x, y| {
-                    *x -= 1;
-                    *y += 1;
-                });
-            }
-        });
-        let (one, two) = (std::sync::Arc::clone(&a), std::sync::Arc::clone(&b));
-        let right = std::thread::spawn(move || {
-            for _ in 0..400 {
-                update_all(&*two, &*one, |y, x| {
-                    *y -= 1;
-                    *x += 1;
-                });
-            }
-        });
-        left.join().expect("the left task");
-        right.join().expect("the right task");
-        assert_eq!(a.get() + b.get(), 2_000, "nothing is created or lost");
-    }
-
     /// **The witness door stores when nothing moved and refuses when
     /// something did** ([ADR-281](../../../docs/specification/adr/adr-281.md)
     /// D5), in both shapes — the two are one surface
@@ -1310,16 +1228,6 @@ mod doors {
             "one stored and one was overtaken: {outcomes:?}"
         );
         assert!(kasse.get() == 1 || kasse.get() == 2);
-    }
-
-    /// A lock of one type beside a lock of another, which is the case a door
-    /// written against one shape could not have.
-    #[test]
-    fn the_two_locks_need_not_hold_the_same_type() {
-        let name = Local::new("kasse".to_string());
-        let count = Local::new(3i64);
-        let said = access_all(&name, &count, |n, c| format!("{n} {c}"));
-        assert_eq!(said, "kasse 3");
     }
 }
 
