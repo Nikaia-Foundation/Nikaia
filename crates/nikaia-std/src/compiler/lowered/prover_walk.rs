@@ -2321,7 +2321,10 @@ pub(crate) fn prover_call_precondition(walk: &mut ProverWalk, callee: &str, call
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String) {
-    if nikaia_std::index::or(prover_variable_named(Some(receiver), words), || "".into()) != "self" { return; }
+    if nikaia_std::index::or(prover_variable_named(Some(receiver), words), || "".into()) != "self" {
+        prover_a_call_on(walk, receiver, method, args, config, span, scope, at, program, words, &mut *ask, &mut *model, &mut *escape, &mut *written_of);
+        return;
+    }
     let function = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
     let cut = match nikaia_std::search::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
     let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&function, nikaia_std::index::at(0..cut)).to_string());
@@ -2337,6 +2340,31 @@ pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, metho
         prover_record_call(walk, &callee, &target.params, &found.claims, &all, None, span, scope, at, words, &mut *ask, &mut *model, &mut *escape, &mut *written_of);
     }
     if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &target.params, &all, span, scope, at, &mut *ask, &mut *model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &target.params, &all, span, scope, words, &mut *ask, &mut *model); }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_a_call_on(walk: &mut ProverWalk, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String) {
+    let callee: String = match match walk.state.method_callees.get(&(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let cut = match nikaia_std::search::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(0..cut)).to_string());
+    let name = nikaia_std::block::Text::from(words.resolve(method).to_string());
+    let target = match own_method(program, words, &owner, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let caller = carrying_function((at.function).as_deref());
+    if caller.is_some() { walk.state.edges.insert((nikaia_std::index::or(caller, || "".into()), nikaia_std::block::Text::from(callee.to_string()))); }
+    let mut params: Vec<String> = vec![String::from("self")];
+    params.extend(target.params.iter().cloned());
+    let mut all: Vec<Expr> = vec![receiver.clone()];
+    all.extend(arguments_in_order(&target, args, config, words));
+    let told = walk.findings.len() as i64;
+    let pre = if walk.state.collecting { prover_precondition_in(&walk.state.known, &callee) } else { prover_precondition_in(&walk.state.preconditions, &callee) };
+    if pre.is_some() {
+        let found = match pre { Some(__nikaia_value) => __nikaia_value, None => return };
+        prover_record_call(walk, &callee, &params, &found.claims, &all, None, span, scope, at, words, &mut *ask, &mut *model, &mut *escape, &mut *written_of);
+    }
+    if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &params, &all, span, scope, at, &mut *ask, &mut *model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &params, &all, span, scope, words, &mut *ask, &mut *model); }
 }
 
 #[allow(clippy::too_many_arguments)]
