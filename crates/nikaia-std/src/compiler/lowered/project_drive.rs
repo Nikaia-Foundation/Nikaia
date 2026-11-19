@@ -96,6 +96,7 @@ pub trait ProjectDriveHost {
     fn gen_dir(&self) -> fs::Path;
     fn write_publishable(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn write_spliced(&self, src: &std::path::Path, lowered: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
+    fn hand_modules(&self) -> String;
     fn switches_path(&self) -> fs::Path;
     fn own_dir(&self) -> fs::Path;
     fn choices(&self) -> (String, String);
@@ -240,6 +241,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
             };
         }
         { let __nikaia_stored = nikaia_std::block::Text::from(lowered.rust.to_string()); nikaia_std::index::set(&mut rust, nikaia_std::index::at(at), __nikaia_stored); }
+        if at == 0 && host.tests_build() && host.rust_library().is_some() { { let __nikaia_stored = format!("{}{}", *nikaia_std::index::get(&rust, nikaia_std::index::at(at)), host.hand_modules()); unsafe { nikaia_std::proven::write(&mut rust, (at) as usize, __nikaia_stored) }; } }
     }
     if crate_build { return Ok((project_drive_rust_library(host, &members, &rust, subcommand == "check")?, None)); }
     for (member, text) in members.iter().zip(rust.iter()) { host.write_if_changed(&project_drive_generated(host, &member.name), text)?; }
@@ -835,10 +837,30 @@ pub async fn project_drive_spliced(root: &std::path::Path, file: &ManifestFile, 
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("reading {}: {}", nikaia_std::fs::path::display(&(hand_path)), error)), &"project_drive_spliced")) },
     };
-    project_drive_written(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(src), std::path::Path::new(&(table.native)))), std::path::Path::new(&("mod.rs"))), lowered).await?;
+    let mut uses: String = String::from("");
+    for head in project_members_rust_heads(&hand) { uses = format!("{}#[allow(unused_imports)]\nuse crate::{};\n", uses, head); }
+    let ended = if uses.is_empty() || lowered.is_empty() || lowered.ends_with("\n") { "" } else { "\n" };
+    project_drive_written(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(src), std::path::Path::new(&(table.native)))), std::path::Path::new(&("mod.rs"))), &format!("{}{}{}", lowered, ended, uses)).await?;
     let parted = if hand.is_empty() || hand.ends_with("\n") { "" } else { "\n" };
     project_drive_written(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&("lib.rs"))), &format!("{}{}\npub mod {};\n", hand, parted, table.native)).await?;
     Ok(())
+}
+
+pub async fn project_drive_hand_modules(root: &std::path::Path, file: &ManifestFile) -> String {
+    let table = match file.rust_library.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let hand = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(nikaia_std::index::or(table.root.as_deref(), || ""))));
+    let text = match fs::read_to_string(&hand, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return String::from(""); },
+    };
+    let from = match nikaia_std::fs::path::parent(&(hand)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let mut out: String = String::from("\n#[allow(unused_imports)]\nuse crate as native;\n");
+    for head in project_members_rust_heads(&text) {
+        let file = project_members_rust_file(&from, &head);
+        let quoted = nikaia_std::search::replaced(nikaia_std::block::Text::from(nikaia_std::fs::path::display(&(file)).replace("\\", "\\\\")), &"\"", &"\\\"");
+        out = format!("{}#[path = \"{}\"]\nmod {};\n", out, quoted, head);
+    }
+    out
 }
 
 pub(crate) async fn project_drive_written(path: &std::path::Path, text: &str) -> Result<(), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
@@ -996,8 +1018,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple71065| {
-        let (a, b) = __nikaia_tuple71065;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple73009| {
+        let (a, b) = __nikaia_tuple73009;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

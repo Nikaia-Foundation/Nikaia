@@ -3888,6 +3888,13 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.held(written.map_err(|thrown| anyhow!("{thrown}")))
     }
 
+    fn hand_modules(&self) -> String {
+        nikaia_std::rt::exec::block_on(project_drive::project_drive_hand_modules(
+            &self.project.root,
+            self.project.manifest.file(),
+        ))
+    }
+
     fn write_spliced(&self, src: &Path, lowered: &str) -> HostResult<()> {
         let written = nikaia_std::rt::exec::block_on(project_drive::project_drive_spliced(
             &self.project.root,
@@ -4458,8 +4465,20 @@ fn wrapper_lower(
         None => Vec::new(),
     };
     let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown.map(String::from)));
-    let lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
+    let mut lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
     SHOWN_AS.with(|cell| cell.replace(shown_outer));
+    // **A test block reaches the package's own Rust** (ADR-rust-boundary-1
+    // D24): the same splice the drive writes before Cargo starts
+    // (`project_drive_hand_modules`), so the two write the same bytes.
+    if program
+        && root.is_none()
+        && settings.words.tests
+        && let (Ok(done), Some(at)) = (lowered.as_mut(), manifest.root())
+    {
+        done.rust.push_str(&nikaia_std::rt::exec::block_on(
+            project_drive::project_drive_hand_modules(at, manifest.file()),
+        ));
+    }
     lowered
 }
 

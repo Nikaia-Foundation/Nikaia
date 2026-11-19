@@ -115,6 +115,9 @@ pub struct CliDescribed {
     pub promises: bool,
     /// How many entries carry what their signature does not say.
     pub proposed: i64,
+    /// The package's own Rust its code calls that is narrower than
+    /// `pub(crate)` (ADR-rust-boundary-1 D24, `nikaia describe crate`).
+    pub narrow: Vec[String],
 }
 
 /// **The project `nikaia describe` describes a crate for** (ADR-rust-boundary-1 D1):
@@ -154,6 +157,13 @@ pub fn cli_commands_described(crate_name: String, written: ref CliDescribed) -> 
     if unanswered > 0 {
         said = said + f"\n{unanswered} name{cli_commands_plural(unanswered)} the program uses that no `pub` signature covers. Each is a `?` \nfor you to fill in, or a name a macro wrote:\n"
         for name in written.unanswered {
+            said = said + f"    {name}\n"
+        }
+    }
+    let narrow = written.narrow.len()
+    if narrow > 0 {
+        said = said + f"\n{narrow} function{cli_commands_plural(narrow)} the package's Nikaia code calls {if narrow == 1 { "is" } else { "are" }} narrower than `pub(crate)` in its \nRust, and got no entry. Declare {if narrow == 1 { "it" } else { "each" }} `pub(crate)`, then describe again:\n"
+        for name in written.narrow {
             said = said + f"    {name}\n"
         }
     }

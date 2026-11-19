@@ -157,9 +157,33 @@ pub(crate) fn sv_rat_add(a: &SvRat, b: &SvRat) -> Option<SvRat> {
     let g = match sv_gcd(a.den, b.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let da = a.den / g;
     let db = b.den / g;
-    let num = match sv_mul_add(a.num, db, b.num, da) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let den = match a.den.checked_mul(db) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    sv_rat(num, den)
+    let num = sv_mul_add(a.num, db, b.num, da);
+    let den = a.den.checked_mul(db);
+    if num.is_some() && den.is_some() { return sv_rat(nikaia_std::index::or(num, || 0), nikaia_std::index::or(den, || 1)); }
+    sv_rat_add_wide(a, b, g, da, db)
+}
+
+pub(crate) fn sv_rat_add_wide(a: &SvRat, b: &SvRat, g: i64, da: i64, db: i64) -> Option<SvRat> {
+    let (l1, h1) = { let __wide = (a.num) as i128 * (db) as i128; (__wide as u64, (__wide >> 64) as i64) };
+    let (l2, h2) = { let __wide = (b.num) as i128 * (da) as i128; (__wide as u64, (__wide >> 64) as i64) };
+    let (low, carry) = l1.overflowing_add(l2);
+    let (top, over) = h1.overflowing_add(h2);
+    let (high, past) = top.overflowing_add(if carry { 1 } else { 0 });
+    if over || past { return None; }
+    let zero: u64 = 0u64;
+    let mut size_low = low;
+    let mut size_high = high;
+    if high < 0 {
+        size_low = zero.wrapping_sub(low);
+        size_high = if low == 0u64 { 0 - high } else { 0 - high - 1 };
+    }
+    let by = match u64::try_from(g).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let up = match u64::try_from(size_high).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (_, rest) = match { let __wide = (((up % by) as u128) << 64) | ((size_low) as u128); let __by = (by) as u128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => u64::try_from(__q).ok().map(|__q| (__q, __r as u64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let g2 = match sv_gcd(match i64::try_from(rest).ok() { Some(__nikaia_value) => __nikaia_value, None => return None }, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (num, _) = match { let __wide = (((high) as i128) << 64) | ((low) as i128); let __by = (g2) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => i64::try_from(__q).ok().map(|__q| (__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let den = match da.checked_mul(b.den / g2) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(SvRat { num, den })
 }
 
 pub(crate) fn sv_rat_neg(a: &SvRat) -> Option<SvRat> { Some(SvRat { num: match a.num.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None }, den: a.den }) }

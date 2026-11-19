@@ -21,6 +21,7 @@ pub struct Function {
 pub struct Surface {
     pub functions: collections::BTreeMap<String, Function>,
     pub offers: collections::BTreeSet<String>,
+    pub within: collections::BTreeSet<String>,
     pub fields: collections::BTreeMap<String, Vec<String>>,
     pub types: collections::BTreeSet<String>,
     pub derives: collections::BTreeMap<String, collections::BTreeSet<String>>,
@@ -30,7 +31,7 @@ pub struct Surface {
     pub promises: Vec<String>,
 }
 
-pub fn empty() -> Surface { Surface { functions: collections::BTreeMap::new(), offers: collections::BTreeSet::new(), fields: collections::BTreeMap::new(), types: collections::BTreeSet::new(), derives: collections::BTreeMap::new(), modules: collections::BTreeMap::new(), reachable: collections::BTreeMap::new(), exports: vec![], promises: vec![] } }
+pub fn empty() -> Surface { Surface { functions: collections::BTreeMap::new(), offers: collections::BTreeSet::new(), within: collections::BTreeSet::new(), fields: collections::BTreeMap::new(), types: collections::BTreeSet::new(), derives: collections::BTreeMap::new(), modules: collections::BTreeMap::new(), reachable: collections::BTreeMap::new(), exports: vec![], promises: vec![] } }
 
 pub fn read_items(surface: &mut Surface, relative: &str, items: &[RustItem<'_>]) {
     let found = module_of(relative);
@@ -142,6 +143,11 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
                 surface.functions.insert(path, function_of(f, imports));
             },
             RustItem::Hidden(f) => { surface.functions.insert(joined(at, f.name), function_of(f, imports)); },
+            RustItem::Crate(f) => {
+                let path = joined(at, f.name);
+                surface.within.insert(nikaia_std::block::Text::from(path.to_string()));
+                surface.functions.insert(path, function_of(f, imports));
+            },
             RustItem::Rec(r) => {
                 let path = joined(at, r.name);
                 if r.what == "struct" {
