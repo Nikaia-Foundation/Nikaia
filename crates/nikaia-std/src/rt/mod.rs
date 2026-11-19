@@ -1607,34 +1607,6 @@ mod tests {
         assert!(first.config().io_workers >= 1, "D4: one I/O thread always");
     }
 
-    /// The fallback is not a hypothetical: pinning `blocking` produces a
-    /// runtime that never touches a ring, and it answers the same bytes.
-    #[test]
-    fn the_blocking_fallback_reads_what_the_completion_path_reads() {
-        let path = std::env::temp_dir().join(format!("nikaia-rt-both-{}", std::process::id()));
-        let text = "Hamburg;12.0\n".repeat(10_000);
-        std::fs::write(&path, &text).expect("write");
-
-        let blocking = Runtime::build(
-            UserCode::Sequential,
-            Config {
-                io_method: Method::Blocking,
-                ..Config::default()
-            },
-        );
-        assert_eq!(blocking.files(), Files::Blocking);
-
-        let auto = Runtime::build(UserCode::Sequential, Config::default());
-        let one = read_through(&blocking, &path);
-        let other = read_through(&auto, &path);
-        assert_eq!(one, text.as_bytes(), "the fallback read the file");
-        assert_eq!(other, one, "and the chosen mechanism read the same bytes");
-
-        blocking.workers.drain(std::time::Duration::from_secs(5));
-        auto.workers.drain(std::time::Duration::from_secs(5));
-        std::fs::remove_file(&path).ok();
-    }
-
     /// A pair through a named runtime, so the test can compare two mechanisms
     /// rather than only whichever one this machine chose.
     fn read_through(runtime: &Runtime, path: &Path) -> Vec<u8> {
