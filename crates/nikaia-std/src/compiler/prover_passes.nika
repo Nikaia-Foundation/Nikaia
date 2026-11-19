@@ -146,7 +146,7 @@ fn checked_entries(walk: ref ProverWalk, escape: fn(ref String) -> String sync) 
             walk.arena.variables(claim.term, read)
             let mut operands: Vec[(String, String)] = []
             for name in read {
-                operands.push((name.clone(), rust_of_name(name, escape)))
+                operands.push((property_shown(name), rust_of_name(name, escape)))
             }
             checks.push(PreconditionCheck { rust: rust_text(walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of(claim.message), operands: operands })
         }

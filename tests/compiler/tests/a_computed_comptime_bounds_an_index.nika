@@ -1,0 +1,8 @@
+// A `comptime` whose value a call computed bounds an index as a literal
+// one does (ADR-359 D7, #2161): `xs[AT]` is proved.
+fn half(n: i64) -> i64 { return n / 2 }
+comptime AT = half(4)
+fn main() throws {
+    let xs = [10, 20, 30]
+    println(f"{xs[AT]}")
+}

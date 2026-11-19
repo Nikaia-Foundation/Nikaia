@@ -162,6 +162,7 @@ fn frame_context(
 		through_loops: false,
 		trace: [],
 		decided: collections::BTreeMap(),
+		computed: collections::BTreeMap(),
 		list_indices: collections::BTreeSet(),
 		text_bytes: collections::BTreeSet(),
 		text_scalars: collections::BTreeSet(),

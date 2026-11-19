@@ -92,6 +92,10 @@ pub struct ProverScope {
     /// with any name they read.
     pub held: collections::BTreeMap[String, Vec[i64]],
     pub failed: collections::BTreeMap[String, Vec[i64]],
+    /// **Where each named property known here came from** (ADR-381 D2):
+    /// the `assert`, the callee's postcondition or the type's rule, for what
+    /// `--asserts` says of a claim it proves.
+    pub known_from: collections::BTreeMap[String, String],
 }
 
 /// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
@@ -125,6 +129,7 @@ impl ProverScope {
             guards: collections::BTreeMap(),
             held: collections::BTreeMap(),
             failed: collections::BTreeMap(),
+            known_from: collections::BTreeMap(),
         }
     }
 
@@ -189,6 +194,7 @@ impl ProverScope {
         }
         self.held.remove(name)
         self.failed.remove(name)
+        self.known_from.remove(name)
         if !self.held.is_empty() || !self.failed.is_empty() {
             let mut stale: Vec[String] = []
             for (bound, facts) in self.held {
@@ -434,6 +440,10 @@ impl ProverScope {
         for name in read {
             if name == returned {
                 values.insert(name.clone(), result)
+            } else if (property_base(name) ?? "") == returned {
+                // **A named property of the result** (ADR-381 D2).
+                let rest = name.strip_prefix(returned) ?? name
+                values.insert(name.clone(), arena.var(f"{result_name()}{rest}"))
             } else {
                 let value = self.entry[name] ?? return null
                 values.insert(name.clone(), value)
@@ -443,7 +453,7 @@ impl ProverScope {
         let mut names: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(term, names)
         for name in names {
-            if name != result_name() && !is_a_parameter(name, params) {
+            if name != result_name() && (property_base(name) ?? "") != result_name() && !is_a_parameter(name, params) {
                 return null
             }
         }

@@ -83,11 +83,26 @@ impl ProverState {
                 break;
             }
         }
+        let path = path_of(value, words);
         for index in 0..posts.len() as i64 {
             let mut shown = false;
-            if unshadowed && returned.is_some() {
-                let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-                given.insert(result_name(), nikaia_std::index::or(returned, || 0));
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+            arena.variables(unsafe { nikaia_std::proven::read(&posts, (index) as usize) }.term, &mut read);
+            let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+            let mut ready = unshadowed && returned.is_some();
+            for name in read.iter() {
+                if nikaia_std::index::or(property_base(name), || "".into()) == result_name() {
+                    let on = nikaia_std::index::or(match path.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || "".into());
+                    ready = unshadowed && !on.is_empty() && (returned.is_some() || !read.contains(&result_name()));
+                    let rest = nikaia_std::index::or(name.strip_prefix(&*result_name()), || std::convert::AsRef::<str>::as_ref(name));
+                    given.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(&format!("{}{}", on, rest)));
+                }
+            }
+            given.insert(result_name(), nikaia_std::index::or(returned, || 0));
+            if ready {
                 let goal = arena.substitute(unsafe { nikaia_std::proven::read(&posts, (index) as usize) }.term, &given);
                 shown = matches!(ask(&arena, &scope.facts, goal), SolverAnswer::Proved);
             }
@@ -414,7 +429,7 @@ impl ProverState {
                 let mut operands: Vec<(String, String)> = vec![];
                 for name in read.iter() {
                     let value = match *nikaia_std::index::get(&given_by, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-                    operands.push((nikaia_std::block::Text::from(name.to_string()), rust_text(&arena, value, &mut *escape)));
+                    operands.push((property_shown(name), rust_text(&arena, value, &mut *escape)));
                 }
                 let check = PreconditionCheck { rust: rust_text(&arena, nikaia_std::index::or(goal, || 0), &mut *escape), written: pre.failure(callee), message: claim_text_of((pre.message).as_deref()), operands };
                 this_reach = CallReach::Checked(vec![check]);
@@ -614,6 +629,12 @@ pub(crate) fn postconditions_for(arena: &mut logic::TermArena, posts: &[PostClai
     }
     let result = arena.var(bound);
     args_given.insert(result_name(), result);
+    for name in read_all.iter() {
+        if nikaia_std::index::or(property_base(name), || "".into()) == result_name() {
+            let rest = nikaia_std::index::or(name.strip_prefix(&*result_name()), || std::convert::AsRef::<str>::as_ref(name));
+            args_given.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(&format!("{}{}", bound, rest)));
+        }
+    }
     let mut out: Vec<i64> = vec![];
     for post in posts.iter() {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -787,18 +808,31 @@ pub(crate) fn given_path(arena: &mut logic::TermArena, words: &winnow_grammar::I
     let named = path_of(arg, words);
     if named.is_some() {
         let target = format!("{}.{}", nikaia_std::index::or(named.as_deref(), || ""), rest);
-        if !scope.ints.contains(&target) { return None; }
+        if !scope.ints.contains(&target) && !rest.starts_with(&*property_mark()) { return None; }
         return Some(arena.var(&target));
     }
     match arg {
         Expr::StructLit { fields, .. } => {
+            let marked = nikaia_std::search::find(&rest, &format!(".{}", property_mark()), 0);
+            if marked.is_some() {
+                let at = nikaia_std::index::or(marked, || 0);
+                let wanted = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(0..at)).to_string());
+                for field in fields.iter() {
+                    if words.resolve(field.name) == wanted {
+                        let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        let on = match path_of(value, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        return Some(arena.var(&format!("{}{}", on, nikaia_std::index::get(&rest, nikaia_std::index::at(at..)))));
+                    }
+                }
+                return None;
+            }
             let field_name = nikaia_std::block::Text::from(nikaia_std::index::or(rest.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(rest)).to_string());
             let counted = rest.ends_with(".len()");
             for field in fields.iter() {
                 if words.resolve(field.name) == field_name {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
                     if counted {
-                        let list = match path_of(value, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        let list = match path_of(value, words) { Some(__nikaia_value) => __nikaia_value, None => return length_given(arena, words, value, scope, pinned) };
                         let length = length_of(&list);
                         if !scope.ints.contains(&length) { return None; }
                         return Some(arena.var(&length));

@@ -28,6 +28,7 @@ pub struct ProverScope {
     pub guards: collections::BTreeMap<i64, (i64, String)>,
     pub held: collections::BTreeMap<String, Vec<i64>>,
     pub failed: collections::BTreeMap<String, Vec<i64>>,
+    pub known_from: collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -37,7 +38,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new(), known_from: collections::BTreeMap::new() } }
     pub(crate) fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -82,6 +83,7 @@ impl ProverScope {
         for bound in gone.iter() { self.summed.remove(bound); }
         self.held.remove(name);
         self.failed.remove(name);
+        self.known_from.remove(name);
         if !self.held.is_empty() || !self.failed.is_empty() {
             let mut stale: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (bound, facts) in self.held.iter() { if mentions_any(arena, facts, name, &length) { stale.push(nikaia_std::block::Text::from(bound.to_string())); } }
@@ -242,7 +244,10 @@ impl ProverScope {
         let result = arena.var(&result_name());
         let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for name in read.iter() {
-            if name == returned { values.insert(nikaia_std::block::Text::from(name.to_string()), result); } else {
+            if name == returned { values.insert(nikaia_std::block::Text::from(name.to_string()), result); } else if nikaia_std::index::or(property_base(name), || "".into()) == returned {
+                let rest = nikaia_std::index::or(name.strip_prefix(AsRef::<str>::as_ref(returned)), || std::convert::AsRef::<str>::as_ref(name));
+                values.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(&format!("{}{}", result_name(), rest)));
+            } else {
                 let value = match *nikaia_std::index::get(&self.entry, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
                 values.insert(nikaia_std::block::Text::from(name.to_string()), value);
             }
@@ -250,7 +255,7 @@ impl ProverScope {
         let term = arena.substitute(claim, &values);
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(term, &mut names);
-        for name in names.iter() { if *name != result_name() && !is_a_parameter(name, params) { return None; } }
+        for name in names.iter() { if *name != result_name() && nikaia_std::index::or(property_base(name), || "".into()) != result_name() && !is_a_parameter(name, params) { return None; } }
         Some(term)
     }
     pub(crate) fn pinned_names(&self, arena: &logic::TermArena, claim: i64) -> Option<collections::BTreeSet<String>> {

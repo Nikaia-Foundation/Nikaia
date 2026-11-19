@@ -27,6 +27,7 @@
 // D3).
 
 use std::collections
+use std::text
 use logic
 
 /// **What the walks proved** over one file: index nodes, arithmetic
@@ -111,6 +112,7 @@ pub fn bounds_proven(
 		through_loops: through_loops,
 		trace: trace.clone(),
 		decided: bp_decided(program, words, facts.comptime_values),
+		computed: bp_computed(program, words, facts.comptime_values),
 		list_indices: facts.list_indices.clone(),
 		text_bytes: facts.text_bytes.clone(),
 		text_scalars: facts.text_scalars.clone(),
@@ -360,6 +362,32 @@ fn bp_decided(
 				} else if written == "false" {
 					out.insert(words.resolve(name).clone(), false)
 				}
+			},
+			else => {},
+		}
+	}
+	return out
+}
+
+/// **The module's `comptime`s of a whole-number type**, by name, with what
+/// the build computed for each (`values`, the checker's `comptime_values`)
+/// where an `i64` holds it: each is that number to the walk (ADR-359 D7,
+/// #2161).
+fn bp_computed(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	values: ref collections::BTreeMap[i64, (String, String)],
+) -> collections::BTreeMap[String, i64] {
+	let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Comptime { name, .. } => {
+				let value = values.get(item.span.start as i64) ?? continue
+				if !is_whole_number(value.0) {
+					continue
+				}
+				let n = text::parse_i64(value.1.trim()) ?? continue
+				out.insert(words.resolve(name).clone(), n)
 			},
 			else => {},
 		}

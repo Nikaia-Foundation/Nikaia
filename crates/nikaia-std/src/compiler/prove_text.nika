@@ -59,6 +59,15 @@ fn rust_of_name(name: ref String, escape: fn(ref String) -> String sync) -> Stri
         }
         return f"({escape(base)}.len() as i128)"
     }
+    // **A named property is its call** (ADR-381 D3): `xs.prop@p()` checked
+    // at a call is `p(&xs)`, `true` 1.
+    let base = property_base(name)
+    if base != null {
+        let on = base ?? ""
+        let called = name.strip_prefix(f"{on}.{property_mark()}") ?? name
+        let rest = (called.strip_suffix("()") ?? called).clone()
+        return f"(({escape(rest)}(&{escape(on)})) as i128)"
+    }
     return f"({escape(name)}.clone() as i128)"
 }
 

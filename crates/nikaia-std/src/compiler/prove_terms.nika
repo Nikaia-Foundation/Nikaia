@@ -273,6 +273,52 @@ fn call_result_name(call: ref Expr) -> String {
     return f"result@{node_key(call)}"
 }
 
+/// **The name a named property has in the proof** (ADR-381 D1): `p(xs)`, a
+/// call by name of one argument that is a path of fields, is
+/// `xs.prop@p()`. Keyed under its argument's path, it goes where the path
+/// goes (ADR-306 D17): bound again, the argument takes it along
+/// (`ProverScope::rebind`), and a call hands it on as it hands on
+/// `xs.len()` (`given_paths`). Whether the callee is one (a `bool` that
+/// changes nothing) the walk decides where it makes the name.
+fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Call { func, args, config, .. } => {
+            if args.len() != 1 || !config.is_empty() {
+                return null
+            }
+            let callee = match func {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => return null,
+            }
+            let on = path_of(args[0], words) ?? return null
+            f"{on}.{property_mark()}{callee}()"
+        },
+        else => null,
+    }
+}
+
+/// What a property's name holds after its argument's path (ADR-381 D1): a
+/// form no binding or field of a program can spell.
+fn property_mark() -> String {
+    return "prop@"
+}
+
+/// **The path a property's name is keyed under** (ADR-381 D1), where `name`
+/// is one: `xs` of `xs.prop@p()`.
+fn property_base(name: ref String) -> String? {
+    let at = name.find(f".{property_mark()}") ?? return null
+    return name[0..<at].clone()
+}
+
+/// **A name as the program writes it** (ADR-381 D1): a property's
+/// `xs.prop@p()` is the call `p(xs)`; any other name is itself.
+fn property_shown(name: ref String) -> String {
+    let on = property_base(name) ?? return name.clone()
+    let called = name.strip_prefix(f"{on}.{property_mark()}") ?? return name.clone()
+    let callee = called.strip_suffix("()") ?? called
+    return f"{callee}({on})"
+}
+
 /// The claim `expr` as a formula over [`lin_term`]s, where it is one this
 /// prover reads.
 pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[logic::SolverTerm]) -> i64? {
@@ -288,6 +334,17 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
             let named = built(logic::SolverTerm::Var(n.clone()), out)
             let one = built(logic::SolverTerm::Int(1), out)
             built(logic::SolverTerm::Ge(named, one), out)
+        },
+        // **A named property is a fact of its own** (ADR-381 D1): `p(xs)`,
+        // where the walk made `property_name` a name, is that name `== 1`.
+        Expr::Call { .. } => {
+            let name = property_name(expr, words) ?? return null
+            if !var(name) {
+                return null
+            }
+            let named = built(logic::SolverTerm::Var(name), out)
+            let one = built(logic::SolverTerm::Int(1), out)
+            built(logic::SolverTerm::Eq(named, one), out)
         },
         // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
         // a name of its own as `lin_term` reads it.

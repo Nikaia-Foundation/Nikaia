@@ -235,11 +235,26 @@ impl ProverState {
                 break
             }
         }
+        // **A named property of the result is the returned path's**
+        // (ADR-381 D2): `result.prop@p()` is `r.prop@p()` of `return r`.
+        let path = path_of(value, words)
         for index in 0..<posts.len() {
             let mut shown = false
-            if unshadowed && returned != null {
-                let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
-                given.insert(result_name(), returned ?? 0)
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(posts[index].term, read)
+            let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            // As before for a claim of no property: a returned whole number.
+            let mut ready = unshadowed && returned != null
+            for name in read {
+                if (property_base(name) ?? "") == result_name() {
+                    let on = path?.clone() ?? ""
+                    ready = unshadowed && !on.is_empty() && (returned != null || !read.contains(result_name()))
+                    let rest = name.strip_prefix(result_name()) ?? name
+                    given.insert(name.clone(), arena.var(f"{on}{rest}"))
+                }
+            }
+            given.insert(result_name(), returned ?? 0)
+            if ready {
                 let goal = arena.substitute(posts[index].term, given)
                 shown = match ask(arena, scope.facts, goal) {
                     SolverAnswer::Proved => true,
@@ -796,7 +811,7 @@ impl ProverState {
                 let mut operands: Vec[(String, String)] = []
                 for name in read {
                     let value = given_by[name] ?? continue
-                    operands.push((name.clone(), rust_text(arena, value, escape)))
+                    operands.push((property_shown(name), rust_text(arena, value, escape)))
                 }
                 let check = PreconditionCheck { rust: rust_text(arena, goal ?? 0, escape), written: pre.failure(callee), message: claim_text_of(pre.message), operands: operands }
                 this_reach = CallReach::Checked([check])
@@ -1102,6 +1117,13 @@ fn postconditions_for(mut arena: logic::TermArena, posts: ref Vec[PostClaim], pa
     }
     let result = arena.var(bound)
     args_given.insert(result_name(), result)
+    // **A named property of the result is the bound name's** (ADR-381 D2).
+    for name in read_all {
+        if (property_base(name) ?? "") == result_name() {
+            let rest = name.strip_prefix(result_name()) ?? name
+            args_given.insert(name.clone(), arena.var(f"{bound}{rest}"))
+        }
+    }
     let mut out: Vec[i64] = []
     for post in posts {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
@@ -1335,13 +1357,30 @@ fn given_path(mut arena: logic::TermArena, words: ref winnow_grammar::InternerCo
     let named = path_of(arg, words)
     if named != null {
         let target = f"{named ?? ""}.{rest}"
-        if !scope.ints.contains(target) {
+        // **A named property is asked of the argument even unknown**
+        // (ADR-381 D2): no fact of it is a property the caller must show.
+        if !scope.ints.contains(target) && !rest.starts_with(property_mark()) {
             return null
         }
         return arena.var(target)
     }
     match arg {
         Expr::StructLit { fields, .. } => {
+            // **A field's named property is its value's** (ADR-381 D2):
+            // `items.prop@p()` of `Bag { items: c }` is `c.prop@p()`.
+            let marked = rest.find(f".{property_mark()}")
+            if marked != null {
+                let at = marked ?? 0
+                let wanted = rest[0..<at].clone()
+                for field in fields {
+                    if words.resolve(field.name) == wanted {
+                        let value = field.value ?? return null
+                        let on = path_of(value, words) ?? return null
+                        return arena.var(f"{on}{rest[at..<rest.len()]}")
+                    }
+                }
+                return null
+            }
             let field_name = (rest.strip_suffix(".len()") ?? rest).clone()
             let counted = rest.ends_with(".len()")
             for field in fields {
@@ -1349,7 +1388,9 @@ fn given_path(mut arena: logic::TermArena, words: ref winnow_grammar::InternerCo
                     // A field written by its name alone is not read here.
                     let value = field.value ?? return null
                     if counted {
-                        let list = path_of(value, words) ?? return null
+                        // **A list written in the literal counts its items**
+                        // (ADR-306 D17): `Tree { nodes: [n], root: 0 }`.
+                        let list = path_of(value, words) ?? return length_given(arena, words, value, scope, pinned)
                         let length = length_of(list)
                         if !scope.ints.contains(length) {
                             return null
