@@ -559,6 +559,7 @@ pub(crate) struct TierWalk {
     pub(crate) stmt: Span,
     pub(crate) tuple_items: collections::BTreeMap<i64, Vec<Kinds>>,
     pub(crate) closure_owns: bool,
+    pub(crate) grown: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -2028,8 +2029,19 @@ pub(crate) fn handed_by_name(stmt: &Stmt, block: &Block, at: i64, ask: &TierAsk<
 
 pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     match stmt {
-        Stmt::Let { names, value, ty, .. } => {
+        Stmt::Let { names, value, ty, mutable, .. } => {
+            let mutable = *mutable;
             tier_let(names, value, (ty).as_ref(), at, ask, walk);
+            if mutable && names.len() == 1 && walk.grown.contains(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) && given_cut_source(value, ask.names).is_some() {
+                let name = nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+                let mut local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return no_kinds() };
+                local.kinds = owned_kinds();
+                local.from = None;
+                local.through = vec![];
+                local.unkept = false;
+                bind_tier_local(name, local, walk);
+                return no_kinds();
+            }
             tie_bound(names, value, ask, walk);
         },
         Stmt::Comptime { name, ty, .. } => {
@@ -5279,6 +5291,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
     };
     let key = tier_key(target, &own_name((name).as_ref(), ask.names));
     walk.function = own_name((name).as_ref(), ask.names);
+    walk.grown = grown_text_of(ask.names, body);
     walk.locals.clear();
     walk.ties.clear();
     walk.frames = vec![];
@@ -5809,7 +5822,7 @@ pub(crate) fn tier_word(tier: &Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names, ask.beside_calls);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), late_lent: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), late_lent: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false, grown: collections::BTreeSet::new() };
     let found = late_arms(program, &walk.declared, ask);
     walk.late = found.arms;
     walk.late_args = found.args;

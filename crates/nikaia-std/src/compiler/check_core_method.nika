@@ -622,6 +622,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             },
             else => {}
         }
+        state.a_replace_seen(world, receiver, args, span)
     }
     // **A view of the receiver** (ADR-views-3 D9, #1478): `s.trim()` points
     // into `s`, so a change to `s` while it is used is NK2305.
