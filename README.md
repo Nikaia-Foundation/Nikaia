@@ -35,6 +35,13 @@ Nikaia is a statically typed, compiled, type-safe programming language with easy
 verification. The compiler catches easy-to-miss mistakes before the program runs, the
 program becomes optimised machine code, and the code stays concise.
 
+Safety, speed and simplicity are usually weighed against each other, and Nikaia aims for all
+three at once. The compiler makes the decisions that safety and speed otherwise ask of the
+programmer, and it makes them on the tree the programmer wrote, so what it proves and what it
+optimises are the same program. The language chooses its concepts freely, because no existing
+code holds it back, and it builds on the Rust ecosystem from the start. The
+[Manifesto](manifesto.md#6-how-it-can-be-all-three) argues the aim and the evidence for it.
+
 The compiler is pre-alpha. What works today is in
 [Status & roadmap](docs/project_status_and_roadmap.md); the reasons behind the project are in
 the [Manifesto](manifesto.md).
