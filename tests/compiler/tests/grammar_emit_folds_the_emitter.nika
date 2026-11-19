@@ -1,0 +1,35 @@
+// An emitting `@stream` entry folds the repetition whose items emit, so a
+// second repetition in its body (`"."*` before the end) is a plain step
+// (ADR-grammar-2 D7, amended 2026-11-18, #1443): the walk still stops at a
+// `break`, and the error of a later item is never reported.
+
+struct Item {
+	word: String,
+}
+
+struct Lim {
+	depth: i64,
+}
+
+grammar Words {
+	@stream entry rule items(lim: Lim) -> Item = opened group(lim.depth)* "."* eof
+	rule opened = "" -> { emit Item { word: "open" } }
+	rule group(d: i64) = w:until(";") ";" -> { emit Item { word: f"{w} {w.len()} {d}" } }
+}
+
+fn walk(text: String, lim: Lim) -> i64 throws {
+	let mut seen = 0
+	for it in Words::items(text, lim) {
+		println(it.word)
+		seen += 1
+		if it.word.starts_with("stop") {
+			break
+		}
+	}
+	return seen
+}
+
+fn main() throws {
+	println(f"walked {walk("ab;c;..", Lim { depth: 3 })}")
+	println(f"walked {walk("x;stop;y", Lim { depth: 4 })}")
+}
