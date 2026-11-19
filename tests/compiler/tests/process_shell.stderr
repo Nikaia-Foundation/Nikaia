@@ -1,0 +1,9 @@
+error[NK1314]: No shell is configured: `std` runs no shell (ADR-raw-sinks-1 D9).
+  --> tests/process_shell.nika:8:5
+   |
+ 8 |     let out = process::shell("echo hi; echo there | tr a-z A-Z")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A shell reads its text as code, and a check of that text holds only for the one shell that reads it, so `std` starts none, on any platform.
+   = help: Write the command as `process::run("PROGRAM", ["ARG", ...])`, whose arguments reach the program one by one and are never read as code.
+1 type error
