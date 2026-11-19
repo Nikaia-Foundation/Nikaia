@@ -144,8 +144,8 @@ pub(crate) fn prover_test(walk: &mut ProverWalk, body: &Block, program: &Program
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<&str>, of_a_trait: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     match &item.node {
-        Item::Fn { name, receiver, args, config, body, can_throw, .. } => {
-            let can_throw = *can_throw; let name = *name;
+        Item::Fn { name, receiver, args, config, body, can_throw, is_public, .. } => {
+            let can_throw = *can_throw; let is_public = *is_public; let name = *name;
             let has_owner = owner.is_some();
             let mut key: Option<String> = None;
             let plain = prover_symbol_text((name).as_ref(), words);
@@ -160,8 +160,13 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                 scope.locals.insert(String::from("self"));
                 let lent = nikaia_std::index::or(receiver, || Receiver { is_ref: true, is_mut: true, is_keep: false });
                 if !lent.is_mut && has_owner {
-                    let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    prover_parameter_fields(walk, &mut scope, &mut not_params, "self", nikaia_std::index::or(owner, || ""), true, program, words);
+                    let mut fields: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    prover_parameter_fields(walk, &mut scope, &mut fields, "self", nikaia_std::index::or(owner, || ""), true, program, words);
+                    let hidden = if is_public { prover_private_fields(program, words, nikaia_std::index::or(owner, || "")) } else { collections::BTreeSet::new() };
+                    for path in fields.iter() {
+                        let field = nikaia_std::index::or(path.strip_prefix("self."), || "");
+                        if !hidden.contains(field) { params.insert(nikaia_std::block::Text::from(path.to_string())); }
+                    }
                 }
             }
             for arg in args.iter() {
@@ -395,6 +400,20 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
         Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition),
         Stmt::Emit(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition),
     }
+}
+
+pub(crate) fn prover_private_fields(program: &Program, words: &winnow_grammar::InternerContext, ty: &str) -> collections::BTreeSet<String> {
+    let mut hidden: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Struct { name: declared, fields, .. } => {
+                let declared = *declared;
+                if words.resolve(declared) == ty { for field in fields.iter() { if !field.is_public { hidden.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); } } }
+            },
+            _ => { },
+        }
+    }
+    hidden
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -982,7 +1001,7 @@ pub(crate) fn prover_summary_exits(walk: &mut ProverWalk, value: &Expr, scope: &
         }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(term, &mut read);
-        for name in read.iter() { if !is_a_parameter(name, &params) { return None; } }
+        for name in read.iter() { if !is_a_parameter(name, &params) || name == "self" || name.starts_with("self.") { return None; } }
         if walk.arena.size(term) > precondition_terms() { return None; }
         out.push(SummaryExit { guard, value: v, term, written: nikaia_std::block::Text::from(alt.why.to_string()) });
     }
@@ -2336,14 +2355,17 @@ pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, metho
     let callee = format!("{}::{}", owner, name);
     walk.state.edges.insert((nikaia_std::block::Text::from(function.to_string()), nikaia_std::block::Text::from(callee.to_string())));
     let target = match own_method(program, words, &owner, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let all = arguments_in_order(&target, args, config, words);
+    let mut params: Vec<String> = vec![String::from("self")];
+    params.extend(target.params.iter().cloned());
+    let mut all: Vec<Expr> = vec![receiver.clone()];
+    all.extend(arguments_in_order(&target, args, config, words));
     let told = walk.findings.len() as i64;
     let pre = if walk.state.collecting { prover_precondition_in(&walk.state.known, &callee) } else { prover_precondition_in(&walk.state.preconditions, &callee) };
     if pre.is_some() {
         let found = match pre { Some(__nikaia_value) => __nikaia_value, None => return };
-        prover_record_call(walk, &callee, &target.params, &found.claims, &all, None, span, scope, at, words, &mut *ask, &mut *model, &mut *escape, &mut *written_of);
+        prover_record_call(walk, &callee, &params, &found.claims, &all, None, span, scope, at, words, &mut *ask, &mut *model, &mut *escape, &mut *written_of);
     }
-    if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &target.params, &all, span, scope, at, &mut *ask, &mut *model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &target.params, &all, span, scope, words, &mut *ask, &mut *model); }
+    if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &params, &all, span, scope, at, &mut *ask, &mut *model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &params, &all, span, scope, words, &mut *ask, &mut *model); }
 }
 
 #[allow(clippy::too_many_arguments)]

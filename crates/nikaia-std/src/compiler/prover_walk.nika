@@ -206,7 +206,7 @@ fn prover_test(mut walk: ProverWalk, body: ref Block, program: ref Program, word
 /// `of_a_trait` says so.
 fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?, of_a_trait: bool, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     match item.node {
-        Item::Fn { name, receiver, args, config, body, can_throw, .. } => {
+        Item::Fn { name, receiver, args, config, body, can_throw, is_public, .. } => {
             let has_owner = owner != null
             // The ledger's key: `f`, or `Type::m` for a method.
             let mut key: String? = null
@@ -229,12 +229,21 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 // **A path of fields from a `self` the method does not
                 // change is a name of its own** (ADR-306 D17), as one from a
                 // borrowed parameter is: `self.other.len()` under `if
-                // self.other.len() == 0` (#1476). Not a precondition: a call
-                // through the receiver gives no argument for it.
+                // self.other.len() == 0` (#1476). A claim on one is a
+                // precondition (ADR-269 D15), since every call hands its
+                // receiver in for `self`; not on a private field of a `pub`
+                // method, which its callers cannot see (D16).
                 let lent = receiver ?? Receiver { is_ref: true, is_mut: true, is_keep: false }
                 if !lent.is_mut && has_owner {
-                    let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
-                    prover_parameter_fields(walk, scope, not_params, "self", owner ?? "", true, program, words)
+                    let mut fields: collections::BTreeSet[String] = collections::BTreeSet()
+                    prover_parameter_fields(walk, scope, fields, "self", owner ?? "", true, program, words)
+                    let hidden = if is_public { prover_private_fields(program, words, owner ?? "") } else { collections::BTreeSet() }
+                    for path in fields {
+                        let field = path.strip_prefix("self.") ?? ""
+                        if !hidden.contains(field) {
+                            params.insert(path.clone())
+                        }
+                    }
                 }
             }
             for arg in args {
@@ -546,6 +555,26 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
         Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Stmt::Emit(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
     }
+}
+
+/// The names of the fields the struct `ty` declares without `pub`.
+fn prover_private_fields(program: ref Program, words: ref winnow_grammar::InternerContext, ty: ref String) -> collections::BTreeSet[String] {
+    let mut hidden: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in program.items {
+        match item.node {
+            Item::Struct { name: declared, fields, .. } => {
+                if words.resolve(declared) == ty {
+                    for field in fields {
+                        if !field.is_public {
+                            hidden.insert(words.resolve(field.name).clone())
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return hidden
 }
 
 /// The fields of the struct `ty` declares, as names of the parameter `name`:
@@ -1323,7 +1352,10 @@ fn prover_summary_exits(mut walk: ProverWalk, value: ref Expr, scope: ref Prover
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         walk.arena.variables(term, read)
         for name in read {
-            if !is_a_parameter(name, params) {
+            // Not a field of the receiver (#2231): a claim on one is a
+            // precondition (ADR-269 D15), but a summary of it would stand
+            // at a call `self.m()` past a change of the field.
+            if !is_a_parameter(name, params) || name == "self" || name.starts_with("self.") {
                 return null
             }
         }
@@ -3149,17 +3181,22 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
     let callee = f"{owner}::{name}"
     walk.state.edges.insert((function.clone(), callee.clone()))
     let target = own_method(program, words, owner, name) ?? return
-    let all = arguments_in_order(target, args, config, words)
+    // The receiver is put in for `self`, as on any other receiver: a
+    // claim on `self.k` (D15) reads the caller's `self.k`.
+    let mut params: Vec[String] = ["self"]
+    params.extend(target.params.clone())
+    let mut all: Vec[Expr] = [receiver.clone()]
+    all.extend(arguments_in_order(target, args, config, words))
     let told = walk.findings.len()
     let pre = if walk.state.collecting { prover_precondition_in(walk.state.known, callee) } else { prover_precondition_in(walk.state.preconditions, callee) }
     if pre != null {
         let found = pre ?? return
-        prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
+        prover_record_call(walk, callee, params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
     }
     if walk.state.collecting {
-        walk.state.carry_unwritten(walk.arena, words, callee, target.params, all, span, scope, at, ask, model)
+        walk.state.carry_unwritten(walk.arena, words, callee, params, all, span, scope, at, ask, model)
     } else if walk.findings.len() == told {
-        prover_unwritten_call(walk, callee, target.params, all, span, scope, words, ask, model)
+        prover_unwritten_call(walk, callee, params, all, span, scope, words, ask, model)
     }
 }
 
