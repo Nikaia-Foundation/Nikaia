@@ -656,7 +656,7 @@ test "a loan beside a jump binds a view" {
 struct NullablePerson { name: String }
 
 fn nullable_pick_name(user: ref NullablePerson?, who: ref String) -> i64 {
-    let name = user?.name ?? who.to_string()
+    let name = user?.name ?? who
     return name.len()
 }
 

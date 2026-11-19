@@ -2212,7 +2212,7 @@ fn sv_cuts_test_every(title: String, names: Vec[String], atoms: Vec[SvAtom]) -> 
 	let mut out: String = ""
 	out = out + title + "\n"
 	for kind in ["gcd", "cg", "gmi", "branch"] {
-		out = out + sv_cuts_test_run(title, names.clone(), atoms.clone(), kind.to_string(), "")
+		out = out + sv_cuts_test_run(title, names.clone(), atoms.clone(), kind, "")
 	}
 	return out
 }

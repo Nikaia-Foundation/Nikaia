@@ -328,8 +328,8 @@ pub fn emit_program(parsed: &Parsed, build: Build) -> Result<Lowered> {
 /// [`assets::Reads::none`], which is D1.
 pub fn emit_program_reading(parsed: &Parsed, build: Build, reads: &Reads) -> Result<Lowered> {
     // **A default is compiled where a `comptime` is** (ADR-321 D1): the ledger
-    // this lowering infers records it from the same workshop.
-    crate::comptime_run::defaults_compiled_in(reads.workshop().place(), || {
+    // this lowering infers records it from the same build-time directory.
+    crate::comptime_run::defaults_compiled_in(reads.build_time_dir().place(), || {
         let trust = crate::contracts::trust::analyse(parsed, std_ledger());
         Emitter::new_reading(parsed, build, trust.provenance, reads).program()
     })
@@ -624,7 +624,10 @@ pub const RUST_FLOOR: &str = "1.88";
 
 impl<'p> Emitter<'p> {
     fn new(parsed: &'p Parsed, build: Build, provenance: crate::contracts::Provenance) -> Self {
-        Self::new_reading(parsed, build, provenance, &Reads::none())
+        // A lowering handed no reads is one a run makes of its own
+        // sub-program, which computes nothing itself: a place here would run
+        // its option defaults again from inside that run (#2153).
+        Self::new_reading(parsed, build, provenance, &Reads::none().building_nowhere())
     }
 
     /// The same, told what this build may read

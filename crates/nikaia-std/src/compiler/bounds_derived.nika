@@ -233,7 +233,7 @@ fn derived_candidate(
 				""
 			}
 			if gate != "" {
-				derived.gates.insert(text.clone(), gate.to_string())
+				derived.gates.insert(text.clone(), gate)
 				return
 			}
 			let sites = everywhere.calls[text] ?? return

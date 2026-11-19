@@ -350,7 +350,7 @@ impl EmitState {
                 out.push(&format!("{}const {}: {} = {};\n", vis, bound, value.0, value.1));
             },
             Item::Extern { abi, declarations, opaque, .. } => {
-                if abi.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("[NK1227] `extern` takes no convention: write `extern {{ … }}`."), at: Some(i64::from(at)) }, &"emit_item")); }
+                if abi.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("[NK1227] `extern` takes no convention: write `extern { … }`."), at: Some(i64::from(at)) }, &"emit_item")); }
                 for handle in opaque.iter() {
                     let st = out.mark();
                     out.push(&opaque_type_text(&escaped_name(&emit_text(world, handle.node.name)), &escaped_name(&emit_text(world, handle.node.released_by))));

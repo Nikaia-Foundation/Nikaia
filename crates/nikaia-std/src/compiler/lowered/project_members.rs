@@ -326,7 +326,7 @@ pub(crate) async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: 
         None => { },
         Some(ref handed) => {
             for line in handed.lines() {
-                let parts: Vec<&str> = line.splitn(2, '=').map(|part| { part }).collect::<Vec<_>>();
+                let parts: Vec<&str> = line.splitn(2, '=').collect::<Vec<_>>();
                 if parts.len() == 2 { out.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()), cargo_json_path(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string()))); }
             }
             return Ok(out);

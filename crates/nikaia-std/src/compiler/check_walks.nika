@@ -504,6 +504,46 @@ impl CheckState {
         return not_pure
     }
 
+    /// **Whether a lambda touches nothing and changes no name outside it**
+    /// (ADR-342 D1): what a `par_iter` lambda is asked, except that it may
+    /// pause. Every method the walk of its call reached (`frame`) and every
+    /// free call in it is `sync`, fails with nothing, changes nothing and
+    /// touches nothing; its body binds with `let` and reads, and assigns no
+    /// name, jumps nowhere and holds no block of its own. A call nothing
+    /// describes is not known to.
+    fn a_lambda_touching_nothing[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, frame: ref CheckStoredCode, lambda: ref Expr) -> bool sync {
+        if frame.unresolved {
+            return false
+        }
+        for key in frame.resolved {
+            let method = resolve_method(world, key) ?? return false
+            if check_not_pure_because(method.contract) != null {
+                return false
+            }
+        }
+        let body = match lambda {
+            Expr::Closure { mutable, body, .. } => {
+                if mutable.len() > 0 {
+                    return false
+                }
+                body
+            },
+            else => return false,
+        }
+        let mut found: Vec[String] = []
+        for stmt in body.stmts {
+            match stmt.node {
+                Stmt::Let { .. } => {},
+                Stmt::Expr(_) => {},
+                else => return false,
+            }
+            for each in check_visit_stmt(stmt.node) {
+                self.a_claim_looks_at(world, host, each, found)
+            }
+        }
+        return found.len() == 0
+    }
+
     /// **The free calls and the forms in a claim that are not a read**
     /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
     fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {

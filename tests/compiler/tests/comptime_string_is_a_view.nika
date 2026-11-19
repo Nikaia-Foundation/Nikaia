@@ -11,7 +11,7 @@ fn shout(s: String) -> String {
 fn main() throws {
 	comptime LOCAL: String = "local"
 	println(shout(GREETING))
-	let owned: String = GREETING.to_string()
+	let owned: String = GREETING
 	println(owned)
 	println(GREETING.len())
 	println(GREETING == "hello")

@@ -460,7 +460,7 @@ fn agent_commits(n: String) -> String throws {
 
 fn agent_exe() -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
-        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+        if fs::exists(exe, fs::Root::Anywhere) { return exe }
     }
     return ""
 }

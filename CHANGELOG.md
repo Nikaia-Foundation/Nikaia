@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1449] — 2026-11-19
+
+**NK1301 refuses .to_string() on text, with a fix edit; the sites are migrated (ADR-text-reuse-1 D1)**
+- `.to_string()` on text is refused (NK1301): a view is a String already; drop it, or write `.clone()` for a copy, and `nikaia fix` drops it. A type parameter keeps it (ADR-text-reuse-1 D1). benches/lowering/source.nika is unchanged (it has its own check errors, so fix skipped it)
+
+## [0.0.1448] — 2026-11-19
+
+**ADR-failure-return-1 §6: non-inlined failing calls counted, too few for the two-scalar lowering (D2)**
+- A call to a failing function that does not fail pays no frame of its own: the throw path is cold and never inlined (ADR-failure-return-1 D1)
+
+## [0.0.1447] — 2026-11-19
+
+**A list map whose result goes into a for, a map or len runs element by element (ADR-342 D1)**
+- Faster list chains: a list map whose result goes into a for, another map or len runs element by element and builds no list in between, when its lambda touches nothing (ADR-342 D1)
+
+## [0.0.1446] — 2026-11-18
+
+**Builders' changes (#2153)**
+- A library check with no build-time directory computes `comptime` calls in the shared one (ADR-321 D19 as amended), and NK1127 names a build-time directory that can't be created or written; `Workshop` is now `BuildTimeDir`.
+- Bounds - a counter raised once per element of `Bytes::find_all` is proved without its overflow check, since the positions rise and the loop turns fewer times than the bytes are long (#432).
+
 ## [0.0.1445] — 2026-11-18
 
 **Bytes gets eq_ignore_ascii_case, an ASCII case-insensitive compare (#2156)**

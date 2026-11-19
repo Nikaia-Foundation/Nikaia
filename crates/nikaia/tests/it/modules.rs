@@ -37,11 +37,12 @@ fn project(name: &str, files: &[(&str, &str)]) -> (PathBuf, PathBuf) {
 /// program.
 fn run(entry: &Path, build: Build) -> String {
     // **As a build reads and lowers it**: a `comptime` or a default that calls
-    // something is compiled and run in the workshop (ADR-321 D1).
-    let program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
-        Program::read(entry)
-    })
-    .expect("the program reads");
+    // something is compiled and run in the build-time directory (ADR-321 D1).
+    let program =
+        nikaia::comptime_run::defaults_compiled_in(Some(&common::build_time_dir()), || {
+            Program::read(entry)
+        })
+        .expect("the program reads");
     let lowered = program
         .emit_reading(build, &common::reads())
         .expect("the program lowers");

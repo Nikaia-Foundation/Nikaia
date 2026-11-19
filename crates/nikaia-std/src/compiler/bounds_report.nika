@@ -299,7 +299,7 @@ fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Ve
 pub fn bounds_report_derived(derived: ref Vec[String], source: ref String) -> Vec[String] {
 	let mut out: Vec[String] = []
 	for row in derived {
-		let parts: Vec[String] = row.split("\t").map(fn(p) { p.to_string() }).collect()
+		let parts: Vec[String] = row.split("\t").collect()
 		if parts.len() != 3 {
 			continue
 		}

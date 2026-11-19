@@ -379,9 +379,9 @@ fn a_copy_has_one_word() {
     );
 }
 
-/// **The text form of text is the text itself** (ADR-282 D8): a view stays a
-/// view and a literal a literal, so nothing is copied and nothing is written
-/// below, also where it is kept in a field.
+/// **The text form of a number stays, and a literal is kept as itself**
+/// (ADR-282 D8, ADR-text-reuse-1 D1): nothing is copied and nothing is
+/// written below, also where it is kept in a field.
 #[test]
 fn the_text_form_of_text_is_the_text() {
     let rust = lowered(
@@ -398,12 +398,12 @@ fn the_text_form_of_text_is_the_text() {
         "struct P { name: String }\n\n\
          fn main() throws {\n\
          \x20   let v = \"x\"\n\
-         \x20   let p = P { name: v.to_string() }\n\
+         \x20   let p = P { name: v }\n\
          \x20   println(p.name)\n\
          }\n",
     );
-    // A literal's text form is the literal: kept in a field it makes the
-    // field a `&'static str`, so nothing is refused.
+    // A literal kept in a field makes the field a `&'static str`, so nothing
+    // is refused; `.to_string()` is not written on text (ADR-text-reuse-1 D1).
     assert!(refused.is_empty(), "{refused:#?}");
 }
 

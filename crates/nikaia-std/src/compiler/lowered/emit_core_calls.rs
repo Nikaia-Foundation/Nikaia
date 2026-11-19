@@ -1085,7 +1085,17 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             out.push(&format!(".{}(", entry));
         } else {
+            let stepping = name == "map" && walk.stepping_receiver == on_node;
+            if stepping { walk.stepping_receiver = -1; }
+            let mut on_fused = false;
+            if (stepping || name == "len" && args.is_empty()) && receiver.is_some() {
+                let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                on_fused = self.facts.fused_maps.contains(&node_key(on));
+                if on_fused { walk.fused.insert(node_key(on)); }
+            }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+            if stepping && !on_fused { out.push(".into_iter()"); }
+            if name == "len" && on_fused { written = String::from("count"); }
             if name == "collect" && args.is_empty() && self.facts.text_slot_collects.contains(&on_node) { out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))"); }
             out.push(&format!(".{}", written));
             if name == "update" && self.facts.copied_doors.contains(&on_node) { out.push("_copied"); }
@@ -1357,7 +1367,10 @@ impl EmitState {
             let made = self.emit_place_all_defaults(world, nikaia_std::index::or(*nikaia_std::index::get(&self.facts.defaulted_entries, &(node_key(node))), || ""));
             self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
             out.push(&format!(".or_insert_with(|| {})", made));
-        } else { self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?; }
+        } else {
+            if name == "map" && walk.fused.contains(&node_key(node)) { walk.stepping_receiver = node_key(receiver); }
+            self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?;
+        }
         if self.facts.copied_walks.contains(&node_key(node)) { out.push(".copied()"); }
         Ok(())
     }
@@ -1388,8 +1401,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple102480| {
-        let (i, word) = __nikaia_tuple102480;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple103628| {
+        let (i, word) = __nikaia_tuple103628;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

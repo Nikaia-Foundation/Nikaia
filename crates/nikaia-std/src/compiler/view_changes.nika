@@ -1379,11 +1379,11 @@ fn vc_part_of(head: ref String) -> String {
     if !head.ends_with(": ") {
         return ""
     }
-    let words: Vec[String] = head.split(" ").map(fn(w) { w.to_string() }).collect()
+    let words: Vec[String] = head.split(" ").collect()
     if words.len() < 3 {
         return ""
     }
-    return (words[2].strip_suffix(":") ?? "").to_string()
+    return words[2].strip_suffix(":") ?? ""
 }
 
 fn vc_label(span: Span, word: ref String, text: String, main: bool) -> CheckLabel {

@@ -13,7 +13,7 @@ impl Doc {
     }
 
     fn whole(ref self, n: i64) -> String {
-        return self.text(n).to_string()
+        return self.text(n)
     }
 
     fn trimmed(ref self, n: i64) -> String {
@@ -26,7 +26,7 @@ fn made(n: i64) -> String {
 }
 
 fn copied(n: i64) -> String {
-    return made(n).to_string()
+    return made(n)
 }
 
 fn main() throws {

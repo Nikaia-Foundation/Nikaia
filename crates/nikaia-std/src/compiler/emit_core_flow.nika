@@ -1015,8 +1015,11 @@ impl EmitState {
                             out.push(", ")
                         }
                         at += 1
+                        // `&*`, never `&`: a part that is a `&'static str`
+                        // stays one, where `&rest` borrowed the local name
+                        // and rustc refused a map keyed by the views.
                         if split == 1 && !emit_flow_a_lit_str(part) {
-                            out.push("std::convert::AsRef::<str>::as_ref(&")
+                            out.push("std::convert::AsRef::<str>::as_ref(&*")
                             self.emit_expr(world, walk, out, host, emit_flow_cloned_place(world, part), depth, flow, scope)
                             out.push(")")
                             continue

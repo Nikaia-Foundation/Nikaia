@@ -583,7 +583,7 @@ pub fn a_literal(expr: &Expr) -> bool {
 
 /// **A build-time value as the literal the ledger records** (ADR-318 D1-D3):
 /// an initialiser of literals is folded, and anything else is compiled and run
-/// where the build has a workshop (ADR-321 D1), as the checker computes the
+/// where the build has a build-time directory (ADR-321 D1), as the checker computes the
 /// same value; a call is never interpreted (D19). `None` where it cannot be
 /// computed or has no literal - the checker refuses it there.
 fn computed_literal(
@@ -597,13 +597,13 @@ fn computed_literal(
     let reads = crate::assets::Reads::none();
     let nothing = |_: &str| -> Option<crate::build_time::Value> { None };
     // **Literals alone are folded** (D1's last paragraph), with or without a
-    // workshop; the folder runs no call, so anything else is compiled.
+    // build-time directory; the folder runs no call, so anything else is compiled.
     if let Ok(folded) =
         crate::build_time::BuildTime::new(parsed, units, &reads, &nothing).evaluate(expr)
     {
         return literal_of(&folded);
     }
-    let workshop = crate::comptime_run::defaults_workshop()?;
+    let build_time_dir = crate::comptime_run::defaults_build_time_dir()?;
     let here = units.iter().position(|unit| std::ptr::eq(*unit, parsed))?;
     let ty = crate::comptime_run::as_built(ty.clone());
     match crate::comptime_run::compute(
@@ -615,8 +615,8 @@ fn computed_literal(
         &nothing,
         &|_: &str| None,
         library,
-        &workshop,
-        workshop.bounds(),
+        &build_time_dir,
+        build_time_dir.bounds(),
         None,
     ) {
         crate::comptime_run::Computed::Value(value) => literal_of(&value),
@@ -628,7 +628,7 @@ fn computed_literal(
 /// (#1277): `lower-std`'s tools package, whose files are checked on worker
 /// threads for the lowering too. A project's build keeps one thread: its
 /// checker reads thread-local state the build sets around it (the proofs'
-/// file, a default's workshop).
+/// file, a default's build-time directory).
 pub fn infer_package_parallel(
     units: &[&Parsed],
     library: &Ledger,

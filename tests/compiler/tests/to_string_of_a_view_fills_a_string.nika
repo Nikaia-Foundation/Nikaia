@@ -1,7 +1,7 @@
-// #843: `to_string()` of a view is the view (ADR-282 D8), so it fills a declared `String`.
+// #843: a view fills a declared `String`; a lent one is copied with `.clone()`, since `.to_string()` on text is refused (ADR-text-reuse-1 D1).
 fn first(ws: ref Vec[String]) -> String {
     for w in ws {
-        return w.to_string()
+        return w.clone()
     }
     return ""
 }
@@ -9,7 +9,7 @@ fn first(ws: ref Vec[String]) -> String {
 fn copied(ws: ref Vec[String]) -> i64 {
     let mut v: Vec[String] = []
     for w in ws {
-        v.push(w.to_string())
+        v.push(w.clone())
     }
     return v.len()
 }
@@ -17,13 +17,13 @@ fn copied(ws: ref Vec[String]) -> i64 {
 fn main() throws {
     let abc = "abc"
     let d = "d"
-    let words: Vec[String] = [abc.to_string(), d.to_string()]
+    let words: Vec[String] = [abc, d]
     println(words.len())
     println(words[1])
     let lit: Vec[String] = ["p", "q"]
     println(first(lit))
     println(copied(lit))
     let xyz = "xyz"
-    let name = xyz.to_string()
+    let name = xyz
     println(name)
 }

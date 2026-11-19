@@ -1251,8 +1251,9 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             false => crate::proofs::Book::default(),
         };
         let (program, book) = crate::proofs::with_book(book, || {
-            crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
-                match (self.settings.words.tests, self.layout.in_project) {
+            crate::comptime_run::defaults_compiled_in(
+                self.reads.build_time_dir().place(),
+                || match (self.settings.words.tests, self.layout.in_project) {
                     _ if self.program_test => {
                         modules::Program::read_program_test_open(input, packages, self.open)
                     }
@@ -1261,8 +1262,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                     ),
                     (false, true) => modules::Program::read_with_open(input, packages, self.open),
                     (false, false) => modules::Program::read_one_open(input, self.open),
-                }
-            })
+                },
+            )
         });
         *self.book.borrow_mut() = Some(book);
         let mut program = self.held(program)?;

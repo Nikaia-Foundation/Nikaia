@@ -679,7 +679,7 @@ impl EmitState {
                         if at > 0 { out.push(", "); }
                         at += 1;
                         if split == 1 && !emit_flow_a_lit_str(part) {
-                            out.push("std::convert::AsRef::<str>::as_ref(&");
+                            out.push("std::convert::AsRef::<str>::as_ref(&*");
                             self.emit_expr(world, walk, out, host, emit_flow_cloned_place(world, part), depth, flow, scope)?;
                             out.push(")");
                             continue;

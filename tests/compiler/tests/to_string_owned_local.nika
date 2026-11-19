@@ -2,7 +2,7 @@ enum BV { Int(i64), Text(String) }
 
 fn f(n: i64) -> String {
     let s = f"a{n}"
-    return s.to_string()
+    return s
 }
 
 fn g(got: BV) -> String {
@@ -13,12 +13,12 @@ fn g(got: BV) -> String {
 fn h() -> String {
     let a = "x"
     let s = a + "y"
-    return s.to_string()
+    return s
 }
 
 fn k(n: i64) -> String {
     let s: String = f"b{n}"
-    return s.to_string()
+    return s
 }
 
 fn m(n: i64) -> String {
@@ -28,7 +28,7 @@ fn m(n: i64) -> String {
 
 fn c(t: String) -> String {
     let s = t.clone()
-    return s.to_string()
+    return s
 }
 
 fn main() throws {

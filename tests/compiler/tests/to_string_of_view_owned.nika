@@ -35,7 +35,7 @@ fn matched_set(all: Vec[String]) -> collections::BTreeSet[String] {
     for full in all {
         match full.strip_prefix("shim::") {
             null => {},
-            rest => { out.insert(rest.to_string()) },
+            rest => { out.insert(rest) },
         }
     }
     return out

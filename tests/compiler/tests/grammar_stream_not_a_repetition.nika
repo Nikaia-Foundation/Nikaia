@@ -27,7 +27,7 @@ grammar TwoAlternatives {
 
 grammar OtherType {
 	@stream entry rule items -> Item = word*
-	rule word -> String = w:until(";") ";" -> { w.to_string() }
+	rule word -> String = w:until(";") ";" -> { w }
 }
 
 grammar NoType {

@@ -1,0 +1,37 @@
+exit 0
+checked: 3 files, 8 lines, 1 refused, 3 warnings (375.00 per 1000 lines)
+
+by code (count, files, per 1000 lines):
+      2  NK1111      2 files  250.00
+      1  NK2211      1 files  125.00
+      1  refused files
+
+files with the most warnings:
+      2  a.nika
+      1  b.nika
+
+sample (seed 1625, up to 20 sites per code):
+
+| Code | Site | Headline | Verdict |
+| :--- | :--- | :--- | :--- |
+| NK1111 | `a.nika:1` | a value is copied \| twice | |
+| NK1111 | `b.nika:2` | a value is copied | |
+| NK2211 | `a.nika:4` | a task waits | |
+exit 0
+checked: 3 files, 8 lines, 1 refused, 3 warnings (375.00 per 1000 lines)
+
+by code (count, files, per 1000 lines):
+      2  NK1111      2 files  250.00
+      1  NK2211      1 files  125.00
+      1  refused files
+
+files with the most warnings:
+      2  a.nika
+      1  b.nika
+
+sample (seed 7, up to 1 sites per code):
+
+| Code | Site | Headline | Verdict |
+| :--- | :--- | :--- | :--- |
+| NK1111 | `b.nika:2` | a value is copied | |
+| NK2211 | `a.nika:4` | a task waits | |

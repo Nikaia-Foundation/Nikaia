@@ -350,6 +350,32 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_lambda_touching_nothing<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, frame: &CheckStoredCode, lambda: &Expr) -> bool {
+        if frame.unresolved { return false; }
+        for key in frame.resolved.iter() {
+            let method = match resolve_method(world, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if check_not_pure_because(method.contract).is_some() { return false; }
+        }
+        let body = match lambda {
+            Expr::Closure { mutable, body, .. } => {
+                if !mutable.is_empty() { return false; }
+                body
+            },
+            _ => return false,
+        };
+        let mut found: Vec<String> = vec![];
+        for stmt in body.stmts.iter() {
+            match &stmt.node {
+                Stmt::Let { .. } => { },
+                Stmt::Expr(_) => { },
+                _ => { return false; },
+            }
+            for each in check_visit_stmt(&stmt.node) { self.a_claim_looks_at(world, host, each, &mut found); }
+        }
+        found.is_empty()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
         let mut found: Vec<String> = vec![];
         for each in check_visit_preorder(condition) { self.a_claim_looks_at(world, host, each, &mut found); }
