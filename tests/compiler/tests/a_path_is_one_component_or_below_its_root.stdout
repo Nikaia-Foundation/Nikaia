@@ -1,0 +1,15 @@
+is_component "a.txt" true
+is_component ".." false
+is_component "a/b" false
+is_component "a\\b" false
+is_component "" false
+is_below "a/b" true
+is_below "/a" false
+is_below "C:/a" false
+is_below "a/../b" false
+is_below "." true
+is_below ".." false
+is_below "a/.." false
+is_below "a\\..\\b" false
+is_below "\\a" false
+is_below "..a/b." true

@@ -31,6 +31,8 @@ use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
+use nikaia_std::fs;
+#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
@@ -111,6 +113,17 @@ mod line_breaks_lowered {
 }
 #[allow(unused_imports)]
 pub use line_breaks_lowered::*;
+
+#[allow(unsafe_code)]
+mod paths_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/paths.rs");
+}
+#[allow(unused_imports)]
+pub use paths_lowered::*;
 
 #[allow(unsafe_code)]
 mod raw_sinks_lowered {
@@ -213,6 +226,10 @@ pub mod line_breaks {
     #[allow(unused_imports)]
     pub use super::{LineBreaks, line_breaks};
 }
+pub mod paths {
+    #[allow(unused_imports)]
+    pub use super::{is_component, is_below, root_join, root_path};
+}
 pub mod raw_sinks {
     #[allow(unused_imports)]
     pub use super::{is_plain};
@@ -289,4 +306,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "dcffb92689994433d7533b374436898a8abaa97ce64e3868ce801218eea7128b";
+pub const LOWERED_DIGEST: &str = "5dc1131e6f94f9685a774ef820d7e0e2bf9d7e00749d633b167cb23b1978352f";

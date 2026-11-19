@@ -501,6 +501,29 @@ touches = ["file write"]
 provenance = "trusted"
 signature = "() -> fs::Root"
 
+# A root for the directory `part` under this one, under the same check:
+# `Dir(dir)` is `Dir(dir.join(part))`, `Anywhere` stays `Anywhere`
+# (ADR-raw-sinks-1 D13). The root a program walks a directory with, so a name
+# `fs::read_dir` hands back is opened under it and a planted symlink out of it
+# is `io::IoError::Outside` (ADR-108 D3). Written in Nikaia,
+# `src/runtime/paths.nika` (`root_join`).
+[fn."fs::Root::join"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref fs::Root, part: ref fs::Path) -> fs::Root"
+
+# The directory of a `Dir`, for a program's argument (ADR-raw-sinks-1 D12);
+# `null` for `Anywhere`. Written in Nikaia, `src/runtime/paths.nika`
+# (`root_path`).
+[fn."fs::Root::path"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref fs::Root) -> fs::Path?"
+
 # Write data to a file.
 #
 # `create` makes the file where there is none and `append` adds to the end
@@ -582,6 +605,27 @@ sync = true
 touches = []
 signature = "(part: ref String) -> bool"
 
+# Whether `p` is one component of a path: not empty, not `.` or `..`, no `/`
+# and no `\` (ADR-raw-sinks-1 D14). A pure `bool` call, so a guard on it is a
+# fact the prover reads (ADR-396 D2). Written in Nikaia,
+# `src/runtime/paths.nika`.
+[fn."path::is_component"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(p: ref String) -> bool"
+
+# Whether `p` stays below the directory it is joined to: relative, no root, no
+# drive letter, no `..` component (ADR-raw-sinks-1 D14). A pure `bool` call,
+# as `path::is_component`. Written in Nikaia, `src/runtime/paths.nika`.
+[fn."path::is_below"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(p: ref String) -> bool"
+
 # Promise that `markup` is already HTML: the one constructor of `html::Raw`,
 # and the one line to review, because everything downstream of it trusts this
 # call.
@@ -647,12 +691,14 @@ signature = "(; trusted: bool = false) -> String"
 # the input (Part III 17.1).
 #
 # It reads from the buffer `io::lines` and `io::read_exact` read from, so they
-# can be mixed. It pauses, and fails where the line is not UTF-8.
+# can be mixed. It pauses, and fails where the line is not UTF-8. What it reads
+# is from outside the program, and it has no `trusted:` option: a line is
+# proved by a guard (ADR-raw-sinks-1 D16.1), as `io::read_exact`'s bytes are.
 [fn."io::read_line"]
 pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
-signature = "(; trusted: bool = false) -> String?"
+signature = "() -> String?"
 
 # Exactly `n` bytes of standard input (Part III 17.1): a body whose length a
 # header gave. An input that ends sooner is an error, not a shorter result
@@ -664,7 +710,7 @@ signature = "(; trusted: bool = false) -> String?"
 pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
-signature = "(n: i64; trusted: bool = false) -> Bytes"
+signature = "(n: i64) -> Bytes"
 
 # Each element through a function, as a new list.
 #
