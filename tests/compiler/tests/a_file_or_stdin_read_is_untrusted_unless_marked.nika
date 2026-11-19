@@ -40,7 +40,7 @@ fn main() throws {
     said(nikaia, tmp, "trusted: true, a claim as any other", f"{head}{marked}{tail}", ["check"])
     said(nikaia, tmp, "trusted: true, checked at run time", f"{head}{marked}{tail}", ["check", "--unproved-claims=warn"])
     let file = "use std::fs\nuse std::collections\n\nfn main() throws {\n    let s = fs::read_to_string(\"in.txt\", fs::Root::Anywhere"
-    let rest = ")\n    let mut m = collections::HashMap()\n    for line in s.lines() {\n        m.insert(line.to_string(), 1)\n    }\n    println(m.len())\n}\n"
+    let rest = ")\n    let mut m = collections::HashMap()\n    for line in s.lines() {\n        m.insert(line, 1)\n    }\n    println(m.len())\n}\n"
     said(nikaia, tmp, "a file read, no marker", f"{file}{rest}", ["lower", "--trust", "-o", "p.rs"])
     said(nikaia, tmp, "a file read, trusted: true", f"{file}; trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
     said(nikaia, tmp, "trusted: takes a bool", f"{file}; trusted: \"yes\"{rest}", ["check"])
