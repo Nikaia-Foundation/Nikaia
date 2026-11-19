@@ -113,6 +113,7 @@ fn lines(items: &[RustItem<'_>], path: &str, out: &mut Vec<String>) {
             // shown here so a test that asserts what is *not* an item can see
             // that this one is not an offer either.
             RustItem::Hidden(f) => out.push(format!("{path}{}() (private)", f.name)),
+            RustItem::Crate(f) => out.push(format!("{path}{}() (crate)", f.name)),
             RustItem::Rec(r) => out.push(format!("{} {path}{}", r.what, r.name)),
             RustItem::Export(text) => out.push(format!("use {text}")),
             RustItem::Used(text) => out.push(format!("(use {text})")),
@@ -168,8 +169,9 @@ fn nothing_that_is_not_an_item_is_reported() {
             .iter()
             .find(|line| line.contains(hidden))
             .unwrap_or_else(|| panic!("`{hidden}` is an item: {found:?}"));
+        // `pub(crate)` is read apart, for the package's own code (D24).
         assert!(
-            line.ends_with("(private)"),
+            line.ends_with("(private)") || line.ends_with("(crate)"),
             "`{hidden}` is not offered, and says so: {line}"
         );
     }

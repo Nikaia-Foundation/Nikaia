@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1468] — 2026-11-19
+
+**A package's Nikaia code and test blocks call the package's own Rust (#2233)**
+- A package's test blocks and Nikaia code call its own Rust: nikaia test builds the Rust root's modules in, NK2507 refuses a use naming a Rust-root module, NK2508 a pub = true entry of the own Rust, and describe crate drafts the contracts with the package's version.
+
 ## [0.0.1467] — 2026-11-19
 
 **pre-push and CI run the ADR citation check in Nikaia; check-adr-refs.py is deleted (#2263)**

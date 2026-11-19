@@ -1,0 +1,71 @@
+--- test block: exit 0
+running 1 test
+test "quad goes through the package's own Rust" (src/demo.nika:8) ... ok
+
+test result: ok. 1 passed; 0 failed
+--- same name: exit 1
+error[NK2507]: `words` is both a Rust module of this package and a Nikaia one.
+  --> src/demo.nika:1:1
+   |
+ 1 | use std::fs as words
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The package's Rust declares `mod words` in `rust/words.rs`, and this file names `std::fs` `words`: a path such as `words::f` would mean both.
+   = help: Rename one of them: the Rust module in `rust/words.rs`, or this `use` with `as`.
+1 name both a Rust and a Nikaia module
+--- narrow: exit 1
+error[NK2505]: The package's own Rust has changed since its description was reviewed.
+  --> src/demo.nika:5:5
+   |
+ 5 |     return words::twice(words::twice(x))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `contracts/crate.contracts` describes an older version of the package's Rust: `words.rs` changed since.
+   = note: A description is written by a person, so it has to be reviewed again, not just regenerated.
+   = help: Run `nikaia describe crate` and review the diff before committing it.
+error[NK1171]: `words` has no function called `hidden`.
+  --> src/demo.nika:9:5
+   |
+ 9 |     return words::hidden(x)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What can be called is what is written down: `words::hidden` is in no declaration, ledger or description this program reads.
+   = help: Only what is written down for `words` can be called; a Rust function or method of the same name is not reached.
+error[NK2504]: `words::hidden` is the package's own Rust, and it isn't visible at the crate root.
+  --> src/demo.nika:9:5
+   |
+ 9 |     return words::hidden(x)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The package's Nikaia code reaches its Rust from the crate root, so an item it calls must be visible there: `pub(crate)` or wider. A private or `pub(super)` item is not widened for the call.
+   = help: Declare it `pub(crate)` in `rust/words.rs`, then run `nikaia describe crate`.
+1 type error, 1 Rust crate nothing describes, 1 description of a crate that has moved
+--- describe crate: exit 0
+Wrote TMP/demo/contracts/crate.draft.contracts for crate 0.1.0: 2 functions, 0 types
+
+Review it before you commit it: what a signature can't say is written as 
+the safe answer, and a mistake in it is only caught by you.
+# The boundary of `crate`, described before it is called
+# ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D2).
+#
+# Written by `nikaia describe crate` from the crate's `pub` signatures,
+# translated by Part III 15.2's table. **Committed and reviewed like code**,
+# and a hand edit is expected: what a signature cannot say is written
+# fail-closed, and what it says wrongly is caught by the reviewer or by
+# nobody (D5).
+#
+# What the signatures do not say: no `touches` on any entry, which reads as
+# *touches everything*; no `locks`, which is that column's third answer.
+# Neither is something a Rust signature can tell anybody, and reading
+# silence as nothing at all is the polarity ADR-010 D1 forbids.
+#
+# crate: crate 0.1.0
+version = 4
+
+[fn."words::thrice"]
+sync = true
+signature = "(x: i64) -> i64"
+
+[fn."words::twice"]
+sync = true
+signature = "(x: i64) -> i64"
