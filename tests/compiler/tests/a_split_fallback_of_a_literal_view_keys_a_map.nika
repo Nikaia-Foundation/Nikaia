@@ -1,0 +1,20 @@
+// A `??` whose fallback is a tuple of a split's view and a literal, `(rest,
+// "")`, keeps the view as long as the text it points into: here a literal,
+// so the map keyed by the views is keyed by `'static` text. The fallback
+// lent `&rest`, the local name, and rustc refused it (NK1343, #1625).
+use std::collections
+
+fn main() throws {
+    let report: String = "x  a  b\ny  c\nz  a"
+    let mut sites: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for line in report.lines() {
+        let (_, rest) = line.split_once("  ") ?? continue
+        let (code, headline) = rest.split_once("  ") ?? (rest, "")
+        let mut these = sites.remove(code) ?? Vec()
+        these.push(headline.clone())
+        sites.insert(code, these)
+    }
+    for (code, these) in sites {
+        println(f"{code}: {these.len()}")
+    }
+}
