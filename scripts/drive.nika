@@ -1561,7 +1561,11 @@ fn drive_lowered_dirs() -> Vec[String] throws {
 	for entry in fs::read_dir(root.clone(), fs::Root::Anywhere) {
 		let path = entry.to_text()
 		let names: Vec[String] = path.split("/").collect()
-		let name = names[names.len() - 1].clone()
+		let name = names[names.len() - 1]
+		// Only a part's directory can hold a lowered index or directory; a
+		// file such as `abort.rs` is no part (`abort.rs/lowered.rs` throws
+		// "Not a directory" rather than answering false).
+		if !fs::metadata(f"{root}/{name}", fs::Root::Anywhere).is_dir() { continue }
 		let dir = f"{root}/{name}/lowered"
 		if fs::exists(dir.clone() + ".rs", fs::Root::Anywhere) || fs::exists(dir.clone(), fs::Root::Anywhere) { parts.push(dir) }
 	}
