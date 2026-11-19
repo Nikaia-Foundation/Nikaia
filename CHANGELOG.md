@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1477] — 2026-11-19
+
+**Builders' changes (#2305, #2321)**
+- meta::Access reaches the running program: `let a = P::access` and `field.ty::access` are std::meta::Access values that can be compared, matched, kept and printed with {a:?} (ADR-330 D8).
+- A `String` parameter handed back whole on one path and cut on another (`return s` beside `return s[i..]`) is lent on both, as beside `s.trim()`; it no longer fails in rustc (NK1343) or with NK2302.
+
 ## [0.0.1476] — 2026-11-19
 
 **The decisions on frames and folds, and how fast a grammar scans, live in one record, ADR-grammar-parallel-v1 (#2267)**
