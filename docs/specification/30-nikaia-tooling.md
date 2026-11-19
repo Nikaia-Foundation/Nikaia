@@ -1425,8 +1425,9 @@ removed with it (14.1); elsewhere it is a new directory under the system's tempo
 `root`, under the same check: `Dir(dir)` becomes `Dir(dir.join(part))` and `Anywhere` stays
 `Anywhere`, so a name `read_dir` hands back is opened under it and a link planted in the directory
 that points out of it throws `Outside` ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D13).
-`root.path()` is the directory of a `Dir` as an `fs::Path`, for a program's argument, and `null`
-for `Anywhere` ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D12).
+`root.path()` is the directory of a `Dir` as an `fs::Path`, for a program's argument, and `.` for
+`Anywhere`, which hands a name to the operating system as written, so `f"{root.path()}/x"` names the
+file `root` opens for `"x"` under either root ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D12).
 
 **`std::path` — a path from outside proved by a property of its own**
 
