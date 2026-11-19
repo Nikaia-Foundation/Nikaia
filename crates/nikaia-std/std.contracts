@@ -651,8 +651,8 @@ signature = "(; trusted: bool = false) -> String"
 [fn."io::read_line"]
 pub = true
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "() -> String?"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> String?"
 
 # Exactly `n` bytes of standard input (Part III 17.1): a body whose length a
 # header gave. An input that ends sooner is an error, not a shorter result
@@ -663,8 +663,8 @@ signature = "() -> String?"
 [fn."io::read_exact"]
 pub = true
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(n: i64) -> Bytes"
+provenance = "untrusted"
+signature = "(n: i64; trusted: bool = false) -> Bytes"
 
 # Each element through a function, as a new list.
 #
