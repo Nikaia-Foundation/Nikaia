@@ -2542,6 +2542,13 @@ pub(crate) fn prover_properties_in(expr: &Expr, scope: &ProverScope, program: &P
             let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push((name, on));
         },
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !prover_a_method_property(program, words, words.resolve(method)) { return; }
+            let name = match property_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let on = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+            out.push((name, on));
+        },
         _ => { },
     }
 }
@@ -2599,13 +2606,38 @@ pub(crate) fn prover_a_property(program: &Program, words: &winnow_grammar::Inter
                 let can_throw = *can_throw; let is_sync = *is_sync; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
                     let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
-                    return is_sync && args.len() == 1 && !unsafe { nikaia_std::proven::read(&args, (0) as usize) }.mutable && config.is_empty() && !can_throw && words.resolve(ty.name) == "bool" && ty.generics.is_empty();
+                    return is_sync && !args.is_empty() && args.iter().all(|arg| { !arg.mutable }) && config.is_empty() && !can_throw && words.resolve(ty.name) == "bool" && ty.generics.is_empty();
                 }
             },
             _ => { },
         }
     }
     false
+}
+
+pub(crate) fn prover_a_method_property(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> bool {
+    let mut found = false;
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Impl { methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, receiver, args, config, ret_type, can_throw, is_sync, .. } => {
+                            let can_throw = *can_throw; let is_sync = *is_sync; let name = *name;
+                            if !named_as((name).as_ref(), words, wanted) { continue; }
+                            let lent = match receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
+                            let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+                            if lent.is_mut || lent.is_keep || !is_sync || !args.iter().all(|arg| { !arg.mutable }) || !config.is_empty() || can_throw || words.resolve(ty.name) != "bool" || !ty.generics.is_empty() { return false; }
+                            found = true;
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    found
 }
 
 pub(crate) fn prover_property_changed(stmt: &Stmt, base: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext) -> bool {
@@ -2669,7 +2701,7 @@ pub(crate) fn prover_entry_properties(walk: &mut ProverWalk, scope: &mut ProverS
         let mut found: Vec<(String, String)> = vec![];
         prover_properties_in(&cond, &scope, program, words, &mut found);
         for (name, on) in found.iter() {
-            if !kept.contains(on) { continue; }
+            if !kept.contains(on) || !property_carried(name) { continue; }
             scope.ints.insert(nikaia_std::block::Text::from(name.to_string()));
             scope.loose.insert(nikaia_std::block::Text::from(name.to_string()));
             params.insert(nikaia_std::block::Text::from(on.to_string()));
@@ -2830,9 +2862,13 @@ pub(crate) fn prover_follow_elements(walk: &mut ProverWalk, stmt: &Stmt, scope: 
     }; #[allow(unused_mut, clippy::redundant_locals)] let mut gone = gone;
     if !prover_a_claim_stmt(stmt, words) {
         for n in scope.ints.iter() {
-            let base = match property_base(n) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if nikaia_std::list::contains(&bound, &path_root(&base)) { continue; }
-            if prover_property_changed(stmt, &base, &scope, program, words) || rebinds_in_statement(stmt, &path_root(&base), words) { gone.push(nikaia_std::block::Text::from(n.to_string())); }
+            for base in property_args(n) {
+                if nikaia_std::list::contains(&bound, &path_root(&base)) { continue; }
+                if prover_property_changed(stmt, &base, &scope, program, words) || rebinds_in_statement(stmt, &path_root(&base), words) {
+                    gone.push(nikaia_std::block::Text::from(n.to_string()));
+                    break;
+                }
+            }
         }
     }
     for n in scope.ints.iter() {
@@ -2869,8 +2905,12 @@ pub(crate) fn prover_follow_elements(walk: &mut ProverWalk, stmt: &Stmt, scope: 
 pub(crate) fn prover_loop_elements(walk: &mut ProverWalk, body: &Block, counters: &[winnow_grammar::Symbol], scope: &mut ProverScope, words: &winnow_grammar::InternerContext) {
     let mut gone: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for n in scope.ints.iter() {
-        let base = match property_base(n) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !elements_stay(body, &base, words) || rebinds(body, &path_root(&base), words) { gone.push(nikaia_std::block::Text::from(n.to_string())); }
+        for base in property_args(n) {
+            if !elements_stay(body, &base, words) || rebinds(body, &path_root(&base), words) {
+                gone.push(nikaia_std::block::Text::from(n.to_string()));
+                break;
+            }
+        }
     }
     for n in scope.ints.iter() {
         let inner = match n.strip_suffix(']') { Some(__nikaia_value) => __nikaia_value, None => continue };

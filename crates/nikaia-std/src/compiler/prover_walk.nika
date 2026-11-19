@@ -3413,11 +3413,11 @@ fn prover_a_claim_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContex
     }
 }
 
-/// **The named properties a claim reads** (ADR-381 D1): each call `p(x)`
-/// of a `sync` function of the program that hands back a `bool`, takes one
-/// argument it does not change, has no options and does not throw, on a
-/// path `x`; with the prover's name for it (`prove_terms.nika`,
-/// `property_name`) and the path.
+/// **The named properties a claim reads** (ADR-381 D1): each call
+/// `p(x, …)` of a `sync` function of the program that hands back a `bool`,
+/// changes none of its arguments, has no options and does not throw, or
+/// `x.m(…)` of such a method, each argument a path; with the prover's name
+/// for it (`prove_terms.nika`, `property_name`) and its first path.
 fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, mut out: Vec[(String, String)]) {
     match expr {
         Expr::Binary { lhs, rhs, .. } => {
@@ -3432,6 +3432,14 @@ fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, program: ref Pro
             }
             let name = property_name(expr, words) ?? return
             let on = path_of(args[0], words) ?? return
+            out.push((name, on))
+        },
+        Expr::MethodCall { receiver, method, .. } => {
+            if !prover_a_method_property(program, words, words.resolve(method)) {
+                return
+            }
+            let name = property_name(expr, words) ?? return
+            let on = path_of(receiver, words) ?? return
             out.push((name, on))
         },
         else => {},
@@ -3509,13 +3517,45 @@ fn prover_a_property(program: ref Program, words: ref winnow_grammar::InternerCo
             Item::Fn { name, receiver, args, config, ret_type, can_throw, is_sync, .. } => {
                 if receiver == null && named_as(name, words, wanted) {
                     let ty = ret_type ?? return false
-                    return is_sync && args.len() == 1 && !args[0].mutable && config.is_empty() && !can_throw && words.resolve(ty.name) == "bool" && ty.generics.is_empty()
+                    return is_sync && !args.is_empty() && args.iter().all(fn(arg) { !arg.mutable }) && config.is_empty() && !can_throw && words.resolve(ty.name) == "bool" && ty.generics.is_empty()
                 }
             },
             else => {},
         }
     }
     return false
+}
+
+/// **Whether `wanted` is a method a named property calls** (ADR-381 D1):
+/// every method of that name the program's types have is `sync`, hands
+/// back a `bool`, changes neither its receiver nor an argument, has no
+/// options and does not throw; and there is one.
+fn prover_a_method_property(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> bool {
+    let mut found = false
+    for item in program.items {
+        match item.node {
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, receiver, args, config, ret_type, can_throw, is_sync, .. } => {
+                            if !named_as(name, words, wanted) {
+                                continue
+                            }
+                            let lent = receiver ?? return false
+                            let ty = ret_type ?? return false
+                            if lent.is_mut || lent.is_keep || !is_sync || !args.iter().all(fn(arg) { !arg.mutable }) || !config.is_empty() || can_throw || words.resolve(ty.name) != "bool" || !ty.generics.is_empty() {
+                                return false
+                            }
+                            found = true
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return found
 }
 
 /// **Whether `stmt` may change the argument `base` of a named property**
@@ -3603,7 +3643,7 @@ fn prover_entry_properties(mut walk: ProverWalk, mut scope: ProverScope, mut par
         let mut found: Vec[(String, String)] = []
         prover_properties_in(cond, scope, program, words, found)
         for (name, on) in found {
-            if !kept.contains(on) {
+            if !kept.contains(on) || !property_carried(name) {
                 continue
             }
             scope.ints.insert(name.clone())
@@ -3850,12 +3890,15 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
     }
     if !prover_a_claim_stmt(stmt, words) {
         for n in scope.ints {
-            let base = property_base(n) ?? continue
-            if bound.contains(path_root(base)) {
-                continue
-            }
-            if prover_property_changed(stmt, base, scope, program, words) || rebinds_in_statement(stmt, path_root(base), words) {
-                gone.push(n.clone())
+            // Each argument: `p(xs, n)` goes where `xs` or `n` may change.
+            for base in property_args(n) {
+                if bound.contains(path_root(base)) {
+                    continue
+                }
+                if prover_property_changed(stmt, base, scope, program, words) || rebinds_in_statement(stmt, path_root(base), words) {
+                    gone.push(n.clone())
+                    break
+                }
             }
         }
     }
@@ -3910,11 +3953,14 @@ fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
 /// (`prover_loop_keeps`); its elements are not.
 fn prover_loop_elements(mut walk: ProverWalk, body: ref Block, counters: ref Vec[winnow_grammar::Symbol], mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
     let mut gone: Vec[String] = []
-    // A named property a loop's body may change goes before it (ADR-381 D1).
+    // A named property a loop's body may change goes before it (ADR-381
+    // D1), whichever of its arguments the body may change.
     for n in scope.ints {
-        let base = property_base(n) ?? continue
-        if !elements_stay(body, base, words) || rebinds(body, path_root(base), words) {
-            gone.push(n.clone())
+        for base in property_args(n) {
+            if !elements_stay(body, base, words) || rebinds(body, path_root(base), words) {
+                gone.push(n.clone())
+                break
+            }
         }
     }
     for n in scope.ints {
