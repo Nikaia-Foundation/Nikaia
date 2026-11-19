@@ -141,6 +141,17 @@ RISC-V keep the register.
 * **How many failing calls are not inlined** in our programs (the compiler
   through `lower-std`, the benchmarks, `tools/*.nika`), counted as
   `docs/measuring.md` says. Gates D2.
+  **Counted (November 2026), too few for D2 to pay:** the compiler
+  (`target/fast/nikaia`, after D1) holds 462 failing functions in
+  `tools/*.nika`; 177 survive as functions of their own, reached from 176
+  direct call sites, against 8 477 direct call sites of lowered functions in
+  all. Under callgrind, `nikaia check` of `compiler/libraries.nika` (the first
+  116 G instructions) made 9 490 calls to a failing lowered function out of
+  202 M calls to lowered functions (0.005 %); `nikaia lower` of
+  `benches/template.nika` made 3 975 of 184 k in 132 M instructions. At D2's
+  4 instructions a call that is under 0.02 % of either run. The benchmarks
+  fail outside `main` only in `game/fasta` (3 calls a run) and
+  `game/k-nucleotide` (7). D2 stays unbuilt until a program shows weight.
 * **The carry flag against the register**, issue #1235, step 7. Decides D5.
 * **Whether the ledger narrows a call site's set to empty** where a proof makes
   the only `throw` unreachable; such a call could take the plain convention.
