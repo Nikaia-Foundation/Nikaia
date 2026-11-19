@@ -462,6 +462,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             },
             _ => { },
         }
+        state.a_replace_seen(world, receiver, args, span);
     }
     if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {

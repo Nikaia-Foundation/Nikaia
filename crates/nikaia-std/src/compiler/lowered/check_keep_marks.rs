@@ -142,7 +142,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
                         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }).as_deref(), &parameter, own, library, &indexes, resolved, &mut *holes_of), || arg.span.clone().into());
-                    out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(format!("Write `keep {}` in the signature of `{}`.", parameter, found.key))));
+                    out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(keep_marks_help(view, item, &parameter, &found.key))));
                 }
                 if arg.keep && !kept {
                     let mut warned = check_refusal("NK1334", &arg.span, format!("`{}` is marked `keep`, but `{}` never keeps it.", parameter, found.key), vec![String::from("A parameter the body only reads or changes is lent (ADR-views-3 D2).")], Some(format!("Remove `keep` before `{}`.", parameter)));
@@ -153,6 +153,35 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
         },
         _ => { },
     }
+}
+
+pub(crate) fn keep_marks_help(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, parameter: &str, key: &str) -> String {
+    let marked = format!("Write `keep {}` in the signature of `{}`", parameter, key);
+    match &item.node {
+        Item::Fn { body, .. } => {
+            let grown = grown_text_of(view.words, body);
+            let changed = match keep_marks_changed_cut(view, body, &grown, parameter) { Some(__nikaia_value) => __nikaia_value, None => return format!("{}.", marked) };
+            return format!("{}; or let `{}` change a copy: write `.clone()` after the cut it is bound to, and `{}` stays its caller's.", marked, changed, parameter);
+        },
+        _ => return format!("{}.", marked),
+    }
+}
+
+pub(crate) fn keep_marks_changed_cut(view: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, grown: &collections::BTreeSet<String>, parameter: &str) -> Option<String> {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, value, mutable, .. } => {
+                let mutable = *mutable;
+                if mutable && names.len() == 1 && grown.contains(view.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) && nikaia_std::index::or(given_cut_source(value, view.words), || "".into()) == parameter { return Some(nikaia_std::block::Text::from(view.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
+            },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) {
+            let found = keep_marks_changed_cut(view, inner, grown, parameter);
+            if found.is_some() { return std::convert::identity(found); }
+        }
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
