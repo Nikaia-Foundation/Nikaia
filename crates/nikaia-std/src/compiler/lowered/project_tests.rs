@@ -889,7 +889,7 @@ pub(crate) async fn project_tests_bless_program(program: &ProgramTest, outcomes:
     let first = &nikaia_std::index::get(&outcomes, 0).1;
     let refused = !first.ended_well && !first.stopped && is_refusal(&first.stderr);
     let stops = first.stopped && program.stops.is_some();
-    if refused && program.stderr.is_none() && !stderr { return Ok(ProjectTestsBlessed::Refused(String::from("the program is refused and no .stderr expects it"))); }
+    if refused && program.stderr.is_none() && !stderr { return Ok(ProjectTestsBlessed::Refused(String::from("the program is refused, no .stderr expects it and --bless-stderr was not given"))); }
     if !first.ended_well && !refused && !stops && first.stderr.starts_with("the program does not compile") { return Ok(ProjectTestsBlessed::Refused(String::from("the program does not compile"))); }
     if !first.ended_well && !refused && !stops { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
     if !stops && program.stops.is_some() { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not stop, as its .stops expects"))); }
