@@ -804,6 +804,10 @@ The rule reaches as far as the Rust signature is true. Where the compiler reads 
   picks: a Nikaia `String` crosses to Rust `&str`
   for free, and to a Rust `String` the callee owns by being handed over, as
   the list below
+* Rust `&OsStr` as a parameter -> Nikaia `String`: a Nikaia `String` is
+  UTF-8, which every platform's `OsStr` holds, so it crosses for free
+  (`OsStr::new`). Only into Rust: an `OsStr` or `OsString` handed back may
+  hold what is not UTF-8 and is not mapped (the supervisor, 2026-11-19, #2314)
 * Rust `Option<T>` -> Nikaia `T?` (Nullable)
 * Rust `Vec<T>` -> Nikaia `Vec[T]`, and `HashMap<K, V>` -> `HashMap[K, V]`: a
   Nikaia list crosses to Rust `&[T]` for free, and to a Rust `Vec<T>` the callee
