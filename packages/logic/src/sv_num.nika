@@ -227,7 +227,18 @@ fn sv_int(n: i64) -> SvRat {
 	return SvRat { num: n, den: 1 }
 }
 
+/// A sum of two integers, the usual case of a tableau's values, skips the
+/// gcds (#1960: the rationals' gcds were a third of the simplex's work).
 fn sv_rat_add(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	if a.den == 1 && b.den == 1 {
+		return SvRat { num: a.num.checked_add(b.num) ?? return null, den: 1 }
+	}
+	if a.num == 0 {
+		return b.clone()
+	}
+	if b.num == 0 {
+		return a.clone()
+	}
 	let g = sv_gcd(a.den, b.den) ?? return null
 	let da = a.den / g
 	let db = b.den / g
@@ -247,7 +258,15 @@ fn sv_rat_sub(a: ref SvRat, b: ref SvRat) -> SvRat? {
 
 /// The product, each numerator reduced against the other's denominator
 /// first so that nothing larger than the result is formed.
+/// A product with an integer or zero factor skips the gcds it does not
+/// need (#1960).
 fn sv_rat_mul(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	if a.num == 0 || b.num == 0 {
+		return sv_int(0)
+	}
+	if a.den == 1 && b.den == 1 {
+		return SvRat { num: a.num.checked_mul(b.num) ?? return null, den: 1 }
+	}
 	let g1 = sv_gcd(a.num, b.den) ?? return null
 	let g2 = sv_gcd(b.num, a.den) ?? return null
 	let num = (a.num / g1).checked_mul(b.num / g2) ?? return null
@@ -265,6 +284,9 @@ fn sv_rat_div(a: ref SvRat, b: ref SvRat) -> SvRat? {
 /// Never overflows: integer parts first, then the fractional parts through
 /// their reciprocals, a continued fraction.
 fn sv_rat_cmp(a: ref SvRat, b: ref SvRat) -> i64 {
+	if a.den == 1 && b.den == 1 {
+		return if a.num < b.num { -1 } else if a.num > b.num { 1 } else { 0 }
+	}
 	let mut an = a.num
 	let mut ad = a.den
 	let mut bn = b.num

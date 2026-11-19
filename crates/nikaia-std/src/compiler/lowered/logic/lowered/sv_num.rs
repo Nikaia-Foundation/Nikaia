@@ -151,6 +151,9 @@ pub(crate) fn sv_rat(n: i64, d: i64) -> Option<SvRat> {
 pub(crate) fn sv_int(n: i64) -> SvRat { SvRat { num: n, den: 1 } }
 
 pub(crate) fn sv_rat_add(a: &SvRat, b: &SvRat) -> Option<SvRat> {
+    if a.den == 1 && b.den == 1 { return Some(SvRat { num: match a.num.checked_add(b.num) { Some(__nikaia_value) => __nikaia_value, None => return None }, den: 1 }); }
+    if a.num == 0 { return Some(b.clone()); }
+    if b.num == 0 { return Some(a.clone()); }
     let g = match sv_gcd(a.den, b.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let da = a.den / g;
     let db = b.den / g;
@@ -167,6 +170,8 @@ pub(crate) fn sv_rat_sub(a: &SvRat, b: &SvRat) -> Option<SvRat> {
 }
 
 pub(crate) fn sv_rat_mul(a: &SvRat, b: &SvRat) -> Option<SvRat> {
+    if a.num == 0 || b.num == 0 { return Some(sv_int(0)); }
+    if a.den == 1 && b.den == 1 { return Some(SvRat { num: match a.num.checked_mul(b.num) { Some(__nikaia_value) => __nikaia_value, None => return None }, den: 1 }); }
     let g1 = match sv_gcd(a.num, b.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let g2 = match sv_gcd(b.num, a.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let num = match (a.num / g1).checked_mul(b.num / g2) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -180,6 +185,7 @@ pub(crate) fn sv_rat_div(a: &SvRat, b: &SvRat) -> Option<SvRat> {
 }
 
 pub(crate) fn sv_rat_cmp(a: &SvRat, b: &SvRat) -> i64 {
+    if a.den == 1 && b.den == 1 { return if a.num < b.num { -1 } else if a.num > b.num { 1 } else { 0 }; }
     let mut an = a.num;
     let mut ad = a.den;
     let mut bn = b.num;
