@@ -443,7 +443,7 @@ impl Pool {
     }
 }
 
-// Kept as Rust (#2082): no program can observe what these two check. A
+// Kept as Rust (#2304): no program can observe what these two check. A
 // wake from inside a task's own poll needs a hand-written future, which
 // Nikaia has no form for; the idle pool's quiet is read from `rang`, which
 // only the test build has. Their move waits for #2088.
