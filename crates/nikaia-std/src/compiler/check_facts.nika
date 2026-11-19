@@ -570,6 +570,11 @@ pub struct CheckFacts {
     /// and not a word. The rule takes it as a reference and a call hands it
     /// one, so nothing is cloned per call.
     pub lent_rule_values: collections::BTreeSet[String],
+    /// **A `@stream` entry whose items are handed over by `emit`**
+    /// (ADR-grammar-2 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
+    /// engine items are `Option<Item>`, the repetition's own values `None` and
+    /// each emitted item `Some`, and its walk hands on only the `Some`.
+    pub emitting_entries: collections::BTreeSet[String],
     /// **A value lent into a `ref` field of a struct literal** (D37), by the
     /// value: the counterpart of `lent_args` for a call.
     pub lent_fields: collections::BTreeSet[i64],
@@ -954,6 +959,7 @@ impl CheckFacts {
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
             lent_rule_values: collections::BTreeSet(),
+            emitting_entries: collections::BTreeSet(),
             lent_fields: collections::BTreeSet(),
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),

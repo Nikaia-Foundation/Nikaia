@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1456] — 2026-11-19
+
+**Code a function runs from tasks at once is Send + Sync where user code overlaps (ADR-292 D6) (#2158, #2165)**
+- Fixed: a function, or a trait method, that runs its code parameter from tasks at once (`xs.par_iter().for_each(f)`) builds at `user-parallelism = "yes"`; it reached rustc as NK1343 because the parameter lacked `Send + Sync`
+
+## [0.0.1455] — 2026-11-19
+
+**Grammar: emit statement for @stream entries, checked (NK1371, NK1370, NK1349)**
+- Grammar actions get `emit item`: the rules a `@stream` entry reaches hand items to its walk; emit outside such a rule is NK1371, an emit the parse could still undo is NK1370 (checked; running it follows).
+
 ## [0.0.1454] — 2026-11-19
 
 **Builders' changes (#2158, #2163, #2175, #2225, #2231, #2234)**

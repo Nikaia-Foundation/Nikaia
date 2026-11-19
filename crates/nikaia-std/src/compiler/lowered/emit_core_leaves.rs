@@ -452,7 +452,8 @@ impl EmitState {
                 },
             }
             out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut {}, winnow_grammar::rt::Reading::default(), {}|__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name, context, handed));
+            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
+            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut {}, winnow_grammar::rt::Reading::default(), {}{}); ", lowered, rule_name, context, handed, each));
             out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
             out.push(&format!("{}", question));
             return Ok(());
