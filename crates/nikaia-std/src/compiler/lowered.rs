@@ -3517,7 +3517,7 @@ pub mod fold_bound {
 }
 pub mod foreign {
     #[allow(unused_imports)]
-    pub use super::{Seen, written_in, foreign_own_refused};
+    pub use super::{Seen, written_in, foreign_own_published, foreign_own_refused};
 }
 pub mod grammar_decode {
     #[allow(unused_imports)]
@@ -3659,7 +3659,7 @@ pub mod project_batch {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_summary, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "33490888dc37e3e07b679af82f8c29fcb88b7ade82ed7535b96dd3ba7dc6874c";
+pub const LOWERED_DIGEST: &str = "5dac9a4b9ab0d247bbca691ffaa4da7da75c5330c32f1dc68d48aa6240937a21";

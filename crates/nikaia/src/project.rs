@@ -1591,6 +1591,33 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         }
     }
 
+    fn check_package(&self) -> Option<project_lower::UnitSaid> {
+        let foreign = self.foreign.borrow();
+        let found = nikaia_std::compiler::foreign::foreign_own_published(&foreign.as_ref()?.own);
+        if found.is_empty() {
+            return None;
+        }
+        // Named as the files of the program are: from where the build runs.
+        let path = self.layout.root.join(CONTRACTS).join("crate.contracts");
+        let here = std::env::current_dir().unwrap_or_default();
+        let shown = path
+            .strip_prefix(&here)
+            .unwrap_or(&path)
+            .display()
+            .to_text();
+        let text = &foreign.as_ref()?.own.entries;
+        let lines: Vec<&str> = text.split('\n').collect();
+        for finding in &found {
+            let rendered = diagnostics::render_finding_in(finding, &shown, &lines);
+            if !diagnostics::is_collecting() {
+                eprint!("{rendered}");
+            }
+        }
+        Some(project_lower::UnitSaid::Refused(
+            project_check::project_check_summary(&found, 0),
+        ))
+    }
+
     fn check_close(&self, refused: &[String]) -> HostResult<()> {
         *self.checking.borrow_mut() = None;
         if !refused.is_empty() {

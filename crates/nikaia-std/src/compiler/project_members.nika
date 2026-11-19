@@ -710,11 +710,13 @@ pub struct ProjectMembersOwnRust {
     /// The Rust files that hash otherwise than `contracts/crate.derived`
     /// recorded (D25, `NK2505`).
     pub moved: Vec[String],
+    /// The text of `contracts/crate.contracts`, where `NK2508` stands (D26).
+    pub entries: String,
 }
 
 /// A package without Rust of its own.
 pub fn project_members_no_own_rust() -> ProjectMembersOwnRust {
-    return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeMap(), narrow: collections::BTreeSet(), files: collections::BTreeMap(), moved: [] }
+    return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeMap(), narrow: collections::BTreeSet(), files: collections::BTreeMap(), moved: [], entries: "" }
 }
 
 /// A build with no project around it: nothing declared, nothing described.
@@ -895,6 +897,7 @@ fn project_members_own_rust[H: ProjectMembersForeignHost](root: ref fs::Path, ru
     }
     let entries = root.join("contracts").join("crate.contracts")
     let written = fs::read_to_string(entries, fs::Root::Anywhere) catch { "" }
+    own.entries = written.clone()
     let mut ledger = host.read_beside(entries) ?? return own
     let functions: Vec[String] = ledger.functions.keys().map(fn(x) { x.clone() }).collect()
     for function in functions {
