@@ -27,7 +27,7 @@ fn counted(s: String) -> String {
 fn in_a_loop(s: String) -> String {
     let x = f"{s}ab"
     let mut all = ""
-    for i in 0..3 {
+    for i in 0..<3 {
         all = all + x.replace("a", f"{i}")
     }
     return all
