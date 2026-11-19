@@ -189,7 +189,7 @@ fn an_items_refusal_names_the_item() {
 }
 
 /// **A grammar entry that names no rule.** `Tiny::two(…)` is the shape
-/// [ADR-296](../../../docs/specification/adr/adr-296.md) D25 introduced, and its
+/// [ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D6 introduced, and its
 /// two refusals — no such rule, and a rule that is not `pub` — were text.
 #[test]
 fn a_grammar_entry_that_is_not_there_names_its_line() {

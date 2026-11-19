@@ -1182,7 +1182,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     if passed.len() > 0 {
         state.flow.method_passed.insert(id_of(receiver) as i64, passed)
     }
-    // **A grammar is entered by an ordinary call** (ADR-296 D24); both ways
+    // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5); both ways
     // out of here owe the witness its walk.
     let entered: String? = state.grammar_entry(world, receiver, method)
     if entered != null {

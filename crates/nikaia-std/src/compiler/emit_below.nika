@@ -91,7 +91,7 @@ fn integer_limit_below(path: ref String) -> String {
 impl EmitState {
     /// Whether `receiver.method(..)` enters a grammar: a receiver naming one of
     /// this file's grammars and a method naming one of its entries
-    /// (ADR-296 D24, D25).
+    /// (ADR-grammar-syntax-v1 D5, D6).
     fn enters_a_grammar(ref self, world: ref EmitWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
         match receiver {
             Expr::Variable(name, _) => {
@@ -314,7 +314,7 @@ impl EmitState {
     }
 
     /// A method call, or one that may not happen, whose failure is the
-    /// branch's: a grammar entry propagates on its own (ADR-296 D25).
+    /// branch's: a grammar entry propagates on its own (ADR-grammar-syntax-v1 D6).
     fn emit_method_can_fail(ref self, world: ref EmitWorld, statement: i64, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg]) -> bool {
         return self.enters_a_grammar(world, receiver, method)
             || self.method_can_fail(node_key(receiver))

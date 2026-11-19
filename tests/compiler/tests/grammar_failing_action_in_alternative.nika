@@ -1,4 +1,4 @@
-// An action that fails inside an alternative (Part II 10.8, ADR-339 5, #557):
+// An action that fails inside an alternative (Part II 10.8, its cut; #557):
 // without a commit point before it, the failure is the alternative's, and the
 // next one is tried; past a commit point it is the parse's error, and the
 // action's message is what `ParseError` carries.

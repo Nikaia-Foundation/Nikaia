@@ -1477,7 +1477,7 @@ fn a_fields_visibility_survives_the_ledger() {
 }
 
 /// **A grammar's entry earns its columns from its actions**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24,
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5,
 /// [ADR-186](../../../docs/specification/adr/adr-186.md)).
 ///
 /// A `pub` rule is a ledger entry, and it used to be written with

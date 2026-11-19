@@ -176,8 +176,8 @@ pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerCon
                     }
                 }
             }
-            // **A `entry` rule is an entry, so it gets the walk too** (ADR-296
-            // D24). Its body is every action block in the grammar: which
+            // **A `entry` rule is an entry, so it gets the walk too** (ADR-grammar-syntax-v1
+            // D5). Its body is every action block in the grammar: which
             // rules' actions run with it is the parser backend's question, so
             // the grammar is the unit - the over-approximation ADR-292 D4
             // asks for in this column.

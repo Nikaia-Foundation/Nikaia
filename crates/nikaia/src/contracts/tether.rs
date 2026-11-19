@@ -91,7 +91,7 @@ impl HeldOps for Held {
 /// Give every entry of this package the states its views solved to (D7):
 /// each function's (`function_views`), and a `entry` rule's whose result may
 /// point into the text it parsed - the entry holds the input and the result
-/// borrows it ([ADR-296](../../../../docs/specification/adr/adr-296.md) D24).
+/// borrows it ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5).
 /// Then which positions really leave, over the whole package, to a fixpoint
 /// (`keep::infer`, [ADR-283](../../../../docs/specification/adr/adr-283.md)
 /// D6).
