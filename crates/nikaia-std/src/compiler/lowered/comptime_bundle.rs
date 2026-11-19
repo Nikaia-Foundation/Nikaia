@@ -364,11 +364,7 @@ pub(crate) fn comptime_bundle_path(text: nikaia_std::either_text::EitherText<'_>
 
 pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> (String, String) {
     let name = comptime_bundle_library(&flavour);
-    let whole_std = match flavour {
-        ComptimeBundleFlavour::BuildTime => false,
-        ComptimeBundleFlavour::Run => true,
-    };
-    let mut manifest = cr_bundle_manifest(&name, &host.runtime_dependencies(&nikaia_std::block::Text::from(comptime_bundle_named().join(" "))), whole_std);
+    let mut manifest = cr_bundle_manifest(&name, &host.runtime_dependencies(&nikaia_std::block::Text::from(comptime_bundle_named().join(" "))));
     let source = match flavour {
         ComptimeBundleFlavour::BuildTime => {
             manifest.push_str(&cr_own_profile(&name));
