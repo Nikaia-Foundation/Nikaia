@@ -347,6 +347,10 @@ pub struct Parsed {
     /// their nodes ([ADR-282](../../../docs/specification/adr/adr-282.md) D13,
     /// #712). The checker types each as a view and lends it.
     pub viewed_arms: std::collections::BTreeSet<i64>,
+    /// **The cuts [`crate::text_tiers`] took as text of their own**, given
+    /// the buffer of a local that dies where they are pushed into a
+    /// parameter's list, by their nodes (ADR-text-reuse-1 D2, #2291).
+    pub given_pushes: std::collections::BTreeSet<i64>,
     /// **The names moved into a literal's position that must hold text of
     /// its own while a view of them is still used**, by their nodes
     /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
@@ -533,6 +537,7 @@ impl Parsed {
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             viewed_arms: self.viewed_arms.clone(),
+            given_pushes: self.given_pushes.clone(),
             refused_moves: self.refused_moves.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
@@ -838,6 +843,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         package: None,
         hole_wraps: std::collections::BTreeMap::new(),
         viewed_arms: std::collections::BTreeSet::new(),
+        given_pushes: std::collections::BTreeSet::new(),
         refused_moves: std::collections::BTreeMap::new(),
         holes: Default::default(),
         kept_calls: Default::default(),
@@ -1679,8 +1685,8 @@ grammar! {
         // field, and the nearest span the walk around it has is a statement's
         // (ADR-298 D4).
         rule field_def -> FieldDef @=
-            attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref default:field_default? -> {
-                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default, attributes }
+            doc:doc_here attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref default:field_default? -> {
+                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default, attributes, doc }
             }
 
         // `size: i64 = 50` (ADR-331 D5): the default and where it is written,
@@ -1703,10 +1709,10 @@ grammar! {
                 "A variant's field has no default; only a struct's field may have one \
                  (Part I 4.1). Remove the `= …`."
             ) -> {
-                FieldDef { name, ty, is_public: false, span: Span::from(_span), default: None, attributes: Vec::new() }
+                FieldDef { name, ty, is_public: false, span: Span::from(_span), default: None, attributes: Vec::new(), doc: None }
             }
           | attributes:attribute* vis:kw_pub? name:NAME ":" ty:type_ref -> {
-                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default: None, attributes }
+                FieldDef { name, ty, is_public: vis.is_some(), span: Span::from(_span), default: None, attributes, doc: None }
             }
 
         // --- Argumente & Typen ---

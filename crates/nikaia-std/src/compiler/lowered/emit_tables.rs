@@ -164,7 +164,7 @@ pub(crate) fn emit_tables_method_into(words: &winnow_grammar::InternerContext, o
     }
 }
 
-pub(crate) fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub(crate) fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for other in beside.iter() {
         for item in other.items.iter() {
@@ -180,7 +180,7 @@ pub(crate) fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_
     out
 }
 
-pub(crate) fn emit_tables_prelude_taken(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub(crate) fn emit_tables_prelude_taken(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for unit in units.iter() {
         for item in unit.items.iter() {
@@ -196,13 +196,13 @@ pub(crate) fn emit_tables_prelude_taken(units: &[ParsedView<'_, '_, '_, '_, '_, 
     out
 }
 
-pub(crate) fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub(crate) fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for unit in units.iter() { out.extend(declared_errors(unit.words, unit.items)); }
     out
 }
 
-pub(crate) fn emit_tables_tethered(own: &Ledger, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub(crate) fn emit_tables_tethered(own: &Ledger, beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (name, contract) in own.types.iter() { if !contract.tethered.is_empty() { out.insert(nikaia_std::block::Text::from(name.to_string())); } }
     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -228,7 +228,7 @@ pub fn emit_tables_described_maps(described: &Ledger) -> Vec<String> {
     out
 }
 
-pub fn emit_tables_package_borrowing(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub fn emit_tables_package_borrowing(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut grew = true;
     while grew {

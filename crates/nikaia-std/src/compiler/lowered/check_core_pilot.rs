@@ -148,7 +148,7 @@ pub(crate) fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_,
     None
 }
 
-pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, entry: &str) -> Option<bool> {
+pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, owner: &str, entry: &str) -> Option<bool> {
     for item in view.items.iter() {
         match &item.node {
             Item::Grammar(def) => { if view.text(def.name) == owner { return Some(grammar_entry_interns(view.words, def, entry)); } },
@@ -375,19 +375,31 @@ pub(crate) fn check_reflect_a_type(state: &CheckState, ty: &str) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> Option<String> {
-    if check_reflect_field_kind(&state, world, side) { return Some(String::from("?")); }
+    if check_reflect_field_kind(&state, world, side, "ty::kind") { return Some(String::from("?")); }
+    if check_reflect_field_kind(&state, world, side, "ty::access") { return Some(String::from("@?")); }
     let segments = match side {
         Expr::Path(segments, _) => segments,
         _ => return None,
     };
     if segments.len() == 3 {
         let case = world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) });
+        if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Access" {
+            if case == "Owned" || case == "Shared" || case == "SharedMut" { return Some(format!("@{}", case)); }
+            return None;
+        }
         if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_bare_kind(case) { return Some(nikaia_std::block::Text::from(case.to_string())); }
+        if check_reflect_no_case(world, segments) { return Some(String::from("!")); }
         return None;
     }
-    if segments.len() != 2 || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "kind" { return None; }
+    if segments.len() != 2 { return None; }
+    let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }).to_string());
+    if member != "kind" && member != "access" { return None; }
     let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
-    if state.is_variant(&ty, "kind") || !check_reflect_a_type(&state, &ty) { return None; }
+    if state.is_variant(&ty, &member) || !check_reflect_a_type(&state, &ty) { return None; }
+    if member == "access" {
+        if state.type_parameters.contains_key(&ty) { return Some(String::from("@?")); }
+        return Some(format!("@{}", reflect_access_of(&ty)));
+    }
     if state.type_parameters.contains_key(&ty) { return Some(String::from("?")); }
     let kind = check_reflect_named_kind(&state, &ty, &vec![]);
     state.facts.type_kinds.insert(nikaia_std::block::Text::from(ty.to_string()), nikaia_std::block::Text::from(kind.to_string()));
@@ -396,12 +408,17 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> Option<Ty> {
+pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr, span: &Span) -> Option<Ty> {
     let equality = matches!(op, BinaryOp::Eq | BinaryOp::Ne);
     if !equality { return None; }
     let left = match check_reflect_kind_of(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let right = match check_reflect_kind_of(state, world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if left == "" || right == "" { return None; }
+    if left == "!" || right == "!" {
+        check_reflect_refuse_no_case(state, world, lhs, span);
+        check_reflect_refuse_no_case(state, world, rhs, span);
+        return Some(Ty::Named { name: String::from("bool"), args: vec![], view: false });
+    }
+    if left == "" || right == "" || left.starts_with('@') != right.starts_with('@') { return None; }
     state.facts.kind_compares.insert(id_of(expr) as i64);
     Some(Ty::Named { name: String::from("bool"), args: vec![], view: false })
 }
@@ -415,15 +432,23 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
             state.a_kind_kept_at_run_time(&format!("meta::Type::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })), span);
             return Some(meta);
         }
+        if check_reflect_no_case(world, segments) {
+            state.a_kind_arm_names_no_case(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) }), span);
+            return Some(Ty::Unknown);
+        }
         return None;
     }
     if segments.len() != 2 { return None; }
     let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
     let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }).to_string());
-    if member != "kind" && member != "name" { return None; }
+    if member != "kind" && member != "name" && member != "doc" { return None; }
     if state.is_variant(&ty, &member) || resolve_call(world, &format!("{}::{}", ty, member)).is_some() || !check_reflect_a_type(&state, &ty) { return None; }
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64);
+        return Some(Ty::Named { name: String::from("str"), args: vec![], view: true });
+    }
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Some(Ty::Named { name: String::from("str"), args: vec![], view: true });
     }
     state.a_kind_kept_at_run_time(&format!("{}::kind", ty), span);
@@ -435,6 +460,10 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
 pub(crate) fn check_reflect_field_type(state: &mut CheckState, expr: &Expr, member: &str, span: &Span) -> Ty {
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64);
+        return Ty::Named { name: String::from("str"), args: vec![], view: true };
+    }
+    if member == "doc" {
+        state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Ty::Named { name: String::from("str"), args: vec![], view: true };
     }
     if member == "kind" {
@@ -504,11 +533,11 @@ pub(crate) fn check_reflected_field_kept(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> bool {
+pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, member: &str) -> bool {
     match side {
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
-            if world.words.resolve(name) != "ty::kind" { return false; }
+            if world.words.resolve(name) != member { return false; }
             match base {
                 Expr::Variable(held, _) => {
                     let held = *held;
@@ -552,6 +581,17 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
         state.facts.type_fields.insert(nikaia_std::block::Text::from(written.to_string()), fields);
     }
     for part in parts.iter() { check_reflect_record(state, world, part); }
+}
+
+pub(crate) fn check_reflect_no_case(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool { segments.len() == 3 && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_case_parts(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) < 0 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reflect_refuse_no_case(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, span: &Span) {
+    match side {
+        Expr::Path(segments, _) => { if check_reflect_no_case(world, segments) { state.a_kind_arm_names_no_case(world.words.resolve(*nikaia_std::index::get(&segments, 2)), span); } },
+        _ => { },
+    }
 }
 
 pub(crate) fn check_reflect_case_parts(case: &str) -> i64 {
@@ -606,7 +646,7 @@ pub(crate) fn check_reflect_arm(words: &winnow_grammar::InternerContext, pattern
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
-    if check_reflect_field_kind(&state, world, value) { return true; }
+    if check_reflect_field_kind(&state, world, value, "ty::kind") { return true; }
     let segments = match value {
         Expr::Path(segments, _) => segments,
         _ => return false,
@@ -669,5 +709,11 @@ pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &
     if !any { return Some(Ty::Unknown); }
     if agree { return Some(seen); }
     Some(check_core_flow_meet(state, world, expr, &answered, span))
+}
+
+pub(crate) fn reflect_access_of(written: &str) -> &'static str {
+    if written.starts_with("SharedMut[") { return "SharedMut"; }
+    if written.starts_with("Shared[") { return "Shared"; }
+    "Owned"
 }
 

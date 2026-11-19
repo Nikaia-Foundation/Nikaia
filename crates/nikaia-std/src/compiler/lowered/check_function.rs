@@ -7,7 +7,7 @@ pub(crate) fn check_function_shape_member(bound: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str, shape: &str) -> bool {
+pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str, shape: &str) -> bool {
     for expr in visited_in_block(body) {
         match expr {
             Expr::Path(segments, _) => {
@@ -23,7 +23,7 @@ pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '
     false
 }
 
-pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str) -> bool {
+pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str) -> bool {
     let mut called: collections::BTreeSet<u32> = collections::BTreeSet::new();
     for expr in visited_in_block(body) {
         match expr {
@@ -43,7 +43,7 @@ pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '
                 let at = *at;
                 if segments.len() == 2 && !called.contains(&at.get()) {
                     let member = here.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
-                    if here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == parameter && (member == "kind" || member == "name") { return true; }
+                    if here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == parameter && (member == "kind" || member == "name" || member == "access" || member == "doc") { return true; }
                 }
             },
             _ => { },
@@ -60,7 +60,7 @@ pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) {
         for item in file.items.iter() {
             match &item.node {
                 Item::Fn { name, generics, args, body, .. } => {
@@ -148,7 +148,7 @@ pub(crate) fn check_function_grown_in(words: &winnow_grammar::InternerContext, b
     }
 }
 
-pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
+pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
 
 pub(crate) fn lone_texts_of(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
     let seen = visited_in_block(body);
@@ -222,6 +222,70 @@ pub(crate) fn grown_text_of(words: &winnow_grammar::InternerContext, body: &Bloc
     out
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_function_shrunk_leaves(state: &mut CheckState, words: &winnow_grammar::InternerContext, body: &Block) {
+    if state.facts.given_names.is_empty() { return; }
+    let mut leaving: Vec<&Expr> = vec![];
+    check_function_leaving_in(body, &mut leaving);
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Return(value, _) => {
+                let value = nikaia_std::boxed::open(value);
+                match value {
+                    None => { },
+                    Some(left) => { leaving.push(left); },
+                }
+            },
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                if puts_its_argument(words.resolve(method)) { for arg in args.iter() { leaving.push(arg); } }
+            },
+            _ => { },
+        }
+    }
+    if !body.stmts.is_empty() {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
+            Stmt::Expr(value) => { leaving.push(value); },
+            _ => { },
+        }
+    }
+    for value in leaving.iter() {
+        let value = *value;
+        match value {
+            Expr::Variable(_, _) => {
+                let named = match state.facts.declared.get(&node_key(value)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                match named {
+                    CheckDeclared::Binding(id) => { if state.facts.given_names.contains(&id) { state.facts.shrunk_leaves.insert(node_key(value)); } },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn check_function_leaving_in<'a>(block: &'a Block, out: &mut Vec<&'a Expr>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Return(value) => {
+                match value {
+                    None => { },
+                    Some(left) => { out.push(left); },
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                match target {
+                    Expr::Variable(_, _) => { },
+                    _ => { out.push(value); },
+                }
+            },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_leaving_in(inner, out); }
+    }
+}
+
 pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -277,7 +341,7 @@ pub(crate) fn check_function_block_ends_in(block: &Block, grows: bool) -> bool {
     }
 }
 
-pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>, both: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>, both: &mut collections::BTreeSet<String>) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Assign { target, op, value } => {
@@ -298,7 +362,7 @@ pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_fielded_in(here, body, &mut fielded, &mut both);
@@ -829,6 +893,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.needless_place_clones_said();
     state.data_handed_over_is_used_again();
     state.replaces_at_last_use_said();
+    check_function_shrunk_leaves(state, world.here.words, body);
     state.flow.lone_texts = outer_lone;
     state.needless_clones_said();
     state.reads_on_paths.clear();

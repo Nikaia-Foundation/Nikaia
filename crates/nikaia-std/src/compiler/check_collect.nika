@@ -94,6 +94,30 @@ impl CheckState {
         }
     }
 
+    /// **The `///` lines of a type and of its fields** (ADR-329 D2,
+    /// ADR-330 D2): what `T::doc` and `field.doc` answer, as written.
+    fn collect_docs(ref mut self, file: ref ParsedView, item: ref Spanned[Item]) sync {
+        match item.node {
+            Item::Struct { name, fields, .. } => {
+                let owner = file.text(name)
+                for field in fields {
+                    if field.doc != null {
+                        self.facts.docs.insert(f"{owner}.{file.text(field.name)}", (field.doc ?? "").clone())
+                    }
+                }
+                if item.doc != null {
+                    self.facts.docs.insert(owner, (item.doc ?? "").clone())
+                }
+            },
+            Item::Enum { name, .. } => {
+                if item.doc != null {
+                    self.facts.docs.insert(file.text(name), (item.doc ?? "").clone())
+                }
+            },
+            else => {},
+        }
+    }
+
     /// A struct of this file: its fields nameable and declared.
     fn collect_struct(ref mut self, world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], name: winnow_grammar::Symbol, generics: ref Vec[GenericParam], fields: ref Vec[FieldDef], span: ref Span) sync {
         let mut order: Vec[String] = []
@@ -174,9 +198,11 @@ impl CheckState {
         for other in world.beside {
             for item in other.items {
                 self.collect_types_beside(other, item.node)
+                self.collect_docs(other, item)
             }
         }
         for item in world.here.items {
+            self.collect_docs(world.here, item)
             match item.node {
                 Item::Struct { name, generics, fields, .. } => self.collect_struct(world, world.parts_beside, name, generics, fields, item.span),
                 Item::Enum { name, variants, .. } => self.collect_enum(world, world.parts_beside, name, variants, item.span),
