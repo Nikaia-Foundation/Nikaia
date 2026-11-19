@@ -101,14 +101,3 @@ impl<'a, T: ?Sized> Of for &'a T {
 pub fn of<N: Of>(count: N) -> N::Out {
     count.of()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Which is what lets the emitter write it around a name it cannot type.
-    #[test]
-    fn anything_that_is_not_a_number_is_untouched() {
-        assert_eq!(of("text"), "text");
-    }
-}

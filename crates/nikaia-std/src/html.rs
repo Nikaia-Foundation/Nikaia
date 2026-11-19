@@ -222,24 +222,16 @@ render_by_display!(
 
 #[cfg(test)]
 mod tests {
-    use super::{Raw, escape};
-    use std::borrow::Cow;
+    use super::Raw;
 
     // The escapes, a template's holes and `html::Raw` written out are
     // `tests/compiler/tests/html_text_is_escaped_and_markup_is_not.nika`
-    // (#2082). What stays here no program sees: that text needing nothing is
-    // not copied, and `Raw::escaped`, which the contracts do not name.
-
-    #[test]
-    fn text_that_needs_nothing_is_returned_unallocated() {
-        assert!(matches!(
-            escape("Additional fortune added at request time."),
-            Cow::Borrowed(_)
-        ));
-        assert!(matches!(escape("日本語"), Cow::Borrowed(_)));
-    }
+    // (#2082), and that text needing nothing is not copied is
+    // `tests/compiler/tests/std_handing_on_requests_no_memory.nika` (#2215).
 
     /// The safe way in: escape first, and the result is markup by construction.
+    /// Kept as Rust (#2082): `Raw::escaped` is not in the contracts, so no
+    /// program can call it.
     #[test]
     fn escaped_text_becomes_markup() {
         let markup = Raw::escaped("a < b & c");
