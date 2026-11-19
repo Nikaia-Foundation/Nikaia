@@ -47,7 +47,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                     let mut given = check_core_expr(state, world, host, args[i], span)
                     let mut wanted = signature.params[i].1.clone()
                     // **A value the entry does not change is lent**
-                    // (ADR-grammar-1 D6): a view is handed as the value is.
+                    // (ADR-grammar-actions-v1 D7): a view is handed as the value is.
                     if !signature.mutable.contains(named) {
                         given = given.owned()
                         wanted = wanted.owned()

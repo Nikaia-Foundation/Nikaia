@@ -1,5 +1,5 @@
-// A rule's value written plain is lent, not cloned per call (ADR-grammar-1
-// D6, #1560): the rule takes a reference, a call hands one, and a value made
+// A rule's value written plain is lent, not cloned per call (ADR-grammar-actions-v1
+// D7, #1560): the rule takes a reference, a call hands one, and a value made
 // at the call, `Two([])`, lives in a temporary for the call.
 
 struct D { h: String }

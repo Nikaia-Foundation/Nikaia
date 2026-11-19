@@ -933,7 +933,8 @@ pub struct CheckState {
     /// there is nothing that could take a second one.
     pub inside_a_door: bool,
     /// The rule whose action is being walked, for
-    /// [ADR-296](../../docs/specification/adr/adr-296.md) D35's refusal - which
+    /// [ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md)
+    /// D1's refusal - which
     /// needs the rule's name, because a grammar is a page of rules and a caret
     /// on a call inside one is not enough to find it.
     pub inside_an_action: String?,

@@ -77,10 +77,13 @@ pub fn root_join(root: ref fs::Root, part: ref fs::Path) -> fs::Root sync {
 }
 
 /// `root.path()`: the directory of a `Dir`, for a program's argument
-/// (ADR-raw-sinks-1 D12); nothing for `Anywhere`.
-pub fn root_path(root: ref fs::Root) -> fs::Path? sync {
+/// (ADR-raw-sinks-1 D12); `.` for `Anywhere`, which hands a name to the
+/// operating system as written, so `f"{root.path()}/x"` names the file
+/// `root` opens for `"x"` under either root.
+pub fn root_path(root: ref fs::Root) -> fs::Path sync {
+    let here: fs::Path = "."
     return match root {
         fs::Root::Dir(dir) => dir.clone(),
-        fs::Root::Anywhere => null,
+        fs::Root::Anywhere => here,
     }
 }

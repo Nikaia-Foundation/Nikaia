@@ -590,7 +590,7 @@ pub struct CheckFacts {
     pub bytes_grammars: collections::BTreeSet[String],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
-    /// **A rule's value it is lent** (ADR-grammar-1 D6), by
+    /// **A rule's value it is lent** (ADR-grammar-actions-v1 D7), by
     /// `Grammar::rule::value`: written plain or `ref`, not `mut` or `keep`,
     /// and not a word. The rule takes it as a reference and a call hands it
     /// one, so nothing is cloned per call.

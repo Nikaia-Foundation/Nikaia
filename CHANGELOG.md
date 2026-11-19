@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1473] — 2026-11-19
+
+**The decisions on what a rule's action may do and how a parse fails live in one record, ADR-grammar-actions-v1 (#2266)**
+- The decisions on what a rule's action may do and how a parse fails (no pause in an action, an entry `sync`, `ParseError` with its message only, rule values lent) live in one record, ADR-grammar-actions-v1; ADR-grammar-1 archived, six decisions of ADR-296 moved.
+
 ## [0.0.1472] — 2026-11-19
 
 **The decisions on what a grammar reads and how it holds it live in one record, ADR-grammar-input-v1 (#2265)**
