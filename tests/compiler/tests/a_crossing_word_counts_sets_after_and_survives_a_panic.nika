@@ -1,0 +1,62 @@
+// A word-sized value that crosses to another task is one atomic word
+// (ADR-281 D13): its `update` is a compare-and-swap run again on a
+// collision, so four tasks adding to it lose no step (D14); `set(…; after:)`
+// is one compare-and-swap that stores on a match and is overtaken
+// otherwise; and a block that panics stores nothing, so the word keeps its
+// value (D15). Each value crosses to a `spawn`, so at
+// `user_parallelism = yes` it is a word and at `no` the plain shape.
+fn count(n: SharedMut[i64]) -> i64 {
+	for _ in 0..<10000 {
+		n.update fn(mut v) { v += 1 }
+	}
+	return 10000
+}
+
+fn change(flag: SharedMut[bool], x: SharedMut[f64], c: SharedMut[scalar]) -> i64 {
+	flag.update fn(mut v) { v = !v }
+	x.update fn(mut v) { v *= 2.0 }
+	c.update fn(mut v) { if v == 'a' { v = 'z' } }
+	return 3
+}
+
+fn store(w: SharedMut[i64], seen: i64) -> i64 {
+	w.set(8; after: seen) catch { return 0 }
+	return 1
+}
+
+fn spoil(k: SharedMut[i64]) -> i64 {
+	k.update fn(mut v) { v += i64::MAX }
+	return 1
+}
+
+fn main() throws {
+	let n = SharedMut(0)
+	let t1 = spawn fn { count(n) }
+	let t2 = spawn fn { count(n) }
+	let t3 = spawn fn { count(n) }
+	let t4 = spawn fn { count(n) }
+	let steps = t1.join() + t2.join() + t3.join() + t4.join()
+	println(f"no update lost: {n.get()} ({steps} steps)")
+
+	let flag = SharedMut(false)
+	let x = SharedMut(1.5)
+	let c: SharedMut[scalar] = SharedMut('a')
+	let changed = spawn fn { change(flag, x, c) }
+	let done = changed.join()
+	println(f"bool {flag.get()}, float {x.get()}, char {c.get()} ({done} changed)")
+
+	let w = SharedMut(7)
+	let stale = spawn fn { store(w, 6) }
+	if stale.join() == 0 { println("overtaken") }
+	let fresh = spawn fn { store(w, 7) }
+	let stored = fresh.join()
+	println(f"set after: {w.get()} ({stored} stored)")
+
+	let k = SharedMut(7)
+	let crossed = spawn fn { k.get() }
+	println(f"crossed: {crossed.join()}")
+	let a = async spoil(k) catch { 0 }
+	println("the task runs")
+	if a == 0 { println("the block panicked") }
+	println(f"the word is untouched: {k.get()}")
+}
