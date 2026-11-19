@@ -301,6 +301,8 @@ impl Error for Raised {
 
 /// What `throw` lowers to: put the value in the failure channel, with the site
 /// it came from.
+#[cold]
+#[inline(never)]
 pub fn raise<E>(error: E, origin: Origin) -> Box<dyn Error>
 where
     E: Error + 'static,
@@ -444,6 +446,8 @@ impl<E> Site<E> {
     /// error on is not where it was raised, and re-capturing here would make it
     /// look like it was ([ADR-023](../../../docs/specification/adr/adr-023.md)
     /// D6).
+    #[cold]
+    #[inline(never)]
     pub fn refill(self, error: E) -> Thrown<E> {
         // **And what joined it travels on with it**, in the same word. A
         // handler that passes an error along passes what came with it; dropping
@@ -545,6 +549,15 @@ impl<E: Error + 'static> From<Thrown<E>> for Box<dyn Error> {
 /// carrying a view of the caller's buffer — `ConfigError::NotFound(path)`,
 /// Part I 7.1's own example — has a lifetime, and boxing it into a
 /// `Box<dyn Error>` asks it to outlive the program (`E0521`).
+///
+/// **Cold and never inlined**, as is every envelope constructor on the throw
+/// path ([ADR-failure-return-1](../../../docs/specification/adr/adr-failure-return-1.md)
+/// D1): inlined, the trace machinery gave every call of a failing function,
+/// failing or not, two pushes and a 168-byte frame. Out of line, the failing
+/// function's body is a compare, a branch and a jump here, and it stays a good
+/// candidate for inlining itself.
+#[cold]
+#[inline(never)]
 pub fn throwing<E>(error: E, origin: Origin) -> Thrown<E> {
     Thrown {
         inner: error,
@@ -565,6 +578,8 @@ pub fn throwing<E>(error: E, origin: Origin) -> Thrown<E> {
 ///
 /// The site stays absent, which [`Full`] already has words for.
 impl<E> From<E> for Thrown<E> {
+    #[cold]
+    #[inline(never)]
     fn from(error: E) -> Thrown<E> {
         Thrown {
             inner: error,
