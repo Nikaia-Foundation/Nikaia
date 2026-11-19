@@ -1,5 +1,5 @@
 // YAML's block structure, written as its specification writes it: the
-// indentation `n` and the context `c` are values of the rules (ADR-grammar-1,
+// indentation `n` and the context `c` are values of the rules (ADR-grammar-syntax-v1 D12,
 // #932; the engine's `tests/yaml_indent_test.rs`, in Nikaia). A subset - block
 // sequences and mappings, one-line plain scalars, compact nested sequences
 // (`- - a`) - with what makes YAML context-sensitive:

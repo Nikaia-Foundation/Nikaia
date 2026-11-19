@@ -510,7 +510,7 @@ begins with itself. The specification does not describe what such a rule means
 yet, so this chapter, and the calculator, write a head and a list of tails
 instead. That form is specified, and its action states the order of evaluation
 in plain code. Left recursion through a rule that takes values is listed as not
-decided in [ADR-grammar-1](../docs/specification/adr/adr-grammar-1.md).
+decided in [ADR-grammar-syntax-v1](../docs/specification/adr/adr-grammar-syntax-v1.md).
 
 **Specification:** [Part II, §10.6 Advanced parser features](../docs/specification/20-nikaia-advance.md#106-advanced-parser-features),
 [§10.8](../docs/specification/20-nikaia-advance.md#108-the-grammars-vocabulary)

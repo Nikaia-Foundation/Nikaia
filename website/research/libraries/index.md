@@ -96,7 +96,7 @@ nesting is fixed, which took the deep input from 5.4 to 2.5 times, and reading
 properties twice is fixed, which took the large input from 2.5 to 2.2. Three
 are open. A rule of the grammar clones the values it is given at each call,
 about 4 % of the large input; a rule's values are to be lent like a function's
-arguments ([ADR-grammar-1](/docs/specification/adr/adr-grammar-1.html) D6),
+arguments ([ADR-grammar-actions-v1](/docs/specification/adr/adr-grammar-actions-v1.html) D7),
 and the build is [#1560](https://github.com/Nikaia-Foundation/Nikaia/issues/1560).
 Allocating and copying take about 15 % of the large input and wait on events
 read straight from the parse
@@ -125,7 +125,7 @@ warnings on code that hardly runs.
 
 Some costs come from the lowering and not from anything the source writes,
 such as the clone of a grammar rule's values at each call
-([ADR-grammar-1](/docs/specification/adr/adr-grammar-1.html) D6,
+([ADR-grammar-actions-v1](/docs/specification/adr/adr-grammar-actions-v1.html) D7,
 [#1560](https://github.com/Nikaia-Foundation/Nikaia/issues/1560)). A warning on
 the source cannot see these, so they form a class of their own, found in the
 profile and fixed in the compiler. The question is how much of the work of
@@ -144,7 +144,8 @@ tree ([ADR-yaml-1](/docs/specification/adr/adr-yaml-1.html)
 D3), and a grammar is part of the language
 ([ADR-296](/docs/specification/adr/adr-296.html)). YAML needs rules that take
 values, such as the current indentation, and guards that decide which rule
-applies, which [ADR-grammar-1](/docs/specification/adr/adr-grammar-1.html)
+applies, which
+[ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html)
 adds. Writing the package found defects in the grammar engine, which are filed
 for the compiler, among them
 [#1561](https://github.com/Nikaia-Foundation/Nikaia/issues/1561). The question
@@ -198,7 +199,7 @@ once the parser underneath is as fast as it can be.
 | :--- | :--- |
 | The official yaml package: one grammar builds the tree, nodes point into the input, limits on by default | [ADR-yaml-1](/docs/specification/adr/adr-yaml-1.html) |
 | A grammar is part of the language | [ADR-296](/docs/specification/adr/adr-296.html) |
-| A grammar's rules take values, with bounds and guards, and the values are lent rather than cloned | [ADR-grammar-1](/docs/specification/adr/adr-grammar-1.html) |
+| A grammar's rules take values, with bounds and guards, and the values are lent rather than cloned | [ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html), [ADR-grammar-actions-v1](/docs/specification/adr/adr-grammar-actions-v1.html) |
 | A package becomes a Rust library, and hand-written Rust can sit over it | [ADR-393](/docs/specification/adr/adr-393.html) |
 | A check is dropped only where a proof shows it cannot fail, and dropping is asked for | [ADR-306](/docs/specification/adr/adr-306.html) |
 | Performance is counted in instructions against tuned Rust and not timed | [measuring](/docs/measuring.html) |

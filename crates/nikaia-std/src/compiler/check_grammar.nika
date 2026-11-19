@@ -430,7 +430,7 @@ fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: re
 impl CheckState {
     /// **The values a rule takes** (ADR-grammar-syntax-v1 D12): its parameters and its
     /// options, each a local of its patterns and of its actions.
-    /// A value written plain or `ref` is lent (ADR-grammar-1 D6, ADR-views-3
+    /// A value written plain or `ref` is lent (ADR-grammar-actions-v1 D7, ADR-views-3
     /// D1): the action reads the caller's, as a function's parameter does.
     /// Plain text is a view of text there, as in a function (ADR-282 D2).
     fn rule_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, rule: ref GrammarRule) -> Vec[CheckLocal] sync {
@@ -586,7 +586,7 @@ impl CheckState {
         self.findings.push(check_refusal("NK1102", span, spoken_in(f"{what} here is `{found.text()}`, but it has to be `{want.text()}`.", found, want), [], shown_in(help, found, want)))
     }
 
-    /// **Whether a rule's value is lent** (ADR-grammar-1 D6): written plain or
+    /// **Whether a rule's value is lent** (ADR-grammar-actions-v1 D7): written plain or
     /// `ref`, neither `mut` nor `keep`, and of a type a word does not hold
     /// (ADR-279 D8), which is copied as a function's is.
     pub fn a_lent_rule_value[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, arg: ref FnArg) -> bool sync {
@@ -598,7 +598,7 @@ impl CheckState {
     }
 
     /// One value, typed in the scope it stands in, against what it must be.
-    /// **A lent value takes a view as well** (ADR-grammar-1 D6): the rule
+    /// **A lent value takes a view as well** (ADR-grammar-actions-v1 D7): the rule
     /// reads what it is handed, as a function's lent parameter does.
     fn grammar_value[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, want: Ty, lent: bool, scope: ref Vec[CheckLocal], span: ref Span, what: ref String) sync {
         self.scope.push(scope.clone())

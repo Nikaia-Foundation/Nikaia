@@ -236,7 +236,7 @@ fn a_sysroot_module_is_checked_before_it_is_lowered() {
     std::fs::create_dir_all(&src).expect("a sysroot to work in");
 
     // A grammar whose action calls something that can pause. A grammar's
-    // action may not pause (ADR-296 D35), because the generated parser is an
+    // action may not pause (ADR-grammar-actions-v1 D1), because the generated parser is an
     // ordinary function. The probe used to reach the pause through a method on
     // what a **`match` arm** bound, which resolved to nothing while a pattern
     // binding had no type; since issue #168 such a binding is typed
