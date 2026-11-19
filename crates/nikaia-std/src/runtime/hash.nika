@@ -1,0 +1,245 @@
+// crates/nikaia-std/src/runtime/hash.nika
+//
+// **The hash a map gets when nobody outside the program chose its keys**
+// (ADR-010 D5, ADR-316 D5), written in Nikaia: the Fx step a number takes,
+// the rotation that finishes it, and the byte hash that folds a text into
+// one word first. `src/hash.rs` keeps `FxHasher`, the shell Rust's `Hasher`
+// trait asks for, and calls these.
+//
+// `hash_bytes` and what it calls are `rustc-hash` 2.1.1's (`src/lib.rs`),
+// MIT or Apache-2.0, by Orson Peters; the 64-bit half only, since
+// `nikaia-std` targets 64-bit. Copied rather than depended on: it sits on the
+// hot path of every program that aggregates anything, and a program whose
+// hash function comes from a crate it did not choose is a program whose
+// iteration order and worst case can change under it.
+
+use std::collections
+
+/// The constant `rustc`'s hash multiplies by: the 64-bit odd number closest
+/// to `2^64 / φ`, so that the multiply spreads a change in any bit across the
+/// whole word.
+comptime SEED: u64 = 0x517c_c1b7_2722_0a95
+
+// Digits of pi.
+comptime SEED1: u64 = 0x243f_6a88_85a3_08d3
+comptime SEED2: u64 = 0x1319_8a2e_0370_7344
+comptime PREVENT_TRIVIAL_ZERO_COLLAPSE: u64 = 0xa409_3822_299f_31d0
+
+/// **One Fx step**: `word` folded into the state `hash`. One multiply and one
+/// rotate; every write folds into the same state, so the order of the parts
+/// of a compound key matters, which is what a hash of a tuple has to promise.
+@inline
+pub fn fx_add(hash: u64, word: u64) -> u64 sync {
+    return (hash.rotate_left(5) ^ word).wrapping_mul(SEED)
+}
+
+/// **The hash a state gives**: the multiply leaves the most entropy in the
+/// top bits, but a table picks the bucket from the bottom ones; the rotation
+/// brings the top down, as `rustc-hash` 2 does, so keys on a power-of-two
+/// stride (`i * 1024`, `i << 32`) do not crowd into a few buckets.
+@inline
+pub fn fx_finish(hash: u64) -> u64 sync {
+    return hash.rotate_left(26)
+}
+
+/// The full 64 x 64 -> 128 product, its halves xor-ed: the middle bits, which
+/// move most with a small change in either input, end up everywhere.
+@inline
+fn multiply_mix(x: u64, y: u64) -> u64 sync {
+    let (low, high) = x.widening_mul(y)
+    return low ^ high
+}
+
+/// **Any number of bytes as one word.** Up to 16 bytes, the key is read as
+/// its first and its last 8 (or 4) bytes, which overlap where the key is
+/// shorter than both: one branch on the length's class rather than one per
+/// piece of the tail. Longer keys are read 16 bytes a step, and the last 16
+/// overlap the step before. The length is xor-ed in at the end, so two
+/// lengths of one overlapping pattern do not collide.
+///
+/// **Out of line on purpose** (#695): a map's `entry` with this inlined into
+/// it is too big for LLVM to inline into a fold's loop, and whether it was
+/// inlined depended on how the codegen units were cut. Kept a call, the
+/// table's `entry` is inlined, for the cost of one call a key.
+@inline(never)
+pub fn hash_bytes(bytes: Bytes) -> u64 sync {
+    if bytes.len() <= 16 {
+        return hash_short(bytes)
+    }
+    return hash_long(bytes)
+}
+
+/// `hash_bytes` of up to 16 bytes, inline: the first and the last word.
+@inline(always)
+pub fn hash_short(bytes: Bytes) -> u64 sync {
+    let len = bytes.len()
+    let mut s0 = SEED1
+    let mut s1 = SEED2
+    if len >= 8 {
+        s0 ^= bytes.u64_le(0)
+        s1 ^= bytes.u64_le(len - 8)
+    } else if len >= 4 {
+        s0 ^= (bytes.u32_le(0) as u64)
+        s1 ^= (bytes.u32_le(len - 4) as u64)
+    } else if len > 0 {
+        s0 ^= (bytes[0] as u64)
+        s1 ^= (((bytes[len - 1] as u64) << 8) | (bytes[len / 2] as u64))
+    }
+    return multiply_mix(s0, s1) ^ (len as u64)
+}
+
+/// `hash_bytes` of more than 16 bytes.
+@inline(never)
+pub fn hash_long(bytes: Bytes) -> u64 sync {
+    let len = bytes.len()
+    let mut s0 = SEED1
+    let mut s1 = SEED2
+    let mut off = 0
+    while off < len - 16 {
+        let x = bytes.u64_le(off)
+        let y = bytes.u64_le(off + 8)
+        // Two independent streams, s0 and s1, so the loop unrolls; the
+        // constant keeps a run of zeros from collapsing the state.
+        let t = multiply_mix(s0 ^ x, PREVENT_TRIVIAL_ZERO_COLLAPSE ^ y)
+        s0 = s1
+        s1 = t
+        off += 16
+    }
+    s0 ^= bytes.u64_le(len - 16)
+    s1 ^= bytes.u64_le(len - 8)
+    return multiply_mix(s0, s1) ^ (len as u64)
+}
+
+/// What the fast hasher gives a run of bytes written alone: one step from a
+/// zero state, then the finish.
+fn hash_of(bytes: Bytes) -> u64 sync {
+    return fx_finish(fx_add(0, hash_bytes(bytes)))
+}
+
+/// The bytes `at(i)` gives for `i` from 0 up to `len`.
+fn key_of(len: i64, step: i64, plus: i64) -> Bytes sync {
+    let mut v: Vec[u8] = []
+    for i in 0..<len {
+        v.push(((i * step) % 251 + plus) as u8)
+    }
+    return Bytes(v)
+}
+
+/// A hash is only useful if the same key hashes the same way every time, in
+/// the same process and the next one: that is what "fixed seed" means, and
+/// the whole difference from the map `std` gives by default.
+test "the same key hashes the same way" {
+    let a = hash_of("Hamburg".bytes)
+    let b = hash_of("Hamburg".bytes)
+    let c = hash_of("Bulawayo".bytes)
+    assert(a == b)
+    assert(a != c)
+}
+
+/// Order matters inside a key: `ab` is not `ba`, and a compound key's parts
+/// do not commute.
+test "the order of the bytes matters" {
+    let ab = hash_of("ab".bytes)
+    let ba = hash_of("ba".bytes)
+    assert(ab != ba)
+    let first = fx_finish(fx_add(fx_add(0, 1), 2))
+    let second = fx_finish(fx_add(fx_add(0, 2), 1))
+    assert(first != second)
+}
+
+/// Every length is reached: a key one byte longer hashes differently, across
+/// the short reads (1-3, 4-7, 8-16 bytes) and the 16-byte steps. The empty
+/// key and the single zero byte differ too, since the length is mixed in. Not
+/// injectivity: a 64-bit hash that is not cryptographic does not promise
+/// that, and a map compares keys in full (ADR-010 D5).
+test "every length is covered" {
+    let mut seen: collections::HashSet[u64] = collections::HashSet()
+    for len in 0..<80 {
+        let h = hash_of(key_of(len, 1, 1))
+        assert(!seen.contains(h))
+        seen.insert(h)
+    }
+    let empty = hash_of(key_of(0, 0, 0))
+    let zero = hash_of(key_of(1, 0, 0))
+    assert(empty != zero)
+}
+
+/// The overlapping reads see one pattern at two lengths, and still tell them
+/// apart: a run of one byte, every length up to 40.
+test "a repeated byte at every length differs" {
+    let mut seen: collections::HashSet[u64] = collections::HashSet()
+    for len in 0..<40 {
+        let h = hash_of(key_of(len, 0, 97))
+        assert(!seen.contains(h))
+        seen.insert(h)
+    }
+}
+
+/// The copy answers as `rustc-hash` 2.1.1 does: these words are what its
+/// byte hash gave the key `i * 37 % 256` at each length, read back out of its
+/// hasher through the inverse of the multiplier when the copy was Rust.
+test "hash_bytes is the one copied" {
+    let lengths = [0, 1, 3, 4, 7, 8, 15, 16, 17, 32, 79]
+    let words: Vec[u64] = [
+        0xbc13_060e_2d1a_ac79, 0xbc13_060e_2d1a_ac78, 0x7907_257e_7982_d7b3,
+        0xdd42_8ff6_73d7_3be6, 0x31fd_7a2f_9c27_9090, 0x6fbd_92db_d304_a19d,
+        0x0fba_6b57_719a_2fdb, 0x0ea1_43f4_f7e7_b76e, 0x05e6_5923_b738_829e,
+        0xa5f6_abb6_dff7_158b, 0xa5dc_8ee4_1925_c59a,
+    ]
+    for k in 0..<lengths.len() {
+        let mut v: Vec[u8] = []
+        for i in 0..<lengths[k] {
+            v.push((i * 37 % 256) as u8)
+        }
+        let got = hash_bytes(Bytes(v))
+        assert(got == words[k])
+    }
+}
+
+/// Integer keys on a power-of-two stride spread over the buckets a
+/// 4096-bucket table picks from the low 12 bits: 2941 of them for `i * 1024`
+/// and 1985 for `i << 32` (random keys reach about 2589), where without the
+/// rotation in `fx_finish` they share 4 and 1. Keyed again, they hash the
+/// same way.
+test "strided integers spread over the low bits" {
+    let mut times: collections::HashSet[u64] = collections::HashSet()
+    let mut shifted: collections::HashSet[u64] = collections::HashSet()
+    for i in 0..<4096 {
+        let n = i as u64
+        let a = fx_finish(fx_add(0, n * 1024))
+        let b = fx_finish(fx_add(0, n << 32))
+        assert(a == fx_finish(fx_add(0, n * 1024)))
+        assert(b == fx_finish(fx_add(0, n << 32)))
+        times.insert(a & 0xfff)
+        shifted.insert(b & 0xfff)
+    }
+    assert(times.len() >= 4096 / 4)
+    assert(shifted.len() >= 4096 / 4)
+}
+
+/// The keys of a real aggregation, spread over a table of the size one would
+/// have: no bucket of 1024 may hold a tenth of 413 station names.
+test "it spreads the keys of an aggregation" {
+    let mut counts: Vec[i64] = []
+    for _ in 0..<1024 {
+        counts.push(0)
+    }
+    for i in 0..<413 {
+        let key = if i < 10 {
+            f"Station00{i}"
+        } else if i < 100 {
+            f"Station0{i}"
+        } else {
+            f"Station{i}"
+        }
+        let at = (hash_of(key.bytes) % 1024) as i64
+        counts[at] += 1
+    }
+    let mut worst = 0
+    for c in counts {
+        if c > worst {
+            worst = c
+        }
+    }
+    assert(worst < 413 / 10)
+}

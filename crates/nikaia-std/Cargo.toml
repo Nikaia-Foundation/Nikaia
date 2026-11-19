@@ -140,7 +140,3 @@ file-ring = { path = "../unsafe/file-ring" }
 [[test]]
 name = "rust_signatures"
 required-features = ["compiler"]
-
-[dev-dependencies]
-# `hash.rs` copies its byte hash; a test holds the copy to it.
-rustc-hash = "=2.1.1"

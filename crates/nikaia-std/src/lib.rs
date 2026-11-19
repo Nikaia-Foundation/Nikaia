@@ -152,7 +152,8 @@ pub mod text {
     clippy::too_many_arguments,
     clippy::useless_conversion,
     clippy::needless_borrow,
-    clippy::type_complexity
+    clippy::type_complexity,
+    clippy::borrow_deref_ref
 )]
 pub mod runtime {
     include!("runtime/lowered.rs");
