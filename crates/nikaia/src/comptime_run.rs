@@ -185,7 +185,8 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             contracts,
             &crate::contracts::Ledger::blank(),
             entry,
-            &crate::assets::Reads::none(),
+            // The run's own sub-program computes nothing itself (#2153).
+            &crate::assets::Reads::none().building_nowhere(),
             None,
         )
         .ok()?;
@@ -290,7 +291,7 @@ pub(crate) fn compute(
     known: &dyn Fn(&str) -> Option<Value>,
     typed: &dyn Fn(&str) -> Option<Ty>,
     library: &crate::contracts::Ledger,
-    workshop: &crate::grammar_run::Workshop,
+    build_time_dir: &crate::grammar_run::BuildTimeDir,
     bounds: Bounds,
     outer: Option<&crate::contracts::Ledger>,
 ) -> Computed {
@@ -304,7 +305,7 @@ pub(crate) fn compute(
                 files,
                 units: RefCell::new(Vec::new()),
                 library,
-                workshop,
+                build_time_dir,
                 bounds,
                 program: std::cell::OnceCell::new(),
             };
@@ -323,13 +324,13 @@ pub(crate) fn compute(
 
 /// **What computing a build-time constant asks of the compiler**
 /// (`ComptimeComputeHost`, K3a): the program's files, the units made from
-/// them, the inference, the emitter and the workshop stay here; Nikaia names
+/// them, the inference, the emitter and the build-time directory stay here; Nikaia names
 /// files by their place and units by their index in `units`.
 struct ComputeHost<'a> {
     files: &'a [&'a Parsed],
     units: RefCell<Vec<Parsed>>,
     library: &'a crate::contracts::Ledger,
-    workshop: &'a crate::grammar_run::Workshop,
+    build_time_dir: &'a crate::grammar_run::BuildTimeDir,
     bounds: Bounds,
     /// The program's files as one number, worked out at the first question.
     program: std::cell::OnceCell<u64>,
@@ -532,7 +533,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     }
 
     fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<Wall> {
-        match self.workshop.run_comptime(program, bound) {
+        match self.build_time_dir.run_comptime(program, bound) {
             Ok(text) => {
                 *answer = text;
                 None
@@ -633,20 +634,20 @@ fn rows_of(lowered: crate::emit::Lowered) -> tree::ComptimeLowered {
 thread_local! {
     /// **Where an option's default is compiled** while a ledger is inferred
     /// ([ADR-318](../../../docs/specification/adr/adr-318.md) D1, ADR-321 D1): the
-    /// workshop of the build that reads the program, for as long as it reads it.
+    /// build-time directory of the build that reads the program, for as long as it reads it.
     /// The inference has no `Reads` of its own; a build sets this around the read,
     /// and a caller that sets nothing gets the interpreter, as before.
     ///
     /// **One per thread**, because the inference runs on the thread that reads:
     /// two builds side by side, as the tests are, each keep their own.
-    static DEFAULTS: std::cell::RefCell<Option<std::sync::Arc<crate::grammar_run::Workshop>>> =
+    static DEFAULTS: std::cell::RefCell<Option<std::sync::Arc<crate::grammar_run::BuildTimeDir>>> =
         const { std::cell::RefCell::new(None) };
 }
 
-/// Read a program with `at` as the workshop its defaults are compiled in.
+/// Read a program with `at` as the build-time directory its defaults are compiled in.
 pub fn defaults_compiled_in<R>(at: Option<&Path>, read: impl FnOnce() -> R) -> R {
-    let workshop = at.map(|at| std::sync::Arc::new(crate::grammar_run::Workshop::at(at)));
-    let before = DEFAULTS.with(|held| std::mem::replace(&mut *held.borrow_mut(), workshop));
+    let build_time_dir = at.map(|at| std::sync::Arc::new(crate::grammar_run::BuildTimeDir::at(at)));
+    let before = DEFAULTS.with(|held| std::mem::replace(&mut *held.borrow_mut(), build_time_dir));
     let out = read();
     DEFAULTS.with(|held| *held.borrow_mut() = before);
     out
@@ -679,14 +680,15 @@ pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Opti
     })
 }
 
-/// The workshop defaults are compiled in now, where a build set one.
-pub(crate) fn defaults_workshop() -> Option<std::sync::Arc<crate::grammar_run::Workshop>> {
+/// The build-time directory defaults are compiled in now, where a build set one.
+pub(crate) fn defaults_build_time_dir() -> Option<std::sync::Arc<crate::grammar_run::BuildTimeDir>>
+{
     DEFAULTS.with(|held| held.borrow().clone())
 }
 
 /// **What a build-time run may spend** ([ADR-321](../../../docs/specification/adr/adr-321.md)
 /// D7, D10): counted steps and bytes live at once. How a `comptime` raises
-/// either is not decided (D11); a workshop carries them, so that this
+/// either is not decided (D11); a build-time directory carries them, so that this
 /// compiler's own tests can ask for less.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
@@ -720,7 +722,7 @@ use nikaia_std::rt::exec::block_on;
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
 /// by Cargo from the same compiled dependencies as anything else in the
-/// workshop.
+/// build-time directory.
 #[derive(Debug)]
 pub(crate) struct Bundle {
     /// The library itself.
@@ -765,7 +767,7 @@ impl From<&Bundle> for ComptimeBundle {
 
 /// Build the bundle, or say why it could not be built
 /// (`comptime_bundle_bundle`): once per machine, under the user cache.
-pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
+pub(crate) fn bundle(_build_time_dir: &Path) -> Result<Bundle, String> {
     block_on(moved::comptime_bundle_bundle(&BundleHost))
         .map(Bundle::from)
         .map_err(|e| e.split().0.to_text())

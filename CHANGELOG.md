@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1446] — 2026-11-18
+
+**Builders' changes (#2153)**
+- A library check with no build-time directory computes `comptime` calls in the shared one (ADR-321 D19 as amended), and NK1127 names a build-time directory that can't be created or written; `Workshop` is now `BuildTimeDir`.
+- Bounds - a counter raised once per element of `Bytes::find_all` is proved without its overflow check, since the positions rise and the loop turns fewer times than the bytes are long (#432).
+
 ## [0.0.1445] — 2026-11-18
 
 **Bytes gets eq_ignore_ascii_case, an ASCII case-insensitive compare (#2156)**

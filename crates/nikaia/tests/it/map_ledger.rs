@@ -21,12 +21,13 @@ fn ledger_of(purpose: &str, source: &str) -> (std::path::PathBuf, nikaia::contra
     )
     .expect("a manifest");
     std::fs::write(dir.join("src/main.nika"), source).expect("a source");
-    let program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
-        let manifest = nikaia::manifest::Manifest::read(&dir.join("nikaia.toml"))?;
-        let dependencies = nikaia::project::packages_of(&manifest, &dir, false)?;
-        nikaia::modules::Program::read_with(&dir.join("src/main.nika"), &dependencies)
-    })
-    .expect("the package reads");
+    let program =
+        nikaia::comptime_run::defaults_compiled_in(Some(&common::build_time_dir()), || {
+            let manifest = nikaia::manifest::Manifest::read(&dir.join("nikaia.toml"))?;
+            let dependencies = nikaia::project::packages_of(&manifest, &dir, false)?;
+            nikaia::modules::Program::read_with(&dir.join("src/main.nika"), &dependencies)
+        })
+        .expect("the package reads");
     (dir, program.contracts)
 }
 

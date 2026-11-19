@@ -18,6 +18,7 @@ impl CheckWall {
             CheckWall::InsideAnother { outer } => format!("a grammar run inside the run of `{}`", outer),
             CheckWall::NowhereToBuild => String::from("no directory to compile the parser in"),
             CheckWall::DidNotBuild { detail } => format!("the parser did not build: {}", detail),
+            CheckWall::Unwritable { dir } => format!("the build-time directory {} can't be created or written", dir),
             CheckWall::Unreadable { detail } => format!("the parser's result could not be read: {}", detail),
         }
     }
@@ -38,9 +39,15 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
     let key = hash::sha256_hex(&bytes);
     let dir = nikaia_std::fs::path::join(&(at), std::path::Path::new(&(key)));
     let source = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src")))), std::path::Path::new(&("main.rs")));
-    grammar_run_write_if_changed(&source, &program, &host.unique_beside(&source)).await?;
+    match grammar_run_write_if_changed(&source, &program, &host.unique_beside(&source)).await {
+        Ok(_) => {},
+        Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"grammar_run_compile_and_run")); },
+    };
     let manifest_path = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml")));
-    grammar_run_write_if_changed(&manifest_path, &host.manifest(&key, &program), &host.unique_beside(&manifest_path)).await?;
+    match grammar_run_write_if_changed(&manifest_path, &host.manifest(&key, &program), &host.unique_beside(&manifest_path)).await {
+        Ok(_) => {},
+        Err(_error) => { return Err(nikaia_std::error::throwing(CheckWall::Unwritable { dir: nikaia_std::fs::path::display(&(at)) }, &"grammar_run_compile_and_run")); },
+    };
     let target = host.shared_target();
     let triple = host.build_target();
     let cargo = nikaia_std::index::or(env::var("CARGO"), || "cargo".into());
@@ -147,8 +154,8 @@ pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &colle
 }
 
 pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple10304| {
-        let (name, entry) = __nikaia_tuple10304;
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple10676| {
+        let (name, entry) = __nikaia_tuple10676;
         grammar_run_constant(name, &entry.constant)
     }).collect() };
     for item in program.items.iter() {

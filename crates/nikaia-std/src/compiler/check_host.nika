@@ -81,7 +81,7 @@ pub trait CheckHost {
     fn evaluate(ref self, value: ref Expr, held: ref collections::BTreeMap[String, BuildValue]) -> CheckBuilt sync
     /// Compile an initialiser with the program's functions and run it.
     fn compute_comptime(ref self, value: ref Expr, found: ref Ty, bound: ref String, known: ref collections::BTreeMap[String, BuildValue], typed: ref collections::BTreeMap[String, Ty], steps: u64?, bytes: u64?) -> CheckComputed sync
-    /// Whether a grammar can be run anywhere (a workshop to build it in).
+    /// Whether a grammar can be run anywhere (a build-time directory to build it in).
     fn somewhere(ref self) -> bool sync
     /// The text a literal in source stands for.
     fn decoded(ref self, literal: ref String) -> String? sync
@@ -603,7 +603,7 @@ impl CheckState {
             here = 0
         }
         // **A grammar run is its own** (ADR-177): its parser is compiled and
-        // run by the grammar's workshop, and the text it reads is folded.
+        // run by the grammar's build-time directory, and the text it reads is folded.
         let mut grammars: collections::BTreeSet[String] = collections::BTreeSet()
         let mut enums: collections::BTreeSet[String] = collections::BTreeSet()
         if world.here_at < 0 {

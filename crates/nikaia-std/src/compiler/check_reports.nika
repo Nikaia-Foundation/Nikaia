@@ -23,6 +23,9 @@ pub enum CheckWall {
     NowhereToBuild,
     /// The generated parser did not compile.
     DidNotBuild { detail: String },
+    /// The build-time directory could not be created or written
+    /// (ADR-321 D19 as amended, #2153).
+    Unwritable { dir: String },
     /// The result could not be read back.
     Unreadable { detail: String },
 }
@@ -231,6 +234,11 @@ impl CheckState {
                 message = f"`{entry}` has nowhere to compile its parser."
                 note = "Running a grammar at build time compiles its parser, which needs a directory, and this build has none."
                 way_out = "Build with `nikaia build` or `nikaia lower`, which both have one."
+            }
+            CheckWall::Unwritable { dir } => {
+                message = f"`{entry}` has nowhere to compile its parser."
+                note = f"Running a grammar at build time compiles its parser in the build-time directory `{dir}`, which can't be created or written."
+                way_out = "Make that directory one this build can write."
             }
             CheckWall::DidNotBuild { detail } => {
                 message = f"The parser generated for `{entry}` didn't compile."

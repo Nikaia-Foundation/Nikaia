@@ -682,6 +682,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
         CheckWall::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
         CheckWall::NoCrossedForm { ref ty, ref because } => CheckComputed::NotHere(format!("`{}` has no form that crosses from build time: {}", ty, because)),
         CheckWall::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
+        CheckWall::Unwritable { ref dir } => CheckComputed::NotHere(format!("The build-time directory `{}` can't be created or written, and a value that runs code is computed only by compiling it and running it", dir)),
         CheckWall::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
     }
 }

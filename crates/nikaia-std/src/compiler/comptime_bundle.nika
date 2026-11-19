@@ -18,7 +18,7 @@ use std::time
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
 /// by Cargo from the same compiled dependencies as anything else in the
-/// workshop.
+/// build-time directory.
 pub struct ComptimeBundle {
     /// The library itself.
     pub dylib: fs::Path,
@@ -189,7 +189,7 @@ fn comptime_bundle_digest(text: String) -> String {
 /// **Once per machine, not per project**: what it is depends on its manifest
 /// (where `std` comes from), its one file and the toolchain, never on the
 /// program - so it lives under the user cache, keyed by the first two, as the
-/// compiled `std` of ADR-002 D4 does. Under each project's own workshop it was
+/// compiled `std` of ADR-002 D4 does. Under each project's own build-time directory it was
 /// built again for every new project, some forty crates (half a minute) before
 /// the first `comptime` could run. Cargo's lock on the target directory is what
 /// makes two builds at once wait for one another rather than collide.
@@ -495,13 +495,13 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
         detail => throw CheckWall::DidNotBuild { detail: detail },
     }
     let source = dir.join("main.rs")
-    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     // **Each build compiles and runs its own binary, in a directory of its
     // own**, moved into place after: `rustc` names its object files after the
     // crate, so two builds of the same program side by side wrote, linked and
     // deleted each other's.
     let scratch = host.unique_beside(dir.join("build"))
-    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::DidNotBuild { detail: f"{scratch.display()}: {error}" } }
+    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::Unwritable { dir: at.display() } }
     let binary = scratch.join("run")
     let mut args: Vec[String] = ["--edition=2024", "--crate-name", "comptime", "--crate-type", "bin", "-C", "opt-level=0", "-C", "overflow-checks=on", "-C", "debug-assertions=off", "-C", "prefer-dynamic", "-A", "warnings", "--extern", f"nikaia_bundle={bundle.dylib.display()}"]
     for (crate_name, rlib) in bundle.rlibs {
@@ -541,7 +541,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     comptime_bundle_tidy(binary, dir, scratch)
     if ran.success {
         let answer = ran.stdout.trim().clone()
-        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::Unwritable { dir: at.display() } }
         return answer
     }
     let mut said = ran.stderr.trim().clone()
@@ -554,7 +554,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     // code stops the same way. A run that died without a word is not, and is
     // tried again next time.
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
-        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     }
     throw CheckWall::Refused { detail: said }
 }
@@ -567,7 +567,7 @@ fn comptime_bundle_tidy(binary: ref fs::Path, dir: ref fs::Path, scratch: ref fs
 }
 
 /// Written only when it changed, so that Cargo's freshness keeps working.
-/// **Written whole or not at all**: builds side by side share the workshop,
+/// **Written whole or not at all**: builds side by side share the build-time directory,
 /// and one that read a file another was still writing compiled half a program
 /// or read half an answer; so the text goes to `partial` first (a path no
 /// other build writes, `ComptimeBundleHost::unique_beside`) and is moved into

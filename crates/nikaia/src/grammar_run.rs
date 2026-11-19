@@ -62,10 +62,11 @@ pub struct Ask<'a> {
 /// Where a build compiles the parsers it runs, and the guard against nesting.
 ///
 /// **One per build**, carried with the rest of what a build may do while it
-/// builds. A build with no place to put a sub-project is one no person runs:
-/// every real build has a `target/`, and a bare `check` in a test has none.
+/// builds. A check handed none builds in the shared one, `user_cache_dir()/
+/// build-time` ([ADR-321](../../../docs/specification/adr/adr-321.md) D19);
+/// [`BuildTimeDir::none`] is for a caller that asks for no place.
 #[derive(Debug, Default)]
-pub struct Workshop {
+pub struct BuildTimeDir {
     at: Option<PathBuf>,
     /// The grammars being run, innermost last — a ring rather than a depth,
     /// because the message names what it found.
@@ -78,10 +79,10 @@ pub struct Workshop {
     bounds: crate::comptime_run::Bounds,
 }
 
-impl Workshop {
+impl BuildTimeDir {
     /// A build with nowhere to compile a parser.
-    pub fn none() -> Workshop {
-        Workshop::default()
+    pub fn none() -> BuildTimeDir {
+        BuildTimeDir::default()
     }
 
     /// Whether there is anywhere to compile a parser.
@@ -90,11 +91,11 @@ impl Workshop {
     }
 
     /// A build that compiles its parsers under `at`.
-    pub fn at(at: impl Into<PathBuf>) -> Workshop {
+    pub fn at(at: impl Into<PathBuf>) -> BuildTimeDir {
         // **Absolute**, because Cargo and `rustc` are started elsewhere
         // (ADR-325 D1).
         let at = at.into();
-        Workshop {
+        BuildTimeDir {
             at: Some(std::path::absolute(&at).unwrap_or(at)),
             running: std::sync::Mutex::new(Vec::new()),
             bundle: std::sync::OnceLock::new(),
@@ -103,11 +104,11 @@ impl Workshop {
     }
 
     /// The same, with other bounds on what a `comptime`'s run may spend.
-    pub fn bounded(self, bounds: crate::comptime_run::Bounds) -> Workshop {
-        Workshop { bounds, ..self }
+    pub fn bounded(self, bounds: crate::comptime_run::Bounds) -> BuildTimeDir {
+        BuildTimeDir { bounds, ..self }
     }
 
-    /// Where this workshop builds, where it has a place at all.
+    /// Where this build-time directory builds, where it has a place at all.
     pub fn place(&self) -> Option<&Path> {
         self.at.as_deref()
     }
@@ -148,7 +149,7 @@ impl Workshop {
         // `comptime`, so what reaches here is one inside a body.
         {
             let mut running = self.running.lock().map_err(|_| Wall::DidNotBuild {
-                detail: "the workshop's lock was poisoned".to_text(),
+                detail: "the build-time directory's lock was poisoned".to_text(),
             })?;
             if let Some(outer) = running.first() {
                 return Err(Wall::InsideAnother {

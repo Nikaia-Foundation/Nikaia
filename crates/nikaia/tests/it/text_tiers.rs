@@ -79,7 +79,7 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
 }
 
 /// The errors of an example's source checked as the build checks it, with
-/// a workshop: `listen`'s option defaults `= 10.seconds()` are computed by
+/// a build-time directory: `listen`'s option defaults `= 10.seconds()` are computed by
 /// compiling them, and a check without one refuses them with NK1127 (ADR-321 D19).
 fn example_findings(path: &std::path::Path, source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
