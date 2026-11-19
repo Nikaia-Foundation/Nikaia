@@ -1,0 +1,8 @@
+== check --asserts --unproved-claims=warn two.nika
+asserts in two.nika: 3 - not proved 2 (refused 0, checked at run time 2, checked by a test 0); checked where the words arrive 0; proved 1 (proved 1, preconditions proved at every call 0); derived from the callers 1
+  two.nika:9  assert(within(xs, n))  checked at run time: nothing before it shows it
+  two.nika:11  assert(within(xs, m))  checked at run time: nothing before it shows it
+  two.nika:10  assert(within(xs, n))  proved: known from `assert(within(xs, n))`
+  two.nika  derived  within: 0 <= n, proved at the calls on lines 9, 10, 11
+Checked two.nika
+exit 0

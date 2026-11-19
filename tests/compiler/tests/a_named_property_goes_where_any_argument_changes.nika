@@ -1,0 +1,45 @@
+// #2175 (ADR-381 D1, D2): a property of several arguments stops being
+// known where any one of them may change: after `n = 2`, after `xs.push(0)`,
+// after `let n` binds it again, after a loop that changes `n`, and in method
+// form after `j = 0`, each next `assert` is open again (checked at run time),
+// where the same `assert` before the change is proved.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn ran(tmp: String, file: String, text: String, args: Vec[String]) throws {
+	fs::write(f"{tmp}/{file}", fs::Root::Anywhere, text)
+	println(f"== {args.join(" ")}")
+	let out = process::run(toolchain(), args; dir: tmp)
+	println(shown(tmp, out.stdout))
+	println(f"exit {out.code}")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	ran(tmp, "change.nika", "fn within(xs: ref Vec[i64], n: i64) -> bool sync {\n\treturn n < xs.len()\n}\n\nstruct Bag {\n\titems: Vec[i64],\n}\n\nimpl Bag {\n\tfn holds(self, n: i64) -> bool sync {\n\t\treturn n < self.items.len()\n\t}\n}\n\nfn main() throws {\n\tlet mut xs = [1, 2, 3]\n\tlet mut n = 1\n\tassert(within(xs, n))\n\tassert(within(xs, n))\n\tn = 2\n\tassert(within(xs, n))\n\txs.push(0)\n\tassert(within(xs, n))\n\tlet n = 0\n\tassert(within(xs, n))\n\tlet mut i = 0\n\tlet mut k = 0\n\tassert(within(xs, k))\n\twhile i < 2 {\n\t\tk = i\n\t\ti = i + 1\n\t}\n\tassert(within(xs, k))\n\tlet b = Bag { items: [1, 2, 3] }\n\tlet mut j = 1\n\tassert(b.holds(j))\n\tassert(b.holds(j))\n\tj = 0\n\tassert(b.holds(j))\n\tprintln(n)\n}\n", ["check", "--asserts", "--unproved-claims=warn", "change.nika"])
+	process::run("rm", ["-rf", tmp])
+}

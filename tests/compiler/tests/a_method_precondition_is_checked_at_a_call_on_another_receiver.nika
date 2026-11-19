@@ -1,0 +1,20 @@
+/// A program method's precondition is held at a call on any receiver, not
+/// only `self` (ADR-269 D20, #2225): `b.take(n)` is called through `Box`'s
+/// ledger entry the way a free function is, and nothing before it shows
+/// `n >= 0`.
+use std::text
+
+struct Box { k: i64 }
+
+impl Box {
+	fn take(ref self, n: i64) -> i64 sync {
+		assert(n >= 0)
+		return self.k + n
+	}
+}
+
+fn main() throws {
+	let b = Box { k: 1 }
+	let n = text::parse_i64("-3") ?? 0
+	println(b.take(n).to_string())
+}

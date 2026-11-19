@@ -1,0 +1,34 @@
+== check --asserts guards.nika
+asserts in guards.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 4 (proved 4, preconditions proved at every call 0)
+  guards.nika:12  assert(is_sorted(xs))  proved: known from the guard `if !is_sorted(xs)`
+  guards.nika:17  assert(is_sorted(xs))  proved: known from the guard `if !is_sorted(xs)`
+  guards.nika:26  assert(is_sorted(xs))  proved: known from the guard `if is_sorted(xs)`
+  guards.nika:32  assert(is_sorted(xs))  proved: known from the guard `if !is_sorted(xs)`
+Checked guards.nika
+exit 0
+== check --asserts --unproved-claims=warn open.nika
+asserts in open.nika: 2 - not proved 2 (refused 0, checked at run time 2, checked by a test 0); checked where the words arrive 0; proved 0 (proved 0, preconditions proved at every call 0)
+  open.nika:12  assert(is_sorted(xs))  checked at run time: nothing before it shows it
+  open.nika:19  assert(is_sorted(w))  checked at run time: nothing before it shows it
+Checked open.nika
+warning[NK1300]: `assert(is_sorted(xs))` is not proved: nothing before it shows it.
+   --> open.nika:12:2
+    |
+ 12 | 	assert(is_sorted(xs))
+    |  ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+warning[NK1300]: `assert(is_sorted(w))` is not proved: nothing before it shows it.
+   --> open.nika:19:2
+    |
+ 19 | 	assert(is_sorted(w))
+    |  ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+exit 0

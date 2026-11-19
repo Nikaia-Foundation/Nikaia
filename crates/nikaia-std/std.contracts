@@ -4452,12 +4452,15 @@ signature = "[T](mut self: ref Vec[T], items: ?)"
 # It is **stable**: elements the order does not separate keep the order they
 # had, which is what lets two passes express a compound order.
 #
-# The elements need an order (`NK1164` otherwise, ADR-341 D4).
+# The elements need an order (`NK1164` otherwise, ADR-341 D4). It **ensures
+# the list sorted** (ADR-381 D5): `xs.is_sorted()` is known after it, until
+# the list may change, so a search by halving right after owes nothing.
 [fn."Vec::sort"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["self.is_sorted()"]
 signature = "[T: Ord](mut self: ref Vec[T])"
 
 # Keep the elements the function says yes to and drop the rest, in place.
@@ -4746,12 +4749,57 @@ locks = true
 # Put the elements in the order of what the function returns, in place.
 #
 # It is **stable**, so a sort by one key after a sort by another leaves the
-# first as the tie-breaker.
+# first as the tie-breaker. It **ensures the list sorted by that function**
+# (ADR-381 D5): `xs.is_sorted_by_key(f)` is known after it for the same named
+# `f`, until the list may change.
 [fn."Vec::sort_by_key"]
 pub = true
 panics = false
 sync = "sync(f)"
+ensures = ["self.is_sorted_by_key(f)"]
 signature = "[T, K](mut self: ref Vec[T], f: fn(ref T) -> K)"
+
+# Whether every element is at most the next in their natural order (Part I
+# 4.5). It holds after `sort()`, and a guard on it makes it known afterwards
+# until the list changes (ADR-381 D2).
+[fn."Vec::is_sorted"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T: Ord](self: ref Vec[T]) -> bool"
+
+# The position of an element equal to `value`, found by halving, or `null`
+# where none is (Part I 4.5). It **requires the list sorted** (ADR-381 D5): a
+# call where the order is not shown is refused (`NK1300`).
+[fn."Vec::binary_search"]
+pub = true
+panics = false
+sync = true
+touches = []
+requires = ["self.is_sorted()"]
+signature = "[T: Ord](self: ref Vec[T], value: ref T) -> i64?"
+
+# Whether every element's key, what the function returns for it, is at most
+# the next one's (Part I 4.5): `is_sorted` in the order `sort_by_key(f)`
+# leaves.
+[fn."Vec::is_sorted_by_key"]
+pub = true
+panics = false
+sync = "sync(f)"
+touches = []
+signature = "[T, K: Ord](self: ref Vec[T], f: fn(ref T) -> K) -> bool"
+
+# The position of an element whose key is `key`, found by halving, or `null`
+# where none is (Part I 4.5). It **requires the list sorted by the same
+# function** (ADR-381 D5), as `binary_search` requires `is_sorted()`.
+[fn."Vec::binary_search_by_key"]
+pub = true
+panics = false
+sync = "sync(f)"
+touches = []
+requires = ["self.is_sorted_by_key(f)"]
+signature = "[T, K: Ord](self: ref Vec[T], key: ref K, f: fn(ref T) -> K) -> i64?"
 
 # Put the elements in the order the comparator says, in place: `f(a, b)` is
 # `Less` where `a` goes before `b`, so `fn(a, b) { b.cmp(a) }` sorts

@@ -1,0 +1,25 @@
+// **A guard on a named property in method form keeps it known** (ADR-381
+// D1, D2): `if !b.full() { return }` hands `b` only to a property, which
+// changes nothing, so the `assert` after it is proved, as after the guard
+// `if !full(b) { return }` - the walk took the method call for a change of
+// `b` and dropped what the guard made known.
+
+struct Bag {
+    items: Vec[i64],
+}
+
+impl Bag {
+    fn full(self) -> bool sync {
+        return self.items.len() > 2
+    }
+}
+
+fn main() throws {
+    let b = Bag { items: [1, 2, 3] }
+    if !b.full() { return }
+    assert(b.full())
+    let xs = [1, 2]
+    return if !xs.is_sorted()
+    assert(xs.is_sorted())
+    println("kept")
+}

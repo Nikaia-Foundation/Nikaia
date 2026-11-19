@@ -1,0 +1,15 @@
+== check --asserts --unproved-claims=warn change.nika
+asserts in change.nika: 10 - not proved 8 (refused 0, checked at run time 8, checked by a test 0); checked where the words arrive 0; proved 2 (proved 2, preconditions proved at every call 0); derived from the callers 1
+  change.nika:18  assert(within(xs, n))  checked at run time: nothing before it shows it
+  change.nika:21  assert(within(xs, n))  checked at run time: nothing before it shows it
+  change.nika:23  assert(within(xs, n))  checked at run time: nothing before it shows it
+  change.nika:25  assert(within(xs, n))  checked at run time: nothing before it shows it
+  change.nika:28  assert(within(xs, k))  checked at run time: nothing before it shows it
+  change.nika:33  assert(within(xs, k))  checked at run time: nothing before it shows it
+  change.nika:36  assert(b.holds(j))  checked at run time: nothing before it shows it
+  change.nika:39  assert(b.holds(j))  checked at run time: nothing before it shows it
+  change.nika:19  assert(within(xs, n))  proved: known from `assert(within(xs, n))`
+  change.nika:37  assert(b.holds(j))  proved: known from `assert(b.holds(j))`
+  change.nika  derived  holds: 0 <= n, proved at the calls on lines 36, 37, 39
+Checked change.nika
+exit 0
