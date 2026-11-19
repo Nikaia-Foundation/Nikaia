@@ -19,10 +19,11 @@ fn is_a_parameter(name: ref String, params: ref collections::BTreeSet[String]) -
     if params.contains(name) {
         return true
     }
-    // **A named property of a parameter** (ADR-381 D3): `v.prop@p()`.
+    // **A named property of a parameter** (ADR-381 D3): `v.prop@p()`; one
+    // with more arguments or in method form is not carried.
     let base = property_base(name)
     if base != null {
-        return params.contains(base ?? "")
+        return property_carried(name) && params.contains(base ?? "")
     }
     if !name.ends_with(".len()") {
         return false

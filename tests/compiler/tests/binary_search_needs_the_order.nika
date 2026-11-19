@@ -1,0 +1,19 @@
+// **A search by halving requires the list's order** (Part I 4.5, ADR-381
+// D5): where nothing shows it, by itself or by the key, the call is refused
+// (#2158).
+
+struct Entry {
+    id: i64,
+    name: String,
+}
+
+fn by_id(e: ref Entry) -> i64 sync {
+    return e.id
+}
+
+fn main() throws {
+    let xs = [3, 1, 2]
+    println(xs.binary_search(2)?.to_string() ?? "none")
+    let es = [Entry { id: 4, name: "b" }, Entry { id: 1, name: "a" }]
+    println(es.binary_search_by_key(1, by_id)?.to_string() ?? "none")
+}

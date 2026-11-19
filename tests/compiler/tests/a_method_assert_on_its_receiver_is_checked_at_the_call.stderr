@@ -1,0 +1,9 @@
+error[NK1207]: This call breaks `Box::below`'s precondition `i < self.k` every time it is reached.
+   --> tests/a_method_assert_on_its_receiver_is_checked_at_the_call.nika:15:2
+    |
+ 15 | 	println(b.below(7).to_string())
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `i` is 7, `self.k` is 5.
+    = help: Pass `Box::below` arguments for which `i < self.k` holds, or check them with a guard before the call.
+1 claim shown false

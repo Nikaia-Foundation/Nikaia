@@ -186,16 +186,30 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            if args.len() != 1 || !config.is_empty() { return None; }
+            if args.is_empty() || !config.is_empty() { return None; }
             let callee = match func {
                 Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
                 _ => return None,
             };
-            let on = match path_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Some(format!("{}.{}{}()", on, property_mark(), callee))
+            let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let rest = match property_paths(args, 1, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}.{}{}({})", on, property_mark(), callee, rest))
+        },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !config.is_empty() { return None; }
+            let on = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let rest = match property_paths(args, 0, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}.{}.{}({})", on, property_mark(), words.resolve(method), rest))
         },
         _ => None,
     }
+}
+
+pub(crate) fn property_paths(args: &[Expr], from: i64, words: &winnow_grammar::InternerContext) -> Option<String> {
+    let mut paths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (i, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if i >= from { paths.push(match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => return None }); } }
+    Some(nikaia_std::block::Text::from(paths.join(", ")))
 }
 
 pub(crate) fn property_mark() -> String { String::from("prop@") }
@@ -205,11 +219,48 @@ pub(crate) fn property_base(name: &str) -> Option<String> {
     Some(nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string()))
 }
 
+pub(crate) fn property_called(name: &str) -> Option<String> {
+    let on = match property_base(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(nikaia_std::block::Text::from(match name.strip_prefix(&*format!("{}.{}", on, property_mark())) { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string()))
+}
+
+pub(crate) fn property_args(name: &str) -> Vec<String> {
+    let on = match property_base(name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let mut paths: Vec<String> = vec![nikaia_std::block::Text::from(on.to_string())];
+    let called = match property_called(name) { Some(__nikaia_value) => __nikaia_value, None => return paths };
+    let inner = match property_inner(&called) { Some(__nikaia_value) => __nikaia_value, None => return paths };
+    if inner.is_empty() { return paths; }
+    for part in inner.split(", ") { paths.push(nikaia_std::block::Text::from(part.to_string())); }
+    paths
+}
+
+pub(crate) fn property_reads(name: &str, path: &str) -> bool {
+    let all = property_args(name);
+    for (i, arg) in all.iter().enumerate().map(|(at, item)| (at as i64, item)) { if i > 0 && (AsRef::<str>::as_ref(&(arg)) == AsRef::<str>::as_ref(&(path)) || arg.starts_with(&*format!("{}.", path))) { return true; } }
+    false
+}
+
+pub(crate) fn property_carried(name: &str) -> bool {
+    let called = match property_called(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !called.starts_with('.') && called.ends_with("()")
+}
+
+pub(crate) fn property_inner(called: &str) -> Option<String> {
+    let open = match nikaia_std::search::find(&called, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let tail = nikaia_std::index::get(&called, nikaia_std::index::at(open..));
+    let inner = match tail.strip_prefix('(') { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(nikaia_std::block::Text::from(match inner.strip_suffix(')') { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string()))
+}
+
 pub(crate) fn property_shown(name: &str) -> String {
     let on = match property_base(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
-    let called = match name.strip_prefix(&*format!("{}.{}", on, property_mark())) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
-    let callee = nikaia_std::index::or(called.strip_suffix("()"), || std::convert::AsRef::<str>::as_ref(called));
-    format!("{}({})", callee, on)
+    let called = match property_called(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    if called.starts_with('.') { return format!("{}{}", on, called); }
+    let open = match nikaia_std::search::find(&called, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    let callee = nikaia_std::block::Text::from(nikaia_std::index::get(&called, nikaia_std::index::at(0..open)).to_string());
+    let inner = nikaia_std::index::or(property_inner(&called), || "".into());
+    if inner.is_empty() { return format!("{}({})", callee, on); }
+    format!("{}({}, {})", callee, on, inner)
 }
 
 pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mut dyn FnMut(&str) -> bool, pinned: &mut dyn FnMut(&str) -> Option<i64>, out: &mut Vec<logic::SolverTerm>) -> Option<i64> {
@@ -232,7 +283,13 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &mu
         },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if !args.is_empty() || words.resolve(method) != "is_empty" { return None; }
+            if !args.is_empty() || words.resolve(method) != "is_empty" {
+                let name = match property_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if !var(&name) { return None; }
+                let named = built(logic::SolverTerm::Var(name), out);
+                let one = built(logic::SolverTerm::Int(1), out);
+                return Some(built(logic::SolverTerm::Eq(named, one), out));
+            }
             let length = match length_path(receiver, words, &mut &mut *var) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let counted = built(logic::SolverTerm::Var(length), out);
             let zero = built(logic::SolverTerm::Int(0), out);

@@ -274,16 +274,18 @@ fn call_result_name(call: ref Expr) -> String {
 }
 
 /// **The name a named property has in the proof** (ADR-381 D1): `p(xs)`, a
-/// call by name of one argument that is a path of fields, is
-/// `xs.prop@p()`. Keyed under its argument's path, it goes where the path
-/// goes (ADR-306 D17): bound again, the argument takes it along
+/// call by name whose arguments are paths of fields, is `xs.prop@p()`, and
+/// `p(xs, n)` is `xs.prop@p(n)`; the method form `xs.m(n)` is
+/// `xs.prop@.m(n)`. Keyed under its first argument's path, it goes where
+/// the path goes (ADR-306 D17): bound again, the argument takes it along
 /// (`ProverScope::rebind`), and a call hands it on as it hands on
-/// `xs.len()` (`given_paths`). Whether the callee is one (a `bool` that
-/// changes nothing) the walk decides where it makes the name.
+/// `xs.len()` (`given_paths`); a change to any other argument drops it
+/// (`property_args`). Whether the callee is one (a `bool` that changes
+/// nothing) the walk decides where it makes the name.
 fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
         Expr::Call { func, args, config, .. } => {
-            if args.len() != 1 || !config.is_empty() {
+            if args.is_empty() || !config.is_empty() {
                 return null
             }
             let callee = match func {
@@ -291,10 +293,32 @@ fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
                 else => return null,
             }
             let on = path_of(args[0], words) ?? return null
-            f"{on}.{property_mark()}{callee}()"
+            let rest = property_paths(args, 1, words) ?? return null
+            f"{on}.{property_mark()}{callee}({rest})"
+        },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if !config.is_empty() {
+                return null
+            }
+            let on = path_of(receiver, words) ?? return null
+            let rest = property_paths(args, 0, words) ?? return null
+            f"{on}.{property_mark()}.{words.resolve(method)}({rest})"
         },
         else => null,
     }
+}
+
+/// The paths of `args` from the one at `from`, as a property's name lists
+/// them after its first (ADR-381 D1): nothing where one is not a path of
+/// fields.
+fn property_paths(args: ref Vec[Expr], from: i64, words: ref winnow_grammar::InternerContext) -> String? {
+    let mut paths: Vec[String] = []
+    for (i, arg) in args.iter().enumerate() {
+        if i >= from {
+            paths.push(path_of(arg, words) ?? return null)
+        }
+    }
+    return paths.join(", ")
 }
 
 /// What a property's name holds after its argument's path (ADR-381 D1): a
@@ -310,13 +334,75 @@ fn property_base(name: ref String) -> String? {
     return name[0..<at].clone()
 }
 
+/// What follows a property's mark: `p()`, `p(n)`, `.m(n)`.
+fn property_called(name: ref String) -> String? {
+    let on = property_base(name) ?? return null
+    return (name.strip_prefix(f"{on}.{property_mark()}") ?? return null).clone()
+}
+
+/// **Every path a property reads** (ADR-381 D1): its first argument's, or
+/// its receiver's, and each other argument's, so a change to any one drops
+/// it. Nothing where `name` is no property.
+fn property_args(name: ref String) -> Vec[String] {
+    let on = property_base(name) ?? return []
+    let mut paths: Vec[String] = [on.clone()]
+    let called = property_called(name) ?? return paths
+    let inner = property_inner(called) ?? return paths
+    if inner.is_empty() {
+        return paths
+    }
+    for part in inner.split(", ") {
+        paths.push(part.clone())
+    }
+    return paths
+}
+
+/// Whether the property `name` reads `path` or a part of it among its
+/// other arguments: `n` of `xs.prop@p(n)`, `t` of `xs.prop@p(t.k)`.
+fn property_reads(name: ref String, path: ref String) -> bool {
+    let all = property_args(name)
+    for (i, arg) in all.iter().enumerate() {
+        if i > 0 && (arg == path || arg.starts_with(f"{path}.")) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **Whether a property goes to a caller** (ADR-381 D3): one call by name
+/// of one argument, whose parameter the call's argument takes the place of.
+/// One with more arguments, or in method form, is known where it stands,
+/// not carried as a precondition or a postcondition.
+fn property_carried(name: ref String) -> bool {
+    let called = property_called(name) ?? return false
+    return !called.starts_with(".") && called.ends_with("()")
+}
+
+/// The other arguments' paths of what follows a property's mark: `n` of
+/// `p(n)`, empty of `p()`.
+fn property_inner(called: ref String) -> String? {
+    let open = called.find("(") ?? return null
+    let tail = called[open..<called.len()]
+    let inner = tail.strip_prefix("(") ?? return null
+    return (inner.strip_suffix(")") ?? return null).clone()
+}
+
 /// **A name as the program writes it** (ADR-381 D1): a property's
-/// `xs.prop@p()` is the call `p(xs)`; any other name is itself.
+/// `xs.prop@p(n)` is the call `p(xs, n)`, `xs.prop@.m(n)` is `xs.m(n)`; any
+/// other name is itself.
 fn property_shown(name: ref String) -> String {
     let on = property_base(name) ?? return name.clone()
-    let called = name.strip_prefix(f"{on}.{property_mark()}") ?? return name.clone()
-    let callee = called.strip_suffix("()") ?? called
-    return f"{callee}({on})"
+    let called = property_called(name) ?? return name.clone()
+    if called.starts_with(".") {
+        return f"{on}{called}"
+    }
+    let open = called.find("(") ?? return name.clone()
+    let callee = called[0..<open].clone()
+    let inner = property_inner(called) ?? ""
+    if inner.is_empty() {
+        return f"{callee}({on})"
+    }
+    return f"{callee}({on}, {inner})"
 }
 
 /// The claim `expr` as a formula over [`lin_term`]s, where it is one this
@@ -347,10 +433,17 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
             built(logic::SolverTerm::Eq(named, one), out)
         },
         // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
-        // a name of its own as `lin_term` reads it.
+        // a name of its own as `lin_term` reads it; any other method is a
+        // named property where the walk made it one (ADR-381 D1).
         Expr::MethodCall { receiver, method, args, .. } => {
             if !args.is_empty() || words.resolve(method) != "is_empty" {
-                return null
+                let name = property_name(expr, words) ?? return null
+                if !var(name) {
+                    return null
+                }
+                let named = built(logic::SolverTerm::Var(name), out)
+                let one = built(logic::SolverTerm::Int(1), out)
+                return built(logic::SolverTerm::Eq(named, one), out)
             }
             let length = length_path(receiver, words, var) ?? return null
             let counted = built(logic::SolverTerm::Var(length), out)
