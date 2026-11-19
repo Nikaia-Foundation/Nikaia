@@ -88,6 +88,58 @@ fn says_trusted(names: ref winnow_grammar::InternerContext, config: ref Vec[Conf
     return false
 }
 
+/// **The meta-variables a CGI host fills** (ADR-397 D2, RFC 3875 4.1):
+/// a stranger's request chose their bytes, as it chose every `HTTP_` name's.
+fn host_names() -> Vec[String] {
+    return ["AUTH_TYPE", "CONTENT_LENGTH", "CONTENT_TYPE", "GATEWAY_INTERFACE", "PATH_INFO", "PATH_TRANSLATED", "QUERY_STRING", "REMOTE_ADDR", "REMOTE_HOST", "REMOTE_IDENT", "REMOTE_USER", "REQUEST_METHOD", "SCRIPT_NAME", "SERVER_NAME", "SERVER_PORT", "SERVER_PROTOCOL", "SERVER_SOFTWARE"]
+}
+
+/// **Whether a host may fill a variable this argument reaches** (ADR-397
+/// D2): for `"name"`, the name starts with `HTTP_` or is a meta-variable;
+/// for `"prefix"`, a name the list holds can start with it (`""`, `"H"`,
+/// `"HTTP_X"`, `"REMOTE"`).
+fn reaches_a_host_name(by: ref String, written: ref String) -> bool {
+    if written.starts_with("HTTP_") {
+        return true
+    }
+    for name in host_names() {
+        if by == "prefix" && name.starts_with(written) || name == written {
+            return true
+        }
+    }
+    return by == "prefix" && "HTTP_".starts_with(written)
+}
+
+/// **Whether a read of the environment hands back the operator's text**
+/// (ADR-397 D1, D2): the source decides it by its first argument
+/// (`provenance_by`), `first` is that argument where it is a literal, and
+/// no name a CGI host fills is reached. A name not known while building
+/// is the stranger's; so is every name where the build's environment is
+/// `"untrusted"`, which leaves `provenance_by` empty (D4).
+pub fn read_by_operator(contract: ref FnContract, first: String?) -> bool {
+    if contract.provenance_by.is_empty() {
+        return false
+    }
+    let written = first ?? return false
+    return !reaches_a_host_name(contract.provenance_by, written)
+}
+
+/// The first argument of a call, where it is a string literal with no hole.
+pub fn first_literal(args: ref Vec[Expr]) -> String? {
+    let first = args.get(0) ?? return null
+    return match first {
+        Expr::LitStr { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+/// Whether a call by name of `source` reads the operator's text (ADR-397
+/// D1, D2), as `read_by_operator` decides it.
+pub fn operator_read(library: ref Ledger, source: ref String, args: ref Vec[Expr]) -> bool {
+    let contract = library.functions[source] ?? return false
+    return read_by_operator(contract, first_literal(args))
+}
+
 /// **One call of a source** (ADR-365 D2): the function it stands in and
 /// the source, both as the ledger keys them, whether it is a method, and
 /// whether it wrote `trusted: true`. `at` is the first byte of the
@@ -1355,7 +1407,7 @@ fn tm_call_deps(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
     let contract = library.functions[name] ?? return tm_never()
     if contract.provenance != null {
         let provenance = contract.provenance ?? return tm_never()
-        if provenance == Provenance::Trusted || says_trusted(words, config) {
+        if provenance == Provenance::Trusted || says_trusted(words, config) || read_by_operator(contract, first_literal(args)) {
             return tm_nothing()
         }
         return tm_from(name)

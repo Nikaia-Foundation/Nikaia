@@ -125,11 +125,12 @@
 # "trusted" - it is "this is not a source", which is what almost every function
 # is. Every source read while the program runs is `untrusted`: standard input,
 # every file, a socket and another program's output (ADR-365 D1: a path or a
-# pipe does not say who wrote the bytes), the environment (ADR-397) and the
-# words the program was started with (ADR-399 D1: `xargs`, a glob, a server or
-# a caller with fewer rights chose them as often as the operator did). Each such source takes the option
-# `trusted: bool = false`; a call that writes `trusted: true` says the operator
-# chose them (ADR-365 D2). The option is the compiler's: the emitter does not
+# pipe does not say who wrote the bytes), and the words the program was
+# started with (ADR-399 D1: `xargs`, a glob, a server or a caller with fewer
+# rights chose them as often as the operator did). Each such source takes the
+# option `trusted: bool = false`; a call that writes `trusted: true` says the
+# operator chose them (ADR-365 D2). The environment is the operator's except a
+# CGI host's names, decided by `provenance_by` and no marker (ADR-397). The option is the compiler's: the emitter does not
 # hand it to the function below, which reads the same bytes either way.
 version = 3
 
@@ -2169,9 +2170,14 @@ signature = "(data: ref Vec[u8]) -> String"
 # which may set the variable. All are `sync`: a read of the process's own
 # memory, nothing to pause on.
 #
-# Whoever started the program chose its environment, and that need not be the
-# operator: a CGI host, a caller with fewer rights, a CI job. So the value is
-# **untrusted** unless the call says `trusted: true` (ADR-397 D1, D2).
+# **The environment is the operator's** (ADR-397 D1): whoever types the
+# command or writes the unit file chose it. Two exceptions, and the entries
+# say both fail closed: `provenance = "untrusted"` holds, and
+# `provenance_by` lets the compiler call a read the operator's by the name it
+# reads. A name a CGI host fills (`HTTP_*` and RFC 3875's meta-variables), or
+# a name not known while building, stays untrusted (D2); a build whose
+# `[build] environment` is `"untrusted"` drops `provenance_by`, so every read
+# is (D4). No call carries a marker: these sources take no `trusted:`.
 # `env::temp_dir` gives a path, and no provenance travels a path (ADR-010 D8).
 
 # The value of the environment variable `name`, null where unset, empty or not Unicode.
@@ -2180,7 +2186,8 @@ pub = true
 panics = false
 sync = true
 provenance = "untrusted"
-signature = "(name: ref String; trusted: bool = false) -> String?"
+provenance_by = "name"
+signature = "(name: ref String) -> String?"
 
 # The directory for temporary files, as the system names it.
 [fn."env::temp_dir"]
@@ -2213,15 +2220,17 @@ signature = "() -> fs::Path?"
 #
 # Nikaia (`src/runtime/env.nika`, #1601) over `env::pairs`, and written here
 # rather than inferred because a source's provenance is not inferred: the
-# values are **untrusted** unless the call says `trusted: true` (ADR-397 D1,
-# D2). The prefix is required, so a program asks for the variables it uses;
-# `env::vars("")` lists them all, and says so.
+# values are the operator's unless a name a CGI host fills can start with the
+# prefix (ADR-397 D1, D2): `env::vars("")`, `env::vars("H")` and
+# `env::vars("REMOTE")` are untrusted. The prefix is required, so a program
+# asks for the variables it uses; `env::vars("")` lists them all, and says so.
 [fn."env::vars"]
 pub = true
 panics = false
 sync = true
 provenance = "untrusted"
-signature = "(prefix: ref String; trusted: bool = false) -> Vec[(String, String)]"
+provenance_by = "prefix"
+signature = "(prefix: ref String) -> Vec[(String, String)]"
 
 # The operating system's list of the environment, raw: every name and value as
 # bytes, empty values and bytes that are not Unicode included (#1601). The one

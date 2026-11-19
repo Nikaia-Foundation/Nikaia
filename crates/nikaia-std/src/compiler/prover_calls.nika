@@ -173,7 +173,8 @@ fn thrower_named(call: ref Expr, words: ref winnow_grammar::InternerContext, una
 
 /// **Whether a value came from outside the program** (ADR-010 D2): it names
 /// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted
-/// without writing `trusted: true` (ADR-365 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
+/// without writing `trusted: true` (ADR-365 D2) and not as the operator's
+/// read of the environment (ADR-397 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
 /// expression, not into its blocks, the holes of its literals included.
 fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     match expr {
@@ -182,9 +183,11 @@ fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], word
                 return true
             }
         },
-        Expr::Call { func, config, .. } => {
+        Expr::Call { func, args, config, .. } => {
             let source = outside_source_named(func, words)
-            if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) {
+            // **A read of the environment the operator chose** (ADR-397 D1,
+            // D2) is no outside data, by the name it reads.
+            if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) && !operator_read(library, source ?? "", args) {
                 return true
             }
             // **A function of the package whose result comes from outside**

@@ -121,7 +121,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
-<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who chose a file, a variable of the environment or the words on the command line is something only the program knows. It says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who chose a file or the words on the command line is something only the program knows. It says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place. Who sets the environment is the deployment's to say, once, in the manifest.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
         <p>Everything read while the program runs is from outside: the command line, the environment, standard input, files, other programs and the network. A claim about such a value, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words taken as parameters of <code>main</code> are checked against its preconditions before the body runs.</p>
