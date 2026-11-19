@@ -1,0 +1,91 @@
+// The runtime file named by `NIKAIA_RUNTIME_CONFIG` (ADR-303 D5) is read
+// with its four keys, and each mistake in it is named by its line rather
+// than ignored: an unknown key (a build switch such as `user-parallelism` is
+// not an operating property, ADR-037 D5), zero I/O workers (ADR-303 D4), a
+// method that names no mechanism, a line that is not `key = value` and a
+// deadline that is not a duration. A bad file starts the program on its
+// default settings, exit 0. A valid file shows its `user-pool` in
+// `task::cores()` at `user-parallelism = yes` and its `cleanup-deadline` in
+// an expired drain (ADR-297 D6), exit 70. The keys are not counted: ADR-289
+// D24 adds `send-file` (#120). Each message is named once, from the first
+// stderr line that holds it, with the temp path cut off. Moved from the
+// `nikaia-std` unit tests `all_four_settings_are_read`,
+// `an_unknown_key_is_named_rather_than_ignored`, `there_is_no_fifth_setting`,
+// `zero_io_workers_is_refused_by_name`,
+// `a_method_that_names_no_mechanism_is_refused` and
+// `a_line_that_is_not_a_setting_is_refused_by_line_number` (#2211).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(err: String) -> String {
+	let nl = err.find("\n") ?? err.len()
+	let first = f"{err[0..<nl]}"
+	let rest = if nl < err.len() { f"{err[nl + "\n".len()..]}" } else { "" }
+	let at = first.find(": line ") ?? return "no message"
+	let next = rest.find("\n") ?? rest.len()
+	let defaults = f"{rest[0..<next]}" == "nikaia: the runtime is starting on its default settings"
+	return f"{first[at + ": ".len()..]}; defaults next: {defaults}"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(
+		f"{tmp}/cores.nika",
+		fs::Root::Anywhere,
+		"use std::task\n\nfn main() throws {\n\tprintln(f\"cores {task::cores()}\")\n}\n",
+	)
+	let bad = [
+		"io_workers = 2\n",
+		"ordering = 1\n",
+		"user-parallelism = \"yes\"\n",
+		"io-workers = 0\n",
+		"io-method = \"epoll\"\n",
+		"io-workers = 1\nnonsense\n",
+		"cleanup-deadline = \"soon\"\n",
+	]
+	for text in bad {
+		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, text)
+		let out = process::run(
+			toolchain(),
+			["run", "cores.nika"]; dir: tmp,
+			env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		)
+		println(f"{shown(out.stderr)}; exit {out.code}")
+	}
+	fs::write(
+		f"{tmp}/runtime.toml",
+		fs::Root::Anywhere,
+		"# the runtime, on this machine\nio-workers = 2\nuser-pool = 8\nio-method = \"blocking\"  # a comment\ncleanup-deadline = \"500ms\"\n",
+	)
+	let out = process::run(
+		toolchain(),
+		["run", "--user-parallelism", "yes", "cores.nika"]; dir: tmp,
+		env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+	)
+	println(f"valid: {shown(out.stderr)}; {out.stdout.trim()}; exit {out.code}")
+	process::run("mkfifo", ["-m", "600", f"{tmp}/fifo"])
+	fs::write(
+		f"{tmp}/drain.nika",
+		fs::Root::Anywhere,
+		"use std::fs\n\nfn main() throws {\n\tasync(detached) fn {\n\t\tlet bytes = fs::read(\"fifo\", fs::Root::Anywhere) catch { return }\n\t\tprintln(f\"read {bytes.len()}\")\n\t}\n\tprintln(\"main ends\")\n}\n",
+	)
+	let drained = process::run(
+		toolchain(),
+		["run", "drain.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+	)
+	let said = drained.stderr.contains("did not finish within the 0.5s cleanup deadline")
+	println(f"drain: {drained.stdout.trim()}; the 0.5s deadline is named: {said}; exit {drained.code}")
+	process::run("rm", ["-rf", tmp])
+}
