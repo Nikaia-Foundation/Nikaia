@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** November 19, 2026 (owner)
 **Answers:** how a decision record is named and changed, so that a topic is read in one document, a citation in an old commit message still finds the text it meant, and no two records on one topic are live side by side
-**Supersedes / Related:** the record it replaces, now in [`docs/history/adr/`](../../history/adr/README.md) (a number per topic counted records side by side, and a change was made in place); [`README.md`](README.md) (*Writing a new one*, *Reserved numbers*), [`TEMPLATE.md`](TEMPLATE.md), `scripts/check-adr-refs.py`, [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904) (the consolidation of the earlier records)
+**Supersedes / Related:** the record it replaces, now in [`docs/history/adr/`](../../history/adr/README.md) (a number per topic counted records side by side, and a change was made in place); [`README.md`](README.md) (*Writing a new one*, *Reserved numbers*), [`TEMPLATE.md`](TEMPLATE.md), `scripts/check-adr-refs.nika`, [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904) (the consolidation of the earlier records)
 
 ## 1. Question
 
@@ -59,7 +59,7 @@ others under **Supersedes / Related**. A new topic is taken when none of the
 existing ones fits; the index lists the topics in use.
 
 **Why.** One live record per topic is what makes "read the record" an answer.
-`check-adr-refs.py` refuses two live versions of one topic.
+`check-adr-refs.nika` refuses two live versions of one topic.
 
 ### D3 — A change in substance makes the next version; the previous one goes to the history.
 
@@ -97,14 +97,14 @@ The index's **Reserved numbers** table holds names of every scheme: a row
 `regex-v2` claims that name as a row `385` claimed that number. A row is
 deleted in the commit that adds the record.
 
-### D6 — `check-adr-refs.py` checks the schemes side by side, and moves to Nikaia with the rename tool.
+### D6 — `check-adr-refs.nika` checks the schemes side by side, and moved to Nikaia with the rename tool.
 
 It checks that every record has a valid name, one index row and a title that
 agrees; that a topic has at most one live `-v` record; that every `Dn` and `§`
 cited resolves; that no live file cites an archived record; and that every topic
-name cited names a record. It was kept in Python until `std::regex` existed; its
-run-time patterns are built now, and it moves to Nikaia together with the rename
-tool of #904, which needs the same patterns.
+name cited names a record. It was kept in Python until `std::regex` existed, and
+moved to Nikaia (`scripts/check-adr-refs.nika`, #2263) after the rename tool of
+#904, which uses the same patterns.
 
 ## 4. Consequences
 

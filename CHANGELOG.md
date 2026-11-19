@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1467] — 2026-11-19
+
+**pre-push and CI run the ADR citation check in Nikaia; check-adr-refs.py is deleted (#2263)**
+- The ADR citation check is written in Nikaia — `scripts/check-adr-refs.nika` replaces `check-adr-refs.py` in pre-push and CI, with the same checks, messages and exit code, and `--root DIR` to check another tree.
+
 ## [0.0.1466] — 2026-11-19
 
 **A tool moves ADR citations to their new record from a table of old and new decisions (scripts/adr-rename.nika) (#2262)**
