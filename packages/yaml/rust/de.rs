@@ -395,7 +395,7 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
     let docs = read.documents;
     let lines = Lines::new(input);
     let mut documents = Vec::new();
-    let mut anchors: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut anchors: BTreeMap<String, usize> = BTreeMap::new();
     for event in native::events(&docs) {
         let mark = lines.mark(event.start as usize);
         let converted = match event.kind {
@@ -418,14 +418,14 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
                     continue;
                 }
                 match event.kind {
-                    native::EventKind::Alias => match anchors.get(event.value) {
+                    native::EventKind::Alias => match anchors.get(event.value.as_str()) {
                         Some(id) => Event::Alias(*id),
                         None => {
                             document.error = Some(Arc::new(ErrorImpl::UnknownAnchor(mark)));
                             continue;
                         }
                     },
-                    native::EventKind::Scalar => Event::Scalar(scalar(&event)),
+                    native::EventKind::Scalar => Event::Scalar(scalar(&event, input)),
                     native::EventKind::SequenceStart => {
                         Event::SequenceStart(event.tag.as_deref().map(String::from))
                     }
@@ -440,9 +440,9 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
         let Some(document) = documents.last_mut() else {
             continue;
         };
-        if let Some(anchor) = event.anchor {
+        if let Some(anchor) = &event.anchor {
             let id = anchors.len();
-            anchors.insert(anchor, id);
+            anchors.insert(anchor.as_str().to_owned(), id);
             document.aliases.insert(id, document.events.len());
         }
         document.events.push((converted, mark));
@@ -465,23 +465,38 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
 }
 
 /// A scalar event: its text decoded, borrowed where the input holds it as
-/// it reads.
-fn scalar<'de>(event: &native::Event<'de, 'de>) -> Scalar<'de> {
+/// it reads. The event owns its text (ADR-grammar-2 D7, as amended
+/// 2026-11-08), so the scalar as written is borrowed from its span of the
+/// input, where that span reads as the event's text.
+fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
     let (style, literal) = match event.style {
         native::Style::Plain => (Style::Plain, false),
         native::Style::Single | native::Style::Double => (Style::Quoted, false),
         native::Style::Literal => (Style::Block, true),
         native::Style::Folded => (Style::Block, false),
     };
-    let raw: &'de str = event.value;
+    let written = event.value.as_str();
+    let Some(raw) = written_in(input, event, written) else {
+        let value = match &event.text {
+            Some(text) => text.as_str().to_owned(),
+            None if style == Style::Block => written.trim().to_owned(),
+            None => written.to_owned(),
+        };
+        return Scalar {
+            tag: event.tag.as_deref().map(String::from),
+            value: Cow::Owned(value),
+            style,
+            literal,
+        };
+    };
     let value = match &event.text {
         // A block scalar's text is folded and chomped; one a core tag reads
         // as a number, a `bool` or null has no text, and is its trimmed raw.
         Some(text) if style == Style::Block => Cow::Owned(text.as_str().to_owned()),
         None if style == Style::Block => Cow::Borrowed(raw.trim()),
         None => Cow::Borrowed(raw),
-        Some(text) if text == raw => Cow::Borrowed(raw),
-        Some(text) => match borrowed_inside(raw, text, style) {
+        Some(text) if text.as_str() == raw => Cow::Borrowed(raw),
+        Some(text) => match borrowed_inside(raw, text.as_str(), style) {
             Some(borrowed) => Cow::Borrowed(borrowed),
             None => Cow::Owned(text.as_str().to_owned()),
         },
@@ -492,6 +507,21 @@ fn scalar<'de>(event: &native::Event<'de, 'de>) -> Scalar<'de> {
         style,
         literal,
     }
+}
+
+/// The scalar as written, `written`, borrowed from the event's span of the
+/// input: the span itself, or a quoted scalar's span inside its quotes.
+fn written_in<'de>(input: &'de [u8], event: &native::Event, written: &str) -> Option<&'de str> {
+    let span = input.get(event.start as usize..event.end as usize)?;
+    let quoted = matches!(event.style, native::Style::Single | native::Style::Double);
+    let inside = if span == written.as_bytes() {
+        span
+    } else if quoted && span.len() >= 2 && &span[1..span.len() - 1] == written.as_bytes() {
+        &span[1..span.len() - 1]
+    } else {
+        return None;
+    };
+    std::str::from_utf8(inside).ok()
 }
 
 /// The text as written between the quotes of `raw`, where it reads so.
