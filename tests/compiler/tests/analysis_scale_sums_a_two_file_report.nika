@@ -1,0 +1,46 @@
+// scripts/analysis_scale.nika (#1625): a `lower-std --findings` report of a
+// package of two files with known warnings, and a third file refused, is
+// summed by code and by file against the files' lines, and the sample takes
+// the same sites on every run (`--per-code 1` keeps one of NK1111's two).
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/analysis_scale.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/analysis_scale.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("realpath", [process::run("mktemp", ["-d"]).stdout.trim().clone()]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn a() {\n}\n\nfn b() {\n}\n")
+    fs::write(f"{tmp}/b.nika", fs::Root::Anywhere, "fn c() {\n}\n")
+    fs::write(f"{tmp}/c.nika", fs::Root::Anywhere, "fn d(\n")
+    let report = f"findings in {tmp}/a.nika: 2\n  {tmp}/a.nika:1  NK1111  a value is copied | twice\n  {tmp}/a.nika:4  NK2211  a task waits\nfindings in {tmp}/b.nika: 1\n  {tmp}/b.nika:2  NK1111  a value is copied\nrefused: {tmp}/c.nika\n"
+    fs::write(f"{tmp}/report.txt", fs::Root::Anywhere, report)
+    let runs: Vec[Vec[String]] = [["report.txt"], ["report.txt", "--per-code", "1", "--seed", "7"]]
+    for words in runs {
+        let mut argv: Vec[String] = ["run", f"{repo}/scripts/analysis_scale.nika", "--"]
+        for w in words { argv.push(w.clone()) }
+        let out = process::run(nikaia.clone(), argv; dir: tmp.clone())
+        println(f"exit {out.code}")
+        print(out.stdout.replace(tmp.clone(), "T"))
+    }
+    process::run("rm", ["-rf", tmp])
+}

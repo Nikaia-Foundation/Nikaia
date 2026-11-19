@@ -24,3 +24,32 @@ pub struct Finding {
 pub fn refusal(code: ref String, span: Span, message: String, notes: Vec[String], help: String) -> Finding {
     return Finding { code: code.clone(), span: span, message: message, notes: notes, help: help, warning: false, labels: [] }
 }
+
+/// **One file's block of `lower-std --findings`** (#1625): the line
+/// `findings in PATH: N`, then every warning the checker gave the file, one
+/// line each, `  PATH:LINE  NKnnnn  headline`, in the order the checker
+/// found them. `scripts/analysis_scale.nika` sums the blocks by code.
+pub fn findings_report(findings: ref Vec[CheckFinding], source: ref String, path: ref String) -> String {
+    let mut lines: Vec[String] = []
+    for finding in findings {
+        if finding.severity != CheckSeverity::Warning {
+            continue
+        }
+        let mut end = finding.span.start as i64
+        if end > source.bytes.len() {
+            end = source.bytes.len()
+        }
+        let mut line = 1
+        for c in source.bytes[0..<end] {
+            if c == '\n' {
+                line = line + 1
+            }
+        }
+        lines.push(f"  {path}:{line}  {finding.code}  {finding.message.replace("\n", " ")}\n")
+    }
+    let mut out = f"findings in {path}: {lines.len()}\n"
+    for each in lines {
+        out.push_str(each)
+    }
+    return out
+}
