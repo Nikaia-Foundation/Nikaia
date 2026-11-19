@@ -184,8 +184,10 @@
 // rejected (other sessions push too), `git merge --autostash` of
 // `origin/develop`; a merge that brought a change under `crates/` or `tools/`
 // is regenerated before it is committed (#1333: `lower-std` and the build
-// until the lowered files settle, then `scripts/badges.py` on the merged tree,
-// both in the merge commit, `MERGE <sha8> regenerated <paths>`), since files
+// until the lowered files settle, a round that changed only the index's
+// `LOWERED_DIGEST` line counting as settled (#2154), then `scripts/badges.py`
+// on the merged tree, both in the merge commit, `MERGE <sha8> regenerated
+// <paths>`, after `MERGE timing <step> <n>s, ..., total <n>s`), since files
 // generated from both sides were never generated from the combination
 // (develop red on 2026-11-07, 576d862e); then the short checks on the merge (`MERGE <sha8> short checks`:
 // the compiler built, the tests named after the changed scripts and the changed
@@ -1557,12 +1559,17 @@ fn drive_lowered_paths() -> Vec[String] {
 	return [drive_lowered_dir(), drive_lowered_dir() + ".rs"]
 }
 
-// A fingerprint of the lowered files' contents under DIR, to see the lowering settle.
+// A fingerprint of the lowered files' contents under DIR, to see the lowering
+// settle. The index's `LOWERED_DIGEST` line is left out (#2154): it is the
+// digest of the other lines, so a set that differs only there compiles to the
+// same code, and lowering again with that code writes the same files; one
+// build and one cold `lower-std` less per merge (the merged index always
+// carries one side's digest, which the first round rewrites).
 fn drive_lowered_print(dir: String) -> String throws {
 	let dirs = drive_lowered_paths().join(" ")
 	return process::run(
 		"sh",
-		["-c", f"cd '{dir}' && find {dirs} -type f | sort | xargs sha256sum | sha256sum"],
+		["-c", f"cd '{dir}' && find {dirs} -type f | sort | while read -r f; do echo \"$f\"; sed '/^pub const LOWERED_DIGEST: /d' \"$f\"; done | sha256sum"],
 	).stdout.trim().clone()
 }
 
@@ -1632,9 +1639,16 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	// The binary there is about to be rebuilt from other sources than its stamp names.
 	process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 	let mut failed: String = ""
+	// Each step's seconds, for `MERGE timing` (#2154).
+	let began = drive_now()
+	let mut times: Vec[String] = []
+	let mut at = drive_now()
 	let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+	times.push(f"build {drive_now() - at}s")
 	if !first.ok {
+		at = drive_now()
 		let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
+		times.push(f"old lower-std {drive_now() - at}s")
 		if !old_lowered.ok {
 			failed = "lower-std before the build"
 			println(drive_tail(first.stdout + old_lowered.stdout, 30))
@@ -1648,14 +1662,18 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 			break
 		}
 		rounds += 1
+		at = drive_now()
 		let built = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+		times.push(f"round {rounds} build {drive_now() - at}s")
 		if !built.ok {
 			failed = "the build of the re-lowered files"
 			println(drive_tail(built.stdout, 30))
 			break
 		}
 		let old = drive_lowered_print(wt.clone())
+		at = drive_now()
 		let lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
+		times.push(f"lower-std {drive_now() - at}s")
 		if !lowered.ok {
 			failed = "lower-std"
 			println(drive_tail(lowered.stdout, 30))
@@ -1663,7 +1681,10 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		}
 		settled = drive_lowered_print(wt.clone()) == old
 	}
-	if failed != "" { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})") }
+	if failed != "" {
+		println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
+		drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})")
+	}
 	// The lowered paths the regeneration rewrote, wrote new or removed in the
 	// worktree, against the merged index, are copied into the checkout and
 	// staged; nothing else of the checkout is touched.
@@ -1690,6 +1711,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	}
 	let tree = process::run("git", ["write-tree"])
 	if !tree.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
+	at = drive_now()
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let sha = tree.stdout.trim().clone()
 	let made = process::run(
@@ -1707,9 +1729,18 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	}
 	let staged = process::run("git", ["add", "--", "assets/badges/"])
 	if !staged.ok { drive_merge_abort_paths(cause, unmerged, "git add of the badges failed") }
+	times.push(f"badges {drive_now() - at}s")
 	// The ledgers of the merged tree, with the compiler built from it (#1591).
+	at = drive_now()
 	let tree_now = process::run("git", ["write-tree"]).stdout.trim().clone()
-	let ledgers = drive_ledgers_refresh(tree_now)
+	// The lowering settled on the compiler the last round built: the merged
+	// tree differs from its sources at most in `LOWERED_DIGEST`, so that
+	// binary runs the merged tree's code and the ledgers take it, without a
+	// build of their own (#2154). Only where BUILD built it in the tree target.
+	let built = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia"
+	let settled_on = if build == drive_merge_build() && fs::exists(built.clone(), fs::Root::Anywhere) { built } else { "" }
+	let ledgers = drive_ledgers_refresh_on(tree_now, settled_on)
+	times.push(f"ledgers {drive_now() - at}s")
 	if ledgers.len() > 0 {
 		let mut add_ledgers: Vec[String] = ["add", "--"]
 		for p in ledgers {
@@ -1721,6 +1752,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	}
 	let done = process::run("git", ["commit", "-q", "--no-edit"])
 	if !done.ok { drive_merge_abort_paths(cause, unmerged, "the merge commit failed") }
+	println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
 		println(f"MERGE {drive_short(merge)} re-lowered {unmerged}")
@@ -2042,6 +2074,14 @@ fn drive_tree_target() -> String { return "target/ledger-target" }
 // printed (`LEDGERS failed ...`) and its files are left as they were. A
 // checkout without the script has no ledgers to refresh.
 fn drive_ledgers_refresh(name: String) -> Vec[String] throws {
+	return drive_ledgers_refresh_on(name, "")
+}
+
+// drive_ledgers_refresh with BUILT, when not "", the compiler of NAME's code
+// already built in the tree target (drive_merge_regenerate, #2154): the
+// worktree is moved to NAME and stamped with its `crates/`, and nothing is
+// built.
+fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 	if !fs::exists("scripts/ledgers.nika", fs::Root::Anywhere) { return [] }
 	// Resolved here: in the worktree `HEAD` names the worktree's own commit.
 	let tree = process::run("git", ["rev-parse", f"{name}^{{tree}}"]).stdout.trim().clone()
@@ -2049,7 +2089,14 @@ fn drive_ledgers_refresh(name: String) -> Vec[String] throws {
 		println(f"LEDGERS not refreshed: {name} names no tree")
 		return []
 	}
-	let exe = drive_tree_exe(tree.clone())
+	let mut exe = built.clone()
+	if exe == "" {
+		exe = drive_tree_exe(tree.clone())
+	} else {
+		if drive_tree_move(tree.clone(), "LEDGERS not refreshed") == "" { return [] }
+		let crates = process::run("git", ["rev-parse", f"{tree}:crates"]).stdout.trim().clone()
+		if crates != "" { fs::write(f"{exe}.crates", fs::Root::Anywhere, crates + "\n") }
+	}
 	if exe == "" { return [] }
 	let wt = process::run("realpath", [drive_tree_dir()]).stdout.trim().clone()
 	let out = process::run(

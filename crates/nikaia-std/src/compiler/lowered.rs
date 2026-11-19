@@ -3335,7 +3335,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, ComptimeBundleToolchain, comptime_bundle_toolchain, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -3343,7 +3343,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "f19170fe180397c92489e698ab5ec7c263170425a6f7a44cca16695644107de3";
+pub const LOWERED_DIGEST: &str = "616857481b31a5f74183ecfca089ba73e4cfa3f2cead9f01ed3e9351c9033d0a";

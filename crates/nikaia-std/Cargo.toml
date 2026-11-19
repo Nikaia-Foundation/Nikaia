@@ -12,7 +12,7 @@ rust-version = "1.88"
 # `[build]` key. It is a Cargo feature because the check lives in this crate,
 # and a switch the compiler acts on has to reach the crate the code is in.
 [features]
-default = ["reentrancy-check"]
+default = ["reentrancy-check", "async-io"]
 reentrancy-check = []
 # The `grammar!` expansion in `src/rust.rs` checks this feature, so it has to
 # exist here as it does on the compiler - a `cfg` naming a feature no manifest
@@ -25,6 +25,13 @@ trace = ["winnow-grammar/trace"]
 # rebuilt when a `tools/*.nika` changes. What `std` itself runs is in
 # `src/runtime` and always compiled.
 compiler = []
+# **Sockets, TLS and the asynchronous file ring** (#2152): `net`, its TLS
+# and the readiness poller, and the io_uring path of `fs`. On by default, so a
+# program's `std` is whole; the build-time bundle (ADR-321 D3) is built
+# without it, since a build-time program reaches no input or output (D2) and
+# runs only Nikaia code and this crate's Rust (D9). Without it a file is read
+# on the blocking path, which `io-method = "blocking"` chooses anyway.
+async-io = ["dep:polled", "dep:rustls", "dep:rustls-native-certs", "dep:file-ring"]
 
 [dependencies]
 # **A map is `std`'s own type over `hashbrown`'s table** (#420, #434, ADR-296
@@ -110,14 +117,14 @@ unicode-normalization = "0.1.25"
 # executor, no task model, no opinion about what the program does when a socket
 # is ready - which is what keeps D1's and D3's decisions from being remade by a
 # dependency.
-polled = { path = "../unsafe/polled" }
+polled = { path = "../unsafe/polled", optional = true }
 # **TLS is never ours** (ADR-303 D2, ADR-289 D34; `src/tls.rs`): `net::Tls`
 # is `rustls` on the `ring` provider, with no `aws-lc-rs` (default features off),
 # so it builds with the C compiler Rust already needs and no system package. The
 # PEM files are read with `rustls-pki-types`' own reader, and `Tls::trusting`
 # adds the system's roots from `rustls-native-certs`.
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-native-certs = "0.8"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
 
 # ADR-303 D3's completion half. A *target* gate and not a feature gate: the
 # bindings do not exist off Linux at all. On Linux whether the ring is used is
@@ -126,7 +133,7 @@ rustls-native-certs = "0.8"
 [target.'cfg(target_os = "linux")'.dependencies]
 # ADR-303 D3's completion half, with the bell ADR-121 D1 hangs on it: the ring
 # and the `unsafe` it takes live in their own crate (ADR-218).
-file-ring = { path = "../unsafe/file-ring" }
+file-ring = { path = "../unsafe/file-ring", optional = true }
 
 # **No build dependencies, and that is the point** (ADR-002 D4). This crate used
 # to build the Stage 0 compiler to lower its own `src/*.nika`, which meant Cargo
@@ -140,3 +147,9 @@ file-ring = { path = "../unsafe/file-ring" }
 [[test]]
 name = "rust_signatures"
 required-features = ["compiler"]
+
+# Sockets and TLS, which only a `std` with `async-io` has (#2152).
+[[test]]
+name = "sockets"
+required-features = ["async-io"]
+

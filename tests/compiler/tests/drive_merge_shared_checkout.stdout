@@ -1,5 +1,6 @@
 == another driver merges
 MERGE waiting for target/merge.lock: PID other lane
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -10,6 +11,7 @@ base
 theirs
 == the index is locked
 MERGE waiting for .git/index.lock
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -29,6 +31,7 @@ lock free
 committed:
 base
 == a builder writes a source meanwhile
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
 exit ok: true
 Merge branch 'develop' of ../origin into develop

@@ -118,6 +118,18 @@ impl BuildTimeDir {
         self.bounds
     }
 
+    /// **The stamp of the bundle a `comptime`'s program links against**
+    /// (`ComptimeBundle::stamp`), building the bundle where it is not yet;
+    /// `None` where there is nowhere to build or the bundle does not build.
+    pub fn bundle_stamp(&self) -> Option<String> {
+        let at = self.at.as_ref()?;
+        self.bundle
+            .get_or_init(|| crate::comptime_run::bundle(at))
+            .as_ref()
+            .ok()
+            .map(|bundle| bundle.stamp.clone())
+    }
+
     /// **Compile and run a `comptime`'s program**
     /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D1): what it
     /// printed, or why it did not (`crate::comptime_run`).

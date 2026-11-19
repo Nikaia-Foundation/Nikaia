@@ -64,6 +64,7 @@ pub mod list;
 pub mod lock;
 pub mod map;
 pub mod mem;
+#[cfg(feature = "async-io")]
 pub mod net;
 pub mod node_id;
 pub mod num;
@@ -84,6 +85,7 @@ pub mod target;
 pub mod task;
 pub mod tether;
 pub mod thread;
+#[cfg(feature = "async-io")]
 mod tls;
 /// **What a library's entry point reads from C and writes back to it**
 /// ([ADR-284](../../../docs/specification/adr/adr-284.md) D5-D7): the wrapper
@@ -555,6 +557,7 @@ pub mod prelude {
     // **The socket `std` lends** (ADR-289 D6). Here for `fs`'s reason: a module
     // a program reaches through its prefix has to be in scope in the generated
     // file, and nothing a program writes says where it comes from.
+    #[cfg(feature = "async-io")]
     pub use crate::net;
     // **`par::Order` and a fold's default `order:`**
     // ([ADR-372](../../../docs/specification/adr/adr-372.md) D5), and the fold
