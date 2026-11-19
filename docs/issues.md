@@ -128,6 +128,9 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
   in `tests/compiler/tests/` or the package's tests) and the rows it shows;
   never a Rust test (a builder reads an old one as that program). Each item
   settles every choice that changes its result, or says the builder chooses.
+  Two sources offered as one ("the parsed parameter or the ledger's keeps")
+  are read in the code first (I4a): where they differ on a case, the item
+  names that case and picks one (#2010).
   * Two passes that each take a run are two issues (`After #N`). A fact made in
     one pass and read in another names how it reaches each reader's caller;
     recording what a pass reads names the function all reads go through (I4a),
@@ -138,7 +141,11 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
     `warn` setting or warning code, the moves one item per area, the switch
     last; the issue names the setting or says `no decision yet`.
   * Removed code is named with what it does today (I4a) and checked against the
-    decision (I6). No item needs GitHub (a report's `Comment: #N <text>`). A
+    decision (I6). No item needs GitHub (dispatch a workflow, set a secret
+    or label): such a step is the supervisor's, a `Supervisor:` line after
+    *Done when*, which does not wait for it; a builder meeting one in an
+    older issue builds the rest, reports `Result: done` when that holds,
+    names the step in `Comment: #N <text>` and judges `broke I9` (#2019). A
     changed default or lowering level names where it is set 
     (`sysroot::tools_build`), the crate's limiting ADRs (ADR-218) and the `it`
     tests lowering with no flag.
