@@ -591,6 +591,23 @@ panics = false
 sync = true
 touches = []
 signature = "(markup: ?) -> ?"
+# `text`, escaped: the safe way to build markup out of what is not markup yet.
+# `std`'s own, for its test blocks (ADR-rust-boundary-1 D24, D26, #2304).
+[fn."html::Raw::escaped"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(text: ref String) -> html::Raw"
+
+# The markup, for whoever writes it out. `std`'s own (#2304).
+[fn."html::Raw::as_str"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref html::Raw) -> ref String"
+
 
 # The whole of standard input, as bytes.
 #

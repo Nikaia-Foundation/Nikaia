@@ -219,25 +219,3 @@ macro_rules! render_by_display {
 render_by_display!(
     bool, i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64
 );
-
-#[cfg(test)]
-mod tests {
-    use super::Raw;
-
-    // The escapes, a template's holes and `html::Raw` written out are
-    // `tests/compiler/tests/html_text_is_escaped_and_markup_is_not.nika`
-    // (#2082), and that text needing nothing is not copied is
-    // `tests/compiler/tests/std_handing_on_requests_no_memory.nika` (#2215).
-
-    /// The safe way in: escape first, and the result is markup by construction.
-    /// Kept as Rust (#2082): `Raw::escaped` is not in the contracts, so no
-    /// program can call it.
-    #[test]
-    fn escaped_text_becomes_markup() {
-        let markup = Raw::escaped("a < b & c");
-        assert_eq!(markup.as_str(), "a &lt; b &amp; c");
-
-        // …and it is not escaped twice, because it is no longer text.
-        assert_eq!(Raw::new(markup.as_str()).as_str(), "a &lt; b &amp; c");
-    }
-}
