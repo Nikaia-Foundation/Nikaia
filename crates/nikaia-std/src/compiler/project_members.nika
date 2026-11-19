@@ -698,8 +698,15 @@ pub struct ProjectMembersOwnRust {
     pub heads: collections::BTreeSet[String],
     /// The names `contracts/crate.contracts` describes.
     pub described: collections::BTreeSet[String],
-    /// The names it describes with `pub = true`, which D26 refuses.
-    pub published: collections::BTreeSet[String],
+    /// The names it describes with `pub = true`, which D26 refuses, each
+    /// with the line of its entry (`NK2508`).
+    pub published: collections::BTreeMap[String, i64],
+    /// The functions of the Rust narrower than `pub(crate)` (private or
+    /// `pub(super)`), by path: a call to one is refused as such (D24).
+    pub narrow: collections::BTreeSet[String],
+    /// The file each `mod` of the hand root is read from, relative to the
+    /// package (D28 names it).
+    pub files: collections::BTreeMap[String, String],
     /// The Rust files that hash otherwise than `contracts/crate.derived`
     /// recorded (D25, `NK2505`).
     pub moved: Vec[String],
@@ -707,7 +714,7 @@ pub struct ProjectMembersOwnRust {
 
 /// A package without Rust of its own.
 pub fn project_members_no_own_rust() -> ProjectMembersOwnRust {
-    return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeSet(), moved: [] }
+    return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeMap(), narrow: collections::BTreeSet(), files: collections::BTreeMap(), moved: [] }
 }
 
 /// A build with no project around it: nothing declared, nothing described.
@@ -809,28 +816,92 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
 /// declares, and `contracts/crate.contracts` merged into `descriptions`
 /// under the paths from the crate root, each entry described and private to
 /// the package, with what it publishes and what moved since it was reviewed.
-fn project_members_own_rust[H: ProjectMembersForeignHost](root: ref fs::Path, rust_root: ref String, mut descriptions: Ledger, host: ref H) -> ProjectMembersOwnRust {
-    let mut own = project_members_no_own_rust()
-    let hand = root.join(rust_root)
-    let text = fs::read_to_string(hand, fs::Root::Anywhere) catch { "" }
+/// **The modules a hand-written Rust root declares** (ADR-rust-boundary-1
+/// D24): each `mod X` of `text`, in order.
+pub fn project_members_rust_heads(text: ref String) -> Vec[String] sync {
+    let mut heads: Vec[String] = []
     let items = Rust::file(text) catch { [] }
     for item in items {
         match item {
             RustItem::Group(group) => {
                 if group.what == "mod" {
-                    own.heads.insert(group.name.clone())
+                    heads.push(group.name.clone())
                 }
             },
             else => {},
         }
     }
-    let mut ledger = host.read_beside(root.join("contracts").join("crate.contracts")) ?? return own
+    return heads
+}
+
+/// The file a hand root's `mod head;` is read from, beside the root in
+/// `dir`: `head.rs`, else `head/mod.rs`.
+pub fn project_members_rust_file(dir: ref fs::Path, head: ref String) -> fs::Path sync {
+    let flat = dir.join(f"{head}.rs")
+    if fs::exists(flat, fs::Root::Anywhere) catch { false } {
+        return flat
+    }
+    return dir.join(head).join("mod.rs")
+}
+
+/// The functions of `items`, under the module path `at`, that are narrower
+/// than `pub(crate)` (D24): private or `pub(super)`, into `narrow`.
+fn project_members_narrow(items: ref Vec[RustItem], at: ref String, mut narrow: collections::BTreeSet[String]) {
+    for item in items {
+        match item {
+            RustItem::Hidden(f) => {
+                narrow.insert(f"{at}::{f.name}")
+            },
+            RustItem::Group(group) => {
+                if group.what == "mod" {
+                    project_members_narrow(group.items, f"{at}::{group.name}", narrow)
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// The line, from 1, of `function`'s entry in the text of
+/// `contracts/crate.contracts` (`NK2508` names it); 0 where it is not found.
+fn project_members_entry_line(text: ref String, function: ref String) -> i64 {
+    let quoted = f"[fn.\"{function}\"]"
+    let bare = f"[fn.{function}]"
+    let mut at: i64 = 0
+    for line in text.lines() {
+        at += 1
+        let trimmed = line.trim()
+        if trimmed == quoted || trimmed == bare {
+            return at
+        }
+    }
+    return 0
+}
+
+fn project_members_own_rust[H: ProjectMembersForeignHost](root: ref fs::Path, rust_root: ref String, mut descriptions: Ledger, host: ref H) -> ProjectMembersOwnRust {
+    let mut own = project_members_no_own_rust()
+    let hand = root.join(rust_root)
+    let text = fs::read_to_string(hand, fs::Root::Anywhere) catch { "" }
+    let dir = hand.parent() ?? root.clone()
+    for head in project_members_rust_heads(text) {
+        let file = project_members_rust_file(dir, head)
+        let read = fs::read_to_string(file, fs::Root::Anywhere) catch { "" }
+        let items = Rust::file(read) catch { [] }
+        project_members_narrow(items, head, own.narrow)
+        let shown = file.display()
+        let prefix = f"{root.display()}/"
+        own.files.insert(head.clone(), if shown.starts_with(prefix) { shown.replacen(prefix, "", 1) } else { shown })
+        own.heads.insert(head)
+    }
+    let entries = root.join("contracts").join("crate.contracts")
+    let written = fs::read_to_string(entries, fs::Root::Anywhere) catch { "" }
+    let mut ledger = host.read_beside(entries) ?? return own
     let functions: Vec[String] = ledger.functions.keys().map(fn(x) { x.clone() }).collect()
     for function in functions {
         let mut contract = ledger.functions.get(function) ?? continue
         contract.described = true
         if contract.public {
-            own.published.insert(function.clone())
+            own.published.insert(function.clone(), project_members_entry_line(written, function))
         }
         // `pub = false` keeps it from dependents (D26), not from its own package.
         contract.public = true

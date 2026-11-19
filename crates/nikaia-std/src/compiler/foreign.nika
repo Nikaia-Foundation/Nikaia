@@ -475,10 +475,30 @@ fn a_named_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
 /// item, and so is one whose entry says `pub = true` (D26); and where a Rust
 /// file moved since the entries were reviewed, the first call is `NK2505`.
 /// Each names `nikaia describe crate`.
-pub fn foreign_own_refused(written: ref Vec[(String, Span)], own: ref ProjectMembersOwnRust) -> Vec[CheckFinding] {
+pub fn foreign_own_refused(written: ref Vec[(String, Span)], program: ref Program, names: ref winnow_grammar::InternerContext, own: ref ProjectMembersOwnRust) -> Vec[CheckFinding] {
     let mut out: Vec[CheckFinding] = []
     if own.heads.is_empty() {
         return out
+    }
+    // **A Rust module and a Nikaia prefix of one name** (D28): `words::twice`
+    // would mean two things, and nothing picks one.
+    for item in program.items {
+        match item.node {
+            Item::Import { path, alias } => {
+                let mut parts: Vec[String] = []
+                for p in path {
+                    parts.push(names.resolve(p).clone())
+                }
+                let prefix = match alias {
+                    null => parts.last()?.clone() ?? "",
+                    a => names.resolve(a).clone(),
+                }
+                let file = own.files.get(prefix) ?? continue
+                let notes: Vec[String] = [f"The package's Rust declares `mod {prefix}` in `{file}`, and this file names `{parts.join("::")}` `{prefix}`: a path such as `{prefix}::f` would mean both."]
+                out.push(check_refusal("NK2507", item.span, f"`{prefix}` is both a Rust module of this package and a Nikaia one.", notes, f"Rename one of them: the Rust module in `{file}`, or this `use` with `as`."))
+            },
+            else => {},
+        }
     }
     let mut met: collections::BTreeSet[String] = collections::BTreeSet()
     let mut stale = own.moved.is_empty()
@@ -488,9 +508,19 @@ pub fn foreign_own_refused(written: ref Vec[(String, Span)], own: ref ProjectMem
             continue
         }
         met.insert(name.clone())
-        if own.published.contains(name) {
-            let notes: Vec[String] = ["What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them."]
-            out.push(check_refusal("NK2504", span, f"`{name}` is described with `pub = true`, and the package's own Rust stays the package's.", notes, "Write `pub = false` in its entry in `contracts/crate.contracts`."))
+        match own.published.get(name) {
+            null => {},
+            line => {
+                let notes: Vec[String] = [f"Its entry is at `contracts/crate.contracts:{line}`.", "What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them."]
+                out.push(check_refusal("NK2508", span, f"`{name}` is described with `pub = true`, and the package's own Rust stays the package's.", notes, "Write `pub = false` in its entry in `contracts/crate.contracts`."))
+                continue
+            },
+        }
+        if !own.described.contains(name) && own.narrow.contains(name) {
+            let head = name.split("::").next() ?? ""
+            let file = (own.files.get(head) ?? "its file").clone()
+            let notes: Vec[String] = ["The package's Nikaia code reaches its Rust from the crate root, so an item it calls must be visible there: `pub(crate)` or wider. A private or `pub(super)` item is not widened for the call."]
+            out.push(check_refusal("NK2504", span, f"`{name}` is the package's own Rust, and it isn't visible at the crate root.", notes, f"Declare it `pub(crate)` in `{file}`, then run `nikaia describe crate`."))
             continue
         }
         if !own.described.contains(name) {

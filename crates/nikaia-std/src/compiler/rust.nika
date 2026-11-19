@@ -177,6 +177,9 @@ pub enum RustItem {
     // `across_a_thread_unchecked` and a `tokio::spawn`. A reader that threw it
     // away could not follow the calls at all.
     Hidden(Fun),
+    // A `fn` written `pub(crate)` or `pub(in crate)`: a package's own Nikaia
+    // may call it (ADR-rust-boundary-1 D24), what is narrower it may not.
+    Crate(Fun),
     // A plain `use`, kept as the text between the keyword and the semicolon.
     //
     // **What a name in this file means** ([ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md)
@@ -241,6 +244,7 @@ grammar Rust {
 
     rule found -> Found =
           i:item -> { Found::One(i) }
+        | f:crate_function -> { Found::One(RustItem::Crate(f)) }
         | f:method -> { Found::One(RustItem::Hidden(f)) }
         | JUNK -> { Found::Skip }
 
@@ -270,6 +274,12 @@ grammar Rust {
     // ---- functions -----------------------------------------------------
 
     rule function -> Fun = PUB f:method -> { f }
+
+    // `pub(crate) fn` and `pub(in crate) fn`; `pub(super)` and `pub(self)` fall
+    // to `method` and read as hidden (ADR-rust-boundary-1 D24).
+    rule crate_function -> Fun =
+          "pub" "(" CRATE ")" f:method -> { f }
+        | "pub" "(" IN CRATE ")" f:method -> { f }
 
     rule method -> Fun =
         pauses:qualifiers FN name:IDENT g:generics parts:parameters result:result w:where_clause c:tail -> {
@@ -565,6 +575,8 @@ grammar Rust {
 
     rule PUB = "pub" not(WORD) not("(") -> { }
     rule FN = "fn" not(WORD) -> { }
+    rule CRATE = "crate" not(WORD) -> { }
+    rule IN = "in" not(WORD) -> { }
     rule ASYNC = "async" not(WORD) -> { }
     rule CONST = "const" not(WORD) -> { }
     rule UNSAFE = "unsafe" not(WORD) -> { }

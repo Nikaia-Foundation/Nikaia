@@ -304,7 +304,7 @@ impl EmitState {
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let parts: Vec<&str> = name.splitn(2, "::").collect::<Vec<_>>();
         let a_grammar = self.grammars.contains_key(*nikaia_std::index::get(&parts, 0)); ::core::mem::drop(parts);
-        if a_grammar { return false; }
+        if a_grammar || self.a_package_grammar_entry(&name) { return false; }
         self.named_error(world, &name) != 0
     }
     pub(crate) fn caught_sum(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> Option<String> {

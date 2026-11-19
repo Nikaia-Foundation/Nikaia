@@ -99,6 +99,9 @@ pub struct Described {
     /// The crate's own reviewed ledger, where the description was adopted
     /// from one rather than drafted (ADR-rust-boundary-1 D22).
     pub adopted: Option<PathBuf>,
+    /// The calls into the package's own Rust that is narrower than
+    /// `pub(crate)` (ADR-rust-boundary-1 D24), which got no entry.
+    pub narrow: Vec<String>,
 }
 
 /// The file a crate ships its reviewed description in, beside its
@@ -107,6 +110,9 @@ pub const SHIPPED: &str = "nikaia.contracts";
 
 /// Write `contracts/<crate>.contracts` for the crate the program calls.
 pub fn describe(root: &Path, crate_word: &str) -> Result<Described> {
+    if crate_word == "crate" {
+        return describe_own(root);
+    }
     if let Some(adopted) = adopt(root, crate_word)? {
         return Ok(adopted);
     }
@@ -126,6 +132,61 @@ pub fn describe(root: &Path, crate_word: &str) -> Result<Described> {
         .with_context(|| format!("{}", derived.display()))?;
     written.path = path;
     Ok(written)
+}
+
+/// **`nikaia describe crate`** (ADR-rust-boundary-1 D27): the package's own
+/// Rust, drafted by `describe_own` in Nikaia, written as
+/// `contracts/crate.contracts`, or beside it as `crate.draft.contracts`
+/// where a reviewed one is there: never over it (D5).
+fn describe_own(root: &Path) -> Result<Described> {
+    let manifest = crate::manifest::Manifest::read(&root.join("nikaia.toml"))
+        .with_context(|| format!("{}/nikaia.toml", root.display()))?;
+    let Some(rust_root) = manifest
+        .file()
+        .rust_library
+        .as_ref()
+        .and_then(|t| t.root.clone())
+    else {
+        bail!(
+            "`nikaia describe crate` describes the package's own Rust, and this package has none: its `nikaia.toml` names no `[rust-library] root`."
+        );
+    };
+    let own = block_on(describe::describe_own(
+        root,
+        &rust_root,
+        crate::project::CONTRACTS,
+        &Host,
+    ))
+    .map_err(|thrown| anyhow::anyhow!("{thrown}"))?;
+    let mut ledger = Ledger::empty();
+    ledger.inference = "described-from-signatures".to_text();
+    ledger.sources = own.sources;
+    ledger.functions = own.drafted.functions;
+    let directory = root.join(crate::project::CONTRACTS);
+    std::fs::create_dir_all(&directory).with_context(|| format!("{}", directory.display()))?;
+    let reviewed = directory.join("crate.contracts");
+    let path = if reviewed.exists() {
+        directory.join("crate.draft.contracts")
+    } else {
+        reviewed
+    };
+    let version = manifest.file().version.to_string();
+    let notes = own.drafted.notes;
+    std::fs::write(&path, ledger.render_description("crate", &version, &notes))
+        .with_context(|| format!("{}", path.display()))?;
+    let derived = crate::contracts::derived_path(&path);
+    std::fs::write(&derived, ledger.render_derived())
+        .with_context(|| format!("{}", derived.display()))?;
+    Ok(Described {
+        path,
+        version,
+        functions: ledger.functions.len(),
+        types: 0,
+        unanswered: own.drafted.unanswered,
+        notes,
+        adopted: None,
+        narrow: own.narrow,
+    })
 }
 
 /// **The crate's own reviewed ledger, where it ships one** (ADR-rust-boundary-1 D22):
@@ -195,6 +256,7 @@ fn adopt(root: &Path, crate_word: &str) -> Result<Option<Described>> {
         unanswered,
         notes: Notes::empty(),
         adopted: Some(shipped),
+        narrow: Vec::new(),
     }))
 }
 
@@ -247,6 +309,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
         unanswered,
         notes,
         adopted: None,
+        narrow: Vec::new(),
     };
     Ok((ledger, described))
 }
