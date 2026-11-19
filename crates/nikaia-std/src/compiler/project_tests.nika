@@ -258,6 +258,7 @@ pub fn project_tests_program_manifest(root: ref fs::Path, package: String?) -> P
         uses_in: root.join("tests"),
         within_std: false,
         described: null,
+        rust_root: null,
     }
 }
 

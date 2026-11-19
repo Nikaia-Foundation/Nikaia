@@ -124,6 +124,17 @@ mod raw_sinks_lowered {
 pub use raw_sinks_lowered::*;
 
 #[allow(unsafe_code)]
+mod run_config_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/run_config.rs");
+}
+#[allow(unused_imports)]
+pub use run_config_lowered::*;
+
+#[allow(unsafe_code)]
 mod target_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -206,6 +217,10 @@ pub mod raw_sinks {
     #[allow(unused_imports)]
     pub use super::{is_plain};
 }
+pub mod run_config {
+    #[allow(unused_imports)]
+    pub use super::{Method, Config, ConfigRead, config_default, config_keys, method_named, method_spelled, config_read};
+}
 pub mod target {
     #[allow(unused_imports)]
     pub use super::{Instruction, level_has};
@@ -232,6 +247,7 @@ pub mod time_spans {
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(run_config_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(text_float_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all
 }
@@ -273,4 +289,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e99472ab4ccfef16f403bd9d694269653579fa0827af484bd7d71398990a4445";
+pub const LOWERED_DIGEST: &str = "dcffb92689994433d7533b374436898a8abaa97ce64e3868ce801218eea7128b";

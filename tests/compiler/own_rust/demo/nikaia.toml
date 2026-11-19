@@ -1,0 +1,12 @@
+# The package of `tests/a_package_calls_its_own_rust.nika`
+# (ADR-rust-boundary-1 D24-D27): its Nikaia code calls `rust/words.rs`,
+# described in `contracts/crate.contracts`.
+[package]
+name = "demo"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[rust-library]
+root = "rust/lib.rs"

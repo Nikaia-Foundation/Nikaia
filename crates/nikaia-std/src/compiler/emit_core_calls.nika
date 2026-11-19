@@ -753,13 +753,20 @@ impl EmitState {
                     self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], values, config, parallelism, depth, flow, scope)
                     return true
                 }
-                if segments.len() != 3 {
+                // **Or a grammar of another file of this package** (#2233),
+                // `Rust::file(text)`, entered as a package's is, without
+                // the package's name in front.
+                if segments.len() != 3 && segments.len() != 2 {
                     return false
                 }
-                let package = emit_text(world, segments[0])
-                let book = emit_text(world, segments[1])
-                let rule = emit_text(world, segments[2])
-                if !self.a_package_grammar_entry(f"{package}::{book}::{rule}") {
+                let first = segments.len() - 2
+                let package = match first {
+                    0 => "",
+                    else => f"{emit_text(world, segments[0])}::",
+                }
+                let book = emit_text(world, segments[first])
+                let rule = emit_text(world, segments[first + 1])
+                if !self.a_package_grammar_entry(f"{package}{book}::{rule}") {
                     return false
                 }
                 let mut question: String = "?"
@@ -771,7 +778,7 @@ impl EmitState {
                 let mut pieces = false
                 let mut streamed = false
                 let mut options: Vec[String] = []
-                let contract = self.own_contracts.functions.get(f"{package}::{book}::{rule}")
+                let contract = self.own_contracts.functions.get(f"{package}{book}::{rule}")
                 if contract != null {
                     let held = contract ?? return false
                     pieces = held.pieces
@@ -797,7 +804,7 @@ impl EmitState {
                     // out is `None`, and the walk takes its default where it is
                     // declared; last the caller's `words:` table (ADR-388 D1),
                     // which is no option the rule declares.
-                    out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}::{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
+                    out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
                     self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                     out.push(").to_vec()")
                     for i in 1..<args.len() {
@@ -843,7 +850,7 @@ impl EmitState {
                     // two names are not imported here.
                     let options = emit_fold_options(book, rule)
                     let claimed = host.parallelism() != "Parallelism::Off"
-                    out.push(f", {package}::{options}(), {claimed}, |source, how| {package}::{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
+                    out.push(f", {package}{options}(), {claimed}, |source, how| {package}{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
                     return true
                 }
                 // **The caller's table, where it hands one** (ADR-388 D1,
@@ -867,7 +874,7 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                     },
                 }
-                out.push(f", {package}::{book}::parse_{rule}()){question}")
+                out.push(f", {package}{book}::parse_{rule}()){question}")
                 return true
             },
             else => return false,
