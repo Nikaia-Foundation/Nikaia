@@ -2620,8 +2620,9 @@ fn bounding_mixed_fits(
 	let mut least = a
 	let mut most = b
 	if subtracts {
-		least = 0 - b
-		most = 0 - a
+		// `i64::MIN` has no negation: such a range proves nothing.
+		least = b.checked_neg() ?? return false
+		most = a.checked_neg() ?? return false
 	}
 	let least_term = walk.arena.int(least)
 	let most_term = walk.arena.int(most)
