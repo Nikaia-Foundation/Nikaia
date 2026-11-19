@@ -1,0 +1,29 @@
+// #2224 (ADR-381 D1): `b.sorted()`, a `sync` method on `ref self` that
+// returns `bool`, loops and returns early, is a property in method form:
+// the `if` shows it, so the `assert` under it is proved by name and the
+// program builds without a run-time check.
+struct Bag {
+	items: Vec[i64],
+}
+
+impl Bag {
+	fn sorted(ref self) -> bool sync {
+		let mut i = 1
+		while i < self.items.len() {
+			if self.items[i - 1] > self.items[i] {
+				return false
+			}
+			i = i + 1
+		}
+		return true
+	}
+}
+
+fn main() throws {
+	let b = Bag { items: [1, 2, 3] }
+	if b.sorted() {
+		assert(b.sorted())
+		assert(b.sorted())
+		println("sorted")
+	}
+}
