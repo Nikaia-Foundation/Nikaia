@@ -717,6 +717,14 @@ pub struct CheckFacts {
     /// copy, not a refused loan): a view of the source still read after one
     /// is refused (`NK2305`, ADR-text-reuse-1 D2, #2243).
     pub cut_gives: collections::BTreeSet[i64],
+    /// The bindings (`CheckLocal::id`) a `let mut` of a giving cut made: the
+    /// text in them sits in the whole source's buffer (ADR-text-reuse-1 D2).
+    pub given_names: collections::BTreeSet[i64],
+    /// **The uses of a given name where its text leaves** (returned, pushed,
+    /// stored in a place, the body's last value): the emitter shrinks the
+    /// buffer there when the text fills less than half of it
+    /// (`index::shrunk`, ADR-text-reuse-1 D2, #1589). A local is not shrunk.
+    pub shrunk_leaves: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -1046,6 +1054,8 @@ impl CheckFacts {
             text_bytes: collections::BTreeSet(),
             given_cuts: collections::BTreeSet(),
             cut_gives: collections::BTreeSet(),
+            given_names: collections::BTreeSet(),
+            shrunk_leaves: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

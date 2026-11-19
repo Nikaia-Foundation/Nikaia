@@ -222,6 +222,70 @@ pub(crate) fn grown_text_of(words: &winnow_grammar::InternerContext, body: &Bloc
     out
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_function_shrunk_leaves(state: &mut CheckState, words: &winnow_grammar::InternerContext, body: &Block) {
+    if state.facts.given_names.is_empty() { return; }
+    let mut leaving: Vec<&Expr> = vec![];
+    check_function_leaving_in(body, &mut leaving);
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Return(value, _) => {
+                let value = nikaia_std::boxed::open(value);
+                match value {
+                    None => { },
+                    Some(left) => { leaving.push(left); },
+                }
+            },
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                if puts_its_argument(words.resolve(method)) { for arg in args.iter() { leaving.push(arg); } }
+            },
+            _ => { },
+        }
+    }
+    if !body.stmts.is_empty() {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
+            Stmt::Expr(value) => { leaving.push(value); },
+            _ => { },
+        }
+    }
+    for value in leaving.iter() {
+        let value = *value;
+        match value {
+            Expr::Variable(_, _) => {
+                let named = match state.facts.declared.get(&node_key(value)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                match named {
+                    CheckDeclared::Binding(id) => { if state.facts.given_names.contains(&id) { state.facts.shrunk_leaves.insert(node_key(value)); } },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn check_function_leaving_in<'a>(block: &'a Block, out: &mut Vec<&'a Expr>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Return(value) => {
+                match value {
+                    None => { },
+                    Some(left) => { out.push(left); },
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                match target {
+                    Expr::Variable(_, _) => { },
+                    _ => { out.push(value); },
+                }
+            },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_leaving_in(inner, out); }
+    }
+}
+
 pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -829,6 +893,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.needless_place_clones_said();
     state.data_handed_over_is_used_again();
     state.replaces_at_last_use_said();
+    check_function_shrunk_leaves(state, world.here.words, body);
     state.flow.lone_texts = outer_lone;
     state.needless_clones_said();
     state.reads_on_paths.clear();

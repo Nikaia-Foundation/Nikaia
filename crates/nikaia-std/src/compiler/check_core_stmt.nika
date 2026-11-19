@@ -1341,6 +1341,9 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         state.task_bindings[tasks - 1].push((name.clone(), bound.clone(), span.start as i64))
     }
     let id = state.a_new_binding()
+    if state.facts.cut_gives.contains(node_key(value)) {
+        state.facts.given_names.insert(id)
+    }
     if ty == null && names.len() == 1 && shape.len() == 0 && check_core_stmt_expects_a_lambda(value) {
         match value {
             Expr::Closure { .. } => state.facts.let_lambdas.insert(id, value.clone()),

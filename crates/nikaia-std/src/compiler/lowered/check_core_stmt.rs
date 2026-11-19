@@ -988,6 +988,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     let tasks = state.task_bindings.len() as i64;
     if tasks > 0 { (*unsafe { nikaia_std::proven::slot(&mut state.task_bindings, (nikaia_std::proven::sub::<i64>(tasks, 1)) as usize) }).push((nikaia_std::block::Text::from(name.to_string()), bound.clone(), span.start as i64)); }
     let id = state.a_new_binding();
+    if state.facts.cut_gives.contains(&node_key(value)) { state.facts.given_names.insert(id); }
     if ty.is_none() && names.len() == 1 && shape.is_empty() && check_core_stmt_expects_a_lambda(value) {
         match value {
             Expr::Closure { .. } => { state.facts.let_lambdas.insert(id, value.clone()); },

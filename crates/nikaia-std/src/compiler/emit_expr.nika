@@ -389,6 +389,12 @@ impl EmitState {
                 let handle = walk.async_handles.get(emit_text(world, name))
                 if handle != null {
                     out.push(handle ?? "")
+                } else if self.facts.shrunk_leaves.contains(at) {
+                    // **A given cut's text that leaves gives back the buffer
+                    // it does not fill** (ADR-text-reuse-1 D2, #1589).
+                    out.push("nikaia_std::index::shrunk(")
+                    self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)
+                    out.push(")")
                 } else {
                     self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)
                 }
