@@ -158,7 +158,7 @@ print them sorted. One input file, no dependencies, a one-paragraph spec.
 
 It is the best fit because it stresses exactly the three things 0.0.7 asserts:
 
-* **Scannerless parsing** (ADR-296 D1) — a billion lines of a tiny custom format.
+* **Scannerless parsing** (ADR-grammar-syntax-v1 D1) — a billion lines of a tiny custom format.
 * **Zero-copy / tethered slices** (Part II, 10.6) — station names must point into the input
   buffer; allocating a billion strings loses by an order of magnitude.
 * **`par_iter` and the `sync` rule** (12.1, 12.6) — the aggregation is pure computation, so
@@ -376,7 +376,7 @@ seed for untrusted keys, fast hash for trusted ones — the switch enters as *ho
 *whether*. 1BRC keeps the fast path without a word about hashing; `fortunes` gets hardened without
 anyone remembering to ask.
 
-**G9 — bounded repetition (`digit{1,2}`) in the grammar protocol.** ADR-296 D13: fixed-width
+**G9 — bounded repetition (`digit{1,2}`) in the grammar protocol.** ADR-grammar-syntax-v1 D11: fixed-width
 numeric parsing is only sound where the grammar states the width bound. Delivered upstream —
 `p{n}`, `p{n,}`, `p{n,m}`, together with a single-digit `digit` terminal that turned out to be
 missing too (only the greedy `digit1` existed, which would have swallowed the run before a bound

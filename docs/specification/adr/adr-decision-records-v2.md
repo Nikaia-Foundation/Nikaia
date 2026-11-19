@@ -16,7 +16,7 @@ stands after `->`). A reader looking for the rules of a topic reads several
 documents and cannot tell which one holds.
 
 A change was made in place, with a *Changed by* note. A citation in a commit
-message (`after ADR-grammar-1 D3`) then points at a text that no longer says what
+message (`after ADR-grammar-syntax-v1 D13`) then points at a text that no longer says what
 it said when the commit was written, and commit messages are not rewritten.
 
 How is a record named and changed so that one topic is one document, and an old

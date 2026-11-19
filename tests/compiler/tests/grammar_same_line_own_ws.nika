@@ -1,4 +1,4 @@
-// `same_line` in a grammar with its own `WS` (ADR-339 D2, #557): the line
+// `same_line` in a grammar with its own `WS` (ADR-grammar-syntax-v1 D17, #557): the line
 // break counts wherever the skipped run holds it, after a line comment and
 // inside a block comment too. `a /* c */ [0]` is an index; `a // c\n[0]` and
 // `a /*\n*/ [0]` are a name and then a list.

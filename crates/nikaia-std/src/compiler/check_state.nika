@@ -744,7 +744,7 @@ pub struct CheckState {
     /// call has to do about one of these is decided at the call.
     pub walks_fields: collections::BTreeMap[String, String],
     /// Every **grammar** declared here, with the names of its `entry` rules
-    /// ([ADR-296](../../docs/specification/adr/adr-296.md) D24, D25).
+    /// ([ADR-grammar-syntax-v1](../../docs/specification/adr/adr-grammar-syntax-v1.md) D5, D6).
     ///
     /// A grammar is entered by an ordinary call — `Json.value(input)` — so its
     /// name has to be something `NK1117` counts as declared, and which rules

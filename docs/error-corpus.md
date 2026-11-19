@@ -85,8 +85,8 @@ C1 is the best row in the corpus and the model for the rest. It carried a
 note calling `ref` a reserved word until the note was asked whether a name was
 wanted there; it was not, and the note is gone. So is C5's.
 
-C2's missing arrow is refused by name (ADR-grammar-1 D1, which withdrew
-ADR-296 D33): an action stands after `->`, and a program written the
+C2's missing arrow is refused by name (ADR-grammar-syntax-v1 D9, which withdrew
+ADR-grammar-syntax-v1 D9): an action stands after `->`, and a program written the
 arrowless way is told the form to write.
 
 ## D. Almost the right token

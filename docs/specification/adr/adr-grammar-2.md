@@ -12,7 +12,7 @@ grammar), D6a (`parse`/`Value`: stays, as a second entry), §5 ("a typed read
 needs a type, not a grammar": reversed); [ADR-330](adr-330.md) D1-D4 (a type as
 a parameter, `T::kind`, `match` on a kind), D7 (a grammar names no type of the
 program: its reason amended, the rule holds), D9 (`f[T]()` warned with
-`NK1233`); [ADR-grammar-1](adr-grammar-1.md) D2 (a rule takes values; this adds
+`NK1233`); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule takes values; this adds
 types); [ADR-specialization-1](adr-specialization-1.md) D1, D5, D7 (a copy per
 build-time value, the build's budget, a result type from a `comptime`
 parameter); [ADR-299](adr-299.md) D15-D18 (a row is the struct the block
@@ -182,7 +182,7 @@ are refused here.
 
 It lowers to the engine's `#[stream]`. A JSON Lines file is read in parallel by
 `par_fold` over a generic `@frame` rule, `init`, `step` and `merge` handed in as
-rule values (ADR-grammar-1 D2). An entry takes `String` or `Bytes` (`NK1282`).
+rule values (ADR-grammar-syntax-v1 D12). An entry takes `String` or `Bytes` (`NK1282`).
 
 *Amended November 8, 2026 (owner's decision on #1428, options Q1-A, Q2-A, Q3):*
 

@@ -375,7 +375,7 @@ impl EmitState {
         let name = call_callee_name(world.words, world.aliases, expr) ?? return false
         // A call of this program's hands its failure in an envelope whoever
         // declared the error (ADR-280 D13); a call of `std`'s hands it bare,
-        // and so does a grammar's entry rule (ADR-296 D24).
+        // and so does a grammar's entry rule (ADR-grammar-syntax-v1 D5).
         let parts: Vec[ref String] = name.splitn(2, "::").collect()
         let a_grammar = self.grammars.contains_key(parts[0])
         if a_grammar {

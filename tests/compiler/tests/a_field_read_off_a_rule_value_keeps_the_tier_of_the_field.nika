@@ -1,5 +1,5 @@
 // A field read off a rule's value of a struct is that struct's field, as off
-// a function's parameter (ADR-grammar-1 D2, #1548): `p.a` with `p: P` is a
+// a function's parameter (ADR-grammar-syntax-v1 D12, #1548): `p.a` with `p: P` is a
 // view of the input where `P.a` is one, so `N { a: p.a }` keeps it and is
 // no `ref String` handed to a field of text of its own (NK1106).
 struct P {

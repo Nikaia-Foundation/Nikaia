@@ -1,5 +1,5 @@
 // A `@stream` entry whose items are emitted takes values and options as any
-// entry does (ADR-grammar-1 D2, ADR-grammar-2 D7, amended 2026-11-18, #1443):
+// entry does (ADR-grammar-syntax-v1 D12, ADR-grammar-2 D7, amended 2026-11-18, #1443):
 // the rules it reaches see them, an option left out has its default.
 
 struct Item {

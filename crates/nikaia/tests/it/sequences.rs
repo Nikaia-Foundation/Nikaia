@@ -218,7 +218,7 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 /// used to land in no entry at all, because the checker filed its answers under
 /// the enclosing *function* and an action has none — so six calls that were
 /// always unanswered were also uncounted. A `pub` rule is a ledger entry
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24), and it has its
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5), and it has its
 /// own key now ([ADR-186](../../../docs/specification/adr/adr-186.md)), which
 /// is what made them visible.
 /// What a pattern binds has no type in this compiler — that is the parser
