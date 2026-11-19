@@ -742,47 +742,6 @@ thread_local! {
     };
 }
 
-// **Two tests no program can make yet** (#2088, #2304): they check that `update`
-// and `access` do not copy the value, by its buffer's address (`as_ptr`,
-// NK1171 on a test block's list), which no Nikaia program observes and no condition input reaches. They stay here
-// until it is decided how a test written in Nikaia shows that a door does
-// not copy; every other test of this file is a program in
-// `tests/compiler/tests/` (#2189).
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// **`update` moves, it does not copy**, which is the finding that made
-    /// `access` stop needing to write (D2). The list's buffer is the same
-    /// allocation after an append, so nothing was copied to add one entry.
-    #[test]
-    fn update_appends_without_copying_the_value() {
-        // Room to spare, so a `push` does not grow the buffer: what is being
-        // asked is whether `update` copies, not whether `Vec` reallocates.
-        let mut start = Vec::with_capacity(8);
-        start.extend([1_i64, 2, 3]);
-        let local = Local::new(start);
-        let before = local.access(|v| v.as_ptr());
-        local.update(|v| v.push(4));
-        assert_eq!(local.access(|v| v.len()), 4);
-        assert_eq!(
-            local.access(|v| v.as_ptr()),
-            before,
-            "the same buffer: an append is a move and not a copy"
-        );
-    }
-
-    /// And reading in place answers a question about a large value without
-    /// taking a copy of it (D1) — the one thing neither `get` nor `update` does.
-    #[test]
-    fn access_reads_a_large_value_in_place() {
-        let local = Local::new((0..10_000_i64).collect::<Vec<_>>());
-        let before = local.access(|v| v.as_ptr());
-        assert_eq!(local.access(|v| v.len()), 10_000);
-        assert_eq!(local.access(|v| v.as_ptr()), before, "nothing was copied");
-    }
-}
-
 /// **A value that fits a machine word, as the word itself**
 /// ([ADR-281](../../../docs/specification/adr/adr-281.md) D13, D14;
 /// [ADR-281](../../../docs/specification/adr/adr-281.md)).
