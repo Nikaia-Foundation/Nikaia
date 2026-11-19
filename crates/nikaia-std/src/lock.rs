@@ -742,9 +742,9 @@ thread_local! {
     };
 }
 
-// **Two tests no program can make yet** (#2088): they check that `update`
-// and `access` do not copy the value, by its buffer's address, which no
-// Nikaia program observes and no condition input reaches. They stay here
+// **Two tests no program can make yet** (#2088, #2304): they check that `update`
+// and `access` do not copy the value, by its buffer's address (`as_ptr`,
+// NK1171 on a test block's list), which no Nikaia program observes and no condition input reaches. They stay here
 // until it is decided how a test written in Nikaia shows that a door does
 // not copy; every other test of this file is a program in
 // `tests/compiler/tests/` (#2189).
