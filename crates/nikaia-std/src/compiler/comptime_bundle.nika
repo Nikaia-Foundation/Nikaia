@@ -510,7 +510,14 @@ fn comptime_bundle_path(text: String) -> fs::Path {
 /// the run bundle's is built as a program's dependency is.
 fn comptime_bundle_bundle_text[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, host: ref H) -> (String, String) {
     let name = comptime_bundle_library(flavour)
-    let mut manifest = cr_bundle_manifest(name, host.runtime_dependencies(comptime_bundle_named().join(" ")))
+    // **The run bundle's `std` is a program's, whole**: a program `nikaia
+    // run` compiles against it may open a socket. Build-time code reaches
+    // none (#2152).
+    let whole_std = match flavour {
+        ComptimeBundleFlavour::BuildTime => false,
+        ComptimeBundleFlavour::Run => true,
+    }
+    let mut manifest = cr_bundle_manifest(name, host.runtime_dependencies(comptime_bundle_named().join(" ")), whole_std)
     let source = match flavour {
         ComptimeBundleFlavour::BuildTime => {
             manifest.push_str(cr_own_profile(name))
