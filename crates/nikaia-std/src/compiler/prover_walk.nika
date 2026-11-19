@@ -3534,8 +3534,7 @@ fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, state: ref Prove
         },
         Expr::Unary { expr, .. } => prover_properties_in(expr, scope, state, program, words, out),
         Expr::Call { func, args, .. } => {
-            let callee = prover_variable_named(func, words) ?? return
-            if scope.locals.contains(callee) || !prover_a_property(program, words, callee) {
+            if !prover_a_property_callee(func, scope, state, program, words) {
                 return
             }
             let name = property_name(expr, words) ?? return
@@ -3619,6 +3618,21 @@ fn prover_rule_type(config: ref Vec[ConfigArg], words: ref winnow_grammar::Inter
     return ""
 }
 
+/// **Whether a call's callee makes a named property** (ADR-381 D1, D5): a
+/// function of the program no local hides, or a free function of `std`'s
+/// ledger that is one by `prover_std_properties`, by its path:
+/// `html::is_plain(name)` after its guard is a fact (ADR-raw-sinks-1 D2).
+fn prover_a_property_callee(func: ref Expr, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+    return match func {
+        Expr::Variable(name, _) => {
+            let callee = words.resolve(name)
+            !scope.locals.contains(callee) && prover_a_property(program, words, callee)
+        },
+        Expr::Path(segments, _) => state.std_properties.contains(path_text(segments, words)),
+        else => false,
+    }
+}
+
 /// Whether `wanted` is a function a named property calls (ADR-381 D1).
 fn prover_a_property(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> bool {
     for item in program.items {
@@ -3645,7 +3659,7 @@ fn prover_std_properties(library: ref Ledger) -> collections::BTreeSet[String] {
     let mut found: collections::BTreeSet[String] = collections::BTreeSet()
     for (key, contract) in library.functions {
         let signature = contract.signature ?? continue
-        if !signature.takes_a_receiver() || !signature.mutable.is_empty() || !signature.config.is_empty() || contract.mutates || !contract.fails_with.is_empty() || !contract.touches_known || !contract.touches.is_empty() {
+        if (!signature.takes_a_receiver() && signature.params.is_empty()) || !signature.mutable.is_empty() || !signature.config.is_empty() || contract.mutates || !contract.fails_with.is_empty() || !contract.touches_known || !contract.touches.is_empty() {
             continue
         }
         let pure = match contract.sync_claim {
@@ -3803,8 +3817,7 @@ fn prover_condition_changes(cond: ref Expr, base: ref String, scope: ref ProverS
         Expr::Unary { expr, .. } => return prover_condition_changes(expr, base, scope, state, program, words),
         Expr::Binary { lhs, rhs, .. } => return prover_condition_changes(lhs, base, scope, state, program, words) || prover_condition_changes(rhs, base, scope, state, program, words),
         Expr::Call { func, .. } => {
-            let callee = prover_variable_named(func, words) ?? ""
-            if !scope.locals.contains(callee) && prover_a_property(program, words, callee) && property_name(cond, words) != null {
+            if prover_a_property_callee(func, scope, state, program, words) && property_name(cond, words) != null {
                 return false
             }
         },

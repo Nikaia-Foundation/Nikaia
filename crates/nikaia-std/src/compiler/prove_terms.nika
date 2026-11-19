@@ -290,6 +290,7 @@ fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
             }
             let callee = match func {
                 Expr::Variable(name, _) => words.resolve(name).clone(),
+                Expr::Path(segments, _) => path_text(segments, words),
                 else => return null,
             }
             let on = path_of(args[0], words) ?? return null
@@ -306,6 +307,13 @@ fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
         },
         else => null,
     }
+}
+
+/// A path's segments as written, joined by `::`: the callee of a property
+/// of `std`, `html::is_plain` (ADR-381 D5).
+fn path_text(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> String {
+    let parts: Vec[String] = segments.iter().map(fn(segment) { words.resolve(segment).clone() }).collect()
+    return parts.join("::")
 }
 
 /// The paths of `args` from the one at `from`, as a property's name lists

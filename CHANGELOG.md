@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1463] — 2026-11-19
+
+**Builders' changes**
+- The environment is the operator's: env::var and env::vars are trusted except a name a CGI host fills (HTTP_*, RFC 3875's) or one not known while building; their trusted: option is gone; [build] environment = "untrusted" (or --environment=untrusted) makes every variable data from outside (ADR-397 D1, D2, D4)
+- `io::read_line` and `io::read_exact` are untrusted sources, as `io::read_to_string` is (ADR-365): what they read is data from outside the program, and `trusted: true` marks a read whose sender the program trusts.
+- A free function of `std` that answers a `bool` and changes nothing is a named property, as a program's own is (ADR-381 D1, D5): after `return if !html::is_plain(name)`, `assert(html::is_plain(name))` is proved, the precondition of `html::Raw` (ADR-raw-sinks-1 D2).
+
+## [0.0.1462] — 2026-11-19
+
+**The solver's oracle prints why z3 refuses a file and what our engine answers; files that must be refused move to tests/solver/malformed and count solved when we refuse them (#2258)**
+- The solver oracle names z3's reason and our engine's answer for every file z3 refuses; ill-formed files live in tests/solver/malformed and count as solved when refused (#2258)
+
 ## [0.0.1461] — 2026-11-19
 
 **A changed trim takes its source's text too, and NK2302 offers the copy**

@@ -1,0 +1,19 @@
+error[NK1202]: `line.len() > 0` is a claim about data from outside the program.
+  --> tests/a_line_read_from_standard_input_is_data_from_outside.nika:9:5
+   |
+ 9 |     assert(line.len() > 0)
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `line` comes from outside the program, so nothing the compiler can see says what it holds.
+   = note: That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(line) if !(line.len() > 0)`, or `return … if !(line.len() > 0)`. After that line, this `assert` is proved.
+error[NK1202]: `body.len() == 4` is a claim about data from outside the program.
+   --> tests/a_line_read_from_standard_input_is_data_from_outside.nika:11:5
+    |
+ 11 |     assert(body.len() == 4)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `body` comes from outside the program, so nothing the compiler can see says what it holds.
+    = note: That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+    = help: Check it where it arrives, with a guard the program handles: `throw BadInput(body) if !(body.len() == 4)`, or `return … if !(body.len() == 4)`. After that line, this `assert` is proved.
+2 type errors
