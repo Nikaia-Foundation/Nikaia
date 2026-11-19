@@ -36,7 +36,7 @@ annotation, described like any crate)
 [ADR-010](adr-010.md) D1 (absence is never a claim);
 [ADR-014](adr-014.md) D1 (the first Nikaia module inside a Rust crate);
 [ADR-289](adr-289.md) D2 and D6 (an operating-system resource belongs in `std`), D15 (HTTP/1.1's parser);
-[ADR-296](adr-296.md) D12 (*measure before choosing a shape*, and where it does not apply);
+[ADR-grammar-parallel-v1](adr-grammar-parallel-v1.md) D4 (*measure before choosing a shape*, and where it does not apply);
 [ADR-243](adr-243.md) (`std::process`, the subprocess D14 asks for);
 [ADR-294](adr-294.md) (the road on which the compiler itself moves to Nikaia);
 [ADR-393](adr-393.md) D1 and D6 (the rust-library artifact D23 splices into);
@@ -293,7 +293,7 @@ the grammar waits on neither. The subprocess is [ADR-243](adr-243.md)'s
 
 ### D15 — A measurement decides between options; where the choice rests on a project principle, a number is a diagnosis.
 
-[ADR-296](adr-296.md) D12's *measure before choosing a shape* applies where two
+[ADR-grammar-parallel-v1](adr-grammar-parallel-v1.md) D4's *measure before choosing a shape* applies where two
 shapes are genuinely on the table. Here the choice is made on a reason about
 the project, so if the Nikaia `describe` is slower than the scanner, that is a
 finding about this compiler and work owed — not a reason to go back. A

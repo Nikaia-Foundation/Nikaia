@@ -57,7 +57,7 @@ names what it catches ([ADR-280](adr-280.md)).
 
 `sync` is asked of every call an action makes and of every call a fold's
 `init`, `step` and `merge` make; a call that can pause is `NK2209`, naming the
-rule. A parse that can be cut and run on several cores (ADR-296 D10) is one
+rule. A parse that can be cut and run on several cores (ADR-grammar-parallel-v1 D2) is one
 whose steps do not wait on the world. Refused only where the ledger answered,
 as every `sync` rule is.
 
