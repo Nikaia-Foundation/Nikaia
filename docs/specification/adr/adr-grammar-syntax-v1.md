@@ -10,8 +10,9 @@ a grammar may write ([#202](https://github.com/Nikaia-Foundation/Nikaia/issues/2
 [#932](https://github.com/Nikaia-Foundation/Nikaia/issues/932),
 [#125](https://github.com/Nikaia-Foundation/Nikaia/issues/125))
 **Supersedes / Related:** takes the decisions on how a grammar is written from
-[ADR-296](adr-296.md) and [ADR-grammar-1](adr-grammar-1.md) (their other
-decisions stay there) and the whole of a record now in
+[ADR-296](adr-296.md) (its other decisions stay there), the rule values of a
+record now in the history (its last decision went to
+[ADR-grammar-actions-v1](adr-grammar-actions-v1.md)) and the whole of a record now in
 [`docs/history/adr/`](../../history/adr/README.md) (spans, `same_line`, `///`);
 [ADR-296](adr-296.md) D4 (the two ways a hole binds), D18 (the backend is handed
 the grammar's own strings), D27 (`asset("…")`); [ADR-299](adr-299.md) D20, D21

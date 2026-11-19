@@ -596,7 +596,7 @@ pub mod prelude {
     // reached through its prefix has to be in scope in the generated file.
     pub use crate::regex;
     // **What a parse fails with**
-    // ([ADR-296](../../../docs/specification/adr/adr-296.md) D38): written bare,
+    // ([ADR-grammar-actions-v1](../../../docs/specification/adr/adr-grammar-actions-v1.md) D4): written bare,
     // like `Overtaken`, because a program never writes a path to it — it
     // arrives in a `catch`, and the generated file has to find it there
     // without a `use` the program did not write.

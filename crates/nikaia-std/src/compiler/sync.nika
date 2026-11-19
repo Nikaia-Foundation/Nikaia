@@ -207,7 +207,7 @@ pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContex
                 }
             }
             // **A grammar's entries are leaves too, and they hold**
-            // (ADR-296 D35, D36): an action may not pause, so the entry is
+            // (ADR-grammar-actions-v1 D1, D2): an action may not pause, so the entry is
             // `sync` and a caller keeps its own claim.
             Item::Grammar(def) => {
                 let named = names.resolve(def.name).clone()

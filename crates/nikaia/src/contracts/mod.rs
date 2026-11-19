@@ -559,7 +559,7 @@ fn toolchain() -> String {
 pub const UNNAMED_ERROR: &str = "?";
 
 /// What a parse fails with
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D38).
+/// ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md) D4).
 ///
 /// A `std` type with no module in front, which is `Overtaken`'s shape: a
 /// program never writes a path to it, because it arrives in a `catch`.

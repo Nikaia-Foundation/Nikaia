@@ -289,7 +289,7 @@ fn a_dsl_with_a_catch_is_handed_the_result_and_not_the_value() {
 /// expected and never *where* (ADR-296 D11, `docs/error-corpus.md`).
 ///
 /// **And what comes out of it has a name**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D38): the rendered
+/// ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md) D4): the rendered
 /// text goes into a `ParseError`, which is the type the rule's ledger entry
 /// says it throws. The text is unchanged, so a program that prints the error
 /// prints what it printed before.

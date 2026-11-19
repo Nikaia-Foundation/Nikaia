@@ -566,7 +566,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             let outer_action: String? = state.inside_an_action?.clone()
             state.inside_an_action = world.words.resolve(rule.name).clone()
             // What an argument, a bound or a guard computes may not pause,
-            // as an action may not (ADR-296 D35).
+            // as an action may not (ADR-grammar-actions-v1 D1).
             state.grammar_values(world, host, gram, alt.pattern, rules, values.clone())
             let mut frame = values.clone()
             for bound in state.bindings_of(world, alt.pattern.node, rules) {

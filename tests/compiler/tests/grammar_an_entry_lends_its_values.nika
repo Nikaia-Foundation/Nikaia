@@ -1,4 +1,4 @@
-// An entry's values are lent as a rule's are (ADR-grammar-1 D6, #1560): the
+// An entry's values are lent as a rule's are (ADR-grammar-actions-v1 D7, #1560): the
 // caller's list is still its own after the parse, and text is handed as a
 // literal or as a view.
 
