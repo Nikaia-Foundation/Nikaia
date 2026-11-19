@@ -599,7 +599,7 @@ impl EmitState {
             let mut handed = String()
             for i in 0..<rule.args.len() {
                 out.push(f"let __wg_value{i} = ")
-                // **A lent value is the caller's still** (ADR-grammar-1 D6):
+                // **A lent value is the caller's still** (ADR-grammar-actions-v1 D7):
                 // the reader's thread takes a copy, once, and lends it on.
                 let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
                 if lent {
@@ -673,8 +673,8 @@ impl EmitState {
                         out.push(", ")
                     }
                     first = false
-                    // **A lent value is handed as a reference** (ADR-grammar-1
-                    // D6): the caller keeps it.
+                    // **A lent value is handed as a reference** (ADR-grammar-actions-v1
+                    // D7): the caller keeps it.
                     let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
                     if i < values.len() && lent {
                         out.push("&(")

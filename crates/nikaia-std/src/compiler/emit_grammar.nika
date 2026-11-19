@@ -356,7 +356,7 @@ impl EmitState {
         for i in 0..<rule.args.len() {
             let value_ty = host.ty_named(walk, rule.args[i].ty)
             params.push_str(f", __wg_value{i}: {value_ty}")
-            // A lent value is lent from the thread's own (ADR-grammar-1 D6).
+            // A lent value is lent from the thread's own (ADR-grammar-actions-v1 D7).
             let lent = if self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}") { "&" } else { "" }
             handed.push_str(f"{lent}__wg_value{i}, ")
         }
@@ -442,7 +442,7 @@ impl EmitState {
             names.insert(emit_text(world, rule.name))
         }
         walk.grammar_rules = names
-        // **A lent value is a view here** (ADR-grammar-1 D6): the rule takes
+        // **A lent value is a view here** (ADR-grammar-actions-v1 D7): the rule takes
         // a reference and a call hands one, so nothing is cloned per call.
         // The facts name the grammar as written, not its copy over bytes.
         let source = emit_text(world, def.name)
@@ -617,7 +617,7 @@ impl EmitState {
         let taken: GrammarRule = walk.grammar_values.get(emit_text(world, rule.name))?.clone() ?? rule.clone()
         for arg in taken.args {
             // **A lent value is a reference of the call's own lifetime**
-            // (ADR-grammar-1 D6): one the caller made for the call, `Two([])`,
+            // (ADR-grammar-actions-v1 D7): one the caller made for the call, `Two([])`,
             // lives as long as the call does, not as long as the input.
             let mut owned = arg.ty.clone()
             owned.is_view = false

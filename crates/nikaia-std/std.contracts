@@ -5842,8 +5842,8 @@ compares = true
 # kind and it carries the thing*.
 variants = ["NotFound(fs::Path)", "PermissionDenied(fs::Path)", "NotText(String)", "Outside(fs::Path)", "Other(String)"]
 
-# **What a parse fails with** ([ADR-296](../../docs/specification/adr/adr-296.md)
-# D38), and the end of the last `"?"` in this tree. A `dsl` entry rule's ledger
+# **What a parse fails with** ([ADR-grammar-actions-v1](../../docs/specification/adr/adr-grammar-actions-v1.md)
+# D4), and the end of the last `"?"` in this tree. A `dsl` entry rule's ledger
 # entry wrote `throws = ["?"]` because a parse fails with a rendered string and
 # a string is not a type; seven of the corpus' eight `main`s carried that into
 # their own set, and each of them has a **sum of two named members** now.
