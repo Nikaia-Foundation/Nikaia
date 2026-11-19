@@ -29,7 +29,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
             ks.push(t.k);
         }
     }
-    let mut row = SvRow { cols: vec![], ks: vec![], constant };
+    let mut row = SvRow { cols: Vec::with_capacity(nikaia_std::count::of(cols.len() as i64)), ks: Vec::with_capacity(nikaia_std::count::of(cols.len() as i64)), constant };
     let mut i: i64 = 0;
     while ((i) as usize) < cols.len() {
         if *unsafe { nikaia_std::proven::read(&ks, (i) as usize) } != 0 {

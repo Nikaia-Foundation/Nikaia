@@ -48,7 +48,7 @@ fn sv_row_of(terms: Vec[SvTerm], constant: i64) -> SvRow? {
 			ks.push(t.k)
 		}
 	}
-	let mut row = SvRow { cols: [], ks: [], constant: constant }
+	let mut row = SvRow { cols: Vec(capacity: cols.len()), ks: Vec(capacity: cols.len()), constant: constant }
 	let mut i = 0
 	while i < cols.len() {
 		if ks[i] != 0 {

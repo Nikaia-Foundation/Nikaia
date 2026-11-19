@@ -1011,7 +1011,7 @@ impl SvSimplex {
             l_terms.push(SvTerm { col: *unsafe { nikaia_std::proven::read(&form_b.cols, (i) as usize) }, k: *nikaia_std::index::get(&form_b.ks, (i) as usize) });
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        let mut cut_cols: Vec<u32> = vec![];
+        let mut cut_cols: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut cut_ks: Vec<SvRat> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut cut_c = sv_int(1);
         let mut side1: Vec<SvRat> = vec![];

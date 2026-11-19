@@ -3169,6 +3169,9 @@ fn check_core_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref E
         Expr::Call { func, args, config, .. } => check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name) && config.iter().all(fn(option) { check_core_stays_in(state, world, option.value, name) }),
         Expr::Tuple(parts, _) => check_core_stays_in_all(state, world, parts, name),
         Expr::ListLit { items, .. } => check_core_stays_in_all(state, world, items, name),
+        // A field value is read as a list item is: `Row { n: xs.len() }`
+        // keeps `xs` where it is, `Row { xs }` moves it in (#2323).
+        Expr::StructLit { fields, .. } => fields.iter().all(fn(field) { check_core_stays_in_field(state, world, field, name) }),
         Expr::Coalesce { value, fallback, .. } => check_core_stays_in(state, world, value, name) && check_core_stays_in(state, world, fallback, name),
         Expr::Range { start, end, .. } => check_core_stays_in(state, world, start, name) && check_core_stays_in(state, world, end, name),
         Expr::Block(inner, _) => check_core_stays_in_block(state, world, inner, name),
@@ -3199,6 +3202,15 @@ fn check_core_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref E
             true
         },
         else => false,
+    }
+}
+
+/// Whether a struct literal's field keeps `name` where it is: its value
+/// does, or, written without one (`Row { xs }`), it names another binding.
+fn check_core_stays_in_field(state: ref CheckState, world: ref CheckWorld, field: ref FieldInit, name: ref String) -> bool sync {
+    return match field.value {
+        null => f"{world.words.resolve(field.name)}" != name,
+        value => check_core_stays_in(state, world, value, name),
     }
 }
 

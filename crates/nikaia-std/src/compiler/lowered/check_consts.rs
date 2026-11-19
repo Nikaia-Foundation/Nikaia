@@ -414,14 +414,14 @@ impl CheckState {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let table = match build(&keys) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
-        #[allow(unused_mut)] let mut disps: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut disps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (d1, d2) in table.disps.iter() {
             let d1 = nikaia_std::num::value(d1);let d2 = nikaia_std::num::value(d2);
             disps.push(format!("({}, {})", d1, d2));
         }
-        #[allow(unused_mut)] let mut written_keys: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps;
+        #[allow(unused_mut)] let mut written_keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps;
         for key in table.keys.iter() { written_keys.push(format!("\"{}\"", as_a_literal(key))); }
-        let mut written_values: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps; #[allow(unused_mut, clippy::redundant_locals)] let mut written_keys = written_keys;
+        let mut written_values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut values = values; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps; #[allow(unused_mut, clippy::redundant_locals)] let mut written_keys = written_keys;
         for place in table.order.iter() {
             let place = nikaia_std::num::value(place);
             written_values.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_string()));

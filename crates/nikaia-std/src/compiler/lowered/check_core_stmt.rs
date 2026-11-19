@@ -2302,6 +2302,7 @@ pub(crate) fn check_core_stays_in(state: &CheckState, world: &CheckWorld<'_, '_,
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name) && config.iter().all(|option| { check_core_stays_in(state, world, &option.value, name) }) },
         Expr::Tuple(parts, _) => check_core_stays_in_all(state, world, parts, name),
         Expr::ListLit { items, .. } => check_core_stays_in_all(state, world, items, name),
+        Expr::StructLit { fields, .. } => fields.iter().all(|field| { check_core_stays_in_field(state, world, field, name) }),
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); check_core_stays_in(state, world, value, name) && check_core_stays_in(state, world, fallback, name) },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_stays_in(state, world, start, name) && check_core_stays_in(state, world, end, name) },
         Expr::Block(inner, _) => check_core_stays_in_block(state, world, inner, name),
@@ -2323,6 +2324,15 @@ pub(crate) fn check_core_stays_in(state: &CheckState, world: &CheckWorld<'_, '_,
             true
         },
         _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stays_in_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, field: &FieldInit, name: &str) -> bool {
+    match &field.value {
+        None => format!("{}", world.words.resolve(field.name)) != name,
+        Some(value) => check_core_stays_in(state, world, value, name),
     }
 }
 
