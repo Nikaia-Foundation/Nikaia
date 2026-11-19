@@ -808,7 +808,7 @@ impl EmitState {
                     // **The values, then each option the entry declares, in
                     // its order** (ADR-grammar-syntax-v1 D12, #1512): one the call leaves
                     // out is `None`, and the walk takes its default where it is
-                    // declared; last the caller's `words:` table (ADR-388 D1),
+                    // declared; last the caller's `words:` table (ADR-grammar-input-v1 D10),
                     // which is no option the rule declares.
                     out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
                     self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
@@ -859,7 +859,7 @@ impl EmitState {
                     out.push(f", {package}{options}(), {claimed}, |source, how| {package}{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
                     return true
                 }
-                // **The caller's table, where it hands one** (ADR-388 D1,
+                // **The caller's table, where it hands one** (ADR-grammar-input-v1 D10,
                 // #1519): the parse interns into it, as an entry beside the
                 // call does.
                 let mut table: Expr? = null

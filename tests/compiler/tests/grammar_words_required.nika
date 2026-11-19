@@ -1,5 +1,5 @@
 // An entry whose result can hold a `Symbol` must be handed the table
-// (ADR-388 D2, #1198): called without `words:`, its symbols would point into
+// (ADR-grammar-input-v1 D11, #1198): called without `words:`, its symbols would point into
 // a table nobody can reach, so each call below is refused with NK1330, the
 // symbol in an element, a field, a variant, a variant's field, behind `?` and in a tuple.
 

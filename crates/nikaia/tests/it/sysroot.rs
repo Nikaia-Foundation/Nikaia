@@ -316,7 +316,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
                   \x20   return names.resolve(name) == \"main\" && Named { name: name } == Named { name: name }\n\
                   }\n";
     // A name only the tools' description holds (`winnow_grammar::Symbol` is
-    // `std`'s since ADR-388 D3, so a module of `std` reads it too).
+    // `std`'s since ADR-grammar-input-v1 D12, so a module of `std` reads it too).
     let described_only = "pub fn number() -> u32 {\n\
          \x20   return node_id::NodeId::fresh().get()\n\
          }\n";

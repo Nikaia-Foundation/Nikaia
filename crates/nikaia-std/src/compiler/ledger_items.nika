@@ -156,7 +156,7 @@ fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref col
             options.push(ConfigContract { name: words.resolve(option.name).clone(), ty: written_ty(words, aliases, option.ty), default: default_text(option.default) })
         }
         contract.signature = Signature { bounds: [], mutable: [], params: params, config: options, result: result }
-        // **Whether it interns** (ADR-388 D1, #1519): a caller in another
+        // **Whether it interns** (ADR-grammar-input-v1 D10, #1519): a caller in another
         // package hands it `words:` by this, as one beside it does by the rule.
         contract.interns = grammar_entry_interns(words, definition, words.resolve(rule.name))
         out.push(DeclaredFn { key: f"{owner}::{words.resolve(rule.name)}", contract: contract })
@@ -164,7 +164,7 @@ fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref col
     return out
 }
 
-/// **Whether the entry `entry` of `definition` interns** (ADR-388 D1): the
+/// **Whether the entry `entry` of `definition` interns** (ADR-grammar-input-v1 D10): the
 /// rules it reaches, walked once each, call `ident` or `intern(p)`.
 fn grammar_entry_interns(words: ref winnow_grammar::InternerContext, definition: ref GrammarDef, entry: ref String) -> bool {
     let mut rules: collections::BTreeSet[String] = collections::BTreeSet()

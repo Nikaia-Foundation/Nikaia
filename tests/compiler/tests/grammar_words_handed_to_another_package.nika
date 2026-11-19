@@ -1,5 +1,5 @@
 // #1519: a program hands its `words:` table to another package's grammar
-// entry that interns (ADR-388 D1), `@stream` or not: the ledger says the entry
+// entry that interns (ADR-grammar-input-v1 D10), `@stream` or not: the ledger says the entry
 // interns, and the parse interns into the caller's table, so `resolve` reads
 // each symbol back and one spelling is one symbol across two parses.
 use std::fs

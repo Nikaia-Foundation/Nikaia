@@ -411,7 +411,7 @@ all, which a set search cannot know to skip.
 | what | where | issue |
 |---|---|---|
 | the sum's check, proved below a length checked once before the fold (ADR-367 D4; the count's is proved); one branch a row, no instruction in today's layout | the prover, the lowering | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
-| no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422; a name used only as a key, checked on a miss, is its D5, not built). Today the same program over `data[0..<data.len()]` (a `Bytes`) counts 350.2 and 338.1: the per-name `from_utf8` is 115.6 a row, and the bytes loop 10 more than the text one, so D5 alone would win at most the 10.3 back | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
+| no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-grammar-input-v1, #422; a name used only as a key, checked on a miss, is its D5, not built). Today the same program over `data[0..<data.len()]` (a `Bytes`) counts 350.2 and 338.1: the per-name `from_utf8` is 115.6 a row, and the bytes loop 10 more than the text one, so D5 alone would win at most the 10.3 back | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## Why two AI variants
 
