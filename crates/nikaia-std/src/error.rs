@@ -843,135 +843,14 @@ pub fn reopened<E: Error + 'static>(error: Box<dyn Error>) -> Thrown<E> {
 mod tests {
     use super::*;
 
-    #[derive(Debug)]
-    struct Boom;
-    impl fmt::Display for Boom {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("boom")
-        }
-    }
-    impl Error for Boom {}
-
-    /// **ADR-280 D28: a typed envelope keeps its site in the box**, and the
-    /// failures that joined it, each with its own; and what joins it there is
-    /// kept too.
-    #[test]
-    fn a_thrown_error_keeps_its_site_and_list_in_the_box() {
-        let mut thrown = throwing(Boom, &"load");
-        thrown.joined_by(throwing(Boom, &"later"));
-        let mut boxed: Box<dyn Error> = thrown.into();
-        boxed.joined_by(raise(Boom, &"cleanup"));
-        let full = boxed.full();
-        assert!(full.starts_with("boom\n  raised at load\n"), "{full}");
-        assert!(
-            full.contains("  and then:\n  boom\n    raised at later"),
-            "{full}"
-        );
-        assert!(
-            full.contains("  and then:\n  boom\n    raised at cleanup"),
-            "{full}"
-        );
-        assert_eq!(full.matches("(no trace;").count(), 1, "{full}");
-    }
-
-    /// **And a bare error that reaches the box keeps what joins it**, in an
-    /// envelope with no site.
-    #[test]
-    fn a_bare_error_in_the_box_keeps_what_joins_it() {
-        let mut boxed: Box<dyn Error> = Box::new(Boom);
-        boxed.joined_by(raise(Boom, &"cleanup"));
-        let full = boxed.full();
-        assert!(full.starts_with(&format!("boom\n{BELOW}")), "{full}");
-        assert!(full.contains("raised at cleanup"), "{full}");
-    }
-
-    #[test]
-    fn the_short_form_is_the_message_and_nothing_else() {
-        let e = raise(Boom, &"conf.nika:12");
-        assert_eq!(e.to_string(), "boom");
-    }
-
-    #[test]
-    fn the_full_form_names_the_site() {
-        let e = raise(Boom, &"conf.nika:12");
-        let full = e.full();
-        assert!(full.contains("boom"), "{full}");
-        assert!(full.contains("raised at conf.nika:12"), "{full}");
-    }
-
-    /// Without `NIKAIA_TRACE` there is no trace, and the full form says so
-    /// rather than leaving a reader wondering whether it lost one.
-    #[test]
-    fn without_the_switch_the_absence_is_stated() {
-        let e = raise(Boom, &"conf.nika:12");
-        assert!(e.full().contains("NIKAIA_TRACE=1"), "{}", e.full());
-    }
-
-    /// **A failure that joined is under the one it joined**
-    /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D8, D9), in the
-    /// order they joined.
-    #[test]
-    fn what_joined_is_printed_under_it() {
-        let mut first = throwing(Boom, &"load.nika:3");
-        first.joined_by(throwing(Boom, &"load.nika:9"));
-        let full = first.full();
-
-        assert_eq!(full.matches("boom").count(), 2, "{full}");
-        assert!(full.contains("raised at load.nika:3"), "{full}");
-        assert!(full.contains("raised at load.nika:9"), "{full}");
-        assert!(
-            full.find("load.nika:3") < full.find("load.nika:9"),
-            "the one that was joined comes first:\n{full}"
-        );
-        assert!(full.contains("and then:"), "{full}");
-    }
-
-    /// **And the trace note is said once**, because it is about how this
-    /// *process* was started: repeating it under every joined failure says the
-    /// same thing three times and buries them.
-    #[test]
-    fn the_trace_note_is_not_repeated_under_each() {
-        let mut first = throwing(Boom, &"load.nika:3");
-        first.joined_by(throwing(Boom, &"load.nika:9"));
-        assert_eq!(first.full().matches("NIKAIA_TRACE").count(), 1);
-    }
-
-    /// **An envelope with no site says so**, which is the sentence
-    /// [ADR-280](../../../docs/specification/adr/adr-280.md) D3 already had.
-    /// Since D1 a library's error may be enveloped for the sake of the list,
-    /// and *raised at (below Nikaia)* would be this compiler inventing a place.
-    #[test]
-    fn an_enveloped_error_from_below_still_has_no_site() {
-        let below: Thrown<Boom> = Boom.into();
-        let full = below.full();
-        assert!(full.contains("no site recorded"), "{full}");
-        assert!(!full.contains("raised at"), "{full}");
-    }
-
-    /// **The list survives `throw error`** (D1): a handler that passes an error
-    /// along passes what came with it, or that would be the one place a
-    /// failure quietly loses the others.
-    #[test]
-    fn passing_an_error_on_keeps_what_joined_it() {
-        let mut first = throwing(Boom, &"load.nika:3");
-        first.joined_by(throwing(Boom, &"load.nika:9"));
-        let (error, site) = first.split();
-        assert_eq!(site.secondary().len(), 1);
-        assert!(site.refill(error).full().contains("load.nika:9"));
-    }
-
-    /// An error from below Nikaia has no site, and says that instead of
-    /// inventing one.
-    #[test]
-    fn an_error_from_below_says_it_has_no_site() {
-        let e: Box<dyn Error> = Box::new(Boom);
-        assert!(e.full().contains("no site recorded"), "{}", e.full());
-    }
-
     // --- The one-word tail (ADR-280) ----------------------------------------
+    //
+    // What the envelope prints, joins, passes on and drops is tested by
+    // programs (`tests/compiler/tests/error_*.nika`, `error_types.nika` in
+    // `tests/language`). The two tests left check its layout, which no
+    // program sees.
 
     use std::mem::size_of;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[allow(dead_code)]
     enum Kind {
@@ -986,6 +865,9 @@ mod tests {
     /// error** (D2) for the error types a program declares: fieldless, unit,
     /// and one word of payload. That is the success path, which every call
     /// that can fail pays whether it fails or not.
+    ///
+    /// Kept as Rust (#2082): a size is layout, and no test block can name
+    /// `size_of`.
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn a_result_around_an_envelope_is_as_small_as_around_the_bare_error() {
@@ -1004,16 +886,11 @@ mod tests {
         assert_eq!(size_of::<Raised>(), 3 * size_of::<usize>());
     }
 
-    /// Envelopes travel into tasks, so they cross threads where the error does.
-    #[test]
-    fn an_envelope_crosses_a_thread_where_its_error_does() {
-        fn send_and_sync<T: Send + Sync>() {}
-        send_and_sync::<Thrown<Kind>>();
-        send_and_sync::<Site<Kind>>();
-    }
-
     /// **The common case allocates nothing**: a site and nothing else lives in
     /// the word, tagged.
+    ///
+    /// Kept as Rust (#2082): whether the tail is the word or a cold box is
+    /// layout, which no program sees.
     #[test]
     fn a_site_alone_is_the_tagged_word() {
         let tail: Tail<()> = Tail::site(&"load.nika:3");
@@ -1022,87 +899,5 @@ mod tests {
         assert_eq!(tail.origin(), "load.nika:3");
         assert!(tail.trace().is_none());
         assert!(tail.secondary().is_empty());
-    }
-
-    /// **Joining is what moves an envelope to the cold box**, and the site
-    /// goes with it.
-    #[test]
-    fn joining_moves_the_site_into_the_cold_box() {
-        let mut first: Thrown<Boom> = Thrown {
-            inner: Boom,
-            tail: Tail::site(&"load.nika:3"),
-        };
-        assert!(first.tail.is_site_only());
-        first.joined_by(throwing(Boom, &"load.nika:9"));
-        assert!(!first.tail.is_site_only());
-        assert_eq!(first.origin(), "load.nika:3");
-        assert_eq!(first.tail.secondary().len(), 1);
-        assert_eq!(first.tail.secondary()[0].origin(), "load.nika:9");
-        first.joined_by(throwing(Boom, &"load.nika:12"));
-        assert_eq!(first.tail.secondary().len(), 2, "one box, not one per join");
-    }
-
-    /// **A trace lives in the cold box**, and the long form prints it instead
-    /// of the note.
-    #[test]
-    fn a_trace_lives_in_the_cold_box() {
-        let e = Thrown {
-            inner: Boom,
-            tail: Tail::traced(&"load.nika:3", Backtrace::force_capture()),
-        };
-        assert!(!e.tail.is_site_only());
-        assert_eq!(e.origin(), "load.nika:3");
-        let captured = e.tail.trace().map(|t| t.status()) == Some(BacktraceStatus::Captured);
-        assert_eq!(!e.full().contains("NIKAIA_TRACE"), captured, "{}", e.full());
-    }
-
-    /// `split` and `refill` hand the one word across, in both states.
-    #[test]
-    fn the_word_survives_split_and_refill_in_both_states() {
-        let plain = throwing(Boom, &"a.nika:1");
-        let (error, site) = plain.split();
-        assert_eq!(site.refill(error).origin(), "a.nika:1");
-
-        let mut joined = throwing(Boom, &"a.nika:1");
-        joined.joined_by(throwing(Boom, &"a.nika:2"));
-        let (error, site) = joined.split();
-        assert!(site.full_of(&error).contains("raised at a.nika:1"));
-        let back = site.refill(error);
-        assert_eq!(back.origin(), "a.nika:1");
-        assert!(back.full().contains("a.nika:2"), "{}", back.full());
-    }
-
-    /// The boxed channel joins into its own cold box the same way.
-    #[test]
-    fn the_boxed_channel_joins_into_its_cold_box() {
-        let mut first = raise(Boom, &"load.nika:3");
-        first.joined_by(raise(Boom, &"load.nika:9"));
-        let full = first.full();
-        assert!(full.contains("raised at load.nika:3"), "{full}");
-        assert!(full.contains("raised at load.nika:9"), "{full}");
-    }
-
-    /// **Everything a cold box holds is dropped with it**, in a tree three deep:
-    /// the tail's own `Drop` is the only thing that frees the box, so a leak or
-    /// a double drop would show here as a wrong count.
-    #[test]
-    fn a_tree_of_joined_failures_is_dropped_exactly_once() {
-        static DROPPED: AtomicUsize = AtomicUsize::new(0);
-        struct Counted;
-        impl Drop for Counted {
-            fn drop(&mut self) {
-                DROPPED.fetch_add(1, Ordering::SeqCst);
-            }
-        }
-        {
-            let mut root = throwing(Counted, &"r");
-            let mut middle = throwing(Counted, &"m");
-            middle.joined_by(throwing(Counted, &"leaf"));
-            root.joined_by(middle);
-            root.joined_by(Counted.into());
-            let (error, site) = root.split();
-            let _again = site.refill(error);
-        }
-        assert_eq!(DROPPED.load(Ordering::SeqCst), 4);
     }
 }

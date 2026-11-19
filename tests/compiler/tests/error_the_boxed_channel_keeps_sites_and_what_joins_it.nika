@@ -1,0 +1,83 @@
+// The boxed channel (ADR-280 D9, D28): a trait method's channel is the box, so
+// these rows reach `raise`, the box join and the typed-to-box conversion.
+// Rows: the short and the long form of a raise; two raises joined; a typed
+// function's joined list converted into the box, joined by another; a bare
+// error from below (no site) joined by a raise.
+use std::fs
+
+enum LoadError {
+	Boom,
+}
+
+impl Error for LoadError {
+	fn message(ref self) -> String {
+		return "boom"
+	}
+}
+
+fn typed_load() -> String throws {
+	throw LoadError::Boom
+}
+
+fn both() -> String throws {
+	let pair = overlap {
+		typed_load()
+		typed_load()
+	}
+	return pair.0 + pair.1
+}
+
+trait Loader {
+	fn load(ref self) -> String throws
+	fn listed(ref self) -> String throws
+	fn missing(ref self) -> String throws
+}
+
+struct Disk {
+	root: String,
+}
+
+impl Loader for Disk {
+	fn load(ref self) -> String throws {
+		throw LoadError::Boom
+	}
+
+	fn listed(ref self) -> String throws {
+		return both()
+	}
+
+	fn missing(ref self) -> String throws {
+		return fs::read_to_string(f"{self.root}/no-such-file.txt", fs::Root::Anywhere)
+	}
+}
+
+fn main() throws {
+	let disk = Disk { root: "/nonexistent-2188" }
+	let a = disk.load() catch {
+		println(f"short: {error}")
+		println(f"full:\n{error.full()}")
+		""
+	}
+	let b = overlap {
+		disk.load()
+		disk.load()
+	} catch {
+		println(f"joined:\n{error.full()}")
+		("", "")
+	}
+	let c = overlap {
+		disk.listed()
+		disk.listed()
+	} catch {
+		println(f"lists:\n{error.full()}")
+		("", "")
+	}
+	let d = overlap {
+		disk.missing()
+		disk.load()
+	} catch {
+		println(f"bare:\n{error.full()}")
+		("", "")
+	}
+	println(f"{a}{b.0}{c.0}{d.0}after")
+}
