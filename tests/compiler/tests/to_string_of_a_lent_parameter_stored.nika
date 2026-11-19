@@ -6,20 +6,20 @@ struct B { name: String, held: Vec[String] }
 fn add(mut bodies: Vec[B], name: String, args: ref Vec[String]) {
     let held: Vec[String] = args.iter().filter(fn(a) { a.len() > 0 }).map(fn(a) { a.clone() }).collect()
     if !held.is_empty() {
-        bodies.push(B { name: name.to_string(), held })
+        bodies.push(B { name: name, held })
     }
 }
 
 fn make(name: String) -> B {
-    return B { name: name.to_string(), held: [] }
+    return B { name: name, held: [] }
 }
 
 fn keep(mut names: Vec[String], name: String) {
-    names.push(name.to_string())
+    names.push(name)
 }
 
 fn escape(mut bodies: Vec[B], name: String) {
-    let s = name.to_string()
+    let s = name
     bodies.push(B { name: s, held: [] })
 }
 

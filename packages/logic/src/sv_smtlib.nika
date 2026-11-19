@@ -239,7 +239,7 @@ fn sv_overflow(what: String) -> SvGot {
 fn sv_decimal(a: String) -> SvGot {
 	let mut parts: Vec[String] = []
 	for part in a.split(".") {
-		parts.push(part.to_string())
+		parts.push(part)
 	}
 	if parts.len() != 2 || !sv_is_numeral(parts[0]) || !sv_is_numeral(parts[1]) {
 		return SvGot::Failed(SvReadWhy::Unsupported(f"the numeral {a}"))
@@ -323,8 +323,8 @@ fn sv_lin_atom(mut arena: TermArena, rel: String, d: ref SvLin) -> i64? {
 /// atom; `n/0` is malformed (ADR-270 D28.6).
 fn sv_ratio(a: String) -> SvGot? {
 	let at = a.find("/") ?? return null
-	let num = a[0..<at].to_string()
-	let den = a[at + "/".len()..].to_string()
+	let num = a[0..<at]
+	let den = a[at + "/".len()..]
 	if !sv_is_numeral(num) || !sv_is_numeral(den) {
 		return null
 	}
@@ -410,7 +410,7 @@ impl SvSmtReader {
 			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))
 		}
 		// A negative numeral atom, as some benchmarks write it: `-175`.
-		if a.starts_with("-") && sv_is_numeral((a.strip_prefix("-") ?? "").to_string()) {
+		if a.starts_with("-") && sv_is_numeral((a.strip_prefix("-") ?? "")) {
 			let n = text::parse_i64(a)
 				?? return SvGot::Failed(SvReadWhy::Overflow(f"the numeral {a}"))
 			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))

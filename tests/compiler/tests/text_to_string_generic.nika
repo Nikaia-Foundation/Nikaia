@@ -1,0 +1,28 @@
+// #1589: `.to_string()` through a bound stays the text form of a value, also
+// where the type parameter is `String` at a call (ADR-text-reuse-1 D1).
+trait Named {
+    fn to_string(self) -> String
+}
+
+impl Named for String {
+    fn to_string(self) -> String {
+        return f"{self}!"
+    }
+}
+
+impl Named for i64 {
+    fn to_string(self) -> String {
+        return f"#{self}"
+    }
+}
+
+fn show[T: Named](x: T) -> String {
+    return x.to_string()
+}
+
+fn main() throws {
+    let word: String = f"Ham{"burg"}"
+    println(show(word))
+    let n: i64 = 12
+    println(show(n))
+}

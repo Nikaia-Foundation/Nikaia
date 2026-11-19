@@ -13,7 +13,7 @@ use std::fs
 fn cargo_json_lines(messages: String) -> Vec[json::Value] {
     let mut out: Vec[json::Value] = []
     for line in messages.lines() {
-        let value = json::parse(line.to_string()) catch { continue }
+        let value = json::parse(line) catch { continue }
         out.push(value)
     }
     return out

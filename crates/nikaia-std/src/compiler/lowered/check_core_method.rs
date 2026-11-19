@@ -445,6 +445,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     check_core_method_changes(state, world, receiver, &name, span);
     state.a_copy_under_another_name(world, receiver, method, args, span);
     state.a_call_on_a_literal_that_adds_nothing(world, receiver, method, args, span);
+    state.a_text_form_of_text(world, expr, receiver, method, args, &on, span);
     let text = match on {
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "String" || name == "str"),
         _ => false,

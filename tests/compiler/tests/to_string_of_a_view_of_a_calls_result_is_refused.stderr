@@ -1,8 +1,8 @@
 error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
   --> tests/to_string_of_a_view_of_a_calls_result_is_refused.nika:8:12
    |
- 8 |     return made(n).trim().to_string()
-   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 8 |     return made(n).trim()
+   |            ^^^^^^^^^^^^^^
    |
    = note: This is a view: it points into text that something else owns.
    = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.

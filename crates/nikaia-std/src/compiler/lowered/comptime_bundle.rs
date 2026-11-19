@@ -224,8 +224,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let named = COMPTIME_BUNDLE_NAMED.len() as i64;
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(3).take(nikaia_std::count::of(named)).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14857| {
-        let (name, rlib) = __nikaia_tuple14857;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(3).take(nikaia_std::count::of(named)).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14845| {
+        let (name, rlib) = __nikaia_tuple14845;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != named { return None; }

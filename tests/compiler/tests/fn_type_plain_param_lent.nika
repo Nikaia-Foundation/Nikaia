@@ -10,17 +10,17 @@ fn apply(f: fn(s: String) -> i64, s: String) -> i64 {
 }
 
 fn twice(f: fn(s: String) -> i64) -> i64 throws {
-    let g: String = "hey ".trim().to_string()
+    let g: String = "hey ".trim()
     let n = f(g)
     println(g)
     return n + f(g)
 }
 
 fn main() throws {
-    let g = "hi ".trim().to_string()
+    let g = "hi ".trim()
     let f: fn(s: String) -> i64 sync = fn(s) { s.len() }
     println(f(g))
-    let h: String = "hello ".trim().to_string()
+    let h: String = "hello ".trim()
     println(f(h))
     println(h)
     let k: fn(s: String) -> i64 sync = count

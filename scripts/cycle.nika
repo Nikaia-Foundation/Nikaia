@@ -30,7 +30,7 @@ fn cycle_cap(line: String) -> String throws {
 
 fn cycle_exe() -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
-        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+        if fs::exists(exe, fs::Root::Anywhere) { return exe }
     }
     return ""
 }

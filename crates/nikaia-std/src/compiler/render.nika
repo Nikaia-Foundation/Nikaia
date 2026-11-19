@@ -125,7 +125,7 @@ pub fn rendered_in(shown: ref Shown, path: ref String, lines: ref Vec[ref String
             out.push(' ')
             out.push_str(ref right_aligned(f"{one.line}", gutter))
             out.push_str(" | ")
-            out.push_str(ref line_of(lines, one.line).trim_end().to_string())
+            out.push_str(ref line_of(lines, one.line).trim_end())
             out.push('\n')
             shown_line = one.line
         }
@@ -136,7 +136,7 @@ pub fn rendered_in(shown: ref Shown, path: ref String, lines: ref Vec[ref String
         marked.push_str(ref mark.repeat(one.width))
         marked.push(' ')
         marked.push_str(ref one.label.text)
-        out.push_str(ref marked.trim_end().to_string())
+        out.push_str(ref marked.trim_end())
         out.push('\n')
     }
     out.push_str(ref bar)

@@ -6,9 +6,9 @@ fn first_comma(line: String) -> i64 {
 }
 
 fn head(line: String) -> String {
-    let at = line.find(",") ?? return line.to_string()
+    let at = line.find(",") ?? return line
     if first_comma(line) > 0 {
-        return line[..<at].to_string()
+        return line[..<at]
     }
     return ""
 }

@@ -102,8 +102,8 @@ pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64,
         },
         CheckDeclared::Field(ref ty, ref field) => site_named(site_typed(units, &package, ty, field, 1), field),
         CheckDeclared::Type(ref ty) => {
-            let words: Vec<&str> = ty.split("::").map(|part| { part }).collect::<Vec<_>>();
-            site_named(site_typed(units, &package, ty, "", 2), *nikaia_std::index::get(&words, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(words.len() as i64, 1) })))
+            let words: Vec<&str> = ty.split("::").collect::<Vec<_>>();
+            site_named(site_typed(units, &package, ty, "", 2), *unsafe { nikaia_std::proven::read(&words, (nikaia_std::proven::sub::<i64>(words.len() as i64, 1)) as usize) })
         },
         CheckDeclared::Variant(ref ty, ref variant) => site_named(site_typed(units, &package, ty, variant, 3), variant),
     }
@@ -122,7 +122,7 @@ pub(crate) fn site_package_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Stri
 }
 
 pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &'r str) -> (nikaia_std::either_text::EitherText<'r>, Vec<nikaia_std::either_text::EitherText<'r>>) {
-    let parts: Vec<nikaia_std::either_text::EitherText<'_>> = name.split("::").map(|part| { part }).either_items().collect::<Vec<_>>();
+    let parts: Vec<nikaia_std::either_text::EitherText<'_>> = name.split("::").either_items().collect::<Vec<_>>();
     if parts.len() >= 2 {
         let head = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string());
         if units.iter().any(|unit| { site_package_of(unit) == head }) {

@@ -59,7 +59,7 @@ fn asked(id: i64, uri: String, at: (i64, i64)) -> String {
 fn masked(stdout: String, base: String) -> String {
     let mut out = ""
     for part in stdout.split("Content-Length: ") {
-        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p.to_string() }).collect()
+        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p }).collect()
         if pieces.len() == 2 && !pieces[1].contains("publishDiagnostics") {
             let length = if pieces[0] == f"{pieces[1].len()}" { "ok" } else { "wrong" }
             out.push_str(f"Content-Length: {length}\\r\\n\n\\r\\n\n{pieces[1].replace(base, "<scratch>")}\n")

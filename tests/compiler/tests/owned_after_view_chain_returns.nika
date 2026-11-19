@@ -9,7 +9,7 @@ fn first(s: String) -> String {
 }
 
 fn trimmed(s: String) -> String {
-    let rest = s.trim().to_string()
+    let rest = s.trim()
     return rest
 }
 

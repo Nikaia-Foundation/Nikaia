@@ -252,8 +252,8 @@ fn release_version_lines(head: String, now: String) -> String {
     let mut version = String()
     let mut date = String()
     for line in now.split("\n") {
-        if version == "" && line.starts_with("**Version:**") { version = line.to_string().clone() }
-        if date == "" && line.starts_with("**Date:**") { date = line.to_string().clone() }
+        if version == "" && line.starts_with("**Version:**") { version = line.clone() }
+        if date == "" && line.starts_with("**Date:**") { date = line.clone() }
     }
     let mut out: Vec[String] = []
     let mut put_version = false

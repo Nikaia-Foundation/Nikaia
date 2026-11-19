@@ -311,7 +311,7 @@ fn comptime_bundle_path_dependency(line: ref String) -> String? {
         return null
     }
     let (named, _) = value.split_once("\"") ?? return null
-    return named.to_string()
+    return named
 }
 
 /// The target directory a record's crates were built in: three levels above

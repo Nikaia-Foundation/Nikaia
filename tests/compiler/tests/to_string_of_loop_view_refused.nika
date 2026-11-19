@@ -1,4 +1,4 @@
-// #1144: the text form of a view of an element a loop walks of a list made
+// #1144: a view of an element a loop walks of a list made
 // here is that view (ADR-282 D8); put where text of its own is kept, it is
 // refused with NK1102, not left to rustc.
 fn make(n: i64) -> Vec[String] {
@@ -12,7 +12,7 @@ fn rests(n: i64) -> Vec[String] {
     for full in make(n) {
         match full.strip_prefix("x ") {
             null => {},
-            rest => { out.push(rest.to_string()) },
+            rest => { out.push(rest) },
         }
     }
     return out
