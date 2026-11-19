@@ -347,6 +347,10 @@ pub struct Parsed {
     /// their nodes ([ADR-282](../../../docs/specification/adr/adr-282.md) D13,
     /// #712). The checker types each as a view and lends it.
     pub viewed_arms: std::collections::BTreeSet<i64>,
+    /// **The cuts [`crate::text_tiers`] took as text of their own**, given
+    /// the buffer of a local that dies where they are pushed into a
+    /// parameter's list, by their nodes (ADR-text-reuse-1 D2, #2291).
+    pub given_pushes: std::collections::BTreeSet<i64>,
     /// **The names moved into a literal's position that must hold text of
     /// its own while a view of them is still used**, by their nodes
     /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
@@ -533,6 +537,7 @@ impl Parsed {
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             viewed_arms: self.viewed_arms.clone(),
+            given_pushes: self.given_pushes.clone(),
             refused_moves: self.refused_moves.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
@@ -838,6 +843,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         package: None,
         hole_wraps: std::collections::BTreeMap::new(),
         viewed_arms: std::collections::BTreeSet::new(),
+        given_pushes: std::collections::BTreeSet::new(),
         refused_moves: std::collections::BTreeMap::new(),
         holes: Default::default(),
         kept_calls: Default::default(),

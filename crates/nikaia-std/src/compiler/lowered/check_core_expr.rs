@@ -361,6 +361,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let read = check_core_index(state, world, host, expr, base, index, span);
+            if world.here.given_pushes.contains(&node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) { return a_string_type(); }
             if state.an_element_of_a_made_list(world, expr) { state.flow.made_element_reads.insert(node_key(expr)); }
             match read {
                 Ty::Fn { .. } => { state.facts.kept_fn_reads.insert(id_of(base) as i64); },
@@ -768,5 +769,17 @@ pub(crate) fn check_core_async_fails(state: &mut CheckState, span: &Span, error:
     if state.flow.throwing || state.flow.caught || state.inside_an_action.is_some() { return; }
     if state.current.is_none() { return; }
     state.findings.push(check_refusal("NK2605", span, nikaia_std::block::Text::from(message.to_string()), vec![nikaia_std::block::Text::from(note.to_string())], Some(nikaia_std::block::Text::from(help.to_string()))));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_pushed_cut(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cut: &Expr, span: &Span) -> bool {
+    let source = match given_cut_source(cut, world.words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let held = match state.binding(&source) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if held.lent || held.ty.is_a_view() || state.a_lent_let(world, match check_core_stmt_given_source(cut) { Some(__nikaia_value) => __nikaia_value, None => return false }) { return false; }
+    state.facts.pushed_cuts.insert(node_key(cut));
+    state.facts.cut_gives.insert(node_key(cut));
+    state.hands_over_name(world, &source, "given to the list it is pushed into", span);
+    true
 }
 

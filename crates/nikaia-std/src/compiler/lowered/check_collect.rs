@@ -28,7 +28,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_types_beside(&mut self, other: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item) {
+    pub(crate) fn collect_types_beside(&mut self, other: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item) {
         match item {
             Item::Enum { name, variants, .. } => {
                 let name = *name;

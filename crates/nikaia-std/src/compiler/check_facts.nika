@@ -725,6 +725,11 @@ pub struct CheckFacts {
     /// buffer there when the text fills less than half of it
     /// (`index::shrunk`, ADR-text-reuse-1 D2, #1589). A local is not shrunk.
     pub shrunk_leaves: collections::BTreeSet[i64],
+    /// **A cut of a local that dies where it is pushed into a parameter's
+    /// list, given the local's buffer** (ADR-text-reuse-1 D2, #2291): the
+    /// tier pass took it as text of its own (`given_pushes`), so the element
+    /// owns it, shrunk as it leaves, and nothing tethers the local.
+    pub pushed_cuts: collections::BTreeSet[i64],
     /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
@@ -1056,6 +1061,7 @@ impl CheckFacts {
             cut_gives: collections::BTreeSet(),
             given_names: collections::BTreeSet(),
             shrunk_leaves: collections::BTreeSet(),
+            pushed_cuts: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),

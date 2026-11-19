@@ -72,7 +72,7 @@ impl CheckState {
     }
 }
 
-pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64, facts: &CheckFacts, offset: i64) -> Option<(i64, Span, String)> {
+pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], here_at: i64, facts: &CheckFacts, offset: i64) -> Option<(i64, Span, String)> {
     if here_at < 0 || here_at >= units.len() as i64 { return None; }
     let here = unsafe { nikaia_std::proven::read(&units, (here_at) as usize) };
     let mut best: Option<CheckDeclared> = None;
@@ -114,14 +114,14 @@ pub(crate) fn site_named(place: Option<(i64, Span)>, name: &str) -> Option<(i64,
     Some((found.0, found.1.clone(), nikaia_std::block::Text::from(name.to_string())))
 }
 
-pub(crate) fn site_package_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn site_package_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> String {
     match unit.package {
         None => String::from(""),
         Some(named) => nikaia_std::block::Text::from(named.to_string()),
     }
 }
 
-pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &'r str) -> (nikaia_std::either_text::EitherText<'r>, Vec<nikaia_std::either_text::EitherText<'r>>) {
+pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], package: &str, name: &'r str) -> (nikaia_std::either_text::EitherText<'r>, Vec<nikaia_std::either_text::EitherText<'r>>) {
     let parts: Vec<nikaia_std::either_text::EitherText<'_>> = name.split("::").either_items().collect::<Vec<_>>();
     if parts.len() >= 2 {
         let head = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string());
@@ -133,13 +133,13 @@ pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], packa
     (nikaia_std::block::Text::from(package.to_string()).into_either(), parts)
 }
 
-pub(crate) fn site_typed(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {
+pub(crate) fn site_typed(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {
     let (owner, parts) = site_split(units, package, ty);
     if parts.len() != 1 { return None; }
     site_member(units, &owner, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, member, what)
 }
 
-pub(crate) fn site_function(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &str) -> Option<(i64, Span)> {
+pub(crate) fn site_function(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], package: &str, name: &str) -> Option<(i64, Span)> {
     let mut at = -1;
     for unit in units.iter() {
         at += 1;
@@ -158,7 +158,7 @@ pub(crate) fn site_function(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], packag
     None
 }
 
-pub(crate) fn site_member(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {
+pub(crate) fn site_member(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {
     let mut at = -1;
     for unit in units.iter() {
         at += 1;

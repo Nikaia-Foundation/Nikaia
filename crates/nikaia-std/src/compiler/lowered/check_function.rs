@@ -7,7 +7,7 @@ pub(crate) fn check_function_shape_member(bound: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str, shape: &str) -> bool {
+pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str, shape: &str) -> bool {
     for expr in visited_in_block(body) {
         match expr {
             Expr::Path(segments, _) => {
@@ -23,7 +23,7 @@ pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '
     false
 }
 
-pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str) -> bool {
+pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str) -> bool {
     let mut called: collections::BTreeSet<u32> = collections::BTreeSet::new();
     for expr in visited_in_block(body) {
         match expr {
@@ -60,7 +60,7 @@ pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) {
         for item in file.items.iter() {
             match &item.node {
                 Item::Fn { name, generics, args, body, .. } => {
@@ -148,7 +148,7 @@ pub(crate) fn check_function_grown_in(words: &winnow_grammar::InternerContext, b
     }
 }
 
-pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
+pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> { grown_text_of(here.words, body) }
 
 pub(crate) fn lone_texts_of(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
     let seen = visited_in_block(body);
@@ -341,7 +341,7 @@ pub(crate) fn check_function_block_ends_in(block: &Block, grows: bool) -> bool {
     }
 }
 
-pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>, both: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>, both: &mut collections::BTreeSet<String>) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Assign { target, op, value } => {
@@ -362,7 +362,7 @@ pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_fielded_in(here, body, &mut fielded, &mut both);

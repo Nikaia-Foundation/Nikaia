@@ -314,7 +314,18 @@ impl EmitState {
                 let base = nikaia_std::boxed::open(base); let name = *name;
                 if self.facts.plain_reaches.contains(&at) { self.emit_core_field(world, walk, out, host, node, base, name, depth, flow, scope)?; } else { self.emit_core_safe_field(world, walk, out, host, node, base, name, depth, flow, scope)?; }
             },
-            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?; },
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if self.facts.pushed_cuts.contains(&at) {
+                    out.push("nikaia_std::index::shrunk({ let __cut = ");
+                    self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?;
+                    out.push("; let __span = nikaia_std::index::cut_span(&");
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
+                    out.push(", __cut); nikaia_std::index::given_cut(");
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
+                    out.push(", __span) })");
+                } else { self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)?; }
+            },
             Expr::Cast { expr, ty, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_core_cast(world, walk, out, host, expr, ty, depth, flow, scope)?; },
             Expr::StructLit { name, fields, .. } => { let name = *name; self.emit_core_struct_lit(world, walk, out, host, node, name, fields, depth, flow, scope)?; },
             Expr::With { base, fields, at: written_at, .. } => { let base = nikaia_std::boxed::open(base); let written_at = *written_at; self.emit_core_with(world, walk, out, host, node, base, fields, written_at, depth, flow, scope)?; },

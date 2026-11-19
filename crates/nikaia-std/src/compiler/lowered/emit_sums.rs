@@ -250,7 +250,7 @@ impl EmitState {
     }
 }
 
-pub(crate) fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut declared: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }

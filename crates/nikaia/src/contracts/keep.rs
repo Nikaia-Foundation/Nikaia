@@ -350,6 +350,7 @@ pub(crate) fn buffer_plans(
         context: &context,
         given_up: &given_up,
         viewed: &parsed.viewed_arms,
+        given: &parsed.given_pushes,
     };
     nika::buffer_plans(
         &parsed.program,

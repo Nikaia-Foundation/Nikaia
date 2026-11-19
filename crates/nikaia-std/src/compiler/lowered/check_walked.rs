@@ -184,7 +184,7 @@ pub(crate) fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
     CheckPlace { at: -1, function }
 }
 
-pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_>, byte: i64) -> Option<String> {
+pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, byte: i64) -> Option<String> {
     for item in view.items.iter() {
         match &item.node {
             Item::Fn { name, .. } => {

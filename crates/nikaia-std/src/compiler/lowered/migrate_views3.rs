@@ -665,7 +665,7 @@ pub fn migrate_views3_markdown(source: &str, keeps_of: &mut impl FnMut(&str) -> 
     out
 }
 
-pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
+pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     let plain = hb_plain_enums(view.items, view.words);
     for item in view.items.iter() {
@@ -685,7 +685,7 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding], plain: &collections::BTreeSet<String>, out: &mut Vec<i64>) {
+pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, findings: &[CheckFinding], plain: &collections::BTreeSet<String>, out: &mut Vec<i64>) {
     match &item.node {
         Item::Fn { args, is_extern, receiver, .. } => {
             let is_extern = *is_extern;

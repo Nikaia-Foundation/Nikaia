@@ -119,7 +119,7 @@ pub struct TierAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub beside_lists: &'a6 collections::BTreeSet<String>,
 }
 
-pub fn tier_beside_lists(files: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub fn tier_beside_lists(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut methods: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
     for file in files.iter() {
@@ -165,7 +165,7 @@ pub(crate) fn owned_text_list(names: &winnow_grammar::InternerContext, ty: &Type
     plain_string(names, element) && !element.is_nullable && !element.lasting
 }
 
-pub fn tier_beside_calls(files: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub fn tier_beside_calls(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut declared: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut called: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for file in files.iter() {
@@ -210,7 +210,7 @@ pub(crate) fn bc_item(item: &Item, words: &winnow_grammar::InternerContext, own:
     }
 }
 
-pub fn tier_beside_fields(files: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeMap<String, Vec<FieldContract>> {
+pub fn tier_beside_fields(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> collections::BTreeMap<String, Vec<FieldContract>> {
     let mut out: collections::BTreeMap<String, Vec<FieldContract>> = collections::BTreeMap::new();
     for file in files.iter() {
         for item in file.items.iter() {
@@ -246,6 +246,7 @@ pub struct TextTiers {
     pub adopted: collections::BTreeMap<i64, TierAdopted>,
     pub viewed_arms: collections::BTreeSet<i64>,
     pub refused_moves: collections::BTreeMap<i64, TierRefusal>,
+    pub given_pushes: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -521,13 +522,14 @@ pub(crate) struct Flows {
     pub(crate) arg_uses: collections::BTreeMap<String, i64>,
     pub(crate) changed: collections::BTreeSet<String>,
     pub(crate) viewed_arms: collections::BTreeSet<i64>,
+    pub(crate) given_cuts: collections::BTreeSet<i64>,
     pub(crate) param_arm_into: collections::BTreeMap<i64, String>,
     pub(crate) kept_through: collections::BTreeSet<(String, i64)>,
     pub(crate) arm_uses: collections::BTreeMap<String, i64>,
     pub(crate) forced: collections::BTreeMap<String, TierForced>,
 }
 
-pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), owned_lets: collections::BTreeSet::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), handed_beyond: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
+pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), owned_lets: collections::BTreeSet::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), handed_beyond: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), given_cuts: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TierWalk {
@@ -551,6 +553,7 @@ pub(crate) struct TierWalk {
     pub(crate) late_args: collections::BTreeSet<i64>,
     pub(crate) late_params: collections::BTreeSet<i64>,
     pub(crate) late_lent: collections::BTreeSet<i64>,
+    pub(crate) late_cuts: collections::BTreeSet<i64>,
     pub(crate) keeping: collections::BTreeSet<String>,
     pub(crate) kept_into: collections::BTreeSet<(String, i64)>,
     pub(crate) param_arms: collections::BTreeSet<i64>,
@@ -3217,6 +3220,7 @@ pub(crate) struct TierLateFound {
     pub(crate) moved: collections::BTreeMap<i64, (String, String)>,
     pub(crate) held: collections::BTreeSet<i64>,
     pub(crate) lent: collections::BTreeSet<i64>,
+    pub(crate) cuts: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -3255,10 +3259,13 @@ pub(crate) struct TierLate {
     pub(crate) temporaries: collections::BTreeSet<String>,
     pub(crate) lendable: collections::BTreeSet<i64>,
     pub(crate) lent: collections::BTreeSet<i64>,
+    pub(crate) cuts: collections::BTreeSet<i64>,
+    pub(crate) made: collections::BTreeSet<String>,
+    pub(crate) cut_pushes: collections::BTreeMap<String, Vec<i64>>,
 }
 
 pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), viewing_library: collections::BTreeMap::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new(), lendable: collections::BTreeSet::new(), lent: collections::BTreeSet::new() };
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), viewing_library: collections::BTreeMap::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new(), lendable: collections::BTreeSet::new(), lent: collections::BTreeSet::new(), cuts: collections::BTreeSet::new(), made: collections::BTreeSet::new(), cut_pushes: collections::BTreeMap::new() };
     for (key, function) in declared.fns.iter() {
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if late_holds_text(result, declared, ask, 0) { late.viewing.insert(nikaia_std::block::Text::from(key.to_string())); }
@@ -3309,7 +3316,7 @@ pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAs
             if late.held_moves.contains(&node) { held.insert(node.clone()); }
         }
     }
-    TierLateFound { arms: late.found.copy_owned(), args: late.args.copy_owned(), params: late.params.copy_owned(), moved, held, lent: late.lent.copy_owned() }
+    TierLateFound { arms: late.found.copy_owned(), args: late.args.copy_owned(), params: late.params.copy_owned(), moved, held, lent: late.lent.copy_owned(), cuts: late_single_cuts(&late) }
 }
 
 pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
@@ -3469,6 +3476,7 @@ pub(crate) fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
                 late_viewing(ask.names.resolve(name), &sources, (alias).as_deref(), late);
             }
             if names.len() == 1 {
+                if late_made_text(value) { late.made.insert(format!("{} {}", ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), late.serial)); }
                 late_held_view(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), value, ask, late);
                 late_holding(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), value, ask, late);
             }
@@ -3607,11 +3615,12 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
                 }
             }
         },
-        Expr::MethodCall { receiver, args, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             late_expr(receiver, false, ask, late);
             late_all(args, ask, late);
             late_temporary(expr, ask, late);
+            late_pushed_cut(receiver, ask.names.resolve(method), args, ask, late);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -3725,6 +3734,47 @@ pub(crate) fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
     }
     late_defer(TierLateArm { at: node_key(arg), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
 }
+
+pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
+    if late.leaving > 0 || args.len() != 1 { return; }
+    if method != "push" && method != "push_back" && method != "push_front" { return; }
+    let list = match receiver {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+        _ => return,
+    };
+    let held = late_serial(&list, &late);
+    if held <= late.params_from || held > late.params_upto { return; }
+    let word = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            if !a_range(index) { return; }
+            match base {
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+                _ => return,
+            }
+        },
+        _ => return,
+    };
+    let serial = late_serial(&word, &late);
+    if serial <= late.params_upto { return; }
+    let key = format!("{} {}", word, serial);
+    let mut pushed = nikaia_std::index::or(late.cut_pushes.remove(&key), || vec![].into());
+    pushed.push(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
+    late.cut_pushes.insert(nikaia_std::block::Text::from(key.to_string()), pushed);
+    let loops = late_loops(&word, &late);
+    if late.loops > loops || late.temporaries.contains(&format!("{} {}", word, serial)) || !late.made.contains(&format!("{} {}", word, serial)) { return; }
+    if late.viewers.contains_key(&format!("{} {}", word, serial)) { return; }
+    late.cuts.insert(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
+    late_defer(TierLateArm { at: node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
+}
+
+pub(crate) fn late_single_cuts(late: &TierLate) -> collections::BTreeSet<i64> {
+    let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for (_, pushed) in late.cut_pushes.iter() { if pushed.len() == 1 && late.cuts.contains(unsafe { nikaia_std::proven::read(&pushed, (0) as usize) }) { out.insert(*unsafe { nikaia_std::proven::read(&pushed, (0) as usize) }); } }
+    out
+}
+
+pub(crate) fn late_made_text(value: &Expr) -> bool { !matches!(value, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }
 
 pub(crate) fn late_temporary(call: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) { for key in late_sources(call, ask, &late) { late.temporaries.insert(key); } }
 
@@ -4074,6 +4124,10 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let received = tier_expr(base, ask, walk);
             tier_expr(index, ask, walk);
+            if a_range(index) && walk.late_cuts.contains(&node_key(expr)) && only_own_text(&received) {
+                walk.flows.given_cuts.insert(node_key(expr));
+                return owned_kinds();
+            }
             if a_range(index) { return viewed(&received); }
             let place = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return received };
             element_kinds(&place, false, ask, walk)
@@ -5031,6 +5085,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
     }
     into.changed.extend(from.changed.iter().cloned());
     into.viewed_arms.extend(from.viewed_arms.iter().cloned());
+    into.given_cuts.extend(from.given_cuts.iter().cloned());
     into.kept_through.extend(from.kept_through.iter().cloned());
     for (word, count) in from.arm_uses.iter() {
         let count = nikaia_std::num::value(count);
@@ -5830,8 +5885,12 @@ pub(crate) fn tier_word(tier: &Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names, ask.beside_calls);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), late_lent: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false, grown: collections::BTreeSet::new() };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), late_lent: collections::BTreeSet::new(), late_cuts: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false, grown: collections::BTreeSet::new() };
     let found = late_arms(program, &walk.declared, ask);
+    for cut in found.cuts.iter() {
+        let cut = nikaia_std::num::value(cut);
+        if !found.args.contains(&cut) { walk.late_cuts.insert(cut.clone()); }
+    }
     walk.late = found.arms;
     walk.late_args = found.args;
     walk.late_params = found.params;
@@ -5929,7 +5988,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) 
             } });
         }
     }
-    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.copy_owned(), hole_wraps: walk.flows.hole_wraps.copy_owned(), adopted, viewed_arms, refused_moves }
+    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.copy_owned(), hole_wraps: walk.flows.hole_wraps.copy_owned(), adopted, viewed_arms, refused_moves, given_pushes: walk.flows.given_cuts.copy_owned() }
 }
 
 pub(crate) fn same_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &collections::BTreeMap<i64, Declaring>) -> bool {
@@ -6441,7 +6500,7 @@ pub struct SliceFills {
     pub pieces: collections::BTreeMap<String, bool>,
 }
 
-pub fn tier_slice_fills(files: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> SliceFills {
+pub fn tier_slice_fills(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> SliceFills {
     let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     let mut pieces: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for file in files.iter() { for item in file.items.iter() { sf_item(&item.node, file.words, &mut filled, &mut pieces); } }

@@ -45,7 +45,7 @@ pub trait EmitContractsHost {
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
-pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade {
+pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade {
     ();
     let words = unsafe { nikaia_std::proven::read(&units, (0) as usize) }.words;
     let items = unsafe { nikaia_std::proven::read(&units, (0) as usize) }.items;
@@ -104,7 +104,7 @@ pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(h
     EmitContractsMade { give_ups: vc_analyse(&ask, &mut |e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
 #[allow(dead_code)]
-pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade { if !((units.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `emit_contracts_state`: `units.len() > 0`", None, &[("units.len()", (&&nikaia_std::abort::Operand(&(units.len() as i128))).shown()), ]) } emit_contracts_state__unchecked(host, parsed, units, beside, program, own_contracts, described, library, checked, checked_plans, refused, build, graphs) }
+pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade { if !((units.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `emit_contracts_state`: `units.len() > 0`", None, &[("units.len()", (&&nikaia_std::abort::Operand(&(units.len() as i128))).shown()), ]) } emit_contracts_state__unchecked(host, parsed, units, beside, program, own_contracts, described, library, checked, checked_plans, refused, build, graphs) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EmitReachGraphs {
@@ -112,16 +112,16 @@ pub struct EmitReachGraphs {
     pub code_cycle_graph: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
-pub fn emit_contracts_package_graphs(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> EmitReachGraphs { EmitReachGraphs { pausing_reach: emit_contracts_pausing_reach(units, contracts), code_cycle_graph: emit_contracts_code_cycle_graph(units, contracts) } }
+pub fn emit_contracts_package_graphs(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> EmitReachGraphs { EmitReachGraphs { pausing_reach: emit_contracts_pausing_reach(units, contracts), code_cycle_graph: emit_contracts_code_cycle_graph(units, contracts) } }
 
-pub(crate) fn emit_contracts_pausing_reach(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn emit_contracts_pausing_reach(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let index = reach_pausing_index(contracts);
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for unit in units.iter() { for (key, reached) in pausing_edges(unit.words, unit.aliases, unit.items, &index).into_iter() { graph.entry(String::from(key)).or_default().extend(reached); } }
     pausing_reach(&graph, contracts)
 }
 
-pub(crate) fn emit_contracts_code_cycle_graph(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn emit_contracts_code_cycle_graph(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let index = reach_running_index(contracts);
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for unit in units.iter() { for (key, reached) in code_cycle_edges(unit.words, unit.aliases, unit.items, &index).into_iter() { graph.entry(String::from(key)).or_default().extend(reached); } }

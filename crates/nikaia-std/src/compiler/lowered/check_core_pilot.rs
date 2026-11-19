@@ -148,7 +148,7 @@ pub(crate) fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_,
     None
 }
 
-pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, entry: &str) -> Option<bool> {
+pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, owner: &str, entry: &str) -> Option<bool> {
     for item in view.items.iter() {
         match &item.node {
             Item::Grammar(def) => { if view.text(def.name) == owner { return Some(grammar_entry_interns(view.words, def, entry)); } },

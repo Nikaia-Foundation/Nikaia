@@ -495,7 +495,22 @@ impl EmitState {
                     self.emit_core_safe_field(world, walk, out, host, node, base, name, depth, flow, scope)
                 }
             },
-            Expr::Index { base, index, .. } => self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope),
+            Expr::Index { base, index, .. } => {
+                if self.facts.pushed_cuts.contains(at) {
+                    // **A cut pushed as text of its own takes its source's
+                    // buffer, and gives back what it does not fill**
+                    // (ADR-text-reuse-1 D2, #2291).
+                    out.push("nikaia_std::index::shrunk({ let __cut = ")
+                    self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)
+                    out.push("; let __span = nikaia_std::index::cut_span(&")
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)
+                    out.push(", __cut); nikaia_std::index::given_cut(")
+                    self.emit_expr(world, walk, out, host, base, depth, flow, scope)
+                    out.push(", __span) })")
+                } else {
+                    self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope)
+                }
+            },
             Expr::Cast { expr, ty, .. } => self.emit_core_cast(world, walk, out, host, expr, ty, depth, flow, scope),
             Expr::StructLit { name, fields, .. } => self.emit_core_struct_lit(world, walk, out, host, node, name, fields, depth, flow, scope),
             Expr::With { base, fields, at: written_at, .. } => self.emit_core_with(world, walk, out, host, node, base, fields, written_at, depth, flow, scope),

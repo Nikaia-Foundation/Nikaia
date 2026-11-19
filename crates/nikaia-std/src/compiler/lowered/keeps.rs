@@ -1142,7 +1142,7 @@ pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     }
 }
 
-pub(crate) fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+pub(crate) fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in view.items.iter() {
         match &item.node {
@@ -1188,7 +1188,7 @@ pub(crate) const KEEPS_SCALARS: [&str; 15] = ["i8", "i16", "i32", "i64", "isize"
 
 pub(crate) fn no_uses() -> Uses { Uses { kept: collections::BTreeSet::new(), passed: vec![] } }
 
-pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, indexes: &KeepsIndexes<'_, '_>, host: &H) -> KeepsColumn {
+pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, indexes: &KeepsIndexes<'_, '_>, host: &H) -> KeepsColumn {
     let mut graph: collections::BTreeMap<String, Uses> = collections::BTreeMap::new();
     let mut package = PackageTypes::empty();
     for view in units.iter() { declare_unit(view.words, view.items, &mut package); }
@@ -1300,7 +1300,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
     column
 }
 
-pub(crate) fn keeps_by_value(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger) {
+pub(crate) fn keeps_by_value(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger) {
     let named = keeps_named_as_values(units, &ledger);
     let mut found: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (key, contract) in ledger.functions.iter() {
@@ -1335,7 +1335,7 @@ pub(crate) fn keeps_a_tethered_type(name: &str, ledger: &Ledger) -> bool {
     !described.tethered.is_empty()
 }
 
-pub(crate) fn keeps_named_as_values(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], ledger: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn keeps_named_as_values(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], ledger: &Ledger) -> collections::BTreeSet<String> {
     let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
     for view in units.iter() {
         for item in view.items.iter() {
@@ -1387,9 +1387,9 @@ pub(crate) fn keeps_fold_exprs(pattern: &Pattern) -> Vec<&Expr> {
     out
 }
 
-pub(crate) fn keeps_named_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) { keeps_named_among(view, &visited_in_block(body), owner, ledger, named); }
+pub(crate) fn keeps_named_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block, owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) { keeps_named_among(view, &visited_in_block(body), owner, ledger, named); }
 
-pub(crate) fn keeps_named_among(view: &ParsedView<'_, '_, '_, '_, '_, '_>, exprs: &[&Expr], owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) {
+pub(crate) fn keeps_named_among(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, exprs: &[&Expr], owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) {
     let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for expr in exprs.iter() {
         let expr = *expr;
@@ -1414,14 +1414,14 @@ pub(crate) fn keeps_named_among(view: &ParsedView<'_, '_, '_, '_, '_, '_>, exprs
     }
 }
 
-pub(crate) fn keeps_path_key(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &Expr, owner: &str) -> Option<String> {
+pub(crate) fn keeps_path_key(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, owner: &str) -> Option<String> {
     match expr {
         Expr::Path(segments, _) => keeps_path_text(view, segments, owner),
         _ => None,
     }
 }
 
-pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], owner: &str) -> Option<String> {
+pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], owner: &str) -> Option<String> {
     if segments.len() != 2 { return None; }
     let first = view.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
     let ty = if first == "Self" { nikaia_std::block::Text::from(owner.to_string()) } else { first };
@@ -1438,7 +1438,7 @@ pub(crate) fn add_impl(impls_of: &mut collections::BTreeMap<String, collections:
     impls_of.insert(nikaia_std::block::Text::from(at_trait.to_string()), names);
 }
 
-pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], rows: &[KeepsImplRow<'_>], graph: &collections::BTreeMap<String, Uses>, ledger: &Ledger, library: &Ledger, host: &H) -> KeepsColumn {
+pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], rows: &[KeepsImplRow<'_>], graph: &collections::BTreeMap<String, Uses>, ledger: &Ledger, library: &Ledger, host: &H) -> KeepsColumn {
     let mut column = KeepsColumn { beyond: vec![], keepers: collections::BTreeMap::new() };
     for row in rows.iter() { if graph.contains_key(&row.at_trait) && !column.keepers.contains_key(&row.at_trait) { column.keepers.insert(nikaia_std::block::Text::from(row.at_trait.to_string()), collections::BTreeMap::new()); } }
     let mut asked: Vec<&KeepsImplRow<'_>> = vec![];
@@ -1526,7 +1526,7 @@ pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
+pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
     match item {
         Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let name = *name;
@@ -1619,7 +1619,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
     None
 }
 
-pub(crate) fn keeps_result_copies(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ret_type: Option<&Type>) -> bool {
+pub(crate) fn keeps_result_copies(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ret_type: Option<&Type>) -> bool {
     let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
     if (*ty.code).is_some() || ty.is_slice || ty.is_view || ty.is_tuple || !ty.generics.is_empty() { return false; }
     let name = view.text(ty.name);

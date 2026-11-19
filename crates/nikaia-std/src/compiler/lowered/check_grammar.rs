@@ -297,7 +297,7 @@ pub(crate) fn grammar_position_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, named: &str) -> String {
+pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
     for item in view.items.iter() {
         match &item.node {
             Item::Grammar(def) => {
