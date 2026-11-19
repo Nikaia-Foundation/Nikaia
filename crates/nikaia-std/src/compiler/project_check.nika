@@ -249,6 +249,45 @@ fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding], un
     }
 }
 
+/// **What the build allows of data from outside at a raw sink**
+/// (ADR-raw-sinks-1 D3, D4, D5): an `NK1308` whose key the build allows
+/// goes; a dependency's (`package` is its name) is allowed by the
+/// application's `NAME:key` alone, and refused otherwise as `NK1309`, whose
+/// help names the table to add; `raw-sinks = "warn"` makes each that stays
+/// a warning.
+fn project_check_let_raw_sinks_through(findings: Vec[CheckFinding], raw_sinks: String, allow: ref Vec[String], package: String) -> Vec[CheckFinding] {
+    let mut kept: Vec[CheckFinding] = []
+    for finding in findings {
+        if finding.code != "NK1308" {
+            kept.push(finding.clone())
+            continue
+        }
+        let help = finding.help ?? ""
+        let mut key: String = ""
+        for known in raw_sinks_allow_keys() {
+            if help.contains(f"`{known} = true`") {
+                key = known.clone()
+            }
+        }
+        let word = if package.is_empty() { key.clone() } else { f"{package}:{key}" }
+        if allow.iter().any(fn(allowed) { allowed == word }) {
+            continue
+        }
+        let mut said = finding.clone()
+        if !package.is_empty() {
+            said.code = "NK1309"
+            said.message = f"{said.message} The package `{package}` hands it on, and the application does not allow it."
+            said.help = f"If the application means to let `{package}` do this, `{key} = true` under `[allow.packages.{package}]` in its manifest builds it, or `--allow={package}:{key}` for one build."
+        }
+        if raw_sinks == "warn" {
+            said.severity = CheckSeverity::Warning
+            said.notes.push("`raw-sinks = \"warn\"` lets this build through.")
+        }
+        kept.push(said)
+    }
+    return kept
+}
+
 /// The `NK25xx` codes whose crossing this build does not perform, reported as a
 /// lint rather than as an error.
 ///
@@ -357,7 +396,7 @@ pub struct ProjectCheckSaid {
 /// `unproved_checks` is the package's `unproved-checks`: at `error` each
 /// check the walk does not prove is refused (ADR-306 D29); a dependency is
 /// checked at `allow`.
-pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, building_a_library: bool) -> ProjectCheckSaid {
+pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, raw_sinks: String, allow: ref Vec[String], package: String, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against()
     // **`NK1238` is the checker's answer for a build it knows nothing of**
     // (ADR-284 D4): a library build exports its entry points.
@@ -375,6 +414,7 @@ pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, sourc
     project_check_lint_where_nothing_crosses(all, user_parallelism)
     project_check_let_refuted_claims_through(all, refuted_claims)
     project_check_let_unproved_claims_through(all, unproved_claims)
+    all = project_check_let_raw_sinks_through(all, raw_sinks, allow, package)
     let violations = host.sync_violations()
     if all.is_empty() && violations == 0 {
         return ProjectCheckSaid { warnings: "", refused: null }

@@ -2360,6 +2360,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
             let callee = prover_called(func, words, unaliased)
             if callee != null {
                 prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, unaliased, written_of, condition)
+                prover_raw_sink(walk, callee ?? "", args, span, scope, words, library, holes_of, ask, written_of)
             }
         },
         else => {},
@@ -2655,6 +2656,123 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
         notes.push(f"The prover cannot state `{holds}` here: a part of it is not a whole number it reads.")
     }
     walk.findings.push(Finding { code: "NK1302", span: span, message: f"`{written_of(expr)}` is not proved in bounds, and `{first}` comes from outside the program.", notes: notes, help: outside_help(first, guard), warning: false, labels: [] })
+}
+
+/// **Data from outside at a raw sink** (ADR-raw-sinks-1 D2, D3, D10):
+/// each part of a path under `fs::Root::Anywhere` or `Dir("/")`, of the
+/// markup of `html::Raw` and of the program `process::run` runs, that comes
+/// from outside, is not a whole number the walk follows, and is not proved
+/// to meet the sink's precondition (`html::is_plain`, after a guard where it
+/// arrives) is `NK1308`. Its help names the `[allow]` key, by which the
+/// build lets it through (`project_check_let_raw_sinks_through`).
+fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    if walk.state.collecting || walk.state.in_test {
+        return
+    }
+    let mut parts: Vec[Expr] = []
+    let mut key: String = ""
+    let mut sink: String = ""
+    if callee == "html::Raw" {
+        key = "untrusted-markup"
+        sink = "the markup of `html::Raw`, written to the page as it is"
+        for arg in args {
+            raw_sink_parts(arg, holes_of, parts)
+        }
+    } else if callee == "process::run" && !args.is_empty() {
+        key = "untrusted-program"
+        sink = "the program `process::run` runs"
+        raw_sink_parts(args[0], holes_of, parts)
+    } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
+        for (i, arg) in args.iter().enumerate() {
+            if raw_sink_anywhere(arg, words, written_of) {
+                key = "untrusted-paths-anywhere"
+                sink = f"the path `{callee}` opens under `{written_of(arg)}`, which may name any file"
+                for j in 0..<i {
+                    raw_sink_parts(args[j], holes_of, parts)
+                }
+            }
+        }
+    }
+    for part in parts {
+        if !from_outside(part, scope.tainted, words, library, walk.state, holes_of) {
+            continue
+        }
+        let first = written_of(part)
+        match part {
+            Expr::Variable(name, _) => {
+                if scope.ints.contains(words.resolve(name)) {
+                    continue
+                }
+            },
+            else => {},
+        }
+        if key == "untrusted-markup" {
+            let on = path_of(part, words)
+            if on != null {
+                let name = f"{on ?? ""}.{property_mark()}html::is_plain()"
+                if scope.ints.contains(name) {
+                    let named = walk.arena.var(name)
+                    let one = walk.arena.int(1)
+                    let goal = walk.arena.equal(named, one)
+                    if prover_proves_here(walk, goal, scope, ask) {
+                        continue
+                    }
+                }
+            }
+        }
+        let source = outside_source(part, scope.tainted, scope.sources, words, library, walk.state, holes_of)
+        let mut notes: Vec[String] = [outside_note(first, source)]
+        let mut help: String = ""
+        if key == "untrusted-markup" {
+            notes.push("Markup from outside can carry a script that runs in the page of whoever opens it.")
+            help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
+        } else if key == "untrusted-program" {
+            notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
+            help = f"Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
+        } else {
+            notes.push("A path from outside may name any file the program can reach: `../`, or one that starts at `/`.")
+            help = f"Read it under `fs::Root::Dir(\".\")`, where a path cannot leave the directory, or from a source that says who chose it (`cli::args(trusted: true)`, ADR-399). If the program means to reach any path, `untrusted-paths-anywhere = true` under `[allow]` in the manifest builds it."
+        }
+        walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches {sink}, and it comes from outside the program.", notes: notes, help: help, warning: false, labels: [] })
+    }
+}
+
+/// **The parts of a raw sink's text** (ADR-raw-sinks-1 D2): each hole of an
+/// f-string and each operand of `+`, judged on its own; anything else is one
+/// part.
+fn raw_sink_parts(expr: ref Expr, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[Expr]) {
+    match expr {
+        Expr::LitInterpolated { .. } => {
+            for hole in holes_of(expr) {
+                raw_sink_parts(hole, holes_of, out)
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if op == BinaryOp::Add {
+                raw_sink_parts(lhs, holes_of, out)
+                raw_sink_parts(rhs, holes_of, out)
+            } else {
+                out.push(expr.clone())
+            }
+        },
+        else => out.push(expr.clone()),
+    }
+}
+
+/// Whether an argument is the root that reaches any path
+/// (ADR-raw-sinks-1 D2): `fs::Root::Anywhere`, or `fs::Root::Dir("/")`.
+fn raw_sink_anywhere(arg: ref Expr, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> bool {
+    return match arg {
+        Expr::Path(segments, _) => path_text(segments, words).ends_with("Root::Anywhere"),
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                else => "",
+            }
+            named.ends_with("Root::Dir") && args.len() == 1 && written_of(args[0]) == "\"/\""
+        },
+        else => false,
+    }
 }
 
 /// **An index data from outside reaches, recorded for `--bounds`**
