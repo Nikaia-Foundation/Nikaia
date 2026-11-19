@@ -133,7 +133,7 @@ pub trait EmitSeedsHost {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], described: &[String]) -> EmitSeedsTables {
+pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], described: &[String]) -> EmitSeedsTables {
     let mut tables = emit_seeds_tables();
     tables.barriers.extend(described.iter().cloned());
     let declared = emit_seeds_structs(units);
@@ -159,7 +159,7 @@ pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '
     tables
 }
 
-pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], analysed: &[(String, bool, i64, i64)]) {
+pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], analysed: &[(String, bool, i64, i64)]) {
     let mut owns: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut fixes: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (key, _, own, fixed) in analysed.iter() {
@@ -214,7 +214,7 @@ pub(crate) fn emit_seeds_holds(tables: &EmitSeedsTables, words: &winnow_grammar:
     tables.count(words, ret) > 0
 }
 
-pub(crate) fn emit_seeds_structs(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsDeclared> {
+pub(crate) fn emit_seeds_structs(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsDeclared> {
     let mut declared: Vec<EmitSeedsDeclared> = vec![];
     for unit in units.iter() {
         for item in unit.items.iter() {
@@ -234,7 +234,7 @@ pub(crate) fn emit_seeds_structs(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -
     declared
 }
 
-pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
+pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) {
     for unit in units.iter() {
         for item in unit.items.iter() {
             match &item.node {
@@ -348,13 +348,13 @@ pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[Pa
     tables.close_barriers(&bodies);
 }
 
-pub(crate) fn emit_seeds_body(tables: &EmitSeedsTables, bodies: &mut Vec<EmitSeedsBody>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, name: String, args: &[FnArg], body: &Block) {
+pub(crate) fn emit_seeds_body(tables: &EmitSeedsTables, bodies: &mut Vec<EmitSeedsBody>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: String, args: &[FnArg], body: &Block) {
     let mut held: Vec<String> = vec![];
     for a in args.iter() { if tables.count(unit.words, &a.ty) > 0 { held.push(unit.text(a.name)); } }
     if !held.is_empty() { bodies.push(EmitSeedsBody { name, held, calls: emit_seeds_calls_of(unit, body) }); }
 }
 
-pub(crate) fn emit_seeds_impls_of(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsBody> {
+pub(crate) fn emit_seeds_impls_of(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsBody> {
     let mut out: Vec<EmitSeedsBody> = vec![];
     for unit in units.iter() {
         for item in unit.items.iter() {
@@ -378,7 +378,7 @@ pub(crate) fn emit_seeds_impls_of(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) 
     out
 }
 
-pub(crate) fn emit_seeds_calls_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> Vec<EmitSeedsCall> {
+pub(crate) fn emit_seeds_calls_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, body: &Block) -> Vec<EmitSeedsCall> {
     let mut out: Vec<EmitSeedsCall> = vec![];
     for e in visited_in_block(body) {
         match e {
@@ -397,7 +397,7 @@ pub(crate) fn emit_seeds_calls_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, bod
     out
 }
 
-pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
+pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     let mut out: Option<String> = None;
     match func {
         Expr::Path(segments, _) => { if !segments.is_empty() { out = Some(unit.text(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) })); } },
@@ -410,7 +410,7 @@ pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, func:
     out
 }
 
-pub(crate) fn emit_seeds_roots(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[Expr]) -> Vec<String> {
+pub(crate) fn emit_seeds_roots(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for a in args.iter() {
         let root = match emit_seeds_root(unit, a) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -419,7 +419,7 @@ pub(crate) fn emit_seeds_roots(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: 
     out
 }
 
-pub(crate) fn emit_seeds_root(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, e: &Expr) -> Option<String> {
+pub(crate) fn emit_seeds_root(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, e: &Expr) -> Option<String> {
     let mut out: Option<String> = None;
     match e {
         Expr::Variable(n, _) => {

@@ -1,0 +1,28 @@
+// A name moved into a struct's field while a cut of it is still read lends
+// the field a view, as a trim does (ADR-views-3 D8, D9, ADR-293 D23, #2243):
+// before, the cut was not seen as a view, the move stayed a move and rustc
+// refused it ("cannot move out of `line` because it is borrowed", NK1343).
+
+struct Box { s: String }
+
+fn moved(keep line: String) -> String {
+    let m = line.find(";") ?? 0
+    let head = line[..m]
+    let b = Box { s: line }
+    return f"{head}|{b.s}"
+}
+
+fn made() -> String {
+    let mut g = String()
+    g.push_str("Bremen;7")
+    return g
+}
+
+fn main() throws {
+    println(moved(f"Hamburg;{12}"))
+    let line = made()
+    let m = line.find(";") ?? return
+    let tail = line[m..]
+    let b = Box { s: line }
+    println(f"{tail}|{b.s}")
+}

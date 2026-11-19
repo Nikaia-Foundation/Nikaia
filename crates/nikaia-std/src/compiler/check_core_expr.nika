@@ -303,7 +303,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             ty
         },
         Expr::Unary { op, expr: inner, .. } => check_core_expr_unary(state, world, host, expr, op, inner, span),
-        Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
+        Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs, at) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
         Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),
@@ -439,6 +439,9 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Expr::Coalesce { value, fallback, .. } => check_core_ops_coalesce(state, world, host, expr, value, fallback, span),
         Expr::Index { base, index, .. } => {
             let read = check_core_index(state, world, host, expr, base, index, span)
+            if world.here.given_pushes.contains(node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) {
+                return a_string_type()
+            }
             if state.an_element_of_a_made_list(world, expr) {
                 state.flow.made_element_reads.insert(node_key(expr))
             }
@@ -994,4 +997,21 @@ fn check_core_async_fails(mut state: CheckState, span: ref Span, error: ref Stri
         return
     }
     state.findings.push(check_refusal("NK2605", span, message.clone(), [note.clone()], help.clone()))
+}
+
+/// **A cut of a local that dies where it is pushed into a parameter's list
+/// takes the local's buffer** (ADR-text-reuse-1 D2, D3, #2291): the tier
+/// pass found the local not read again, so the cut is text of its own, cut
+/// down in the local's buffer, and the local is handed over. A local that
+/// only views, or is only lent, keeps the cut a view.
+fn check_core_expr_pushed_cut(mut state: CheckState, world: ref CheckWorld, cut: ref Expr, span: ref Span) -> bool sync {
+    let source = given_cut_source(cut, world.words) ?? return false
+    let held = state.binding(source) ?? return false
+    if held.lent || held.ty.is_a_view() || state.a_lent_let(world, check_core_stmt_given_source(cut) ?? return false) {
+        return false
+    }
+    state.facts.pushed_cuts.insert(node_key(cut))
+    state.facts.cut_gives.insert(node_key(cut))
+    state.hands_over_name(world, source, "given to the list it is pushed into", span)
+    return true
 }

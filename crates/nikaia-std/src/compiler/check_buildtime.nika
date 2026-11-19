@@ -218,7 +218,7 @@ impl CheckState {
 
     /// `NK1180`: a member a field from `T::fields` does not have.
     fn a_reflected_field_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`."))
+        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, `.doc`, its documentation, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.doc`, `.attribute(X)` or `.attributes(X)`."))
     }
 
     /// **`NK1230`: a reflected field's `.ty` where a value belongs**
@@ -230,7 +230,7 @@ impl CheckState {
 
     /// **`NK1180`: a member a field's type does not answer** (ADR-330 D2, D5).
     fn a_field_type_has_no_member(ref mut self, member: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1180", span, f"A field's `.ty` has no `::{member}`.", ["A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct."], "Use `.ty::kind`, `.ty::name` or `.ty::fields`."))
+        self.findings.push(check_refusal("NK1180", span, f"A field's `.ty` has no `::{member}`.", ["A reflected field's `.ty` is its type: it answers `::kind`, `::name`, `::doc`, and `::fields` where it is a struct."], "Use `.ty::kind`, `.ty::name`, `.ty::doc` or `.ty::fields`."))
     }
 
     /// **`NK1181`: a path after a value** (ADR-330 D5): `x.name::member` asks

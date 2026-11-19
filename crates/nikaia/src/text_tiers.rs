@@ -159,6 +159,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     };
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();
+    parsed.given_pushes = decided.given_pushes.clone();
     parsed.refused_moves = decided.refused_moves.clone();
     // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
     // Its text views in an impl of a trait were written `String` (#1250).

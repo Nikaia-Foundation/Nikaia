@@ -145,7 +145,7 @@ pub(crate) fn host_branch_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
     }
 }
 
-pub(crate) fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -155,7 +155,7 @@ pub(crate) fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, out: &m
     }
 }
 
-pub(crate) fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Grammar(def) => view.text(def.name),
@@ -228,7 +228,7 @@ pub(crate) fn host_assets_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_
     found
 }
 
-pub(crate) fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptimes: &mut collections::BTreeSet<String>, options: &mut collections::BTreeMap<String, Vec<String>>) {
+pub(crate) fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, comptimes: &mut collections::BTreeSet<String>, options: &mut collections::BTreeMap<String, Vec<String>>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Comptime { name, .. } => {
@@ -248,7 +248,7 @@ pub(crate) fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
     }
 }
 
-pub(crate) fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &Expr, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<String>) {
+pub(crate) fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<String>) {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -277,7 +277,7 @@ pub(crate) fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &E
     }
 }
 
-pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, graph: &mut collections::BTreeMap<String, Vec<String>>, labels: &mut collections::BTreeMap<String, String>) {
+pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, graph: &mut collections::BTreeMap<String, Vec<String>>, labels: &mut collections::BTreeMap<String, String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Comptime { name, value, .. } => {

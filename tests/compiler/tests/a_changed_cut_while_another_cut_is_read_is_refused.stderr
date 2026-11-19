@@ -1,0 +1,14 @@
+error[NK2305]: `rest` gets the text of `line`, but `head` still reads it afterwards.
+   --> tests/a_changed_cut_while_another_cut_is_read_is_refused.nika:9:20
+    |
+  8 |     let head = line[..m]
+    |         ---- `head` may be the text of `line`
+  9 |     let mut rest = line[m..]
+    |                    ^^^^ `rest` is changed later, so it takes the text of `line` here
+    ...
+ 11 |     return f"{head}|{rest}"
+    |               ---- `head` is read here
+    |
+    = note: A cut that is changed takes the buffer of the text it is cut from and cuts it down in place (ADR-text-reuse-1 D2), which `head` still points into.
+    = help: Read `head` before `rest` is cut, or make `rest` a copy: add `.clone()` after the cut.
+1 change to data a view still to be used may point into

@@ -163,7 +163,7 @@ pub(crate) fn sysroot_declared_text(source: &str, start: i64, end: i64, cut: &[(
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_declared(source: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> (Vec<SysrootDeclared>, String) {
+pub fn sysroot_declared(source: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> (Vec<SysrootDeclared>, String) {
     let mut out: Vec<SysrootDeclared> = vec![];
     let mut whole: String = String::from("");
     for item in unit.items.iter() {
@@ -185,7 +185,7 @@ pub fn sysroot_declared(source: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>)
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn sysroot_item_names(item: &Spanned<Item>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<String> {
+pub(crate) fn sysroot_item_names(item: &Spanned<Item>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     match &item.node {
         Item::Fn { name, .. } => { let name = *name; names.push(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => return names })); },

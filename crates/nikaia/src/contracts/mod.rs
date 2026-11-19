@@ -686,10 +686,11 @@ fn infer_package_with(
     // each derived column and the defaults. What holds a view is computed
     // per unit here, by name (#544): a `Symbol` is interned by the parse
     // of one file, so a set of them means nothing to another.
-    let views: Vec<nikaia_std::compiler::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
-        .iter()
-        .map(|parsed| crate::check::parsed_view_of(parsed))
-        .collect();
+    let views: Vec<nikaia_std::compiler::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_, '_>> =
+        units
+            .iter()
+            .map(|parsed| crate::check::parsed_view_of(parsed))
+            .collect();
     let package_borrowing = package_borrowing(units);
     let borrowing: Vec<BTreeSet<String>> = units
         .iter()
