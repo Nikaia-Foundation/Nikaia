@@ -497,6 +497,77 @@ impl EmitState {
         }
         Ok(())
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_counted_cut<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match node {
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if self.facts.bytes_cuts.contains(&node_key(base)) { self.emit_counted_cut(world, walk, out, host, base, depth, flow, scope)?; } else { self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?; }
+                out.push(".cut(");
+                self.emit_counted_cut_range(world, walk, out, host, base, index, depth, flow, scope)?;
+                out.push(")");
+            },
+            _ => { self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)?; },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_counted_cut_range<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let counts_down = a_negation_inside(index);
+        match index {
+            Expr::Range { start, end, inclusive, .. } => {
+                let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                if !inclusive && emit_read_ends_in_len(world, end, base) {
+                    if only_literals(start) {
+                        self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?;
+                        out.push("..");
+                    } else {
+                        out.push("nikaia_std::index::at(");
+                        self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
+                        out.push("..)");
+                    }
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        if only_literals(index) && !counts_down { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else {
+            out.push("nikaia_std::index::at(");
+            if counts_down { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.widened(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
+            out.push(")");
+        }
+        Ok(())
+    }
+    pub(crate) fn emit_cut_has_an_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, node: &Expr, scope: &EmitScope) -> bool {
+        let name = match node {
+            Expr::Index { base, .. } => {
+                let base = nikaia_std::boxed::open(base);
+                if self.facts.bytes_cuts.contains(&node_key(base)) { return self.emit_cut_has_an_owner(world, base, scope); }
+                match base {
+                    Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+                    _ => return true,
+                }
+            },
+            _ => return true,
+        };
+        let c = match self.own_contracts.functions.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let mut at: i64 = 0;
+        while at < signature.params.len() as i64 {
+            if unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.0 == name {
+                return match &unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1 {
+                    Ty::Named { name: n, args, .. } => !(args.is_empty() && n == "Bytes") || keeps_its_bytes(c, at),
+                    _ => true,
+                };
+            }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        }
+        true
+    }
     pub(crate) fn emit_read_ordinal(&self, at: i64) -> String {
         let all: Vec<&'static str> = vec!["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
         nikaia_std::block::Text::from((*nikaia_std::index::get(&all, nikaia_std::index::at(at))).to_string())
