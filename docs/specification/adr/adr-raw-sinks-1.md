@@ -259,7 +259,12 @@ the form for a temporary directory: `process::run("mktemp", ["-d"])` hands
 back standard output, which is outside, and a path joined to it under
 `Anywhere` is refused. Where the directory's name is needed as text, for a
 program's argument, `Root::path(root)` gives it; an argument is not a raw
-sink (D10).
+sink (D10). `Root::path` returns `fs::Path`, never `null` (supervisor,
+2026-11-19, #2326): for `Dir(d)` it is `d`; for `Anywhere`, which opens a
+relative path as given, against the working directory, it is `"."`, so
+`f"{root.path()}/x"` names the file `root` opens for `"x"` under either
+root. A test of `fs::scratch()` thus writes no fallback for a case that
+cannot occur.
 
 ### D13 — A name from `fs::read_dir` is opened under its directory.
 

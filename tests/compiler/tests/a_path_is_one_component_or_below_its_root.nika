@@ -1,0 +1,13 @@
+// `path::is_component` and `path::is_below` (ADR-raw-sinks-1 D14): one
+// component, no separator, not `.` or `..`; and relative, no root, no drive
+// letter, no `..` component. `.` has no `..` and no root, so it is below.
+use std::path
+
+fn main() throws {
+    for p in ["a.txt", "..", "a/b", "a\\b", ""] {
+        println(f"is_component {p:?} {path::is_component(p)}")
+    }
+    for p in ["a/b", "/a", "C:/a", "a/../b", ".", "..", "a/..", "a\\..\\b", "\\a", "..a/b."] {
+        println(f"is_below {p:?} {path::is_below(p)}")
+    }
+}

@@ -1,7 +1,7 @@
 // What `io::read_line` and `io::read_exact` hand back comes from outside the
 // program, as `io::read_to_string` does (ADR-365, #2242): an `assert` about a
-// line or a body waits for a guard (NK1202), and `trusted: true` marks a
-// read whose sender the program trusts.
+// line or a body waits for a guard (NK1202). Neither takes `trusted:`
+// (ADR-raw-sinks-1 D16.1): `a_line_read_takes_no_trusted_option` is refused.
 use std::io
 
 fn main() throws {
@@ -9,6 +9,5 @@ fn main() throws {
     assert(line.len() > 0)
     let body = io::read_exact(4)
     assert(body.len() == 4)
-    let marked = io::read_line(trusted: true) ?? ""
-    println(f"{line} {marked}")
+    println(line)
 }

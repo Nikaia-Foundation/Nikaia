@@ -1,0 +1,19 @@
+// A guard on `path::is_component` is a fact after it (ADR-raw-sinks-1 D14,
+// ADR-396 D2): the precondition of `opened`, the `assert` that leads its
+// body (Part III 14.2), is proved from it.
+use std::path
+
+fn opened(name: String) -> String {
+    assert(path::is_component(name))
+    return f"opened {name}"
+}
+
+fn tried(arg: String) throws {
+    return if !path::is_component(arg)
+    println(opened(arg))
+}
+
+fn main() throws {
+    tried("a.txt")
+    tried("a/b")
+}
