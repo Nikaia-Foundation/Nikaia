@@ -642,6 +642,19 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let in_scope = emit_call_library_trait(world, &nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()));
+        if in_scope != "" { out.push(&format!("{{ use nikaia_std::{} as _; ", in_scope)); }
+        self.emit_core_method_call_hoisted(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)?;
+        if in_scope != "" { out.push(" }"); }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_method_call_hoisted<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let hoisted = self.emit_method_hoisted(world, receiver, args);
         if hoisted.is_empty() {
             walk.hoisted_args = None;
@@ -1422,11 +1435,19 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple105581| {
-        let (i, word) = __nikaia_tuple105581;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple106621| {
+        let (i, word) = __nikaia_tuple106621;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
     format!("({})", nikaia_std::block::Text::from(copies.join(", ")))
+}
+
+pub(crate) fn emit_call_library_trait(world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> String {
+    for (trait_name, _) in world.library.implementations.iter() {
+        let method = match key.strip_prefix(&*format!("{}::", trait_name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if trait_name.contains("::") && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+    }
+    String::from("")
 }
 
