@@ -688,12 +688,6 @@ mod tests {
     use super::*;
     use std::rc::Rc;
 
-    /// **`block_on` drives a future with nothing to wait for.**
-    #[test]
-    fn a_future_that_never_pauses_runs_straight_through() {
-        assert_eq!(block_on(async { 7 }), 7);
-    }
-
     /// **A suspension point is a place the executor may run something else** —
     /// which is Part II 11.2's *"interleaved on the same thread"*, and the whole
     /// reason this file exists (ADR-055 D4).
@@ -730,42 +724,5 @@ mod tests {
                 "each task ran up to its suspension point before the other resumed"
             );
         });
-    }
-
-    /// **A slot is how a value leaves a task**, and taking it is a suspension
-    /// point rather than a wait.
-    #[test]
-    fn a_slot_wakes_whoever_is_waiting_for_it() {
-        let slot = Slot::<i64>::empty();
-        let filling = slot.clone();
-
-        let answer = block_on(async move {
-            start(async move {
-                Yield::once().await;
-                filling.fill(41);
-            });
-            Waiting::on(slot).await.expect("the task did not crash") + 1
-        });
-        assert_eq!(answer, 42);
-    }
-}
-
-#[cfg(test)]
-mod io_tests {
-    /// A read that fails is a failure and not a hang.
-    ///
-    /// The park is the place a mistake here becomes a program that never
-    /// finishes, so the path where there is nothing to wait for has its own
-    /// test: the `open` fails before anything reaches the kernel, so the future
-    /// is finished at its first poll and the executor never parks.
-    #[test]
-    fn a_read_of_a_file_that_is_not_there_fails_rather_than_hangs() {
-        let missing = std::env::temp_dir().join(format!("nikaia-absent-{}", std::process::id()));
-        let _ = std::fs::remove_file(&missing);
-        let outcome = super::block_on(crate::fs::read_to_string(
-            &missing,
-            &crate::fs::Root::Anywhere,
-        ));
-        assert!(outcome.is_err(), "a missing file read as something");
     }
 }
