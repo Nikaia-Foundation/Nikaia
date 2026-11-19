@@ -658,10 +658,25 @@ what takes text of its own (a `mut` or owning parameter, also through a
 and where it is kept `.clone()` makes the copy, written where it happens. A view
 in a published `String` slot that text of its own also flows into is refused without it (`NK1106`); any other `String` slot takes the view (2.2). **`.clone()` is the one
 word for a copy**, of text and of everything else: a copy of text is text of its
-own. `.to_owned()` is refused naming it (`NK1189`); `.to_string()` is the text
-form of a value, and the text form of text is the text itself: a view stays a
-view, and nothing is copied. On a plain text literal neither `.to_string()` nor
-`.clone()` is written: the literal is the text (`NK1301`).
+own. `.to_owned()` is refused naming it (`NK1189`). `.to_string()` is the text
+form of a value, but **not written on text** (`NK1301`, [ADR-text-reuse-1](adr/adr-text-reuse-1.md) D1): a view is a
+`String` already, and the compiler decides whether text is a view or text of
+its own, so the call has no job; where a copy is meant, `.clone()` is the word.
+The refusal goes by the receiver's written type: on a type parameter that is
+`String` at a call, `x.to_string()` is the text itself, and nothing is copied.
+On a plain text literal neither `.to_string()` nor `.clone()` is written: the
+literal is the text (`NK1301`).
+
+**A copy is written, a give is not** ([ADR-text-reuse-1](adr/adr-text-reuse-1.md)). A view that is
+changed (assigned to, `+=`, a `mut` method, handed to a `mut` or `keep`
+parameter, kept in an owned slot) is text of its own, and takes its source's
+buffer where the source is owned here and no other view of it lives past the
+change: a cut becomes a `truncate` or a `drain` of the source, and nothing is
+written for it. The source is then gone; a later read of it is the error of a
+use after a give, whose help writes `.clone()` on the cut. A view of a lent
+parameter cannot be given: it needs `.clone()`, or the parameter says `keep`.
+`replace` on a source that is not read afterwards works in that source's
+buffer, which changes nothing the program prints.
 
 **`T?` lowers to the backend's `Option<T>`**, the mapping Part III 15.2 writes
 the other way round, and `null` is a reserved word (2.1) that lowers to `None`.
