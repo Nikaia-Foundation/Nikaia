@@ -188,3 +188,77 @@ pub(crate) fn type_entry(fields: &[String], derives: &collections::BTreeSet<Stri
     entry
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let shared = crosses(&vec![String::from("Rc<u8>"), String::from("u8")]);
+    if !(shared == Crosses::MayNot) { nikaia_std::abort::assertion_failed("assert(shared == Crosses::MayNot)", None, &[("shared", (&&nikaia_std::abort::Operand(&(shared))).shown()), ("Crosses::MayNot", (&&nikaia_std::abort::Operand(&(Crosses::MayNot))).shown()), ]) };
+    let plain = crosses(&vec![String::from("Vec<Option<u8>>"), String::from("String")]);
+    if !(plain == Crosses::May) { nikaia_std::abort::assertion_failed("assert(plain == Crosses::May)", None, &[("plain", (&&nikaia_std::abort::Operand(&(plain))).shown()), ("Crosses::May", (&&nikaia_std::abort::Operand(&(Crosses::May))).shown()), ]) };
+    let two = crosses(&vec![String::from("Vec<u8, u16>")]);
+    if !(two == Crosses::May) { nikaia_std::abort::assertion_failed("assert(two == Crosses::May)", None, &[("two", (&&nikaia_std::abort::Operand(&(two))).shown()), ("Crosses::May", (&&nikaia_std::abort::Operand(&(Crosses::May))).shown()), ]) };
+    let view = crosses(&vec![String::from("&str")]);
+    if !(view == Crosses::Undecided) { nikaia_std::abort::assertion_failed("assert(view == Crosses::Undecided)", None, &[("view", (&&nikaia_std::abort::Operand(&(view))).shown()), ("Crosses::Undecided", (&&nikaia_std::abort::Operand(&(Crosses::Undecided))).shown()), ]) };
+    let unknown = crosses(&vec![String::from("Handle")]);
+    if !(unknown == Crosses::Undecided) { nikaia_std::abort::assertion_failed("assert(unknown == Crosses::Undecided)", None, &[("unknown", (&&nikaia_std::abort::Operand(&(unknown))).shown()), ("Crosses::Undecided", (&&nikaia_std::abort::Operand(&(Crosses::Undecided))).shown()), ]) };
+    let none: Vec<String> = vec![];
+    let no_fields = crosses(&none);
+    if !(no_fields == Crosses::Undecided) { nikaia_std::abort::assertion_failed("assert(no_fields == Crosses::Undecided)", None, &[("no_fields", (&&nikaia_std::abort::Operand(&(no_fields))).shown()), ("Crosses::Undecided", (&&nikaia_std::abort::Operand(&(Crosses::Undecided))).shown()), ]) };
+    let inner = generic_of(" Option <u8>", "Option");
+    if !(nikaia_std::index::or(inner.as_deref(), || "none") == "u8") { nikaia_std::abort::assertion_failed("assert((inner ?? \"none\") == \"u8\")", None, &[("inner ?? \"none\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(inner.as_deref(), || "none")))).shown()), ]) };
+    let longer = generic_of("Optional<u8>", "Option");
+    if !(longer.is_none()) { nikaia_std::abort::assertion_failed("assert(longer == null)", None, &[("longer", (&&nikaia_std::abort::Operand(&(longer))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let bound = bounds_send("T: Send + 'static");
+    if !(bound) { nikaia_std::abort::assertion_failed("assert(bound)", None, &[]) };
+    let alone = bounds_send("Send");
+    if !(alone) { nikaia_std::abort::assertion_failed("assert(alone)", None, &[]) };
+    let inside = bounds_send("T: Sender<u8>, U: Resend");
+    if !(!inside) { nikaia_std::abort::assertion_failed("assert(!inside)", None, &[]) };
+    let accented = bounds_send("Sendé");
+    if !(!accented) { nikaia_std::abort::assertion_failed("assert(!accented)", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let one = a_list(&vec![String::from("a")], "the one", "the many");
+    if !(one == "the one `a`") { nikaia_std::abort::assertion_failed("assert(one == \"the one `a`\")", None, &[("one", (&&nikaia_std::abort::Operand(&(one))).shown()), ]) };
+    let two = a_list(&vec![String::from("a"), String::from("b")], "x", "the many");
+    if !(two == "the many `a` and `b`") { nikaia_std::abort::assertion_failed("assert(two == \"the many `a` and `b`\")", None, &[("two", (&&nikaia_std::abort::Operand(&(two))).shown()), ]) };
+    let three = a_list(&vec![String::from("a"), String::from("b"), String::from("c")], "x", "y");
+    if !(three == "y `a`, `b` and `c`") { nikaia_std::abort::assertion_failed("assert(three == \"y `a`, `b` and `c`\")", None, &[("three", (&&nikaia_std::abort::Operand(&(three))).shown()), ]) };
+    let none: Vec<String> = vec![];
+    let empty = a_list(&none, "x", "y");
+    if !(empty == "") { nikaia_std::abort::assertion_failed("assert(empty == \"\")", None, &[("empty", (&&nikaia_std::abort::Operand(&(empty))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut calls: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    calls.insert(String::from("a::run"), vec![String::from("helper"), String::from("slow")]);
+    calls.insert(String::from("a::helper"), vec![String::from("tokio::spawn")]);
+    calls.insert(String::from("a::slow"), vec![String::from("a::slower")]);
+    calls.insert(String::from("a::slower"), vec![String::from("std::thread::spawn")]);
+    calls.insert(String::from("a::loops"), vec![String::from("a::loops")]);
+    let way = reaches_a_thread("a::run", &calls);
+    let expected: Option<Vec<String>> = Some(vec![String::from("a::helper"), String::from("tokio::spawn")]); #[allow(clippy::redundant_locals)] let way = way;
+    if !(way == expected) { nikaia_std::abort::assertion_failed("assert(way == expected)", None, &[("way", (&&nikaia_std::abort::Operand(&(way))).shown()), ("expected", (&&nikaia_std::abort::Operand(&(expected))).shown()), ]) };
+    let round = reaches_a_thread("a::loops", &calls);
+    if !(round.is_none()) { nikaia_std::abort::assertion_failed("assert(round == null)", None, &[("round", (&&nikaia_std::abort::Operand(&(round))).shown()), ]) };
+    calls.insert(String::from("b::helper"), vec![]);
+    let ambiguous = the_crates_own("helper", &calls);
+    if !(ambiguous.is_none()) { nikaia_std::abort::assertion_failed("assert(ambiguous == null)", None, &[("ambiguous", (&&nikaia_std::abort::Operand(&(ambiguous))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn crossing_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("crossing::what_crosses_is_read_from_the_fields", __nikaia_test_0),
+        ("crossing::a_bound_names_send_as_a_word", __nikaia_test_1),
+        ("crossing::a_list_reads_as_a_sentence", __nikaia_test_2),
+        ("crossing::the_shortest_way_to_a_thread_is_named", __nikaia_test_3),
+    ]
+}

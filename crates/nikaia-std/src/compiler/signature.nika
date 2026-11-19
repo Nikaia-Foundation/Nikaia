@@ -256,3 +256,57 @@ pub fn contract(written: ref WrittenFn, crate_word: ref String, types: ref colle
     entry.signature = signature
     return entry
 }
+
+/// A view is not kept, a value is; the crate's own type is named by its path
+/// and noted; anything else is `?`.
+test "a rust type reads as the ledgers" {
+    let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+    types.insert("Conn")
+    let params: Vec[String] = ["T"]
+    let mut mentioned: collections::BTreeSet[String] = collections::BTreeSet()
+    let view = translate("&str", "db", params, types, mentioned)
+    assert(view.ty.text() == "ref String")
+    assert(!view.kept)
+    let own = translate("Vec<Conn>", "db", params, types, mentioned)
+    assert(own.ty.text() == "Vec[db::Conn]")
+    assert(own.kept)
+    let variable = translate("Option<T>", "db", params, types, mentioned)
+    assert(variable.ty.text() == "$T?")
+    assert(variable.kept)
+    let small = translate("u8", "db", params, types, mentioned)
+    assert(small.ty.text() == "u8")
+    assert(!small.kept)
+    let lent = translate("&mut u8", "db", params, types, mentioned)
+    assert(lent.ty.text() == "?")
+    assert(!lent.kept)
+    let foreign = translate("other::Thing", "db", params, types, mentioned)
+    assert(foreign.kept)
+    let noted = mentioned.contains("Conn")
+    assert(noted)
+}
+
+/// A `Result` throws the crate's own error by its path, and `?` for any
+/// other.
+test "a result names what it throws" {
+    let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+    types.insert("Error")
+    let none: Vec[String] = []
+    let mut mentioned: collections::BTreeSet[String] = collections::BTreeSet()
+    let own = result_of("Result<u8, Error>", "db", none, types, mentioned)
+    assert((own.fails ?? "none") == "db::Error")
+    let other = result_of("Result<(), io::Error>", "db", none, types, mentioned)
+    assert((other.fails ?? "none") == "?")
+    let plain = result_of("u8", "db", none, types, mentioned)
+    assert(plain.fails == null)
+}
+
+/// A bound reaches a parameter through its type variable or an `impl Send`
+/// at the parameter itself.
+test "a send bound reaches its parameters" {
+    let variables = sends("T: Send + 'static, U: Clone, 'a: 'b")
+    assert(variables == ["T"])
+    let names: Vec[String] = ["job", "name", "f"]
+    let types: Vec[String] = ["&mut T", "&str", "impl FnOnce() + Send"]
+    let sent = sent_across(names, types, "T: Send, ")
+    assert(sent == ["job", "f"])
+}
