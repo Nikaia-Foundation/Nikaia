@@ -771,8 +771,9 @@ pub fn ended<T, E: Ending>(outcome: Result<T, E>) -> Result<T, E> {
     outcome
 }
 
-// Kept as Rust (#2082): names compared without case is the Windows half of
-// `merged`, which no program run on Unix reaches. The Unix half and the rest
+// Kept as Rust (#2304): names compared without case is the Windows half of
+// `merged`, which no program run on Unix reaches, and `merged` takes
+// `OsString` pairs, which Nikaia has no type for (NK1135). The Unix half and the rest
 // are `tests/compiler/tests/process_a_childs_environment_is_cleared_removed_then_set.nika`.
 #[cfg(test)]
 mod tests {
