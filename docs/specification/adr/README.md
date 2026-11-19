@@ -304,6 +304,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [failure-return-1](adr-failure-return-1.md) | A failing call's status travels beside the value: the throw path (`throwing` and every envelope constructor on it) is cold and never inlined, a failing function stays inlinable; on the Rust backend two scalars where value and error fit a word each (after a count of non-inlined failing calls), on the direct backend a status register; ADR-023 D10 is stated per backend; the carry flag is a measurement | Accepted | no |
 | [error-sets-1](adr-error-sets-1.md) | A code parameter the body does not keep is `from(p)` in the set of every function, public or not, replaced at each call by what that call hands it; a kept one stays a place with its storage's union (ADR-351 D8); nothing is written | Accepted | no |
 | [357](adr-357.md) | A `catch` whose `match` names every non-fatal error type arriving is complete, with no `else`; `"?"` or an open `from(p)` needs `else`; a grown set refuses such a `match` (`NK1151`, narrated), and the author of a `pub` function is warned when its set grows (`NK2404`) | Accepted | partly: D1, D2, D5 built; D3 (the ledger narrating a grown set) and D4 (`NK2404`) not; a fatal type no arm names is still asked for |
 | [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's; kept code's set belongs to its storage, the ledger's `code` says what a function puts there, lowered without a box (D8) | Accepted | no |
@@ -391,7 +392,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `lambdas`, `raw-sinks`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `lambdas`, `raw-sinks`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
