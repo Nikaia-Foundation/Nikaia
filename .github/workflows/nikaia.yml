@@ -54,6 +54,8 @@ jobs:
       arm64: ${{ steps.tested.outputs.arm64 || steps.decide.outputs.arm64 }}
       docs: ${{ steps.tested.outputs.docs || steps.decide.outputs.docs }}
       examples: ${{ steps.tested.outputs.examples || steps.decide.outputs.examples }}
+      # A documentation-only change this run tests (not one tested before).
+      docs_checked: ${{ steps.decide.outputs.docs }}
       superseded: ${{ steps.tested.outputs.superseded }}
       unsafe_crates: ${{ steps.crates.outputs.list }}
     steps:
@@ -110,10 +112,10 @@ jobs:
 
       # A documentation-only change skips the build and test jobs; these cheap
       # checks still run for it (the full ones run again in bootstrap_compiler).
+      # Its ADR citations are checked in `examples`, which builds the compiler.
       - name: Cheap checks (documentation-only change)
         if: steps.decide.outputs.docs == 'true'
         run: |
-          python3 scripts/check-adr-refs.py
           python3 scripts/badges.py --check
 
   # The oldest Rust Nikaia claims (ADR-305), with the whole suite run on it:
@@ -151,14 +153,15 @@ jobs:
       - name: Run the suite on the floor
         run: sh scripts/check-floor.sh
 
-  # **A documentation-only change that edits an example** (`scripts/ci-changes.sh`,
-  # `examples`): the compiler is built, and every `nika` example of website/
-  # and guide/ goes through `nikaia check` and `nikaia lower`, compared with
-  # tests/page-examples/EXPECTED.txt. No `rustc` runs on the examples, so after the
-  # build it takes about a minute. A change to the prose alone skips it.
+  # **A documentation-only change** builds the compiler for the checks written
+  # in Nikaia: its ADR citations (`scripts/check-adr-refs.nika`, #2263) and,
+  # where it edits an example (`scripts/ci-changes.sh`, `examples`), every
+  # `nika` example of website/ and guide/ through `nikaia check` and `nikaia
+  # lower`, compared with tests/page-examples/EXPECTED.txt. No `rustc` runs on
+  # the examples, so after the build it takes about a minute.
   examples:
     needs: changes
-    if: needs.changes.outputs.docs == 'true' && needs.changes.outputs.examples == 'true'
+    if: needs.changes.outputs.docs_checked == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -181,7 +184,11 @@ jobs:
       - name: Build the compiler
         run: cargo build --release -p nikaia
 
+      - name: Check ADR citations resolve
+        run: ./target/release/nikaia run scripts/check-adr-refs.nika
+
       - name: The examples of the website and the guide
+        if: needs.changes.outputs.examples == 'true'
         run: |
           export PATH="$PWD/target/release:$PATH"
           cd tests/page-examples && nikaia test
@@ -275,7 +282,7 @@ jobs:
         run: sh scripts/check-unsafe-crates.sh "${{ matrix.crate }}"
 
   # The cheap checks, beside the suite's `build` rather than in front of the tests:
-  # formatting, ADR citations, badges and clippy need no release build.
+  # formatting, badges and clippy need no release build.
   lint:
     needs: changes
     if: needs.changes.outputs.docs != 'true'
@@ -301,10 +308,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
-      # A decision is only citable if its number is stable, so a dangling
-      # `ADR-023 D7` is as much a defect as a dangling link.
-      - name: Check ADR citations resolve
-        run: python3 scripts/check-adr-refs.py
+      # The ADR citations (`scripts/check-adr-refs.nika`) need the compiler:
+      # the suite's `ledgers` shard checks them.
 
       # The README's badges are drawn from the specification's version line
       # and the self-hosting count; a hand-edited SVG drifts.

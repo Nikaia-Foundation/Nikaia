@@ -11,7 +11,7 @@ reached, no version that built it and no progress report.
 the next version states all the topic's decisions in their current form, the
 previous version moves to [`docs/history/adr/`](../../history/adr/), and every
 live citation moves with it; nothing live cites an archived record
-(`scripts/check-adr-refs.py` refuses it). A decision that stays keeps its `Dn`.
+(`scripts/check-adr-refs.nika` refuses it). A decision that stays keeps its `Dn`.
 Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
@@ -67,7 +67,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [registry-1](adr-registry-1.md) | Nikaia packages leave crates.io for a registry of their own: a Git index whose versions arrive by pull request (metadata only, checked by `nikaia registry check` building the pinned commit); a canonical `nkpkg` archive hashed with SHA-256; ownership proved by the commit and kept by a signing key in the index; the newest compatible version solved with ADR-270's logic package, semver checked from API and ledger, a cooling period; mirrors are a file layout anyone hosts; two versions of a package side by side where no public edge joins them; replaces ADR-286 D23-D27 if accepted | Open | no |
-| [decision-records-v2](adr-decision-records-v2.md) | A topic has one live record, `ADR-<topic>-v<n>` (one to three lowercase words, general first; `n` its version); a change in substance makes the next version, the previous goes to the history, a decision that stays keeps its `Dn`; earlier records are consolidated when changed; names are claimed under Reserved numbers; `check-adr-refs.py` refuses two live versions of a topic | Accepted | partly: the rename tool and the move of `check-adr-refs` to Nikaia (#904) |
+| [decision-records-v2](adr-decision-records-v2.md) | A topic has one live record, `ADR-<topic>-v<n>` (one to three lowercase words, general first; `n` its version); a change in substance makes the next version, the previous goes to the history, a decision that stays keeps its `Dn`; earlier records are consolidated when changed; names are claimed under Reserved numbers; `check-adr-refs.nika` refuses two live versions of a topic | Accepted | partly: the rename tool and the move of `check-adr-refs` to Nikaia (#904) |
 | [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [382](adr-382.md) | A test that proves a local, a parameter or a path of fields from one (`p.name`, `self.cache`) is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write to the name, or an assignment or `mut` hand-over of the path or a prefix, takes it back (`NK1102` names it); not a path: `v[i].f`, `f().x`; an enum's value is bound by `match` only | Accepted | built |
@@ -82,7 +82,6 @@ implementation.
 | [342](adr-342.md) | A list's `map` whose result goes straight into the next step runs element by element with it, with no list between; where a chain's lambdas touch nothing, the order they run in and which panic stops it are not fixed, an overflow may stop it after its last element, and a filter's conditions may be read without a branch; what can be slower than today's code is measured first. | Accepted | no |
 | [341](adr-341.md) | `Eq` and `Ord` are traits of the language, always in scope; a bound on them gives the body the operators, and `a < b` on an unbounded `T` is `NK1248`; a bound is answered by an `impl` or, for the language's own types and declared types' equality, by the walk; a program writes `impl Eq`/`impl Ord` for the types it declares (`NK1249` otherwise); an ordered map's key is `Ord`. | Accepted | yes |
 | [340](adr-340.md) | Every `Expr` node carries a `u32` id, given right after the parse (ADR-383), unique within a parsed file; a clone keeps its id, a node the compiler builds takes a new one; two trees that differ only in ids are equal; the id replaces the address keys, the ordinals and `at` as a key, so the code that keys on an expression can be written in Nikaia. | Accepted | no |
-| [339](adr-339.md) | A grammar says where a match was (`span(p)`, `here`) and whether a line break precedes it (`same_line`, recorded by the generated parser by position); `///` is a rule, a stray one a parse error; no grammar declares a state or an `extern rule`, a lexical rule and an action that may fail do what those did. | Accepted | no |
 | [383](adr-383.md) | The grammar gives no ids: a numbering pass over the finished tree, right after the parse and before ADR-347's rewrite, gives every parsed node its id, dense and in input order, the same on any number of cores; a node carries its span until then and the pass writes the span table; one walk per file and per hole | Accepted | yes |
 | [384](adr-384.md) | `Entry::or_default` and `Seq::cloned` (`iter().cloned()`) are in `std`: the Rust calls the C1a move needs, `NK1171` today | Accepted | no (#1082) |
 | [385](adr-385.md) | Every length is at most 2^63 - 1 for a proof, whether or not its elements take space; a `std` sequence's ledger entry may state its count (`ensures_count`: `split` at least one piece, `chars` between a quarter of the bytes and all of them, `bytes` all of them), read where a `collect()`, `count()` or `for` makes it a length | Accepted | no (#1053) |
@@ -104,8 +103,8 @@ implementation.
 | [401](adr-401.md) | A program names the thread it runs on with `std::thread::id() -> thread::Id`: an opaque id with `==` and hash, no arithmetic or number; inside a counter taken on first use, never reused, not the OS id or an address; a thread, not a task; `std::thread` holds nothing else | Accepted | no |
 | [402](adr-402.md) | A `time::Duration` has `saturating_add`, `saturating_sub`, `saturating_mul(int)` (below zero is no time, past the longest stays there), `min` and `max`, as the integers do; `n.nanos()` is the sixth constructor; plain `+ - *` stay checked | Accepted | no |
 | [403](adr-403.md) | A program in a package's `tests/` sees the package's private names by the same paths as its public ones, as a `test` block does; nothing else does, and a test reaching a name publishes nothing; std's Nikaia packages (`runtime`, `compiler`) have such a `tests/`, run by `nikaia test` and the suite | Accepted | no |
-| [raw-sinks-1](adr-raw-sinks-1.md) | Data from outside the program at a raw sink (`db::raw`, `html::Raw`, a path under `fs::Root::Anywhere`) is proved from its type or a guard, or the manifest's `[allow]` admits it, else `NK1308`; every boundary escapes by default; a dependency's exception builds only where the application allows it for that package (`NK1309`); `raw-sinks = "warn"` checks at run time; `std` runs no shell, `process::shell` is `NK1314` (D9); an outside program at `process::run` is refused, `NK1308`, unless `untrusted-program` allows it (D10) | Accepted | no |
-| [grammar-1](adr-grammar-1.md) | A grammar takes values: a rule declares them as a function does (Subject ; Config), an argument, a bound (`" "{m}`) and a guard `if(cond)` are Nikaia expressions over the values in scope, `count(p)` is an `i64` (no `usize`), an entry takes values after its input; an action stands after `->` and a brace after a pattern is a bound (ADR-296 D33 changed); `{ p }` as a delimiter is withdrawn | Accepted | yes |
+| [raw-sinks-1](adr-raw-sinks-1.md) | Data from outside the program at a raw sink (`db::raw`, `html::Raw`, a path under `fs::Root::Anywhere`) is proved from its type or a guard, or the manifest's `[allow]` admits it, else `NK1308`; every boundary escapes by default; a dependency's exception builds only where the application allows it for that package (`NK1309`); `raw-sinks = "warn"` checks at run time; `std` runs no shell, `process::shell` is `NK1314` (D9); an outside program at `process::run` is refused, `NK1308`, unless `untrusted-program` allows it (D10); the root of `Dir` is a part (D11), `fs::scratch()` replaces `mktemp` (D12), a `read_dir` name is opened under its directory (D13), `path::is_component`/`path::is_below` prove a name (D14), the key is per operation and names its sources, `untrusted-paths-read = ["args"]` (D15), proof in place of `trusted:` (D16) | Accepted | no |
+| [grammar-1](adr-grammar-1.md) | A rule's values are passed as a function's are: lent, never copied (D6); its decisions on how a grammar takes values (D1-D5) moved to grammar-syntax-v1 D9, D12-D15 | Accepted | yes |
 | [grammar-2](adr-grammar-2.md) | A grammar entry may take a type from its caller (`Json::read[Contact](bytes)`) and is emitted once per type; a `match` on `T::kind` chooses the pattern; `members[S]` fills a struct by one mapping rule shared with SQL, the compiler matching keys and building the value; attributes read in the format's `name:` function; `@stream` entries; `write[T]` stays a function; `json::read` forwards to the grammar (ADR-344 D3 changed); a type argument in brackets is not warned where nothing else names the type (ADR-330 D9 narrowed); an enum variant without payload by its name | Accepted | no |
 | [338](adr-338.md) | `std` is the core the language stands on; JSON, TOML, CSV, HTML, HTTP/1.1's text half and the database protocol are official packages (`nikaia_json` …), versioned on their own, shipped with the toolchain, listed in `std` and taken in by their first `use`. | Accepted | no |
 | [337](adr-337.md) | `nikaia fmt` writes one style with no options (a tab per level and nothing aligned, `{` at the line's end, width 100, trailing `,` where broken), keeps every comment where it was, leaves a `dsl` body as written, never changes what a file lowers to, and `--check` reports for CI. | Accepted | no |
@@ -223,7 +222,8 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()`, D14's prefix hash, D15's skipped teardown, D25's `pub grammar` |
+| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()`, D14's prefix hash, D15's skipped teardown |
+| [grammar-syntax-v1](adr-grammar-syntax-v1.md) | How a grammar is written: scannerless, a DSL block ends with `} eod`, a grammar is parsed, comments are whitespace and strings Nikaia's own; entered by an ordinary call to any `entry rule` (`Json::value(x)`, no `parse` alias, `pub` belongs to the grammar); Part II 10.8 lists every element; an action stands after `->` and a brace after a pattern is a bound; a rule takes values as a function does (Subject ; Config), a bound may be a value, a guard `if(cond)`, `count(p)` an `i64`; `span(p)`, `here`, `same_line`, `///` a rule, no state and no `extern rule`; hardware instructions leave the core, auto-AST and regex terminals are goals | Accepted | no |
 | [016](adr-016.md) | The UTF-8 check is divided across frames, never skipped, and each piece is checked with SIMD (`simdutf8`), answering as the standard library does; it is made where a mapping becomes text (`m.text()`), not where the file is mapped (D5). | Accepted | yes |
 
 ### Diagnostics
@@ -401,7 +401,7 @@ makes the next version of the changed topic instead. Records replaced as a whole
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -411,7 +411,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| grammar-syntax-v1 | how a grammar is written (ADR-296, grammar-1, ADR-339) | #904 |
 | grammar-input-v1 | what a grammar reads and how it holds it (ADR-296, ADR-366, ADR-388) | #904 |
 | grammar-actions-v1 | what a rule's action may do (ADR-296, grammar-1) | #904 |
 | grammar-parallel-v1 | frames and folds (ADR-296) | #904 |
@@ -427,7 +426,7 @@ what the decision is. Delete the row in the same commit that adds the record.
 A claim whose branch is abandoned is deleted by whoever notices.
 
 **When a record has to move to another name, its citations move with it.**
-`check-adr-refs.py` catches a citation of a decision that does not exist and a
+`check-adr-refs.nika` catches a citation of a decision that does not exist and a
 number held by two records, but not a citation that still resolves and now
 points at the record that took the old number. Every sentence that cited the old
 number is checked by hand.

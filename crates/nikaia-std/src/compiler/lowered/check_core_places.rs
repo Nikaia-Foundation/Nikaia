@@ -130,6 +130,10 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if ty == "meta::Field" {
         if field == "name" { return check_core_places_str_view(); }
+        if field == "doc" {
+            state.facts.reflected_docs.insert(id_of(expr) as i64);
+            return check_core_places_str_view();
+        }
         if field == "default" { return check_core_places_unrolled_default((state.flow.unrolling).as_ref()); }
         if field == "ty" {
             state.a_field_type_as_a_value(span);

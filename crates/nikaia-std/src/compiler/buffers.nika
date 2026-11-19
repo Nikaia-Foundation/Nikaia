@@ -114,6 +114,10 @@ pub struct BufferAsk {
     /// stand, by their nodes (`viewed_arms`): a buffer moved so into a
     /// literal is a view of it (ADR-views-3 D9).
     pub viewed: ref collections::BTreeSet[i64],
+    /// The cuts the text tiers took as text of their own (`given_pushes`):
+    /// each takes its local's buffer, so it views nothing (ADR-text-reuse-1
+    /// D2, #2291).
+    pub given: ref collections::BTreeSet[i64],
 }
 
 // One local, as far as this walk needs it: the statement that binds it, the
@@ -1579,6 +1583,9 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
         Expr::Field { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
         Expr::SafeField { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
         Expr::Index { base, index, .. } => {
+            if ask.given.contains(node_key(expr)) {
+                return none
+            }
             origins_of(index, ask, holes_of, unaliased, walk)
             origins_of(base, ask, holes_of, unaliased, walk)
         }

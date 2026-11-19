@@ -7,7 +7,7 @@
 //!
 //! **And naming it turned up something worse than a missing name.** A grammar's
 //! entry is written straight into the ledger
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D24) rather than
+//! ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5) rather than
 //! inferred from an `Item::Fn`, so the `throws` fixpoint — which walks the
 //! graph it built from functions — had no set for it and **what a parse threw
 //! reached no caller at all**. That was invisible while the entry threw `"?"`:

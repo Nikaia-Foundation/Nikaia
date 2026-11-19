@@ -649,8 +649,8 @@ at that commit: re-grep the names before cutting.
 `comptime_run.rs` (1,699), is planned with it (`K` rows):
 
 * The `grammar!` block (926-4351: 3,426 lines, 1,334 of them comments, 358 rules) is
-  the parser. ADR-339 decided it moves as a Nikaia grammar, but #557's *To build*
-  (`span(p)`, `here`, `same_line`, the `doc` rule) is not built, and ADR-339 D3
+  the parser. ADR-grammar-syntax-v1 decided it moves as a Nikaia grammar, but #557's *To build*
+  (`span(p)`, `here`, `same_line`, the `doc` rule) is not built, and ADR-grammar-syntax-v1 D18
   forbids a grammar state while 71 actions draw node ids from `Trivia`
   (`_state.user().id()`) and 27 record spans (`.at()`). Decided (owner,
   2026-10-28, ADR-383): the grammar gives no ids; a numbering pass right after

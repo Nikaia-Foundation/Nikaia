@@ -1,5 +1,5 @@
 // A guard at the top of an alternative holds where its action runs
-// (ADR-grammar-1 D4), so a claim in the action leans on it: `scalar::from(v)`
+// (ADR-grammar-syntax-v1 D14), so a claim in the action leans on it: `scalar::from(v)`
 // is proved by the guard on `v`, a whole number a rule of the grammar
 // declares (ADR-yaml-1 D11, #1003). A text the guard refuses is a parse error.
 

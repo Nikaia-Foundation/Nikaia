@@ -22,6 +22,10 @@ pub struct ParsedView {
     /// **The arms the tier pass took as a view of the name they are**, by
     /// their nodes (ADR-282 D13, #712).
     pub viewed_arms: ref collections::BTreeSet[i64],
+    /// **The cuts the tier pass took as text of their own**, given the
+    /// buffer of a local that dies where they are pushed into a parameter's
+    /// list, by their nodes (ADR-text-reuse-1 D2, #2291).
+    pub given_pushes: ref collections::BTreeSet[i64],
 }
 
 impl ParsedView {

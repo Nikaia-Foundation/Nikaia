@@ -37,7 +37,7 @@ pub(crate) fn check_attributes_same_word(left: &str, right: &str) -> bool {
     a == b
 }
 
-pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, arg: &Expr) -> String {
+pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> String {
     match arg {
         Expr::Variable(word, _) => { let word = *word; return unit.text(word) },
         Expr::Path(segments, _) => {
@@ -49,7 +49,7 @@ pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, 
     }
 }
 
-pub(crate) fn check_attributes_mark_text(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> String {
+pub(crate) fn check_attributes_mark_text(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, mark: &Attribute) -> String {
     let read = check_attributes_mark_of(unit, mark);
     let mut places: String = String::from("");
     for place in read.places.iter() {
@@ -86,7 +86,7 @@ pub(crate) fn check_attributes_mark_read(text: &str) -> CheckAttributesMark {
     CheckAttributesMark { places, repeatable: rest.trim() == "repeatable" }
 }
 
-pub(crate) fn check_attributes_mark_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> CheckAttributesMark {
+pub(crate) fn check_attributes_mark_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, mark: &Attribute) -> CheckAttributesMark {
     let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
     let known = check_attributes_places();
     for arg in mark.args.iter() {
@@ -107,7 +107,7 @@ pub(crate) fn check_attributes_mark_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_marks_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, marks: &mut collections::BTreeMap<String, CheckAttributesMark>) {
+pub(crate) fn check_attributes_marks_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, marks: &mut collections::BTreeMap<String, CheckAttributesMark>) {
     let mark_name = check_attributes_mark_name();
     for item in unit.items.iter() {
         match &item.node {

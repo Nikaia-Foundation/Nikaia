@@ -1,0 +1,16 @@
+// A changed cut takes its source's text only where no other view of it is
+// still read (ADR-text-reuse-1 D2, #2243): `rest` would cut `line` down in
+// place while `head` still points into it. Before, the cut was given the
+// text anyway and rustc refused the move (NK1343).
+
+fn moved(keep line: String) -> String {
+    let m = line.find(";") ?? 0
+    let head = line[..m]
+    let mut rest = line[m..]
+    rest += "!"
+    return f"{head}|{rest}"
+}
+
+fn main() throws {
+    println(moved(f"Hamburg;{12}"))
+}

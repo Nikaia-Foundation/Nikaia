@@ -325,6 +325,7 @@ pub struct FieldDef {
     pub span: Span,
     pub default: Option<FieldDefault>,
     pub attributes: Vec<Attribute>,
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

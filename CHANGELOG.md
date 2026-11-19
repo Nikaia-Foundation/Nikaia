@@ -8,6 +8,29 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1470] — 2026-11-19
+
+**Builders' changes (#2243, #2285, #2291)**
+- A cut, trim or replace on text nobody reads afterwards no longer copies the kept part: 100k given cuts drop from 300k to 200k allocations and 23 % fewer instructions.
+- Moving a text while a cut of it is still read no longer fails with an internal error (NK1343): the moved place gets a view, and a cut that is changed while another view of its source is read is refused with NK2305.
+- A `return` inside an expression (`p.find(";") ?? return p`) now counts as keeping a `keep` parameter, as a `return` statement does.
+- A cut of a local text pushed into a caller's list, where the local is not read again, takes the local's buffer and is shrunk, so the caller keeps no whole lines alive
+
+## [0.0.1469] — 2026-11-19
+
+**adr-rename: follow a citation whose decisions start on the next line (#2298)**
+- adr-rename follows a citation whose decisions start on the next comment line, and lists a decision list that crosses a line break
+
+## [0.0.1468] — 2026-11-19
+
+**A package's Nikaia code and test blocks call the package's own Rust (#2233)**
+- A package's test blocks and Nikaia code call its own Rust: nikaia test builds the Rust root's modules in, NK2507 refuses a use naming a Rust-root module, NK2508 a pub = true entry of the own Rust, and describe crate drafts the contracts with the package's version.
+
+## [0.0.1467] — 2026-11-19
+
+**pre-push and CI run the ADR citation check in Nikaia; check-adr-refs.py is deleted (#2263)**
+- The ADR citation check is written in Nikaia — `scripts/check-adr-refs.nika` replaces `check-adr-refs.py` in pre-push and CI, with the same checks, messages and exit code, and `--root DIR` to check another tree.
+
 ## [0.0.1466] — 2026-11-19
 
 **A tool moves ADR citations to their new record from a table of old and new decisions (scripts/adr-rename.nika) (#2262)**

@@ -2,16 +2,17 @@
 // Edit parsed_view.nika in the directory above, not this file.
 
 #[derive(Debug, Clone)]
-pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
+pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub words: &'a winnow_grammar::InternerContext,
     pub aliases: &'a1 collections::BTreeMap<String, String>,
     pub items: &'a2 [Spanned<Item>],
     pub package: Option<&'a3 str>,
     pub spans: &'a4 collections::BTreeMap<u32, Span>,
     pub viewed_arms: &'a5 collections::BTreeSet<i64>,
+    pub given_pushes: &'a6 collections::BTreeSet<i64>,
 }
 
-impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a, 'a> {
+impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn text(&self, sym: winnow_grammar::Symbol) -> String { nikaia_std::block::Text::from(self.words.resolve(sym).to_string()) }
     pub fn unaliased(&self, name: &str) -> String { unaliased_in(self.aliases, name) }
 }

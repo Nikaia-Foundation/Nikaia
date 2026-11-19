@@ -1,0 +1,67 @@
+// scripts/check-adr-refs.nika checks the ADR citations and names (#2263,
+// ADR-decision-records-v2 D6). Shown on a fixture tree given with `--root`:
+// a clean tree, then one with a case per check - a dangling `D7` and `§9`, a
+// note's section cited as authority, two live versions of one topic, a title
+// that disagrees with its name, a record with no index row, a citation of an
+// archived record and a topic name no record carries.
+//
+// The fixture is written here, with `~` for the `-` of its names, and what is
+// shown is written back so: its made-up records would otherwise be findings
+// of the check itself, which reads tests/.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn masked(s: String) -> String {
+    return s.replace("ADR-", "ADR~").replace("adr-", "adr~")
+}
+
+fn put(dir: String, file: String, text: String) throws {
+    let path = f"{dir}/{file}".replace("~", "-")
+    process::run("mkdir", ["-p", process::run("dirname", [path.clone()]).stdout.trim().clone()])
+    fs::write(path, fs::Root::Anywhere, text.replace("~", "-"))
+}
+
+fn run(repo: String, nikaia: String, tree: String) throws {
+    let out = process::run(nikaia, ["run", "scripts/check-adr-refs.nika", "--", "--root", tree]; dir: repo)
+    println(masked(out.stdout.trim()))
+    if out.stderr.trim().len() > 0 { println(masked(out.stderr.trim())) }
+    println(f"exit {out.code}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tree = f"{dir}/tree"
+    put(tree.clone(), "docs/specification/adr/README.md", "| Record | What |\n| :--- | :--- |\n| [alpha~v1](adr~alpha~v1.md) | the first |\n")
+    put(tree.clone(), "docs/specification/adr/adr~alpha~v1.md", "# ADR~alpha~v1: Alpha\n\n## D1 — one\n\n## 2. A section\n")
+    put(tree.clone(), "docs/history/adr/README.md", "| [old~v1](adr~old~v1.md) | replaced by ADR~alpha~v1 |\n")
+    put(tree.clone(), "docs/history/adr/adr~old~v1.md", "# ADR~old~v1: Old\n\n### D1 — gone\n")
+    put(tree.clone(), "docs/notes.md", "Cites ADR~alpha~v1 D1 and [ADR~alpha~v1](specification/adr/adr~alpha~v1.md) §2.\n")
+    println("--- clean")
+    run(repo.clone(), nikaia.clone(), tree.clone())
+
+    put(tree.clone(), "docs/specification/adr/README.md", "| Record | What |\n| :--- | :--- |\n| [alpha~v1](adr~alpha~v1.md) | the first |\n| [alpha~v2](adr~alpha~v2.md) | the second |\n| [beta~v1](adr~beta~v1.md) | misnamed |\n| [beta~v1](adr~beta~v1.md) | twice |\n")
+    put(tree.clone(), "docs/specification/adr/adr~alpha~v1.md", "# ADR~alpha~v1: Alpha\n\n## D1 — one\n\n## 2. A section\n\nAs handoff.md §3 says.\n")
+    put(tree.clone(), "docs/specification/adr/adr~alpha~v2.md", "# ADR~alpha~v2: Alpha again\n")
+    put(tree.clone(), "docs/specification/adr/adr~beta~v1.md", "# ADR~betta~v1: Beta\n")
+    put(tree.clone(), "docs/specification/adr/adr~gamma~v1.md", "# ADR~gamma~v1: Unlisted\n")
+    put(tree.clone(), "crates/a/src/lib.rs", "// ADR~alpha~v1 D7, ADR~alpha~v1 §9 and ADR~old~v1 D1\n// ADR~alpha~v9 is no record; ADR~alpha~v1x is no name.\n")
+    println("--- one case per check")
+    run(repo, nikaia, tree)
+    process::run("rm", ["-rf", dir])
+}

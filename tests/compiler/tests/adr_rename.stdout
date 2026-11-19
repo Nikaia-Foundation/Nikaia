@@ -1,6 +1,7 @@
-crates/a/src/lib.rs: 2
+crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
@@ -16,9 +17,10 @@ Section: ADR~901 §2.
 Unknown: ADR~901 D9.
 History: [ADR~901](../docs/history/adr/adr~901.md) D3.
 Astray: [ADR~901](adr~901.md) D3.
-crates/a/src/lib.rs: 2
+crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
@@ -38,6 +40,10 @@ Astray: [ADR~901](adr~901.md) D3.
 Links: [ADR~moved-v1](adr~moved-v1.md) D1, [moved-v1](adr~moved-v1.md) D2, [moved-v1](adr~moved-v1.md).
 --- crates/a/src/lib.rs
 // ADR~moved-v1 D2 and ADR~other-v1 D7
+    // a rule (ADR~moved-v1
+    // D2), and more
+// ADR~901 D3,
+// D4 past the break
 --- docs/history/adr/README.md
 ADR~901 D3 is archived.
 --- src/main.nika

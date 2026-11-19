@@ -566,7 +566,7 @@ pub const UNNAMED_ERROR: &str = "?";
 pub const PARSE_ERROR: &str = "ParseError";
 
 /// The one parameter every grammar entry takes: the text to parse
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24).
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5).
 ///
 /// A name rather than four spellings of it, because three analyses have to
 /// agree on it: the loop below writes the signature, [`tether::infer`] writes
@@ -686,10 +686,11 @@ fn infer_package_with(
     // each derived column and the defaults. What holds a view is computed
     // per unit here, by name (#544): a `Symbol` is interned by the parse
     // of one file, so a set of them means nothing to another.
-    let views: Vec<nikaia_std::compiler::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
-        .iter()
-        .map(|parsed| crate::check::parsed_view_of(parsed))
-        .collect();
+    let views: Vec<nikaia_std::compiler::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_, '_>> =
+        units
+            .iter()
+            .map(|parsed| crate::check::parsed_view_of(parsed))
+            .collect();
     let package_borrowing = package_borrowing(units);
     let borrowing: Vec<BTreeSet<String>> = units
         .iter()

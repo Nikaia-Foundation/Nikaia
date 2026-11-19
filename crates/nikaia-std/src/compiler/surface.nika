@@ -47,6 +47,9 @@ pub struct Surface {
     pub functions: collections::BTreeMap[String, Function],
     /// The subset of `functions` the crate writes `pub`.
     pub offers: collections::BTreeSet[String],
+    /// The subset of `functions` the crate writes `pub(crate)`: the ones a
+    /// package's own Nikaia may call (ADR-rust-boundary-1 D24).
+    pub within: collections::BTreeSet[String],
     /// Every `pub struct`'s field types, by the path the type is defined at.
     /// A `pub enum` has no entry: *nobody looked*, not *it holds nothing*.
     pub fields: collections::BTreeMap[String, Vec[String]],
@@ -70,6 +73,7 @@ pub fn empty() -> Surface {
     return Surface {
         functions: collections::BTreeMap(),
         offers: collections::BTreeSet(),
+        within: collections::BTreeSet(),
         fields: collections::BTreeMap(),
         types: collections::BTreeSet(),
         derives: collections::BTreeMap(),
@@ -254,6 +258,11 @@ fn walk(mut surface: Surface, items: ref Vec[RustItem], at: ref String, imports:
             // it.
             RustItem::Hidden(f) => {
                 surface.functions.insert(joined(at, f.name), function_of(f, imports))
+            }
+            RustItem::Crate(f) => {
+                let path = joined(at, f.name)
+                surface.within.insert(path.clone())
+                surface.functions.insert(path, function_of(f, imports))
             }
             RustItem::Rec(r) => {
                 let path = joined(at, r.name)

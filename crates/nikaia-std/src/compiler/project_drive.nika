@@ -76,6 +76,10 @@ pub trait ProjectDriveHost {
     /// `project_drive_spliced` over its root and its manifest, into the
     /// crate's `src` with the `lowered` package.
     fn write_spliced(ref self, src: ref fs::Path, lowered: ref String) sync throws
+    /// `project_drive_hand_modules` over its root and its manifest: the hand
+    /// root's modules, for a test build to splice in (ADR-rust-boundary-1
+    /// D24).
+    fn hand_modules(ref self) -> String sync
     /// The switches file the cache keys on.
     fn switches_path(ref self) -> fs::Path sync
     /// `target/nikaia` of the project.
@@ -345,6 +349,12 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             java = lowered.java?.clone()
         }
         rust[at] = lowered.rust.clone()
+        // **A test block reaches the package's own Rust** (ADR-rust-boundary-1
+        // D24): the test build is a program crate, so the hand root's modules
+        // are spliced in beside the lowered items.
+        if at == 0 && host.tests_build() && host.rust_library() != null {
+            rust[at] = f"{rust[at]}{host.hand_modules()}"
+        }
     }
 
     // **The crates, and no Cargo** (ADR-393 D1): a Rust crate that depends
@@ -1102,10 +1112,35 @@ pub fn project_drive_spliced(root: ref fs::Path, file: ref ManifestFile, src: re
         project_drive_written(to, text)
     }
     let hand = fs::read_to_string(hand_path, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {hand_path.display()}: {error}") }
-    project_drive_written(src.join(table.native).join("mod.rs"), lowered)
+    // **An own path is the crate's** (D24): `words::twice` in the package
+    // names the hand root's `mod words`, one level up from `<native>`.
+    let mut uses: String = ""
+    for head in project_members_rust_heads(hand) {
+        uses = f"{uses}#[allow(unused_imports)]\nuse crate::{head};\n"
+    }
+    let ended = if uses.len() == 0 || lowered.len() == 0 || lowered.ends_with("\n") { "" } else { "\n" }
+    project_drive_written(src.join(table.native).join("mod.rs"), f"{lowered}{ended}{uses}")
     // At the end: above the file's `//!` and `#![...]` it would end them.
     let parted = if hand.len() == 0 || hand.ends_with("\n") { "" } else { "\n" }
     project_drive_written(src.join("lib.rs"), f"{hand}{parted}\npub mod {table.native};\n")
+}
+
+/// **The hand root's modules for the test build** (ADR-rust-boundary-1
+/// D24): each `mod X;` of the `[rust-library] root` declared with its file's
+/// absolute path, and `native` naming the crate, so the hand Rust that
+/// reaches the lowered items as `crate::native::...` (D23) still compiles.
+pub fn project_drive_hand_modules(root: ref fs::Path, file: ref ManifestFile) -> String {
+    let table = file.rust_library ?? return ""
+    let hand = root.join(table.root ?? "")
+    let text = fs::read_to_string(hand, fs::Root::Anywhere) catch { return "" }
+    let from = hand.parent() ?? return ""
+    let mut out: String = "\n#[allow(unused_imports)]\nuse crate as native;\n"
+    for head in project_members_rust_heads(text) {
+        let file = project_members_rust_file(from, head)
+        let quoted = file.display().replace("\\", "\\\\").replace("\"", "\\\"")
+        out = f"{out}#[path = \"{quoted}\"]\nmod {head};\n"
+    }
+    return out
 }
 
 /// `text` written to `path`, its directory made, where the file holds

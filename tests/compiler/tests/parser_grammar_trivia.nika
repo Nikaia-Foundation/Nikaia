@@ -1,6 +1,6 @@
 // The trivia of `tools/parser_grammar.nika` (#557 step 4c), read through its
 // `tokens` scan: `//`, nested `/* */` (ADR-307 D1, D2), `///` docs as a rule
-// of their own (ADR-339 D4), and the line break `same_line` sees before a
+// of their own (ADR-grammar-syntax-v1 D19), and the line break `same_line` sees before a
 // token (ADR-135 D3). The grammar file, `parse_numbers.nika` and the
 // `slice` it calls are copied beside a small driver and run, the way a later
 // chunk compares it with the Rust grammar.

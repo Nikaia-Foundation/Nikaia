@@ -15,17 +15,20 @@
 // the decisions they name, and its whole line, where there is one, moves the
 // citations that name no decision.
 //
-// It rewrites, in the files check-adr-refs.py searches except `docs/history/`
+// It rewrites, in the files check-adr-refs.nika searches except `docs/history/`
 // and build output, a bare citation with its decisions (`D33`, a list
 // `D33, D34`, a range `D33-D34` or `D33–D34`, after `'s` too) and a link to
 // the record (`[ADR-OLD](adr-OLD.md) D33`, `[OLD](adr-OLD.md) D33`) whose path
 // resolves, from the file it stands in, to `docs/specification/adr/`; a link
 // elsewhere (`../history/adr/`) stays as it is. A list whose decisions all
 // land in one record becomes one citation of it, with the new numbers; a
-// range stays a range where the new numbers follow each other.
+// range stays a range where the new numbers follow each other. The decisions
+// may start on the citation's next line, after its comment marker (`ADR-OLD`
+// at a line's end, `// D1` on the next), and that line break stays.
 //
 // What it does not rewrite it lists as `file:line: <citation>: <reason>`:
-// decisions that land in different records, a `§` citation, a decision the
+// decisions that land in different records, a `§` citation, a list of
+// decisions that goes on past a line break, a decision the
 // table does not name, a citation of a whole record the table moves only by
 // decision. The consolidation edits those by hand. It prints one line per
 // changed file with its count of citations, then that list; `--dry-run`
@@ -107,7 +110,7 @@ fn rename_target(table: Vec[Move], old: String, dec: i64) -> Target {
     return Target { record: "", dec: 0 }
 }
 
-// Whether FILE (relative to the root) is one check-adr-refs.py searches,
+// Whether FILE (relative to the root) is one check-adr-refs.nika searches,
 // outside the history and build output.
 fn rename_searched(file: String) -> bool {
     if file.starts_with("docs/history/") || file.starts_with("target/") || file.contains("/target/") { return false }
@@ -179,6 +182,13 @@ fn rename_decisions(decs: Vec[i64], dash: String) -> String {
     return out
 }
 
+// How many line breaks S holds.
+fn rename_breaks(s: String) -> i64 {
+    let mut k = -1
+    for _ in s.split("\n") { k += 1 }
+    return k
+}
+
 // The text a citation becomes, or `!` and the reason it stays.
 fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic], item: regex::Regex[regex::Dynamic], cited: String) -> String throws {
     let caps = whole.captures(cited) ?? return "!not a citation"
@@ -193,12 +203,18 @@ fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic
         if rename_resolved(file, prefix) != "docs/specification/adr" { return "" }
     }
     if caps.named("sect") != null { return "!a § citation" }
+    if caps.named("wrap") != null { return "!a list of decisions that goes on past a line break" }
     let mut poss: String = ""
     if caps.named("poss") != null { poss = "'s" }
     let mut decs: Vec[i64] = []
     let mut dash: String = ""
+    // What stands before the first decision: a space, or a line break.
+    let mut gap: String = " "
     let tail = caps.named("tail")
     if tail != null {
+        let t = (tail ?? return "!").text()
+        let at = t.find("D") ?? return "!"
+        gap = t[0..<at].clone()
         for one in item.find_all((tail ?? return "!").text()) {
             let parts = item.captures(one.text()) ?? return "!"
             let first = text::parse_i64((parts.group(1) ?? return "!").text()) ?? 0
@@ -232,7 +248,7 @@ fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic
         out = f"[{shown}]({prefix}adr-{record}.md)"
     }
     out.push_str(poss)
-    if moved.len() > 0 { out.push_str(f" {rename_decisions(moved, dash)}") }
+    if moved.len() > 0 { out.push_str(f"{gap}{rename_decisions(moved, dash)}") }
     return out
 }
 
@@ -265,7 +281,10 @@ fn main() throws {
         if names.len() > 0 { names.push_str("|") }
         names.push_str(m.old)
     }
-    let pattern = f"(?:\\[(?P<label>(?:ADR-)?(?:{names}))\\]\\((?P<path>[^)\\s]*?)adr-(?P<fname>{names})\\.md\\)|ADR-(?P<bare>{names})\\b)(?P<poss>'s)?(?P<tail> D[0-9]+(?:(?:, ?| ?[-–] ?)D[0-9]+)*)?(?P<sect> ?§[0-9]+(?:\\.[0-9]+)*)?"
+    // A line break inside a citation, with the next line's comment marker
+    // (`//`, `///`, `//!`, `#`, `*`, `>`): its decisions may start there.
+    let brk = "[ \\t]*\\n[ \\t]*(?:(?://[/!]?|#|\\*|>)[ \\t]*)?"
+    let pattern = f"(?:\\[(?P<label>(?:ADR-)?(?:{names}))\\]\\((?P<path>[^)\\s]*?)adr-(?P<fname>{names})\\.md\\)|ADR-(?P<bare>{names})\\b)(?P<poss>'s)?(?P<tail>(?: |{brk})D[0-9]+(?:(?:, ?| ?[-–] ?)D[0-9]+)*)?(?P<wrap>,{brk}D[0-9]+)?(?P<sect> ?§[0-9]+(?:\\.[0-9]+)*)?"
     let found = regex::dynamic(pattern)
     let whole = regex::dynamic(f"^(?:{pattern})$")
     let item = regex::dynamic("D([0-9]+)(?: ?([-–]) ?D([0-9]+))?")
@@ -279,33 +298,32 @@ fn main() throws {
         if !found.is_match(text) { continue }
         let mut out = String()
         let mut count = 0
-        let mut n = 0
-        let mut first = true
-        for line in text.split("\n") {
-            n += 1
-            if !first { out.push_str("\n") }
-            first = false
-            // The pieces between the citations, and the citations, in turn.
-            let pieces: Vec[String] = found.split(line).collect()
-            let mut i = 0
-            for m in found.find_all(line) {
-                out.push_str(pieces[i])
-                i += 1
-                let cited = m.text().clone()
-                let now = rename_one(table, file, whole, item, cited.clone())
-                if now.starts_with("!") {
-                    let why = now.strip_prefix("!") ?? ""
-                    listed.push(f"{file}:{n}: {cited}: {why}")
-                    out.push_str(cited)
-                } else if now.len() == 0 || now == cited {
-                    out.push_str(cited)
-                } else {
-                    count += 1
-                    out.push_str(now)
-                }
-            }
+        // The line each citation starts on, counted from the text before it.
+        let mut n = 1
+        // The pieces between the citations, and the citations, in turn. The
+        // whole text at once: a citation's decisions may start on its next line.
+        let pieces: Vec[String] = found.split(text).collect()
+        let mut i = 0
+        for m in found.find_all(text) {
             out.push_str(pieces[i])
+            n += rename_breaks(pieces[i])
+            i += 1
+            let cited = m.text().clone()
+            let now = rename_one(table, file, whole, item, cited.clone())
+            if now.starts_with("!") {
+                let why = now.strip_prefix("!") ?? ""
+                let shown = cited.replace("\n", "\\n")
+                listed.push(f"{file}:{n}: {shown}: {why}")
+                out.push_str(cited)
+            } else if now.len() == 0 || now == cited {
+                out.push_str(cited)
+            } else {
+                count += 1
+                out.push_str(now)
+            }
+            n += rename_breaks(cited)
         }
+        out.push_str(pieces[i])
         if count > 0 {
             println(f"{file}: {count}")
             if !dry { fs::write(path, fs::Root::Anywhere, out) }

@@ -334,7 +334,7 @@ impl EmitState {
             return false
         }
         let signature = contract.signature?.clone() ?? return false
-        // The values after the input are an entry's too (ADR-grammar-1 D2, #1512).
+        // The values after the input are an entry's too (ADR-grammar-syntax-v1 D12, #1512).
         return signature.params.len() >= 1 && signature.params[0].0 == "input"
     }
 
@@ -377,6 +377,11 @@ impl EmitState {
     fn kind_named(ref self, world: ref EmitWorld, walk: ref EmitWalk, side: ref Expr) -> String {
         match side {
             Expr::Field { base, name, .. } => {
+                // **`field.ty::access`, how the field's type is reached** (ADR-330 D8).
+                let access = self.reflected_field_type(world, walk, base, name, "ty::access")
+                if access != null {
+                    return emit_access_of(access ?? "")
+                }
                 let ty = self.reflected_field_type(world, walk, base, name, "ty::kind") ?? return ""
                 return (self.facts.type_kinds.get(ty)?.clone() ?? "Opaque").clone()
             },
@@ -385,6 +390,9 @@ impl EmitState {
                     return emit_text(world, segments[2])
                 }
                 let ty = self.type_named(world, walk, emit_text(world, segments[0]))
+                if emit_text(world, segments[1]) == "access" {
+                    return emit_access_of(ty)
+                }
                 return (self.facts.type_kinds.get(ty)?.clone() ?? "Opaque").clone()
             },
             else => {},
@@ -618,4 +626,16 @@ impl EmitState {
         }
         return f"{name} {{ {fields.join(", ")} }}"
     }
+}
+
+/// **How a type, as written, is reached** (ADR-330 D8): `Shared[A]` is
+/// `Shared`, `SharedMut[A]` is `SharedMut`, every other type `Owned`.
+fn emit_access_of(written: ref String) -> String {
+    if written.starts_with("SharedMut[") {
+        return "SharedMut"
+    }
+    if written.starts_with("Shared[") {
+        return "Shared"
+    }
+    return "Owned"
 }

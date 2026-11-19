@@ -127,7 +127,7 @@ pub mod text {
     pub use lowered::*;
     include!("text_float.rs");
     include!("text_normal.rs");
-    /// The bytes a grammar's `span(p)` covered (ADR-339 D1).
+    /// The bytes a grammar's `span(p)` covered (ADR-grammar-syntax-v1 D16).
     pub use crate::grammar::Span;
     /// One match of a search, a view of the searched text (ADR-374, without
     /// its positions until that is built): what `std::regex` hands back.
@@ -301,6 +301,9 @@ pub mod runtime {
 /// (`trust.nika`'s `first_literal`, #2216); `.first()` there lowers a
 /// `ref` binding Rust refuses under a reference.
 ///
+/// **And `manual_unwrap_or`**: `fs::exists(p) catch { false }` lowers as a
+/// `match` (`project_members.nika`'s `project_members_rust_file`, #2233).
+///
 /// **And `result_large_err`**: an error enum a `.nika` throws holds its values
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
@@ -357,6 +360,7 @@ pub mod runtime {
     clippy::double_ended_iterator_last,
     clippy::precedence,
     clippy::manual_unwrap_or_default,
+    clippy::manual_unwrap_or,
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
     clippy::map_clone,

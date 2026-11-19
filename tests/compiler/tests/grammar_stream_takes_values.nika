@@ -1,6 +1,6 @@
 // An `@stream` entry takes the values its rule declares after its input, an
 // option by name or by its default, and the caller's `words:` table, as a
-// sequential entry does (ADR-grammar-1 D2, ADR-388 D1, ADR-grammar-2 D7,
+// sequential entry does (ADR-grammar-syntax-v1 D12, ADR-388 D1, ADR-grammar-2 D7,
 // #1509): they are taken before the reader starts and move to it.
 
 use std::winnow_grammar

@@ -66,7 +66,18 @@ fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> St
     if unfollowed > 0 {
         refused.push(f"{unfollowed} value{project_check_plural(unfollowed)} handed to Rust that the compiler can't follow back")
     }
-    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale - unfollowed
+    // **And `NK2507` and `NK2508` are the package's own Rust**
+    // (ADR-rust-boundary-1 D26, D28): a name meaning two things, an entry
+    // that publishes.
+    let clashing = project_check_count(findings, "NK2507")
+    if clashing > 0 {
+        refused.push(f"{clashing} name{project_check_plural(clashing)} both a Rust and a Nikaia module")
+    }
+    let published = project_check_count(findings, "NK2508")
+    if published > 0 {
+        refused.push(f"{published} entr{if published == 1 { "y" } else { "ies" }} of the package's own Rust marked `pub = true`")
+    }
+    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale - unfollowed - clashing - published
     if crossings > 0 {
         refused.push(f"{crossings} value{project_check_plural(crossings)} that may not cross a thread")
     }
@@ -183,6 +194,8 @@ fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> St
         undescribed -
         stale -
         unfollowed -
+        clashing -
+        published -
         aliases -
         changed_under -
         tethered -

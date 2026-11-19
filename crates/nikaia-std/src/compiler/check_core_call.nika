@@ -871,7 +871,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         wanted = state.flow.lambda_expected?.clone()
         state.flow.lambda_expected = null
     }
-    // **A grammar is entered by an ordinary call** (ADR-296 D24).
+    // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5).
     let entered: String? = state.grammar_path(name)
     if entered != null {
         let entered_path: String = entered ?? ""

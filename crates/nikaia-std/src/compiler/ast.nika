@@ -1302,6 +1302,9 @@ pub struct FieldDef {
     pub default: FieldDefault?,
     /// Its `@` lines (ADR-331 D1).
     pub attributes: Vec[Attribute],
+    /// The run of `///` lines standing before it, as an item's
+    /// [`Spanned::doc`]: what `field.doc` answers (ADR-329 D2).
+    pub doc: String?,
 }
 
 /// A field's default and where it is written (ADR-331 D5).
@@ -1377,7 +1380,7 @@ impl BinaryOp {
 pub struct GrammarDef {
     pub name: winnow_grammar::Symbol,
     pub rules: Vec[GrammarRule],
-    /// `pub grammar`: every entry is offered to other packages (ADR-296 D25).
+    /// `pub grammar`: every entry is offered to other packages (ADR-grammar-syntax-v1 D6).
     pub public: bool,
 }
 
@@ -1385,7 +1388,7 @@ pub struct GrammarDef {
 pub struct GrammarRule {
     pub name: winnow_grammar::Symbol,
     /// `entry rule file`: the program may call it, `Measurements::file(data)`
-    /// (ADR-296 D25). Every other rule is the grammar's own.
+    /// (ADR-grammar-syntax-v1 D6). Every other rule is the grammar's own.
     pub is_entry: bool,
     /// `@stream entry rule events -> Event = event*`: the entry hands its
     /// items over one at a time, a sequence walked once
@@ -1401,7 +1404,7 @@ pub struct GrammarRule {
     pub span: Span,
     /// `rule Block(n: i64; c: Ctx = Ctx::BlockIn)`: the values the rule takes,
     /// declared as a function's are, Subject ; Config
-    /// ([ADR-grammar-1](../../../docs/specification/adr/adr-grammar-1.md) D2):
+    /// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D12):
     /// `n` here, empty for a rule without parentheses ...
     pub args: Vec[FnArg],
     /// ... and `c`, an option with its default.
@@ -1474,7 +1477,7 @@ pub enum Pattern {
     /// `fold(...)` / `par_fold(...)`
     Fold(FoldSpec),
     /// `Block(n + 1; c: Ctx::BlockOut)`: a rule of the grammar handed values,
-    /// as a function is called (ADR-grammar-1 D2). A built-in called with
+    /// as a function is called (ADR-grammar-syntax-v1 D12). A built-in called with
     /// patterns (`until(";")`, `list(item, sep)`) is a `Ref`.
     Call {
         name: winnow_grammar::Symbol,
@@ -1482,7 +1485,7 @@ pub enum Pattern {
         config: Vec[ConfigArg],
     },
     /// `p{m}`, `p{0, n - 1}`, `p{n,}`: a repetition whose bound is a value
-    /// (ADR-grammar-1 D3). Bounds that are all integers written out are a
+    /// (ADR-grammar-syntax-v1 D13). Bounds that are all integers written out are a
     /// `Repeat`. `high` is null for `{n}` and `{n,}`; `comma` tells them apart.
     Counted {
         pat: Spanned[Pattern],
@@ -1491,7 +1494,7 @@ pub enum Pattern {
         comma: bool,
     },
     /// `if(cond)`, `if(cond, "a deeper indentation")`: matches nothing, and
-    /// fails the alternative where `cond` is false (ADR-grammar-1 D4).
+    /// fails the alternative where `cond` is false (ADR-grammar-syntax-v1 D14).
     Guard {
         cond: Expr,
         expected: String?,

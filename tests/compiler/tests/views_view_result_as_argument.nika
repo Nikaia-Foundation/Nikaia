@@ -14,7 +14,7 @@ fn total(xs: Array[i64]) -> i64 {
 }
 
 fn after(s: String) -> String {
-	let i = s.find("l") ?? return s
+	let i = s.find("l") ?? return ""
 	return s[i..]
 }
 
