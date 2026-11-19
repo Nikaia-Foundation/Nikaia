@@ -1,0 +1,26 @@
+// **A change after a sort loses the order it ensured** (Part I 4.5,
+// ADR-381 D2, D5): after `xs.push(0)` nothing shows `xs.is_sorted()` any
+// more, and a sort by one key shows nothing of another (#2234).
+
+struct Entry {
+    id: i64,
+    name: String,
+}
+
+fn by_id(e: ref Entry) -> i64 sync {
+    return e.id
+}
+
+fn by_length(e: ref Entry) -> i64 sync {
+    return e.name.len()
+}
+
+fn main() throws {
+    let mut xs = [3, 1, 2]
+    xs.sort()
+    xs.push(0)
+    println(xs.binary_search(2)?.to_string() ?? "none")
+    let mut es = [Entry { id: 4, name: "b" }, Entry { id: 1, name: "a" }]
+    es.sort_by_key(by_length)
+    println(es.binary_search_by_key(4, by_id)?.to_string() ?? "none")
+}

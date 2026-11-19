@@ -1,0 +1,22 @@
+// **A sort ensures the order a search by halving requires** (Part I 4.5,
+// ADR-381 D5): `xs.sort()` makes `xs.is_sorted()` known, and
+// `es.sort_by_key(by_id)` makes `es.is_sorted_by_key(by_id)` known, until
+// the list may change (#2234).
+
+struct Entry {
+    id: i64,
+    name: String,
+}
+
+fn by_id(e: ref Entry) -> i64 sync {
+    return e.id
+}
+
+fn main() throws {
+    let mut xs = [3, 1, 2]
+    xs.sort()
+    println(xs.binary_search(2)?.to_string() ?? "none")
+    let mut es = [Entry { id: 4, name: "b" }, Entry { id: 1, name: "a" }]
+    es.sort_by_key(by_id)
+    println(es.binary_search_by_key(4, by_id)?.to_string() ?? "none")
+}

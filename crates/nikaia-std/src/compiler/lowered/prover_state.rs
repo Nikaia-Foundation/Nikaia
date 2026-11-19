@@ -32,6 +32,8 @@ pub struct ProverState {
     pub divisions: collections::BTreeMap<i64, String>,
     pub unfit_numbers: collections::BTreeSet<i64>,
     pub method_callees: collections::BTreeMap<i64, String>,
+    pub std_properties: collections::BTreeSet<String>,
+    pub std_ensured: collections::BTreeMap<String, (Vec<String>, Vec<String>)>,
     pub call_sites: collections::BTreeMap<String, Expr>,
     pub call_args: collections::BTreeMap<String, (String, Vec<i64>)>,
     pub wanted: collections::BTreeSet<String>,
@@ -55,7 +57,7 @@ pub struct ProverState {
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), unwritten: collections::BTreeMap::new(), known_unwritten: collections::BTreeMap::new(), unstated: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), whole_lets: collections::BTreeMap::new(), zero_divisors: collections::BTreeSet::new(), field_owners: collections::BTreeMap::new(), outside: ProverOutside::nothing(), arithmetic: collections::BTreeMap::new(), divisions: collections::BTreeMap::new(), unfit_numbers: collections::BTreeSet::new(), method_callees: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), unwritten: collections::BTreeMap::new(), known_unwritten: collections::BTreeMap::new(), unstated: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), whole_lets: collections::BTreeMap::new(), zero_divisors: collections::BTreeSet::new(), field_owners: collections::BTreeMap::new(), outside: ProverOutside::nothing(), arithmetic: collections::BTreeMap::new(), divisions: collections::BTreeMap::new(), unfit_numbers: collections::BTreeSet::new(), method_callees: collections::BTreeMap::new(), std_properties: collections::BTreeSet::new(), std_ensured: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(from.to_string())], nikaia_std::block::Place::Block);
@@ -796,12 +798,34 @@ pub(crate) fn given_paths(arena: &mut logic::TermArena, words: &winnow_grammar::
         if given_by.contains_key(v) { continue; }
         for k in 0..params.len() as i64 {
             if ((k) as usize) < args.len() && v.starts_with(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })) {
-                let rest = nikaia_std::block::Text::from(nikaia_std::index::or(v.strip_prefix(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })), || "").to_string());
+                let written = nikaia_std::block::Text::from(nikaia_std::index::or(v.strip_prefix(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })), || "").to_string());
+                let rest = match property_given(&written, params, args, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let term = given_path(arena, words, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, &rest, scope, pinned);
                 if term.is_some() { given_by.insert(nikaia_std::block::Text::from(v.to_string()), nikaia_std::index::or(term, || 0)); }
             }
         }
     }
+}
+
+pub(crate) fn property_given(rest: &str, params: &[String], args: &[Expr], words: &winnow_grammar::InternerContext) -> Option<String> {
+    if !rest.starts_with(&*property_mark()) && !rest.contains(&*format!(".{}", property_mark())) { return Some(nikaia_std::block::Text::from(rest.to_string())); }
+    let open = match nikaia_std::search::find(&rest, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
+    let inner = match property_inner(nikaia_std::index::get(&rest, nikaia_std::index::at(open..))) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
+    if inner.is_empty() { return Some(nikaia_std::block::Text::from(rest.to_string())); }
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for part in inner.split(", ") {
+        let mut given = nikaia_std::block::Text::from(part.to_string());
+        for j in 0..params.len() as i64 {
+            if AsRef::<str>::as_ref(&(part)) == AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&params, (j) as usize) })) || part.starts_with(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (j) as usize) })) {
+                let arg = match args.get(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let on = match path_of(&arg, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                given = format!("{}{}", on, nikaia_std::index::or(part.strip_prefix(&**unsafe { nikaia_std::proven::read(&params, (j) as usize) }), || ""));
+                break;
+            }
+        }
+        parts.push(given);
+    }
+    Some(format!("{}({})", nikaia_std::index::get(&rest, nikaia_std::index::at(0..open)), nikaia_std::block::Text::from(parts.join(", "))))
 }
 
 pub(crate) fn given_path(arena: &mut logic::TermArena, words: &winnow_grammar::InternerContext, arg: &Expr, rest: &str, scope: &ProverScope, pinned: &collections::BTreeMap<String, i64>) -> Option<i64> {

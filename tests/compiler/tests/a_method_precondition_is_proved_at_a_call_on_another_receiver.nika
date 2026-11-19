@@ -1,0 +1,21 @@
+/// A program method's precondition is proved at a call on another receiver
+/// as a free function's is at a call by name (ADR-269 D20, #2225): the `if`
+/// around `b.take(n)` shows `n >= 0`.
+use std::text
+
+struct Box { k: i64 }
+
+impl Box {
+	fn take(ref self, n: i64) -> i64 sync {
+		assert(n >= 0)
+		return self.k + n
+	}
+}
+
+fn main() throws {
+	let b = Box { k: 5 }
+	let n = text::parse_i64("3") ?? 0
+	if n >= 0 {
+		println(b.take(n).to_string())
+	}
+}

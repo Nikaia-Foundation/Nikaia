@@ -1,0 +1,8 @@
+46 bytes joined, requests: 0
+trimmed to 4 bytes, requests: 0
+14 bytes in lines, requests: 0
+2 lines as keys, requests: 0
+escaped 41 and 27 bytes, requests: 0
+a &lt; b &amp; c, more requests: true
+100000 bytes handed over, grew under 1000 bytes: true
+two holders of 100000 and 100000 bytes, requests: 0

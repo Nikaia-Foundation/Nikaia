@@ -85,6 +85,14 @@ pub struct ProverState {
     /// **The `std` entry each method call resolved to**, by its receiver's
     /// node, as the checker's `method_callees` keys it (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
+    /// **The `std` methods a named property may call** (ADR-381 D1, D5),
+    /// by their ledger keys: `Vec::is_sorted`, `Vec::is_sorted_by_key`.
+    pub std_properties: collections::BTreeSet[String],
+    /// **What each `std` method ensures of its receiver's named
+    /// properties** (ADR-381 D2, D5), by its ledger key: its parameters'
+    /// names and each property as its name follows the receiver's path,
+    /// `Vec::sort` with `prop@.is_sorted()`.
+    pub std_ensured: collections::BTreeMap[String, (Vec[String], Vec[String])],
     /// **Each call with arguments the build knows** that a claim or a
     /// binding read (ADR-359 D11), by `call_result_name`: the call as
     /// written, and the callee with its arguments' values.
@@ -167,6 +175,8 @@ impl ProverState {
             divisions: collections::BTreeMap(),
             unfit_numbers: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
+            std_properties: collections::BTreeSet(),
+            std_ensured: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
             call_args: collections::BTreeMap(),
             wanted: collections::BTreeSet(),
@@ -1342,7 +1352,8 @@ fn given_paths(mut arena: logic::TermArena, words: ref winnow_grammar::InternerC
         }
         for k in 0..<params.len() {
             if k < args.len() && v.starts_with(f"{params[k]}.") {
-                let rest = (v.strip_prefix(f"{params[k]}.") ?? "").clone()
+                let written = (v.strip_prefix(f"{params[k]}.") ?? "").clone()
+                let rest = property_given(written, params, args, words) ?? continue
                 let term = given_path(arena, words, args[k], rest, scope, pinned)
                 if term != null {
                     given_by.insert(v.clone(), term ?? 0)
@@ -1350,6 +1361,37 @@ fn given_paths(mut arena: logic::TermArena, words: ref winnow_grammar::InternerC
             }
         }
     }
+}
+
+/// **A property's other arguments are the caller's** (ADR-381 D3): `rest`
+/// of a parameter's path with each argument of its property that names a
+/// parameter (or a part of one) written as the path of the argument handed
+/// to it, `prop@.is_sorted_by_key(by_id)` of `prop@.is_sorted_by_key(f)`;
+/// `null` where that argument is no path (a closure), so the claim is not
+/// shown. Any other `rest` is itself.
+fn property_given(rest: ref String, params: ref Vec[String], args: ref Vec[Expr], words: ref winnow_grammar::InternerContext) -> String? {
+    if !rest.starts_with(property_mark()) && !rest.contains(f".{property_mark()}") {
+        return rest.clone()
+    }
+    let open = rest.find("(") ?? return rest.clone()
+    let inner = property_inner(rest[open..<rest.len()]) ?? return rest.clone()
+    if inner.is_empty() {
+        return rest.clone()
+    }
+    let mut parts: Vec[String] = []
+    for part in inner.split(", ") {
+        let mut given = part.clone()
+        for j in 0..<params.len() {
+            if part == params[j] || part.starts_with(f"{params[j]}.") {
+                let arg = args.get(j) ?? return null
+                let on = path_of(arg, words) ?? return null
+                given = f"{on}{part.strip_prefix(params[j]) ?? ""}"
+                break
+            }
+        }
+        parts.push(given)
+    }
+    return f"{rest[0..<open]}({parts.join(", ")})"
 }
 
 /// The term for the path `rest` of fields from the argument `arg`.

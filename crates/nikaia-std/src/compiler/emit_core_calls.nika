@@ -1759,6 +1759,12 @@ impl EmitState {
                 out.push(".map(|at| at as i64)")
             }
         }
+        // **A list's search by halving answers a position or `null`** (Part I
+        // 4.5): Rust's `Result` with its insertion point is not exposed.
+        let callee = self.facts.method_callees[on_node] ?? ""
+        if callee == "Vec::binary_search" || callee == "Vec::binary_search_by_key" {
+            out.push(".ok().map(|at| at as i64)")
+        }
         if name == "enumerate" && receiver != null {
             let on = receiver ?? return
             if self.facts.counted.contains(node_key(on)) {

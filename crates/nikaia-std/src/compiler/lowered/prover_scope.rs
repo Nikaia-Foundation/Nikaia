@@ -51,7 +51,7 @@ impl ProverScope {
         let index = format!("[{}]", name);
         let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
         let own = length_of(name);
-        for n in self.ints.iter() { if (n.starts_with(&*under) || n.starts_with(&*element) || n.ends_with(&*index)) && *n != own { parts.insert(nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string())); } }
+        for n in self.ints.iter() { if (n.starts_with(&*under) || n.starts_with(&*element) || n.ends_with(&*index)) && *n != own { parts.insert(nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string())); } else if n.ends_with(')') && property_reads(n, name) { parts.insert(nikaia_std::block::Text::from(n.to_string())); } }
         for part in parts.iter() { self.rebind(arena, part); }
         let length = length_of(name);
         self.ints.remove(name);
@@ -255,7 +255,10 @@ impl ProverScope {
         let term = arena.substitute(claim, &values);
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(term, &mut names);
-        for name in names.iter() { if *name != result_name() && nikaia_std::index::or(property_base(name), || "".into()) != result_name() && !is_a_parameter(name, params) { return None; } }
+        for name in names.iter() {
+            if property_base(name).is_some() && !property_carried(name) { return None; }
+            if *name != result_name() && nikaia_std::index::or(property_base(name), || "".into()) != result_name() && !is_a_parameter(name, params) { return None; }
+        }
         Some(term)
     }
     pub(crate) fn pinned_names(&self, arena: &logic::TermArena, claim: i64) -> Option<collections::BTreeSet<String>> {
