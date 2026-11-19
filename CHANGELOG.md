@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1447] — 2026-11-19
+
+**A list map whose result goes into a for, a map or len runs element by element (ADR-342 D1)**
+- Faster list chains: a list map whose result goes into a for, another map or len runs element by element and builds no list in between, when its lambda touches nothing (ADR-342 D1)
+
 ## [0.0.1446] — 2026-11-18
 
 **Builders' changes (#2153)**
