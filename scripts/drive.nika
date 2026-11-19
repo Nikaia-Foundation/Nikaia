@@ -3091,21 +3091,23 @@ fn drive_label_remove(issue: String, label: String) throws {
 }
 
 // Before a run on issue N (owner, 2026-11-06): the issue gets the label
-// `wip`, so drive_queue does not queue it again while it is worked on. No
-// issue, or a failed call, is logged (`wip failed for <brief>`) and stops nothing.
+// `wip` in place of `ready` (one status label per issue, CLAUDE.md), so
+// drive_queue does not queue it again while it is worked on. No issue, or a
+// failed call, is logged (`wip failed for <brief>`) and stops nothing.
 fn drive_wip_start(dry: bool, brief: String) throws {
 	let issue = drive_issue(brief)
 	if issue == "" { return }
 	drive_say(dry, f"gh api -X POST repos/{drive_repo()}/issues/{issue}/labels -f labels[]=wip")
 	if dry { return }
-	if !drive_label_add(issue, "wip") { println(f"wip failed for {drive_stem(brief)}") }
+	if !drive_label_add(issue.clone(), "wip") { println(f"wip failed for {drive_stem(brief)}") }
+	drive_label_remove(issue, "ready")
 }
 
 // What a run's end does to the labels of its issue N, by the report's
 // `Result:` and `Fixes:`: `keep` (done and `Fixes:` names #N: `wip` stays
 // until promote closes the issue, so it is not queued again), `block`
-// (blocked: `wip` and `ready` go, `blocked` comes, the supervisor decides),
-// `remove` (anything else, partial or no report: `wip` goes, `ready` stays;
+// (blocked: `wip` goes, `blocked` comes, the supervisor decides),
+// `remove` (anything else, partial or no report: `wip` goes, `ready` comes back;
 // the `#N` line stays in batch.txt, so drive_queue_add does not queue it again
 // here: the supervisor retries it with a `#N SUFFIX` line, or removes the
 // line and its report so the next queue picks it up again).
@@ -3141,10 +3143,7 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 	)
 	if what == "keep" { return }
 	drive_label_remove(issue.clone(), "wip")
-	if what == "block" {
-		drive_label_remove(issue.clone(), "ready")
-		drive_label_add(issue, "blocked")
-	}
+	drive_label_add(issue, if what == "block" { "blocked" } else { "ready" })
 }
 
 // The labels of an issue filed from a report's `Found:`: `ready` and `bugs`
