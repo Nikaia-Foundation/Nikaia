@@ -241,6 +241,11 @@ impl EmitState {
             out.push("\"");
             return Ok(());
         }
+        let reached = self.reflected_field_type(world, &walk, base, name, "ty::access");
+        if reached.is_some() {
+            out.push(&format!("nikaia_std::meta::Access::{}", emit_access_of(nikaia_std::index::or(reached.as_deref(), || ""))));
+            return Ok(());
+        }
         let typed = self.reflected_field_type(world, &walk, base, name, "ty::name");
         if typed.is_some() {
             out.push(&nikaia_std::index::or(typed, || "".into()).quoted());

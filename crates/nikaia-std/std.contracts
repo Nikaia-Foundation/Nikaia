@@ -6000,6 +6000,16 @@ crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
 
+# **How a value is reached** ([ADR-330](../../docs/specification/adr/adr-330.md)
+# D8): what `T::access` and `field.ty::access` are, a value the running
+# program compares, matches, prints with `{a:?}` and keeps.
+[type."meta::Access"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["Owned", "Shared", "SharedMut"]
+
 # **What a program sizes parallel work by** ([ADR-372](../../docs/specification/adr/adr-372.md)
 # D1): the threads that run user code, not the machine's total, which a
 # container or an affinity mask makes larger than what runs at once.
