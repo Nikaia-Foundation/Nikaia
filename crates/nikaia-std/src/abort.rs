@@ -209,8 +209,9 @@ fn find(places: &Places, file: &str, generated: u32) -> Option<(&'static str, u3
     None
 }
 
-/// The `.nika` file and line for a line of the generated file.
-fn lookup(table: &[Site], generated: u32) -> Option<(&'static str, u32)> {
+/// The `.nika` file and line for a line of the generated file. `std`'s own
+/// test blocks ask it (`runtime/abort_lines.nika`, ADR-rust-boundary-1 D24).
+pub(crate) fn lookup(table: &[Site], generated: u32) -> Option<(&'static str, u32)> {
     table
         .binary_search_by_key(&generated, |(line, _, _)| *line)
         .ok()
@@ -231,27 +232,4 @@ fn said(info: &std::panic::PanicHookInfo<'_>) -> String {
         return text.clone();
     }
     "aborted".to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const TABLE: &[Site] = &[
-        (10, "src/main.nika", 3),
-        (24, "src/parse.nika", 41),
-        (99, "src/main.nika", 7),
-    ];
-
-    /// The half that keeps a program from being worse off: a line the table does
-    /// not know is not answered wrongly. Kept as Rust (#2304): a test block's
-    /// `Vec[(u32, String, u32)]` reaches the language below as a list of
-    /// `(u32, Text, u32)`, not this table of `&'static str` (rustc E0308).
-    #[test]
-    fn an_unknown_line_is_not_guessed_at() {
-        assert_eq!(lookup(TABLE, 11), None);
-        assert_eq!(lookup(TABLE, 1), None);
-        assert_eq!(lookup(TABLE, 1000), None);
-        assert_eq!(lookup(&[], 10), None);
-    }
 }

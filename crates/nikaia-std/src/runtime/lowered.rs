@@ -27,6 +27,8 @@ use nikaia_std::seq::Join as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextQuoted as _;
 #[allow(unused_imports)]
+use nikaia_std::abort;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -42,6 +44,17 @@ use nikaia_std::supervisor;
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
+
+#[allow(unsafe_code)]
+mod abort_lines_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/abort_lines.rs");
+}
+#[allow(unused_imports)]
+pub use abort_lines_lowered::*;
 
 #[allow(unsafe_code)]
 mod cli_lowered {
@@ -219,6 +232,7 @@ mod time_spans_lowered {
 #[allow(unused_imports)]
 pub use time_spans_lowered::*;
 
+pub mod abort_lines {}
 pub mod cli {
     #[allow(unused_imports)]
     pub use super::{an};
@@ -281,6 +295,7 @@ pub mod time_spans {
 /// name, as `nikaia test --std` runs them.
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(abort_lines_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(raw_sinks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(restart_policy_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -326,4 +341,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "673b97e23c7a1586cbd175ddddf6902928547f0255706749918dc88b37174280";
+pub const LOWERED_DIGEST: &str = "365793457ac589b3c3181c0ba83fdf07c88c75b3263fe42387126ae875883c54";

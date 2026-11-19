@@ -1,0 +1,20 @@
+// A map whose text keys no untrusted key reaches is std's `TrustedMap`
+// (ADR-010 D5, `src/map.rs`), keyed by the text the build holds (#2310): it
+// counts with `entry`, keeps what `retain` keeps, and `drain` hands out every
+// pair, taking the map with it. Was map.rs's Rust test `entries_drain_and_retain`.
+use std::collections
+
+fn main() throws {
+	let mut m: collections::HashMap[ref String, i64] = collections::HashMap()
+	for word in ["a", "b", "a", "c", "b", "a"] {
+		m.entry(word).and_modify(fn(n) { n += 1 }).or_insert(1)
+	}
+	println(f"a: {m["a"] ?? 0}, b: {m["b"] ?? 0}, c: {m["c"] ?? 0}")
+	m.retain(fn(_, n) { n > 1 })
+	println(f"kept: {m.len()}")
+	let mut drained: Vec[(ref String, i64)] = m.drain().collect()
+	drained.sort()
+	for (word, n) in drained {
+		println(f"{word} {n}")
+	}
+}

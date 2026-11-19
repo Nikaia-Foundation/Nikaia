@@ -1,0 +1,13 @@
+# The package of `tests/a_comptime_table_reaches_described_rust.nika` and
+# `tests/a_run_time_table_to_described_rust_is_refused.nika`
+# (ADR-rust-boundary-1 D24, #2310): its Rust takes a table of
+# `&'static str`, described as `ref Array[(u32, ref String, u32)]`.
+[package]
+name = "lines"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[rust-library]
+root = "rust/lib.rs"

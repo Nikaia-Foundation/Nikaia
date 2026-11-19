@@ -941,11 +941,8 @@ mod tests {
     // The lookups, the empty key, late-differing keys and other keys are
     // `tests/compiler/tests/map_*.nika` (#2082). What stays here (#2304) no
     // test block reaches yet: the hasher a text key goes through, `hashbrown`'s order,
-    // and a map's `remove` and `retain`, which `collections::HashMap` lacks.
-
-    fn trusted() -> TrustedMap<&'static str, i64> {
-        TrustedMap::default()
-    }
+    // and a map's `remove`. `entry`, `retain` and `drain` are
+    // `tests/compiler/tests/a_trusted_map_counts_retains_and_drains.nika` (#2310).
 
     /// A text key hashes to what the fast hasher gives the text, so a map of
     /// `&str` and one of `String`, and a lookup by `str`, agree. Kept as Rust
@@ -1016,25 +1013,6 @@ mod tests {
         assert_eq!(m.remove("ab"), Some(2));
         assert_eq!(m.get("ab"), None);
         assert_eq!(m.len(), 7);
-    }
-
-    /// The entry API, `drain` and `retain` as `hashbrown`'s map has them. Kept
-    /// as Rust (#2304): the map under test is `TrustedMap`, which no contract
-    /// describes, and its `entry`, `and_modify` and `drain` with it.
-    #[test]
-    fn entries_drain_and_retain() {
-        let mut m = trusted();
-        for word in "a b a c b a".split(' ') {
-            m.entry(word).and_modify(|n| *n += 1).or_insert(1);
-        }
-        assert_eq!(m.get("a"), Some(&3));
-        assert_eq!(m["b"], 2);
-        m.retain(|_, n| *n > 1);
-        assert_eq!(m.len(), 2);
-        let mut drained: Vec<(&str, i64)> = m.drain().collect();
-        drained.sort();
-        assert_eq!(drained, vec![("a", 3), ("b", 2)]);
-        assert!(m.is_empty());
     }
 
     /// Same calls, same table: a trusted map holds its keys in the order

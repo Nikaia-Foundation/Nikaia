@@ -1,0 +1,58 @@
+// A `comptime` table handed to the package's own Rust (ADR-rust-boundary-1
+// D24, decision on #2310): a `ref String` part of a described parameter's
+// list is the Rust's `&'static str`, and a `comptime` value is one. Before
+// #2310 a test block's table reached the Rust as owned text (rustc E0308).
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn ran(nikaia: String, tmp: String, case: String, args: Vec[String]) throws {
+	let done = process::run(nikaia, args; dir: f"{tmp}/lines", env: [("CARGO_TERM_COLOR", "never")])
+	println(f"--- {case}: exit {done.code}")
+	let text = f"{done.stdout}{done.stderr}".replace(tmp, "TMP")
+	for line in text.lines() {
+		// Cargo's progress varies by run and by machine; CI colours it, so it is asked not to.
+		let word = line.trim_start().split(" ").next() ?? ""
+		if ["Updating", "Locking", "Adding", "Downloading", "Downloaded", "Compiling", "Finished", "Running", "Blocking"].contains(word) {
+			continue
+		}
+		println(line)
+	}
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/lines", tmp.clone()])
+	let lines = f"{tmp}/lines"
+	let source = fs::read_to_string(f"{lines}/src/lines.nika", fs::Root::Anywhere)
+	// A package's entry is `src/main.nika` (Part III 13.3), a library's too.
+	fs::write(f"{lines}/src/main.nika", fs::Root::Anywhere, "// The entry of the package.\n")
+	let tested: String = "\ncomptime NONE: Array[(u32, ref String, u32), 0] = []\n\ntest \"an unknown line is not guessed at\" {\n    assert(words::lookup(TABLE, 11) == null)\n    assert(words::lookup(TABLE, 1000) == null)\n    assert(words::lookup(NONE, 10) == null)\n}\n\ntest \"a known line is answered\" {\n    let found = words::lookup(TABLE, 24) ?? (\"\", 0)\n    assert(found.0 == \"src/parse.nika\" && found.1 == 41)\n}\n"
+	fs::write(f"{lines}/src/lines.nika", fs::Root::Anywhere, f"{source}{tested}")
+	ran(nikaia, tmp.clone(), "comptime table", ["test"])
+	process::run("rm", ["-rf", tmp])
+}
