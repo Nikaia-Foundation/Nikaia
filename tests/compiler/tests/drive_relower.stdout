@@ -158,6 +158,24 @@ theirs-side
 pub const LOWERED_DIGEST: &str = "round 2";
 a.nika b.nika 
 local
+== runtime index only
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
+MERGE SHA re-lowered crates/nikaia-std/src/runtime/lowered.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
+crates/nikaia-std/src/runtime/lowered.rs
+base
+theirs-side
+index
+2
+a.nika b.nika 
+local
 == theirs fails, ours builds
 error[E0603]: function `file` is private
 MERGE re-lowering from theirs failed (the build of the re-lowered files), trying ours

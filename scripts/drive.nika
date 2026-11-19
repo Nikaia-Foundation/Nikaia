@@ -1483,7 +1483,7 @@ fn drive_merge_in_way(said: String) -> Vec[String] {
 
 // True for a file the toolchain writes and the merge's regeneration writes
 // again: the lowered files, the badges, and the ledgers of a package.
-fn drive_is_generated(path: String) -> bool {
+fn drive_is_generated(path: String) -> bool throws {
 	if drive_is_lowered(path.clone()) || path.starts_with("assets/badges/") { return true }
 	for ledger in ["nikaia.lock", "nikaia.proofs", "nikaia.contracts"] {
 		if path == ledger || path.ends_with("/" + ledger) { return true }
@@ -1491,7 +1491,7 @@ fn drive_is_generated(path: String) -> bool {
 	return false
 }
 
-fn drive_all_generated(paths: Vec[String]) -> bool {
+fn drive_all_generated(paths: Vec[String]) -> bool throws {
 	for p in paths {
 		if !drive_is_generated(p.clone()) { return false }
 	}
@@ -1543,20 +1543,51 @@ fn drive_merge_generates(paths: Vec[String]) -> bool {
 	return false
 }
 
-fn drive_lowered_dir() -> String {
-	return "crates/nikaia-std/src/compiler/lowered"
+// The directory whose parts `lower-std` lowers: each `<part>/lowered/` and
+// its index `<part>/lowered.rs` under it is output (`SYSROOT_COMPILER` and
+// `SYSROOT_RUNTIME` in sysroot_cache.nika name the parts today).
+fn drive_lowered_root() -> String {
+	return "crates/nikaia-std/src"
 }
 
-// True for a file the lowering writes: one under the lowered directory, or
+// The lowered directories, read from the tree rather than named (#2256: the
+// runtime's were missed): each part of drive_lowered_root that holds a
+// lowered index `lowered.rs` or a directory `lowered/`, so a third part
+// `lower-std` lowers is not missed either.
+fn drive_lowered_dirs() -> Vec[String] throws {
+	let root = drive_lowered_root()
+	let mut parts: Vec[String] = []
+	if !fs::exists(root.clone(), fs::Root::Anywhere) { return parts }
+	for entry in fs::read_dir(root.clone(), fs::Root::Anywhere) {
+		let path = entry.to_text()
+		let names: Vec[String] = path.split("/").collect()
+		let name = names[names.len() - 1].clone()
+		let dir = f"{root}/{name}/lowered"
+		if fs::exists(dir.clone() + ".rs", fs::Root::Anywhere) || fs::exists(dir.clone(), fs::Root::Anywhere) { parts.push(dir) }
+	}
+	parts.sort()
+	return parts
+}
+
+// True for a file the lowering writes: one under a lowered directory, or
 // its index `lowered.rs` beside it (a conflict only in the index's digest line
-// escalated on 2026-11-16 before this).
-fn drive_is_lowered(path: String) -> bool {
-	return path.starts_with(drive_lowered_dir() + "/") || path == drive_lowered_dir() + ".rs"
+// escalated on 2026-11-16 before this; one in the runtime's on 2026-11-19,
+// #2256).
+fn drive_is_lowered(path: String) -> bool throws {
+	for dir in drive_lowered_dirs() {
+		if path.starts_with(dir.clone() + "/") || path == dir.clone() + ".rs" { return true }
+	}
+	return false
 }
 
-// The lowered files the lowering writes: the directory and its index.
-fn drive_lowered_paths() -> Vec[String] {
-	return [drive_lowered_dir(), drive_lowered_dir() + ".rs"]
+// The lowered files the lowering writes: each directory and its index.
+fn drive_lowered_paths() -> Vec[String] throws {
+	let mut paths: Vec[String] = []
+	for dir in drive_lowered_dirs() {
+		paths.push(dir.clone())
+		paths.push(dir.clone() + ".rs")
+	}
+	return paths
 }
 
 // A fingerprint of the lowered files' contents under DIR, to see the lowering
