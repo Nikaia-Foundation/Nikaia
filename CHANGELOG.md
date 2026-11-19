@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1458] — 2026-11-19
+
+**A privileged start ends before main unless the environment is untrusted (ADR-397 D3), the check in crates/unsafe/privileged-start (#2239)**
+- A program started with more rights than its caller (setuid, setgid, file capabilities) ends before main with one line on stderr and exit status 1, unless its manifest declares [build] environment = "untrusted" (ADR-397 D3); the question is asked by the new crate crates/unsafe/privileged-start
+
 ## [0.0.1457] — 2026-11-19
 
 **Builders' changes (#2152)**
