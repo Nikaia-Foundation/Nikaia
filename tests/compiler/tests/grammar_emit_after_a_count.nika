@@ -1,0 +1,25 @@
+// A `count(p)` and a `here` cannot fail (zero times is a count), so a call
+// they alone follow before a cut is committed: the `emit`s in rule `word`
+// below pass NK1370's analysis (ADR-grammar-2 D7, amended 2026-11-18, #1443)
+// and run, in the order the parse makes them. Nothing is skipped (`WS`).
+
+struct Item {
+	word: String,
+	at: u32,
+}
+
+grammar Counted {
+	rule WS = "" -> { }
+	@stream entry rule items -> Item = group*
+	rule group =
+		word n:count(" ") b:here => ";" -> { emit Item { word: f"{n} spaces", at: b } }
+		| "#" -> { emit Item { word: "hash", at: 0 } }
+	rule word = w:text(letter+) -> { emit Item { word: w.clone(), at: 0 } }
+	rule letter = x:any if(x >= 'a' && x <= 'z') -> { }
+}
+
+fn main() throws {
+	for it in Counted::items(Bytes("ab  ;#cd;".bytes().collect())) {
+		println(f"{it.word} {it.at}")
+	}
+}

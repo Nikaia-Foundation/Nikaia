@@ -323,6 +323,17 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), rules)
             if emitted {
                 state.facts.emitting_entries.insert(f"{named}::{world.words.resolve(rule.name)}")
+                // The rules its body calls that reach an `emit`: the lowering
+                // folds the repetition of one of them (#1443).
+                let mut called: collections::BTreeSet[String] = collections::BTreeSet()
+                for alt in rule.alts {
+                    grammar_called_rules(world, alt.pattern.node, rules, called)
+                }
+                for one in called {
+                    if grammar_entry_emits(world, gram, one, rules) {
+                        state.facts.emitting_rules.insert(f"{named}::{one}")
+                    }
+                }
             }
             match grammar_stream_refused(world, rule, state.rule_results, rules, emitted) {
                 refused => state.findings.push(refused),

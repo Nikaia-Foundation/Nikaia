@@ -1239,6 +1239,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut uses = no_uses();
                         if a_parse_that_views(view.words, (rule.ret_type).as_ref(), &package) { uses.kept.insert(nikaia_std::block::Text::from(INPUT_POSITION.to_string())); }
                         for arg in rule.args.iter() { if by_value(arg) { uses.kept.insert(view.text(arg.name)); } }
+                        if rule.stream && rule.ret_type.is_some() { for option in rule.config.iter() { if !option.ty.is_view { uses.kept.insert(view.text(option.name)); } } }
                         let called = view.text(rule.name);
                         graph.insert(format!("{}::{}", named, called), uses);
                     }

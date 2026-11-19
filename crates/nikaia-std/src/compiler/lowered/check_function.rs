@@ -236,7 +236,12 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
     for rule in gram.rules.iter() {
         if rule.stream {
             let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), &rules);
-            if emitted { state.facts.emitting_entries.insert(format!("{}::{}", named, world.words.resolve(rule.name))); }
+            if emitted {
+                state.facts.emitting_entries.insert(format!("{}::{}", named, world.words.resolve(rule.name)));
+                let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
+                for alt in rule.alts.iter() { grammar_called_rules(world, &alt.pattern.node, &rules, &mut called); }
+                for one in called.iter() { if grammar_entry_emits(world, gram, one, &rules) { state.facts.emitting_rules.insert(format!("{}::{}", named, one)); } }
+            }
             match grammar_stream_refused(world, rule, &state.rule_results, &rules, emitted) {
                 Some(refused) => { state.findings.push(refused); },
                 None => { },

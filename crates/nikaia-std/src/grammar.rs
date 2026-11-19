@@ -302,16 +302,19 @@ impl Span {
 /// **The text a bound `text(p)` covered, where `p` binds names** (Part II 10,
 /// #1013): the backend's `(p) @ at` keeps what `p` binds, and the action reads
 /// the covered range from the input here - a view of it, one pass, no second
-/// parse.
+/// parse. A span bound with `@` counts from the stream's start, the input of
+/// a `@stream` step from its window's (#1443): the window's `origin` is taken
+/// off first (0 outside a stream).
 #[doc(hidden)]
-pub fn covered<'a, S>(
+pub fn covered<'a, S: Clone + std::fmt::Debug>(
     input: &winnow_grammar::ParseInput<'a, S>,
     at: std::ops::Range<usize>,
 ) -> &'a str {
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a str = *whole;
-    &all[at]
+    let origin = input.state.origin;
+    &all[at.start - origin..at.end - origin]
 }
 
 /// [`covered`] over a `Bytes`: the covered bytes checked as UTF-8 where they
@@ -329,6 +332,8 @@ where
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a [u8] = *whole;
+    let origin = input.state.origin;
+    let at = at.start - origin..at.end - origin;
     match std::str::from_utf8(&all[at.clone()]) {
         Ok(text) => Ok(text),
         Err(bad) => {

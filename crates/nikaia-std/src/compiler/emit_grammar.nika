@@ -485,12 +485,22 @@ impl EmitState {
             out.push(f"\n        rule WS -> () =\n          w:{skipped} @ at\n")
             out.push(f"            -> {{ _state.user().ran(at.start as i64, at.end as i64, {newline}) }}\n")
         }
+        // The rules that reach an `emit` (the check's `emitting_rules`): an
+        // emitting entry folds the repetition of one of them.
+        let grammar_name = emit_text(world, def.name)
+        let mut emitters: Vec[String] = []
+        for rule in def.rules {
+            let name = emit_text(world, rule.name)
+            if self.facts.emitting_rules.contains(f"{grammar_name}::{name}") {
+                emitters.push(name)
+            }
+        }
         for rule in def.rules {
             out.push("\n")
             let st = out.mark()
             let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" }
             let emitting = rule.stream && rule.is_entry && self.facts.emitting_entries.contains(f"{emit_text(world, def.name)}::{emit_text(world, rule.name)}")
-            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting)
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting, emitters)
             if !bytes {
                 out.record(rule.span, st)
             }
@@ -581,7 +591,7 @@ impl EmitState {
         }
     }
 
-    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool, emitting: bool) sync throws {
+    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool, emitting: bool, emitters: ref Vec[String]) sync throws {
         match rule.frame {
             frame => out.push(f"        {frame_attribute(frame)}\n"),
             null => {},
@@ -627,7 +637,7 @@ impl EmitState {
         // takes `renamed` (`emit_grammar_body`).
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.clone() }
         if rule.stream && rule.is_entry {
-            self.emit_stream_rule(world, walk, out, host, rule, rule_name, taken, label, emitting)
+            self.emit_stream_rule(world, walk, out, host, rule, rule_name, taken, label, emitting, emitters)
             return
         }
         out.push(f"        {vis}rule {rule_name}{taken}{ret}{label} =\n")
@@ -721,11 +731,25 @@ impl EmitState {
     /// actions emit as one type (winnow-grammar ADR 28), and an `emit` hands
     /// over `Some(item)` (`emit_stmt`). The walk passes on only the `Some`
     /// (`emit_stream_each`), so the items are all emitted ones.
-    fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String, emitting: bool) sync throws {
+    fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String, emitting: bool, emitters: ref Vec[String]) sync throws {
         let item = match rule.ret_type {
             ty => host.ty_named(walk, ty),
             null => throw EmitRefused { message: "A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`.", at: rule.span.start as i64 },
         }
+        // **The values an emitting entry takes reach its items** (#1443):
+        // the rule folded around the repeated one takes them as the entry
+        // does, and the fold hands each on by name.
+        let mut handed: Vec[String] = []
+        for arg in rule.args {
+            let name = emit_text(world, arg.name)
+            handed.push(f"{name} = {name}")
+        }
+        for option in rule.config {
+            let name = emit_text(world, option.name)
+            handed.push(f"{name} = {name}")
+        }
+        let passed = if handed.is_empty() { "" } else { f"({handed.join(", ")})" }
+        let folded = if emitting { f"::std::option::Option<{item}>" } else { item.clone() }
         if rule.alts.len() != 1 || rule.alts[0].action != null {
             throw EmitRefused { message: "The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns.", at: rule.span.start as i64 }
         }
@@ -734,19 +758,22 @@ impl EmitState {
             Pattern::Seq(seq) => seq.clone(),
             else => [pattern.clone()],
         }
+        // **An emitting entry folds the repetition whose items emit**
+        // (#1443): the engine hands an item's emits over when its fold takes
+        // the item, and those of a step when the step has matched, so the
+        // other repetitions of its body (`DocEnd*` before `eof`) are steps.
+        let mut chosen: Vec[bool] = []
         let mut folds = 0
         for part in parts {
-            if stream_fold(world, part.node) != null {
+            let fold = stream_fold(world, part.node) != null && (!emitting || stream_item_emits(world, part.node, emitters))
+            chosen.push(fold)
+            if fold {
                 folds += 1
             }
         }
         if folds != 1 {
             throw EmitRefused { message: "The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`.", at: rule.span.start as i64 }
         }
-        if emitting && !taken.is_empty() {
-            throw EmitRefused { message: "The compiler can't translate a `@stream` entry that takes values and whose items are emitted yet.", at: rule.span.start as i64 }
-        }
-        let folded = if emitting { f"::std::option::Option<{item}>" } else { item.clone() }
         let mut wrapped: Spanned[Pattern]? = null
         out.push("        #[stream(each)]\n")
         out.push(f"        pub(crate) rule {rule_name}{taken} -> usize{label} =\n          ")
@@ -754,7 +781,8 @@ impl EmitState {
             if i > 0 {
                 out.push(" ")
             }
-            match stream_fold(world, parts[i].node) {
+            let found = if chosen[i] { stream_fold(world, parts[i].node) } else { null }
+            match found {
                 fold => {
                     match fold.max {
                         most => {
@@ -766,7 +794,7 @@ impl EmitState {
                     }
                     out.push("__wg_n:fold(")
                     if emitting {
-                        out.push(f"__wg_{rule_name}_item")
+                        out.push(f"__wg_{rule_name}_item{passed}")
                         wrapped = fold.item.clone()
                     } else {
                         self.emit_pattern(world, walk, out, host, fold.item)
@@ -818,12 +846,33 @@ impl EmitState {
         out.push("\n            -> { __wg_n }\n")
         match wrapped {
             repeated => {
-                out.push(f"\n        rule __wg_{rule_name}_item -> {folded} =\n          ")
+                out.push(f"\n        rule __wg_{rule_name}_item{taken} -> {folded} =\n          ")
                 self.emit_pattern(world, walk, out, host, repeated)
                 out.push("\n            -> { ::std::option::Option::None }\n")
             },
             null => {},
         }
+    }
+}
+
+/// Whether a repetition of an emitting entry's body repeats a rule that
+/// reaches an `emit` (`emitters`, the check's `emitting_rules`): that one is
+/// the entry's fold (`emit_stream_rule`).
+fn stream_item_emits(world: ref EmitWorld, pattern: ref Pattern, emitters: ref Vec[String]) -> bool {
+    let fold = stream_fold(world, pattern) ?? return false
+    return match stream_item_rule(world, fold.item.node) {
+        name => emitters.contains(name),
+        null => false,
+    }
+}
+
+/// The rule a repetition's item calls, through the groups around it.
+fn stream_item_rule(world: ref EmitWorld, pattern: ref Pattern) -> String? {
+    return match pattern {
+        Pattern::Ref { name, .. } => emit_text(world, name),
+        Pattern::Call { name, .. } => emit_text(world, name),
+        Pattern::Group(inner) => stream_item_rule(world, inner.node),
+        else => null,
     }
 }
 

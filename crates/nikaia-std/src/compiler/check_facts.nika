@@ -575,6 +575,10 @@ pub struct CheckFacts {
     /// engine items are `Option<Item>`, the repetition's own values `None` and
     /// each emitted item `Some`, and its walk hands on only the `Some`.
     pub emitting_entries: collections::BTreeSet[String],
+    /// **The rules an emitting entry's body calls that reach an `emit`**
+    /// (#1443), by `Grammar::rule`: the lowering folds the repetition of one
+    /// of them, and the other repetitions of the body are plain steps.
+    pub emitting_rules: collections::BTreeSet[String],
     /// **A value lent into a `ref` field of a struct literal** (D37), by the
     /// value: the counterpart of `lent_args` for a call.
     pub lent_fields: collections::BTreeSet[i64],
@@ -960,6 +964,7 @@ impl CheckFacts {
             lent_args: collections::BTreeSet(),
             lent_rule_values: collections::BTreeSet(),
             emitting_entries: collections::BTreeSet(),
+            emitting_rules: collections::BTreeSet(),
             lent_fields: collections::BTreeSet(),
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),

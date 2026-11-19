@@ -1942,6 +1942,18 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                                 uses.kept.insert(view.text(arg.name))
                             }
                         }
+                        // **An `@stream` entry's options are kept too**
+                        // (ADR-grammar-2 D7, #1443): its walk parses on a
+                        // thread of its own, which owns what it is handed, so
+                        // a caller hands an option by value, not a lent
+                        // parameter's `&T`.
+                        if rule.stream && rule.ret_type != null {
+                            for option in rule.config {
+                                if !option.ty.is_view {
+                                    uses.kept.insert(view.text(option.name))
+                                }
+                            }
+                        }
                         let called = view.text(rule.name)
                         graph.insert(f"{named}::{called}", uses)
                     }
