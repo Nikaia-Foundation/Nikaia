@@ -925,7 +925,7 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_text()
+        rustc_version().to_text()
     }
 
     fn runtime_dependencies(&self, named: &str) -> Vec<(String, String)> {
@@ -1100,17 +1100,23 @@ pub(crate) fn rustc() -> String {
     std::env::var("RUSTC").map_or_else(|_| String::from("rustc"), String::from)
 }
 
-/// `rustc -vV`, once: the toolchain a key is about.
+/// What the toolchain says of itself, once per process
+/// (`comptime_bundle_toolchain`): read from the user cache while the stamp of
+/// what decides the toolchain is unchanged, so that a check whose answers are
+/// on disk starts no `rustc` (#2151).
+fn toolchain_answers() -> &'static moved::ComptimeBundleToolchain {
+    static HELD: OnceLock<moved::ComptimeBundleToolchain> = OnceLock::new();
+    HELD.get_or_init(|| block_on(moved::comptime_bundle_toolchain(&BundleHost)))
+}
+
+/// `rustc -vV`: the toolchain a key is about.
 pub(crate) fn toolchain() -> &'static str {
-    static HELD: OnceLock<String> = OnceLock::new();
-    HELD.get_or_init(|| {
-        Command::new(rustc())
-            .current_dir(orchestrator::cache::Layout::where_tools_start())
-            .arg("-vV")
-            .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).to_text())
-            .unwrap_or_default()
-    })
+    &toolchain_answers().verbose
+}
+
+/// `rustc --version`, of the same `rustc` as `toolchain` (`RUSTC` first).
+fn rustc_version() -> &'static str {
+    &toolchain_answers().version
 }
 
 /// Where the toolchain's own `std` is, which a program linked with
