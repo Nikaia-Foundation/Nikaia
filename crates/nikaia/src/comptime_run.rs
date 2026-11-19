@@ -105,6 +105,32 @@ pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) ->
     })
 }
 
+/// **Without what the build-time `std` lacks** (#2152,
+/// `comptime_drop_unbuilt` over `comptime_unbuilt`, followed through over
+/// the files), for a program nothing in particular is computed by: a
+/// grammar's.
+pub(crate) fn without_unbuilt(units: &mut [Parsed]) {
+    let count = units.len() as i64;
+    let units = RefCell::new(units);
+    let keep = BTreeSet::new();
+    tree::comptime_readers_dropped(count, tree::comptime_unbuilt(), &mut |at: i64,
+                                                                          gone: &BTreeSet<
+        String,
+    >| {
+        drop_unbuilt(&mut units.borrow_mut()[at as usize], gone, &keep)
+    });
+}
+
+/// `unit` without what names a name of `gone`, but for `keep`
+/// (`comptime_drop_unbuilt`).
+fn drop_unbuilt(
+    unit: &mut Parsed,
+    gone: &BTreeSet<String>,
+    keep: &BTreeSet<String>,
+) -> Vec<String> {
+    tree::comptime_drop_unbuilt(&mut unit.program.items, &unit.interner, gone, keep)
+}
+
 /// `unit` without what reads a name of `gone` (`comptime_drop_readers`).
 fn drop_readers(unit: &mut Parsed, gone: &BTreeSet<String>) -> Vec<String> {
     tree::comptime_drop_readers(&mut unit.program.items, &unit.interner, gone)
@@ -503,6 +529,21 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
 
     fn drop_readers(&self, unit: i64, gone: &BTreeSet<String>) -> Vec<String> {
         drop_readers(&mut self.units.borrow_mut()[unit as usize], gone)
+    }
+
+    fn drop_unbuilt(
+        &self,
+        unit: i64,
+        gone: &BTreeSet<String>,
+        keep: &BTreeSet<String>,
+    ) -> Vec<String> {
+        let went = drop_unbuilt(&mut self.units.borrow_mut()[unit as usize], gone, keep);
+        // **The checked units are of the items before the cut** (#2150):
+        // the lowering infers again what lost an item.
+        if !went.is_empty() {
+            *self.derived_checked.borrow_mut() = None;
+        }
+        went
     }
 
     fn value_fn_names(&self, unit: i64) -> BTreeSet<String> {

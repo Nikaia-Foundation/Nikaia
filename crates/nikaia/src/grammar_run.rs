@@ -280,14 +280,18 @@ fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
     // names one would name what this program does not declare.
     let constants = crate::comptime_run::constants_of(std::iter::once(parsed).chain(package));
     let _ = crate::comptime_run::without_readers(&mut all, constants);
+    // **And without what the build-time `std` lacks** (#2152): its sockets.
+    crate::comptime_run::without_unbuilt(&mut all);
     let beside = all.split_off(1);
     let items = all.pop().expect("the grammar's own file");
-    let others: Vec<&Parsed> = ask
+    let mut others: Vec<Parsed> = ask
         .units
         .iter()
         .copied()
         .filter(|u| u.package.is_some() && u.package != parsed.package)
+        .map(|u| u.keeping(|_| true))
         .collect();
+    crate::comptime_run::without_unbuilt(&mut others);
     let host = Driver {
         parsed,
         items,
@@ -323,7 +327,7 @@ struct Driver<'a> {
     /// **A dependency's files, for the actions that call them** (D13). The
     /// grammar's own package is the program here, and the program's own
     /// files are not visible from a dependency's grammar.
-    others: Vec<&'a Parsed>,
+    others: Vec<Parsed>,
     /// The package's ledger over the grammar's file and those beside it,
     /// inferred the first time a file beside it is lowered.
     ledger: std::cell::OnceCell<crate::contracts::Ledger>,
@@ -373,12 +377,13 @@ impl nikaia_std::compiler::grammar_run::GrammarDriverHost for Driver<'_> {
     }
 
     fn dependency_modules(&self) -> Option<String> {
-        let packages = crate::comptime_run::by_package(&self.others);
+        let others: Vec<&Parsed> = self.others.iter().collect();
+        let packages = crate::comptime_run::by_package(&others);
         let provenance =
             crate::contracts::trust::analyse(self.parsed, crate::contracts::std_ledger())
                 .provenance;
         crate::comptime_run::dependency_modules(
-            &self.others,
+            &others,
             &packages,
             crate::emit::Build::default(),
             provenance,

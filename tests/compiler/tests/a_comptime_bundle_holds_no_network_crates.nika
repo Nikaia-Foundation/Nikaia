@@ -1,0 +1,44 @@
+// #2152: the build-time bundle a `comptime` links against is built without
+// `std`'s sockets, TLS and file ring (its `async-io` feature): a check in a
+// cache of its own leaves no rlib of `rustls`, `ring`,
+// `rustls-native-certs`, `polled` or `file-ring` there, and fewer than the
+// 75 rlibs the whole `std` took.
+use std::fs
+use std::process
+use std::text
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+/// How many rlibs under `dir` have a name `pattern` matches.
+fn rlibs(dir: String, pattern: String) -> i64 throws {
+	let found = process::run("sh", ["-c", f"find {dir} -name '*.rlib' -printf '%f\\n' | grep -E -c '{pattern}'"]).stdout.trim().clone()
+	return text::parse_i64(found) ?? -1
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, "fn square(n: i64) -> i64 sync {\n\treturn n * n\n}\n\ncomptime SIDE: i64 = square(12)\n\nfn main() throws {\n\tprintln(SIDE)\n}\n")
+	let out = process::run("env", [f"NIKAIA_CACHE_DIR={tmp}/cache", nikaia, "check", "main.nika"]; dir: tmp.clone())
+	if out.code != 0 {
+		println(f"check failed: {out.stdout}{out.stderr}")
+	}
+	let network = rlibs(f"{tmp}/cache", "^lib(rustls|ring|rustls_native_certs|polled|file_ring)-[0-9a-f]+[.]rlib$")
+	println(f"network crates in the bundle: {network}")
+	let all = rlibs(f"{tmp}/cache", "")
+	println(f"fewer than 75 rlibs: {all > 0 && all < 75}")
+	process::run("rm", ["-rf", tmp])
+}
