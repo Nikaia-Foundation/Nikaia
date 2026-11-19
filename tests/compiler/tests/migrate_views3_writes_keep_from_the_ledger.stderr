@@ -1,0 +1,80 @@
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:24:5
+    |
+ 24 |     fs::write(f"{tmp}/alone.nika", fs::Root::Anywhere, "struct Bag { items: Vec[String] }\n\nimpl Bag {\n    fn add(ref mut self, s: String) { self.items.push(s) }\n    fn has(ref self, s: ref String) -> bool { return self.items.contains(s) }\n}\n\nfn store(b: ref mut Bag, s: String, keep t: String) {\n    b.items.push(s)\n    b.items.push(t)\n}\n\nfn main() throws {\n    let mut b = Bag { items: [] }\n    b.add(\"a\")\n    store(b, \"b\", \"c\")\n    println(b.has(\"a\"))\n}\n")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:25:5
+    |
+ 25 |     fs::write(f"{tmp}/guide.md", fs::Root::Anywhere, "# Prose: ref self stays\n\n```nika\nfn store(v: ref mut Vec[String], s: String) { v.push(s) }\n```\n\n```rust\nfn f(x: &ref) {}\n```\n\nText `x: ref T` stays.\n")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:26:5
+    |
+ 26 |     fs::write(f"{tmp}/pkg/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:27:5
+    |
+ 27 |     fs::write(f"{tmp}/pkg/src/bag.nika", fs::Root::Anywhere, "pub struct Bag { items: Vec[String] }\n\npub fn put(b: ref mut Bag, s: String) { b.items.push(s) }\n")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:28:5
+    |
+ 28 |     fs::write(f"{tmp}/pkg/src/main.nika", fs::Root::Anywhere, "fn through(b: ref mut Bag, s: String) { put(b, s) }\n\nfn main() throws {\n    let mut b = Bag { items: [] }\n    through(b, \"x\")\n}\n")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:29:5
+    |
+ 29 |     let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/alone.nika", f"{tmp}/guide.md", f"{tmp}/pkg"])
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:35:5
+    |
+ 35 |     let checked = process::run(nikaia, ["check", f"{tmp}/alone.nika"])
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/migrate_views3_writes_keep_from_the_ledger.nika:38:5
+    |
+ 38 |     let again = process::run(nikaia, ["migrate", "views-3", f"{tmp}/alone.nika", f"{tmp}/guide.md", f"{tmp}/pkg"])
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.

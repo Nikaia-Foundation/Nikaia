@@ -1,0 +1,30 @@
+--- 
+exit 0
+warning[NK1308]: `p` reaches the path `fs::read_to_string` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+= help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(p) if !path::is_component(p)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `p` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+= help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(p) if !path::is_component(p)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `args`, `untrusted-paths-write = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `line` reaches the path `fs::read_to_string` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+= help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(line) if !path::is_component(line)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `stdin`, `untrusted-paths-read = ["stdin"]` under `[allow]` in the manifest builds it.
+--- [allow]
+untrusted-paths-read = ["args"]
+exit 0
+warning[NK1308]: `p` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+= help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(p) if !path::is_component(p)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `args`, `untrusted-paths-write = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `line` reaches the path `fs::read_to_string` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+= help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(line) if !path::is_component(line)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `stdin`, `untrusted-paths-read = ["stdin"]` under `[allow]` in the manifest builds it.
+--- [allow]
+untrusted-paths-read = ["args", "stdin"]
+untrusted-paths-write = true
+exit 0
+--- [allow]
+untrusted-paths-anywhere = true
+exit 0
+--- [allow]
+untrusted-paths-read = ["argz"]
+exit 1
+in TMP/nikaia.toml: `untrusted-paths-read` in `[allow]` lists `argz`, which is no source. The sources are: args, stdin, env, request, file, process, network.
+--- [allow]
+untrusted-shell = ["args"]
+exit 1
+in TMP/nikaia.toml: `untrusted-shell` in `[allow]` is `true` or `false`, not `["args"]`.

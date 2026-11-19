@@ -796,12 +796,16 @@ pub fn refuse_assumes_in_std(checked: &mut Checked) {
 }
 
 /// **`std` reaches its own helpers** (`NK1110`, #1606):
-/// `tools/check_access.nika`.
+/// `tools/check_access.nika`; and its `NK1308` are warnings, the default
+/// `raw-sinks` (`project_check_raw_sinks_in_std`).
 pub fn allow_std_helpers_in_std(checked: &mut Checked) {
     checked.findings = nikaia_std::compiler::check_access::check_access_inside_std(
         &checked.findings,
         &checked.facts.std_helpers_reached,
     );
+    // Built at the default `raw-sinks = "warn"` (ADR-raw-sinks-1 D3).
+    checked.findings =
+        nikaia_std::compiler::project_check::project_check_raw_sinks_in_std(&checked.findings);
 }
 
 /// **A package's own test programs see its private names** (`NK1110`,

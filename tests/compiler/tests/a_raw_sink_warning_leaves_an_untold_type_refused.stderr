@@ -1,0 +1,19 @@
+error[NK1245]: The compiler can't tell what type `args[1]` is.
+   --> tests/a_raw_sink_warning_leaves_an_untold_type_refused.nika:11:9
+    |
+ 11 |         println(fs::exists("n.txt", fs::Root::Dir(args[1])))
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.
+    = help: Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.
+warning[NK1308]: `args[1]` reaches the root `fs::Root::Dir(args[1])` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_raw_sink_warning_leaves_an_untold_type_refused.nika:11:9
+    |
+ 11 |         println(fs::exists("n.txt", fs::Root::Dir(args[1])))
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `args[1]` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+1 type error

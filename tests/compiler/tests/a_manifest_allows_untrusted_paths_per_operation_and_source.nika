@@ -1,0 +1,41 @@
+// `[allow]` takes a key per operation on a path from outside
+// (ADR-raw-sinks-1 D15): `untrusted-paths-read`, `-write`, `-remove` and
+// `-anywhere`, each `true` or a list of the sources it lets through. With
+// `untrusted-paths-read = ["args"]` a read of a path from the command line
+// passes, a write of it is still `NK1308`, and so is a read of a path from
+// stdin. A source that is none is a manifest error naming the sources.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn check(nikaia: String, manifest: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+    let main = "use std::cli\nuse std::fs\nuse std::io\n\nfn main() throws {\n    let args = cli::args()\n    if args.len() > 1 {\n        let p = args[1]\n        println(fs::read_to_string(p, fs::Root::Anywhere))\n        fs::write(p, fs::Root::Anywhere, \"x\")\n    }\n    let line = io::read_line() ?? \"\"\n    println(fs::read_to_string(line, fs::Root::Anywhere))\n}\n"
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, main)
+    let out = process::run(nikaia.clone(), ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"--- {manifest.trim()}")
+    println(f"exit {out.code}")
+    for line in out.stderr.lines() {
+        if line.contains("NK1308") || line.contains("TMP") || line.contains("nikaia.toml") || line.contains("untrusted-paths") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    check(nikaia, "")
+    check(nikaia, "[allow]\nuntrusted-paths-read = [\"args\"]\n")
+    check(nikaia, "[allow]\nuntrusted-paths-read = [\"args\", \"stdin\"]\nuntrusted-paths-write = true\n")
+    check(nikaia, "[allow]\nuntrusted-paths-anywhere = true\n")
+    check(nikaia, "[allow]\nuntrusted-paths-read = [\"argz\"]\n")
+    check(nikaia, "[allow]\nuntrusted-shell = [\"args\"]\n")
+}

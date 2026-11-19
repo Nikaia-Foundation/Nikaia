@@ -262,6 +262,79 @@ fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding], un
     }
 }
 
+/// **What the build allows of data from outside at a raw sink**
+/// (ADR-raw-sinks-1 D3, D4, D5, D15): an `NK1308` whose key the build allows
+/// goes, the key alone (`true`) or with the finding's source
+/// (`untrusted-paths-read=args`, from `untrusted-paths-read = ["args"]`);
+/// `untrusted-paths-anywhere` stands for each path key. A dependency's
+/// (`package` is its name) is allowed by the application's `NAME:key`
+/// alone, and refused otherwise as `NK1309`, whose help names the table to
+/// add; `raw-sinks = "warn"` makes each that stays a warning.
+fn project_check_let_raw_sinks_through(findings: Vec[CheckFinding], raw_sinks: String, allow: ref Vec[String], package: String) -> Vec[CheckFinding] {
+    let mut kept: Vec[CheckFinding] = []
+    for finding in findings {
+        if finding.code != "NK1308" {
+            kept.push(finding.clone())
+            continue
+        }
+        let help = finding.help ?? ""
+        let mut key: String = ""
+        for known in raw_sinks_allow_keys() {
+            if help.contains(f"`{known} = ") {
+                key = known.clone()
+            }
+        }
+        let mut source: String = ""
+        match help.split_once(f"`{key} = [\"") {
+            (_, rest) => {
+                match rest.split_once("\"") {
+                    (named, _) => {
+                        source = named.clone()
+                    },
+                    null => {}
+                }
+            },
+            null => {}
+        }
+        let mut keys: Vec[String] = [key.clone()]
+        if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" {
+            keys.push("untrusted-paths-anywhere")
+        }
+        let mut allowed = false
+        for one in keys {
+            let word = if package.is_empty() { one.clone() } else { f"{package}:{one}" }
+            if allow.iter().any(fn(given) { given == word || (!source.is_empty() && given == f"{word}={source}") }) {
+                allowed = true
+            }
+        }
+        if allowed {
+            continue
+        }
+        let value = if source.is_empty() { "true" } else { f"[\"{source}\"]" }
+        let mut said = finding.clone()
+        if !package.is_empty() {
+            said.code = "NK1309"
+            said.message = f"{said.message} The package `{package}` hands it on, and the application does not allow it."
+            said.help = f"If the application means to let `{package}` do this, `{key} = {value}` under `[allow.packages.{package}]` in its manifest builds it, or `--allow={package}:{key}` for one build."
+        }
+        if raw_sinks == "warn" {
+            said.severity = CheckSeverity::Warning
+            said.notes.push("`raw-sinks = \"warn\"` lets this build through.")
+        }
+        kept.push(said)
+    }
+    return kept
+}
+
+/// **`std` and the toolchain are built at the default, `raw-sinks =
+/// "warn"`** (ADR-raw-sinks-1 D3): the file check of `lower-std` reads no
+/// manifest, so it lets each `NK1308` of `std`'s Nikaia through as the
+/// default lets a program's, a warning with no `[allow]` key.
+pub fn project_check_raw_sinks_in_std(findings: ref Vec[CheckFinding]) -> Vec[CheckFinding] {
+    let allow: Vec[String] = []
+    return project_check_let_raw_sinks_through(findings.clone(), "warn", allow, "")
+}
+
 /// The `NK25xx` codes whose crossing this build does not perform, reported as a
 /// lint rather than as an error.
 ///
@@ -370,7 +443,7 @@ pub struct ProjectCheckSaid {
 /// `unproved_checks` is the package's `unproved-checks`: at `error` each
 /// check the walk does not prove is refused (ADR-306 D29); a dependency is
 /// checked at `allow`.
-pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, building_a_library: bool) -> ProjectCheckSaid {
+pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, unproved_checks: String, raw_sinks: String, allow: ref Vec[String], package: String, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against()
     // **`NK1238` is the checker's answer for a build it knows nothing of**
     // (ADR-284 D4): a library build exports its entry points.
@@ -388,6 +461,7 @@ pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, sourc
     project_check_lint_where_nothing_crosses(all, user_parallelism)
     project_check_let_refuted_claims_through(all, refuted_claims)
     project_check_let_unproved_claims_through(all, unproved_claims)
+    all = project_check_let_raw_sinks_through(all, raw_sinks, allow, package)
     let violations = host.sync_violations()
     if all.is_empty() && violations == 0 {
         return ProjectCheckSaid { warnings: "", refused: null }

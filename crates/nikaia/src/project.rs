@@ -1566,6 +1566,9 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                     } else {
                         "allow"
                     },
+                    &settings.words.raw_sinks,
+                    &settings.words.allow,
+                    unit.package.as_deref().unwrap_or(""),
                     settings.library(),
                     (keep || lsp).then_some(&mut facts),
                 )
@@ -1825,6 +1828,9 @@ pub fn check(
     refuted_claims: &str,
     unproved_claims: &str,
     unproved_checks: &str,
+    raw_sinks: &str,
+    allow: &[String],
+    package: &str,
     building_a_library: bool,
     // Where the walk's facts go, for an emitter that would ask the same.
     facts_out: Option<&mut Option<check::CheckFacts>>,
@@ -1860,6 +1866,9 @@ pub fn check(
         refuted_claims,
         unproved_claims,
         unproved_checks,
+        raw_sinks,
+        allow,
+        package,
         building_a_library,
     );
     if let (Some(out), Some(facts)) = (facts_out, host.facts.into_inner()) {

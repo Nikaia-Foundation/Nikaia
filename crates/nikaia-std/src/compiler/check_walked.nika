@@ -10,7 +10,10 @@ use std::text
 /// **`NK1245` comes after every other refusal** (ADR-286 D41): a type nothing
 /// can tell is most often what another refusal left behind, so where the file
 /// holds another error that error is the one said.
-/// And so does `NK1342`, a value whose type is unknown (#1322).
+/// And so does `NK1342`, a value whose type is unknown (#1322). `NK1308`
+/// is no such other error: `raw-sinks = "warn"`, the default, makes it a
+/// warning after this (ADR-raw-sinks-1 D3), and the build would go on with
+/// the type untold.
 fn check_walked_unknown_last(mut state: CheckState) sync {
     let mut other_error = false
     let mut untold = false
@@ -19,7 +22,7 @@ fn check_walked_unknown_last(mut state: CheckState) sync {
             CheckSeverity::Error => {
                 if f.code == "NK1245" {
                     untold = true
-                } else if f.code != "NK1342" {
+                } else if f.code != "NK1342" && f.code != "NK1308" {
                     other_error = true
                 }
             }

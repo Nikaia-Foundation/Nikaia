@@ -1,0 +1,10 @@
+warning[NK1308]: `toolchain()` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/nikaia_test_warms_the_program_std.nika:60:2
+    |
+ 60 | 	let out = process::run(
+    |  ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `toolchain()` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.

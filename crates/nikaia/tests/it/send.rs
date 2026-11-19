@@ -139,6 +139,10 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
         "error",
         // `unproved-checks` at its default (ADR-306 D29).
         "allow",
+        // `raw-sinks` at its default, nothing allowed, no package (#2303).
+        "warn",
+        &[],
+        "",
         // A program, not a library (ADR-284 D4).
         false,
         None,

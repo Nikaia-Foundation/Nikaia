@@ -9,7 +9,33 @@ pub enum Switch {
 
 pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("unproved-checks"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks"), String::from("environment")] }
 
-pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-paths-anywhere")] }
+pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-program"), String::from("untrusted-paths-read"), String::from("untrusted-paths-write"), String::from("untrusted-paths-remove"), String::from("untrusted-paths-anywhere")] }
+
+pub fn raw_sinks_allow_sources() -> Vec<String> { vec![String::from("args"), String::from("stdin"), String::from("env"), String::from("request"), String::from("file"), String::from("process"), String::from("network")] }
+
+pub(crate) fn raw_sinks_allow_value(table: &str, key: &str, word: &str, text: &str) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
+    let value = text.trim();
+    if value == "true" { return Ok(vec![nikaia_std::block::Text::from(word.to_string())]); }
+    if value == "false" { return Ok(vec![]); }
+    let listed = value.starts_with('[') && value.ends_with(']') && !value.contains("\\");
+    if !key.starts_with("untrusted-paths-") || !listed {
+        let ways = if key.starts_with("untrusted-paths-") { "`true`, `false` or a list of sources" } else { "`true` or `false`" };
+        return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` is {}, not `{}`.", key, table, ways, value)), &"raw_sinks_allow_value"));
+    }
+    #[allow(unused_mut)] let mut words: Vec<String> = vec![];
+    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut words = words;
+    for piece in value.split("\"") {
+        if at % 2 == 1 {
+            if !contains(&raw_sinks_allow_sources(), piece) {
+                let expected = choices(&raw_sinks_allow_sources());
+                return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` lists `{}`, which is no source. The sources are: {}.", key, table, piece, expected)), &"raw_sinks_allow_value"));
+            }
+            words.push(format!("{}={}", word, piece));
+        }
+        at += 1;
+    }
+    Ok(words)
+}
 
 pub fn raw_sinks_allow_key(table: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&raw_sinks_allow_keys(), key) {
@@ -266,11 +292,7 @@ pub(crate) fn manifest_allow(items: &[ManifestItem]) -> Result<Vec<String>, nika
             word = format!("{}:{}", item.name, item.key);
         } else if item.section == "allow.packages" && !item.table { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[allow.packages]` is a table of keys, as `[allow.packages.{}]` with `untrusted-shell = true` under it.", item.name, item.name)), &"manifest_allow")); } else { continue; }
         raw_sinks_allow_key(&table, &key)?;
-        match &*item.text {
-            "true" => { allowed.push(word); },
-            "false" => { },
-            _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` is `true` or `false`, not `{}`.", key, table, item.text)), &"manifest_allow")); },
-        }
+        for one in raw_sinks_allow_value(&table, &key, &word, &item.text)? { allowed.push(one); }
     }
     Ok(allowed)
 }

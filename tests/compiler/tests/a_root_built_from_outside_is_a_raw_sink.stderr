@@ -1,0 +1,10 @@
+warning[NK1308]: `dir` reaches the root `fs::Root::Dir(dir)` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_root_built_from_outside_is_a_raw_sink.nika:12:5
+    |
+ 12 |     println(fs::exists("notes.txt", fs::Root::Dir(dir)))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.

@@ -1743,7 +1743,10 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, &mut &mut *unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition); }
+            if callee.is_some() {
+                prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
+                prover_raw_sink(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, words, library, &mut &mut *holes_of, &mut &mut *ask, &mut &mut *written_of);
+            }
         },
         _ => { },
     }
@@ -1969,6 +1972,187 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
         }
     } else { notes.push(format!("The prover cannot state `{}` here: a part of it is not a whole number it reads.", holds)); }
     walk.findings.push(Finding { code: String::from("NK1302"), span, message: format!("`{}` is not proved in bounds, and `{}` comes from outside the program.", written_of(expr), first), notes, help: Some(outside_help(&first, &guard)), warning: false, labels: vec![] });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    if walk.state.collecting || walk.state.in_test { return; }
+    if callee == "html::Raw" {
+        let mut parts: Vec<Expr> = vec![];
+        for arg in args.iter() { raw_sink_parts(arg, &mut *holes_of, &mut parts); }
+        for part in parts.iter() {
+            if !raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) || raw_sink_guarded(walk, part, "html::is_plain", scope, words, &mut *ask) { continue; }
+            let first = written_of(part);
+            let source = outside_source(part, &scope.tainted, &scope.sources, words, library, &walk.state, &mut *holes_of);
+            let notes: Vec<String> = vec![outside_note(&first, (source).as_deref()), String::from("Markup from outside can carry a script that runs in the page of whoever opens it.")];
+            let help = format!("Check it where it arrives: `throw BadInput({}) if !html::is_plain({})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it.", first, first); #[allow(clippy::redundant_locals)] let notes = notes;
+            walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches the markup of `html::Raw`, written to the page as it is, and it comes from outside the program.", first), notes, help: Some(help), warning: false, labels: vec![] });
+        }
+    } else if callee == "process::run" && !args.is_empty() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
+        for part in parts.iter() {
+            if !raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { continue; }
+            let first = written_of(part);
+            let source = outside_source(part, &scope.tainted, &scope.sources, words, library, &walk.state, &mut *holes_of);
+            let notes: Vec<String> = vec![outside_note(&first, (source).as_deref()), String::from("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")];
+            let help = "Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."; #[allow(clippy::redundant_locals)] let notes = notes;
+            walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches the program `process::run` runs, and it comes from outside the program.", first), notes, help: Some(nikaia_std::block::Text::from(help.to_string())), warning: false, labels: vec![] });
+        }
+    } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
+        for (i, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            let anywhere = raw_sink_anywhere(arg, words, &mut *written_of);
+            let mut root_parts: Vec<Expr> = vec![];
+            if !anywhere {
+                match raw_sink_dir(arg, words) {
+                    Some(ref dir) => { raw_sink_parts(dir, &mut *holes_of, &mut root_parts); },
+                    None => { continue; },
+                }
+            }
+            let mut root_outside = false;
+            for part in root_parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { root_outside = true; } }
+            if !anywhere && !root_outside { continue; }
+            let root = written_of(arg);
+            let mut whole = raw_sink_operation(callee, 0, config, words, &mut *written_of);
+            if i > 1 && raw_sink_operation(callee, 1, config, words, &mut *written_of) != whole { whole = String::from("anywhere"); }
+            for part in root_parts.iter() {
+                if !raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { continue; }
+                raw_sink_path_finding(walk, part, &format!("the root `{}` of `{}`, a directory a stranger may have chosen", root, callee), &whole, true, span, scope, words, library, &mut *holes_of, &mut *written_of);
+            }
+            for j in 0..i {
+                let mut parts: Vec<Expr> = vec![];
+                raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
+                let joined = raw_sink_joined(unsafe { nikaia_std::proven::read(&args, (j) as usize) });
+                let operation = raw_sink_operation(callee, j, config, words, &mut *written_of);
+                for part in parts.iter() {
+                    if !raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { continue; }
+                    if joined && !root_outside && (raw_sink_guarded(walk, part, "path::is_component", scope, words, &mut *ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, &mut *ask)) { continue; }
+                    raw_sink_path_finding(walk, part, &format!("the path `{}` opens under `{}`, which may name any file", callee, root), &operation, false, span, scope, words, library, &mut *holes_of, &mut *written_of);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn raw_sink_outside(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
+    if !from_outside(part, &scope.tainted, words, library, state, &mut *holes_of) { return false; }
+    match part {
+        Expr::Variable(name, _) => { let name = *name; !scope.ints.contains(words.resolve(name)) },
+        _ => true,
+    }
+}
+
+pub(crate) fn raw_sink_guarded(walk: &mut ProverWalk, part: &Expr, predicate: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
+    let on = match path_of(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let name = format!("{}.{}{}()", on, property_mark(), predicate);
+    if !scope.ints.contains(&name) { return false; }
+    let named = walk.arena.var(&name);
+    let one = walk.arena.int(1);
+    let goal = walk.arena.equal(named, one);
+    prover_proves_here(walk, goal, scope, &mut *ask)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_path_finding(walk: &mut ProverWalk, part: &Expr, sink: &str, operation: &str, root_part: bool, span: Span, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, written_of: &mut impl FnMut(&Expr) -> String) {
+    let first = written_of(part);
+    let source = outside_source(part, &scope.tainted, &scope.sources, words, library, &walk.state, &mut *holes_of);
+    let key = format!("untrusted-paths-{}", operation);
+    let class = raw_sink_source_class(nikaia_std::index::or(source.as_deref(), || ""));
+    let allowed = if class.is_empty() { format!("`{} = true`", key) } else { format!("`{} = [\"{}\"]`", key, class) };
+    let verb = match operation {
+        "read" => "read",
+        "write" => "write",
+        "remove" => "remove",
+        _ => "reach",
+    };
+    let from = if class.is_empty() { String::from("outside") } else { format!("`{}`", class) };
+    let manifest = format!("If the program means to {} paths from {}, {} under `[allow]` in the manifest builds it.", verb, from, allowed);
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
+    let mut help: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    if root_part {
+        notes.push(String::from("A root from outside keeps a path inside a directory a stranger chose, which may be `/`."));
+        help = format!("Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. {}", manifest);
+    } else {
+        notes.push(String::from("A path from outside may name any file the program can reach: `../`, or one that starts at `/`."));
+        help = format!("Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(\".\")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput({}) if !path::is_component({})` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. {}", first, first, manifest);
+    }
+    walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches {}, and it comes from outside the program.", first, sink), notes, help: Some(help), warning: false, labels: vec![] });
+}
+
+pub(crate) fn raw_sink_source_class(source: &str) -> &'static str {
+    if source.starts_with("cli::") { return "args"; }
+    if source.starts_with("io::") { return "stdin"; }
+    if source.starts_with("env::") { return "env"; }
+    if source.starts_with("http") { return "request"; }
+    if source.starts_with("fs::") { return "file"; }
+    if source.starts_with("process::") { return "process"; }
+    if source.starts_with("net::") { return "network"; }
+    ""
+}
+
+pub(crate) fn raw_sink_operation(callee: &str, j: i64, config: &[ConfigArg], words: &winnow_grammar::InternerContext, written_of: &mut impl FnMut(&Expr) -> String) -> String {
+    if callee == "fs::write" || callee == "fs::create" || callee == "fs::create_dir" { return String::from("write"); }
+    if callee == "fs::remove" { return String::from("remove"); }
+    if callee == "fs::rename" { return if j == 0 { String::from("remove") } else { String::from("write") }; }
+    if callee == "fs::copy" { return if j == 0 { String::from("read") } else { String::from("write") }; }
+    if callee == "fs::open" {
+        for option in config.iter() {
+            let named = words.resolve(option.name);
+            if (named == "write" || named == "append" || named == "create" || named == "truncate") && written_of(&option.value) != "false" { return String::from("write"); }
+        }
+    }
+    String::from("read")
+}
+
+pub(crate) fn raw_sink_dir(arg: &Expr, words: &winnow_grammar::InternerContext) -> Option<Expr> {
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                _ => String::from(""),
+            };
+            if named.ends_with("Root::Dir") && args.len() == 1 { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None }
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn raw_sink_joined(arg: &Expr) -> bool {
+    match arg {
+        Expr::LitInterpolated { .. } => true,
+        Expr::Binary { op, .. } => *op == BinaryOp::Add,
+        _ => false,
+    }
+}
+
+pub(crate) fn raw_sink_parts(expr: &Expr, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { raw_sink_parts(&hole, &mut &mut *holes_of, out); } },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::Add {
+                raw_sink_parts(lhs, &mut &mut *holes_of, out);
+                raw_sink_parts(rhs, &mut &mut *holes_of, out);
+            } else { out.push(expr.clone()); }
+        },
+        _ => { out.push(expr.clone()); },
+    }
+}
+
+pub(crate) fn raw_sink_anywhere(arg: &Expr, words: &winnow_grammar::InternerContext, written_of: &mut impl FnMut(&Expr) -> String) -> bool {
+    match arg {
+        Expr::Path(segments, _) => path_text(segments, words).ends_with("Root::Anywhere"),
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                _ => String::from(""),
+            };
+            named.ends_with("Root::Dir") && args.len() == 1 && written_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) == "\"/\""
+        },
+        _ => false,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

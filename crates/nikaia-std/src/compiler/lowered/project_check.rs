@@ -85,6 +85,55 @@ pub(crate) fn project_check_let_unproved_claims_through(findings: &mut Vec<Check
     }
 }
 
+pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw_sinks: &str, allow: &[String], package: &str) -> Vec<CheckFinding> {
+    let mut kept: Vec<CheckFinding> = vec![];
+    for finding in findings.iter() {
+        if finding.code != "NK1308" {
+            kept.push(finding.clone());
+            continue;
+        }
+        let help = nikaia_std::index::or(finding.help.as_deref(), || "");
+        let mut key: String = String::from("");
+        for known in raw_sinks_allow_keys() { if help.contains(&*format!("`{} = ", known)) { key = nikaia_std::block::Text::from(known.to_string()); } }
+        let mut source: String = String::from("");
+        match help.split_once(&*format!("`{} = [\"", key)) {
+            Some((_, rest)) => {
+                match rest.split_once("\"") {
+                    Some((named, _)) => { source = nikaia_std::block::Text::from(named.to_string()); },
+                    None => { },
+                }
+            },
+            None => { },
+        }
+        let mut keys: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(key.to_string())], nikaia_std::block::Place::Block);
+        if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" { keys.push(String::from("untrusted-paths-anywhere")); }
+        let mut allowed = false;
+        for one in keys.iter() {
+            let word = if package.is_empty() { nikaia_std::block::Text::from(one.to_string()) } else { format!("{}:{}", package, one) };
+            if allow.iter().any(|given| { AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(word)) || !source.is_empty() && AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(format!("{}={}", word, source))) }) { allowed = true; }
+        }
+        if allowed { continue; }
+        let value = if source.is_empty() { String::from("true") } else { format!("[\"{}\"]", source) };
+        let mut said = finding.clone();
+        if !package.is_empty() {
+            said.code = String::from("NK1309");
+            said.message = format!("{} The package `{}` hands it on, and the application does not allow it.", said.message, package);
+            said.help = Some(format!("If the application means to let `{}` do this, `{} = {}` under `[allow.packages.{}]` in its manifest builds it, or `--allow={}:{}` for one build.", package, key, value, package, package, key));
+        }
+        if raw_sinks == "warn" {
+            said.severity = CheckSeverity::Warning;
+            said.notes.push(String::from("`raw-sinks = \"warn\"` lets this build through."));
+        }
+        kept.push(said);
+    }
+    kept
+}
+
+pub fn project_check_raw_sinks_in_std(findings: &[CheckFinding]) -> Vec<CheckFinding> {
+    let allow: Vec<String> = vec![];
+    project_check_let_raw_sinks_through(&findings.copy_owned(), "warn", &allow, "")
+}
+
 pub fn project_check_lint_where_nothing_crosses(findings: &mut Vec<CheckFinding>, user_parallelism: &str) {
     if user_parallelism != "no" { return; }
     for finding in findings.iter_mut() {
@@ -118,7 +167,7 @@ pub struct ProjectCheckSaid {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, unproved_checks: &str, building_a_library: bool) -> ProjectCheckSaid {
+pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, unproved_checks: &str, raw_sinks: &str, allow: &[String], package: &str, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against();
     if building_a_library { all = { let __nikaia_value = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); __nikaia_value }; }
     all.extend(host.foreign_check());
@@ -127,6 +176,7 @@ pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &s
     project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
     project_check_let_refuted_claims_through(&mut all, refuted_claims);
     project_check_let_unproved_claims_through(&mut all, unproved_claims);
+    all = project_check_let_raw_sinks_through(&all, raw_sinks, allow, package);
     let violations = host.sync_violations();
     if all.is_empty() && violations == 0 { return ProjectCheckSaid { warnings: String::from(""), refused: None }; }
     let in_the_wrapper = host.in_the_wrapper();
@@ -168,14 +218,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple25292| {
-            let (param, _) = __nikaia_tuple25292;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple25351| {
-                let (p, _) = __nikaia_tuple25351;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple28708| {
+            let (param, _) = __nikaia_tuple28708;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple28767| {
+                let (p, _) = __nikaia_tuple28767;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple25392| {
-            let (param, ty) = __nikaia_tuple25392;
+        }).filter_map(|__nikaia_tuple28808| {
+            let (param, ty) = __nikaia_tuple28808;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -203,11 +253,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple27970| {
-        let (_, asked) = __nikaia_tuple27970; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple31386| {
+        let (_, asked) = __nikaia_tuple31386; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple28000| {
-        let (kind, _) = __nikaia_tuple28000;
+    }).map(|__nikaia_tuple31416| {
+        let (kind, _) = __nikaia_tuple31416;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }
