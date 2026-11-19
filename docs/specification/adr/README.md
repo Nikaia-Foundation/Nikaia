@@ -5,17 +5,21 @@ reasoning that makes it the answer, and the number that decided it where a
 number did. It is not a diary. It carries no account of how the decision was
 reached, no version that built it and no progress report.
 
-When a later decision changes a record, the record is **updated in place**: the
-changed rule is rewritten to say what holds now, and a one-line note under it
-names the decision that changed it, *Changed by ADR-MMM Dn.* A decision the
-project withdraws altogether is removed from its record, with one sentence
-saying what is done instead.
+**A topic has one record, and a change makes its next version**
+([ADR-decision-records-v2](adr-decision-records-v2.md)). The record is named
+`ADR-<topic>-v<n>`. When a decision of the topic is added, changed or withdrawn,
+the next version states all the topic's decisions in their current form, the
+previous version moves to [`docs/history/adr/`](../../history/adr/), and every
+live citation moves with it; nothing live cites an archived record
+(`scripts/check-adr-refs.py` refuses it). A decision that stays keeps its `Dn`.
+Only wording, typos, dead links and the **Built** column are changed in place.
+The live record is the one to read and the one to cite; a version cited in an
+old commit message is still read, in the history.
 
-When a group of records is replaced by one record that states all their
-decisions in their current form, the old records move to
-[`docs/history/adr/`](../../history/adr/) and nothing live cites them
-(`scripts/check-adr-refs.py` refuses it). The live record is the one to read and
-the one to cite.
+The records of the earlier schemes (`ADR-296`, `ADR-grammar-1`) keep their
+names until something changes them; a change to one of them consolidates its
+topic into a `-v` record (D4). Until then such a record may still carry
+*Changed by ADR-MMM Dn* notes from before.
 
 **Finding the history.** The archive's
 [README](../../history/adr/README.md) maps every archived decision to the live
@@ -47,8 +51,8 @@ no `Built:` line and no target version. The template also lists what does not
 belong in a record: progress, the route to the decision, the state of other
 lists.
 
-A change to a decision is made in the record that holds it, as above. A change
-that one live record makes to part of another live record is also listed under
+A change to a decision makes the next version of its topic's record, as above.
+The partial changes from before that scheme are listed under
 [What supersedes what](#what-supersedes-what).
 
 ## The index
@@ -63,7 +67,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [registry-1](adr-registry-1.md) | Nikaia packages leave crates.io for a registry of their own: a Git index whose versions arrive by pull request (metadata only, checked by `nikaia registry check` building the pinned commit); a canonical `nkpkg` archive hashed with SHA-256; ownership proved by the commit and kept by a signing key in the index; the newest compatible version solved with ADR-270's logic package, semver checked from API and ledger, a cooling period; mirrors are a file layout anyone hosts; two versions of a package side by side where no public edge joins them; replaces ADR-286 D23-D27 if accepted | Open | no |
-| [decision-records-1](adr-decision-records-1.md) | A record is named `ADR-<topic>-<n>` (one to three lowercase words, a number per topic); the numbered records keep their numbers until a consolidation replaces them; names are claimed under Reserved numbers; `check-adr-refs.py` checks both schemes and stays Python until `std::regex` is built | Accepted | yes |
+| [decision-records-v2](adr-decision-records-v2.md) | A topic has one live record, `ADR-<topic>-v<n>` (one to three lowercase words, general first; `n` its version); a change in substance makes the next version, the previous goes to the history, a decision that stays keeps its `Dn`; earlier records are consolidated when changed; names are claimed under Reserved numbers; `check-adr-refs.py` refuses two live versions of a topic | Accepted | partly: the rename tool and the move of `check-adr-refs` to Nikaia (#904) |
 | [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [382](adr-382.md) | A test that proves a local, a parameter or a path of fields from one (`p.name`, `self.cache`) is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write to the name, or an assignment or `mut` hand-over of the path or a prefix, takes it back (`NK1102` names it); not a path: `v[i].f`, `f().x`; an enum's value is bound by `match` only | Accepted | built |
@@ -277,7 +281,7 @@ implementation.
 | [326](adr-326.md) | `net::serve` accepts connections, a task each, below every protocol; no connection count is configured, an exchangeable `net::Admission` strategy decides beside the hot path; a panic ends only its task, at both settings. Timers: `head_timeout` 10 s, `body_bytes_per_second` 500, keep-alive with `idle_timeout` 75 s, closed early only after a response (D6-D9). | Accepted | no |
 | [325](adr-325.md) | The tools below Nikaia read no configuration from the project: Cargo and `rustc` start in the compiler's own directory outside it, with a configuration the compiler writes from `nikaia.toml`; the user's own still applies. | Accepted | no |
 | [324](adr-324.md) | A package links a C library by name: `extern(library: "x")` in the code, `[library.x] pkg-config = "…"` in the manifest, found only through `pkg-config` with listed linker flags; `extern` is written without `"C"`; there is no build script, and a package brings no C sources yet. | Accepted | no |
-| [323](adr-323.md) | A grammar describes a type as data, `std::meta::Type` (scalars, `Maybe`, `List`, `Record`; `Named` gone by ADR-330 D7), passed to `meta::column` and `meta::parameter`; the compiler writes the block's row and parameter types from it, and a message about such a type names the block that declared it. | Accepted | no |
+| [323](adr-323.md) | A grammar describes a type as data, `std::meta::Type` (scalars, `Maybe`, `List`, `Record`; `Named` gone by ADR-330 D7), handed back by a statement's grammar as a `meta::Statement { row, parameters }` (D5, no `meta::column`); the compiler writes the block's row and parameter types from it, and a message about such a type names the block that declared it. | Accepted | no |
 | [322](adr-322.md) | A decimal whole number may end in a scale, `K M G T P` decimal and `Ki Mi Gi Ti Pi` binary, which is a spelling of its value; an exponent is written with a lower-case `e`. | Accepted | no |
 | [321](adr-321.md) | Build-time code is compiled and run, not interpreted: against the package's dependencies through one generated dynamic library, one crate per package compiled by `rustc` directly, results cached, run beside the rest of the build, and bounded by a step budget counted in loop turns and calls (10 billion) and a memory bound counted by its allocator (4 GiB), each raised at the `comptime` that needs it; a dependency's function runs only on ledger entries this build derived from its sources, and no Rust code but `std`'s runs then. A grammar calls its package's Nikaia; the build-time program holds no foreign code, not even linked, and nothing lets it run (D13-D15). | Accepted | no |
 | [287](adr-287.md) | A `comptime` binding is evaluated while the program is built, where an item or a statement stands, by a body that is `sync` and touches at most the build's parameters; at item level in any order, in a body in written order. The word marks the name and is never an expression; an integer `comptime` is an open number each use takes in its own type. | Accepted | partly: the build's parameters in the cache key; D19's lone `NK1117` (#380) |
@@ -328,10 +332,10 @@ implementation.
 
 ## What supersedes what
 
-A decision that changes another one is written into the record that holds the
-changed rule, with its *Changed by* note. When the change comes from a second
-live record that decides more than this, the pair is listed here, so a reader of
-either finds the other. Records replaced as a whole are not here: they are in
+The partial changes one record made to another before
+[ADR-decision-records-v2](adr-decision-records-v2.md): each pair is listed here,
+so a reader of either finds the other. A `-v` record takes no new row: a change
+makes the next version of the changed topic instead. Records replaced as a whole are not here: they are in
 [`docs/history/adr/`](../../history/adr/).
 
 | Changed | By | What holds now |
@@ -350,6 +354,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [340](adr-340.md) D1 | [383](adr-383.md) D1-D3 | the id is given by a numbering pass right after the parse, in input order without gaps, not by the parser as it makes the node |
 | [269](adr-269.md) D9 | [381](adr-381.md) D1-D3 | a pure `bool` call over unchanged values is a name of the prover (a property), proved by name |
 | [344](adr-344.md) D3, D6a | [grammar-2](adr-grammar-2.md) D1, D3, D10 | `json::read[T]` forwards to the grammar entry `Json::read[T]`, emitted per type; `parse` is the grammar's second entry |
+| [299](adr-299.md) D2, [296](adr-296.md) D4 | [323](adr-323.md) D5 | a statement's grammar returns a `meta::Statement`; `meta::column` and `meta::parameter` are gone, `meta::capture` stands |
 | [330](adr-330.md) D9 | [grammar-2](adr-grammar-2.md) D11 | no `NK1233` where a type argument fills a parameter no value parameter's type names |
 | [299](adr-299.md) D16-D18 | [grammar-2](adr-grammar-2.md) D3, D9 | one mapping rule with `members[S]` (Part II 10.8); SQL keeps its strict settings |
 | [010](adr-010.md) D2, D3 | [365](adr-365.md) D1-D3 | standard input and files are untrusted; `trusted: true` at the source; assets trusted |
@@ -400,12 +405,22 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Reserved numbers
 
-A name - `regex-2`, or a number of the old scheme - is **taken when it is
+A name - `regex-v2`, or a number of the old scheme - is **taken when it is
 claimed here**, not when the record lands, so two branches writing records at
 the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
+| grammar-syntax-v1 | how a grammar is written (ADR-296, grammar-1, ADR-339) | #904 |
+| grammar-input-v1 | what a grammar reads and how it holds it (ADR-296, ADR-366, ADR-388) | #904 |
+| grammar-actions-v1 | what a rule's action may do (ADR-296, grammar-1) | #904 |
+| grammar-parallel-v1 | frames and folds (ADR-296) | #904 |
+| grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
+| grammar-build-time-v1 | a grammar run at build time and what it hands back (ADR-177, ADR-296, ADR-323) | #904 |
+| grammar-typed-read-v1 | an entry that takes a type (grammar-2) | #904 |
+| database-v1 | database statements (ADR-299) | #904 |
+| views-v4 | views (views-1 to views-3) | #904 |
+| collections-v3 | collections (collections-1, collections-2) | #904 |
 
 A row here is a claim and nothing else: it says the number is spoken for, not
 what the decision is. Delete the row in the same commit that adds the record.
@@ -419,20 +434,20 @@ number is checked by hand.
 
 ## Writing a new one
 
-A record is named by its topic and a number
-([ADR-decision-records-1](adr-decision-records-1.md)): `ADR-<topic>-<n>`, the
-topic one to three lowercase words joined by `-`, the number counting that
-topic's records from 1. Take a topic from [Topics in use](#topics-in-use), or a
-new one where none fits, and the next free number of that topic (free means
-neither a file above, nor an archived one in
-[`docs/history/adr/`](../../history/adr/), nor a row under **Reserved
-numbers**), and claim the name there first. The file is `adr-<topic>-<n>.md`.
-The numbered records (`ADR-296`) keep their numbers until a consolidation
-replaces them; no new record takes a bare number. Copy
+A record is named by its topic and its version
+([ADR-decision-records-v2](adr-decision-records-v2.md)): `ADR-<topic>-v<n>`,
+the topic one to three lowercase words joined by `-`, the general word first
+(`grammar-syntax`). Look first for the topic in [Topics in use](#topics-in-use):
+a decision on a topic that has a record is the next version of that record,
+never a second record beside it. Take a new topic only where none fits; its
+first version is `v1`. A name is free when it is neither a file above, nor an
+archived one in [`docs/history/adr/`](../../history/adr/), nor a row under
+**Reserved numbers**; claim it there first. The file is `adr-<topic>-v<n>.md`.
+No new record takes a bare number or a number without `v`. Copy
 [`TEMPLATE.md`](TEMPLATE.md); its header block is, in this order:
 
 ```markdown
-# ADR-<topic>-<n>: A title that states the decision, not the topic
+# ADR-<topic>-v<n>: A title that states the decision, not the topic
 
 **Status:** Accepted | Open
 **Date:** <day the decision was taken>
@@ -444,6 +459,9 @@ There is no `Built:` line and no `Target Version:`; whether a decision is built
 is the **Built** column above. Then: the question, how others answer it, the
 options weighed, the decisions numbered `D1…Dn` so they can be cited, and the
 consequences. A decision nobody can cite by number is a decision that gets
-re-litigated. If the new record changes a decision in another live record,
-update that record in place with its *Changed by* note, and add the pair to
-[What supersedes what](#what-supersedes-what) when the change is partial.
+re-litigated. A next version keeps the `Dn` of every decision that stays, gives
+a new decision the next free number and never reuses a withdrawn one. It
+replaces the previous version: that one moves to the history with a row in its
+README (old `Dn` → new `Dn`), and every live citation moves in the same change.
+If the new version changes a decision of another topic, that topic gets its next
+version too.

@@ -512,7 +512,7 @@ impl CheckState {
         let hole: String = String::from("\u{0}");
         let wanted = want.shown();
         let said = message(&hole, &wanted);
-        let text = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", hole), &*"a number"));
+        let text = nikaia_std::search::replaced(said, &format!("`{}`", hole), &"a number");
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
         if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
         let mut help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);

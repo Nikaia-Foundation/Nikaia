@@ -1023,6 +1023,8 @@ pub fn cut_span<W: AsRef<str> + ?Sized, P: AsRef<str> + ?Sized>(
 /// it is not ours to give.
 pub trait GivenText {
     fn given(self, span: (usize, usize)) -> crate::block::Text;
+    /// The whole text, in its own buffer where it owns one (D4).
+    fn given_whole(self) -> crate::block::Text;
 }
 
 impl GivenText for crate::block::Text {
@@ -1032,6 +1034,11 @@ impl GivenText for crate::block::Text {
         self.drain(..start);
         self
     }
+
+    #[inline]
+    fn given_whole(self) -> crate::block::Text {
+        self
+    }
 }
 
 impl GivenText for std::string::String {
@@ -1039,12 +1046,22 @@ impl GivenText for std::string::String {
     fn given(self, span: (usize, usize)) -> crate::block::Text {
         crate::block::Text::from(self).given(span)
     }
+
+    #[inline]
+    fn given_whole(self) -> crate::block::Text {
+        crate::block::Text::from(self)
+    }
 }
 
 impl<T: AsRef<str> + ?Sized> GivenText for &T {
     #[inline]
     fn given(self, (start, end): (usize, usize)) -> crate::block::Text {
         crate::block::Text::from(&self.as_ref()[start..end])
+    }
+
+    #[inline]
+    fn given_whole(self) -> crate::block::Text {
+        crate::block::Text::from(self.as_ref())
     }
 }
 

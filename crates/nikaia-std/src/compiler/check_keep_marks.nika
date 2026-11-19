@@ -197,7 +197,7 @@ fn keep_marks_of_body(view: ref ParsedView, item: ref Spanned[Item], target: Str
                 let a_copy = !arg.ty.is_view && !arg.mutable && keeps_a_copy_type(written_ty(view.words, view.aliases, arg.ty), copies)
                 if kept && !arg.keep && opted && !a_copy {
                     let at = keep_marks_keeping_statement(view, item, target?.clone(), parameter, own, library, indexes, resolved, holes_of) ?? arg.span.clone()
-                    out.push(check_refusal("NK2302", at, f"`{found.key}` keeps `{parameter}`, but `{parameter}` is not marked `keep`.", ["A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).", "Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213)."], f"Write `keep {parameter}` in the signature of `{found.key}`."))
+                    out.push(check_refusal("NK2302", at, f"`{found.key}` keeps `{parameter}`, but `{parameter}` is not marked `keep`.", ["A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).", "Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213)."], keep_marks_help(view, item, parameter, found.key)))
                 }
                 if arg.keep && !kept {
                     let mut warned = check_refusal("NK1334", arg.span, f"`{parameter}` is marked `keep`, but `{found.key}` never keeps it.", ["A parameter the body only reads or changes is lent (ADR-views-3 D2)."], f"Remove `keep` before `{parameter}`.")
@@ -212,6 +212,42 @@ fn keep_marks_of_body(view: ref ParsedView, item: ref Spanned[Item], target: Str
 
 /// **The statement that keeps `parameter`**: the first prefix of the body
 /// whose walk keeps it; `null` where none does on its own.
+/// **NK2302's help**: `keep`; and where the body keeps the parameter only by
+/// changing a cut of it, a copy too (ADR-text-reuse-1 D3, #1589): the cut
+/// takes the parameter's text, which only a `keep` parameter has to give.
+fn keep_marks_help(view: ref ParsedView, item: ref Spanned[Item], parameter: ref String, key: ref String) -> String {
+    let marked = f"Write `keep {parameter}` in the signature of `{key}`"
+    match item.node {
+        Item::Fn { body, .. } => {
+            let grown = grown_text_of(view.words, body)
+            let changed = keep_marks_changed_cut(view, body, grown, parameter) ?? return f"{marked}."
+            return f"{marked}; or let `{changed}` change a copy: write `.clone()` after the cut it is bound to, and `{parameter}` stays its caller's."
+        },
+        else => return f"{marked}.",
+    }
+}
+
+/// The name a `let mut` binds to a cut of `parameter` that the body grows.
+fn keep_marks_changed_cut(view: ref ParsedView, block: ref Block, grown: ref collections::BTreeSet[String], parameter: ref String) -> String? {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, mutable, .. } => {
+                if mutable && names.len() == 1 && grown.contains(view.words.resolve(names[0])) && (given_cut_source(value, view.words) ?? "") == parameter {
+                    return view.words.resolve(names[0]).clone()
+                }
+            },
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            let found = keep_marks_changed_cut(view, inner, grown, parameter)
+            if found != null {
+                return found
+            }
+        }
+    }
+    return null
+}
+
 fn keep_marks_keeping_statement(view: ref ParsedView, item: ref Spanned[Item], target: String?, parameter: ref String, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span? {
     let settling: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     match item.node {

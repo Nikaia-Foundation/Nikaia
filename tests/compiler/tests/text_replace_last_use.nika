@@ -1,0 +1,66 @@
+// ADR-text-reuse-1 D4: a `replace` at the last use of a `let`'s text works
+// in that text's buffer; one the text is read after, or in a loop, or of a
+// text a view was taken of, makes a new text. Each answers the same.
+
+fn dead(s: String) -> String {
+    let x = f"{s}aa"
+    let y = x.replace("a", "b")
+    return y
+}
+
+fn read_after(s: String) -> String {
+    let x = f"{s}aa"
+    let y = x.replace("a", "b")
+    return f"{x}|{y}"
+}
+
+fn chain_end(s: String) -> String {
+    let x = f"{s}abab"
+    return x.replace("a", "c").replacen("b", "", 1)
+}
+
+fn counted(s: String) -> String {
+    let x = f"{s}oooo"
+    return x.replacen("o", "0", 3)
+}
+
+fn in_a_loop(s: String) -> String {
+    let x = f"{s}ab"
+    let mut all = ""
+    for i in 0..<3 {
+        all = all + x.replace("a", f"{i}")
+    }
+    return all
+}
+
+fn branch(s: String, wide: bool) -> String {
+    let x = f"{s}ab"
+    if wide {
+        return x.replace("a", "AAA")
+    }
+    return f"{x}!"
+}
+
+fn viewed(s: String) -> String {
+    let x = f"{s}  ab  "
+    let v = x.trim()
+    let y = x.replace("a", "b")
+    return f"{v}|{y}"
+}
+
+fn itself(s: String) -> String {
+    let x = f"{s}ab"
+    return x.replace("a", x)
+}
+
+fn main() throws {
+    println(dead("xa"))
+    println(read_after("xa"))
+    println(chain_end("b"))
+    println(counted("o"))
+    println(in_a_loop("a"))
+    println(branch("a", true))
+    println(branch("a", false))
+    println(viewed("a"))
+    println(itself("a"))
+}

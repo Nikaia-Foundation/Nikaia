@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1461] — 2026-11-19
+
+**A changed trim takes its source's text too, and NK2302 offers the copy**
+- A trimmed text that is changed reuses its buffer too: `let mut rest = line.trim(); rest += "?"` trims `line` in place instead of failing to build, and NK2302 on a lent parameter now offers `.clone()` beside `keep` (ADR-text-reuse-1 D2, D3).
+
 ## [0.0.1460] — 2026-11-19
 
 **Builders' changes**
