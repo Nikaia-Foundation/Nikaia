@@ -939,8 +939,8 @@ mod tests {
     use crate::hash::TrustedMap;
 
     // The lookups, the empty key, late-differing keys and other keys are
-    // `tests/compiler/tests/map_*.nika` (#2082). What stays here no program
-    // reaches yet: the hasher a text key goes through, `hashbrown`'s order,
+    // `tests/compiler/tests/map_*.nika` (#2082). What stays here (#2304) no
+    // test block reaches yet: the hasher a text key goes through, `hashbrown`'s order,
     // and a map's `remove` and `retain`, which `collections::HashMap` lacks.
 
     fn trusted() -> TrustedMap<&'static str, i64> {
@@ -949,7 +949,7 @@ mod tests {
 
     /// A text key hashes to what the fast hasher gives the text, so a map of
     /// `&str` and one of `String`, and a lookup by `str`, agree. Kept as Rust
-    /// (#2082): which hasher a key goes through no program's output shows.
+    /// (#2304): which hasher a key goes through no program's output shows.
     #[test]
     fn a_text_key_hashes_as_its_text() {
         let fast = Fast::default();
@@ -975,7 +975,8 @@ mod tests {
 
     /// Keys that share a hash are told apart by their equality. Under the
     /// keyed hasher with a constant hash every key collides. Kept as Rust
-    /// (#2082): a program cannot give a map a hasher of its own.
+    /// (#2304): a program cannot give a map a hasher of its own (no trait
+    /// `Hasher` to implement, NK1117).
     #[test]
     fn colliding_keys_are_told_apart() {
         #[derive(Default, Clone)]
@@ -1018,7 +1019,8 @@ mod tests {
     }
 
     /// The entry API, `drain` and `retain` as `hashbrown`'s map has them. Kept
-    /// as Rust (#2082): `collections::HashMap` offers no `remove` or `retain`.
+    /// as Rust (#2304): the map under test is `TrustedMap`, which no contract
+    /// describes, and its `entry`, `and_modify` and `drain` with it.
     #[test]
     fn entries_drain_and_retain() {
         let mut m = trusted();
@@ -1037,7 +1039,7 @@ mod tests {
 
     /// Same calls, same table: a trusted map holds its keys in the order
     /// `hashbrown`'s map with the same hasher holds them. Kept as Rust
-    /// (#2082): no program can build `hashbrown`'s map to compare with.
+    /// (#2304): no program can build `hashbrown`'s map to compare with.
     #[test]
     fn the_order_is_hashbrowns() {
         let keys: Vec<String> = (0..500).map(|i| format!("k{}", i * 7919 % 1000)).collect();
