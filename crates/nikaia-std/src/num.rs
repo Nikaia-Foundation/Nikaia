@@ -391,8 +391,8 @@ mod tests {
     use super::*;
 
     /// `to_usize` and `to_isize` convert toward zero or stop. No program
-    /// reaches them (Part I 2.2 has no `usize` or `isize`), so this stays a
-    /// Rust test until the decision on unobservable `std` tests (#2082); the
+    /// reaches them (Part I 2.2 has no `usize` or `isize`, NK1135), and a test
+    /// block cannot expect a stop, so this stays a Rust test (#2304); the
     /// rest of this module's tests are `tests/compiler` programs
     /// (`num_a_number_converts_compares_and_keeps_its_low_bits`,
     /// `num_a_float_that_does_not_fit_stops`).
