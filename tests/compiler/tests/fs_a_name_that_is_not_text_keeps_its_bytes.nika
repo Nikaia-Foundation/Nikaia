@@ -1,0 +1,48 @@
+// A name the system hands over that is not text keeps its bytes (ADR-319):
+// `caf\351.txt`, made through `sh` since there is no constructor from bytes
+// (D1), is listed by `fs::walk` (D7), compares by its bytes (`ends_with`,
+// `starts_with`, `==`, D3, D9), shows `�` (D6), refuses `to_text` with
+// `NotText` (D5), reads its file, and `with_extension` and an `f"…"` join
+// (D4) write beside it without changing the byte.
+use std::fs
+use std::io
+use std::process
+
+fn names(root: ref fs::Root) -> Vec[fs::Path] throws {
+    let mut out: Vec[fs::Path] = []
+    for p in fs::walk(".", root) {
+        out.push(p)
+    }
+    return out
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    let base = fs::canonical(".", root).to_text()
+    process::run("sh", ["-c", "printf hallo > \"$(printf 'caf\\351.txt')\"; printf x > \"$(printf 'caf\\351')\""]; dir: base.clone())
+    let found = names(root)
+    println(f"walk: {found.len()}")
+    let p = found[1]
+    let stem = found[0]
+    println(f"display: {p.display()} {stem.display()}")
+    println(f"ends_with .txt: {p.ends_with(".txt")}")
+    println(f"starts_with stem: {p.starts_with(stem)}")
+    println(f"same as itself: {p == found[1]}")
+    println(f"same as text: {p == "café.txt"}")
+    let shown = p.to_text() catch {
+        match error {
+            io::IoError::NotText(_) => "NotText",
+            else => "other",
+        }
+    }
+    println(f"to_text: {shown}")
+    let a: fs::Path = "a.txt"
+    println(f"to_text a.txt: {a.to_text()} {a.text_of()}")
+    println(f"read: {fs::read_to_string(p, root)}")
+    fs::write(p.with_extension("bak"), root, "b")
+    fs::write(f"{p}.bak", root, "j")
+    for q in names(root) {
+        println(f"listed: {q.display()}")
+    }
+    println(process::run("sh", ["-c", "LC_ALL=C ls | od -c"]; dir: base).stdout.trim_end())
+}

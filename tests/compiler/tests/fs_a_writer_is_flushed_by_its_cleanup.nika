@@ -1,0 +1,22 @@
+// What a `fs::Writer` holds reaches the file when its scope ends and its
+// cleanup flushes it, not before; `close()` flushes at once (ADR-297 D11).
+use std::fs
+
+fn shown(text: String) -> String {
+    return text.trim_end().replace("\n", "|")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    {
+        let mut w = fs::create("out.txt", root)
+        w.write("eins\n")
+        w.write("zwei\n")
+        println(f"inside: {shown(fs::read_to_string("out.txt", root))}")
+    }
+    println(f"after: {shown(fs::read_to_string("out.txt", root))}")
+    let mut w = fs::create("out.txt", root)
+    w.write("drei")
+    w.close()
+    println(f"closed: {shown(fs::read_to_string("out.txt", root))}")
+}
