@@ -3,7 +3,7 @@
 // the `let`, not inside the arm, so it lives as long as the text.
 
 fn oracle(p: String) -> String {
-    return p.trim().to_string()
+    return p.trim()
 }
 
 fn pick(i: i64, quick: bool) -> String {

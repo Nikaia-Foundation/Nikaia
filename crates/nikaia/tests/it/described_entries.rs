@@ -1,5 +1,5 @@
 //! A description's **entries** reach the analyses
-//! ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
+//! ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1).
 //!
 //! D1's first sentence is the whole point of the file it asks for: *every
 //! analysis reaches to the boundary and reads an entry there*, and `NK2504`'s
@@ -210,7 +210,7 @@ fn a_described_crate_is_not_something_to_import_from_std() {
 }
 
 /// **A description is believed while its hashes hold** — `NK2505`
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5, on
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5, on
 /// [ADR-100](../../../docs/specification/adr/adr-100.md) D3's rule).
 ///
 /// The description records what the crate's sources hashed to, and until this

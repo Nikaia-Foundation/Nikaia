@@ -1333,6 +1333,11 @@ impl EmitState {
         if lends {
             self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)
         } else {
+            // **A list's `map` walked by a `for` runs element by element with
+            // its body** (ADR-342 D1): no list is built to be walked.
+            if self.facts.fused_maps.contains(node_key(iter)) {
+                walk.fused.insert(node_key(iter))
+            }
             self.emit_expr(world, walk, out, host, iter, depth, flow, scope)
         }
     }

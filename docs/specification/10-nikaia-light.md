@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1444 (Draft)
-**Date:** 2026-11-18
+**Version:** 0.0.1453 (Draft)
+**Date:** 2026-11-19
 
 ---
 
@@ -110,11 +110,13 @@ that lives in a `std` module is refused without its prefix — `NK1117` for a
 function, `NK1135` for a type — and a prefix is refused without its `use`, each
 with the line to add. A name on this list written with a `std` module in front of it, such as `io::println`, is refused too (`NK1163`).
 
-Data from outside the program reaches a shell, an SQL text, markup written as
-it is or a path with no root to keep it in (`process::shell`, `db::raw`,
-`html::Raw`, `fs::Root::Anywhere`) only where the compiler proves it harmless,
+Data from outside the program reaches an SQL text, markup written as it is or
+a path with no root to keep it in (`db::raw`, `html::Raw`,
+`fs::Root::Anywhere`) only where the compiler proves it harmless,
 from its type or a guard, or the manifest's `[allow]` admits it; otherwise the
 program is refused (Part III 14.2, [ADR-raw-sinks-1](adr/adr-raw-sinks-1.md)).
+`std` runs no shell: a program starts another with its arguments as a list
+(Part III 17, `NK1314`).
 
 ---
 
@@ -658,10 +660,25 @@ what takes text of its own (a `mut` or owning parameter, also through a
 and where it is kept `.clone()` makes the copy, written where it happens. A view
 in a published `String` slot that text of its own also flows into is refused without it (`NK1106`); any other `String` slot takes the view (2.2). **`.clone()` is the one
 word for a copy**, of text and of everything else: a copy of text is text of its
-own. `.to_owned()` is refused naming it (`NK1189`); `.to_string()` is the text
-form of a value, and the text form of text is the text itself: a view stays a
-view, and nothing is copied. On a plain text literal neither `.to_string()` nor
-`.clone()` is written: the literal is the text (`NK1301`).
+own. `.to_owned()` is refused naming it (`NK1189`). `.to_string()` is the text
+form of a value, but **not written on text** (`NK1301`, [ADR-text-reuse-1](adr/adr-text-reuse-1.md) D1): a view is a
+`String` already, and the compiler decides whether text is a view or text of
+its own, so the call has no job; where a copy is meant, `.clone()` is the word.
+The refusal goes by the receiver's written type: on a type parameter that is
+`String` at a call, `x.to_string()` is the text itself, and nothing is copied.
+On a plain text literal neither `.to_string()` nor `.clone()` is written: the
+literal is the text (`NK1301`).
+
+**A copy is written, a give is not** ([ADR-text-reuse-1](adr/adr-text-reuse-1.md)). A view that is
+changed (assigned to, `+=`, a `mut` method, handed to a `mut` or `keep`
+parameter, kept in an owned slot) is text of its own, and takes its source's
+buffer where the source is owned here and no other view of it lives past the
+change: a cut becomes a `truncate` or a `drain` of the source, and nothing is
+written for it. The source is then gone; a later read of it is the error of a
+use after a give, whose help writes `.clone()` on the cut. A view of a lent
+parameter cannot be given: it needs `.clone()`, or the parameter says `keep`.
+`replace` on a source that is not read afterwards works in that source's
+buffer, which changes nothing the program prints.
 
 **`T?` lowers to the backend's `Option<T>`**, the mapping Part III 15.2 writes
 the other way round, and `null` is a reserved word (2.1) that lowers to `None`.
@@ -990,7 +1007,10 @@ while true {
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, `b.iter()`, the bytes one at a time as a
 list's `iter` gives its elements, `b.starts_with(prefix)` and
-`b.ends_with(suffix)`, each a `Bytes` compared byte for byte, and
+`b.ends_with(suffix)`, each a `Bytes` compared byte for byte,
+`b.eq_ignore_ascii_case(other) -> bool`, true where both have the same length
+and each pair of bytes is equal once `A`-`Z` read as `a`-`z` (every other byte
+compares exactly, with no locale or Unicode folding), and
 `b.text()`, which checks UTF-8 and is
 `NotText` where it fails, and `b.text_lossy()`, an owned copy in which each
 run that is not UTF-8 is U+FFFD. An index outside stops the program, as a list's does.

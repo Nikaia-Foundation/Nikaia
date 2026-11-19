@@ -54,7 +54,7 @@ fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> St
     }
     // **And `NK2505` is a third thing again**: a crate that *is* described, by
     // a file about a version of it that is no longer there
-    // ([ADR-290](../../docs/specification/adr/adr-290.md) D5). What a reader
+    // ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D5). What a reader
     // does about it is neither of the two above.
     let stale = project_check_count(findings, "NK2505")
     if stale > 0 {

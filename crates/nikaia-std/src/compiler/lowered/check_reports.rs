@@ -8,6 +8,7 @@ pub enum CheckWall {
     InsideAnother { outer: String },
     NowhereToBuild,
     DidNotBuild { detail: String },
+    Unwritable { dir: String },
     Unreadable { detail: String },
 }
 
@@ -184,6 +185,11 @@ impl CheckState {
                 message = format!("`{}` has nowhere to compile its parser.", entry);
                 note = String::from("Running a grammar at build time compiles its parser, which needs a directory, and this build has none.");
                 way_out = String::from("Build with `nikaia build` or `nikaia lower`, which both have one.");
+            },
+            CheckWall::Unwritable { dir } => {
+                message = format!("`{}` has nowhere to compile its parser.", entry);
+                note = format!("Running a grammar at build time compiles its parser in the build-time directory `{}`, which can't be created or written.", dir);
+                way_out = String::from("Make that directory one this build can write.");
             },
             CheckWall::DidNotBuild { detail } => {
                 message = format!("The parser generated for `{}` didn't compile.", entry);

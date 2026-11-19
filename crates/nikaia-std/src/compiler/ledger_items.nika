@@ -6,7 +6,7 @@
 // `extern` block and a grammar make, the value a build-time computation comes
 // to as the literal both languages spell alike, and the `ensures` an
 // expression function publishes (ADR-314 D3). The ledger itself, the checker
-// and the workshop that computes a default stay Rust.
+// and the build-time directory that computes a default stay Rust.
 
 use std::collections
 use logic
@@ -513,7 +513,7 @@ fn computed_defaults(mut into: Vec[ComputedAt], key: ref String, unit: i64, item
 /// given - from the argument, or from its default. An attribute whose
 /// arguments are not literals or variants is the checker's to refuse, and is
 /// left out here. `computed(unit, ty, argument)` computes a non-literal
-/// argument in the compiler's workshop.
+/// argument in the compiler's build-time directory.
 pub fn attribute_values(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, computed: fn(i64, ref Ty, ref Expr) -> String? sync) {
     // Where each value goes, as `apply_attribute` takes it: the type itself
     // (0), a field (1) or a variant (2), and its place.
@@ -682,7 +682,7 @@ pub trait LedgerInferHost {
     /// A default a run's sub-program already computed (#468).
     fn known_default(ref self, unit: i64, key: ref String, at: i64) -> String? sync
     /// `expr` of unit `unit`, computed as a `ty` and written as a literal:
-    /// folded where it is literals alone, else run in the workshop
+    /// folded where it is literals alone, else run in the build-time directory
     /// (ADR-318 D1); `name` is what a compiled run calls it.
     fn computed_literal(ref self, unit: i64, name: ref String, expr: ref Expr, ty: ref Ty) -> String? sync
 }

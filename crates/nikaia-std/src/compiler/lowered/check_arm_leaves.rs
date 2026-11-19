@@ -392,9 +392,19 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_text_bytes_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
-        if !self.a_text_bytes_view(world, value) && !self.facts.bytes_cuts.contains(&node_key(value)) { return false; }
+        let a_cut = self.facts.bytes_cuts.contains(&node_key(value));
+        if !self.a_text_bytes_view(world, value) && !a_cut { return false; }
         self.facts.kept_text_bytes.insert(node_key(value));
+        if a_cut && !self.a_cut_of_text_bytes(world, value) { self.facts.counted_cuts.insert(node_key(value)); }
         true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_cut_of_text_bytes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        match value {
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.a_text_bytes_view(world, base) || self.facts.bytes_cuts.contains(&node_key(base)) && self.a_cut_of_text_bytes(world, base) },
+            _ => false,
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

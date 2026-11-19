@@ -117,7 +117,7 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
         &parsed,
         &own,
         &BTreeSet::new(),
-        // A loose file declares no Rust crate, so ADR-290 D1 has nothing to
+        // A loose file declares no Rust crate, so ADR-rust-boundary-1 D1 has nothing to
         // ask about here, and nothing has gained an error since a committed
         // ledger, which is every build but the one after a change (ADR-308 D11).
         nikaia::project::Around {
@@ -911,7 +911,7 @@ fn a_described_type_that_may_not_cross_is_refused_into_a_foreign_call() {
 }
 
 /// **A described foreign call is asked where the description says the word, and
-/// nowhere else** ([ADR-290](../../../docs/specification/adr/adr-290.md) D6, D7).
+/// nowhere else** ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D6, D7).
 ///
 /// `examples/foreign-runtime/crossing` is the program: its handle says
 /// `crosses = false`, and it is handed to a foreign function the description

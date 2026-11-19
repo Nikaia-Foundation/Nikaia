@@ -1,4 +1,4 @@
-# `[rust-library]` in a package built as a C library: NK1348 (ADR-393 D7).
+# `[rust-library]` in a package built as a C library: NK1348 (ADR-rust-boundary-1 D23).
 [package]
 name = "not_a_library"
 version = "0.1.0"

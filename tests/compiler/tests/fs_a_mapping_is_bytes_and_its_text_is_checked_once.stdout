@@ -1,0 +1,7 @@
+len 10
+byte 9: 255
+cut: ab
+text: not valid UTF-8: bad (at byte 9)
+again: not valid UTF-8: bad (at byte 9)
+same text twice: true
+empty: 0 ""

@@ -406,7 +406,12 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   moved is merged with `origin/develop`, short-checked and pushed, up to three
   rounds (`MERGE <sha8> round <k>`, #2008, owner 2026-11-17: green is green),
   and only red short checks or a third rejection leave the merge to the next
-  suite (a conflict outside `lowered/*.rs` escalates); on red it starts QA
+  suite (a conflict outside `lowered/*.rs` escalates). A merge that brought
+  compiler code is regenerated first, and that is where a merge's minutes go:
+  build, `lower-std`, and another round only when the first changed more than
+  the index's `LOWERED_DIGEST` line (#2154), then the badges and the ledgers;
+  `MERGE timing build <n>s, round 1 build <n>s, lower-std <n>s, ..., total <n>s`
+  logs each step. On red it starts QA
   (on `DIR/qa/qa-task.md`, the lane's own copy of the template
   `docs/qa-task.md`, so its report and run files land in `DIR/qa/`;
   input `DIR/qa-input.txt`, log `DIR/suite.log`),

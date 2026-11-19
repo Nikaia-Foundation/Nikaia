@@ -21,7 +21,7 @@ pub struct BoundsAllProven {
 pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext, beside: &[&BoundsBeside], facts: &CheckFacts, ledgers: &[&Ledger], nonnegative: &collections::BTreeSet<i64>, through_loops: bool, trace: &[i64], read: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, ask_in: &mut impl FnMut(&str, i64, &logic::TermArena, &[i64], i64) -> bool, record: &mut impl FnMut(&collections::BTreeMap<i64, String>), counted: &mut impl FnMut(&Block, &[winnow_grammar::Symbol]), folded: &mut impl FnMut() -> collections::BTreeSet<i64>) -> BoundsAllProven {
     #[allow(unused_mut)] let mut out = BoundsAllProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), derived: vec![], gates: collections::BTreeMap::new(), trace: vec![] };
     let around = bounds_around(program, beside, ledgers, &facts.std_receivers, &facts.simd_loads, words);
-    let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, &mut *read), required: bm_required(ledgers, &mut *read), each: bm_each(ledgers, &mut *read), collected: bm_collected(ledgers, &mut *read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), divisions: facts.divisions.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_types: facts.whole_types.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, trace: trace.copy_owned(), decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), text_bytes: facts.text_bytes.copy_owned(), text_scalars: facts.text_scalars.copy_owned(), returns: collections::BTreeMap::new(), owner: String::from("") };
+    let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, &mut *read), required: bm_required(ledgers, &mut *read), each: bm_each(ledgers, &mut *read), collected: bm_collected(ledgers, &mut *read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), divisions: facts.divisions.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_types: facts.whole_types.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, trace: trace.copy_owned(), decided: bp_decided(program, words, &facts.comptime_values), computed: bp_computed(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), text_bytes: facts.text_bytes.copy_owned(), text_scalars: facts.text_scalars.copy_owned(), returns: collections::BTreeMap::new(), owner: String::from("") };
     bp_summed(&mut context, &facts.summaries);
     bounds_fields(&mut context, program, words, &mut *ask);
     bounds_returns(&mut context, program, words, &mut *ask);
@@ -206,6 +206,23 @@ pub(crate) fn bp_decided(program: &Program, words: &winnow_grammar::InternerCont
                 if value.0 != "bool" { continue; }
                 let written = value.1.trim();
                 if written == "true" { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), true); } else if written == "false" { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), false); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn bp_computed(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>) -> collections::BTreeMap<String, i64> {
+    let mut out: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Comptime { name, .. } => {
+                let name = *name;
+                let value = match values.get(&(item.span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if !is_whole_number(&value.0) { continue; }
+                let n = match text::parse_i64(value.1.trim()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), n);
             },
             _ => { },
         }

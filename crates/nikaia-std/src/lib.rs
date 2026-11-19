@@ -64,6 +64,7 @@ pub mod list;
 pub mod lock;
 pub mod map;
 pub mod mem;
+#[cfg(feature = "async-io")]
 pub mod net;
 pub mod node_id;
 pub mod num;
@@ -84,6 +85,7 @@ pub mod target;
 pub mod task;
 pub mod tether;
 pub mod thread;
+#[cfg(feature = "async-io")]
 mod tls;
 /// **What a library's entry point reads from C and writes back to it**
 /// ([ADR-284](../../../docs/specification/adr/adr-284.md) D5-D7): the wrapper
@@ -152,7 +154,8 @@ pub mod text {
     clippy::too_many_arguments,
     clippy::useless_conversion,
     clippy::needless_borrow,
-    clippy::type_complexity
+    clippy::type_complexity,
+    clippy::borrow_deref_ref
 )]
 pub mod runtime {
     include!("runtime/lowered.rs");
@@ -196,9 +199,9 @@ pub mod runtime {
 /// it.
 ///
 /// It lives in this crate anyway because this is where `nikaia lower-std`
-/// already looks for `.nika` sources (ADR-002 D4, ADR-290 D12), and because the
+/// already looks for `.nika` sources (ADR-002 D4, ADR-rust-boundary-1 D12), and because the
 /// compiler - which is Rust - reaches what is in here as an ordinary Rust
-/// module (ADR-290 D16). That is the whole interface: a call.
+/// module (ADR-rust-boundary-1 D16). That is the whole interface: a call.
 ///
 /// **What none of it is, is *refused***, and that is a defect rather than a
 /// decision: `use std::compiler` in a Nikaia program lowers, and `rustc` is what
@@ -456,232 +459,6 @@ pub mod compiler {
         }
     }
 
-    // --- paths.nika ---
-
-    #[cfg(test)]
-    mod paths_tests {
-        use super::*;
-        #[allow(unused_imports)]
-        use crate::block::names::{String, ToText, Vec, format, vec};
-
-        fn one(name: &str, alias: &str) -> Option<Named> {
-            Some(Named {
-                name: name.into(),
-                alias: alias.into(),
-            })
-        }
-
-        /// The module a file is: `lib.rs` and `mod.rs` are their
-        /// directory, a binary's file is nobody's.
-        #[test]
-        fn a_file_is_the_module_its_path_names() {
-            assert_eq!(module_of("src/lib.rs").as_deref(), Some(""));
-            assert_eq!(module_of("src/a/b.rs").as_deref(), Some("a::b"));
-            assert_eq!(module_of("src/a/mod.rs").as_deref(), Some("a"));
-            assert_eq!(module_of("src/main.rs"), None);
-            assert_eq!(module_of("src/bin/tool.rs"), None);
-            assert_eq!(module_of("build.rs"), None);
-        }
-
-        /// A `pub use` in its three shapes: a group, a glob, one name.
-        #[test]
-        fn a_pub_use_offers_what_it_names() {
-            let group = exported("m", "inner::{a, b as c}");
-            assert_eq!(group.len(), 2);
-            assert_eq!(group[0].prefix, "inner");
-            assert_eq!(group[0].name, one("a", "a"));
-            assert_eq!(group[1].name, one("b", "c"));
-
-            let glob = exported("", "crate::inner::*");
-            assert_eq!(glob[0].prefix, "crate::inner");
-            assert_eq!(glob[0].name, None);
-
-            let single = exported("", " self::x::Y as Z ");
-            assert_eq!(single[0].prefix, "self::x");
-            assert_eq!(single[0].name, one("Y", "Z"));
-
-            assert_eq!(exported("", "spawn")[0].name, one("spawn", "spawn"));
-        }
-
-        /// `crate`, `self` and `super` are answered from where the `use`
-        /// stands; a bare path is tried there and at the root.
-        #[test]
-        fn a_use_path_resolves_from_where_it_was_written() {
-            let at = |prefix: &str| Export {
-                at: "a::b".into(),
-                prefix: prefix.into(),
-                name: None,
-            };
-            assert_eq!(bases(&at("crate::x")), ["x"]);
-            assert_eq!(bases(&at("crate")), [""]);
-            assert_eq!(bases(&at("self::x")), ["a::b::x"]);
-            assert_eq!(bases(&at("super::x")), ["a::x"]);
-            assert_eq!(bases(&at("x")), ["a::b::x", "x"]);
-            assert_eq!(after("crated", "crate"), None);
-        }
-
-        /// Commas inside brackets do not split.
-        #[test]
-        fn only_the_outer_commas_split() {
-            assert_eq!(
-                split_top_level("a: Vec<(u8, u8)>, b: [u8; 2] ,"),
-                ["a: Vec<(u8, u8)>", "b: [u8; 2]"]
-            );
-            assert_eq!(joined("", "x"), "x");
-            assert_eq!(joined("a", ""), "a");
-            assert_eq!(joined("a", "x"), "a::x");
-        }
-    }
-
-    // --- crossing.nika ---
-
-    #[cfg(test)]
-    mod crossing_tests {
-        use super::*;
-        #[allow(unused_imports)]
-        use crate::block::names::{String, ToText, Vec, format, vec};
-
-        fn texts(all: &[&str]) -> Vec<String> {
-            all.iter().map(|s| s.to_text()).collect()
-        }
-
-        /// `Rc` never crosses, plain data does, and anything else - a view,
-        /// an unknown type, no fields known - is silence.
-        #[test]
-        fn what_crosses_is_read_from_the_fields() {
-            assert_eq!(crosses(&texts(&["Rc<u8>", "u8"])), Crosses::MayNot);
-            assert_eq!(
-                crosses(&texts(&["Vec<Option<u8>>", "String"])),
-                Crosses::May
-            );
-            assert_eq!(crosses(&texts(&["Vec<u8, u16>"])), Crosses::May);
-            assert_eq!(crosses(&texts(&["&str"])), Crosses::Undecided);
-            assert_eq!(crosses(&texts(&["Handle"])), Crosses::Undecided);
-            assert_eq!(crosses(&Vec::new()), Crosses::Undecided);
-            assert_eq!(generic_of(" Option <u8>", "Option").as_deref(), Some("u8"));
-            assert_eq!(generic_of("Optional<u8>", "Option"), None);
-        }
-
-        /// `Send` as a word, and not as letters inside one.
-        #[test]
-        fn a_bound_names_send_as_a_word() {
-            assert!(bounds_send("T: Send + 'static"));
-            assert!(bounds_send("Send"));
-            assert!(!bounds_send("T: Sender<u8>, U: Resend"));
-            assert!(!bounds_send("Sendé"));
-        }
-
-        /// The article and the commas.
-        #[test]
-        fn a_list_reads_as_a_sentence() {
-            assert_eq!(a_list(&texts(&["a"]), "the one", "the many"), "the one `a`");
-            assert_eq!(
-                a_list(&texts(&["a", "b"]), "x", "the many"),
-                "the many `a` and `b`"
-            );
-            assert_eq!(
-                a_list(&texts(&["a", "b", "c"]), "x", "y"),
-                "y `a`, `b` and `c`"
-            );
-            assert_eq!(a_list(&Vec::new(), "x", "y"), "");
-        }
-
-        /// The shortest way to a sink, through the crate's own calls, and
-        /// an ambiguous short name is not followed.
-        #[test]
-        fn the_shortest_way_to_a_thread_is_named() {
-            let mut calls = std::collections::BTreeMap::new();
-            calls.insert("a::run".to_text(), texts(&["helper", "slow"]));
-            calls.insert("a::helper".to_text(), texts(&["tokio::spawn"]));
-            calls.insert("a::slow".to_text(), texts(&["a::slower"]));
-            calls.insert("a::slower".to_text(), texts(&["std::thread::spawn"]));
-            calls.insert("a::loops".to_text(), texts(&["a::loops"]));
-            assert_eq!(
-                reaches_a_thread("a::run", &calls),
-                Some(texts(&["a::helper", "tokio::spawn"]))
-            );
-            assert_eq!(reaches_a_thread("a::loops", &calls), None);
-            calls.insert("b::helper".to_text(), Vec::new());
-            assert_eq!(the_crates_own("helper", &calls), None);
-        }
-    }
-
-    // --- signature.nika ---
-
-    #[cfg(test)]
-    mod signature_tests {
-        use super::*;
-        #[allow(unused_imports)]
-        use crate::block::names::{String, ToText, Vec, format, vec};
-
-        fn texts(all: &[&str]) -> Vec<String> {
-            all.iter().map(|s| s.to_text()).collect()
-        }
-
-        /// A view is not kept, a value is; the crate's own type is named
-        /// by its path and noted; anything else is `?`.
-        #[test]
-        fn a_rust_type_reads_as_the_ledgers() {
-            let types: std::collections::BTreeSet<String> =
-                ["Conn".to_text()].into_iter().collect();
-            let params = texts(&["T"]);
-            let mut mentioned = std::collections::BTreeSet::new();
-            let mut said = |t: &str| {
-                let out = translate(t, "db", &params, &types, &mut mentioned);
-                (text(&out.ty), out.kept)
-            };
-            assert_eq!(said("&str"), ("ref String".to_text(), false));
-            assert_eq!(said("Vec<Conn>"), ("Vec[db::Conn]".to_text(), true));
-            assert_eq!(said("Option<T>"), ("$T?".to_text(), true));
-            assert_eq!(said("u8"), ("u8".to_text(), false));
-            assert_eq!(said("&mut u8"), ("?".to_text(), false));
-            assert!(said("other::Thing").1);
-            assert!(mentioned.contains("Conn"));
-        }
-
-        /// A `Result` throws the crate's own error by its path, and `?` for
-        /// any other.
-        #[test]
-        fn a_result_names_what_it_throws() {
-            let types: std::collections::BTreeSet<String> =
-                ["Error".to_text()].into_iter().collect();
-            let mut mentioned = std::collections::BTreeSet::new();
-            let own = result_of(
-                "Result<u8, Error>",
-                "db",
-                &Vec::new(),
-                &types,
-                &mut mentioned,
-            );
-            assert_eq!(own.fails.as_deref(), Some("db::Error"));
-            let other = result_of(
-                "Result<(), io::Error>",
-                "db",
-                &Vec::new(),
-                &types,
-                &mut mentioned,
-            );
-            assert_eq!(other.fails.as_deref(), Some("?"));
-            let plain = result_of("u8", "db", &Vec::new(), &types, &mut mentioned);
-            assert_eq!(plain.fails, None);
-        }
-
-        /// A bound reaches a parameter through its type variable or an
-        /// `impl Send` at the parameter itself.
-        #[test]
-        fn a_send_bound_reaches_its_parameters() {
-            assert_eq!(sends("T: Send + 'static, U: Clone, 'a: 'b"), texts(&["T"]));
-            assert_eq!(
-                sent_across(
-                    &texts(&["job", "name", "f"]),
-                    &texts(&["&mut T", "&str", "impl FnOnce() + Send"]),
-                    "T: Send, "
-                ),
-                texts(&["job", "f"])
-            );
-        }
-    }
-
     // --- ty.nika ---
 
     /// A type prints as its text, which is the one thing a `Display` of
@@ -780,6 +557,7 @@ pub mod prelude {
     // **The socket `std` lends** (ADR-289 D6). Here for `fs`'s reason: a module
     // a program reaches through its prefix has to be in scope in the generated
     // file, and nothing a program writes says where it comes from.
+    #[cfg(feature = "async-io")]
     pub use crate::net;
     // **`par::Order` and a fold's default `order:`**
     // ([ADR-372](../../../docs/specification/adr/adr-372.md) D5), and the fold

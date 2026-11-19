@@ -1,0 +1,39 @@
+// `fs::write` writes a file whole and a second, shorter write replaces it;
+// bytes read back as written and are refused as text; a write into a missing
+// directory throws and the program goes on; `append: true` adds, `create:
+// false` refuses a missing file and makes nothing, and replaces an existing
+// one (Part III, the `fs::write` row).
+use std::fs
+use std::io
+
+fn refused(error: io::IoError) -> String {
+    match error {
+        io::IoError::NotFound(_) => return "NotFound",
+        io::IoError::NotText(_) => return "NotText",
+        else => return "other",
+    }
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("f.txt", root, "Hamburg;12.0\n")
+    println(f"read back: {fs::read_to_string("f.txt", root).trim_end()}")
+    fs::write("f.txt", root, "Bremen\n")
+    println(f"replaced: {fs::read_to_string("f.txt", root).trim_end()}")
+    let data: Vec[u8] = [255, 0, 254]
+    fs::write("f.txt", root, data)
+    let mut back: Vec[u8] = []
+    for b in fs::read("f.txt", root).iter() {
+        back.push(b)
+    }
+    println(f"bytes: {back.len()} {back[0]} {back[1]} {back[2]}")
+    fs::read_to_string("f.txt", root) catch { println(f"as text: {refused(error)}") }
+    fs::write("no/such/dir/report.html", root, "x") catch { println(f"missing directory: {refused(error)}") }
+    fs::write("g.txt", root, "one\n")
+    fs::write("g.txt", root, "two\n"; append: true)
+    println(f"appended: {fs::read_to_string("g.txt", root).replace("\n", "|")}")
+    fs::write("absent.txt", root, "x"; create: false) catch { println(f"create false on a missing file: {refused(error)}") }
+    println(f"exists after: {fs::exists("absent.txt", root)}")
+    fs::write("g.txt", root, "three\n"; create: false)
+    println(f"create false on an existing file: {fs::read_to_string("g.txt", root).trim_end()}")
+}

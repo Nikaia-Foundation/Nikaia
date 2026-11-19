@@ -193,6 +193,10 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_expr_as_written_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.kept_text_bytes.contains(&node_key(node)) {
+            if self.facts.counted_cuts.contains(&node_key(node)) && self.emit_cut_has_an_owner(world, node, scope) {
+                self.emit_counted_cut(world, walk, out, host, node, depth, flow, scope)?;
+                return Ok(());
+            }
             out.push("nikaia_std::bytes::Bytes::from(");
             self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)?;
             out.push(")");

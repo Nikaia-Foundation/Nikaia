@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] [--budget N] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] [--budget N] [--cases N] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] [--rlimit R] DIR|FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED [--size S] [--rlimit R]
@@ -64,6 +64,10 @@
 // which no case counts, with the search's, so a file past it answers
 // `unknown (steps)` on every machine alike (#2107). With `--budget` and no
 // `--timeout` a file has no wall-clock limit; without either, 60 s.
+// `--cases N` gives a new engine a case budget of N (the parameter `cases`
+// of `sv_params`) in place of the build-time one, for a file a fix brought
+// within reach only past `lg_budget()` (#1962); PAR-2 still doubles the
+// build-time budget.
 // `--stats` adds below each file's line the new
 // engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
 // theory lemmas and those repeating an earlier one, decisions, restarts.
@@ -132,7 +136,7 @@ fn solver_program_files(repo: String) -> Vec[String] throws {
 	if !listed.ok { return paths }
 	paths.push(f"{repo}/packages/logic/nikaia.toml")
 	for line in listed.stdout.lines() {
-		if line != "" { paths.push(line.to_string()) }
+		if line != "" { paths.push(line) }
 	}
 	paths.push(f"{solver_rod_dir(repo)}/src/main.nika")
 	return paths
@@ -310,7 +314,7 @@ struct SolverRow {
 // under: its path below the argument's parent.
 fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	let mut out: Vec[(String, String)] = []
-	let trimmed = arg.trim_end_matches("/").to_string()
+	let trimmed = arg.trim_end_matches("/")
 	let base = trimmed.split("/").last() ?? trimmed
 	if trimmed.ends_with(".smt2") {
 		let parts: Vec[String] = trimmed.split("/").collect()
@@ -372,14 +376,14 @@ fn solver_answer_stats(
 	// Each text of the returned tuple made with `f"..."`: a `.to_string()`
 	// of a view makes the tuple `EitherText` and the callers fail in rustc
 	// (#1311).
-	let all = out.stdout.trim().to_string()
+	let all = out.stdout.trim()
 	let nl = all.find("\n") ?? all.len()
 	let line = f"{all[0..<nl]}"
 	let counted = if nl < all.len() { f"{all[nl + "\n".len()..]}" } else { "" }
 	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1, "-1", "")
 	let shown = f"{line[at + 1..]}"
 	let slash = shown.find("/") ?? shown.len()
-	let work = text::parse_i64(shown[0..<slash].to_string()) ?? -1
+	let work = text::parse_i64(shown[0..<slash]) ?? -1
 	return (f"{line[0..<at]}", work, shown, counted)
 }
 
@@ -439,6 +443,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut stats = false
 	let mut timeout = -1
 	let mut budget = 0
+	let mut cases = 0
 	let mut targets: Vec[String] = []
 	let mut i = 0
 	while i < args.len() {
@@ -457,6 +462,15 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			budget = text::parse_i64(args[i + 1].clone()) ?? 0
 			if budget <= 0 {
 				println(f"--budget takes a positive number of steps, not {args[i + 1]}")
+				process::exit(2)
+			}
+			i += 2
+			continue
+		}
+		if a == "--cases" && i + 1 < args.len() {
+			cases = text::parse_i64(args[i + 1].clone()) ?? 0
+			if cases <= 0 {
+				println(f"--cases takes a positive number of cases, not {args[i + 1]}")
 				process::exit(2)
 			}
 			i += 2
@@ -483,6 +497,14 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			process::exit(2)
 		}
 		answering = f"{engine}:steps={budget}"
+	}
+	if cases > 0 {
+		if engine == "fm" {
+			println("--cases sets the new engine's case budget: not with --engine fm")
+			process::exit(2)
+		}
+		let head = if budget > 0 { f"{answering}," } else { f"{engine}:" }
+		answering = f"{head}cases={cases}"
 	}
 	let mut files: Vec[(String, String)] = []
 	for t in targets { files.extend(solver_files(t)) }
@@ -550,7 +572,7 @@ fn solver_z3_exe() -> String throws {
 // query than the file's). The wall clock `-T:30` stays an outer guard.
 fn solver_z3(exe: String, path: String, rlimit: i64) -> String throws {
 	let out = process::run(exe, ["-smt2", "-T:30", f"rlimit={rlimit}", path])
-	return solver_cli_answer(out.stdout.to_string())
+	return solver_cli_answer(out.stdout)
 }
 
 // The value after a flag such as `--rlimit`, `fallback` without the flag;
@@ -614,7 +636,7 @@ fn solver_with_status(source: String, status: String) -> String {
 			done = true
 			continue
 		}
-		out.push(line.to_string())
+		out.push(line)
 		if !done && line.trim().starts_with("(set-logic ") {
 			out.push(wanted.clone())
 			done = true
@@ -920,7 +942,7 @@ fn solver_negated(a: SolverAtom) -> SolverAtom {
 		">" => "<=",
 		else => "=",
 	}
-	return SolverAtom { coeffs: a.coeffs.clone(), op: op.to_string(), rhs: a.rhs }
+	return SolverAtom { coeffs: a.coeffs.clone(), op: op, rhs: a.rhs }
 }
 
 // The mutations of a query (#1989 item 2), each `(kind, query, same)`:
@@ -1374,7 +1396,7 @@ fn solver_family(source: String, path: String) -> (String, String) {
 
 fn solver_fetch(args: Vec[String]) throws {
 	let dir = if args.len()
-		> 0 { args[0].trim_end_matches("/").to_string() } else { "target/smtlib" }
+		> 0 { args[0].trim_end_matches("/") } else { "target/smtlib" }
 	for logic in ["qflia", "qflra"] {
 		if fs::exists(f"{dir}/{logic}", fs::Root::Anywhere) {
 			fs::remove(f"{dir}/{logic}", fs::Root::Anywhere; recursive: true)
@@ -1390,7 +1412,7 @@ fn solver_fetch(args: Vec[String]) throws {
 		let mut reasons: Vec[String] = []
 		let listed = solver_git(clone.clone(), ["ls-files", "-s"])
 		let mut entries: Vec[String] = []
-		for line in listed.lines() { entries.push(line.to_string()) }
+		for line in listed.lines() { entries.push(line) }
 		entries.sort()
 		for line in entries {
 			let tab = line.find("\t") ?? continue
@@ -1449,8 +1471,8 @@ fn solver_sample(args: Vec[String]) throws {
 		println("usage: solver.nika sample DIR OUT [N]")
 		process::exit(2)
 	}
-	let dir = args[0].trim_end_matches("/").to_string()
-	let out = args[1].trim_end_matches("/").to_string()
+	let dir = args[0].trim_end_matches("/")
+	let out = args[1].trim_end_matches("/")
 	let n = if args.len() > 2 { text::parse_i64(args[2].clone()) ?? 25 } else { 25 }
 	for logic in ["qflia", "qflra"] {
 		let mut small: Vec[(String, String)] = []
@@ -1528,7 +1550,7 @@ fn solver_rod_answer(answer: String) -> String {
 fn solver_collected(stderr: String) -> i64 {
 	for line in stderr.lines() {
 		let at = line.find("Collected : ") ?? continue
-		return text::parse_i64(line[at + "Collected : ".len()..].trim().to_string()) ?? -1
+		return text::parse_i64(line[at + "Collected : ".len()..].trim()) ?? -1
 	}
 	return -1
 }
@@ -1560,7 +1582,7 @@ fn solver_one(
 	let out = process::run(run_cmd, run_args; within: limit.seconds())
 	let millis = out.elapsed.in_millis() as i64
 	let kib = out.max_rss_kib ?? -1
-	let counted = if instructions { solver_collected(out.stderr.to_string()) } else { -1 }
+	let counted = if instructions { solver_collected(out.stderr) } else { -1 }
 	if out.timed_out || (!instructions && millis > timeout * 1000) {
 		return SolverRun { answer: "unknown", millis: millis, kib: kib, instructions: counted }
 	}
@@ -1572,7 +1594,7 @@ fn solver_one(
 			answer = solver_rod_answer(f"{line[0..<at]}")
 		}
 	} else {
-		answer = solver_cli_answer(out.stdout.to_string())
+		answer = solver_cli_answer(out.stdout)
 	}
 	return SolverRun { answer: answer, millis: millis, kib: kib, instructions: counted }
 }
@@ -1671,11 +1693,11 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut solvers: Vec[String] = ["ours"]
 	let mut exes: Vec[String] = [""]
 	for (name, var) in [("z3", "Z3"), ("cvc5", "CVC5")] {
-		let exe = solver_exe(var.to_string(), name.to_string())
+		let exe = solver_exe(var, name)
 		if exe == "" {
 			println(f"{name} is not on the path (nor ${var}): left out")
 		} else {
-			solvers.push(name.to_string())
+			solvers.push(name)
 			exes.push(exe)
 		}
 	}

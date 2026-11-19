@@ -185,7 +185,8 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             contracts,
             &crate::contracts::Ledger::blank(),
             entry,
-            &crate::assets::Reads::none(),
+            // The run's own sub-program computes nothing itself (#2153).
+            &crate::assets::Reads::none().building_nowhere(),
             None,
         )
         .ok()?;
@@ -213,6 +214,9 @@ pub(crate) fn lowered_units(
     contracts: &crate::contracts::Ledger,
     packages: &BTreeMap<String, crate::contracts::Ledger>,
     library: &crate::contracts::Ledger,
+    // The checked units of the ledger's pass over the entry's package
+    // against `library`, where the caller ran it (#2150).
+    checked: Option<&[crate::check::Checked]>,
 ) -> Option<crate::emit::Lowered> {
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units
@@ -220,7 +224,12 @@ pub(crate) fn lowered_units(
         .copied()
         .filter(|u| &u.package == home)
         .collect();
-    let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
+    let provenance = match checked {
+        Some(checked) => {
+            crate::contracts::trust::analyse_package_checked(&beside, library, checked).provenance
+        }
+        None => crate::contracts::trust::analyse_package(&beside, library).provenance,
+    };
     let host = LowerHost::new(units, build, provenance);
     let rust = tree::comptime_lowered_units(&host, entry as i64, contracts, packages)?;
     Some(crate::emit::Lowered {
@@ -290,7 +299,7 @@ pub(crate) fn compute(
     known: &dyn Fn(&str) -> Option<Value>,
     typed: &dyn Fn(&str) -> Option<Ty>,
     library: &crate::contracts::Ledger,
-    workshop: &crate::grammar_run::Workshop,
+    build_time_dir: &crate::grammar_run::BuildTimeDir,
     bounds: Bounds,
     outer: Option<&crate::contracts::Ledger>,
 ) -> Computed {
@@ -304,11 +313,13 @@ pub(crate) fn compute(
                 files,
                 units: RefCell::new(Vec::new()),
                 library,
-                workshop,
+                build_time_dir,
                 bounds,
                 program: std::cell::OnceCell::new(),
+                sources: std::cell::OnceCell::new(),
+                derived_checked: RefCell::new(None),
             };
-            tree::comptime_computed(
+            block_on(tree::comptime_value_computed(
                 &host,
                 here as i64,
                 bound,
@@ -316,23 +327,61 @@ pub(crate) fn compute(
                 ty,
                 &mut &known,
                 &mut &typed,
-            )
+            ))
         })
     })
 }
 
 /// **What computing a build-time constant asks of the compiler**
 /// (`ComptimeComputeHost`, K3a): the program's files, the units made from
-/// them, the inference, the emitter and the workshop stay here; Nikaia names
+/// them, the inference, the emitter and the build-time directory stay here; Nikaia names
 /// files by their place and units by their index in `units`.
 struct ComputeHost<'a> {
     files: &'a [&'a Parsed],
     units: RefCell<Vec<Parsed>>,
     library: &'a crate::contracts::Ledger,
-    workshop: &'a crate::grammar_run::Workshop,
+    build_time_dir: &'a crate::grammar_run::BuildTimeDir,
     bounds: Bounds,
     /// The program's files as one number, worked out at the first question.
     program: std::cell::OnceCell<u64>,
+    /// The program's files as their digest on disk, read from the names and
+    /// not the interner's numbers, worked out at the first question.
+    sources: std::cell::OnceCell<String>,
+    /// The units `derived` last inferred against `library` alone (no
+    /// package absorbed), and the checked units of that pass: what the
+    /// lowering would infer again (#2150).
+    derived_checked: RefCell<Option<(Vec<i64>, Vec<crate::check::Checked>)>>,
+}
+
+/// **`what` as `Debug` prints it, each `Symbol(N)` written as the name it
+/// stands for in `parsed`**: the numbers an interner hands out depend on the
+/// order the names were met, which differs between processes, and its map
+/// prints in an order its random hasher chose; the names do not.
+fn named_print(parsed: &Parsed, what: &impl std::fmt::Debug) -> String {
+    const SYMBOL: &str = "Symbol(";
+    let printed = format!("{what:?}");
+    let mut out = String::with_capacity(printed.len());
+    let mut rest = printed.as_str();
+    while let Some(at) = rest.find(SYMBOL) {
+        out.push_str(&rest[..at + SYMBOL.len()]);
+        rest = &rest[at + SYMBOL.len()..];
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        let number = rest[..digits].parse::<usize>().ok();
+        match number {
+            Some(number)
+                if number >= 1
+                    && number <= parsed.interner.len()
+                    && rest[digits..].starts_with(')') =>
+            {
+                let symbol = winnow_grammar::Symbol::from_index(number as u32 - 1);
+                out.push_str(&format!("{:?}", parsed.text(symbol)));
+            }
+            _ => out.push_str(&rest[..digits]),
+        }
+        rest = &rest[digits..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// **A hasher written to as text**: what `Debug` prints goes into the hash
@@ -484,14 +533,41 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         }
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
-        crate::contracts::Ledger::infer_package(&refs, &with_packages)
+        let (ledger, checked) =
+            crate::contracts::Ledger::infer_package_checked(&refs, &with_packages);
+        // **Kept for the lowering** (#2150): against `library` alone, it is
+        // the pass the emitter would run over the same units again.
+        *self.derived_checked.borrow_mut() = packages
+            .is_empty()
+            .then(|| (units.iter().copied().collect(), checked));
+        ledger
     }
 
-    fn lowered_alone(&self, unit: i64) -> Option<tree::ComptimeLowered> {
+    fn lowered_alone(
+        &self,
+        unit: i64,
+        derived: &crate::contracts::Ledger,
+    ) -> Option<tree::ComptimeLowered> {
         let held = self.units.borrow();
-        crate::emit::emit_program(&held[unit as usize], counted())
-            .ok()
-            .map(rows_of)
+        let parsed = &held[unit as usize];
+        // **The ledger `derived` made is the emitter's own** where it was
+        // inferred over this unit against `std` alone: `emit_program` infers
+        // exactly that, twice (#2150).
+        let std = crate::contracts::std_ledger();
+        let against_std = std::ptr::eq(self.library, std) || self.library == std;
+        let checked = self
+            .derived_checked
+            .borrow_mut()
+            .take()
+            .filter(|(at, _)| against_std && at.as_slice() == [unit]);
+        match checked {
+            Some((_, checked)) => {
+                crate::emit::emit_program_inferred(parsed, counted(), derived.clone(), &checked)
+            }
+            None => crate::emit::emit_program(parsed, counted()),
+        }
+        .ok()
+        .map(rows_of)
     }
 
     fn lowered_units(
@@ -503,6 +579,19 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     ) -> Option<tree::ComptimeLowered> {
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
+        // **The trust's pass is `derived`'s** (#2150) where that ran over the
+        // entry's package, in this order, against `library` alone.
+        let home = &held[units[here as usize] as usize].package;
+        let beside: Vec<i64> = units
+            .iter()
+            .copied()
+            .filter(|&at| &held[at as usize].package == home)
+            .collect();
+        let checked = self
+            .derived_checked
+            .borrow_mut()
+            .take()
+            .filter(|(at, _)| *at == beside);
         lowered_units(
             &refs,
             here as usize,
@@ -510,6 +599,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
             derived,
             packages,
             self.library,
+            checked.as_ref().map(|(_, checked)| checked.as_slice()),
         )
         .map(rows_of)
     }
@@ -532,7 +622,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     }
 
     fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<Wall> {
-        match self.workshop.run_comptime(program, bound) {
+        match self.build_time_dir.run_comptime(program, bound) {
             Ok(text) => {
                 *answer = text;
                 None
@@ -560,6 +650,47 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<Value> {
         let key = self.remembered_key(here, bound, value, ty);
         REMEMBERED.with(|held| held.borrow().get(&key).cloned())
+    }
+
+    fn value_key(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> String {
+        let Some(stamp) = self.build_time_dir.bundle_stamp() else {
+            return String::new();
+        };
+        let sources = self.sources.get_or_init(|| {
+            let mut printed = String::new();
+            for parsed in self.files {
+                printed.push_str(&format!("{:?}\n", parsed.package));
+                printed.push_str(&named_print(parsed, &parsed.program));
+                printed.push('\n');
+            }
+            nikaia_std::hash::sha256_hex(printed.as_bytes()).to_text()
+        });
+        let file = self.files[here as usize];
+        let level = CPU_LEVEL
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default();
+        format!(
+            "{sources}\n{here}\n{bound}\n{}\n{}\n{}\n{}\n{}\n{}\n{stamp}\n{level}",
+            named_print(file, value),
+            named_print(file, ty),
+            self.bounds.steps,
+            self.bounds.bytes,
+            crate::compiler_identity(),
+            toolchain(),
+        )
+    }
+
+    fn user_cache_dir(&self) -> PathBuf {
+        orchestrator::cache::Layout::user_cache_dir()
+    }
+
+    fn use_entry(&self, at: &Path) {
+        orchestrator::cache::use_entry(at);
+    }
+
+    fn unique_beside(&self, path: &Path) -> PathBuf {
+        unique_beside(path)
     }
 
     fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &Value) {
@@ -633,20 +764,20 @@ fn rows_of(lowered: crate::emit::Lowered) -> tree::ComptimeLowered {
 thread_local! {
     /// **Where an option's default is compiled** while a ledger is inferred
     /// ([ADR-318](../../../docs/specification/adr/adr-318.md) D1, ADR-321 D1): the
-    /// workshop of the build that reads the program, for as long as it reads it.
+    /// build-time directory of the build that reads the program, for as long as it reads it.
     /// The inference has no `Reads` of its own; a build sets this around the read,
     /// and a caller that sets nothing gets the interpreter, as before.
     ///
     /// **One per thread**, because the inference runs on the thread that reads:
     /// two builds side by side, as the tests are, each keep their own.
-    static DEFAULTS: std::cell::RefCell<Option<std::sync::Arc<crate::grammar_run::Workshop>>> =
+    static DEFAULTS: std::cell::RefCell<Option<std::sync::Arc<crate::grammar_run::BuildTimeDir>>> =
         const { std::cell::RefCell::new(None) };
 }
 
-/// Read a program with `at` as the workshop its defaults are compiled in.
+/// Read a program with `at` as the build-time directory its defaults are compiled in.
 pub fn defaults_compiled_in<R>(at: Option<&Path>, read: impl FnOnce() -> R) -> R {
-    let workshop = at.map(|at| std::sync::Arc::new(crate::grammar_run::Workshop::at(at)));
-    let before = DEFAULTS.with(|held| std::mem::replace(&mut *held.borrow_mut(), workshop));
+    let build_time_dir = at.map(|at| std::sync::Arc::new(crate::grammar_run::BuildTimeDir::at(at)));
+    let before = DEFAULTS.with(|held| std::mem::replace(&mut *held.borrow_mut(), build_time_dir));
     let out = read();
     DEFAULTS.with(|held| *held.borrow_mut() = before);
     out
@@ -679,14 +810,15 @@ pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Opti
     })
 }
 
-/// The workshop defaults are compiled in now, where a build set one.
-pub(crate) fn defaults_workshop() -> Option<std::sync::Arc<crate::grammar_run::Workshop>> {
+/// The build-time directory defaults are compiled in now, where a build set one.
+pub(crate) fn defaults_build_time_dir() -> Option<std::sync::Arc<crate::grammar_run::BuildTimeDir>>
+{
     DEFAULTS.with(|held| held.borrow().clone())
 }
 
 /// **What a build-time run may spend** ([ADR-321](../../../docs/specification/adr/adr-321.md)
 /// D7, D10): counted steps and bytes live at once. How a `comptime` raises
-/// either is not decided (D11); a workshop carries them, so that this
+/// either is not decided (D11); a build-time directory carries them, so that this
 /// compiler's own tests can ask for less.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
@@ -720,7 +852,7 @@ use nikaia_std::rt::exec::block_on;
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
 /// by Cargo from the same compiled dependencies as anything else in the
-/// workshop.
+/// build-time directory.
 #[derive(Debug)]
 pub(crate) struct Bundle {
     /// The library itself.
@@ -765,7 +897,7 @@ impl From<&Bundle> for ComptimeBundle {
 
 /// Build the bundle, or say why it could not be built
 /// (`comptime_bundle_bundle`): once per machine, under the user cache.
-pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
+pub(crate) fn bundle(_build_time_dir: &Path) -> Result<Bundle, String> {
     block_on(moved::comptime_bundle_bundle(&BundleHost))
         .map(Bundle::from)
         .map_err(|e| e.split().0.to_text())
@@ -793,7 +925,7 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_text()
+        rustc_version().to_text()
     }
 
     fn runtime_dependencies(&self, named: &str) -> Vec<(String, String)> {
@@ -968,17 +1100,23 @@ pub(crate) fn rustc() -> String {
     std::env::var("RUSTC").map_or_else(|_| String::from("rustc"), String::from)
 }
 
-/// `rustc -vV`, once: the toolchain a key is about.
+/// What the toolchain says of itself, once per process
+/// (`comptime_bundle_toolchain`): read from the user cache while the stamp of
+/// what decides the toolchain is unchanged, so that a check whose answers are
+/// on disk starts no `rustc` (#2151).
+fn toolchain_answers() -> &'static moved::ComptimeBundleToolchain {
+    static HELD: OnceLock<moved::ComptimeBundleToolchain> = OnceLock::new();
+    HELD.get_or_init(|| block_on(moved::comptime_bundle_toolchain(&BundleHost)))
+}
+
+/// `rustc -vV`: the toolchain a key is about.
 pub(crate) fn toolchain() -> &'static str {
-    static HELD: OnceLock<String> = OnceLock::new();
-    HELD.get_or_init(|| {
-        Command::new(rustc())
-            .current_dir(orchestrator::cache::Layout::where_tools_start())
-            .arg("-vV")
-            .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).to_text())
-            .unwrap_or_default()
-    })
+    &toolchain_answers().verbose
+}
+
+/// `rustc --version`, of the same `rustc` as `toolchain` (`RUSTC` first).
+fn rustc_version() -> &'static str {
+    &toolchain_answers().version
 }
 
 /// Where the toolchain's own `std` is, which a program linked with

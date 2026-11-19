@@ -419,7 +419,7 @@ pub mod sv_pre {
 }
 pub mod sv_proof {
     #[allow(unused_imports)]
-    pub use super::{SvRel, SvAtom, SvQuery, SvSrc, SvStep, SvLog, SvBook, SvClause, SvAsserted, SvExtended};
+    pub use super::{SvRel, SvAtom, SvQuery, SvSrc, SvStep, SvLog, SvAssumes, SvBook, SvClause, SvAsserted, SvExtended};
 }
 pub mod sv_rod_line {
     #[allow(unused_imports)]
@@ -520,4 +520,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "6598fd99ca18f0a1521a7641c42381e851358b45f92927f8dee30115edb20822";
+pub const LOWERED_DIGEST: &str = "168c17c3f3283cf2009c9c11175f893c20ffd1818bf2d49ab9ffe05a261f1f9e";

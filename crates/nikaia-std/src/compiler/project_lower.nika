@@ -85,7 +85,7 @@ pub trait ProjectLowerHost {
     /// Writes `text` to stderr as it is, without a newline added.
     fn eprint(ref self, text: ref String) sync
     /// **Opens the check of the program's units**: reads, once for the whole
-    /// program, the boundary (ADR-290 D1), the contracts that moved (ADR-308
+    /// program, the boundary (ADR-rust-boundary-1 D1), the contracts that moved (ADR-308
     /// D11) and the recorded proofs (ADR-270 D4), and names the units in the
     /// program's order.
     fn check_open(ref self) -> Vec[CheckUnit] sync
@@ -108,7 +108,7 @@ pub trait ProjectLowerHost {
     fn batch_said(ref self, key: ref String) -> UnitSaid? sync
     /// Remembers for the batch what a dependency's file said, by `key`.
     fn batch_remember(ref self, key: ref String, said: ref UnitSaid) sync
-    /// **Lowers the program** with the described crates' boundary (ADR-290
+    /// **Lowers the program** with the described crates' boundary (ADR-rust-boundary-1
     /// D20) and the check's facts: the Rust. The host keeps what the prover
     /// published, the program and, in a project, the proofs.
     fn emit(ref self) -> String sync throws

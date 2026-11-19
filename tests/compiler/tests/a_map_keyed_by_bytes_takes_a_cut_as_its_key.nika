@@ -1,5 +1,6 @@
 // #1345: a cut of a `Bytes` is a key of a map keyed by `Bytes`: read, it is
-// looked up as it is; written or inserted, the map keeps a copy of it.
+// looked up as it is; written or inserted, the map keeps the cut at a count
+// of the same owner (ADR-373 D1, #2190).
 use std::collections
 
 fn made() -> Bytes {

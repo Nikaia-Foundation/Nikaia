@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/describe.nika
 //
-// What `nikaia describe` drafts from a crate's surface (ADR-290) - the entries,
+// What `nikaia describe` drafts from a crate's surface (ADR-rust-boundary-1) - the entries,
 // the types they name and what the describer saw and did not claim - moved
 // from Rust (ADR-294, #125). Reading the manifest and the crate's files, the
 // hashes and the ledger's header stay Rust; reading the files' items is
@@ -137,7 +137,7 @@ pub trait DescribeHost {
     fn cargo_version(ref self, crate_root: ref fs::Path) -> String? sync
 }
 
-/// **Why a crate's shipped ledger is refused** (ADR-290 D22, D5), `null`
+/// **Why a crate's shipped ledger is refused** (ADR-rust-boundary-1 D22, D5), `null`
 /// where it describes the crate as it is now: `text` is the shipped file,
 /// `version` the crate's, `files` the crate's sources by their path in it.
 ///
@@ -169,7 +169,7 @@ pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref
 }
 
 /// **The manifest's key for the crate a program writes `crate_word`**
-/// (ADR-290 D1), refused where that entry is no Rust crate or none is there.
+/// (ADR-rust-boundary-1 D1), refused where that entry is no Rust crate or none is there.
 ///
 /// The key is the manifest's and the word is Cargo's, which is the translation
 /// D1 already makes: `hyper-shim` in the manifest is `hyper_shim` in a program.
@@ -195,7 +195,7 @@ pub fn describe_rust_dependency(manifest: ref ManifestFile, crate_word: String) 
 }
 
 /// **What the program writes of `crate_word` that `ledger` does not answer**
-/// (ADR-290 D5): each of `names` as `crate::name`, in their order, where the
+/// (ADR-rust-boundary-1 D5): each of `names` as `crate::name`, in their order, where the
 /// ledger has neither a function nor a type of that name.
 pub fn describe_unanswered(names: ref collections::BTreeSet[String], crate_word: String, ledger: ref Ledger) -> Vec[String] {
     return names.iter().map(fn(name) { f"{crate_word}::{name}" }).filter(fn(name) { !ledger.functions.contains_key(name) && !ledger.types.contains_key(name) }).collect()
@@ -214,7 +214,7 @@ fn describe_header_version(text: String, crate_word: String) -> String? {
 }
 
 /// **Every description this build reads, as one digest**, for the cache key
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5,
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5,
 /// [ADR-021](../../../docs/specification/adr/adr-021.md) D7): each
 /// `*.contracts` in `directory`, its name and the SHA-256 of its text.
 ///
@@ -317,7 +317,7 @@ pub fn describe_crate_sources[H: DescribeHost](root: ref fs::Path, version: Stri
     if known == "?" {
         known = (host.cargo_version(crate_root) ?? "?").clone()
     }
-    // The walk is `tools/sources.nika`'s (ADR-290 D14, D19). A crate with no
+    // The walk is `tools/sources.nika`'s (ADR-rust-boundary-1 D14, D19). A crate with no
     // `src` has no `.rs` file, which the refusal below says.
     let src = crate_root.join("src")
     let mut files: collections::BTreeMap[String, String] = collections::BTreeMap()

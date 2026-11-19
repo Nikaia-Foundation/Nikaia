@@ -32,7 +32,7 @@ pub(crate) fn sv_row_real(row: &SvRow, reals: &[u32]) -> bool {
 }
 
 pub(crate) fn sv_lit_bound(atom: &SvAtom, l: u32, real: bool) -> Option<SvBound> {
-    if l % 2u32 == 0u32 { return Some(SvBound { row: atom.row.clone(), rel: atom.rel, assumed: vec![l] }); }
+    if l % 2u32 == 0u32 { return Some(SvBound { row: atom.row.clone(), rel: atom.rel }); }
     let le = match atom.rel {
         SvRel::Le => true,
         SvRel::Lt => false,
@@ -41,11 +41,11 @@ pub(crate) fn sv_lit_bound(atom: &SvAtom, l: u32, real: bool) -> Option<SvBound>
     if real {
         let negated = match sv_row_scale(&atom.row, -1) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let rel = if le { SvRel::Lt } else { SvRel::Le };
-        return Some(SvBound { row: negated, rel, assumed: vec![l] });
+        return Some(SvBound { row: negated, rel });
     }
     let shift: i64 = if le { 1 } else { 0 };
     let negated = match sv_row_sum(-1, &atom.row, shift, &sv_row_constant(1)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(SvBound { row: negated, rel: SvRel::Le, assumed: vec![l] })
+    Some(SvBound { row: negated, rel: SvRel::Le })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,17 +75,107 @@ pub struct SvLog {
     pub atoms: u32,
     pub columns: u32,
     pub limit: i64,
+    pub walk: SvAssumes,
 }
 
 pub(crate) fn sv_log(query: &SvQuery) -> Option<SvLog> {
     let atoms = match u32::try_from(query.atoms.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(SvLog { steps: vec![], entries: 0, atoms, columns: query.columns, limit: 0 })
+    Some(SvLog { steps: vec![], entries: 0, atoms, columns: query.columns, limit: 0, walk: sv_assumes() })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SvAssumes {
+    pub made_by: Vec<u32>,
+    pub seen: Vec<i64>,
+    pub stamp: i64,
+}
+
+pub(crate) fn sv_assumes() -> SvAssumes { SvAssumes { made_by: vec![], seen: vec![], stamp: 0 } }
+
+impl SvAssumes {
+    pub(crate) fn made(&mut self, step: u32, made: u32) {
+        let mut k: u32 = 0u32;
+        while k < made {
+            self.made_by.push(step);
+            self.seen.push(0);
+            k = unsafe { nikaia_std::proven::add::<u32>(k, 1) };
+        }
+    }
+    pub(crate) fn assumed(&mut self, steps: &[SvStep], sources: &[SvSrc], multipliers: &[i64]) -> Option<Vec<u32>> {
+        self.stamp += 1;
+        let mut lits: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut queue: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut i: i64 = 0;
+        while ((i) as usize) < sources.len() {
+            if *nikaia_std::index::get(&multipliers, (i) as usize) != 0 {
+                match *unsafe { nikaia_std::proven::read(&sources, (i) as usize) } {
+                    SvSrc::Lit(l) => { lits.push(l); },
+                    SvSrc::Fact(id) => {
+                        let at = id as i64;
+                        if at >= self.seen.len() as i64 { return None; }
+                        if *nikaia_std::index::get(&self.seen, nikaia_std::index::at(at)) != self.stamp {
+                            { let __nikaia_stored = self.stamp; unsafe { nikaia_std::proven::write(&mut self.seen, (at) as usize, __nikaia_stored) }; }
+                            queue.push(id);
+                        }
+                    },
+                }
+            }
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        }
+        let mut next: i64 = 0;
+        while ((next) as usize) < queue.len() {
+            let step = *nikaia_std::index::get(&self.made_by, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&queue, (next) as usize) } as i64)) as i64;
+            next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
+            if step >= steps.len() as i64 { return None; }
+            match nikaia_std::index::get(&steps, nikaia_std::index::at(step)) {
+                SvStep::Combine(srcs, ms) => {
+                    let mut j: i64 = 0;
+                    while ((j) as usize) < srcs.len() {
+                        if *nikaia_std::index::get(&ms, (j) as usize) != 0 {
+                            match *unsafe { nikaia_std::proven::read(&srcs, (j) as usize) } {
+                                SvSrc::Lit(l) => { lits.push(l); },
+                                SvSrc::Fact(id) => {
+                                    let at = id as i64;
+                                    if at >= self.seen.len() as i64 { return None; }
+                                    if *nikaia_std::index::get(&self.seen, nikaia_std::index::at(at)) != self.stamp {
+                                        { let __nikaia_stored = self.stamp; unsafe { nikaia_std::proven::write(&mut self.seen, (at) as usize, __nikaia_stored) }; }
+                                        queue.push(id);
+                                    }
+                                },
+                            }
+                        }
+                        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+                    }
+                },
+                SvStep::Round(id, _) => {
+                    let id = *id;
+                    let at = id as i64;
+                    if at >= self.seen.len() as i64 { return None; }
+                    if *nikaia_std::index::get(&self.seen, nikaia_std::index::at(at)) != self.stamp {
+                        { let __nikaia_stored = self.stamp; unsafe { nikaia_std::proven::write(&mut self.seen, (at) as usize, __nikaia_stored) }; }
+                        queue.push(id);
+                    }
+                },
+                SvStep::Extend(_, _, _) => { },
+                _ => { return None; },
+            }
+        }
+        lits.sort();
+        let mut once: Vec<u32> = vec![];
+        for l in lits.iter() {
+            let l = nikaia_std::num::value(l);
+            if once.is_empty() || *unsafe { nikaia_std::proven::read(&once, (nikaia_std::proven::sub::<i64>(once.len() as i64, 1)) as usize) } != l { once.push(l); }
+        }
+        Some(once)
+    }
 }
 
 impl SvLog {
     pub(crate) fn over(&self) -> bool { self.limit > 0 && (self.steps.len() as i64) > self.limit }
     pub(crate) fn add(&mut self, step: SvStep, made: u32) -> u32 {
         let id = self.entries;
+        let at = nikaia_std::index::or(u32::try_from(self.steps.len() as i64).ok(), || 0u32);
+        self.walk.made(at, made);
         self.steps.push(step);
         self.entries += made;
         id
@@ -217,26 +307,34 @@ impl SvBook {
     }
     pub(crate) fn sum(&self, sources: &[SvSrc], multipliers: &[i64]) -> Option<SvBound> {
         let mut row = sv_row_constant(0);
-        let mut assumed: Vec<u32> = vec![];
         let mut equality = true;
         let mut strict = false;
         let mut i: i64 = 0;
         while ((i) as usize) < sources.len() {
-            let b = match self.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let m = *nikaia_std::index::get(&multipliers, (i) as usize);
-            let is_eq = matches!(b.rel, SvRel::Eq);
+            let rel = match *unsafe { nikaia_std::proven::read(&sources, (i) as usize) } {
+                SvSrc::Fact(id) => {
+                    let b = match self.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if m != 0 { row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+                    b.rel
+                },
+                SvSrc::Lit(l) => {
+                    let b = match self.lit_bound(l) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if m != 0 { row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+                    b.rel
+                },
+            };
+            let is_eq = matches!(rel, SvRel::Eq);
             if m < 0 && !is_eq { return None; }
             if m != 0 {
                 equality = equality && is_eq;
-                let is_lt = matches!(b.rel, SvRel::Lt);
+                let is_lt = matches!(rel, SvRel::Lt);
                 strict = strict || is_lt && m > 0;
-                row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                assumed = sv_lits_union(&assumed, &b.assumed);
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
-        Some(SvBound { row: sv_row_reduced(row), rel, assumed })
+        Some(SvBound { row: sv_row_reduced(row), rel })
     }
     pub(crate) fn combine(&mut self, sources: Vec<SvSrc>, multipliers: Vec<i64>) -> Option<u32> {
         let b = match self.sum(&sources, &multipliers) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -267,8 +365,9 @@ impl SvBook {
         let strict = matches!(b.rel, SvRel::Lt);
         let floor: i64 = if strict { 0 } else { 1 };
         if !b.row.cols.is_empty() || b.row.constant < floor { return None; }
+        let assumed = match self.log.walk.assumed(&self.log.steps, &sources, &multipliers) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut lits: Vec<u32> = vec![];
-        for l in b.assumed.iter() {
+        for l in assumed.iter() {
             let l = nikaia_std::num::value(l);
             let negation = if l % 2u32 == 0u32 { l + 1u32 } else { l - 1u32 };
             lits.push(negation);
@@ -293,8 +392,8 @@ impl SvBook {
         let above0 = match sv_row_sum(1, &l, -1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let above = match sv_row_sum(1, &above0, -(m - 1), &sv_row_constant(1)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let first = self.log.extend(l, m);
-        self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le, assumed: vec![] });
-        self.bounds.insert(first + 1u32, SvBound { row: above, rel: SvRel::Le, assumed: vec![] });
+        self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le });
+        self.bounds.insert(first + 1u32, SvBound { row: above, rel: SvRel::Le });
         Some(SvExtended { column: q, first })
     }
     pub(crate) fn input(&mut self, clause: u32) -> u32 { self.log.input(clause) }
@@ -336,6 +435,6 @@ pub(crate) fn sv_rounded(b: &SvBound, d: i64) -> Option<SvBound> {
         },
     }
     let cols = if ks.is_empty() { vec![] } else { b.row.cols.copy_owned() };
-    Some(SvBound { row: SvRow { cols, ks, constant }, rel, assumed: b.assumed.copy_owned() })
+    Some(SvBound { row: SvRow { cols, ks, constant }, rel })
 }
 

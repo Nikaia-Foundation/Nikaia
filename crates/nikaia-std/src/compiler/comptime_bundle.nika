@@ -18,7 +18,7 @@ use std::time
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
 /// by Cargo from the same compiled dependencies as anything else in the
-/// workshop.
+/// build-time directory.
 pub struct ComptimeBundle {
     /// The library itself.
     pub dylib: fs::Path,
@@ -178,6 +178,159 @@ fn comptime_bundle_named() -> Vec[String] {
     return COMPTIME_BUNDLE_NAMED.iter().map(fn(name) { name.clone() }).collect()
 }
 
+/// **What the toolchain says of itself**: `rustc --version` and `rustc -vV`,
+/// both of the `rustc` a build-time program is compiled with (`RUSTC`
+/// first), so that the bundle's record and a run's key are about one
+/// compiler.
+pub struct ComptimeBundleToolchain {
+    /// `rustc --version`: the first line of `-vV`, as `--version` writes it.
+    pub version: String,
+    /// `rustc -vV`.
+    pub verbose: String,
+}
+
+/// **The toolchain's answers, asked only when what decides the toolchain
+/// moved** (#2151): each ask starts the `rustup` proxy and then `rustc`, most
+/// of a tenth of a second, and a check whose bundle and `comptime` answers are
+/// on disk needs nothing else of it. The answers are kept under the user
+/// cache with the stamp they were asked under; while the stamp of today is
+/// that stamp they are read, else `rustc` is asked and the file rewritten.
+/// The file is named by the stamp, so two projects on two toolchains keep
+/// one file each.
+///
+/// Where `rustc` cannot be asked the answers are empty, as before, and
+/// nothing is kept.
+pub fn comptime_bundle_toolchain[H: ComptimeBundleHost](host: ref H) -> ComptimeBundleToolchain {
+    let rustc = env::var("RUSTC") ?? "rustc"
+    let outer = comptime_bundle_digest(comptime_bundle_toolchain_stamp(rustc, host))
+    let short: String = outer.scalars.take(16).collect()
+    let held_at = host.user_cache_dir().join("toolchain").join(short)
+    let held = fs::read_to_string(held_at, fs::Root::Anywhere) catch { "" }
+    match comptime_bundle_toolchain_held(held, outer) {
+        null => {},
+        answers => {
+            return answers
+        },
+    }
+    let start = host.where_tools_start().display()
+    // **The sysroot first, its stamp next, the answer last**: a toolchain
+    // that changes between two of these steps leaves a record whose stamp
+    // is older than its answer, which the next check asks again; the other
+    // order could keep an old answer under a new stamp.
+    let printed = process::run(rustc, ["--print", "sysroot"]; dir: start) catch { null }
+    let sysroot = match printed {
+        null => "",
+        ran if ran.ok => ran.stdout.trim(),
+        else => "",
+    }
+    let inner = comptime_bundle_toolchain_inner(sysroot)
+    let asked = process::run(rustc, ["-vV"]; dir: start) catch {
+        return ComptimeBundleToolchain { version: "", verbose: "" }
+    }
+    let verbose = asked.stdout
+    let answers = ComptimeBundleToolchain { version: comptime_bundle_first_line(verbose), verbose: verbose.clone() }
+    // Kept only where every part could be read: a toolchain whose `rustc`
+    // is not where its sysroot says is asked again each time.
+    if !asked.ok || verbose.is_empty() || sysroot.is_empty() || inner.contains(" -\n") {
+        return answers
+    }
+    let text = f"{outer}\n{sysroot}\n{comptime_bundle_digest(inner)}\n{verbose}"
+    comptime_bundle_write_if_changed(held_at, text, host.unique_beside(held_at)) catch {}
+    return answers
+}
+
+/// The answers a kept file holds, where it was written under `outer` and
+/// the toolchain its sysroot names is still the one it was.
+fn comptime_bundle_toolchain_held(text: String, outer: String) -> ComptimeBundleToolchain? {
+    let (first, rest) = text.split_once("\n") ?? return null
+    if first != outer {
+        return null
+    }
+    let (sysroot, after) = rest.split_once("\n") ?? return null
+    let (inner, verbose) = after.split_once("\n") ?? return null
+    if verbose.is_empty() || inner != comptime_bundle_digest(comptime_bundle_toolchain_inner(sysroot)) {
+        return null
+    }
+    return ComptimeBundleToolchain { version: comptime_bundle_first_line(verbose), verbose: verbose.clone() }
+}
+
+/// The first line of a text, with its line end, as `rustc --version` ends.
+fn comptime_bundle_first_line(text: ref String) -> String {
+    return match text.split_once("\n") {
+        null => f"{text}\n",
+        (line, _) => f"{line}\n",
+    }
+}
+
+/// **What decides which `rustc` runs**, each by a cheap read: the variables
+/// `rustc` and `rustup` read (`RUSTC`, `RUSTUP_TOOLCHAIN`, `RUSTUP_HOME`,
+/// `CARGO_HOME`, `HOME`), every file named `rustc` on `PATH` (the first that
+/// runs is among them, and a wrapper put in front of it shows), `rustup`'s
+/// `settings.toml` (its default and its directory overrides) and its list of
+/// toolchains, the directory the tools start in (an override is per
+/// directory) and each `rust-toolchain` / `rust-toolchain.toml` from there
+/// upwards. A part in doubt is in the stamp: a stamp that misses a change
+/// keeps an answer about another compiler.
+fn comptime_bundle_toolchain_stamp[H: ComptimeBundleHost](rustc: ref String, host: ref H) -> String {
+    let mut stamp = ""
+    for name in ["RUSTC", "RUSTUP_TOOLCHAIN", "RUSTUP_HOME", "CARGO_HOME", "HOME"] {
+        let line = match env::var(name) {
+            null => f"{name} unset\n",
+            value => f"{name}={value}\n",
+        }
+        stamp.push_str(line)
+    }
+    if rustc.contains("/") {
+        let named: fs::Path = rustc
+        stamp.push_str(comptime_bundle_file_stamp(named))
+    }
+    let path = env::var("PATH") ?? ""
+    for dir in path.split(":") {
+        let at: fs::Path = dir
+        let candidate = at.join("rustc")
+        let meta = fs::metadata(candidate, fs::Root::Anywhere) catch { continue }
+        if meta.is_file() {
+            stamp.push_str(comptime_bundle_file_stamp(candidate))
+        }
+    }
+    let home = env::var("HOME") ?? ""
+    let rustup = env::var("RUSTUP_HOME") ?? f"{home}/.rustup"
+    let rustup_home: fs::Path = rustup
+    stamp.push_str(comptime_bundle_file_stamp(rustup_home.join("settings.toml")))
+    stamp.push_str(comptime_bundle_file_stamp(rustup_home.join("toolchains")))
+    let mut dir = host.where_tools_start()
+    stamp.push_str(f"start {dir.display()}\n")
+    while true {
+        for name in ["rust-toolchain", "rust-toolchain.toml"] {
+            stamp.push_str(comptime_bundle_file_stamp(dir.join(name)))
+        }
+        let up = dir.parent() ?? break
+        dir = up.clone()
+    }
+    return stamp
+}
+
+/// **The resolved toolchain itself**, from the sysroot it named the last
+/// time: the sysroot, its `bin/rustc` and its `lib`, which an update of the
+/// toolchain replaces.
+fn comptime_bundle_toolchain_inner(sysroot: ref String) -> String {
+    let root: fs::Path = sysroot
+    let mut stamp = comptime_bundle_file_stamp(root)
+    stamp.push_str(comptime_bundle_file_stamp(root.join("bin").join("rustc")))
+    stamp.push_str(comptime_bundle_file_stamp(root.join("lib")))
+    return stamp
+}
+
+/// A file's name, length, last change and identity, or ` -` where it is not.
+fn comptime_bundle_file_stamp(path: ref fs::Path) -> String {
+    let meta = fs::metadata(path, fs::Root::Anywhere) catch { return f"{path.display()} -\n" }
+    let id = match meta.file_id() {
+        null => "?",
+        (dev, ino) => f"{dev}:{ino}",
+    }
+    return f"{path.display()} {meta.len()} {meta.modified().in_nanos()} {id}\n"
+}
+
 /// A digest of a text.
 fn comptime_bundle_digest(text: String) -> String {
     let bytes: Vec[u8] = text.bytes().collect()
@@ -189,7 +342,7 @@ fn comptime_bundle_digest(text: String) -> String {
 /// **Once per machine, not per project**: what it is depends on its manifest
 /// (where `std` comes from), its one file and the toolchain, never on the
 /// program - so it lives under the user cache, keyed by the first two, as the
-/// compiled `std` of ADR-002 D4 does. Under each project's own workshop it was
+/// compiled `std` of ADR-002 D4 does. Under each project's own build-time directory it was
 /// built again for every new project, some forty crates (half a minute) before
 /// the first `comptime` could run. Cargo's lock on the target directory is what
 /// makes two builds at once wait for one another rather than collide.
@@ -311,7 +464,7 @@ fn comptime_bundle_path_dependency(line: ref String) -> String? {
         return null
     }
     let (named, _) = value.split_once("\"") ?? return null
-    return named.to_string()
+    return named
 }
 
 /// The target directory a record's crates were built in: three levels above
@@ -495,13 +648,13 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
         detail => throw CheckWall::DidNotBuild { detail: detail },
     }
     let source = dir.join("main.rs")
-    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     // **Each build compiles and runs its own binary, in a directory of its
     // own**, moved into place after: `rustc` names its object files after the
     // crate, so two builds of the same program side by side wrote, linked and
     // deleted each other's.
     let scratch = host.unique_beside(dir.join("build"))
-    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::DidNotBuild { detail: f"{scratch.display()}: {error}" } }
+    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::Unwritable { dir: at.display() } }
     let binary = scratch.join("run")
     let mut args: Vec[String] = ["--edition=2024", "--crate-name", "comptime", "--crate-type", "bin", "-C", "opt-level=0", "-C", "overflow-checks=on", "-C", "debug-assertions=off", "-C", "prefer-dynamic", "-A", "warnings", "--extern", f"nikaia_bundle={bundle.dylib.display()}"]
     for (crate_name, rlib) in bundle.rlibs {
@@ -541,7 +694,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     comptime_bundle_tidy(binary, dir, scratch)
     if ran.success {
         let answer = ran.stdout.trim().clone()
-        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::Unwritable { dir: at.display() } }
         return answer
     }
     let mut said = ran.stderr.trim().clone()
@@ -554,7 +707,7 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     // code stops the same way. A run that died without a word is not, and is
     // tried again next time.
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
-        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::Unwritable { dir: at.display() } }
     }
     throw CheckWall::Refused { detail: said }
 }
@@ -567,7 +720,7 @@ fn comptime_bundle_tidy(binary: ref fs::Path, dir: ref fs::Path, scratch: ref fs
 }
 
 /// Written only when it changed, so that Cargo's freshness keeps working.
-/// **Written whole or not at all**: builds side by side share the workshop,
+/// **Written whole or not at all**: builds side by side share the build-time directory,
 /// and one that read a file another was still writing compiled half a program
 /// or read half an answer; so the text goes to `partial` first (a path no
 /// other build writes, `ComptimeBundleHost::unique_beside`) and is moved into

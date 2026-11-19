@@ -8,6 +8,7 @@
 // writes it) stays out of the merge's lowered file.
 use std::fs
 use std::process
+use std::text
 
 fn toolchain() -> String throws {
     let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
@@ -21,6 +22,27 @@ fn root() -> String throws {
     let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
     if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The output with each step's seconds of `MERGE timing` (#2154) as `Ns`:
+// the steps and their order stay checked, the seconds vary.
+fn untimed(said: String) -> String throws {
+    let mut lines: Vec[String] = []
+    for line in said.split("\n") {
+        if !line.starts_with("MERGE timing ") {
+            lines.push(line.clone())
+            continue
+        }
+        let mut words: Vec[String] = []
+        for word in line.split(" ") {
+            let bare = word.strip_suffix(",") ?? word
+            let digits = bare.strip_suffix("s") ?? "x"
+            let comma = if word.ends_with(",") { "," } else { "" }
+            if text::parse_i64(digits) != null { words.push(f"Ns{comma}") } else { words.push(word.clone()) }
+        }
+        lines.push(words.join(" "))
+    }
+    return lines.join("\n")
 }
 
 fn sh(dir: String, script: String) -> String throws {
@@ -58,7 +80,7 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, before: String,
     let pid = sh(work.clone(), "cat pid.txt 2>/dev/null || true")
     let mut said = out.stdout.trim().replace(head, "SHA")
     if pid != "" { said = said.replace(pid, "PID") }
-    println(said)
+    println(untimed(said))
     println(f"exit ok: {out.ok}")
     let state = sh(work, f"git log --format=%s -1; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; test -d target/merge.lock && echo lock held || echo lock free; git status --porcelain | grep -v pid.txt || true; echo committed:; git show HEAD:{low}/a.rs")
     println(state)

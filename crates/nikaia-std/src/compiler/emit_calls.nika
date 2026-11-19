@@ -77,7 +77,7 @@ fn call_fails_state(ledger: ref Ledger, name: ref String) -> i64 {
 
 /// Whether the callee can fail, so that the call is a place a `?` is owed: this
 /// unit's own entry, its constructor's, `std`'s, and last a described crate's
-/// (ADR-290 D20) - the first that has one answers.
+/// (ADR-rust-boundary-1 D20) - the first that has one answers.
 fn call_can_fail(words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, described: ref Ledger, func: ref Expr) -> bool {
     let name = call_written_name(words, func) ?? return false
     let constructor = f"{name}::new"

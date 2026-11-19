@@ -136,10 +136,11 @@ fn project(name: &str, files: &[(&str, &str)]) -> PathBuf {
 }
 
 fn package_rust(dir: &Path) -> String {
-    let program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
-        nikaia::modules::Program::read(&dir.join("src/main.nika"))
-    })
-    .expect("the program reads");
+    let program =
+        nikaia::comptime_run::defaults_compiled_in(Some(&common::build_time_dir()), || {
+            nikaia::modules::Program::read(&dir.join("src/main.nika"))
+        })
+        .expect("the program reads");
     program
         .emit_reading(Default::default(), &common::reads())
         .expect("the program lowers")

@@ -1,0 +1,12 @@
+crossed: 2
+the first task runs
+rebuilt at once: 10 (0)
+the second task runs
+the third task runs
+a door during the delay panics: true (0)
+rebuilt after the delay: 10
+the fourth task runs
+the fifth task runs
+gave up: true (0)
+the sixth task runs
+stays poisoned: true

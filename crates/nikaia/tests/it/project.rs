@@ -433,10 +433,24 @@ fn the_triple_of_the_target_is_handed_to_cargo() {
                 .any(|named| Path::new(&named).canonicalize().ok().as_ref() == Some(&root))
         })
         .expect("a shared directory names this project");
-    let programs = std::fs::read_dir(tree.join(host.triple()).join("debug/deps"))
-        .expect("Cargo built under the triple")
+    // Cargo before 1.100 puts the crate in `deps/`; 1.100's build-dir layout
+    // puts it in `build/<crate>/<hash>/` (#2136). Either sits under the
+    // triple's profile, and the binary Cargo lifts out sits in the profile.
+    let profile = tree.join(host.triple()).join("debug");
+    assert!(
+        profile.is_dir(),
+        "Cargo built under the triple: {}",
+        profile.display()
+    );
+    let programs = ["", "deps", "build"]
+        .iter()
+        .flat_map(|sub| std::fs::read_dir(profile.join(sub)).into_iter().flatten())
         .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_name().to_string_lossy().starts_with("triple_"))
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("triple_") || name.starts_with("triple-")
+        })
         .count();
     assert!(
         programs > 0,
@@ -2138,7 +2152,7 @@ fn a_trait_a_package_publishes_can_be_implemented_and_called() {
 /// can be believed without being checked** (a registry package's,
 /// [ADR-286](../../../docs/specification/adr/adr-286.md); a hand-written
 /// description of a foreign crate,
-/// [ADR-290](../../../docs/specification/adr/adr-290.md)) this test is what
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)) this test is what
 /// says so, and D6 becomes writable and testable in the same change.
 #[test]
 fn a_hand_edited_dependency_ledger_is_repaired_before_it_is_read() {
@@ -2987,7 +3001,7 @@ fn a_project_with_a_failing_crate(purpose: &str) -> PathBuf {
 }
 
 /// **A described call that can fail is a place that can fail, in the Rust
-/// too** ([ADR-290](../../../docs/specification/adr/adr-290.md) D20). The
+/// too** ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D20). The
 /// checker read the description's `throws` and the emitter did not, so the
 /// crate's `Result` reached `n + 1` and `rustc` said so about a file nobody
 /// wrote.
@@ -3030,7 +3044,7 @@ fn a_function_the_description_does_not_list_is_refused() {
 }
 
 /// **A boundary the backend disagrees with is said as a stale description**
-/// (ADR-100 D6, ADR-290 D21). The description is edited by hand, as D5 expects
+/// (ADR-100 D6, ADR-rust-boundary-1 D21). The description is edited by hand, as D5 expects
 /// a person to, and loses `throws`: the crate's sources have not moved, so
 /// nothing refuses the build, and the lowering believes the description. What
 /// `rustc` says about the `Result` is reported as the description of `fremd`

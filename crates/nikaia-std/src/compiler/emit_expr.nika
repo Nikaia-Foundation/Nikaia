@@ -285,6 +285,12 @@ impl EmitState {
 
     fn emit_expr_as_written_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if self.facts.kept_text_bytes.contains(node_key(node)) {
+            // **A cut of a `Bytes` kept is the same owner at a count**
+            // (ADR-373 D1, D3, #2190); a text's bytes are copied (ADR-320 D11).
+            if self.facts.counted_cuts.contains(node_key(node)) && self.emit_cut_has_an_owner(world, node, scope) {
+                self.emit_counted_cut(world, walk, out, host, node, depth, flow, scope)
+                return
+            }
             out.push("nikaia_std::bytes::Bytes::from(")
             self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
             out.push(")")

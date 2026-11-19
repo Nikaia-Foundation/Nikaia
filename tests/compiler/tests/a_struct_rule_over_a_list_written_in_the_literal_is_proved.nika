@@ -1,0 +1,19 @@
+// #797 (ADR-306 D17, ADR-369 D2): a type's rule over a list's length, at a
+// literal that writes the list in place, counts its items: the rule
+// `root < nodes.len()` of `Tree { nodes: [n], root: 0 }` is proved, so the
+// program builds at the default `unproved-claims = "error"`.
+struct Node {
+    left: i64,
+    value: i64,
+}
+
+struct Tree {
+    nodes: Vec[Node],
+    root: i64,
+    assert(0 <= root && root < nodes.len()),
+}
+
+fn main() throws {
+    let t = Tree { nodes: [Node { left: 0, value: 7 }], root: 0 }
+    println(t.nodes[t.root].value)
+}

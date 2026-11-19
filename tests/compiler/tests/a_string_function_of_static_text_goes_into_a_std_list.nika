@@ -18,7 +18,7 @@ fn label() -> String {
 
 fn named() -> String {
 	let x = "e"
-	return x.to_string()
+	return x
 }
 
 fn main() throws {

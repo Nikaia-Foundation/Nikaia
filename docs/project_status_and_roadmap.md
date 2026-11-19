@@ -2,7 +2,7 @@
 
 One page for the question from outside: where does the language stand, how
 risky is it to rely on it, and which parts of the specification are built and
-tested and which are still to be built or proved. *As of 0.0.1374, November 10,
+tested and which are still to be built or proved. *As of 0.0.1449, November 19,
 2026.*
 
 **How this page stays current.** It holds no list of work and no percentage
@@ -23,9 +23,9 @@ and syntax and diagnostics still change between versions with no migration.
 
 | Figure | Today | Recounted by |
 | :--- | :--- | :--- |
-| Toolchain written in Nikaia (self-hosting, [ADR-294](specification/adr/adr-294.md)) | 87.3 % | `python3 scripts/self_hosting.py` |
-| Issues closed / open | 944 / 406 | [the tracker](https://github.com/Nikaia-Foundation/Nikaia/issues) |
-| Change packages, one per [CHANGELOG](../CHANGELOG.md) heading | 1367 | `grep -c '^## \[' CHANGELOG.md` |
+| Toolchain written in Nikaia (self-hosting, [ADR-294](specification/adr/adr-294.md)) | 87.4 % | `python3 scripts/self_hosting.py` |
+| Issues closed / open | 1430 / 543 | [the tracker](https://github.com/Nikaia-Foundation/Nikaia/issues) |
+| Change packages, one per [CHANGELOG](../CHANGELOG.md) heading | 1442 | `grep -c '^## \[' CHANGELOG.md` |
 
 The version `0.0.N` counts change packages and says nothing about readiness.
 
@@ -79,8 +79,8 @@ chapter. The bar follows from the level and is not a count.
 | 2 Variables and data types | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | numbers typed by their uses, one text type ([ADR-282](specification/adr/adr-282.md)), `T?` and `null` | rounding of `/` and `%` unspecified ([#682](https://github.com/Nikaia-Foundation/Nikaia/issues/682)); `text::Pos` ([#743](https://github.com/Nikaia-Foundation/Nikaia/issues/743)); `f32` literals ([#728](https://github.com/Nikaia-Foundation/Nikaia/issues/728), decision) |
 | 3 Control flow | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | `if`, `while`, `for`, `match`, `break`/`continue` | none known |
 | 4 Data structures | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | structs, enums, lists, maps, sets, arrays; the collections offer one surface, `BTreeMap::entry` among it ([ADR-collections-1](specification/adr/adr-collections-1.md), [-2](specification/adr/adr-collections-2.md)) | type kinds ([#859](https://github.com/Nikaia-Foundation/Nikaia/issues/859)) |
-| 5 Functions and arguments | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | `Subject ; Config`, lambdas, inferred `sync`; a parameter says `keep` or `mut`, a plain one is lent, `self` is lent and `keep self` consumes, a lent or `mut` `Array[T]` takes a piece of a list ([ADR-views-3](specification/adr/adr-views-3.md)) | the rest of views-3: `ref` refused outside `extern "C"`, a result's `from` everywhere ([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213)); several lent parameters in one result, enum variants that hold a view ([#1507](https://github.com/Nikaia-Foundation/Nikaia/issues/1507)) |
-| 6 Memory and ownership | Rebuilding, **highest risk** <span class="rq-build rq-inline" role="img" aria-label="Rebuilding"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 50%"></span></span><span class="rq-unknown" style="width: 30%"></span></span> | views that outlive their buffer with no annotation (the tether, [ADR-283](specification/adr/adr-283.md)), text tiers, `mut` parameters and views ([ADR-views-1](specification/adr/adr-views-1.md)); views inferred for fields and results, and the migration that drops `ref` ([ADR-views-3](specification/adr/adr-views-3.md)); a struct that hands out views of text it read; each task's memory in a block of its own, and a full block ends only that task with `task::OverBudget` ([ADR-327](specification/adr/adr-327.md), first part) | the views-3 build ([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213), [#1507](https://github.com/Nikaia-Foundation/Nikaia/issues/1507)); most class-3 defects live here; the rest of the memory budgets: per shared value, weighed at a hand-over ([#490](https://github.com/Nikaia-Foundation/Nikaia/issues/490)) |
+| 5 Functions and arguments | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | `Subject ; Config`, lambdas, inferred `sync`; a parameter says `keep` or `mut`, a plain one is lent, `self` is lent and `keep self` consumes, a lent or `mut` `Array[T]` takes a piece of a list, several lent parameters in one result and enum variants that hold a view ([ADR-views-3](specification/adr/adr-views-3.md)) | the rest of views-3: `ref` refused outside `extern "C"`, a result's `from` everywhere ([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213)) |
+| 6 Memory and ownership | Rebuilding, **highest risk** <span class="rq-build rq-inline" role="img" aria-label="Rebuilding"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 50%"></span></span><span class="rq-unknown" style="width: 30%"></span></span> | views that outlive their buffer with no annotation (the tether, [ADR-283](specification/adr/adr-283.md)), text tiers, `mut` parameters and views ([ADR-views-1](specification/adr/adr-views-1.md)); views inferred for fields and results, and the migration that drops `ref` ([ADR-views-3](specification/adr/adr-views-3.md)); a struct that hands out views of text it read; each task's memory in a block of its own, and a full block ends only that task with `task::OverBudget`; a value handed over counts against its receiver, and a value put into a shared value against that value ([ADR-327](specification/adr/adr-327.md) D9); `nikaia check --sharing` names where a handle to shared data is duplicated or moved | the views-3 build ([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213)); most class-3 defects live here; the rest of the memory budgets ([#490](https://github.com/Nikaia-Foundation/Nikaia/issues/490)) |
 | 7 Error handling | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | `throws` with typed sets, `catch`, errors that keep their site | a code parameter's failures per call ([ADR-error-sets-1](specification/adr/adr-error-sets-1.md), specified) |
 | 8 Concurrency | **Rebuilding** <span class="rq-build rq-inline" role="img" aria-label="Rebuilding"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 50%"></span></span><span class="rq-unknown" style="width: 30%"></span></span> | `async e` and `async { … }` groups, bounded by `limit:`, `within:` and `admission:`; a task that panics ends alone with `task::Crashed`; an executor at both `user-parallelism` settings; `spawn` and `overlap` still run beside it | handles and the free task ([#987](https://github.com/Nikaia-Foundation/Nikaia/issues/987), [#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)); failure order and stitched traces ([#989](https://github.com/Nikaia-Foundation/Nikaia/issues/989)); moving the programs over and removing `overlap`, `task::scope` and `spawn` ([#990](https://github.com/Nikaia-Foundation/Nikaia/issues/990), [#991](https://github.com/Nikaia-Foundation/Nikaia/issues/991), [#992](https://github.com/Nikaia-Foundation/Nikaia/issues/992)); all under [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983) ([ADR-async-5](specification/adr/adr-async-5.md)) |
 | 9 Project organisation | Built <span class="rq-build rq-inline" role="img" aria-label="Built"><span class="rq-known" style="width: 85%"><span class="rq-done" style="width: 82%"></span></span><span class="rq-unknown" style="width: 15%"></span></span> | modules, `pub`, packages by path and by version (through crates.io) | no Nikaia package published on crates.io yet |
@@ -93,7 +93,7 @@ chapter. The bar follows from the level and is not a count.
 | 14 Testing and quality | Proven <span class="rq-build rq-inline" role="img" aria-label="Proven"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 94%"></span></span><span class="rq-unknown" style="width: 10%"></span></span> | `test` blocks, output tests, `assert` proved while building (an unproved one refuses the program unless `unproved-claims = "warn"`, [ADR-380](specification/adr/adr-380.md)), contracts across packages; what the prover reaches is on [Research questions: the prover](../research/prover/) | tests of several files ([#926](https://github.com/Nikaia-Foundation/Nikaia/issues/926)); facts about data ([#797](https://github.com/Nikaia-Foundation/Nikaia/issues/797), [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798)) |
 | 15 Interoperability | Partial <span class="rq-build rq-inline" role="img" aria-label="Partial"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 60%"></span></span><span class="rq-unknown" style="width: 25%"></span></span> | calling C (`extern`, libraries from `nikaia.toml`), calling a described Rust crate, a C library built from a package, Python and Node bindings ([ADR-284](specification/adr/adr-284.md)), a package as a Rust library | WebAssembly and bare metal ([ADR-119](specification/adr/adr-119.md)) |
 | 16 Hardware instructions | Partial <span class="rq-build rq-inline" role="img" aria-label="Partial"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 60%"></span></span><span class="rq-unknown" style="width: 25%"></span></span> | vectors in `std::simd` | the rest of [ADR-371](specification/adr/adr-371.md) ([#755](https://github.com/Nikaia-Foundation/Nikaia/issues/755), decision; [#876](https://github.com/Nikaia-Foundation/Nikaia/issues/876)) |
-| 17 Standard library and packages | Partial <span class="rq-build rq-inline" role="img" aria-label="Partial"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 60%"></span></span><span class="rq-unknown" style="width: 25%"></span></span> | text, collections, files, I/O, sockets, processes, `std::regex` ([ADR-regex-1](specification/adr/adr-regex-1.md)), an HTTP/1.1 server that takes many connections at once and times out slow and quiet clients ([ADR-326](specification/adr/adr-326.md)) and speaks TLS through `rustls` ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)); the packages `json` and `yaml` ([ADR-yaml-1](specification/adr/adr-yaml-1.md), in progress) | the package `db` and the SQL checked while building ([#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116), [ADR-299](specification/adr/adr-299.md)); HTTP/2; entries the toolchain's move needs ([#922](https://github.com/Nikaia-Foundation/Nikaia/issues/922)) |
+| 17 Standard library and packages | Partial <span class="rq-build rq-inline" role="img" aria-label="Partial"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 60%"></span></span><span class="rq-unknown" style="width: 25%"></span></span> | text, collections, files, I/O, sockets, processes, `std::regex` ([ADR-regex-1](specification/adr/adr-regex-1.md)), an HTTP/1.1 server that takes many connections at once and times out slow and quiet clients ([ADR-326](specification/adr/adr-326.md)) and speaks TLS through `rustls` ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)); the packages `json`, `db` (the database protocol, [#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116)) and `yaml` ([ADR-yaml-1](specification/adr/adr-yaml-1.md), in progress) | SQL checked while building, over the package `db` ([ADR-299](specification/adr/adr-299.md)); HTTP/2; entries the toolchain's move needs ([#922](https://github.com/Nikaia-Foundation/Nikaia/issues/922)) |
 
 ### The walls you will hit
 
@@ -102,8 +102,8 @@ chapter. The bar follows from the level and is not a count.
 | depend on a Nikaia package by version | found through crates.io as the crate `nikaia_<name>`, but none is published there yet |
 | use a crate from crates.io | works after `nikaia describe <crate>`, whose output you review and commit |
 | get completion or generated docs | not yet: `nikaia lsp` shows the checker's messages and goes to a definition, completion is to come ([#103](https://github.com/Nikaia-Foundation/Nikaia/issues/103)); no `nikaia doc`; [`editors/vscode`](../editors/) highlights syntax |
-| talk to a database | only through its C library, as [`examples/sqlite`](../examples/sqlite/) does; the package `db` is being built ([#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116)) |
-| serve many connections at once | works, with deadlines for slow and quiet clients; HTTPS ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)) and HTTP/2 not yet |
+| talk to a database | only through its C library, as [`examples/sqlite`](../examples/sqlite/) does; the package `db` holds the database protocol ([#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116)), SQL checked while building is to come |
+| serve many connections at once | works, with deadlines for slow and quiet clients and HTTPS ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)); HTTP/2 not yet |
 | write the new `async` | works for `async e`, groups and `par_iter`, with `limit:`, `within:` and `admission:`; handles and the free task are being built ([#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)); `spawn` and `overlap` work until it replaces them |
 | find a function you expect in `std` | sometimes missing; a missing entry is worth an issue |
 
@@ -127,24 +127,30 @@ direction, in short:
   parser, checker, runtime and lowering of `async`, then `overlap`,
   `task::scope` and `spawn` are removed. Of views-3, the marks `keep` and
   `mut`, the lent `self`, the written `from`, the views of a run (`Array[T]`)
-  and the migration that drops `ref` are built; refusing `ref` and several
-  views in one result ([#1507](https://github.com/Nikaia-Foundation/Nikaia/issues/1507)) are next. Of the task model, `async e`,
+  and the migration that drops `ref` are built; several views in one
+  result ([#1507](https://github.com/Nikaia-Foundation/Nikaia/issues/1507)) too; refusing `ref` is next. Of the task model, `async e`,
   groups, `limit:`, `within:`, `admission:` and a crash that ends one task are
   built; handles and the free task are next. Grammar rules in traits
   ([#1020](https://github.com/Nikaia-Foundation/Nikaia/issues/1020)) belong to this round too.
 * **Safety under load**: memory budgets per task and per shared value
-  ([#490](https://github.com/Nikaia-Foundation/Nikaia/issues/490); the task block and `task::OverBudget` are built) and the database package with its
-  SQL checked while building ([#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116)). The server already takes many
-  connections at once, times out slow clients and speaks TLS through `rustls`
+  ([#490](https://github.com/Nikaia-Foundation/Nikaia/issues/490); the task block, `task::OverBudget` and counting a
+  handed-over value against its receiver are built), and the SQL of the
+  package `db` checked while building ([ADR-299](specification/adr/adr-299.md)).
+  The server already takes many connections at once, times out slow clients
+  and speaks TLS through `rustls`
   ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)).
 * **Safety against outside data** (safety lane): an index, a divisor or an
   overflow that data from outside reaches is proved or refused, `NK1302` and
   `NK1303` ([ADR-396](specification/adr/adr-396.md),
-  [#1572](https://github.com/Nikaia-Foundation/Nikaia/issues/1572)); how
-  outside data may reach a shell, SQL, the terminal or a path is open
-  ([#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253)). Text
-  from outside already reaches the log escaped, and the command line counts as
-  outside data.
+  [#1572](https://github.com/Nikaia-Foundation/Nikaia/issues/1572)); `--bounds` already shows each such index with its source,
+  and a request's query, header and body count as outside data. How outside
+  data may reach a shell, SQL, the terminal or a path is open
+  ([#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253)): it waits for three decisions of the owner on running a
+  program named from outside, on arguments that start with `-` and on the
+  shell under Windows ([#1937](https://github.com/Nikaia-Foundation/Nikaia/issues/1937), [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938),
+  [#1939](https://github.com/Nikaia-Foundation/Nikaia/issues/1939)), and for reading the environment as untrusted
+  ([#1597](https://github.com/Nikaia-Foundation/Nikaia/issues/1597)). Text from outside already reaches the log escaped, and
+  the command line counts as outside data.
 * **Self-hosting after that** (owner, 2026-10-27): until the compiler holds no
   logic in Rust, every round moves code into Nikaia, largest files first. The
   road and what is left: [`bootstrap.md`](bootstrap.md),

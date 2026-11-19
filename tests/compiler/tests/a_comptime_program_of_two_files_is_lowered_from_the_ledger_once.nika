@@ -1,0 +1,38 @@
+// #2150: the build-time program of a package's `comptime` that calls a
+// function of its other file is lowered with the trust of the pass its D2
+// rule ran over both files, not a third one. A fresh number in an unrelated
+// function makes the value a miss in the user cache (#2149), so the program
+// is written each run.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let fresh = process::run("date", ["+%s%N"]).stdout.trim().clone()
+	let p = f"{tmp}/p"
+	process::run("mkdir", ["-p", f"{p}/src"])
+	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"two\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, "comptime TOTAL: i64 = triple(14)\n\nfn main() throws {\n\tprintln(TOTAL)\n}\n")
+	let tail = "\n}\n"
+	let head = "pub fn triple(n: i64) -> i64 sync {\n\treturn n * 3\n}\n\npub fn fresh() -> i64 {\n\treturn "
+	fs::write(f"{p}/src/other.nika", fs::Root::Anywhere, f"{head}{fresh}{tail}")
+	let out = process::run(nikaia, ["run"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0")])
+	println(f"{out.stdout.trim()} (exit {out.code})")
+	process::run("rm", ["-rf", tmp])
+}

@@ -1,0 +1,30 @@
+// #2190: a cut of a mapped file, kept beyond the `Bytes` it was cut from,
+// is the mapping at a count (ADR-373 D1, D3): the file stays mapped while
+// the cut lives, and is unmapped once it goes.
+use std::fs
+
+fn mapped_count(name: String) -> i64 throws {
+    let maps = fs::read_to_string("/proc/self/maps", fs::Root::Anywhere)
+    let mut n = 0
+    for line in maps.split("\n") {
+        if line.ends_with(name) { n += 1 }
+    }
+    return n
+}
+
+fn rome(root: ref fs::Root) -> Bytes throws {
+    let whole: Bytes = fs::map("page", root)
+    return whole[7..<13]
+}
+
+fn show(root: ref fs::Root) throws {
+    let cut = rome(root)
+    println(f"cut: {cut.text()} mapped: {mapped_count("/page")}")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("page", root, "Oslo;3\nRome;9\nmore text to make it a page or so")
+    show(root)
+    println(f"after: {mapped_count("/page")}")
+}

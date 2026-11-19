@@ -109,7 +109,7 @@ cannot say which part comes from where); C alone lost on D1.
 `fs::map(path)`, `serve(db)`, `into.merge(stats)`. Whether an argument is lent,
 kept or changed is read off the callee's parameter (D2, D3) and the compiler
 writes the reference. Nothing written before an argument says it. A foreign
-crate is described before it is called (ADR-290), so every callee has a
+crate is described before it is called (ADR-rust-boundary-1), so every callee has a
 parameter to read.
 
 ### D2 — A parameter that keeps its argument says `keep`; a plain parameter is lent.
@@ -279,7 +279,7 @@ whose result must own the value it hands back takes it with `keep` or returns
 
 *Added November 3, 2026 (#1213).*
 
-`from` names Rust's `From::from`, which a Nikaia program calls through ADR-290
+`from` names Rust's `From::from`, which a Nikaia program calls through ADR-rust-boundary-1
 descriptions and implements, and both words are names in existing programs. So
 neither is reserved: `keep` means the mark only before a parameter or `self` in
 a parameter list, `from` the source only after a result type, and both are

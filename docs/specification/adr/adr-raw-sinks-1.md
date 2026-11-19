@@ -1,7 +1,11 @@
 # ADR-raw-sinks-1: Data From Outside the Program at a Raw Sink Is Proved, or Allowed in the Manifest
 
 **Status:** Accepted
-**Date:** November 16, 2026 (owner's decision on #1253: alternative C)
+**Date:** November 16, 2026 (owner's decision on #1253: alternative C); D9
+(no shell in `std`) added November 19, 2026 (owner's decision on
+[#1937](https://github.com/Nikaia-Foundation/Nikaia/issues/1937)); D10
+(a program from outside at `process::run`) added November 19, 2026 (owner's
+decision on [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938))
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -76,15 +80,16 @@ its precondition on the outside parts of its text:
 
 | Sink | Precondition on each outside part | `[allow]` key |
 |---|---|---|
-| `process::shell(command)` | `process::is_word(part)`: not empty, only `A-Z a-z 0-9 _ . / : = @ % + , -` | `untrusted-shell` |
 | `db::raw(text)` | `db::is_identifier(part)`: `[A-Za-z_][A-Za-z0-9_]*` | `untrusted-sql` |
 | `html::Raw(markup)` | `html::is_plain(part)`: none of `& < > " '` | `untrusted-markup` |
 | a path under `fs::Root::Anywhere` or `Dir("/")`, in `std::fs` and `http::File` | none: only a value that is not outside passes | `untrusted-paths-anywhere` |
+| the `program` of `process::run` (D10) | none: only a value that is not outside passes | `untrusted-program` |
 
 A call is accepted when each outside part either:
 
 1. is not outside: a literal, a constant, a value from a source marked
-   `trusted: true` (ADR-010 D3, ADR-365 D2, ADR-399);
+   `trusted: true` (ADR-010 D3, ADR-365 D2, ADR-399), a value the operator
+   chose (the environment, ADR-397 D1);
 2. has a type that cannot carry an attack: a whole number, a float, a `bool`
    or an `enum` (its text is a number or a variant name);
 3. is proved to meet the precondition, from a guard where the data arrives,
@@ -123,6 +128,8 @@ untrusted-paths-anywhere = true
 ```
 
 `--allow=KEY` allows one key for one build and may be given more than once.
+`untrusted-shell` names no sink since D9; it is kept for the shell library a
+later decision brings (D9).
 An allowed sink builds with no check, and `--trust` lists every such call with
 its place and its key. A key is all or nothing for the package: the manifest
 does not name a call.
@@ -157,8 +164,8 @@ package needs the `[allow]` key (D4).
 Under `raw-sinks = "warn"` a breached precondition throws from the call:
 `io::IoError::Outside` for a path, checked as under `Dir(".")`; for the other
 sinks the error the call already throws, with the sink and the part that broke
-it, the part escaped as the log escapes it. `process::shell`, every `fs` call
-and `db::Raw::execute` throw already. `html::Raw` checks where its markup is
+it, the part escaped as the log escapes it. Every `fs` call and
+`db::Raw::execute` throw already. `html::Raw` checks where its markup is
 written, a call that throws.
 
 ### D8 — It is switched on when our own code builds under it.
@@ -169,18 +176,76 @@ path the operator typed is read with `cli::args(trusted: true)` (ADR-399),
 which states who chose it. No `[allow]` line goes into our own code to get a
 site through.
 
+### D9 — `std` runs no shell; `process::shell` is refused, `NK1314`.
+
+The owner's decision on [#1937](https://github.com/Nikaia-Foundation/Nikaia/issues/1937), for every platform alike, Unix
+included:
+
+1. `std` has no `process::shell`. A call to it is refused while the program
+   is built, `NK1314` ("no shell is configured"). The help writes the same
+   command as `process::run(program, args)` (ADR-243), whose arguments reach
+   the program one by one and are never read as code.
+2. The precondition `process::is_word` leaves `std` with it. It was written
+   for `/bin/sh`; under `cmd.exe` a `%` expands a variable, and no predicate
+   was checked against PowerShell. A precondition not checked against the
+   shell that reads the text is worse than no shell.
+3. What a shell is wanted for (a pipe, a redirection, `&&` and `||`, a glob)
+   comes later as a structure, not as a text: a list of commands, each a
+   program with its arguments, and where each stream goes. A value from
+   outside is always one argument, so nothing is escaped and nothing has to
+   be proved. A library may run such a structure without a shell. A library
+   that does hand a text to `sh` or `cmd.exe` is the shell library this
+   record keeps `untrusted-shell` for: its escaping is its own, and it builds
+   in a program only where the application allows it (D5).
+
+`process::run` stays as it is. Its program is a raw sink by D10; whether an
+argument that starts with `-` is one is left open below.
+
+### D10 — The program of `process::run` is a raw sink; an outside one is refused, `NK1308`.
+
+The owner's decision on [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938):
+
+```nika
+let tool = req.query("tool") ?? "convert"
+process::run(tool, [name, "thumb.png"])
+```
+
+runs whatever program a stranger names. No precondition makes a stranger's
+choice of program safe: a name without a separator is looked up on `PATH`, a
+name with one runs that file. So the `program` of `process::run` is a raw sink
+with no precondition, as a path under `fs::Root::Anywhere` is (D2): a part that
+is not outside passes, any other is refused, `NK1308`, unless the manifest
+allows `untrusted-program` (D4, D5). The arguments are not this sink: each
+reaches the program as one word and is never read as code (ADR-243).
+
+A value is not outside when it is a literal, a constant, or chosen by the
+operator: the environment is the operator's except a CGI host's names
+(ADR-397 D1, D2), so `env::var("EDITOR") ?? "vi"` passes in a command-line
+tool. Where the environment is untrusted, by a host's name or by
+`[build] environment = "untrusted"` (ADR-397 D4), the help writes the choice
+as a `match` over the programs the program means, whose arms are literals and
+so not outside:
+
+```nika
+let editor = match env::var("EDITOR") ?? "" {
+    "vim" => "vim",
+    "nano" => "nano",
+    _ => "vi",
+}
+```
+
+A privileged start of a program that has not declared its environment
+untrusted ends before `main` (ADR-397 D3), so an operator's `EDITOR` never
+reaches a setuid program unchecked.
+
 ## 4. Not decided here
 
 * **Names and codes** are confirmed by the supervisor (2026-11-16, #1253):
   the keys (`untrusted-shell`, `untrusted-sql`, `untrusted-markup`,
-  `untrusted-paths-anywhere`), `[allow.packages.NAME]`, `--allow=KEY` and
+  `untrusted-paths-anywhere`, and `untrusted-program` of D10, confirmed
+  2026-11-19), `[allow.packages.NAME]`, `--allow=KEY` and
   `--allow=PACKAGE:KEY`, the predicates of D2, and the codes `NK1308` and
   `NK1309`, reserved after `NK1303`.
-* **`process::shell` is new API.** It runs `/bin/sh -c` on Unix; the shell on
-  Windows is open.
-* **A process's program from outside.** `process::run(program, args)` with an
-  outside `program` runs a program a stranger names. Whether that is a raw
-  sink, and with which precondition, is open.
 * **An argument that starts with `-`.** An outside word passed as an argument
   can be read as an option, by the shell and by `process::run` alike. A
   precondition against it is open.
@@ -215,8 +280,14 @@ own precondition, and only a proof of that one admits the value.
 
 * Part III 13.3 names `raw-sinks`, `--raw-sinks`, `[allow]` and `--allow`.
   14.2 states the rule beside `NK1302`. Part III 17 gives each sink its
-  precondition where its module is described (`std::fs`, `std::process`,
-  `html`, `http::File`, `db`). C.3 lists `NK1308` and `NK1309`.
+  precondition where its module is described (`std::fs`, `html`,
+  `http::File`, `db`), says that `std::process` runs no shell (D9), and gives
+  `process::run`'s program its rule (D10). Part III 13.3 names the key
+  `untrusted-program`. C.3
+  lists `NK1308`, `NK1309` and `NK1314`.
 * Part I 1.3 says that outside data at a raw sink is proved or allowed.
 * ADR-010 D8 and ADR-108 D5 carry a note.
-* Built by [#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253).
+* Built by [#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253); D9 by
+  [#2197](https://github.com/Nikaia-Foundation/Nikaia/issues/2197); D10 by
+  [#2217](https://github.com/Nikaia-Foundation/Nikaia/issues/2217); the environment by
+  [#2216](https://github.com/Nikaia-Foundation/Nikaia/issues/2216).

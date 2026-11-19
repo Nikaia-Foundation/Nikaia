@@ -99,6 +99,10 @@ pub struct BoundsContext {
 	/// **A `comptime` of the module of type `bool`, by name, with what the
 	/// build computed for it**: an `if` on it takes one arm only.
 	pub decided: collections::BTreeMap[String, bool],
+	/// **A `comptime` of the module of a whole-number type, by name, with
+	/// the value the build computed for it** (ADR-359 D7): a name of the
+	/// proof with that value, as a literal one is (#2161).
+	pub computed: collections::BTreeMap[String, i64],
 	/// **The indexed bases the checker typed as a std list** (ADR-306 D23,
 	/// #1431), by node: a read of one stops the program outside, so past it
 	/// the position is inside, whatever bound the base.
@@ -794,8 +798,9 @@ fn bounding_new(
 ) -> BoundsWalk {
 	let pinned = pinned_in(body, words)
 	let mut shape = shape_of(args, body, pinned, context.around, words)
-	// **A `comptime` of the module, written as a number**, is that number
-	// wherever the body does not bind its name again.
+	// **A `comptime` of the module, written as a number or computed by the
+	// build** (ADR-359 D7, #2161), is that number wherever the body does not
+	// bind its name again.
 	for item in program.items {
 		match item.node {
 			Item::Comptime { name, ty, value, .. } => {
@@ -808,11 +813,12 @@ fn bounding_new(
 					)),
 					else => null,
 				}
+				let known = n ?? context.computed[text]
 				if whole
-					&& n != null
+					&& known != null
 					&& !shape.bound.contains(text)
 					&& !shape.constants.contains_key(text) {
-						shape.constants.insert(text.clone(), n ?? 0)
+						shape.constants.insert(text.clone(), known ?? 0)
 					}
 			},
 			else => {},
@@ -2614,8 +2620,9 @@ fn bounding_mixed_fits(
 	let mut least = a
 	let mut most = b
 	if subtracts {
-		least = 0 - b
-		most = 0 - a
+		// `i64::MIN` has no negation: such a range proves nothing.
+		least = b.checked_neg() ?? return false
+		most = a.checked_neg() ?? return false
 	}
 	let least_term = walk.arena.int(least)
 	let most_term = walk.arena.int(most)

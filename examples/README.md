@@ -44,7 +44,7 @@ nikaia test --bless            # write the expectations from what the program di
 | [`hello-http/`](hello-http/) | a **server**, and a program that reaches `http` **by a path**: one address and one function that decides | ✅ `crates/nikaia/tests/it/project.rs`, over a real socket |
 | [`sqlite/`](sqlite/) | a real **C library**, end to end: a buffer, two handles with their `cleanup`, an out-parameter and text the library owns | ✅ `crates/nikaia/tests/it/foreign_pointers.rs`, skipped where the machine has no `libsqlite3` |
 | [`c-library/`](c-library/) | the other direction: a **library C calls**, with a handle, text into the caller's buffer, an `enum` and a callback | ✅ `crates/nikaia/tests/it/c_library.rs`, with its C program |
-| [`crate-ledger/`](crate-ledger/) | two of the repository's `unsafe` crates, `crc32c` and `low_bits`, called through `use` under the **ledgers they ship** (ADR-290 D22), at `--cpu=x86-64-v3` | ✅ `crates/nikaia/tests/it/shipped_ledger.rs` |
+| [`crate-ledger/`](crate-ledger/) | two of the repository's `unsafe` crates, `crc32c` and `low_bits`, called through `use` under the **ledgers they ship** (ADR-rust-boundary-1 D22), at `--cpu=x86-64-v3` | ✅ `crates/nikaia/tests/it/shipped_ledger.rs` |
 
 Each of the twelve programs - eleven of them packages now - is compiled and run **at both
 settings**, and their output must be identical — that is the claim the switches rest on, and a test is where it belongs
@@ -114,8 +114,8 @@ They are deliberately different shapes.
 **One grammar that was here is not any more, and where it went is the point.**
 `rust-signatures.nika` read a Rust file's public surface, and in 0.0.157 it moved to
 `crates/nikaia-std/src/compiler/rust.nika` - the reading half of `nikaia describe`
-([ADR-290](../docs/specification/adr/adr-290.md) D13), lowered ahead of time and reached by the
-compiler as an ordinary Rust module ([ADR-290](../docs/specification/adr/adr-290.md) D16). It is
+([ADR-rust-boundary-1](../docs/specification/adr/adr-rust-boundary-1.md) D13), lowered ahead of time and reached by the
+compiler as an ordinary Rust module ([ADR-rust-boundary-1](../docs/specification/adr/adr-rust-boundary-1.md) D16). It is
 not an example any more because it is a tool, and a copy of it here would be a second grammar to
 keep in step with the first. `crates/nikaia-std/tests/rust_signatures.rs` is what runs it.
 

@@ -25,7 +25,7 @@ fn check_exprs_part_name(index: i64) -> String {
 /// are in the program's ledger or in `library`, under its qualified name.
 fn check_exprs_package_type(world: ref CheckWorld, std_in_scope: ref collections::BTreeSet[String], name: ref String) -> TypeContract? sync {
     let parts: Vec[ref String] = name.split("::").collect()
-    let head = parts[0].to_string()
+    let head = parts[0]
     if std_in_scope.contains(head) || !imports_a_package(world.here, head) {
         return null
     }

@@ -3,7 +3,7 @@
 // for a name that is not there and `Outside` for one that leaves its root
 // (ADR-319 D3, amended 2026-10-28); `clone` copies a name. No absolute name is printed: each is cut
 // by the root's own canonical name. `std::fs` makes no link, so the symlink
-// case is `fs.rs`'s own unit test.
+// case is `fs_a_name_is_checked_against_its_root.nika`, which makes one through `sh`.
 use std::fs
 use std::io
 

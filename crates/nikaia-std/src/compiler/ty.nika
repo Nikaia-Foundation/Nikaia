@@ -1907,7 +1907,7 @@ impl Ledger {
     }
 }
 
-/// **What a describer saw and did not claim** (ADR-290 D8, D10).
+/// **What a describer saw and did not claim** (ADR-rust-boundary-1 D8, D10).
 ///
 /// Rendered as comments into `contracts/<crate>.contracts` and never parsed
 /// back. The distinction the record rests on: ADR-123 D2 lets the describer

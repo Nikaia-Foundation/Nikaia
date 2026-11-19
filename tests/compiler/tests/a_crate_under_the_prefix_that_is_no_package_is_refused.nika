@@ -13,7 +13,7 @@ fn toolchain() -> String throws {
 fn refusal(nikaia: String, app: String, dependencies: String) -> String throws {
     fs::write(f"{app}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\n{dependencies}")
     let out = process::run(nikaia, ["build"]; dir: app.clone(), env: [("CARGO_NET_OFFLINE", "true")])
-    let said: Vec[String] = out.stderr.lines().filter(fn(line) { line.contains("nikaia_fake") || line.contains("Dependency `") }).map(fn(line) { line.replace(app, "APP").to_string() }).collect()
+    let said: Vec[String] = out.stderr.lines().filter(fn(line) { line.contains("nikaia_fake") || line.contains("Dependency `") }).map(fn(line) { line.replace(app, "APP") }).collect()
     return f"ok: {out.ok}\n{said.join("\n")}"
 }
 

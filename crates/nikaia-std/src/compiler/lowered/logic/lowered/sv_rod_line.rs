@@ -65,7 +65,7 @@ pub(crate) fn sv_engine_name(engine: &str) -> nikaia_std::either_text::EitherTex
 
 pub(crate) fn sv_engine_settings(engine: &str) -> &str {
     let at = match nikaia_std::search::find(&engine, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return "" };
-    nikaia_std::index::get(&engine, nikaia_std::index::at(at + ":".len() as i64..))
+    &nikaia_std::index::get(&engine, nikaia_std::index::at(at + ":".len() as i64..))
 }
 
 pub(crate) fn sv_line(source: &str, engine: &str) -> String { sv_line_stats(source, engine, false) }

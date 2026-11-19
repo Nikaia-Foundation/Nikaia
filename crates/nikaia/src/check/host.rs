@@ -238,9 +238,9 @@ impl CheckHost for Host<'_> {
     ) -> CheckComputed {
         let (files, here) = self.files();
         let typed = |name: &str| typed.get(name).cloned();
-        let workshop = self.reads.workshop();
+        let build_time_dir = self.reads.build_time_dir();
         let known = |name: &str| known.get(name).cloned();
-        let mut bounds = workshop.bounds();
+        let mut bounds = build_time_dir.bounds();
         if let Some(steps) = steps {
             bounds.steps = steps;
         }
@@ -256,7 +256,7 @@ impl CheckHost for Host<'_> {
             &known,
             &typed,
             self.library,
-            workshop,
+            build_time_dir,
             bounds,
             Some(self.own),
         ) {
@@ -273,7 +273,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn somewhere(&self) -> bool {
-        self.reads.workshop().somewhere()
+        self.reads.build_time_dir().somewhere()
     }
 
     fn decoded(&self, literal: &str) -> Option<String> {

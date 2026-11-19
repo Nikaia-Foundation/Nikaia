@@ -1,0 +1,26 @@
+// A `let mut` whole number whose value the prover cannot read, or which an
+// unreadable assignment changes, is a loose name of its type, as a `let`'s
+// is: an outside operation over it reads a goal (ADR-361 D9, #2108).
+use std::io
+use std::text
+
+fn floor() -> i64 {
+    return 5
+}
+
+fn main() throws {
+    let line = io::read_to_string()
+    let n = text::parse_i64(line.trim()) ?? 0
+    let mut a = n * 1000 / (n + 1)
+    println(a - line.trim().len())
+    let mut b = n
+    if b < floor() {
+        b = floor()
+    }
+    println(b - line.trim().len())
+    let mut c = n
+    if c < 3 {
+        c = 3
+    }
+    println(c - line.trim().len())
+}

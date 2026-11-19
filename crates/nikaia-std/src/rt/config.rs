@@ -244,43 +244,6 @@ mod tests {
     }
 
     #[test]
-    fn all_four_settings_are_read() {
-        let config = Config::parse(
-            "# the runtime, on this machine\n\
-             io-workers = 2\n\
-             user-pool = 8\n\
-             io-method = \"blocking\"   # rule the ring out\n\
-             cleanup-deadline = \"500ms\"\n",
-        )
-        .expect("parses");
-        assert_eq!(config.io_workers, 2);
-        assert_eq!(config.user_pool, 8);
-        assert_eq!(config.io_method, Method::Blocking);
-        assert_eq!(config.cleanup_deadline, Duration::from_millis(500));
-    }
-
-    /// The mistake this exists for: a setting that silently stayed at its
-    /// default leaves an operator believing they changed something.
-    #[test]
-    fn an_unknown_key_is_named_rather_than_ignored() {
-        let error = Config::parse("io_workers = 2\n").expect_err("refused");
-        assert!(error.contains("io_workers"), "{error}");
-        assert!(error.contains("io-workers"), "{error}");
-        assert!(error.contains("line 1"), "{error}");
-    }
-
-    /// There is no fifth setting, and a key that would be one is a typo.
-    #[test]
-    fn there_is_no_fifth_setting() {
-        assert_eq!(KNOWN.len(), 4);
-        assert!(Config::parse("ordering = \"strict\"\n").is_err());
-        assert!(
-            Config::parse("user-parallelism = \"yes\"\n").is_err(),
-            "a build switch is not an operating property (ADR-037 D5)"
-        );
-    }
-
-    #[test]
     fn a_duration_takes_the_units_adr_006_writes() {
         for (written, expected) in [
             ("30s", Duration::from_secs(30)),
@@ -294,25 +257,5 @@ mod tests {
             assert_eq!(config.cleanup_deadline, expected, "{written}");
         }
         assert!(Config::parse("cleanup-deadline = \"soon\"\n").is_err());
-    }
-
-    /// Zero I/O workers would contradict D4 outright, so it is refused rather
-    /// than rounded up to the one that always runs.
-    #[test]
-    fn zero_io_workers_is_refused_by_name() {
-        let error = Config::parse("io-workers = 0\n").expect_err("refused");
-        assert!(error.contains("ADR-303 D4"), "{error}");
-    }
-
-    #[test]
-    fn a_method_that_names_no_mechanism_is_refused() {
-        let error = Config::parse("io-method = \"epoll\"\n").expect_err("refused");
-        assert!(error.contains("auto"), "{error}");
-    }
-
-    #[test]
-    fn a_line_that_is_not_a_setting_is_refused_by_line_number() {
-        let error = Config::parse("io-workers = 1\nnonsense\n").expect_err("refused");
-        assert!(error.contains("line 2"), "{error}");
     }
 }

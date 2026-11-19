@@ -959,7 +959,10 @@ impl EmitState {
             },
             _ => { },
         }
-        if lends { self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?; } else { self.emit_expr(world, walk, out, host, iter, depth, flow, scope)?; }
+        if lends { self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?; } else {
+            if self.facts.fused_maps.contains(&node_key(iter)) { walk.fused.insert(node_key(iter)); }
+            self.emit_expr(world, walk, out, host, iter, depth, flow, scope)?;
+        }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

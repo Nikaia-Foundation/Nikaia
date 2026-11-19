@@ -1,0 +1,36 @@
+// A cut of a mapping returned from a function outlives the mapping and reads
+// the file's bytes 7 to 13; the file stays mapped while the cut lives and is
+// unmapped after (ADR-373 D3: nothing is copied); a `Bytes` made from the
+// whole mapping holds it all.
+use std::fs
+
+fn mapped_count(name: String) -> i64 throws {
+    let maps = fs::read_to_string("/proc/self/maps", fs::Root::Anywhere)
+    let mut n = 0
+    for line in maps.split("\n") {
+        if line.ends_with(name) { n += 1 }
+    }
+    return n
+}
+
+fn rome(root: ref fs::Root) -> Bytes throws {
+    let whole: Bytes = fs::map("page", root)
+    return whole[7..<13]
+}
+
+fn show(root: ref fs::Root) throws {
+    let cut = rome(root)
+    let file = fs::read("page", root)
+    println(f"cut: {cut.text()}")
+    println(f"equals bytes 7 to 13: {cut == file[7..<13]}")
+    println(f"mapped while the cut lives: {mapped_count("/page")}")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("page", root, "Oslo;3\nRome;9\n")
+    show(root)
+    println(f"mapped after: {mapped_count("/page")}")
+    let kept: Bytes = fs::map("page", root)
+    println(f"whole: {kept.len()}")
+}

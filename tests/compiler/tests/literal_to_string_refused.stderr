@@ -14,4 +14,12 @@ error[NK1301]: `.clone()` on a text literal adds nothing.
    |
    = note: A text literal is already the text wherever text is wanted.
    = help: Drop `.clone()`.
-2 type errors
+error[NK1301]: `.to_string()` on text adds nothing.
+  --> tests/literal_to_string_refused.nika:7:13
+   |
+ 7 |     let t = a.to_string()
+   |             ^^^^^^^^^^^^^
+   |
+   = note: A view is a `String` already, and the compiler decides whether text is a view or text of its own (Part I 2.3).
+   = help: Drop `.to_string()`, or write `.clone()` where a copy is meant; `nikaia fix` drops it.
+3 type errors

@@ -27,6 +27,12 @@
 // and 4541 steps. Their old cost was the price of each step, not the number
 // of steps, so the budget does not catch its return; the measuring rod's
 // count of instructions does (`docs/measuring.md`).
+// QF_LIA rings_preprocessed ring_2exp4_5vars_3ite_unsat needs 31150 cases,
+// past the build-time 1024 (its line in the first run is `unknown (cases)`),
+// so a second run gives it alone a case budget of 65536 (`--cases`, #1962):
+// `compare` scored it unknown at 10 s until fe3e835a5 (#2090) ran ours there
+// under the time limit alone, and dfbb7772a (the simplex refreshes only the
+// rows a changed variable stands in) brought it to about 8 s.
 use std::fs
 use std::process
 
@@ -63,12 +69,17 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--budget", "300000", "tests/solver/regress"]
-	let out = process::run(nikaia, all.clone(); dir: repo)
-	println(out.stdout.trim())
-	// A failed inner run names its cause in the diff (#1305).
-	if !out.ok || out.stderr.trim().len() > 0 {
-		println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")
-		if out.stderr.trim().len() == 0 { println("(empty)") } else { println(out.stderr.trim()) }
+	let ring = "tests/solver/regress/rings_preprocessed-ring_2exp4_5vars_3ite_unsat.smt2"
+	for extra in [["tests/solver/regress"], ["--cases", "65536", ring]] {
+		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--", "run", "--budget", "300000"]
+		for a in extra { all.push(a.clone()) }
+		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
+		println(out.stdout.trim())
+		// A failed inner run names its cause in the diff (#1305).
+		if !out.ok || out.stderr.trim().len() > 0 {
+			println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")
+			let said = out.stderr.trim()
+			if said.len() == 0 { println("(empty)") } else { println(said) }
+		}
 	}
 }

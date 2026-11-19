@@ -23,7 +23,7 @@ use nikaia::parser::parse_to_ast;
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// **Where a `comptime`'s program is compiled and run** (ADR-321 D1): one
-/// workshop for the file, as a build keeps one beside its cache.
+/// build-time directory for the file, as a build keeps one beside its cache.
 fn reads() -> nikaia::assets::Reads {
     let at = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("comptime-build-time");
     nikaia::assets::Reads::at(&at).building_in(&at)

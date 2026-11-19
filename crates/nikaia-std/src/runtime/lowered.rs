@@ -27,6 +27,8 @@ use nikaia_std::seq::Join as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextQuoted as _;
 #[allow(unused_imports)]
+use nikaia_std::collections;
+#[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
 use nikaia_std::process;
@@ -78,6 +80,17 @@ mod fixed_lowered {
 }
 #[allow(unused_imports)]
 pub use fixed_lowered::*;
+
+#[allow(unsafe_code)]
+mod hash_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/hash.rs");
+}
+#[allow(unused_imports)]
+pub use hash_lowered::*;
 
 #[allow(unsafe_code)]
 mod http1_lowered {
@@ -190,6 +203,10 @@ pub mod fixed {
     #[allow(unused_imports)]
     pub use super::{fnv, displace};
 }
+pub mod hash {
+    #[allow(unused_imports)]
+    pub use super::{fx_add, fx_finish, hash_bytes, hash_short, hash_long};
+}
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
@@ -231,6 +248,7 @@ pub mod time_spans {
 /// name, as `nikaia test --std` runs them.
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(text_float_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all
 }
@@ -272,4 +290,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b8f135147ff9bbd81d987c7c41f0ce9db0f4f42a2d92e9c19dd3e8b2fc464d7e";
+pub const LOWERED_DIGEST: &str = "03cd72dc48cbe36ffdb049763bc8cefc7c604e116b553d7d1dd14d767f07faf1";

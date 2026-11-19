@@ -146,7 +146,7 @@ pub fn declared_site(units: ref Vec[ParsedView], here_at: i64, facts: ref CheckF
         },
         CheckDeclared::Field(ty, field) => site_named(site_typed(units, package, ty, field, 1), field),
         CheckDeclared::Type(ty) => {
-            let words: Vec[String] = ty.split("::").map(fn(part) { part.to_string() }).collect()
+            let words: Vec[String] = ty.split("::").collect()
             site_named(site_typed(units, package, ty, "", 2), words[words.len() - 1])
         },
         CheckDeclared::Variant(ty, variant) => site_named(site_typed(units, package, ty, variant, 3), variant),
@@ -171,7 +171,7 @@ fn site_package_of(unit: ref ParsedView) -> String {
 /// `json::read` is `json`'s `read` where a unit of `json` is among `units`;
 /// any other name is `package`'s, whole.
 fn site_split(units: ref Vec[ParsedView], package: ref String, name: ref String) -> (String, Vec[String]) {
-    let parts: Vec[String] = name.split("::").map(fn(part) { part.to_string() }).collect()
+    let parts: Vec[String] = name.split("::").collect()
     if parts.len() >= 2 {
         let head = parts[0].clone()
         if units.iter().any(fn(unit) { site_package_of(unit) == head }) {

@@ -32,7 +32,7 @@ fn picked(split: bool) -> Vec[String] {
     let mut out: Vec[String] = ["x"]
     if split {
         let named = draft()
-        out = named.split("\n").map(fn(l) { l.to_string() }).collect()
+        out = named.split("\n").map(fn(l) { l }).collect()
     }
     return out
 }
@@ -42,7 +42,7 @@ fn main() throws {
     let mut lines: Vec[String] = ["a", "b"]
     if stages.contains("split") {
         let named = draft()
-        lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+        lines = named.split("\n").map(fn(l) { l }).collect()
     }
     if stages.contains("shout") {
         lines = shout(lines)
@@ -52,7 +52,7 @@ fn main() throws {
     let mut words: Vec[String] = ["c"]
     if stages.contains("split") {
         let named = draft()
-        words = named.split("\n").map(fn(l) { l.to_string() }).collect()
+        words = named.split("\n").map(fn(l) { l }).collect()
     }
     let joiner = Joiner { glue: "+" }
     println(joiner.join(words))
@@ -63,7 +63,7 @@ fn main() throws {
     let mut holder = Holder { lines: ["d"] }
     if stages.contains("split") {
         let named = draft()
-        holder.lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+        holder.lines = named.split("\n").map(fn(l) { l }).collect()
     }
     println(joiner.join(holder.lines))
 }

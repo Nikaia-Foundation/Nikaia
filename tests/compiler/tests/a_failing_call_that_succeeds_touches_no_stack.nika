@@ -1,0 +1,36 @@
+// ADR-failure-return-1 D1 (#1525): a call to a failing function that does not
+// fail touches no stack memory of its own. `throwing` and the other envelope
+// constructors on the throw path are cold and never inlined; before, LLVM
+// inlined the trace machinery into each failing function, and its success path
+// paid pushes and a 168-byte frame (`one`: 4 stack instructions, `coded`: 6).
+// The functions are `@inline(never)` so the call boundary stays visible; each
+// error type has a single `throw`, the shape where LLVM inlined `throwing`.
+// The check counts what touches the stack (`push`, `pop`, `%rsp`) from the
+// function's entry to its first `ret`. A value returned through memory (sret,
+// `coded`'s 16 bytes) is still stored there: that is D2's, not D1's.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/p/src"])
+    fs::write(f"{tmp}/p/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"failing\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n")
+    fs::write(f"{tmp}/p/src/main.nika", fs::Root::Anywhere, "enum Bad { Neg }\n\nimpl Error for Bad {\n\tfn message(self) -> String {\n\t\t\"negative\"\n\t}\n}\n\nenum Coded { Code(i64) }\n\nimpl Error for Coded {\n\tfn message(self) -> String {\n\t\t\"coded\"\n\t}\n}\n\n@inline(never)\nfn one(n: i64) -> i64 throws {\n\tif n < 0 {\n\t\tthrow Bad::Neg\n\t}\n\treturn n + 1\n}\n\n@inline(never)\nfn coded(n: i64) -> i64 throws {\n\tif n < 0 {\n\t\tthrow Coded::Code(n)\n\t}\n\treturn n + 1\n}\n\nfn main() throws {\n\tlet mut sum = 0\n\tlet mut i = 0\n\twhile i < 10 {\n\t\tsum += one(i) catch { 0 }\n\t\tsum += coded(i) catch { 0 }\n\t\ti += 1\n\t}\n\tsum += one(-1) catch { 1000 }\n\tsum += coded(-1) catch { 1000 }\n\tprintln(sum)\n}\n")
+    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp}/p")
+    if built.code != 0 {
+        println(built.stdout)
+    }
+    let bin = f"{tmp}/p/target/nikaia/bin/failing"
+    print(process::run(bin, []).stdout)
+    for name in ["one", "coded"] {
+        let counted = process::run("sh", ["-c", f"objdump -d --no-show-raw-insn -C {bin} | awk -v f={name} '$0 ~ \"::\" f \">:$\" {{ p = 1; next }} p && /^$/ {{ exit }} p && /\\tret/ {{ exit }} p && (/\\t(push|pop)/ || /%rsp/) {{ n++ }} END {{ print n + 0 }}'"])
+        println(f"{name}: {counted.stdout.trim()} stack instructions on the success path")
+    }
+    process::run("rm", ["-rf", tmp])
+}

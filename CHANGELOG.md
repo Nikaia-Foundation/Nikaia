@@ -8,6 +8,65 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1453] — 2026-11-19
+
+**Builders' changes (#2203, #2204, #2205, #2210)**
+- The Rust unit tests of the std package's paths, crossing and signature files are now Nikaia `test` blocks run by `nikaia test --std`, so lib.rs has no test module left.
+- The Rust unit tests of std's standard input reader move into the Nikaia program io_standard_input_arrives_in_pieces, which feeds real children input in pieces through a pipe
+- The fixed-seed text hash (rustc-hash's hash_bytes) is Nikaia now, in runtime/hash.nika; its tests are Nikaia test blocks and a program, and rustc-hash is no longer a dev-dependency.
+- none (test moves only)
+
+## [0.0.1452] — 2026-11-19
+
+**Builders' changes (#2149, #2150, #2151, #2152)**
+- A `comptime` that calls a function and whose program did not change since the last check is read from the user cache (`comptime-value/`) before its build-time program is written: a second `nikaia check` of the issue's probe costs 170 M instructions instead of 424 M.
+- A `comptime` whose value is not in the cache derives its build-time program's ledger once: `nikaia check` of a one-file computed `comptime` costs 347 M instructions instead of 462 M.
+- A check whose comptime answers are on disk starts no rustc: the toolchain's answers are kept under the user cache with a stamp of what selects the toolchain, read with a few stat calls (#2151).
+- std has a new default feature async-io that carries its sockets, TLS and file ring. The build-time bundle still takes the whole std: building it without them was reverted, since a comptime in a file that uses `std::net` no longer built (#2152 stays open).
+
+## [0.0.1451] — 2026-11-19
+
+**Builders' changes (#2189, #2190, #2192)**
+- The lock tests of std are Nikaia programs: six new programs in tests/compiler/tests/ cover re-entry, poison, supervised rebuilds, the doors of one and two values, racing set after, and the word shape. lock.rs keeps only the two tests that observe a buffer's address (#2088).
+- A cut of a `Bytes` that is kept (returned, pushed, a map's key) shares the owner at a count instead of copying, so a cut of a mapped file keeps the file mapped while it lives (ADR-373 D1, D3).
+- The Rust unit tests of `std::fs` are Nikaia programs now: file names that are not text, a writer's cleanup, mappings and their cuts, writes, many tasks at once, roots and walks; the unused `task::as_text` is gone.
+
+## [0.0.1450] — 2026-11-19
+
+**Builders' changes (#1962, #2108, #2161, #797)**
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type.
+- `nikaia run scripts/solver.nika -- run --cases N` gives the new engine a case budget past the build-time one; the solver's regression set pins the rings_preprocessed file ours now proves in about 8 s (z3 and cvc5 also solve it)
+- Solver: QF_LIA 20220307-SMPT solves 356 of 371, up from 338: the equality elimination substitutes in place and tidies only the bounds that changed, and two sorted assumption sets are merged instead of looked up literal by literal, in the solver and the certificate checker
+- `--bounds` now gives an outside operation over a `let mut` whole number a goal when the prover cannot read the binding's value or a reassignment: the binding is a fresh loose name of its type (ADR-361 D9), so examples/http row 434 reads "not proved within ±2^62".
+- `nikaia check --bounds` proves an index by a `comptime` whose value a call computed, as it did for a literal one, and its report now checks the file as the build does (with the program's files and reads, as `--asserts`)
+- Named properties (ADR-381): `assert(is_sorted(xs))` is proved by name, holds until `xs` may change, is carried to callers as a precondition, known after a call from its postcondition and wherever a type's rule says it, and checked once at the first caller; `--asserts` says where a proved claim is known from.
+
+## [0.0.1449] — 2026-11-19
+
+**NK1301 refuses .to_string() on text, with a fix edit; the sites are migrated (ADR-text-reuse-1 D1)**
+- `.to_string()` on text is refused (NK1301): a view is a String already; drop it, or write `.clone()` for a copy, and `nikaia fix` drops it. A type parameter keeps it (ADR-text-reuse-1 D1). benches/lowering/source.nika is unchanged (it has its own check errors, so fix skipped it)
+
+## [0.0.1448] — 2026-11-19
+
+**ADR-failure-return-1 §6: non-inlined failing calls counted, too few for the two-scalar lowering (D2)**
+- A call to a failing function that does not fail pays no frame of its own: the throw path is cold and never inlined (ADR-failure-return-1 D1)
+
+## [0.0.1447] — 2026-11-19
+
+**A list map whose result goes into a for, a map or len runs element by element (ADR-342 D1)**
+- Faster list chains: a list map whose result goes into a for, another map or len runs element by element and builds no list in between, when its lambda touches nothing (ADR-342 D1)
+
+## [0.0.1446] — 2026-11-18
+
+**Builders' changes (#2153)**
+- A library check with no build-time directory computes `comptime` calls in the shared one (ADR-321 D19 as amended), and NK1127 names a build-time directory that can't be created or written; `Workshop` is now `BuildTimeDir`.
+- Bounds - a counter raised once per element of `Bytes::find_all` is proved without its overflow check, since the positions rise and the loop turns fewer times than the bytes are long (#432).
+
+## [0.0.1445] — 2026-11-18
+
+**Bytes gets eq_ignore_ascii_case, an ASCII case-insensitive compare (#2156)**
+- Bytes.eq_ignore_ascii_case(other) compares two runs of bytes with ASCII case ignored (A-Z read as a-z, every other byte exactly).
+
 ## [0.0.1444] — 2026-11-18
 
 **std's runtime package runs its own test blocks under nikaia test --std (#2146)**

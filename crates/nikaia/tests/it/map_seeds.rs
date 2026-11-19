@@ -20,13 +20,14 @@ struct Two {
 }
 
 fn lower(dir: &Path, package: &str) -> String {
-    let program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
-        let root = dir.join(package);
-        let manifest = nikaia::manifest::Manifest::read(&root.join("nikaia.toml"))?;
-        let dependencies = nikaia::project::packages_of(&manifest, &root, false)?;
-        nikaia::modules::Program::read_with(&root.join("src/main.nika"), &dependencies)
-    })
-    .expect("the program reads");
+    let program =
+        nikaia::comptime_run::defaults_compiled_in(Some(&common::build_time_dir()), || {
+            let root = dir.join(package);
+            let manifest = nikaia::manifest::Manifest::read(&root.join("nikaia.toml"))?;
+            let dependencies = nikaia::project::packages_of(&manifest, &root, false)?;
+            nikaia::modules::Program::read_with(&root.join("src/main.nika"), &dependencies)
+        })
+        .expect("the program reads");
     // Only a program writes the allocator (ADR-327 D9): the library is linked
     // into one, and two allocators are a rustc error.
     let build = nikaia::emit::Build {
@@ -863,10 +864,11 @@ fn a_described_crates_map_function_keys_the_callers_map() {
         "[fn.\"fremd::count\"]\npub = true\nsignature = \"(m: ref collections::HashMap[String, i64]) -> i64\"\n",
     )
     .expect("a description");
-    let mut program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
-        nikaia::modules::Program::read_with(&dir.join("src/main.nika"), &[])
-    })
-    .expect("the program reads");
+    let mut program =
+        nikaia::comptime_run::defaults_compiled_in(Some(&common::build_time_dir()), || {
+            nikaia::modules::Program::read_with(&dir.join("src/main.nika"), &[])
+        })
+        .expect("the program reads");
     program.described =
         nikaia::contracts::Ledger::read_beside(&dir.join("fremd.contracts")).expect("it reads");
     let rust = program

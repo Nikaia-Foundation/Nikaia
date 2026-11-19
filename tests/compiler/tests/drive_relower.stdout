@@ -1,4 +1,5 @@
 == lowered only
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA re-lowered crates/nikaia-std/src/compiler/lowered/a.rs
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -29,6 +30,7 @@ old
 
 local
 == lowering fails
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, total Ns
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
 WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
 exit ok: false
@@ -44,6 +46,7 @@ old
 
 local
 == clean, a source
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs crates/nikaia-std/src/compiler/lowered/new.rs assets/badges/self-hosted.svg
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -71,6 +74,7 @@ old
 
 local
 == clean, lowering fails
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, total Ns
 ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
 WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
 exit ok: false
@@ -85,6 +89,7 @@ old
 
 local
 == clean, an example
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/new.rs assets/badges/self-hosted.svg examples/a/nikaia.contracts
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -99,7 +104,26 @@ index
 a.nika 
 local
 refreshed
+cargo runs: 1
+== clean, an example, merge build
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/new.rs assets/badges/self-hosted.svg examples/a/nikaia.contracts
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered/new.rs
+examples/a/nikaia.contracts
+base
+index
+a.nika 
+local
+refreshed
+cargo runs: 3
 == index only
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
 MERGE SHA re-lowered crates/nikaia-std/src/compiler/lowered.rs
 exit ok: true
 Merge branch 'develop' of ../origin into develop
@@ -113,5 +137,22 @@ crates/nikaia-std/src/compiler/lowered/new.rs
 base
 theirs-side
 2
+a.nika b.nika 
+local
+== index digest only
+MERGE timing build Ns, round 1 build Ns, lower-std Ns, round 2 build Ns, lower-std Ns, badges Ns, ledgers Ns, total Ns
+MERGE SHA re-lowered crates/nikaia-std/src/compiler/lowered.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
+base
+theirs-side
+pub const LOWERED_DIGEST: &str = "round 2";
 a.nika b.nika 
 local

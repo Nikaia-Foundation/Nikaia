@@ -386,7 +386,7 @@ impl CheckState {
         let collapsed = collapsed_doubled_braces(text);
         if collapsed.is_some() {
             let single = nikaia_std::index::or(collapsed, || "".into());
-            self.warn_migration(span, String::from("`{{{{` in a plain string is now two braces."), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
+            self.warn_migration(span, String::from("`{{` in a plain string is now two braces."), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
             return;
         }
         for hole in brace_groups(text) {

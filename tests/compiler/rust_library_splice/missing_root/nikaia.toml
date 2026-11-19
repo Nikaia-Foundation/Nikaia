@@ -1,4 +1,4 @@
-# `[rust-library] root` naming no file of the package: NK1348 (ADR-393 D7).
+# `[rust-library] root` naming no file of the package: NK1348 (ADR-rust-boundary-1 D23).
 [package]
 name = "missing_root"
 version = "0.1.0"

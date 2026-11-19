@@ -29,7 +29,7 @@ pub struct EmitContractsBuild {
     /// The package is trusted (ADR-010 D9).
     pub trusted: bool,
     /// The path of the lowered package's root (`Build::crate_root`, #1447):
-    /// `crate`, or `crate::<native>` under a hand-written root (ADR-393 D7).
+    /// `crate`, or `crate::<native>` under a hand-written root (ADR-rust-boundary-1 D23).
     pub crate_root: String,
     /// The package is offered to Rust (`Build::offered_to_rust`, ADR-393 D1).
     pub offered_to_rust: bool,

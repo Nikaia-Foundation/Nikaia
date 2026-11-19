@@ -1,10 +1,10 @@
 // crates/nikaia-std/src/compiler/paths.nika
 //
-// **How `nikaia describe` spells a Rust crate's names** (ADR-290 D14, ADR-290
+// **How `nikaia describe` spells a Rust crate's names** (ADR-rust-boundary-1 D14, ADR-rust-boundary-1
 // D4): the module a file is, a path joined from its parts, and what one
 // `pub use` offers and where its path could resolve.
 //
-// Moved from the compiler's `describe.rs` by ADR-290's route: lowered by
+// Moved from the compiler's `describe.rs` by ADR-rust-boundary-1's route: lowered by
 // `nikaia lower-std` to `paths.rs` beside it, `include!`d as
 // `nikaia_std::compiler::paths`, and called from `describe`. What stays Rust is
 // the table these answers fill - which modules are `pub`, which items are
@@ -235,3 +235,73 @@ fn stands_at(c: ref Array[scalar], at: i64, w: ref Array[scalar]) -> bool {
     return true
 }
 
+
+/// The module a file is: `lib.rs` and `mod.rs` are their directory, a
+/// binary's file is nobody's.
+test "a file is the module its path names" {
+    let lib = module_of("src/lib.rs")
+    assert((lib ?? "none") == "")
+    let nested = module_of("src/a/b.rs")
+    assert((nested ?? "none") == "a::b")
+    let dir = module_of("src/a/mod.rs")
+    assert((dir ?? "none") == "a")
+    let main = module_of("src/main.rs")
+    assert(main == null)
+    let bin = module_of("src/bin/tool.rs")
+    assert(bin == null)
+    let build = module_of("build.rs")
+    assert(build == null)
+}
+
+/// A `pub use` in its three shapes: a group, a glob, one name.
+test "a pub use offers what it names" {
+    let group = exported("m", "inner::{a, b as c}")
+    assert(group.len() == 2)
+    assert(group[0].prefix == "inner")
+    let a: Named? = Named { name: "a", alias: "a" }
+    assert(group[0].name == a)
+    let c: Named? = Named { name: "b", alias: "c" }
+    assert(group[1].name == c)
+
+    let glob = exported("", "crate::inner::*")
+    assert(glob[0].prefix == "crate::inner")
+    assert(glob[0].name == null)
+
+    let single = exported("", " self::x::Y as Z ")
+    assert(single[0].prefix == "self::x")
+    let z: Named? = Named { name: "Y", alias: "Z" }
+    assert(single[0].name == z)
+
+    let bare = exported("", "spawn")
+    let one: Named? = Named { name: "spawn", alias: "spawn" }
+    assert(bare[0].name == one)
+}
+
+/// `crate`, `self` and `super` are answered from where the `use` stands; a
+/// bare path is tried there and at the root.
+test "a use path resolves from where it was written" {
+    let rooted = bases(Export { at: "a::b", prefix: "crate::x", name: null })
+    assert(rooted == ["x"])
+    let root = bases(Export { at: "a::b", prefix: "crate", name: null })
+    assert(root == [""])
+    let own = bases(Export { at: "a::b", prefix: "self::x", name: null })
+    assert(own == ["a::b::x"])
+    let parent = bases(Export { at: "a::b", prefix: "super::x", name: null })
+    assert(parent == ["a::x"])
+    let bare = bases(Export { at: "a::b", prefix: "x", name: null })
+    assert(bare == ["a::b::x", "x"])
+    let longer = after("crated", "crate")
+    assert(longer == null)
+}
+
+/// Commas inside brackets do not split.
+test "only the outer commas split" {
+    let parts = split_top_level("a: Vec<(u8, u8)>, b: [u8; 2] ,")
+    assert(parts == ["a: Vec<(u8, u8)>", "b: [u8; 2]"])
+    let only_name = joined("", "x")
+    assert(only_name == "x")
+    let only_at = joined("a", "")
+    assert(only_at == "a")
+    let both = joined("a", "x")
+    assert(both == "a::x")
+}

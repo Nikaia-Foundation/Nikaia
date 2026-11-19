@@ -1,0 +1,35 @@
+// A task nobody joins still runs (ADR-055 D4), and the drain at the end of
+// `main` waits for it before the program exits (ADR-297 D6). The child starts
+// an `async(detached)` task that sleeps 20 ms and then writes `done.txt`, and
+// `main` ends at once. Moved from the `nikaia-std` unit tests
+// `a_task_nobody_joins_still_runs` and `a_task_that_finishes_is_still_waited_for`
+// (#2209).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::fs\nuse std::time\n\nfn main() throws {\n\tasync(detached) fn {\n\t\ttime::sleep(20.millis())\n\t\tfs::write(\"done.txt\", fs::Root::Anywhere, \"written\") catch { return }\n\t}\n\tprintln(\"main ends\")\n}\n",
+	)
+	let out = process::run(toolchain(), ["run", "child.nika"]; dir: tmp)
+	println(out.stdout.trim())
+	println(f"exit {out.code}")
+	let done = process::run("cat", [f"{tmp}/done.txt"]).stdout
+	println(f"done.txt: {done}")
+	process::run("rm", ["-rf", tmp])
+}

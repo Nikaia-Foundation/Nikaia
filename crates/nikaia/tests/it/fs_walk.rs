@@ -1,5 +1,5 @@
 //! **`fs::walk`: every file under a directory**
-//! ([ADR-290](../../../docs/specification/adr/adr-290.md) D14, under
+//! ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D14, under
 //! [ADR-108](../../../docs/specification/adr/adr-108.md)'s root).
 //!
 //! The tests here **run a program** over a tree this file lays out, at both

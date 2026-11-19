@@ -1,4 +1,4 @@
-//! The hand-written root of `nikaia_demo` (ADR-393 D7): it re-exports
+//! The hand-written root of `nikaia_demo` (ADR-rust-boundary-1 D23): it re-exports
 //! two lowered items, one only with the feature `cube`, and adds a function
 //! of its own over a module of its own.
 

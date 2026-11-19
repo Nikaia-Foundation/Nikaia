@@ -1,0 +1,11 @@
+first failed
+  raised at step
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  second failed
+    raised at step
+  and then:
+  third failed
+    raised at step
+passed on, the same text: true
+after

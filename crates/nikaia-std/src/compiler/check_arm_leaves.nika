@@ -590,13 +590,28 @@ impl CheckState {
     /// something that keeps it or handed back, the view
     /// becomes a `Bytes` of its own, and the text is not given up.
     fn a_text_bytes_kept(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
-        // **A cut of a `Bytes` kept is copied** as well (ADR-320 D7, #1345):
-        // the checker's `Bytes` is a view into the cut one below.
-        if !self.a_text_bytes_view(world, value) && !self.facts.bytes_cuts.contains(node_key(value)) {
+        // **A cut of a `Bytes` kept is the same owner at a count** (ADR-373
+        // D1, D3, #2190): nothing is copied, and a mapping stays mapped while
+        // the cut lives. A cut of a text's bytes is copied, as they are
+        // (ADR-320 D11).
+        let a_cut = self.facts.bytes_cuts.contains(node_key(value))
+        if !self.a_text_bytes_view(world, value) && !a_cut {
             return false
         }
         self.facts.kept_text_bytes.insert(node_key(value))
+        if a_cut && !self.a_cut_of_text_bytes(world, value) {
+            self.facts.counted_cuts.insert(node_key(value))
+        }
         return true
+    }
+
+    /// Whether the cut `value` is cut, through any cuts between, from a
+    /// text's own bytes (ADR-320 D11), which have no owner to count.
+    fn a_cut_of_text_bytes(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        return match value {
+            Expr::Index { base, .. } => self.a_text_bytes_view(world, base) || (self.facts.bytes_cuts.contains(node_key(base)) && self.a_cut_of_text_bytes(world, base)),
+            else => false,
+        }
     }
 
     /// **A key in a map's brackets** (issue #169, ADR-282): written, the map

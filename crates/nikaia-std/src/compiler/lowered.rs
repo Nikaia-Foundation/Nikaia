@@ -3335,7 +3335,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, ComptimeBundleToolchain, comptime_bundle_toolchain, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -3343,7 +3343,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3493,7 +3493,7 @@ pub mod escapes {
 }
 pub mod findings {
     #[allow(unused_imports)]
-    pub use super::{Finding, refusal};
+    pub use super::{Finding, refusal, findings_report};
 }
 pub mod fix {
     #[allow(unused_imports)]
@@ -3867,8 +3867,11 @@ pub mod logic {
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3913,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "53aded5dd5a199f57ff648d24c47e4956de2bf98032d4f38b98f108fbaebc76e";
+pub const LOWERED_DIGEST: &str = "616857481b31a5f74183ecfca089ba73e4cfa3f2cead9f01ed3e9351c9033d0a";

@@ -511,6 +511,10 @@ pub struct CheckFacts {
     /// lowering lends the others the function lends in a closure around it.
     pub named_fn_values: collections::BTreeMap[i64, Vec[bool]],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
+    /// **The list `map`s that may run element by element with the step their
+    /// result goes into** (ADR-342 D1), by the call's id: the receiver is a
+    /// list and the lambda touches nothing and changes no name outside it.
+    pub fused_maps: collections::BTreeSet[i64],
     pub paused_scopes: collections::BTreeSet[i64],
     /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
     /// its scope's channel.
@@ -688,9 +692,15 @@ pub struct CheckFacts {
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
     pub text_graphemes: collections::BTreeSet[i64],
     /// `b[a..<c]` on a `Bytes`: a cut, a `&[u8]` into `b` below (ADR-320
-    /// D7): kept, it is copied into a `Bytes` of its own; read as a map's
-    /// key, it goes in as it is (#1345).
+    /// D7): kept, it is a `Bytes` cut from the same owner at a count
+    /// (`counted_cuts`); read as a map's key, it goes in as it is (#1345).
     pub bytes_cuts: collections::BTreeSet[i64],
+    /// **A cut of a `Bytes` kept is the same owner at a count** (ADR-373 D1,
+    /// D3, #2190): `b.cut(a..c)`, not a copy, so a mapping stays mapped while
+    /// the cut lives. A cut of a text's bytes is not here: those are copied
+    /// (ADR-320 D11). Read only beside `kept_text_bytes`, which a slot that
+    /// takes a view takes the node out of.
+    pub counted_cuts: collections::BTreeSet[i64],
     /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
     /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
     pub kept_text_bytes: collections::BTreeSet[i64],
@@ -914,6 +924,7 @@ impl CheckFacts {
             infallible_fn_values: collections::BTreeMap(),
             named_fn_values: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
+            fused_maps: collections::BTreeSet(),
             paused_scopes: collections::BTreeSet(),
             scope_tasks: collections::BTreeSet(),
             witnessed_sets: collections::BTreeSet(),
@@ -1000,6 +1011,7 @@ impl CheckFacts {
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             bytes_cuts: collections::BTreeSet(),
+            counted_cuts: collections::BTreeSet(),
             kept_text_bytes: collections::BTreeSet(),
             text_bytes_typed_lets: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),
@@ -1142,7 +1154,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
             false => check_claim_held(claim.held),
         }
         let row = f"  {path}:{line}  {claim.written}  {how}"
-        if how == "proved" {
+        if how == "proved" || how.starts_with("proved: known from") {
             proved.push(row)
         } else if how.starts_with("proved through") || how.starts_with("proved inside") {
             through_loops += 1

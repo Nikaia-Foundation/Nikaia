@@ -1,0 +1,4 @@
+auto, no: rounds 20, bytes 20, cores 1
+auto, yes: rounds 20, bytes 20, cores 3
+blocking, no: rounds 20, bytes 20, cores 1
+blocking, yes: rounds 20, bytes 20, cores 3

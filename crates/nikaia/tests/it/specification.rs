@@ -37,7 +37,7 @@ fn baseline() -> PathBuf {
 fn the_specifications_programs_are_the_ones_in_expected_txt() {
     let expected = std::fs::read_to_string(baseline()).expect("EXPECTED.txt");
     assert_eq!(
-        specbook::report(&specbook::specification_dir(), &common::workshop()),
+        specbook::report(&specbook::specification_dir(), &common::build_time_dir()),
         expected,
         "the specification and tests/specification/EXPECTED.txt have drifted \
          apart. If that is the change you meant, regenerate it with `cargo run \
@@ -60,10 +60,11 @@ fn the_specifications_programs_are_the_ones_in_expected_txt() {
 /// to remember.
 #[test]
 fn only_the_section_about_interpolation_writes_a_plain_string_with_a_hole() {
-    let tripped: Vec<_> = specbook::verdicts(&specbook::specification_dir(), &common::workshop())
-        .into_iter()
-        .filter(|v| v.codes.contains("NK1111"))
-        .collect();
+    let tripped: Vec<_> =
+        specbook::verdicts(&specbook::specification_dir(), &common::build_time_dir())
+            .into_iter()
+            .filter(|v| v.codes.contains("NK1111"))
+            .collect();
     assert_eq!(
         tripped.len(),
         1,
@@ -222,7 +223,7 @@ fn the_specifications_version_is_the_changelogs() {
 /// (`COMPILES.txt`); each is `NK1245` now.
 #[test]
 fn most_of_a_third_of_the_specifications_blocks_are_programs() {
-    let verdicts = specbook::verdicts(&specbook::specification_dir(), &common::workshop());
+    let verdicts = specbook::verdicts(&specbook::specification_dir(), &common::build_time_dir());
     let lowered = verdicts
         .iter()
         .filter(|v| v.stage == Stage::Lowered)
@@ -261,7 +262,7 @@ fn what_lowers_is_handed_to_rustc_and_the_verdicts_are_the_recorded_ones() {
     // rather than for the comparison: see the verdict below.
     let mut detail = String::new();
     let mut nth: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    for v in specbook::verdicts(&specbook::specification_dir(), &common::workshop()) {
+    for v in specbook::verdicts(&specbook::specification_dir(), &common::build_time_dir()) {
         // Counted over **every** block and not only the ones that lower, so the
         // ordinal means the same thing here as in the other baseline.
         let at = nth.entry(v.block.file.clone()).or_insert(0);

@@ -78,7 +78,7 @@ pub struct Choices {
     pub reads: String,
     /// **Every description this build reads at a foreign boundary**, as one
     /// digest, empty where the project describes nothing
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5).
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5).
     ///
     /// Here for `reads`' reason and with `reads`' polarity: the file binds the
     /// whole build rather than one unit, and it is **hand-edited on purpose** —
@@ -301,7 +301,7 @@ impl Key {
         // one with an empty list: the first cannot read at all.
         b.field("reads", &choices.reads);
         // **And what the boundary says**
-        // ([ADR-290](../../../docs/specification/adr/adr-290.md) D5): the
+        // ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5): the
         // descriptions are files this build reads and a person edits, so a
         // change to one has to invalidate — for the reason the line above
         // exists, one boundary over.

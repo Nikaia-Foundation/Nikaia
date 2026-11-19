@@ -921,7 +921,7 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
 
 pub(crate) fn vc_part_of(head: &str) -> &str {
     if !head.ends_with(": ") { return ""; }
-    let words: Vec<&str> = head.split(' ').map(|w| { w }).collect::<Vec<_>>();
+    let words: Vec<&str> = head.split(' ').collect::<Vec<_>>();
     if words.len() < 3 { return ""; }
     nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&words, (2) as usize) }).strip_suffix(':'), || "")
 }

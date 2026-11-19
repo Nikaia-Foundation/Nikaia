@@ -1,0 +1,137 @@
+// `task::scope` at both settings (ADR-326, ADR-328 D8, D10), run as children
+// with `nikaia run --user-parallelism no` and `yes`. A crash is thrown where
+// the scope ends, and at `no` the task after it does not run (at `yes` it may
+// run first, so its count is not shown). A crash after a pause drops the
+// tasks still waiting, so each one's cleanup runs once; the task that does
+// not pause ran at `no`, and at `yes` it is not started after the crash is
+// seen (D10). A scope inside a task that crosses threads runs both kinds of
+// task. These replace the Rust tests of `task.rs` (#2206).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn crash() -> String {
+    return [
+        "use std::task",
+        "",
+        "fn main() throws {",
+        "    let ran = SharedMut(0)",
+        "    let said = task::scope fn(s) {",
+        "        s.spawn fn { ran.update fn(mut v) { v += 1 } }",
+        "        s.spawn fn { panic(\"boom\") }",
+        "        s.spawn fn { ran.update fn(mut v) { v += 10 } }",
+        "        \"finished\"",
+        "    } catch { f\"thrown: {error.message}\" }",
+        "    println(said)",
+        "    println(f\"ran: {ran.get()}\")",
+        "}",
+        "",
+    ].join("\n")
+}
+
+fn cleanup() -> String {
+    return [
+        "use std::task",
+        "use std::time",
+        "",
+        "struct Cleaned {",
+        "    name: String,",
+        "}",
+        "",
+        "impl Drop for Cleaned {",
+        "    fn drop(mut self) {",
+        "        println(f\"{self.name} cleaned\") catch { }",
+        "    }",
+        "}",
+        "",
+        "fn main() throws {",
+        "    let finished = SharedMut(0)",
+        "    let said = task::scope fn(s) {",
+        "        s.spawn fn {",
+        "            let _held = Cleaned { name: \"first\" }",
+        "            while true {",
+        "                time::sleep(1.millis())",
+        "            }",
+        "        }",
+        "        s.spawn fn {",
+        "            let _held = Cleaned { name: \"second\" }",
+        "            while true {",
+        "                time::sleep(1.millis())",
+        "            }",
+        "        }",
+        "        s.spawn fn {",
+        "            time::sleep(1.millis())",
+        "            panic(\"after a pause\")",
+        "        }",
+        "        s.spawn fn { finished.set(1) }",
+        "        \"finished\"",
+        "    } catch { f\"thrown: {error.message}\" }",
+        "    println(said)",
+        "    println(f\"finished: {finished.get()}\")",
+        "}",
+        "",
+    ].join("\n")
+}
+
+fn crossing() -> String {
+    return [
+        "use std::task",
+        "use std::time",
+        "",
+        "fn main() throws {",
+        "    let config = \"abcd\"",
+        "    let running = spawn fn {",
+        "        let total = SharedMut(0)",
+        "        task::scope fn(s) {",
+        "            s.spawn fn { total.update fn(mut v) { v += 1 } }",
+        "            s.spawn fn {",
+        "                time::sleep(1.millis())",
+        "                total.update fn(mut v) { v += config.len() }",
+        "            }",
+        "        } catch { }",
+        "        total.get()",
+        "    }",
+        "    println(f\"total: {running.join()}\")",
+        "}",
+        "",
+    ].join("\n")
+}
+
+// Runs `file` at `setting` and prints what it wrote, the cleanups sorted
+// (the tasks are dropped in no fixed order) and the lines that start with
+// `hidden` left out.
+fn child(tmp: String, file: String, setting: String, hidden: String) throws {
+    let out = process::run(toolchain(), ["run", "--user-parallelism", setting.clone(), file.clone()]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"== {file} at {setting}: exit {out.code}")
+    let mut cleaned: Vec[String] = []
+    let mut rest: Vec[String] = []
+    for line in out.stdout.lines() {
+        if line.ends_with(" cleaned") {
+            cleaned.push(line.clone())
+        } else if hidden.len() == 0 || !line.starts_with(hidden) {
+            rest.push(line.clone())
+        }
+    }
+    cleaned.sort()
+    for line in cleaned { println(line) }
+    for line in rest { println(line) }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/crash.nika", fs::Root::Anywhere, crash())
+    fs::write(f"{tmp}/cleanup.nika", fs::Root::Anywhere, cleanup())
+    fs::write(f"{tmp}/crossing.nika", fs::Root::Anywhere, crossing())
+    child(tmp, "crash.nika", "no", "")
+    child(tmp, "crash.nika", "yes", "ran:")
+    child(tmp, "cleanup.nika", "no", "")
+    child(tmp, "cleanup.nika", "yes", "")
+    child(tmp, "crossing.nika", "no", "")
+    child(tmp, "crossing.nika", "yes", "")
+    process::run("rm", ["-rf", tmp])
+}

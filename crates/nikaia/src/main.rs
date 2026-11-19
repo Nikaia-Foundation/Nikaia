@@ -204,6 +204,13 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub bounds: bool,
 
+    /// With `lower-std`, print every warning the checker gives each file of
+    /// the tools package, one line each with its code (#1625):
+    /// `nikaia run scripts/analysis_scale.nika` sums them. Like `--bounds`,
+    /// it writes nothing and reads no cache.
+    #[arg(long, global = true)]
+    pub findings: bool,
+
     /// With `--bounds`, show for each goal the walk asks on line `LINE`
     /// (`FILE:LINE` for `lower-std`, the file named by the end of its path)
     /// the facts it was asked with, how many the cap on facts dropped, and
@@ -466,7 +473,7 @@ pub enum Command {
         sysroot: Option<PathBuf>,
     },
     /// Write a draft ledger for a Rust crate's boundary
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D2).
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D2).
     ///
     /// The command `NK2504` names. It reads the crate's `pub` signatures,
     /// translates them by Part III 15.2's table, and writes
@@ -658,12 +665,12 @@ fn lower_std(sysroot: Option<PathBuf>) -> Result<i32> {
 /// report, each file seeing the package, at the `--optimization` levels
 /// given (each `on` where none is, ADR-306 D26). With `--asserts`, each file's
 /// `check --asserts` block too, after its `--bounds` one; `--asserts` alone
-/// prints those blocks alone.
+/// prints those blocks alone. With `--findings`, each file's warnings
+/// (#1625), after the others.
 fn lower_std_bounds(
     sysroot: Option<PathBuf>,
     optimization: &[String],
-    bounds_report: bool,
-    asserts_report: bool,
+    reports: [bool; 3],
 ) -> Result<i32> {
     let sysroot = match sysroot {
         Some(root) => Sysroot::new(root),
@@ -674,19 +681,12 @@ fn lower_std_bounds(
     let through_loops = project::prove_through_loops(&words);
     print!(
         "{}",
-        sysroot::bounds_tools(
-            &sysroot,
-            bounds,
-            overflow,
-            through_loops,
-            bounds_report,
-            asserts_report
-        )?
+        sysroot::bounds_tools(&sysroot, bounds, overflow, through_loops, reports)?
     );
     Ok(0)
 }
 
-/// `nikaia describe <crate>` ([ADR-290](../../../docs/specification/adr/adr-290.md) D2).
+/// `nikaia describe <crate>` ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D2).
 ///
 /// **What it prints is what a reviewer does next**, which is the whole reason
 /// the command exists rather than the file appearing during a build: the draft
@@ -818,12 +818,11 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
                 filters,
             );
         }
-        Command::LowerStd { sysroot } if args.bounds || args.asserts => {
+        Command::LowerStd { sysroot } if args.bounds || args.asserts || args.findings => {
             return lower_std_bounds(
                 sysroot.clone(),
                 &args.optimization,
-                args.bounds,
-                args.asserts,
+                [args.bounds, args.asserts, args.findings],
             );
         }
         Command::LowerStd { sysroot } => return lower_std(sysroot.clone()),

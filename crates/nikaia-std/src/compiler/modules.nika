@@ -1105,7 +1105,7 @@ pub fn modules_qualify(package: String?, name: String) -> String {
 pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
     // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
-    // image`), under the name a call writes it by (ADR-290 D1).
+    // image`), under the name a call writes it by (ADR-rust-boundary-1 D1).
     names.extend(modules_foreign_beside(entry, host))
     let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), open, host)
     units.extend(modules_dependency_units(dependencies, open, host))
