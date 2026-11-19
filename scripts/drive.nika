@@ -97,7 +97,9 @@
 // has none (`STOP drive: time limit after <n> min (<m> min left of 120, a
 // builder of DIR takes <k> min)`, drive_time_check, #1885, #2022); checked
 // before the merge that precedes each builder and again after it, so minutes
-// spent merging stop only a builder that no longer fits. A builder run cut off all the
+// spent merging stop only a builder that no longer fits; and before the start
+// of a block's suite, where fewer minutes are left than that start takes
+// (drive_suite_fits). A builder run cut off all the
 // same after its report (BRIEF.running left beside it) gets its follow-up at
 // the next start (`PICKUP <name>`, drive_pickup). A suite still running on
 // CI (or a red one not yet handed to QA) is not lost: its files stay in
@@ -515,6 +517,21 @@ fn drive_time_check(dir: String) -> String throws {
 	let run = drive_run_minutes(dir).min(limit)
 	if left >= run { return "" }
 	return f"{left} min left of {task}, a builder of {dir} takes {run} min"
+}
+
+// Whether the start of a suite still fits in the task: "" when it does;
+// `up` past NIKAIA_DRIVE_LIMIT_MIN; else, where the minutes left until the
+// task ends (NIKAIA_DRIVE_TASK_MIN, default 120) are fewer than the suite's
+// foreground part takes (NIKAIA_DRIVE_SUITE_MIN, default 30: the merge of
+// develop, lower-std, the build and the ledgers), what says so. The 2 h
+// limit once ended a driver inside that merge, after three builders' runs.
+fn drive_suite_fits() -> String throws {
+	if drive_time_up() { return "up" }
+	let task = text::parse_i64(env::var("NIKAIA_DRIVE_TASK_MIN") ?? "") ?? 120
+	let left = (task * 60 - drive_elapsed()) / 60
+	let need = text::parse_i64(env::var("NIKAIA_DRIVE_SUITE_MIN") ?? "") ?? 30
+	if left >= need { return "" }
+	return f"{left} min left of {task}, the start of a suite takes {need} min"
 }
 
 // Ends the run at the time limit, before an agent starts: a suite this driver
@@ -5354,6 +5371,13 @@ fn main() throws {
 				return
 			}
 			if built >= block {
+				// The suite's start (merge, lower-std, build, ledgers) runs
+				// in the foreground: a task that ends inside it leaves a
+				// merge half done and nothing handed over. Where it no
+				// longer fits, the run stops here; the commits stay in
+				// unpushed.txt and the next run tests them first.
+				let fits = drive_suite_fits()
+				if fits != "" { drive_time_stop(fits) }
 				println(f"BLOCK {built} builder runs: the suite starts")
 				drive_suite(exe.clone(), dry, dir)
 				built = 0
