@@ -594,7 +594,14 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
                 keeps_maybe(field.value, interner, holes_of, context, own, library, walk)
             }
         }
-        Expr::Return(value, _) => keeps_maybe(value, interner, holes_of, context, own, library, walk),
+        // **A `return` inside an expression hands back as the statement
+        // does** (ADR-views-3 D2, #2285): `p.find(";") ?? return p` keeps `p`.
+        Expr::Return(value, _) => {
+            if !context.returns_a_view {
+                hand_over_maybe(value, interner, holes_of, context, own, library, walk)
+            }
+            keeps_maybe(value, interner, holes_of, context, own, library, walk)
+        }
         Expr::Select(arms, _) => {
             for arm in arms {
                 keeps_expression(arm.value, interner, holes_of, context, own, library, walk)

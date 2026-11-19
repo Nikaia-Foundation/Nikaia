@@ -373,7 +373,11 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
             keeps_expression(base, interner, &mut &mut *holes_of, context, own, library, walk);
             for field in fields.iter() { keeps_maybe((field.value).as_ref(), interner, &mut &mut *holes_of, context, own, library, walk); }
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); keeps_maybe((value).as_ref(), interner, &mut &mut *holes_of, context, own, library, walk); },
+        Expr::Return(value, _) => {
+            let value = nikaia_std::boxed::open(value);
+            if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, &mut &mut *holes_of, context, own, library, walk); }
+            keeps_maybe((value).as_ref(), interner, &mut &mut *holes_of, context, own, library, walk);
+        },
         Expr::Select(arms, _) => { for arm in arms.iter() { keeps_expression(&arm.value, interner, &mut &mut *holes_of, context, own, library, walk); } },
         _ => { },
     }
