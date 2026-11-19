@@ -503,6 +503,12 @@ pub(crate) fn environment_untrusted(untrusted: bool) {
     ENVIRONMENT_UNTRUSTED.store(untrusted, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Whether this build's environment is untrusted (ADR-397 D4): the emitter
+/// leaves out the stop of a privileged start then (D3).
+pub(crate) fn environment_is_untrusted() -> bool {
+    ENVIRONMENT_UNTRUSTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// `std`'s ledger as a library to **build on**: the floor every package's
 /// inference starts from, before its own dependencies are absorbed into it
 /// ([ADR-100](../../../docs/specification/adr/adr-100.md) D1).

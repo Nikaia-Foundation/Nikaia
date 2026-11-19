@@ -1,0 +1,10 @@
+[package]
+name = "privileged-start"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+description = "Whether this process was started with more rights than its caller: setuid, setgid or file capabilities (AT_SECURE on Linux, issetugid() on macOS and the BSDs)."
+publish = false
+
+[workspace]

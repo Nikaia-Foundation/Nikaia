@@ -1605,7 +1605,7 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   untrusted, as standard input is (17.1, D2); `[build] environment = "untrusted"` (13.3) makes every
   value untrusted (D4). A program started with more rights than its caller (setuid, setgid, file
   capabilities: `AT_SECURE` on Linux, `issetugid()` on macOS and the BSDs) ends before `main` with
-  exit status 1 unless its manifest declares the environment untrusted (D3). `std` does not change the environment of the running program (no
+  exit status 1 unless its manifest declares the environment untrusted (D3); the question is asked by the crate `crates/unsafe/privileged-start` ([ADR-218](adr/adr-218.md) D1), which holds its `unsafe`. `std` does not change the environment of the running program (no
   `set_var`): a child gets another one through `process::run`'s `env:`, `env_clear:` and `env_remove:`
   ([ADR-243](adr/adr-243.md) D5).
   **The values may be secrets** (tokens, passwords, keys): do not print, log or send the list as it
