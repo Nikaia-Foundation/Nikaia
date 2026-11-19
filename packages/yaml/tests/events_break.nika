@@ -1,0 +1,39 @@
+// A walk of `Yaml::events` that stops early (ADR-grammar-2 D7, #1443): a
+// `break` after the first document ends the parse there, so the error in the
+// third document is never read; walked to the end, the same stream fails.
+// The limits are the parse's own option (D8).
+use yaml
+
+fn first_document(text: String) -> i64 throws {
+	let input = Bytes(text.bytes().collect())
+	let mut seen = 0
+	for e in yaml::Yaml::events(input) {
+		println(yaml::event_line(e))
+		seen += 1
+		if e.kind == yaml::EventKind::DocumentEnd {
+			break
+		}
+	}
+	return seen
+}
+
+fn all(text: String, limits: yaml::Limits) -> i64 throws {
+	let input = Bytes(text.bytes().collect())
+	let mut seen = 0
+	for e in yaml::Yaml::events(input; limits: limits) {
+		println(yaml::event_line(e))
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	let bad = "%YAML 1.2\n--- !!str a\n...\n--- b\n--- [c, d\n"
+	println(f"first document: {first_document(bad)} events")
+	let n = all(bad, yaml::default_limits()) catch { -1 }
+	println(f"to the end: {n}")
+	let deep = "- - - x\n"
+	println(f"default limits: {all(deep, yaml::default_limits()) catch { -1 }}")
+	let shallow = yaml::Limits { depth: 2, alias_nodes: 10000, bytes: 4294967295 }
+	println(f"depth 2: {all(deep, shallow) catch { -1 }}")
+}

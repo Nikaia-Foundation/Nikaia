@@ -618,14 +618,19 @@ pub(crate) enum GrammarUndo {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_can_fail(pattern: &Pattern) -> bool {
+pub(crate) fn grammar_can_fail(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern) -> bool {
     match pattern {
         Pattern::Repeat { rep, .. } => *rep != Repeat::Star && *rep != Repeat::Optional,
         Pattern::Cut => false,
-        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); grammar_can_fail(&inner.node) },
-        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_can_fail(&pat.node) },
-        Pattern::Seq(parts) => parts.iter().any(|part| { grammar_can_fail(&part.node) }),
-        Pattern::Choice(parts) => parts.iter().all(|part| { grammar_can_fail(&part.node) }),
+        Pattern::Ref { name, args, .. } => {
+            let name = *name;
+            let called = world.words.resolve(name);
+            !(called == "here" && args.is_empty() || called == "count" && args.len() == 1)
+        },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); grammar_can_fail(world, &inner.node) },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_can_fail(world, &pat.node) },
+        Pattern::Seq(parts) => parts.iter().any(|part| { grammar_can_fail(world, &part.node) }),
+        Pattern::Choice(parts) => parts.iter().all(|part| { grammar_can_fail(world, &part.node) }),
         _ => true,
     }
 }
@@ -660,7 +665,7 @@ pub(crate) fn grammar_undo_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pa
                                     Pattern::Cut => { break; },
                                     _ => { },
                                 }
-                                if grammar_can_fail(&unsafe { nikaia_std::proven::read(&parts, (j) as usize) }.node) { after = true; }
+                                if grammar_can_fail(world, &unsafe { nikaia_std::proven::read(&parts, (j) as usize) }.node) { after = true; }
                                 j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
                             }
                             out = out || after;
