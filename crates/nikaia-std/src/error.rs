@@ -874,8 +874,10 @@ mod tests {
     //
     // What the envelope prints, joins, passes on and drops is tested by
     // programs (`tests/compiler/tests/error_*.nika`, `error_types.nika` in
-    // `tests/language`). The two tests left check its layout, which no
-    // program sees.
+    // `tests/language`); that a site alone allocates nothing and the success
+    // path holds no memory more is
+    // `tests/compiler/tests/error_a_site_alone_requests_no_memory.nika`
+    // (#2319). The test left checks its layout, which no program sees.
 
     use std::mem::size_of;
 
@@ -911,20 +913,5 @@ mod tests {
         // three words (D3).
         assert_eq!(size_of::<Result<u64, Box<dyn Error>>>(), 16);
         assert_eq!(size_of::<Raised>(), 3 * size_of::<usize>());
-    }
-
-    /// **The common case allocates nothing**: a site and nothing else lives in
-    /// the word, tagged.
-    ///
-    /// Kept as Rust (#2304): whether the tail is the word or a cold box is
-    /// layout, which no program sees.
-    #[test]
-    fn a_site_alone_is_the_tagged_word() {
-        let tail: Tail<()> = Tail::site(&"load.nika:3");
-        assert!(tail.is_site_only());
-        assert!(tail.as_cold().is_none());
-        assert_eq!(tail.origin(), "load.nika:3");
-        assert!(tail.trace().is_none());
-        assert!(tail.secondary().is_empty());
     }
 }
