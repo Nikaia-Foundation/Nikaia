@@ -69,6 +69,11 @@ pub mod net;
 pub mod node_id;
 pub mod num;
 pub mod par;
+/// `std::path`: a path from outside proved by a property of its own
+/// (ADR-raw-sinks-1 D14), written in Nikaia, `runtime/paths.nika`.
+pub mod path {
+    pub use crate::runtime::{is_below, is_component};
+}
 pub mod process;
 pub mod range;
 pub mod regex;
@@ -151,10 +156,15 @@ pub mod text {
 /// `question_mark` and `comparison_to_empty`, as there too: `?? return null`
 /// is lowered a `match` that returns `None`, and `s == ""` stays a comparison
 /// (`run_config.nika`, #2211).
+/// `explicit_counter_loop` and `manual_range_contains`, as there too: a
+/// counter beside a `for` and `c >= 'a' && c <= 'z'` stay as written
+/// (`paths.nika`, #2300).
 #[doc(hidden)]
 #[allow(
     clippy::question_mark,
     clippy::comparison_to_empty,
+    clippy::explicit_counter_loop,
+    clippy::manual_range_contains,
     clippy::unnecessary_cast,
     clippy::too_many_arguments,
     clippy::useless_conversion,
@@ -596,6 +606,10 @@ pub mod prelude {
     pub use crate::grammar::ParseError;
     pub use crate::hash::{TrustedMap, TrustedSet};
     pub use crate::html;
+    // `path::is_component(name)` (ADR-raw-sinks-1 D14). Here for `net`'s
+    // reason: a module reached through its prefix has to be in scope in the
+    // generated file.
+    pub use crate::path;
     pub use std::cmp::Ordering;
     // **What an `impl Hash`'s `hash` feeds** (ADR-010 D12): any hasher of the
     // standard library's, behind the `mut` reference the parameter lowers to.

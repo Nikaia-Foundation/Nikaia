@@ -1,0 +1,10 @@
+// `io::read_line` and `io::read_exact` take no `trusted:` option
+// (ADR-raw-sinks-1 D16.1): a line from standard input is proved by a guard,
+// not marked at its source.
+use std::io
+
+fn main() throws {
+    let line = io::read_line(trusted: true) ?? ""
+    let body = io::read_exact(4; trusted: true)
+    println(f"{line} {body.len()}")
+}
