@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1449] — 2026-11-19
+
+**NK1301 refuses .to_string() on text, with a fix edit; the sites are migrated (ADR-text-reuse-1 D1)**
+- `.to_string()` on text is refused (NK1301): a view is a String already; drop it, or write `.clone()` for a copy, and `nikaia fix` drops it. A type parameter keeps it (ADR-text-reuse-1 D1). benches/lowering/source.nika is unchanged (it has its own check errors, so fix skipped it)
+
 ## [0.0.1448] — 2026-11-19
 
 **ADR-failure-return-1 §6: non-inlined failing calls counted, too few for the two-scalar lowering (D2)**
