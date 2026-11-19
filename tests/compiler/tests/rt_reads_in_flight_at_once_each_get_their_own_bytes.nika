@@ -15,7 +15,7 @@ fn main() throws {
 		fs::read_to_string(f"{tmp}/b", fs::Root::Anywhere)
 	}
 	println(f"{a} {b}")
-	for n in 1..8 {
+	for n in 1..<9 {
 		fs::write(f"{tmp}/{n}", fs::Root::Anywhere, "x".repeat(n))
 	}
 	let (r1, r2, r3, r4, r5, r6, r7, r8) = overlap {
