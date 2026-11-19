@@ -7,7 +7,7 @@
 binary the toolchain built in its cache, or the `.nika` file the developer
 named; and is that one question or two
 **Supersedes / Related:**
-[ADR-397](adr-397.md) (a value read from the environment is untrusted; a path carries no provenance);
+[ADR-397](adr-397.md) (who chose a value read from the environment; a path carries no provenance);
 [ADR-010](adr-010.md) D8 (no provenance travels a path);
 [ADR-243](adr-243.md) D5 (`std` does not change the running program's environment; a child gets another one through `process::run`);
 [ADR-218](adr-218.md) (`std` holds no `unsafe` code);
