@@ -292,10 +292,15 @@ pub mod runtime {
 /// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
 /// (`bounds_rules.nika`'s `rules_exit`, #1330).
 ///
+/// **And `get_first`**: `args.get(0) ?? return null` lowers as written
+/// (`trust.nika`'s `first_literal`, #2216); `.first()` there lowers a
+/// `ref` binding Rust refuses under a reference.
+///
 /// **And `result_large_err`**: an error enum a `.nika` throws holds its values
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
+    clippy::get_first,
     clippy::result_large_err,
     clippy::no_effect,
     clippy::eq_op,

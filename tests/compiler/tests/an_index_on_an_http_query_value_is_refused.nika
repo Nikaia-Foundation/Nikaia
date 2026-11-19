@@ -1,0 +1,13 @@
+// An index on a value read from an http request's query string, not proved, is
+// refused with NK1302, the note naming the read (ADR-396 D1, ADR-010 D2, #1572).
+use std::http1
+use std::text
+
+fn main() throws {
+	let names = ["red", "green", "blue"]
+	let mut buffer = http1::Buffer()
+	buffer.take("GET /?pick=1 HTTP/1.1\r\n\r\n")
+	let head = buffer.head()
+	let pick = text::parse_i64(head.query("pick") ?? "0") ?? 0
+	println(names[pick])
+}

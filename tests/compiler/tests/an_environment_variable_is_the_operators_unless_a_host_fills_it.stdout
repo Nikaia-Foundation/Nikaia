@@ -1,0 +1,29 @@
+-- an operator's name, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- an operator's name after the guard
+Checked p.nika
+-- an HTTP_ name
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- an RFC 3875 name
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- env::vars("")
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- the trusted: option is gone
+error[NK1109]: `env::var` has no option called `trusted`.
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- a map keyed by HOME
+input provenance: trusted
+    env::var is trusted
+hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
+-- a map keyed by HTTP_COOKIE
+input provenance: untrusted
+    env::var is untrusted
+hash for a map keyed by the input: keyed, per-process random seed - key choice cannot be aimed at the table
+-- a project, the operator's by default
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- [build] environment = "untrusted"
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- --environment=untrusted
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- another word
+Error: `environment` is `operator` or `untrusted`, not `stranger`. `operator` takes the environment as the operator's, but for the names a CGI host fills; `untrusted` takes every variable as data from outside, for a program meant to run setuid or whose environment a less trusted party sets.

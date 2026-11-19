@@ -36,6 +36,9 @@ pub struct EmitContractsBuild {
     /// Every item is `pub`, for the package's own `tests/` programs
     /// (`Build::every_item_public`, ADR-403 D4).
     pub every_item_public: bool,
+    /// `[build] environment = "untrusted"` (ADR-397 D4): the program's
+    /// `main` does not stop a privileged start (D3).
+    pub environment_untrusted: bool,
 }
 
 /// The state, which checks a statement holds and which are proved, and what
@@ -183,6 +186,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         crate_root: build.crate_root.clone(),
         offered_to_rust: build.offered_to_rust,
         every_item_public: build.every_item_public,
+        environment_untrusted: build.environment_untrusted,
         fails: tables.fails,
         trusted_input: build.trusted,
         unchecked_assumes: unchecked,

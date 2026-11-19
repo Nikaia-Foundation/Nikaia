@@ -73,6 +73,7 @@ pub struct EmitState {
     pub crate_root: String,
     pub offered_to_rust: bool,
     pub every_item_public: bool,
+    pub environment_untrusted: bool,
     pub fails: bool,
     pub trusted_input: bool,
     pub unchecked_assumes: bool,

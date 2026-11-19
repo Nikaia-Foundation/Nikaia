@@ -11,6 +11,10 @@ pub fn launcher_var(name: &str) -> bool { name == EXE_VAR || name == MAIN_VAR }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn privileged_start_line(program: &str) -> String { format!("error: `{}` was started with more rights than its caller (setuid, setgid or file capabilities), and its manifest does not declare the environment untrusted, so the caller chose every variable it would read. A program meant to start so declares `[build] environment = \"untrusted\"` in its `nikaia.toml` (ADR-397 D3, D4).", program) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn vars(prefix: &str) -> Vec<(String, String)> {
     let mut listed: Vec<(String, String)> = vec![];
     for pair in env::pairs() {

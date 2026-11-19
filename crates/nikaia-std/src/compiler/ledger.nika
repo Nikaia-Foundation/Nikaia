@@ -447,6 +447,14 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         // **Each `trusted: true` the body wrote, with its place** (ADR-365
         // D2): a review item, read back as written.
         entry.trusted = entries(value, n)
+    } else if key == "provenance_by" {
+        // **Whose text, by the first argument** (ADR-397 D2): a name or a
+        // prefix of the environment.
+        let by = unquoted(value, n)
+        if by != "name" && by != "prefix" {
+            throw Refused::Because(f"line {n}: `provenance_by` is `name` or `prefix`, not `{by}`")
+        }
+        entry.provenance_by = by.clone()
     } else if key == "views" {
         let mut views: Vec[Held] = []
         for held in entries(value, n) {
