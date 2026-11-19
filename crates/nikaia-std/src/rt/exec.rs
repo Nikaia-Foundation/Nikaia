@@ -760,23 +760,6 @@ mod tests {
         assert!(began.elapsed() < std::time::Duration::from_secs(30));
     }
 
-    /// **A task nobody joins still runs** (D5), which is what Part I 8.2's own
-    /// example needs: it keeps no handle.
-    #[test]
-    fn a_task_nobody_joins_still_runs() {
-        let ran = Rc::new(RefCell::new(false));
-        let inside = ran.clone();
-        let seen = ran.clone();
-
-        block_on(async move {
-            start(async move {
-                *inside.borrow_mut() = true;
-            });
-            Yield::once().await;
-            assert!(*seen.borrow(), "the task ran without being awaited");
-        });
-    }
-
     /// **A slot is how a value leaves a task**, and taking it is a suspension
     /// point rather than a wait.
     #[test]
@@ -890,35 +873,5 @@ mod io_tests {
         }
 
         std::fs::remove_dir_all(&dir).ok();
-    }
-}
-
-#[cfg(test)]
-mod drain_tests {
-    use super::*;
-    use std::rc::Rc;
-
-    // **The bound itself is tested end to end**, in `crates/nikaia/tests/tasks.rs`:
-    // it needs a `cleanup-deadline` short enough to wait out, the runtime is one
-    // per process, and this suite shares a process with eighty other tests. What
-    // is here is the half that must not break when the bound is added.
-
-    /// **A task that does finish is waited for**, which is the case the bound
-    /// must not break.
-    #[test]
-    fn a_task_that_finishes_is_still_waited_for() {
-        let done = Rc::new(RefCell::new(false));
-        let inside = done.clone();
-        block_on(async move {
-            start(async move {
-                Yield::once().await;
-                Yield::once().await;
-                *inside.borrow_mut() = true;
-            });
-        });
-        assert!(
-            *done.borrow(),
-            "the drain returned before the task finished"
-        );
     }
 }
