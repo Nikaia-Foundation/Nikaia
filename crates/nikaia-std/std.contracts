@@ -6669,32 +6669,6 @@ provenance = "untrusted"
 keeps = ["args", "env", "env_remove", "stdin"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
-# Run `command` with `/bin/sh -c` and hand back what it said, with
-# `process::run`'s options (ADR-raw-sinks-1 §4): the one raw sink of
-# `std::process`. A part of `command` from outside the program is proved to
-# meet `process::is_word` or allowed with `[allow] untrusted-shell` (D2-D4).
-# What it reads back is `untrusted`, as `run`'s is. Written in Nikaia,
-# `src/runtime/shell.nika`; a list or a stream option is a `T?` decided there.
-[fn."process::shell"]
-pub = true
-panics = false
-throws = ["io::IoError"]
-provenance = "untrusted"
-keeps = ["command", "env", "env_remove", "stdin"]
-signature = "(command: String; dir: ref String = \".\", env: Vec[(String, String)]? = null, env_remove: Vec[String]? = null, env_clear: bool = false, within: time::Duration? = null, stdin: process::Input? = null, stdout: process::Stream? = null, stderr: process::Stream? = null, trusted: bool = false) -> process::Output"
-
-# Whether `part` is one word a shell reads as written: not empty, and only
-# `A-Z`, `a-z`, `0-9` and `_ . / : = @ % + , -`. The precondition of
-# `process::shell` on each part from outside the program (ADR-raw-sinks-1
-# D2). A pure `bool` call, so a guard on it is a fact the prover reads
-# (ADR-381). Written in Nikaia, `src/runtime/raw_sinks.nika`.
-[fn."process::is_word"]
-pub = true
-panics = false
-sync = true
-touches = []
-signature = "(part: ref String) -> bool"
-
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so
 # it never blocks on a full pipe while nobody waits.

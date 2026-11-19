@@ -178,6 +178,13 @@ impl CheckState {
     }
 
     fn a_member_is_refused(ref mut self, head: ref String, member: ref String, method: bool, members: ref Vec[String], span: ref Span) sync {
+        // **`NK1314`: `std` runs no shell** (ADR-raw-sinks-1 D9, #2197): on
+        // no platform, so `process::shell` is no member and its call is
+        // written as a program with its arguments, never read as code.
+        if !method && head == "process" && member == "shell" {
+            self.findings.push(check_refusal("NK1314", span, "no shell is configured: `std` runs no shell (ADR-raw-sinks-1 D9).", ["A shell reads its text as code, and a check of that text holds only for the one shell that reads it, so `std` starts none, on any platform."], "Write the command as `process::run(\"PROGRAM\", [\"ARG\", ...])`, whose arguments reach the program one by one and are never read as code."))
+            return
+        }
         // A view of text is text to the reader.
         let mut shown: String = head.clone()
         if head == "str" {
