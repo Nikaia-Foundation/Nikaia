@@ -421,6 +421,41 @@ fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref Strin
 }
 
 /// A bare name.
+/// `x = x.replace(a, b)` (or `replacen`) where neither `a` nor `b` reads
+/// `x` (ADR-text-reuse-1 D4).
+fn check_core_stmt_replaces_itself(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> bool sync {
+    let named: String = match target {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => return false,
+    }
+    return match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let by = world.words.resolve(method)
+            let on_itself = match receiver {
+                Expr::Variable(name, _) => world.words.resolve(name) == named,
+                else => false,
+            }
+            if !(by == "replace" || by == "replacen") || !on_itself {
+                return false
+            }
+            for arg in args {
+                for each in visited_in_expr(arg) {
+                    match each {
+                        Expr::Variable(v, _) => {
+                            if world.words.resolve(v) == named {
+                                return false
+                            }
+                        },
+                        else => {}
+                    }
+                }
+            }
+            true
+        },
+        else => false,
+    }
+}
+
 fn check_core_stmt_a_name(value: ref Expr) -> bool sync {
     return match value {
         Expr::Variable(_, _) => true,
@@ -1921,6 +1956,11 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         if check_core_ops_add(o.clone()) {
             let added = state.facts.appended_texts.insert(span.start as i64)
         }
+    }
+    // **`x = x.replace(a, b)` replaces in `x`'s buffer** (ADR-text-reuse-1
+    // D4): `x` owns its text and is not read by `a` or `b`.
+    if op == null && is_text_type(into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
+        let replaced = state.facts.replaced_assigns.insert(span.start as i64)
     }
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {

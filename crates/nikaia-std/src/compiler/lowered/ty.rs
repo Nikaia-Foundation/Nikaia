@@ -437,7 +437,7 @@ pub fn shown_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
     let mut out = nikaia_std::block::Text::from(message.replace(&*format!("`{}`", text(first)), &*format!("`{}`", ty_shown(first))));
     if second.is_some() {
         let other = nikaia_std::index::or(second, || &Ty::Unknown);
-        out = nikaia_std::block::Text::from(out.replace(&*format!("`{}`", text(other)), &*format!("`{}`", ty_shown(other))));
+        nikaia_std::search::replace_in(&mut out, &format!("`{}`", text(other)), &format!("`{}`", ty_shown(other)));
     }
     out
 }

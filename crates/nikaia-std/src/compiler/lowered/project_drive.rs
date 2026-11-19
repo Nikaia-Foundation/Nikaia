@@ -902,7 +902,7 @@ pub(crate) fn project_drive_rust_manifest(generated: &str, crate_name: &str, mem
         if section == "[dependencies]" {
             for member in members.iter() {
                 let beside = project_drive_rust_crate(&member.name);
-                kept = nikaia_std::block::Text::from(kept.replace(&*format!("package = \"{}\", path = \"../{}\"", member.name, member.name), &*format!("package = \"{}\", path = \"../{}\"", beside, beside)));
+                nikaia_std::search::replace_in(&mut kept, &format!("package = \"{}\", path = \"../{}\"", member.name, member.name), &format!("package = \"{}\", path = \"../{}\"", beside, beside));
             }
         }
         out = format!("{}{}\n", out, kept);

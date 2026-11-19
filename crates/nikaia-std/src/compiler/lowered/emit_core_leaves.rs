@@ -192,7 +192,7 @@ impl EmitState {
             n += 1;
             match part {
                 FPart::Text(text) => {
-                    let shown = nikaia_std::block::Text::from(nikaia_std::block::Text::from(text.replace("{{", "{")).replace("}}", "}"));
+                    let shown = nikaia_std::search::replaced(nikaia_std::block::Text::from(text.replace("{{", "{")), &"}}", &"}");
                     out.push(&format!("std::ffi::OsStr::new(\"{}\")", shown));
                 },
                 FPart::Hole { expr, at, .. } => {
@@ -279,7 +279,7 @@ impl EmitState {
                     return Ok(());
                 }
                 if !emit_leaf_has_holes(parts) {
-                    let text = nikaia_std::block::Text::from(nikaia_std::block::Text::from(format_of(parts).replace("{{", "{")).replace("}}", "}"));
+                    let text = nikaia_std::search::replaced(nikaia_std::block::Text::from(format_of(parts).replace("{{", "{")), &"}}", &"}");
                     if self.on_block_types() { out.push(&format!("nikaia_std::block::Text::from(\"{}\")", text)); } else { out.push(&format!("\"{}\".to_string()", text)); }
                     return Ok(());
                 }

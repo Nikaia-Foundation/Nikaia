@@ -834,6 +834,20 @@ impl EmitState {
                 return Ok(());
             }
         }
+        if receiver.is_some() && (name == "replace" || name == "replacen") && self.facts.replaced_in_place.contains(&on_node) {
+            let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let call: &'static str = if name == "replacen" { "replacedn" } else { "replaced" };
+            out.push(&format!("nikaia_std::search::{}(", call));
+            self.emit_core_nested(world, walk, out, host, text, 255, depth, flow, scope)?;
+            let mut i = 0;
+            for arg in args.iter() {
+                out.push(if i < 2 { ", &" } else { ", " });
+                self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)?;
+                i += 1;
+            }
+            out.push(")");
+            return Ok(());
+        }
         let lent_pattern = args.len() == 1 || name == "replace" && args.len() == 2;
         if receiver.is_some() && lent_pattern && self.facts.owned_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -1401,8 +1415,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple103628| {
-        let (i, word) = __nikaia_tuple103628;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple104529| {
+        let (i, word) = __nikaia_tuple104529;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

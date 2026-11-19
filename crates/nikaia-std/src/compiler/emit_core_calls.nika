@@ -1211,6 +1211,23 @@ impl EmitState {
                 return
             }
         }
+        // **A `replace` on the text a `replace` made works in its buffer**
+        // (ADR-text-reuse-1 D4, `replaced_in_place`): the temporary is
+        // handed over whole and nobody reads it again.
+        if receiver != null && (name == "replace" || name == "replacen") && self.facts.replaced_in_place.contains(on_node) {
+            let text = receiver ?? return
+            let call: String = if name == "replacen" { "replacedn" } else { "replaced" }
+            out.push(f"nikaia_std::search::{call}(")
+            self.emit_core_nested(world, walk, out, host, text, 255, depth, flow, scope)
+            let mut i = 0
+            for arg in args {
+                out.push(if i < 2 { ", &" } else { ", " })
+                self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)
+                i += 1
+            }
+            out.push(")")
+            return
+        }
         // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
         // front of it, as for any `ref String` parameter. `replace`'s
         // replacement is lent the same way (#877). A block's text is lent as

@@ -423,6 +423,34 @@ impl EmitState {
         }
         written
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_replace_in<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, target: &Expr, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, at: i64) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let named = match target {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(emit_text(world, name).to_string()) },
+            _ => return Ok(false),
+        };
+        if self.changes_in_place(&scope.function, &named) || host.given_up_rebound(at).is_some() || self.emit_stmt_reput(&walk, &scope.function, at).is_some() || self.facts.view_list_assigns.contains(&at) { return Ok(false); }
+        Ok(match value {
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                let by = emit_text(world, method);
+                let call: &'static str = if by == "replacen" { "replacen_in" } else { "replace_in" };
+                out.push(&format!("nikaia_std::search::{}(&mut ", call));
+                self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
+                let mut i = 0;
+                for arg in args.iter() {
+                    out.push(if i < 2 { ", &" } else { ", " });
+                    self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)?;
+                    i += 1;
+                }
+                out.push(");");
+                true
+            },
+            _ => false,
+        })
+    }
     pub(crate) fn emit_stmt_reput(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -574,6 +602,7 @@ impl EmitState {
         if self.emit_stmt_assign_slot(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
         if self.emit_stmt_assign_proven(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
+        if op.is_none() && self.facts.replaced_assigns.contains(&at) && before == "" && after == "" && self.emit_stmt_replace_in(world, walk, out, host, target, value, depth, flow, scope, at)? { return Ok(()); }
         match target {
             Expr::Variable(name, _) => {
                 let name = *name;

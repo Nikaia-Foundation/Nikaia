@@ -326,6 +326,39 @@ pub(crate) fn check_core_stmt_an_unchanged_owned_let(state: &CheckState, name: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_replaces_itself(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr) -> bool {
+    let named: String = match target {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+        _ => return false,
+    };
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let by = world.words.resolve(method);
+            let on_itself = match receiver {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == named },
+                _ => false,
+            };
+            if !(by == "replace" || by == "replacen") || !on_itself { return false; }
+            for arg in args.iter() {
+                for each in visited_in_expr(arg) {
+                    match each {
+                        Expr::Variable(v, _) => {
+                            let v = *v;
+                            if world.words.resolve(v) == named { return false; }
+                        },
+                        _ => { },
+                    }
+                }
+            }
+            true
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_name(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1369,6 +1402,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if check_core_ops_add(&o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
     }
+    if op.is_none() && is_text_type(&into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) { let replaced = state.facts.replaced_assigns.insert(span.start as i64); }
     if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, &o.clone(), target, &into, value, &found, span); }

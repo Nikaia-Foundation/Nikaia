@@ -590,6 +590,38 @@ impl EmitState {
     }
 
     /// The keep a kept buffer assigned again goes into, with the call (#293).
+    /// **`x = x.replace(a, b)` replaces in `x`'s own buffer**
+    /// (ADR-text-reuse-1 D4, `replaced_assigns`): written
+    /// `nikaia_std::search::replace_in(&mut x, &a, &b)`. Not where `x` is a
+    /// `mut` parameter, rebound beside a view of it or put into a keep: those
+    /// assign as before. Whether it was written.
+    fn emit_stmt_replace_in[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, target: ref Expr, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope, at: i64) -> bool sync throws {
+        let named = match target {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => return false,
+        }
+        if self.changes_in_place(scope.function, named) || host.given_up_rebound(at) != null || self.emit_stmt_reput(walk, scope.function, at) != null || self.facts.view_list_assigns.contains(at) {
+            return false
+        }
+        return match value {
+            Expr::MethodCall { method, args, .. } => {
+                let by = emit_text(world, method)
+                let call: String = if by == "replacen" { "replacen_in" } else { "replace_in" }
+                out.push(f"nikaia_std::search::{call}(&mut ")
+                self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)
+                let mut i = 0
+                for arg in args {
+                    out.push(if i < 2 { ", &" } else { ", " })
+                    self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)
+                    i += 1
+                }
+                out.push(");")
+                true
+            },
+            else => false,
+        }
+    }
+
     fn emit_stmt_reput(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
@@ -796,6 +828,9 @@ impl EmitState {
             return
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(at))
+        if op == null && self.facts.replaced_assigns.contains(at) && before == "" && after == "" && self.emit_stmt_replace_in(world, walk, out, host, target, value, depth, flow, scope, at) {
+            return
+        }
         // **A `mut` parameter assigned whole is written through** (ADR-094 D3,
         // #576): below it is a `&mut T`, and `n = n + 1` is `*n = *n + 1`.
         match target {
