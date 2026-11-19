@@ -155,6 +155,7 @@ fn join(
                 wrote,
                 span,
                 trusted,
+                literals,
                 ..
             } = seen
             else {
@@ -164,10 +165,15 @@ fn join(
                 continue;
             };
             // **`trusted: true` at the call** (ADR-365 D2): the operator chose
-            // these bytes, whatever the ledger says of the source.
+            // these bytes, whatever the ledger says of the source. So did a
+            // read of the environment by a name no CGI host fills (ADR-397
+            // D1, D2), with no marker to record.
             if let Some(provenance) = contract.provenance {
+                let first = literals.first().and_then(|first| first.as_deref());
                 let (provenance, marked) = if trusted {
                     (Provenance::Trusted, Some(own_file.then_some(span)))
+                } else if nikaia_std::compiler::trust::read_by_operator(contract, first) {
+                    (Provenance::Trusted, None)
                 } else {
                     (provenance, None)
                 };

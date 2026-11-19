@@ -118,6 +118,16 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "error|warn")]
     pub raw_sinks: Option<String>,
 
+    /// Who sets the environment (ADR-397 D4): `operator`, the default,
+    /// takes what `env::var` and `env::vars` read as the operator's, but for
+    /// the names a CGI host fills; `untrusted` takes all of it as data from
+    /// outside, and lets a start with more rights than the caller reach
+    /// `main`.
+    ///
+    /// Overrides `nikaia.toml`'s `[build] environment`.
+    #[arg(long, global = true, value_name = "operator|untrusted")]
+    pub environment: Option<String>,
+
     /// Allow one raw sink for this build, as `[allow]` does
     /// (ADR-raw-sinks-1 D4, D5): `untrusted-shell`, `untrusted-sql`,
     /// `untrusted-markup` or `untrusted-paths-anywhere`, or `PACKAGE:KEY` for a
@@ -863,6 +873,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
     project
         .settings
         .sinks(args.raw_sinks.as_deref(), &args.allow)?;
+    project.settings.environment(args.environment.as_deref())?;
     drive(args, &project, subcommand, &program_args)
 }
 
@@ -877,7 +888,8 @@ fn command_line_settings(args: &Cli, settings: &mut Settings) -> Result<()> {
         args.unproved_claims.as_deref(),
     )?;
     settings.checks(args.unproved_checks.as_deref())?;
-    settings.sinks(args.raw_sinks.as_deref(), &args.allow)
+    settings.sinks(args.raw_sinks.as_deref(), &args.allow)?;
+    settings.environment(args.environment.as_deref())
 }
 
 fn drive(args: &Cli, project: &Project, subcommand: &str, program_args: &[String]) -> Result<i32> {
@@ -931,6 +943,7 @@ fn test_command(
     project
         .settings
         .sinks(args.raw_sinks.as_deref(), &args.allow)?;
+    project.settings.environment(args.environment.as_deref())?;
     let filters = filters.to_vec();
     let wanted = |name: &String| project_tests::project_tests_wanted(name, &filters);
     let mut tests =
@@ -1030,6 +1043,7 @@ impl TestHost<'_> {
         built
             .settings
             .sinks(args.raw_sinks.as_deref(), &args.allow)?;
+        built.settings.environment(args.environment.as_deref())?;
         built.drive_to(
             "build",
             &[],
@@ -1116,6 +1130,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
     )?;
     settings.checks(args.unproved_checks.as_deref())?;
     settings.sinks(args.raw_sinks.as_deref(), &args.allow)?;
+    settings.environment(args.environment.as_deref())?;
     if let Some(missing) = settings.build.target.unbuildable() {
         refuse!(
             "cannot build for `{}` yet: {missing}",

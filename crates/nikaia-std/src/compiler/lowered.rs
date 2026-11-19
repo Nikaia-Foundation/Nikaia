@@ -3679,7 +3679,7 @@ pub mod project_members {
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, unproved_checks, raw_sinks, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_unproved_checks, project_settings_raw_sinks, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, unproved_checks, raw_sinks, environment, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_unproved_checks, project_settings_raw_sinks, project_settings_environment, project_settings_allowed, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
@@ -3825,7 +3825,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, Reason, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
+    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9e77b06a39097ddcf0ab86037a58fcc91ed8a599977c9fd399bf108bafb8798c";
+pub const LOWERED_DIGEST: &str = "d4a9fe60a866a4f11e39a2e29b103bcb8c70d635d8e9abefbc240fc2615e62d5";

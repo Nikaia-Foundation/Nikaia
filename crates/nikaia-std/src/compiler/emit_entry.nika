@@ -77,6 +77,12 @@ impl EmitState {
         let vis = if self.as_a_module() { "pub " } else { "" }
         text = f"{text}#[allow(dead_code)]\n{vis}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
+        // ADR-397 D3: a program started with more rights than its caller
+        // ends here, before anything of it runs, unless the build takes the
+        // environment as data from outside (D4).
+        if !self.environment_untrusted {
+            text = f"{text}    nikaia_std::env::stop_a_privileged_start();\n"
+        }
         // ADR-360 D4: the words are read and `main`'s preconditions checked
         // before anything starts; a wrong word ends the program here.
         text = f"{text}{reads}"

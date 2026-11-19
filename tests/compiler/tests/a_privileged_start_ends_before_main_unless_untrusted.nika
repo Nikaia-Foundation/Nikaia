@@ -1,0 +1,50 @@
+// #2239, ADR-397 D3, D4: a program started with more rights than its caller
+// (setuid, setgid, file capabilities) ends before `main` with one line on
+// standard error and status 1, unless its build takes the environment as data
+// from outside. The emitted `main` of a build that takes it as the operator's
+// (the default) calls `nikaia_std::env::stop_a_privileged_start` first; one
+// built with `--environment=untrusted`, or in a project whose `[build]` says
+// `environment = "untrusted"`, holds no such call. A plain start is not
+// privileged, so each program runs. (A setuid start cannot be made here; the
+// crate `privileged-start` says how it was checked by hand.)
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn stops(rust: String) -> String {
+    return f"{rust.matches("nikaia_std::env::stop_a_privileged_start();").count()} stop"
+}
+
+fn lowered(dir: String, words: Vec[String], file: String) -> String throws {
+    let mut args = words.clone()
+    args.push("lower")
+    args.push(file)
+    args.push("-o")
+    args.push(f"{dir}/p.rs")
+    let done = process::run(toolchain(), args; dir: dir.clone())
+    if !done.stdout.contains("Lowered") { println(done.stderr) }
+    return fs::read_to_string(f"{dir}/p.rs", fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let program = "fn main() throws {\n    println(\"main ran\")\n}\n"
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, program)
+    println(f"the operator's, by default: {stops(lowered(tmp, [], "p.nika"))}")
+    println(f"--environment=untrusted: {stops(lowered(tmp, ["--environment=untrusted"], "p.nika"))}")
+    println(f"--environment=operator: {stops(lowered(tmp, ["--environment=operator"], "p.nika"))}")
+    process::run("mkdir", ["-p", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[build]\nenvironment = \"untrusted\"\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, program)
+    println(f"[build] environment = \"untrusted\": {stops(lowered(f"{tmp}/app", [], "src/main.nika"))}")
+    let plain = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(f"a plain start, the operator's: {plain.stdout.trim()}")
+    let untrusted = process::run(toolchain(), ["--environment=untrusted", "run", "p.nika"]; dir: tmp.clone())
+    println(f"a plain start, untrusted: {untrusted.stdout.trim()}")
+    process::run("rm", ["-rf", tmp])
+}

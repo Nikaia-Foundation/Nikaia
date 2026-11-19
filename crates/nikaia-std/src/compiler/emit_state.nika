@@ -173,6 +173,10 @@ pub struct EmitState {
     /// **Every item is `pub`** (ADR-403 D4): the package as it is lowered for
     /// its own `tests/` programs, which reach its private names.
     pub every_item_public: bool,
+    /// **The build takes the environment as data from outside**
+    /// (`[build] environment = "untrusted"`, ADR-397 D4): a privileged start
+    /// reaches `main`, so the entry does not stop it (D3).
+    pub environment_untrusted: bool,
     /// Some function in the file can throw.
     pub fails: bool,
     /// The whole input is trusted.

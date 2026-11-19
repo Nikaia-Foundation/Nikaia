@@ -58,6 +58,33 @@ pub(crate) fn says_trusted(names: &winnow_grammar::InternerContext, config: &[Co
     false
 }
 
+pub(crate) fn host_names() -> Vec<&'static str> { vec!["AUTH_TYPE", "CONTENT_LENGTH", "CONTENT_TYPE", "GATEWAY_INTERFACE", "PATH_INFO", "PATH_TRANSLATED", "QUERY_STRING", "REMOTE_ADDR", "REMOTE_HOST", "REMOTE_IDENT", "REMOTE_USER", "REQUEST_METHOD", "SCRIPT_NAME", "SERVER_NAME", "SERVER_PORT", "SERVER_PROTOCOL", "SERVER_SOFTWARE"] }
+
+pub(crate) fn reaches_a_host_name(by: &str, written: &str) -> bool {
+    if written.starts_with("HTTP_") { return true; }
+    for name in host_names() { if by == "prefix" && name.starts_with(AsRef::<str>::as_ref(written)) || AsRef::<str>::as_ref(&(name)) == AsRef::<str>::as_ref(&(written)) { return true; } }
+    by == "prefix" && "HTTP_".starts_with(AsRef::<str>::as_ref(written))
+}
+
+pub fn read_by_operator(contract: &FnContract, first: Option<&str>) -> bool {
+    if contract.provenance_by.is_empty() { return false; }
+    let written = match first { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !reaches_a_host_name(&contract.provenance_by, written)
+}
+
+pub fn first_literal(args: &[Expr]) -> Option<String> {
+    let first = match args.get(0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match first {
+        Expr::LitStr { text, .. } => Some(nikaia_std::block::Text::from(text.to_string())),
+        _ => None,
+    }
+}
+
+pub fn operator_read(library: &Ledger, source: &str, args: &[Expr]) -> bool {
+    let contract = match *nikaia_std::index::get(&library.functions, source) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    read_by_operator(contract, (first_literal(args)).as_deref())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SourceCall {
     pub function: String,
@@ -1001,7 +1028,7 @@ pub(crate) fn tm_call_deps(func: &Expr, args: &[Expr], config: &[ConfigArg], wor
     let contract = match *nikaia_std::index::get(&library.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return tm_never() };
     if contract.provenance.is_some() {
         let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => return tm_never() };
-        if provenance == Provenance::Trusted || says_trusted(words, config) { return tm_nothing(); }
+        if provenance == Provenance::Trusted || says_trusted(words, config) || read_by_operator(contract, (first_literal(args)).as_deref()) { return tm_nothing(); }
         return tm_from(&name);
     }
     let mut all = tm_all_deps(args, words, library, env, walk);

@@ -55,6 +55,12 @@ pub struct ProjectWords {
     /// (`NK1308`); `warn` builds it, each such call a warning and a check
     /// where it is reached. Read from the application's manifest only.
     pub raw_sinks: String,
+    /// **Who sets the environment** ([ADR-397](../../../docs/specification/adr/adr-397.md)
+    /// D4): `operator`, the default, makes what `env::var` and `env::vars`
+    /// hand back trusted but for a name a CGI host fills (D1, D2);
+    /// `untrusted` makes all of it untrusted, and lets a privileged start
+    /// reach `main` (D3). Read from the application's manifest only.
+    pub environment: String,
     /// **The raw sinks this build allows** (ADR-raw-sinks-1 D4, D5): the
     /// application's `[allow]` keys, a dependency's as `NAME:key`, and each
     /// `--allow` word after them.
@@ -120,6 +126,15 @@ pub fn raw_sinks(word: String) -> String throws {
     return match word {
         "error" | "warn" => word,
         else => throw ProjectSettingsRefusal::Refused(f"`raw-sinks` is `error` or `warn`, not `{word}`. `error` refuses a program that hands data from outside to a raw sink unproved and not allowed; `warn` builds it and checks the data when the call is reached."),
+    }
+}
+
+/// `operator` or `untrusted`, what `--environment` and `[build] environment`
+/// may say ([ADR-397](../../../docs/specification/adr/adr-397.md) D4).
+pub fn environment(word: String) -> String throws {
+    return match word {
+        "operator" | "untrusted" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`environment` is `operator` or `untrusted`, not `{word}`. `operator` takes the environment as the operator's, but for the names a CGI host fills; `untrusted` takes every variable as data from outside, for a program meant to run setuid or whose environment a less trusted party sets."),
     }
 }
 
@@ -221,6 +236,9 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // A build that checks a raw sink's data at run time lowers the check
     // (ADR-raw-sinks-1 D3).
     let sinks = if words.raw_sinks == "warn" { "/raw-sinks:warn" } else { "" }
+    // What a program may claim about the environment, and whether its
+    // `main` lets a privileged start in, depends on who sets it (ADR-397 D4).
+    let environment = if words.environment == "untrusted" { "/environment:untrusted" } else { "" }
     let removed_bounds = match bounds { BoundsChecks::Kept => "", else => f"/remove-bounds-checks:{bounds.name()}" }
     let removed_overflow = match overflow { OverflowChecks::Kept => "", else => f"/remove-overflow-checks:{overflow.name()}" }
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" }
@@ -239,7 +257,7 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // A package lowered for its own `tests/` programs has every item `pub`,
     // a build of its own beside the private one (ADR-403 D4).
     let open = if every_item_public { "/every-item-pub" } else { "" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{checks}{sinks}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}{open}"
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{checks}{sinks}{environment}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}{open}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
@@ -295,6 +313,8 @@ comptime PROJECT_SETTINGS_UNPROVED_VAR: ref String = "NIKAIA_UNPROVED_CLAIMS"
 comptime PROJECT_SETTINGS_UNPROVED_CHECKS_VAR: ref String = "NIKAIA_UNPROVED_CHECKS"
 /// `--raw-sinks`, resolved (ADR-raw-sinks-1 D3).
 comptime PROJECT_SETTINGS_RAW_SINKS_VAR: ref String = "NIKAIA_RAW_SINKS"
+/// `--environment`, resolved ([ADR-397](../../../docs/specification/adr/adr-397.md) D4).
+comptime PROJECT_SETTINGS_ENVIRONMENT_VAR: ref String = "NIKAIA_ENVIRONMENT"
 /// `[build] artifact` and `symbol-prefix` (ADR-284 D4, D13).
 comptime PROJECT_SETTINGS_ARTIFACT_VAR: ref String = "NIKAIA_BUILD_ARTIFACT"
 comptime PROJECT_SETTINGS_PREFIX_VAR: ref String = "NIKAIA_SYMBOL_PREFIX"
@@ -324,13 +344,14 @@ pub trait ProjectSettingsHost {
 /// refuted and unproved claims' words and the artifact. The symbol prefix, the
 /// target's words and the optimizations are parsed by the Rust adapter, after
 /// these, in this order.
-fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, checks: String, sinks: String, made: String, symbol_prefix: String, tests: bool, cpu: String?) -> ProjectWords throws {
+fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, checks: String, sinks: String, environment_word: String, made: String, symbol_prefix: String, tests: bool, cpu: String?) -> ProjectWords throws {
     let refuted_claims = refuted_claims(refuted)
     let unproved_claims = unproved_claims(unproved)
     let unproved_checks = unproved_checks(checks)
     let raw_sinks = raw_sinks(sinks)
+    let environment = environment(environment_word)
     let artifact = artifact(made)
-    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, unproved_checks: unproved_checks, raw_sinks: raw_sinks, allow: [], artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, bind_features: null, cpu: cpu }
+    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, unproved_checks: unproved_checks, raw_sinks: raw_sinks, environment: environment, allow: [], artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, bind_features: null, cpu: cpu }
 }
 
 /// **The words, flag over manifest over built-in default.** `manifest` is
@@ -351,10 +372,11 @@ pub fn project_settings_resolve(manifest: fn(ref String, ref String) -> String s
     let unproved = manifest("unproved-claims", "error")
     let checks = manifest("unproved-checks", "allow")
     let sinks = manifest("raw-sinks", "error")
+    let environment = manifest("environment", "operator")
     let made = manifest("artifact", "program")
     let named = (package ?? "program").replace("-", "_")
     let symbol_prefix = manifest("symbol-prefix", named)
-    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, checks, sinks, made, symbol_prefix, false, null)
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, checks, sinks, environment, made, symbol_prefix, false, null)
 }
 
 /// **What the driver put in the environment.** Absent means the wrapper was
@@ -368,12 +390,13 @@ pub fn project_settings_from_env[H: ProjectSettingsHost](default_target: String,
     let unproved = host.env_var(PROJECT_SETTINGS_UNPROVED_VAR) ?? "error"
     let checks = host.env_var(PROJECT_SETTINGS_UNPROVED_CHECKS_VAR) ?? "allow"
     let sinks = host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR) ?? "error"
+    let environment = host.env_var(PROJECT_SETTINGS_ENVIRONMENT_VAR) ?? "operator"
     let made = host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR) ?? "program"
     let symbol_prefix = host.env_var(PROJECT_SETTINGS_PREFIX_VAR) ?? "program"
     let tests = host.env_var(PROJECT_SETTINGS_TESTS_VAR) != null
     let level = host.env_var(PROJECT_SETTINGS_CPU_VAR) ?? ""
     let cpu: String? = if level.is_empty() { null } else { level }
-    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, checks, sinks, made, symbol_prefix, tests, cpu)
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, checks, sinks, environment, made, symbol_prefix, tests, cpu)
 }
 
 /// **The command line's `--refuted-claims` and `--unproved-claims` over the
@@ -409,6 +432,16 @@ pub fn project_settings_raw_sinks(words: ref ProjectWords, flag: String?) -> Str
     return match flag?.clone() {
         word => raw_sinks(word),
         null => words.raw_sinks.clone(),
+    }
+}
+
+/// **The command line's `--environment` over the manifest's**
+/// ([ADR-397](../../../docs/specification/adr/adr-397.md) D4): the word the
+/// build then has.
+pub fn project_settings_environment(words: ref ProjectWords, flag: String?) -> String throws {
+    return match flag?.clone() {
+        word => environment(word),
+        null => words.environment.clone(),
     }
 }
 
@@ -481,6 +514,7 @@ pub fn project_settings_as_env(words: ref ProjectWords) -> Vec[(String, String)]
         (PROJECT_SETTINGS_UNPROVED_VAR.clone(), words.unproved_claims.clone()),
         (PROJECT_SETTINGS_UNPROVED_CHECKS_VAR.clone(), words.unproved_checks.clone()),
         (PROJECT_SETTINGS_RAW_SINKS_VAR.clone(), words.raw_sinks.clone()),
+        (PROJECT_SETTINGS_ENVIRONMENT_VAR.clone(), words.environment.clone()),
         (PROJECT_SETTINGS_ARTIFACT_VAR.clone(), words.artifact.clone()),
         (PROJECT_SETTINGS_PREFIX_VAR.clone(), words.symbol_prefix.clone()),
     ]

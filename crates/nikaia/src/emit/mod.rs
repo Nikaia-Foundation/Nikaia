@@ -754,6 +754,7 @@ impl<'p> Emitter<'p> {
                 crate_root: build.crate_root.to_text(),
                 offered_to_rust: build.offered_to_rust,
                 every_item_public: build.every_item_public,
+                environment_untrusted: crate::contracts::environment_is_untrusted(),
             },
             graphs,
         );

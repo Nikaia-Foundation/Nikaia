@@ -1,0 +1,6 @@
+the operator's, by default: 1 stop
+--environment=untrusted: 0 stop
+--environment=operator: 1 stop
+[build] environment = "untrusted": 0 stop
+a plain start, the operator's: main ran
+a plain start, untrusted: main ran
