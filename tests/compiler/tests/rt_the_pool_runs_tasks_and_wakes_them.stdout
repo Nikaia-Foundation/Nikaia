@@ -1,0 +1,10 @@
+no, exit 0:
+cores 1
+4 tasks, sum 30
+before 1, after 1
+woke after at least 30 ms: true
+yes, exit 0:
+cores 2
+4 tasks, sum 30
+before 1, after 1
+woke after at least 30 ms: true

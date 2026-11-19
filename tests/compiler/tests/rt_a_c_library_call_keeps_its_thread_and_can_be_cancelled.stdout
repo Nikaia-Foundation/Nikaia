@@ -1,0 +1,5 @@
+build: exit 0
+cc: exit 0
+the next call reuses the thread: 1
+a busy thread is not waited for: 1
+cancelled: 1, within 30s: 1

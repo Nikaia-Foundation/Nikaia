@@ -1,0 +1,44 @@
+// The pool for user code runs tasks and wakes them (ADR-055 D4): it is
+// started only at `user-parallelism = yes`, at the size `user-pool` in the
+// runtime config named by `NIKAIA_RUNTIME_CONFIG` gives (ADR-303 D5), so
+// `task::cores()` is 1 at `no` and 2 at `yes`. The child joins four
+// `async(handle)` tasks and sums their answers, joins a task that pauses
+// halfway (it is polled again and finishes), and one that sleeps 30 ms and
+// checks that at least that much time passed (a lower bound, not a speed
+// figure). The rows other than `cores` are the same at both settings. Moved
+// from the `nikaia-std` unit tests `tasks_run_and_their_answers_come_back`,
+// `a_task_that_pauses_is_polled_again` and `a_sleeping_task_wakes_on_its_time`
+// (#2212); a hang is the failure.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, "user-pool = 2\n")
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::task\nuse std::time\n\nfn square(n: i64) -> i64 {\n\treturn n * n\n}\n\nfn paused(n: i64) -> String {\n\tlet before = f\"before {n}\"\n\ttime::sleep(1.millis())\n\treturn f\"{before}, after {n}\"\n}\n\nfn slept() -> bool {\n\tlet begun = time::now()\n\ttime::sleep(30.millis())\n\treturn begun.elapsed() >= 30.millis()\n}\n\nfn main() throws {\n\tprintln(f\"cores {task::cores()}\")\n\tlet a = async(handle) fn { square(1) }\n\tlet b = async(handle) fn { square(2) }\n\tlet c = async(handle) fn { square(3) }\n\tlet d = async(handle) fn { square(4) }\n\tprintln(f\"4 tasks, sum {a.join() + b.join() + c.join() + d.join()}\")\n\tlet p = async(handle) fn { paused(1) }\n\tprintln(p.join())\n\tlet s = async(handle) fn { slept() }\n\tprintln(f\"woke after at least 30 ms: {s.join()}\")\n}\n",
+	)
+	for setting in ["no", "yes"] {
+		let out = process::run(
+			toolchain(),
+			["run", "--user-parallelism", setting.clone(), "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		)
+		println(f"{setting}, exit {out.code}:")
+		println(out.stdout.trim())
+	}
+	process::run("rm", ["-rf", tmp])
+}

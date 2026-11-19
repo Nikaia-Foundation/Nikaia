@@ -1,0 +1,19 @@
+== crash.nika at no: exit 0
+thrown: boom
+ran: 1
+== crash.nika at yes: exit 0
+thrown: boom
+== cleanup.nika at no: exit 0
+first cleaned
+second cleaned
+thrown: after a pause
+finished: 1
+== cleanup.nika at yes: exit 0
+first cleaned
+second cleaned
+thrown: after a pause
+finished: 0
+== crossing.nika at no: exit 0
+total: 5
+== crossing.nika at yes: exit 0
+total: 5

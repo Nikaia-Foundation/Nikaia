@@ -1,0 +1,109 @@
+// An `_async` call of a C library runs on a library thread, which is kept for
+// the next call, while a call made when that thread is busy does not wait for
+// it (ADR-284 D4, D9). Its ticket cancels it at its next pause (D19): a nap of
+// 60000 ms, cancelled after 50 ms, ends with NAP_E_CANCELLED at once, since a
+// wake from the caller's thread ends the park on the timer (the fix for #829).
+// The C caller tells the threads apart by `pthread_self` in its `done`
+// callback. Moved from the `nikaia-std` unit tests
+// `a_wake_from_another_thread_ends_a_park_on_the_timer` and
+// `a_thread_is_kept_for_the_next_call` (#2209).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/src"])
+	fs::write(
+		f"{tmp}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"nap\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n",
+	)
+	fs::write(
+		f"{tmp}/src/main.nika",
+		fs::Root::Anywhere,
+		"use std::time\n\npub extern fn napped(ms: i64) -> i64 {\n\ttime::sleep(ms.millis())\n\treturn ms\n}\n",
+	)
+	let caller = [
+		"#include <pthread.h>",
+		"#include <stdio.h>",
+		"#include <time.h>",
+		"#include <unistd.h>",
+		"#include \"nap.h\"",
+		"",
+		"typedef struct { int done; int status; pthread_t thread; } call;",
+		"",
+		"static void finished(int status, void *ctx) {",
+		"    call *c = ctx;",
+		"    c->status = status;",
+		"    c->thread = pthread_self();",
+		"    __atomic_store_n(&c->done, 1, __ATOMIC_SEQ_CST);",
+		"}",
+		"",
+		"static void wait_for(call *c) {",
+		"    while (!__atomic_load_n(&c->done, __ATOMIC_SEQ_CST)) usleep(1000);",
+		"}",
+		"",
+		"static nap_op *start(int64_t ms, int64_t *out, call *c) {",
+		"    nap_op *op = NULL;",
+		"    nap_napped_async(ms, out, finished, c, &op);",
+		"    return op;",
+		"}",
+		"",
+		"int main(void) {",
+		"    nap_init();",
+		"    int64_t out1 = 0, out2 = 0, out3 = 0, out4 = 0, out5 = 0;",
+		"    call one = {0}, two = {0}, busy = {0}, other = {0}, long_nap = {0};",
+		"    nap_op *op = start(1, &out1, &one);",
+		"    wait_for(&one);",
+		"    nap_op_free(op);",
+		"    usleep(50000);",
+		"    op = start(1, &out2, &two);",
+		"    wait_for(&two);",
+		"    nap_op_free(op);",
+		"    printf(\"the next call reuses the thread: %d\\n\", pthread_equal(one.thread, two.thread) != 0);",
+		"    nap_op *held = start(300, &out3, &busy);",
+		"    usleep(20000);",
+		"    op = start(1, &out4, &other);",
+		"    wait_for(&other);",
+		"    nap_op_free(op);",
+		"    wait_for(&busy);",
+		"    nap_op_free(held);",
+		"    printf(\"a busy thread is not waited for: %d\\n\", pthread_equal(busy.thread, other.thread) == 0);",
+		"    time_t began = time(NULL);",
+		"    op = start(60000, &out5, &long_nap);",
+		"    usleep(50000);",
+		"    nap_cancel(op);",
+		"    wait_for(&long_nap);",
+		"    nap_op_free(op);",
+		"    printf(\"cancelled: %d, within 30s: %d\\n\", long_nap.status == NAP_E_CANCELLED, time(NULL) - began < 30);",
+		"    nap_shutdown();",
+		"    return 0;",
+		"}",
+	]
+	fs::write(f"{tmp}/use.c", fs::Root::Anywhere, caller.join("\n") + "\n")
+	let built = process::run(toolchain(), ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	println(f"build: exit {built.code}")
+	if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+	let lib = f"{tmp}/target/nikaia/c-library"
+	let cc = process::run(
+		"cc",
+		["-I", lib.clone(), "use.c", "-L", lib.clone(), "-lnap", "-lpthread", "-o", "use"]; dir: tmp.clone(),
+	)
+	println(f"cc: exit {cc.code}")
+	if cc.code != 0 { println(cc.stderr.trim().replace(tmp, "TMP")) }
+	let ran = process::run(f"{tmp}/use", []; dir: tmp.clone(), env: [("LD_LIBRARY_PATH", lib)])
+	print(ran.stdout)
+	process::run("rm", ["-rf", tmp])
+}

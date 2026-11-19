@@ -1,0 +1,9 @@
+line 1: unknown key `io_workers` (expected one of: io-workers, user-pool, io-method, cleanup-deadline); defaults next: true; exit 0
+line 1: unknown key `ordering` (expected one of: io-workers, user-pool, io-method, cleanup-deadline); defaults next: true; exit 0
+line 1: unknown key `user-parallelism` (expected one of: io-workers, user-pool, io-method, cleanup-deadline); defaults next: true; exit 0
+line 1: `io-workers` is 0, and one I/O thread always runs (ADR-303 D4); defaults next: true; exit 0
+line 1: `io-method` is `epoll`, which names no mechanism (expected auto, uring or blocking); defaults next: true; exit 0
+line 2: `nonsense` is not `key = value` (the file has four keys: io-workers, user-pool, io-method, cleanup-deadline); defaults next: true; exit 0
+line 1: `cleanup-deadline` is `soon`, which is not a duration (expected `30s`, `500ms`, `2m` or `0`); defaults next: true; exit 0
+valid: no message; cores 8; exit 0
+drain: main ends; the 0.5s deadline is named: true; exit 70

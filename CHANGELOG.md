@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1453] — 2026-11-19
+
+**Builders' changes (#2203, #2204, #2205, #2210)**
+- The Rust unit tests of the std package's paths, crossing and signature files are now Nikaia `test` blocks run by `nikaia test --std`, so lib.rs has no test module left.
+- The Rust unit tests of std's standard input reader move into the Nikaia program io_standard_input_arrives_in_pieces, which feeds real children input in pieces through a pipe
+- The fixed-seed text hash (rustc-hash's hash_bytes) is Nikaia now, in runtime/hash.nika; its tests are Nikaia test blocks and a program, and rustc-hash is no longer a dev-dependency.
+- none (test moves only)
+
 ## [0.0.1452] — 2026-11-19
 
 **Builders' changes (#2149, #2150, #2151, #2152)**

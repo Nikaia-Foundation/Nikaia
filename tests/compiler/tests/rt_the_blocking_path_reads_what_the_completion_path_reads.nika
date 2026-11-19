@@ -1,0 +1,45 @@
+// The blocking fallback is a real path, not a hypothetical (ADR-303 D3): a
+// runtime config named by `NIKAIA_RUNTIME_CONFIG` that pins
+// `io-method = "blocking"` (ADR-303 D5) reads a file through the I/O workers
+// and answers the same bytes as `auto`, which takes the completion ring where
+// the machine has one. The child reads a file of 10000 lines and prints its
+// length and its line count, once under each mechanism. Moved from the
+// `nikaia-std` unit test
+// `the_blocking_fallback_reads_what_the_completion_path_reads` (#2210).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(f"{tmp}/cities.txt", fs::Root::Anywhere, "Hamburg;12.0\n".repeat(10000))
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::fs\n\nfn main() throws {\n\tlet bytes = fs::read(\"cities.txt\", fs::Root::Anywhere)\n\tlet size = bytes.len()\n\tlet count = bytes.text().lines().count()\n\tprintln(f\"{size} bytes, {count} lines\")\n}\n",
+	)
+	let mut answers: Vec[String] = []
+	for method in ["auto", "blocking"] {
+		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, f"io-method = \"{method}\"\n")
+		let out = process::run(
+			toolchain(),
+			["run", "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		)
+		let answer = out.stdout.trim().clone()
+		println(f"{method}: {answer}")
+		answers.push(answer)
+	}
+	println(f"the same: {answers[0] == answers[1]}")
+	process::run("rm", ["-rf", tmp])
+}
