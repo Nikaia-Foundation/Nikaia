@@ -280,7 +280,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   prompt, with their comments; put what an issue comment should say in your
   report: on another issue, as `Comment: #N <text>` (one line each), which
   the driver posts there; never as `Needs:`, which files an improvement
-  issue nobody without GitHub can do (#1698).
+  issue nobody without GitHub can do (#1698). A *To build* item that needs
+  GitHub (run a workflow on Actions) is the supervisor's (`docs/issues.md`
+  I9): build the rest, `Result: done` when it holds, the step as `Comment:
+  #N`, `Issue: broke I9` (#2019).
 * **Report** in at most 30 lines: the commits, what the change decided (a
   CHANGELOG title and entry for the supervisor), the tests run, what is
   still open, and any error found in another agent's file.
