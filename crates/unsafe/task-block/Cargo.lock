@@ -266,7 +266,7 @@ dependencies = [
 [[package]]
 name = "winnow-grammar"
 version = "0.2.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=3a10540#3a10540cd1f02205785c76f0976756649d88bbfd"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b16b75c#b16b75cb62ee03d25566e85337cea83df9b19cbb"
 dependencies = [
  "lasso",
  "memchr",
@@ -280,7 +280,7 @@ dependencies = [
 [[package]]
 name = "winnow-grammar-macros"
 version = "0.2.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=3a10540#3a10540cd1f02205785c76f0976756649d88bbfd"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b16b75c#b16b75cb62ee03d25566e85337cea83df9b19cbb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -291,7 +291,7 @@ dependencies = [
 [[package]]
 name = "winnow-grammar-model"
 version = "0.2.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=3a10540#3a10540cd1f02205785c76f0976756649d88bbfd"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b16b75c#b16b75cb62ee03d25566e85337cea83df9b19cbb"
 dependencies = [
  "proc-macro2",
  "quote",
