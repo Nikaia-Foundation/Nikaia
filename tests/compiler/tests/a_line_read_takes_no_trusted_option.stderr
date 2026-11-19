@@ -1,0 +1,17 @@
+error[NK1109]: `io::read_line` has no option called `trusted`.
+  --> tests/a_line_read_takes_no_trusted_option.nika:7:5
+   |
+ 7 |     let line = io::read_line(trusted: true) ?? ""
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `io::read_line` takes no options: its declaration has no `;`.
+   = help: Pass it as a plain argument, without a name.
+error[NK1109]: `io::read_exact` has no option called `trusted`.
+  --> tests/a_line_read_takes_no_trusted_option.nika:8:5
+   |
+ 8 |     let body = io::read_exact(4; trusted: true)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `io::read_exact` takes no options: its declaration has no `;`.
+   = help: Pass it as a plain argument, without a name.
+2 type errors

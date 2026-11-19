@@ -1,0 +1,32 @@
+// A root for a directory a program walks (ADR-raw-sinks-1 D12, D13):
+// `root.join("packages")` is a `Dir` under the same check, so each name
+// `fs::read_dir` hands back is opened under it, and a link planted in the
+// directory that points out of it is `io::IoError::Outside` at the call
+// (ADR-108 D3). `root.path()` is the directory for a program's argument, and
+// nothing for `Anywhere`. The link is made through `ln`: `std::fs` makes none.
+use std::fs
+use std::io
+use std::process
+
+fn main() throws {
+    let scratch = fs::scratch()
+    let packages = scratch.join("packages")
+    fs::create_dir("packages", scratch)
+    fs::write("packages/a.txt", scratch, "x")
+    for name in fs::read_dir(".", packages) {
+        println(f"{name.display()}: {fs::read_to_string(name, packages)}")
+    }
+    let dir = packages.path() ?? return
+    process::run("ln", ["-s", "/etc", "out"]; dir: dir.to_text())
+    fs::read_to_string("out/hostname", packages) catch {
+        match error {
+            io::IoError::Outside(_) => println("out/hostname: Outside"),
+            else => println("out/hostname: other"),
+        }
+    }
+    let inside = scratch.path() ?? return
+    println(f"packages is below the scratch: {dir.display().starts_with(inside.display())}")
+    let anywhere = fs::Root::Anywhere
+    println(f"Anywhere: {anywhere.path()?.display() ?? "null"}")
+    println(f"Anywhere joined: {anywhere.join("packages") == fs::Root::Anywhere}")
+}

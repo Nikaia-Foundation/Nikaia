@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1471] — 2026-11-19
+
+**Builders' changes (#2300)**
+- `io::read_line` and `io::read_exact` are untrusted sources, as `io::read_to_string` is (ADR-365); after a guard `return if !html::is_plain(name)`, `html::is_plain(name)` is proved, as a program's own named property is (ADR-381 D5).
+- A path from outside can be proved safe — std::path::is_component and is_below are pure predicates whose guard is a fact for the prover; fs::Root::join and fs::Root::path walk a directory under the same check; io::read_line and io::read_exact no longer take trusted: (ADR-raw-sinks-1 D16.1).
+
 ## [0.0.1470] — 2026-11-19
 
 **Builders' changes (#2243, #2285, #2291)**

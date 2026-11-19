@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1470 (Draft)
+**Version:** 0.0.1471 (Draft)
 **Date:** 2026-11-19
 
 ---
@@ -1043,7 +1043,7 @@ pub fn read_exact(n: i64) -> Bytes throws  // exactly n bytes
 pub fn bytes() -> ByteStream throws        // chunks as they arrive
 ```
 
-`read_line` and `read_exact` read a framed message, a header line and then exactly the body's length of bytes, as LSP's `Content-Length` framing needs: both pause, and both take from the one buffer `lines()` takes from, so the three can be mixed; `null` from `read_line` is the end of the input, and an input that ends before `read_exact` has its `n` bytes is an error, not a shorter result (Part I 6.4).
+`read_line` and `read_exact` read a framed message, a header line and then exactly the body's length of bytes, as LSP's `Content-Length` framing needs: both pause, and both take from the one buffer `lines()` takes from, so the three can be mixed; `null` from `read_line` is the end of the input, and an input that ends before `read_exact` has its `n` bytes is an error, not a shorter result (Part I 6.4). What they read is from outside the program, and neither takes a `trusted:` option: a line is proved by a guard ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D16.1).
 
 **A step of `lines` can fail, and the failure leaves the function.** Nothing marks the loop. The compiler requires the enclosing function to declare `throws`:
 
@@ -1424,6 +1424,27 @@ raw sink (14.2): it takes no part from outside the program, whatever its text, u
 hands it back as `Dir`, so what is written under it is checked to stay there
 ([ADR-247](adr/adr-247.md) D5). Under `nikaia test` it is inside the test's own directory and is
 removed with it (14.1); elsewhere it is a new directory under the system's temporary directory.
+
+**A root for a directory one walks.** `root.join(part)` is a root for the directory `part` under
+`root`, under the same check: `Dir(dir)` becomes `Dir(dir.join(part))` and `Anywhere` stays
+`Anywhere`, so a name `read_dir` hands back is opened under it and a link planted in the directory
+that points out of it throws `Outside` ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D13).
+`root.path()` is the directory of a `Dir` as an `fs::Path`, for a program's argument, and `null`
+for `Anywhere` ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D12).
+
+**`std::path` — a path from outside proved by a property of its own**
+
+```nika
+pub fn is_component(p: String) -> bool sync   // one component: no `/` or `\`, not empty, `.` or `..`
+pub fn is_below(p: String) -> bool sync       // relative: no root, no drive letter, no `..` component
+```
+
+`path::is_component(p)` holds for one component of a path, with no separator, never empty, `.`
+or `..` ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D14). `path::is_below(p)` holds for a path
+that stays below the directory it is joined to: relative, with no root, no drive letter and no
+`..` component, so `.` is below ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D14). Both are pure,
+and a guard on either is a fact after it, as `html::is_plain`'s is ([ADR-396](adr/adr-396.md) D2);
+neither says where a symlink points, which under `Dir` the run time check does.
 
 **A directory walk.** `walk(path, root)` hands back every file under the directory `path`, as
 names relative to it with `/` between the parts, sorted, so two runs over one tree agree
