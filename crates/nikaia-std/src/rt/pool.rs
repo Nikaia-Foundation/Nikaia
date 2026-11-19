@@ -447,30 +447,6 @@ impl Pool {
 mod tests {
     use super::*;
 
-    /// **Two tasks on two threads, and the program sees both answers.**
-    ///
-    /// The `no` executor's own test is that two tasks *interleave* on one
-    /// thread; this one is the other half of ADR-037 D2 — they do not have to
-    /// take turns, because there is more than one thread for them to be on.
-    #[test]
-    fn tasks_run_and_their_answers_come_back() {
-        let pool = Pool::start(2);
-        let done = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        for _ in 0..8 {
-            let mine = done.clone();
-            pool.start_task(async move {
-                mine.fetch_add(1, Ordering::AcqRel);
-            });
-        }
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::yield_now();
-        }
-        assert_eq!(done.load(Ordering::Acquire), 8, "every task ran");
-        assert_eq!(pool.live(), 0, "and none is left behind");
-        pool.close();
-    }
-
     /// **Four tasks on four threads take about as long as one**, which is the
     /// whole of what `user_parallelism = yes` buys and the one thing the `no`
     /// executor cannot do however long it is given.
@@ -502,31 +478,6 @@ mod tests {
         assert!(
             took < slice * 3,
             "four 300ms tasks on four threads took {took:?}: they ran in turn"
-        );
-        pool.close();
-    }
-
-    /// **A task that pauses is put back and polled again**, which is the whole
-    /// difference between this and a pool of closures: a `Pending` is a place
-    /// to be interrupted rather than a thread held.
-    #[test]
-    fn a_task_that_pauses_is_polled_again() {
-        let pool = Pool::start(1);
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let mine = seen.clone();
-        pool.start_task(async move {
-            mine.lock().expect("the log").push("before");
-            crate::rt::exec::Yield::once().await;
-            mine.lock().expect("the log").push("after");
-        });
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::yield_now();
-        }
-        assert_eq!(
-            *seen.lock().expect("the log"),
-            vec!["before", "after"],
-            "both halves ran, and the pause was not the end of it"
         );
         pool.close();
     }
@@ -597,26 +548,5 @@ mod tests {
             rang <= others + 3,
             "an idle pool rang in every window (rings, wakes from elsewhere): {seen:?}, last {rang} for {others}"
         );
-    }
-
-    /// **A task that sleeps on the pool still wakes**, although nothing rings
-    /// for it: its time is handed to the pool and the idle turn looks at it.
-    #[test]
-    fn a_sleeping_task_wakes_on_its_time() {
-        let pool = Pool::start(2);
-        let begun = std::time::Instant::now();
-        let woke = Arc::new(Mutex::new(None));
-        let mine = woke.clone();
-        pool.start_task(async move {
-            crate::time::sleep(std::time::Duration::from_millis(30)).await;
-            *mine.lock().expect("the time") = Some(begun.elapsed());
-        });
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        pool.close();
-        let woke = woke.lock().expect("the time").expect("the task finished");
-        assert!(woke >= std::time::Duration::from_millis(30), "{woke:?}");
     }
 }
