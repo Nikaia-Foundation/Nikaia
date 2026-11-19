@@ -121,7 +121,7 @@ pub struct SvReading {
 fn sv_reading(row: ref SvRow, rel: SvRel) -> SvReading? {
 	let g = sv_row_content(row) ?? return null
 	let scale = if row.ks[0] < 0 { g.checked_neg() ?? return null } else { g }
-	let mut form = SvRow { cols: row.cols.clone(), ks: [], constant: 0 }
+	let mut form = SvRow { cols: row.cols.clone(), ks: Vec(capacity: row.ks.len()), constant: 0 }
 	for k in row.ks {
 		form.ks.push(k / scale)
 	}

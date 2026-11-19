@@ -2178,7 +2178,7 @@ pub(crate) fn check_core_placeable_literal(value: &Expr) -> bool { matches!(valu
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_placeable_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); args.is_empty() && config.is_empty() && match func {
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); args.is_empty() && config.iter().all(|option| { world.words.resolve(option.name) == "capacity" }) && match func {
             Expr::Variable(found, _) => { let found = *found; world.words.resolve(found) == "String" },
             _ => false,
         } },
@@ -2297,7 +2297,7 @@ pub(crate) fn check_core_stays_in(state: &CheckState, world: &CheckWorld<'_, '_,
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); check_core_stays_in(state, world, expr, name) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); check_core_stays_in(state, world, expr, name) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); check_core_stays_in(state, world, inner, name) },
-        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); config.is_empty() && check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name) },
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name) && config.iter().all(|option| { check_core_stays_in(state, world, &option.value, name) }) },
         Expr::Tuple(parts, _) => check_core_stays_in_all(state, world, parts, name),
         Expr::ListLit { items, .. } => check_core_stays_in_all(state, world, items, name),
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); check_core_stays_in(state, world, value, name) && check_core_stays_in(state, world, fallback, name) },

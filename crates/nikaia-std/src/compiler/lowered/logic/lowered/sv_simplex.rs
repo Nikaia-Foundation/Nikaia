@@ -61,7 +61,7 @@ pub struct SvReading {
 pub(crate) fn sv_reading(row: &SvRow, rel: &SvRel) -> Option<SvReading> {
     let g = match sv_row_content(row) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let scale = if *nikaia_std::index::get(&row.ks, 0) < 0 { match g.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None } } else { g };
-    let mut form = SvRow { cols: row.cols.copy_owned(), ks: vec![], constant: 0 };
+    let mut form = SvRow { cols: row.cols.copy_owned(), ks: Vec::with_capacity(nikaia_std::count::of(row.ks.len() as i64)), constant: 0 };
     for k in row.ks.iter() {
         let k = nikaia_std::num::value(k);
         form.ks.push(k / scale);

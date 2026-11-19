@@ -2999,13 +2999,16 @@ sync = true
 touches = []
 signature = "(self: ref collections::HashMap[?, ?]) -> bool"
 
-# A map with nothing in it. It is written `HashMap()`.
+# A map with nothing in it. It is written `HashMap()`, and `HashMap(capacity:
+# n)` holds room for `n` entries ahead, so the first `n` inserts ask for memory
+# once (#2114). The room is a count: a negative one stops the program, as every
+# count `std` takes (ADR-285 D15).
 [fn."collections::HashMap::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> collections::HashMap[?, ?]"
+signature = "(; capacity: i64 = 0) -> collections::HashMap[?, ?]"
 
 # **Whether a key is there**, without the value. Observed being asked for: a
 # checker's scope is a map of names, and *is this name declared* is the question
@@ -3532,13 +3535,15 @@ signature = "[T](self: ref Shared[T]) -> ref(self) T"
 # for the entry. **The key stays `String::new`** and the spelling is `String()`
 # (ADR-140 D2): the key is what the lowering writes, and the lowering is name
 # for name (ADR-296 D17).
-# Text with nothing in it. It is written `String()`.
+# Text with nothing in it. It is written `String()`, and `String(capacity: n)`
+# holds room for `n` bytes ahead (#2114). The room is a count: a negative one
+# stops the program, as every count `std` takes (ADR-285 D15).
 [fn."String::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> String"
+signature = "(; capacity: i64 = 0) -> String"
 
 # The text's UTF-8, one byte at a time ([ADR-285](../../docs/specification/adr/adr-285.md) D4).
 #
@@ -3855,13 +3860,16 @@ touches = []
 keeps = ["value"]
 signature = "[T: Clone](mut self: ref Array[T, ?], value: T)"
 
-# A list with nothing in it. It is written `Vec()`.
+# A list with nothing in it. It is written `Vec()`, and `Vec(capacity: n)`
+# holds room for `n` elements ahead, so the first `n` pushes ask for memory
+# once (#2114). The room is a count: a negative one stops the program, as every
+# count `std` takes (ADR-285 D15).
 [fn."Vec::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> Vec[?]"
+signature = "(; capacity: i64 = 0) -> Vec[?]"
 
 # **`drain` takes the elements away** (ADR-094 D4). A `for` lends, so the body
 # that hands an element to something which keeps it says so here - and below it

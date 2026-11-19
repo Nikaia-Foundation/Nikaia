@@ -81,9 +81,11 @@ fn sv_row_coef(r: ref SvRow, col: u32) -> i64 {
 /// `a·r + b·s` by a sorted merge, zeros left out, not reduced; `null` where
 /// an entry leaves `i64`.
 fn sv_row_sum(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
+	// At most every column of both rows, so the room is taken once (#2114).
+	let room = r.cols.len() + s.cols.len()
 	let mut out = SvRow {
-		cols: [],
-		ks: [],
+		cols: Vec(capacity: room),
+		ks: Vec(capacity: room),
 		constant: sv_mul_add(a, r.constant, b, s.constant) ?? return null,
 	}
 	let mut i = 0
@@ -138,7 +140,7 @@ fn sv_row_reduced(r: SvRow) -> SvRow {
 	if g <= 1 {
 		return r
 	}
-	let mut out = SvRow { cols: r.cols.clone(), ks: [], constant: r.constant / g }
+	let mut out = SvRow { cols: r.cols.clone(), ks: Vec(capacity: r.ks.len()), constant: r.constant / g }
 	for k in r.ks {
 		out.ks.push(k / g)
 	}
@@ -155,7 +157,7 @@ fn sv_row_tightened(r: ref SvRow) -> SvRow {
 	}
 	let mut out = SvRow {
 		cols: r.cols.clone(),
-		ks: [],
+		ks: Vec(capacity: r.ks.len()),
 		constant: sv_ceil_div(r.constant, g) ?? r.constant,
 	}
 	for k in r.ks {

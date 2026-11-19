@@ -3032,7 +3032,7 @@ fn check_core_placeable_literal(value: ref Expr) -> bool sync {
 /// Whether `value` is `String()`, an empty text the emitter can place.
 fn check_core_placeable_text(world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Call { func, args, config, .. } => args.len() == 0 && config.len() == 0 && match func {
+        Expr::Call { func, args, config, .. } => args.len() == 0 && config.iter().all(fn(option) { world.words.resolve(option.name) == "capacity" }) && match func {
             Expr::Variable(found, _) => world.words.resolve(found) == "String",
             else => false,
         },
@@ -3160,7 +3160,9 @@ fn check_core_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref E
         Expr::Unary { expr, .. } => check_core_stays_in(state, world, expr, name),
         Expr::Cast { expr, .. } => check_core_stays_in(state, world, expr, name),
         Expr::Try(inner, _) => check_core_stays_in(state, world, inner, name),
-        Expr::Call { func, args, config, .. } => config.len() == 0 && check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name),
+        // An option's value is read as an argument is: `Vec(capacity:
+        // xs.len())` keeps `xs` where it is (#2114).
+        Expr::Call { func, args, config, .. } => check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name) && config.iter().all(fn(option) { check_core_stays_in(state, world, option.value, name) }),
         Expr::Tuple(parts, _) => check_core_stays_in_all(state, world, parts, name),
         Expr::ListLit { items, .. } => check_core_stays_in_all(state, world, items, name),
         Expr::Coalesce { value, fallback, .. } => check_core_stays_in(state, world, value, name) && check_core_stays_in(state, world, fallback, name),

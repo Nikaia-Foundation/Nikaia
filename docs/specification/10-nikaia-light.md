@@ -1643,6 +1643,20 @@ constructor handed over as a **value** is the same spelling,
 `par_fold(M, Summary, …)`. The ledger writes `Type::new`, the name the lowering
 uses.
 
+**Room ahead is an option of the constructor.** `Vec(capacity: n)`,
+`String(capacity: n)` and `HashMap(capacity: n)` build the same empty value as
+`Vec()`, with room for `n` elements (bytes, entries) held ahead, so the first
+`n` pushes ask for memory once. The option's default is `0`, which is `Vec()`;
+a negative room stops the program, as any negative count does.
+
+```nika
+let n = 10
+let mut squares = Vec(capacity: n)
+for i in 0..<n {
+    squares.push(i * i)
+}
+```
+
 **A copy with fields changed: `with`.** `with` writes a copy of a value with
 named fields changed, without naming the rest:
 
