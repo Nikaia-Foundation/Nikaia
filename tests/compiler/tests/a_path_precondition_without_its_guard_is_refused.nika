@@ -1,0 +1,17 @@
+// Without the guard, `path::is_component(arg)` is not shown and the call of a
+// function whose precondition it is (an `assert` that leads its body, Part
+// III 14.2) is refused (ADR-raw-sinks-1 D14).
+use std::path
+
+fn opened(name: String) -> String {
+    assert(path::is_component(name))
+    return f"opened {name}"
+}
+
+fn tried(arg: String) throws {
+    println(opened(arg))
+}
+
+fn main() throws {
+    tried("a.txt")
+}
