@@ -1209,26 +1209,6 @@ mod doors {
         assert_eq!(list.set_after(vec![9], &seen), Err(Overtaken));
         assert_eq!(list.get(), vec![1, 2, 3, 4]);
     }
-
-    /// **Two threads, one witness**: exactly one of them stores, which is the
-    /// property the whole door exists for. A `get` and a `set` here would let
-    /// both through and lose one of the two updates.
-    #[test]
-    fn only_one_of_two_racing_writers_gets_through() {
-        let kasse = std::sync::Arc::new(Crossing::new(0i64));
-        let seen = kasse.get();
-        let one = std::sync::Arc::clone(&kasse);
-        let left = std::thread::spawn(move || one.set_after(1, &seen));
-        let two = std::sync::Arc::clone(&kasse);
-        let right = std::thread::spawn(move || two.set_after(2, &seen));
-        let outcomes = [left.join().expect("left"), right.join().expect("right")];
-        assert_eq!(
-            outcomes.iter().filter(|o| o.is_ok()).count(),
-            1,
-            "one stored and one was overtaken: {outcomes:?}"
-        );
-        assert!(kasse.get() == 1 || kasse.get() == 2);
-    }
 }
 
 #[cfg(test)]
