@@ -214,6 +214,9 @@ pub(crate) fn lowered_units(
     contracts: &crate::contracts::Ledger,
     packages: &BTreeMap<String, crate::contracts::Ledger>,
     library: &crate::contracts::Ledger,
+    // The checked units of the ledger's pass over the entry's package
+    // against `library`, where the caller ran it (#2150).
+    checked: Option<&[crate::check::Checked]>,
 ) -> Option<crate::emit::Lowered> {
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units
@@ -221,7 +224,12 @@ pub(crate) fn lowered_units(
         .copied()
         .filter(|u| &u.package == home)
         .collect();
-    let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
+    let provenance = match checked {
+        Some(checked) => {
+            crate::contracts::trust::analyse_package_checked(&beside, library, checked).provenance
+        }
+        None => crate::contracts::trust::analyse_package(&beside, library).provenance,
+    };
     let host = LowerHost::new(units, build, provenance);
     let rust = tree::comptime_lowered_units(&host, entry as i64, contracts, packages)?;
     Some(crate::emit::Lowered {
@@ -309,6 +317,7 @@ pub(crate) fn compute(
                 bounds,
                 program: std::cell::OnceCell::new(),
                 sources: std::cell::OnceCell::new(),
+                derived_checked: RefCell::new(None),
             };
             block_on(tree::comptime_value_computed(
                 &host,
@@ -338,6 +347,10 @@ struct ComputeHost<'a> {
     /// The program's files as their digest on disk, read from the names and
     /// not the interner's numbers, worked out at the first question.
     sources: std::cell::OnceCell<String>,
+    /// The units `derived` last inferred against `library` alone (no
+    /// package absorbed), and the checked units of that pass: what the
+    /// lowering would infer again (#2150).
+    derived_checked: RefCell<Option<(Vec<i64>, Vec<crate::check::Checked>)>>,
 }
 
 /// **`what` as `Debug` prints it, each `Symbol(N)` written as the name it
@@ -520,14 +533,41 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         }
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
-        crate::contracts::Ledger::infer_package(&refs, &with_packages)
+        let (ledger, checked) =
+            crate::contracts::Ledger::infer_package_checked(&refs, &with_packages);
+        // **Kept for the lowering** (#2150): against `library` alone, it is
+        // the pass the emitter would run over the same units again.
+        *self.derived_checked.borrow_mut() = packages
+            .is_empty()
+            .then(|| (units.iter().copied().collect(), checked));
+        ledger
     }
 
-    fn lowered_alone(&self, unit: i64) -> Option<tree::ComptimeLowered> {
+    fn lowered_alone(
+        &self,
+        unit: i64,
+        derived: &crate::contracts::Ledger,
+    ) -> Option<tree::ComptimeLowered> {
         let held = self.units.borrow();
-        crate::emit::emit_program(&held[unit as usize], counted())
-            .ok()
-            .map(rows_of)
+        let parsed = &held[unit as usize];
+        // **The ledger `derived` made is the emitter's own** where it was
+        // inferred over this unit against `std` alone: `emit_program` infers
+        // exactly that, twice (#2150).
+        let std = crate::contracts::std_ledger();
+        let against_std = std::ptr::eq(self.library, std) || self.library == std;
+        let checked = self
+            .derived_checked
+            .borrow_mut()
+            .take()
+            .filter(|(at, _)| against_std && at.as_slice() == [unit]);
+        match checked {
+            Some((_, checked)) => {
+                crate::emit::emit_program_inferred(parsed, counted(), derived.clone(), &checked)
+            }
+            None => crate::emit::emit_program(parsed, counted()),
+        }
+        .ok()
+        .map(rows_of)
     }
 
     fn lowered_units(
@@ -539,6 +579,19 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     ) -> Option<tree::ComptimeLowered> {
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
+        // **The trust's pass is `derived`'s** (#2150) where that ran over the
+        // entry's package, in this order, against `library` alone.
+        let home = &held[units[here as usize] as usize].package;
+        let beside: Vec<i64> = units
+            .iter()
+            .copied()
+            .filter(|&at| &held[at as usize].package == home)
+            .collect();
+        let checked = self
+            .derived_checked
+            .borrow_mut()
+            .take()
+            .filter(|(at, _)| *at == beside);
         lowered_units(
             &refs,
             here as usize,
@@ -546,6 +599,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
             derived,
             packages,
             self.library,
+            checked.as_ref().map(|(_, checked)| checked.as_slice()),
         )
         .map(rows_of)
     }

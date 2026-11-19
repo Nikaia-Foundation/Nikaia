@@ -584,7 +584,7 @@ pub trait ComptimeComputeHost {
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
     fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
-    fn lowered_alone(&self, unit: i64) -> Option<ComptimeLowered>;
+    fn lowered_alone(&self, unit: i64, derived: &Ledger) -> Option<ComptimeLowered>;
     fn lowered_units(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<ComptimeLowered>;
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<CheckWall>;
     fn bounds(&self) -> (u64, u64);
@@ -756,7 +756,7 @@ pub(crate) fn comptime_forbidden_callee<H: ComptimeComputeHost>(host: &H, here: 
 // this was written - see `contracts::sync`.
 pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>, ty: &Ty) -> ComptimeDriven {
     let found: Option<ComptimeLowered> = match units.len() as i64 {
-        1 => host.lowered_alone(*nikaia_std::index::get(&units, nikaia_std::index::at(here))),
+        1 => host.lowered_alone(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), derived),
         _ => host.lowered_units(units, here, derived, packages),
     };
     let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return ComptimeDriven::NotLowered };

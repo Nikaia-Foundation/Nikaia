@@ -812,9 +812,10 @@ pub trait ComptimeComputeHost {
     /// The ledger `units` come to against `std` and `packages`, each under
     /// its name.
     fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
-    /// Unit `unit` lowered alone, its steps counted; `null` where the
-    /// emitter refused it.
-    fn lowered_alone(ref self, unit: i64) -> ComptimeLowered? sync
+    /// Unit `unit` lowered alone, its steps counted, from `derived`, the
+    /// ledger `derived` gave it (#2150: not inferred again); `null` where
+    /// the emitter refused it.
+    fn lowered_alone(ref self, unit: i64, derived: ref Ledger) -> ComptimeLowered? sync
     /// `units` lowered as one program with `units[here]` as the entry, its
     /// steps counted (`comptime_lowered_units`); `null` where the emitter
     /// refused one.
@@ -1054,7 +1055,7 @@ fn comptime_forbidden_callee[H: ComptimeComputeHost](host: ref H, here: i64, val
 /// reports a stop, computes the value and writes it (`cr_with_driver`).
 fn comptime_driven[H: ComptimeComputeHost](host: ref H, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger], ty: ref Ty) -> ComptimeDriven sync {
     let found: ComptimeLowered? = match units.len() {
-        1 => host.lowered_alone(units[here]),
+        1 => host.lowered_alone(units[here], derived),
         else => host.lowered_units(units, here, derived, packages),
     }
     let lowered = found ?? return ComptimeDriven::NotLowered
