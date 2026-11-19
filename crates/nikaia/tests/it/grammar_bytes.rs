@@ -1,5 +1,5 @@
 //! A grammar entered with a `Bytes`
-//! ([ADR-366](../../../docs/specification/adr/adr-366.md) D1, #422).
+//! ([ADR-grammar-input-v1](../../../../docs/specification/adr/adr-grammar-input-v1.md) D1, #422).
 //!
 //! The argument decides: a call with a `Bytes` enters the grammar's copy over
 //! bytes (winnow-grammar's `input bytes;`), and a grammar only ever entered
@@ -98,7 +98,7 @@ fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
 
 const PAIR: &str = "grammar Pair {\n    entry rule pair -> i64 = name:until(\";\") sep:\";\" rest:any* -> { name.len() * 100 + sep.len() * 10 + rest.len() }\n}\n";
 
-/// What Nikaia types as text is checked text over bytes (ADR-366 D2): an
+/// What Nikaia types as text is checked text over bytes (ADR-grammar-input-v1 D2): an
 /// `until` and a literal's capture are taken through the backend's
 /// `text(...)`, and a run of `any` is the backend's checked text by itself,
 /// so the action written for text compiles unchanged.
@@ -122,7 +122,7 @@ fn what_is_text_over_bytes_is_checked_text() {
 
 const REC: &str = "grammar Rec {\n    entry rule rec -> i64 = n:dec[i64](digit+) \":\" body:bytes(any*) -> { n * 1000 + body.len() }\n}\n";
 
-/// `bytes(p)` hands back the bytes `p` covered, over either input (ADR-366
+/// `bytes(p)` hands back the bytes `p` covered, over either input (ADR-grammar-input-v1
 /// D4): the backend's `bytes(p)` over bytes, `text(p)` seen as its bytes over
 /// text, where the backend has none.
 #[test]
@@ -150,7 +150,7 @@ fn codes(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// An entry handed neither a `String` nor a `Bytes` is `NK1282` (ADR-366 D1);
+/// An entry handed neither a `String` nor a `Bytes` is `NK1282` (ADR-grammar-input-v1 D1);
 /// either of those is not.
 #[test]
 fn an_entry_takes_text_or_bytes_only() {
@@ -185,7 +185,7 @@ fn an_entry_takes_text_or_bytes_only() {
 }
 
 /// **A binary record** read with `fs::read`: a length, then that many bytes
-/// that are not UTF-8, kept by `bytes(p)` (ADR-366 D4).
+/// that are not UTF-8, kept by `bytes(p)` (ADR-grammar-input-v1 D4).
 #[test]
 fn a_length_prefixed_binary_record() {
     let source = "use std::fs\n\ngrammar Record {\n    entry rule record -> i64 = \"REC\" n:dec[i64](digit+) \":\" body:bytes(any*) -> { if body.len() == n { n * 10 } else { -1 } }\n}\n\nfn main() throws {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Record::record(raw) catch { -2 }\n    println(f\"{r}\")\n}\n";
@@ -204,7 +204,7 @@ fn first_line(out: &str) -> &str {
     out.lines().next().unwrap_or("")
 }
 
-/// **A bad byte in an `until` is a parse error at its own offset** (ADR-366
+/// **A bad byte in an `until` is a parse error at its own offset** (ADR-grammar-input-v1
 /// D3), at the start, in the middle and at the end of the name.
 #[test]
 fn a_bad_byte_in_a_name_is_named_where_it_stands() {
@@ -224,7 +224,7 @@ fn a_bad_byte_in_a_name_is_named_where_it_stands() {
 }
 
 /// **A bad byte inside a `digit` run is the ordinary parse error**: a digit is
-/// matched by comparison, so nothing there is checked as UTF-8 (ADR-366 D2).
+/// matched by comparison, so nothing there is checked as UTF-8 (ADR-grammar-input-v1 D2).
 #[test]
 fn a_bad_byte_in_a_digit_run_is_an_ordinary_parse_error() {
     let out = run("grammar-bytes-bad-digit", ROW, &[("d", b"ab;1\xff2")]);
@@ -233,7 +233,7 @@ fn a_bad_byte_in_a_digit_run_is_an_ordinary_parse_error() {
 }
 
 /// **Under `par_fold` the offset is the whole input's**, in a piece other than
-/// the first too (ADR-366 D3); good input gives the same sum over text and
+/// the first too (ADR-grammar-input-v1 D3); good input gives the same sum over text and
 /// over bytes.
 #[test]
 fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
@@ -267,7 +267,7 @@ fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
 
 const FIRST: &str = "use std::fs\n\ngrammar First {\n    entry rule first -> i64 = \"<\" c:any \";\" -> { if c == '\u{20AC}' { 3 } else if c == '\u{E4}' { 2 } else { 1 } }\n}\n\nfn main() throws {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let a = First::first(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {\n        println(f\"{a}\")\n        return\n    }\n    let b = First::first(t) catch { -1 }\n    println(f\"{a} {b}\")\n}\n";
 
-/// **A lone `any` is one checked character over bytes too** (ADR-366 D2): the
+/// **A lone `any` is one checked character over bytes too** (ADR-grammar-input-v1 D2): the
 /// action that compares it with a character literal reads the same over a
 /// `String` and over its `Bytes`, for a multi-byte character as well, and a
 /// bad or truncated sequence is `invalid UTF-8 at byte N` where it stands.

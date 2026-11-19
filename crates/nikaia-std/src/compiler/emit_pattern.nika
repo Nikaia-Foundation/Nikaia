@@ -2,7 +2,7 @@
 //
 // **A grammar pattern, as the backend's grammar syntax**, moved from
 // `emit/mod.rs` (ADR-294, #125, #583, E11-2): sequences, choices, captures,
-// `list(item, sep)`, the built-ins over bytes (ADR-366 D2), repeats and
+// `list(item, sep)`, the built-ins over bytes (ADR-grammar-input-v1 D2), repeats and
 // groups. A `fold` is `emit_fold`; a type argument is written by the host.
 
 impl EmitState {
@@ -94,7 +94,7 @@ impl EmitState {
                 }
                 out.push(f"{emit_text(world, name)}:")
                 // A literal's capture is text in Nikaia; over bytes the backend
-                // hands back bytes, so it is checked (ADR-366 D2).
+                // hands back bytes, so it is checked (ADR-grammar-input-v1 D2).
                 let literal = match pat.node {
                     Pattern::Literal(_) => true,
                     else => false,
@@ -338,7 +338,7 @@ impl EmitState {
         let over_bytes = walk.grammar_bytes && (called == "until" || called == "text")
         if generics.len() == 0 && args.len() > 0 && (called == "bytes" || over_bytes) {
             // Over bytes `until(t)` is bytes to the backend and text to
-            // Nikaia: it is checked where it becomes text (ADR-366 D2).
+            // Nikaia: it is checked where it becomes text (ADR-grammar-input-v1 D2).
             // Inside `bytes(...)` or `text(...)` what is captured is the
             // outer one's, so nothing below is wrapped again.
             let wrap = called == "until"

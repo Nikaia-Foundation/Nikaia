@@ -53,7 +53,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
             if !handed && !declares_words && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
                 let result = nikaia_std::index::or(signature.result, || Ty::Unknown);
                 let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-                if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.shown()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
+                if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.shown()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-grammar-input-v1 D11).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
             }
         },
         None => { },
