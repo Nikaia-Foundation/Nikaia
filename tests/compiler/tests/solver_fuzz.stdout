@@ -69,11 +69,11 @@ reproduce: nikaia run scripts/solver.nika -- fuzz 8 7 --size 8 --rlimit 50000000
 exit 1
 $ solver.nika oracle --rlimit 123 tests/solver/smoke tests/solver/pre
 tests/solver/smoke/unsat-bounds.smt2 status unsat, z3 sat
-tests/solver/pre/unsat-fixed.smt2 z3 error
+tests/solver/pre/unsat-fixed.smt2 z3 refuses: stub; ours: unsat
 tests/solver/pre/unsat-repeated-unit.smt2 status unsat, z3 sat
 tests/solver/pre/unsat-tighten.smt2 status unsat, z3 sat
-9 files with a status, 3 disagree with z3, 1 unknown to z3 (rlimit 123), 1 z3 errors
+9 files with a status, 3 disagree with z3, 1 unknown to z3 (rlimit 123), 1 refused by z3 (ours agrees with the status 1, ours refuses too 0, ours otherwise 0)
 exit 1
 $ solver.nika oracle --rlimit 123 tests/solver/smoke/sat-interval.smt2
-1 files with a status, 0 disagree with z3, 0 unknown to z3 (rlimit 123), 0 z3 errors
+1 files with a status, 0 disagree with z3, 0 unknown to z3 (rlimit 123), 0 refused by z3 (ours agrees with the status 0, ours refuses too 0, ours otherwise 0)
 exit 0

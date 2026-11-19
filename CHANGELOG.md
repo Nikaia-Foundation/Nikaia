@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1462] — 2026-11-19
+
+**The solver's oracle prints why z3 refuses a file and what our engine answers; files that must be refused move to tests/solver/malformed and count solved when we refuse them (#2258)**
+- The solver oracle names z3's reason and our engine's answer for every file z3 refuses; ill-formed files live in tests/solver/malformed and count as solved when refused (#2258)
+
 ## [0.0.1461] — 2026-11-19
 
 **A changed trim takes its source's text too, and NK2302 offers the copy**
