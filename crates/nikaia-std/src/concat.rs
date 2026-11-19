@@ -255,8 +255,9 @@ mod tests {
     // `tests/compiler/tests/std_handing_on_requests_no_memory.nika` (#2215).
 
     /// The right side's buffer is kept, where the left is borrowed. Kept as
-    /// Rust (#2082): no program's text reaches this impl, since a right side
-    /// `std` builds as a `String` becomes `block::Text` first (#2215).
+    /// Rust (#2304): no program's text reaches this impl, since a right side
+    /// `std` builds as a `String` becomes `block::Text` first (#2215), and a
+    /// buffer's address (`as_ptr`) is no method a test block has (NK1171).
     #[test]
     fn a_borrowed_left_side_reuses_the_right() {
         let mut roomy = String::with_capacity(64);
