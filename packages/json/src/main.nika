@@ -59,7 +59,10 @@ struct Reader {
     pos: i64,
 }
 
-fn fail(r: Reader, keep message: String, keep path: String) -> Error {
+// The error where reading stopped. Its path starts empty: each `value` it
+// leaves puts its own step (`[3]`, `.email`) in front, and `parse` the `$`, so
+// the path text is made only when reading fails (#2071).
+fn fail(r: Reader, keep message: String) -> Error {
     let mut line = 1
     let mut column = 1
     let mut i = 0
@@ -72,7 +75,12 @@ fn fail(r: Reader, keep message: String, keep path: String) -> Error {
         }
         i += 1
     }
-    return Error { message: message, line: line, column: column, path: path }
+    return Error { message: message, line: line, column: column, path: String() }
+}
+
+// `e` seen from one step further out: `step` in front of its path.
+fn within(keep e: Error, step: String) -> Error {
+    return Error { message: e.message, line: e.line, column: e.column, path: f"{step}{e.path}" }
 }
 
 fn at_end(r: Reader) -> bool {
@@ -99,25 +107,25 @@ fn blanks(mut r: Reader) {
     }
 }
 
-fn expect_word(mut r: Reader, word: String, path: String) throws {
+fn expect_word(mut r: Reader, word: String) throws {
     for w in word.scalars {
         if at_end(r) {
-            throw fail(r, f"expected `{word}`", path.clone())
+            throw fail(r, f"expected `{word}`")
         }
         let c = peek(r)
         if c != w {
-            throw fail(r, f"expected `{word}`", path.clone())
+            throw fail(r, f"expected `{word}`")
         }
         r.pos += 1
     }
 }
 
-fn hex4(mut r: Reader, path: String) -> i64 throws {
+fn hex4(mut r: Reader) -> i64 throws {
     let mut n = 0
     let mut k = 0
     while k < 4 {
         if at_end(r) {
-            throw fail(r, "unterminated string", path.clone())
+            throw fail(r, "unterminated string")
         }
         let c = peek(r)
         let d = c as i64
@@ -130,7 +138,7 @@ fn hex4(mut r: Reader, path: String) -> i64 throws {
             v = d - 87
         }
         if v < 0 {
-            throw fail(r, "expected four hex digits after `\\u`", path.clone())
+            throw fail(r, "expected four hex digits after `\\u`")
         }
         n = n * 16 + v
         r.pos += 1
@@ -141,11 +149,11 @@ fn hex4(mut r: Reader, path: String) -> i64 throws {
 }
 
 // The string after its opening quote up to and including the closing one.
-fn string(mut r: Reader, path: String) -> String throws {
+fn string(mut r: Reader) -> String throws {
     let mut out = String()
     while true {
         if at_end(r) {
-            throw fail(r, "unterminated string", path.clone())
+            throw fail(r, "unterminated string")
         }
         let c = peek(r)
         let code = c as i64
@@ -154,7 +162,7 @@ fn string(mut r: Reader, path: String) -> String throws {
             return out
         }
         if code < 32 {
-            throw fail(r, "control character in string", path.clone())
+            throw fail(r, "control character in string")
         }
         if c != '\\' {
             out.push(c)
@@ -163,36 +171,36 @@ fn string(mut r: Reader, path: String) -> String throws {
         }
         r.pos += 1
         if at_end(r) {
-            throw fail(r, "unterminated string", path.clone())
+            throw fail(r, "unterminated string")
         }
         let e = peek(r)
         if e == 'u' {
             let start = r.pos - 1
             r.pos += 1
-            let mut cp = hex4(r, path)
+            let mut cp = hex4(r)
             if cp >= 55296 && cp <= 56319 {
                 // A high surrogate needs `\uXXXX` with a low one right after.
                 let a = peek(r)
                 if a != '\\' {
                     r.pos = start
-                    throw fail(r, "lone surrogate", path.clone())
+                    throw fail(r, "lone surrogate")
                 }
                 r.pos += 1
                 let b = peek(r)
                 if b != 'u' {
                     r.pos = start
-                    throw fail(r, "lone surrogate", path.clone())
+                    throw fail(r, "lone surrogate")
                 }
                 r.pos += 1
-                let low = hex4(r, path)
+                let low = hex4(r)
                 if low < 56320 || low > 57343 {
                     r.pos = start
-                    throw fail(r, "lone surrogate", path.clone())
+                    throw fail(r, "lone surrogate")
                 }
                 cp = 65536 + (cp - 55296) * 1024 + (low - 56320)
             } else if cp >= 56320 && cp <= 57343 {
                 r.pos = start
-                throw fail(r, "lone surrogate", path.clone())
+                throw fail(r, "lone surrogate")
             }
             out.push(scalar::from(cp))
             continue
@@ -210,7 +218,7 @@ fn string(mut r: Reader, path: String) -> String throws {
         } else if e == '"' || e == '\\' || e == '/' {
             out.push(e)
         } else {
-            throw fail(r, "unknown escape", path.clone())
+            throw fail(r, "unknown escape")
         }
         r.pos += 1
     }
@@ -222,7 +230,7 @@ fn is_digit(c: scalar) -> bool {
     return d >= 48 && d <= 57
 }
 
-fn number(mut r: Reader, path: String) -> Value throws {
+fn number(mut r: Reader) -> Value throws {
     let start = r.pos
     if peek(r) == '-' {
         r.pos += 1
@@ -234,12 +242,12 @@ fn number(mut r: Reader, path: String) -> Value throws {
             r.pos += 1
         }
     } else {
-        throw fail(r, "expected a digit", path.clone())
+        throw fail(r, "expected a digit")
     }
     if peek(r) == '.' {
         r.pos += 1
         if !is_digit(peek(r)) {
-            throw fail(r, "expected a digit after `.`", path.clone())
+            throw fail(r, "expected a digit after `.`")
         }
         while is_digit(peek(r)) {
             r.pos += 1
@@ -251,7 +259,7 @@ fn number(mut r: Reader, path: String) -> Value throws {
             r.pos += 1
         }
         if !is_digit(peek(r)) {
-            throw fail(r, "expected a digit in the exponent", path.clone())
+            throw fail(r, "expected a digit in the exponent")
         }
         while is_digit(peek(r)) {
             r.pos += 1
@@ -266,30 +274,30 @@ fn number(mut r: Reader, path: String) -> Value throws {
     return Value::Number(text)
 }
 
-fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
+fn value(mut r: Reader, depth: i64) -> Value throws {
     blanks(r)
     if at_end(r) {
-        throw fail(r, "unexpected end of text", path.clone())
+        throw fail(r, "unexpected end of text")
     }
     let c = peek(r)
     if depth > 512 {
-        throw fail(r, "nesting too deep", path.clone())
+        throw fail(r, "nesting too deep")
     }
     if c == 'n' {
-        expect_word(r, "null", path)
+        expect_word(r, "null")
         return Value::Null
     }
     if c == 't' {
-        expect_word(r, "true", path)
+        expect_word(r, "true")
         return Value::Bool(true)
     }
     if c == 'f' {
-        expect_word(r, "false", path)
+        expect_word(r, "false")
         return Value::Bool(false)
     }
     if c == '"' {
         r.pos += 1
-        return Value::Str(string(r, path))
+        return Value::Str(string(r))
     }
     if c == '[' {
         r.pos += 1
@@ -301,10 +309,13 @@ fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
         }
         while true {
             let at = items.len()
-            items.push(value(r, f"{path}[{at}]", depth + 1))
+            let item = value(r, depth + 1) catch {
+                throw within(error, f"[{at}]")
+            }
+            items.push(item)
             blanks(r)
             if at_end(r) {
-                throw fail(r, "expected `,` or `]`", path.clone())
+                throw fail(r, "expected `,` or `]`")
             }
             let d = peek(r)
             r.pos += 1
@@ -313,7 +324,7 @@ fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
             }
             if d != ',' {
                 r.pos -= 1
-                throw fail(r, "expected `,` or `]`", path.clone())
+                throw fail(r, "expected `,` or `]`")
             }
         }
     }
@@ -328,20 +339,22 @@ fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
         while true {
             blanks(r)
             if peek(r) != '"' {
-                throw fail(r, "expected a member name", path.clone())
+                throw fail(r, "expected a member name")
             }
             r.pos += 1
-            let key = string(r, path)
+            let key = string(r)
             blanks(r)
             if peek(r) != ':' {
-                throw fail(r, "expected `:`", f"{path}.{key}")
+                throw within(fail(r, "expected `:`"), f".{key}")
             }
             r.pos += 1
-            let v = value(r, f"{path}.{key}", depth + 1)
+            let v = value(r, depth + 1) catch {
+                throw within(error, f".{key}")
+            }
             members.push(Member { key: key, value: v })
             blanks(r)
             if at_end(r) {
-                throw fail(r, "expected `,` or `}`", path.clone())
+                throw fail(r, "expected `,` or `}`")
             }
             let d = peek(r)
             r.pos += 1
@@ -350,24 +363,26 @@ fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
             }
             if d != ',' {
                 r.pos -= 1
-                throw fail(r, "expected `,` or `}`", path.clone())
+                throw fail(r, "expected `,` or `}`")
             }
         }
     }
     if c == '-' || is_digit(c) {
-        return number(r, path)
+        return number(r)
     }
-    throw fail(r, "unexpected character", path.clone())
+    throw fail(r, "unexpected character")
 }
 
 // The value `text` holds, or the `Error` where it is not JSON. Anything but
 // blanks after the value is an error.
 pub fn parse(text: String) -> Value sync throws {
     let mut r = Reader { cs: text.scalars.collect(), pos: 0 }
-    let v = value(r, "$", 0)
+    let v = value(r, 0) catch {
+        throw within(error, "$")
+    }
     blanks(r)
     if r.pos < r.cs.len() as i64 {
-        throw fail(r, "unexpected character after the value", "$")
+        throw within(fail(r, "unexpected character after the value"), "$")
     }
     return v
 }

@@ -62,25 +62,24 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["word: borrowed", "path: borrowed"]
-signature = "(mut r: Reader, word: String, path: String)"
+views = ["word: borrowed"]
+signature = "(mut r: Reader, word: String)"
 
 [fn."fail"]
 sync = "inferred"
-keeps = ["message", "path"]
+keeps = ["message"]
 panics = false
 touches = []
-signature = "(r: Reader, message: String, path: String) -> Error"
+signature = "(r: Reader, message: String) -> Error"
 
 [fn."hex4"]
 sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["path: borrowed"]
 ensures = ["result >= 0 && result <= 65535"]
 from = ["assert(n >= 0 && n <= 65535)"]
-signature = "(mut r: Reader, path: String) -> i64"
+signature = "(mut r: Reader) -> i64"
 
 [fn."is_digit"]
 sync = "inferred"
@@ -99,8 +98,7 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["path: borrowed"]
-signature = "(mut r: Reader, path: String) -> Value"
+signature = "(mut r: Reader) -> Value"
 
 [fn."number_text"]
 sync = "inferred"
@@ -130,8 +128,7 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["path: borrowed"]
-signature = "(mut r: Reader, path: String) -> String"
+signature = "(mut r: Reader) -> String"
 
 [fn."to_string"]
 pub = true
@@ -147,8 +144,15 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["path: borrowed"]
-signature = "(mut r: Reader, path: String, depth: i64) -> Value"
+signature = "(mut r: Reader, depth: i64) -> Value"
+
+[fn."within"]
+sync = "inferred"
+keeps = ["e"]
+panics = false
+touches = []
+views = ["step: borrowed"]
+signature = "(e: Error, step: String) -> Error"
 
 [fn."write_string"]
 sync = "inferred"
