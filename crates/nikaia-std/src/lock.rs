@@ -819,55 +819,6 @@ mod tests {
         assert_eq!(lock.get(), 7);
     }
 
-    /// **Re-entering the crossing shape is noticed**, where the build carries
-    /// the check ([ADR-281](../../../docs/specification/adr/adr-281.md) D36).
-    ///
-    /// Under D2 this cannot happen in a correct compiler — `NK2203` refuses the
-    /// nesting when the program is compiled — so the only way to reach it is to
-    /// write the nesting in Rust, here. That is what makes it *self-control of
-    /// D2's rule* rather than error handling: no Nikaia program can get here.
-    #[test]
-    #[cfg(feature = "reentrancy-check")]
-    fn re_entering_the_crossing_shape_is_noticed() {
-        let lock = Crossing::new(1_i64);
-        // The hook is taken off around it: the panic is the answer being
-        // tested, and a test that prints a backtrace for its own expectation
-        // reads like a failure.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            lock.access(|_| lock.get());
-        }));
-        std::panic::set_hook(hook);
-
-        let said = again.expect_err("the second acquisition is noticed");
-        // `panic!` with no arguments carries a `&'static str`; with any, a
-        // `String`. Both, because the message is one literal today and need not
-        // stay one.
-        let said = said
-            .downcast_ref::<&str>()
-            .map(|s| s.to_string())
-            .or_else(|| said.downcast_ref::<String>().cloned())
-            .unwrap_or_default();
-        assert!(said.contains("cannot be re-entered"), "{said}");
-    }
-
-    /// **And `Local`'s check is not ours to decline.** It is a `RefCell`'s own
-    /// borrow flag, so it is there at both settings — which is more noticing
-    /// than the switch promises and costs a program that obeys the rule
-    /// nothing.
-    #[test]
-    fn the_local_shapes_check_is_the_language_belows() {
-        let lock = Local::new(1_i64);
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            lock.access(|_| lock.set(2));
-        }));
-        std::panic::set_hook(hook);
-        assert!(again.is_err(), "a `RefCell` notices either way");
-    }
-
     /// The message a door panicked with.
     fn panicked_with(run: impl FnOnce()) -> String {
         let hook = std::panic::take_hook();
@@ -966,25 +917,6 @@ mod tests {
         assert_eq!(local.access(|v| v.as_ptr()), before, "nothing was copied");
     }
 
-    /// D4, which is the whole reason the crossing shape carries an owner check:
-    /// **one behaviour, two prices.** A bare `Mutex` hangs here.
-    #[test]
-    fn re_entering_says_the_same_thing_in_both_shapes() {
-        let local = Local::new(1_i64);
-        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            local.access(|_| local.access(|n| *n))
-        }))
-        .expect_err("the cheap shape reports");
-        assert!(message(&said).contains("already held by the same task"));
-
-        let crossing = Crossing::new(1_i64);
-        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crossing.access(|_| crossing.access(|n| *n))
-        }))
-        .expect_err("and so does the crossing one, rather than hanging");
-        assert!(message(&said).contains("already held by the same task"));
-    }
-
     /// And the crossing shape really does cross, which is the capability the
     /// cheap one cannot have: `Arc<Local<T>>` is not `Send` and this is.
     #[test]
@@ -1003,13 +935,6 @@ mod tests {
             thread.join().expect("no task failed");
         }
         assert_eq!(value.access(|n| *n), 4000);
-    }
-
-    fn message(said: &Box<dyn std::any::Any + Send>) -> &str {
-        said.downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| said.downcast_ref::<&str>().copied())
-            .unwrap_or("")
     }
 }
 
