@@ -221,9 +221,19 @@ fn grown_text_of(words: ref winnow_grammar::InternerContext, body: ref Block) ->
 
 /// **The text a cut is cut from** (ADR-text-reuse-1 D2, #1589): `line[a..b]`
 /// of a name. A `let mut` that grows such a cut is given `line`'s text, which
-/// it then changes. The trims wait for their result tier (text_tiers).
+/// it then changes. A trim (`line.trim()`, `line.trim_end()`) is a cut too:
+/// its result lies inside `line` as well.
 fn given_cut_source(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            if !a_trim(words.resolve(method)) {
+                return null
+            }
+            return match receiver {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => null,
+            }
+        },
         Expr::Index { base, index, .. } => {
             match index {
                 Expr::Range { .. } => {},
@@ -236,6 +246,12 @@ fn given_cut_source(value: ref Expr, words: ref winnow_grammar::InternerContext)
         },
         else => return null,
     }
+}
+
+/// **A trim's result is a cut of its receiver** (ADR-text-reuse-1 D2): the
+/// text methods of `VIEWS` that hand back one piece of it, never null.
+fn a_trim(method: ref String) -> bool {
+    return method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches"
 }
 
 /// Whether an `if`, a `match` or a block ends, on some path, in a field read

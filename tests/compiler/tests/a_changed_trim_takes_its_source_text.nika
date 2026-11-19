@@ -1,0 +1,30 @@
+// A trim bound `let mut` and then grown takes its source's text and changes
+// it in that buffer, as a changed index cut does (ADR-text-reuse-1 D2,
+// #1589): before, the trim stayed a view and `rest += "?"` became `+=` on a
+// `&str` that rustc refused (NK1343).
+
+fn trimmed(keep line: String) -> String {
+    let mut rest = line.trim()
+    rest += "?"
+    return rest
+}
+
+fn own() -> String {
+    let line = f"  Bremen{3}  "
+    let mut rest = line.trim_end()
+    rest.push_str("|")
+    return rest
+}
+
+fn tail() -> String {
+    let line = f"--Kiel{4}--"
+    let mut rest = line.trim_start_matches("-")
+    rest = rest + "."
+    return rest
+}
+
+fn main() throws {
+    println(trimmed(f"  Hamburg{12}  "))
+    println(own())
+    println(tail())
+}

@@ -158,6 +158,14 @@ pub(crate) fn grown_text_of(words: &winnow_grammar::InternerContext, body: &Bloc
 
 pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !a_trim(words.resolve(method)) { return None; }
+            return match receiver {
+                Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
+                _ => None,
+            };
+        },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             match index {
@@ -172,6 +180,8 @@ pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerCon
         _ => return None,
     }
 }
+
+pub(crate) fn a_trim(method: &str) -> bool { method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches" }
 
 pub(crate) fn check_function_ends_in(expr: &Expr, grows: bool) -> bool {
     match expr {
