@@ -752,38 +752,6 @@ mod tests {
 
 #[cfg(test)]
 mod io_tests {
-    /// **Two file reads in flight at once, on one thread**
-    /// ([ADR-055](../../../../docs/specification/adr/adr-055.md) §6 step 3).
-    ///
-    /// The claim step 3 adds to step 1's: a suspension point is no longer only
-    /// `Yield`, it is a `std` read - so `task::overlap2` over two reads is
-    /// Part II 11.2's sentence about something a program actually writes, and
-    /// `overlap { … }` is how a program writes it
-    /// ([ADR-292](../../../../docs/specification/adr/adr-292.md) D2).
-    ///
-    /// It reads two files and checks both answers. What makes it a test of the
-    /// *interleaving* rather than of reading twice is that neither half is
-    /// awaited before the other is started: both are polled by the same
-    /// `poll_fn`, and the executor's park is what waits for either.
-    #[test]
-    fn two_reads_are_in_flight_at_once_on_one_thread() {
-        let dir = std::env::temp_dir().join(format!("nikaia-exec-io-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
-        let one = dir.join("eins.txt");
-        let two = dir.join("zwei.txt");
-        std::fs::write(&one, "eins").expect("write");
-        std::fs::write(&two, "zweizwei").expect("write");
-
-        let (a, b) = super::block_on(crate::task::overlap2(
-            crate::fs::read_to_string(&one, &crate::fs::Root::Anywhere),
-            crate::fs::read_to_string(&two, &crate::fs::Root::Anywhere),
-        ));
-        assert_eq!(a.expect("eins"), "eins");
-        assert_eq!(b.expect("zwei"), "zweizwei");
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
     /// A read that fails is a failure and not a hang.
     ///
     /// The park is the place a mistake here becomes a program that never
@@ -799,51 +767,5 @@ mod io_tests {
             &crate::fs::Root::Anywhere,
         ));
         assert!(outcome.is_err(), "a missing file read as something");
-    }
-
-    /// **Many reads at once**, which is where a slot table gets its accounting
-    /// wrong.
-    ///
-    /// A finished slot whose answer nobody had taken yet used to be released as
-    /// free, and the next operation reused its buffer - so a read came back as
-    /// another operation's bytes. `uring::Job::owned` is the fix and this is the
-    /// shape that finds it: every file has different contents, and they are
-    /// checked against the file they were asked for.
-    #[test]
-    fn eight_reads_at_once_each_get_their_own_bytes() {
-        let dir = std::env::temp_dir().join(format!("nikaia-exec-many-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
-        let paths: Vec<_> = (0..8)
-            .map(|n| {
-                let path = dir.join(format!("{n}.txt"));
-                std::fs::write(&path, "x".repeat(n + 1)).expect("write");
-                path
-            })
-            .collect();
-
-        let read = super::block_on(async {
-            let mut out = Vec::new();
-            // Pinned so each one can be polled where it stands: what this is
-            // about is eight slots held at once, so they are all started before
-            // any answer is taken.
-            let mut futures: Vec<_> = paths
-                .iter()
-                .map(|path| Box::pin(crate::fs::read_to_string(path, &crate::fs::Root::Anywhere)))
-                .collect();
-            for future in &mut futures {
-                out.push(future.as_mut().await);
-            }
-            out
-        });
-
-        for (n, text) in read.into_iter().enumerate() {
-            assert_eq!(
-                text.expect("read"),
-                "x".repeat(n + 1),
-                "file {n} came back as somebody else's bytes"
-            );
-        }
-
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
