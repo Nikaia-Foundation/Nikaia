@@ -7,7 +7,7 @@ what it is tested against, and in which order its later layers come (#928)
 **Supersedes / Related:**
 [ADR-344](adr-344.md) D1, D2 (an official package lives in `packages/<name>/` with its own version, taken in by path);
 [ADR-338](adr-338.md) D2 (formats are official packages; `yaml` joins the list), §6 (editing a text in place: answered here for `yaml`);
-[ADR-grammar-1](adr-grammar-1.md) (rule parameters, bounds, guards: YAML's indentation `n` and context `c`);
+[ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12-D14 (rule parameters, bounds, guards: YAML's indentation `n` and context `c`);
 [ADR-296](adr-296.md) (a grammar is part of the language, lowered to the winnow-grammar engine);
 [ADR-282](adr-282.md) D12, D13 (a field holding only views is a view position);
 [ADR-016](adr-016.md) D5 (a grammar over a mapping checks UTF-8 as it reads)
@@ -75,7 +75,7 @@ when an error or a tool asks. An entry taking `String` comes with `text::Pos`
 ### D3 — One grammar builds the document tree, written after the specification's productions.
 
 The grammar is a Nikaia `grammar` with rule parameters for the indentation `n`
-and the context `c` (ADR-grammar-1), its rules named after YAML 1.2.2's
+and the context `c` (ADR-grammar-syntax-v1 D12), its rules named after YAML 1.2.2's
 productions where one stands for one (`s-indent(n)` is `Indent(n)`), so a
 reviewer can hold it against the specification. One grammar, no hand-written
 scanner beside it.

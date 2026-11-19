@@ -86,7 +86,7 @@ inputs at a tenth, checks off:
   alternatives after it share the read; large went from 2.5 to 2.2 times.
 * **The directives cloned at each rule**: fixed (#1560). The grammar threads
   `ds: Vec[Dir]` through every node rule; a rule value is now lent
-  (ADR-grammar-1 D6) and lowered as `&Vec<Dir>`, so no rule value is cloned
+  (ADR-grammar-actions-v1 D7) and lowered as `&Vec<Dir>`, so no rule value is cloned
   per call (the clone was 4 % of large). The table above is measured with it.
 * **Allocation and copying**: open (with #1518). `malloc`, `free` and
   `memcpy` are about 20 % of large (events, checks off, at `9e585c4d4`):

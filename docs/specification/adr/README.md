@@ -16,7 +16,7 @@ Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
 
-The records of the earlier schemes (`ADR-296`, `ADR-grammar-1`) keep their
+The records of the earlier schemes (`ADR-296`, `ADR-grammar-2`) keep their
 names until something changes them; a change to one of them consolidates its
 topic into a `-v` record (D4). Until then such a record may still carry
 *Changed by ADR-MMM Dn* notes from before.
@@ -103,7 +103,6 @@ implementation.
 | [402](adr-402.md) | A `time::Duration` has `saturating_add`, `saturating_sub`, `saturating_mul(int)` (below zero is no time, past the longest stays there), `min` and `max`, as the integers do; `n.nanos()` is the sixth constructor; plain `+ - *` stay checked | Accepted | no |
 | [403](adr-403.md) | A program in a package's `tests/` sees the package's private names by the same paths as its public ones, as a `test` block does; nothing else does, and a test reaching a name publishes nothing; std's Nikaia packages (`runtime`, `compiler`) have such a `tests/`, run by `nikaia test` and the suite | Accepted | no |
 | [raw-sinks-1](adr-raw-sinks-1.md) | Data from outside the program at a raw sink (`db::raw`, `html::Raw`, a path under `fs::Root::Anywhere`) is proved from its type or a guard, or the manifest's `[allow]` admits it, else `NK1308`; every boundary escapes by default; a dependency's exception builds only where the application allows it for that package (`NK1309`); `raw-sinks = "warn"` checks at run time; `std` runs no shell, `process::shell` is `NK1314` (D9); an outside program at `process::run` is refused, `NK1308`, unless `untrusted-program` allows it (D10); the root of `Dir` is a part (D11), `fs::scratch()` replaces `mktemp` (D12), a `read_dir` name is opened under its directory (D13), `path::is_component`/`path::is_below` prove a name (D14), the key is per operation and names its sources, `untrusted-paths-read = ["args"]` (D15), proof in place of `trusted:` (D16) | Accepted | no |
-| [grammar-1](adr-grammar-1.md) | A rule's values are passed as a function's are: lent, never copied (D6); its decisions on how a grammar takes values (D1-D5) moved to grammar-syntax-v1 D9, D12-D15 | Accepted | yes |
 | [grammar-2](adr-grammar-2.md) | A grammar entry may take a type from its caller (`Json::read[Contact](bytes)`) and is emitted once per type; a `match` on `T::kind` chooses the pattern; `members[S]` fills a struct by one mapping rule shared with SQL, the compiler matching keys and building the value; attributes read in the format's `name:` function; `@stream` entries; `write[T]` stays a function; `json::read` forwards to the grammar (ADR-344 D3 changed); a type argument in brackets is not warned where nothing else names the type (ADR-330 D9 narrowed); an enum variant without payload by its name | Accepted | no |
 | [338](adr-338.md) | `std` is the core the language stands on; JSON, TOML, CSV, HTML, HTTP/1.1's text half and the database protocol are official packages (`nikaia_json` …), versioned on their own, shipped with the toolchain, listed in `std` and taken in by their first `use`. | Accepted | no |
 | [337](adr-337.md) | `nikaia fmt` writes one style with no options (a tab per level and nothing aligned, `{` at the line's end, width 100, trailing `,` where broken), keeps every comment where it was, leaves a `dsl` body as written, never changes what a file lowers to, and `--check` reports for CI. | Accepted | no |
@@ -223,6 +222,7 @@ implementation.
 | [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()` |
 | [grammar-syntax-v1](adr-grammar-syntax-v1.md) | How a grammar is written: scannerless, a DSL block ends with `} eod`, a grammar is parsed, comments are whitespace and strings Nikaia's own; entered by an ordinary call to any `entry rule` (`Json::value(x)`, no `parse` alias, `pub` belongs to the grammar); Part II 10.8 lists every element; an action stands after `->` and a brace after a pattern is a bound; a rule takes values as a function does (Subject ; Config), a bound may be a value, a guard `if(cond)`, `count(p)` an `i64`; `span(p)`, `here`, `same_line`, `///` a rule, no state and no `extern rule`; hardware instructions leave the core, auto-AST and regex terminals are goals | Accepted | no |
 | [grammar-input-v1](adr-grammar-input-v1.md) | What a grammar reads and how it holds it: an entry takes a `String` or a `Bytes`, the argument decides; over `Bytes` what becomes text is checked as UTF-8 where it becomes text (a map's key only where the map misses), a bad byte is a parse error at its offset, `bytes(p)` hands back the bytes; `asset("…")` says where the bytes come from; identifiers are interned and bulk text is a view with the input's lifetime; a view key may be hashed from a prefix, never compared by one; the interning table is the caller's, handed as `words:` (`NK1330` where the result can hold a `Symbol`), made in `std`; a read-only buffer's teardown may be skipped at exit | Accepted | no |
+| [grammar-actions-v1](adr-grammar-actions-v1.md) | What a rule's action may do and how a parse fails: an action may not pause and a call that can is `NK2209` where it stands, so an entry is `sync` (asserted in the ledger); an action may fail and a pausing body may enter a grammar; a parse fails with the prelude's `ParseError`, which carries the message and nothing else, and every entry's ledger says so, read by the `throws` fixpoint though an entry is no `Item::Fn`; a rule's values are lent as a function's are, never cloned per call | Accepted | yes |
 | [016](adr-016.md) | The UTF-8 check is divided across frames, never skipped, and each piece is checked with SIMD (`simdutf8`), answering as the standard library does; it is made where a mapping becomes text (`m.text()`), not where the file is mapped (D5). | Accepted | yes |
 
 ### Diagnostics
@@ -400,7 +400,7 @@ makes the next version of the changed topic instead. Records replaced as a whole
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-input`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-input`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -410,7 +410,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| grammar-actions-v1 | what a rule's action may do (ADR-296, grammar-1) | #904 |
 | grammar-parallel-v1 | frames and folds (ADR-296) | #904 |
 | grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
 | grammar-build-time-v1 | a grammar run at build time and what it hands back (ADR-177, ADR-296, ADR-323) | #904 |

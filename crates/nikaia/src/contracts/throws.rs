@@ -42,7 +42,7 @@ use nikaia_std::compiler::throws::{self as nika, MethodsCalled, ThrowsGraph};
 /// #125). What stays here is handing in each unit, what one expression
 /// reaches (`sync`'s single answer, ADR-288) and the type checker's method
 /// calls as plain data, and writing the answer into the ledger. A callee the
-/// graph does not hold still has the set the ledger gives it (ADR-296 D40).
+/// graph does not hold still has the set the ledger gives it (ADR-grammar-actions-v1 D6).
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],

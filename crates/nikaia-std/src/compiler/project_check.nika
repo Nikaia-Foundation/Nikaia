@@ -156,7 +156,7 @@ fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -> St
     }
     let pausing = pausing - paused_in_a_door
     // **A pause where nothing may pause** - a grammar's action, a fold, a
-    // parallel lambda (ADR-296 D35, ADR-235 D2) - is not a place that can fail.
+    // parallel lambda (ADR-grammar-actions-v1 D1, ADR-235 D2) - is not a place that can fail.
     let pauses_forbidden = project_check_count(findings, "NK2209")
     if pauses_forbidden > 0 {
         refused.push(f"{pauses_forbidden} call{project_check_plural(pauses_forbidden)} that can pause where nothing may")
