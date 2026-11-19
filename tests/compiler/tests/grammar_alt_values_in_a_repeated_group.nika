@@ -1,0 +1,16 @@
+// A repeated group whose alternatives give different values (`x:any` a
+// character, `":"` a text) is matched for its text only (#2283).
+fn ok(x: scalar, flow: bool) -> bool sync { return x != ':' && x != ' ' && !(flow && x == ',') }
+
+grammar G {
+    rule WS = "" -> { }
+    entry rule top -> String = s:text(Run(false)) -> { s }
+    entry rule any_or_colon -> String = s:text((any | ":")+) -> { s }
+    rule Safe(flow: bool) = x:any if(ok(x, flow)) -> { }
+    rule Run(flow: bool) = (x:any if(ok(x, flow)) | ":" peek(Safe(flow)))+ -> { }
+}
+
+fn main() throws {
+    println(G::top("ab:c") catch { return })
+    println(G::any_or_colon("ab:c") catch { return })
+}
