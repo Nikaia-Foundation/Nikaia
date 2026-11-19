@@ -330,3 +330,36 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     found.seen.push(Seen::Call { name, wrote, span: span.clone(), literals, trusted: says_trusted(names, config) });
 }
 
+pub fn foreign_own_refused(written: &[(String, Span)], own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
+    let mut out: Vec<CheckFinding> = vec![];
+    if own.heads.is_empty() { return out; }
+    let mut met: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut stale = own.moved.is_empty();
+    for (name, span) in written.iter() {
+        let span = *span;
+        let head = match name.split("::").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if head == name || !own.heads.contains(head) || met.contains(name) { continue; }
+        met.insert(nikaia_std::block::Text::from(name.to_string()));
+        if own.published.contains(name) {
+            let notes: Vec<String> = vec![String::from("What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.")];
+            out.push(check_refusal("NK2504", &span, format!("`{}` is described with `pub = true`, and the package's own Rust stays the package's.", name), notes, Some(String::from("Write `pub = false` in its entry in `contracts/crate.contracts`."))));
+            continue;
+        }
+        if !own.described.contains(name) {
+            let notes: Vec<String> = vec![String::from("Nikaia needs to know what a Rust function does: whether it pauses, can fail, reaches locks, or moves values between threads."), String::from("`nikaia describe crate` drafts entries for the package's own Rust that its Nikaia code calls, for you to review and commit as `contracts/crate.contracts`.")];
+            out.push(check_refusal("NK2504", &span, format!("`{}` is the package's own Rust and has no description yet.", name), notes, Some(String::from("Run `nikaia describe crate`."))));
+            continue;
+        }
+        if !stale {
+            stale = true;
+            let which = match own.moved.len() as i64 {
+                1 => format!("`{}`", *nikaia_std::index::get(&own.moved, 0)),
+                n => format!("{} files, among them `{}`", n, *nikaia_std::index::get(&own.moved, 0)),
+            };
+            let notes: Vec<String> = vec![format!("`contracts/crate.contracts` describes an older version of the package's Rust: {} changed since.", which), String::from("A description is written by a person, so it has to be reviewed again, not just regenerated.")];
+            out.push(check_refusal("NK2505", &span, String::from("The package's own Rust has changed since its description was reviewed."), notes, Some(String::from("Run `nikaia describe crate` and review the diff before committing it."))));
+        }
+    }
+    out
+}
+

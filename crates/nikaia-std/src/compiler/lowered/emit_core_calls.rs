@@ -508,17 +508,21 @@ impl EmitState {
                     self.emit_core_grammar_entry(world, walk, out, host, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &values, config, &parallelism, depth, flow, scope)?;
                     return Ok(true);
                 }
-                if segments.len() != 3 { return Ok(false); }
-                let package = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
-                let book = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
-                let rule = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (2) as usize) });
-                if !self.a_package_grammar_entry(&format!("{}::{}::{}", package, book, rule)) { return Ok(false); }
+                if segments.len() != 3 && segments.len() != 2 { return Ok(false); }
+                let first = unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 2) };
+                let package = match first {
+                    0 => String::from(""),
+                    _ => format!("{}::", emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) })),
+                };
+                let book = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (first) as usize) });
+                let rule = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::add::<i64>(first, 1)) as usize) });
+                if !self.a_package_grammar_entry(&format!("{}{}::{}", package, book, rule)) { return Ok(false); }
                 let mut question: &'static str = "?";
                 if flow.caught { question = ""; }
                 let mut pieces = false;
                 let mut streamed = false;
                 let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                let contract = self.own_contracts.functions.get(&format!("{}::{}::{}", package, book, rule));
+                let contract = self.own_contracts.functions.get(&format!("{}{}::{}", package, book, rule));
                 if contract.is_some() {
                     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                     pieces = held.pieces;
@@ -534,7 +538,7 @@ impl EmitState {
                     }
                 }
                 if streamed {
-                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}::{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
+                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
                     self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                     out.push(").to_vec()");
                     for i in 1..args.len() as i64 {
@@ -572,7 +576,7 @@ impl EmitState {
                     self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                     let options = emit_fold_options(&book, &rule);
                     let claimed = host.parallelism() != "Parallelism::Off";
-                    out.push(&format!(", {}::{}(), {}, |source, how| {}::{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", package, options, claimed, package, book, rule, question));
+                    out.push(&format!(", {}{}(), {}, |source, how| {}{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", package, options, claimed, package, book, rule, question));
                     return Ok(true);
                 }
                 let mut table: Option<Expr> = None;
@@ -589,7 +593,7 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                     },
                 }
-                out.push(&format!(", {}::{}::parse_{}()){}", package, book, rule, question));
+                out.push(&format!(", {}{}::parse_{}()){}", package, book, rule, question));
                 return Ok(true);
             },
             _ => return Ok(false),
@@ -1418,8 +1422,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple105215| {
-        let (i, word) = __nikaia_tuple105215;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple105581| {
+        let (i, word) = __nikaia_tuple105581;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

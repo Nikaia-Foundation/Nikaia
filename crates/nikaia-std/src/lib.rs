@@ -148,8 +148,13 @@ pub mod text {
 /// `index::or(x, || d.into())` (#1253).
 /// `needless_borrow`, as there too: a `Bytes` local is lowered a `&[u8]` and
 /// still handed on and indexed as `&b` (`text_float.nika`, #2024).
+/// `question_mark` and `comparison_to_empty`, as there too: `?? return null`
+/// is lowered a `match` that returns `None`, and `s == ""` stays a comparison
+/// (`run_config.nika`, #2211).
 #[doc(hidden)]
 #[allow(
+    clippy::question_mark,
+    clippy::comparison_to_empty,
     clippy::unnecessary_cast,
     clippy::too_many_arguments,
     clippy::useless_conversion,

@@ -99,6 +99,16 @@ pub fn check(
         .collect()
 }
 
+/// **The calls into the package's own Rust no entry answers**
+/// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D24-D27): the
+/// walk's names handed to `foreign_own_refused` in Nikaia.
+pub fn own_rust(
+    parsed: &Parsed,
+    own: &nikaia_std::compiler::project_members::ProjectMembersOwnRust,
+) -> Vec<Finding> {
+    nikaia_std::compiler::foreign::foreign_own_refused(&written(parsed), own)
+}
+
 /// `NK2505`: the crate moved and its description did not
 /// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D5, on
 /// [ADR-100](../../docs/specification/adr/adr-100.md) D3's rule).

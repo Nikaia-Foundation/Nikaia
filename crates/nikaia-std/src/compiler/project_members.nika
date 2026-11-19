@@ -44,6 +44,10 @@ pub struct ProjectMembersManifest {
     /// **`[package] described`** (#1976), resolved against the manifest's
     /// directory; null where it names none.
     pub described: fs::Path?,
+    /// **`[rust-library] root`** as written (ADR-rust-boundary-1 D23): the
+    /// package has Rust of its own, which its Nikaia code calls (D24);
+    /// null where it has none.
+    pub rust_root: String?,
 }
 
 /// What the walk asks of the compiler.
@@ -676,6 +680,34 @@ pub struct ProjectMembersForeign {
     /// the package is also checked against, which win a collision with
     /// `std`'s; blank where the manifest names none.
     pub over_std: Ledger,
+    /// **The package's own Rust** (ADR-rust-boundary-1 D24-D27): what
+    /// `contracts/crate.contracts` says of it; empty where the package has
+    /// none.
+    pub own: ProjectMembersOwnRust,
+}
+
+/// **What a package with Rust of its own reads of it** (ADR-rust-boundary-1
+/// D24-D27): the words a path into it starts with, and what
+/// `contracts/crate.contracts` says. The entries themselves are in
+/// `ProjectMembersForeign.descriptions`, under the path from the crate root
+/// (`words::twice`).
+pub struct ProjectMembersOwnRust {
+    /// The modules the hand-written root declares (`mod words;`), and the
+    /// first word of every entry: a qualified name starting with one is a
+    /// call into the package's own Rust (D24).
+    pub heads: collections::BTreeSet[String],
+    /// The names `contracts/crate.contracts` describes.
+    pub described: collections::BTreeSet[String],
+    /// The names it describes with `pub = true`, which D26 refuses.
+    pub published: collections::BTreeSet[String],
+    /// The Rust files that hash otherwise than `contracts/crate.derived`
+    /// recorded (D25, `NK2505`).
+    pub moved: Vec[String],
+}
+
+/// A package without Rust of its own.
+pub fn project_members_no_own_rust() -> ProjectMembersOwnRust {
+    return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeSet(), moved: [] }
 }
 
 /// A build with no project around it: nothing declared, nothing described.
@@ -688,6 +720,7 @@ pub fn project_members_no_foreign() -> ProjectMembersForeign {
         beneath: collections::BTreeSet(),
         within_std: false,
         over_std: Ledger::blank(),
+        own: project_members_no_own_rust(),
     }
 }
 
@@ -755,6 +788,10 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
         path => host.read_beside(path) ?? host.empty_ledger(),
     }
     let within_std = manifest?.within_std ?? false
+    let own = match manifest?.rust_root {
+        null => project_members_no_own_rust(),
+        rust_root => project_members_own_rust(root, rust_root, descriptions, host),
+    }
     return ProjectMembersForeign {
         declared: declared,
         described: described,
@@ -763,7 +800,69 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
         beneath: beneath,
         within_std: within_std,
         over_std: over_std,
+        own: own,
     }
+}
+
+/// **The package's own Rust** (ADR-rust-boundary-1 D24-D26) under `root`,
+/// whose hand-written crate root is `rust_root`: the modules that root
+/// declares, and `contracts/crate.contracts` merged into `descriptions`
+/// under the paths from the crate root, each entry described and private to
+/// the package, with what it publishes and what moved since it was reviewed.
+fn project_members_own_rust[H: ProjectMembersForeignHost](root: ref fs::Path, rust_root: ref String, mut descriptions: Ledger, host: ref H) -> ProjectMembersOwnRust {
+    let mut own = project_members_no_own_rust()
+    let hand = root.join(rust_root)
+    let text = fs::read_to_string(hand, fs::Root::Anywhere) catch { "" }
+    let items = Rust::file(text) catch { [] }
+    for item in items {
+        match item {
+            RustItem::Group(group) => {
+                if group.what == "mod" {
+                    own.heads.insert(group.name.clone())
+                }
+            },
+            else => {},
+        }
+    }
+    let mut ledger = host.read_beside(root.join("contracts").join("crate.contracts")) ?? return own
+    let functions: Vec[String] = ledger.functions.keys().map(fn(x) { x.clone() }).collect()
+    for function in functions {
+        let mut contract = ledger.functions.get(function) ?? continue
+        contract.described = true
+        if contract.public {
+            own.published.insert(function.clone())
+        }
+        // `pub = false` keeps it from dependents (D26), not from its own package.
+        contract.public = true
+        own.described.insert(function.clone())
+        match function.split("::").next() {
+            null => {},
+            head => {
+                if head != function {
+                    own.heads.insert(head.clone())
+                }
+            },
+        }
+    }
+    for (name, _) in ledger.types {
+        own.described.insert(name.clone())
+    }
+    // The files' paths are the crate root's: the directory holding
+    // `rust_root` (D23).
+    let from = hand.parent() ?? root.clone()
+    for (file, recorded) in ledger.sources {
+        let bytes = fs::read(from.join(file), fs::Root::Anywhere) catch { continue }
+        let mut read: Vec[u8] = []
+        for b in bytes.iter() {
+            read.push(b)
+        }
+        if hash::sha256_hex(read) != recorded {
+            own.moved.push(file.clone())
+        }
+    }
+    let none: collections::BTreeMap[String, String] = collections::BTreeMap()
+    absorb_into(descriptions, null, none, ledger)
+    return own
 }
 
 impl ProjectMembersForeign {
@@ -783,6 +882,9 @@ impl ProjectMembersForeign {
         // or not: an undescribed one is `NK2504`'s to refuse, with its way out.
         out.extend(self.declared.clone())
         out.extend(self.beneath.clone())
+        // **The package's own Rust** (ADR-rust-boundary-1 D24): a path from
+        // its crate root, described or not; an undescribed one is `NK2504`'s.
+        out.extend(self.own.heads.clone())
         return out
     }
 }
