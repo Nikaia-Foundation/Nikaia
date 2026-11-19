@@ -542,7 +542,7 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
                 if line.starts_with("#[") || line.starts_with("//") { continue; }
                 let field: Vec<String> = vec![nikaia_std::block::Text::from(line.to_string())];
                 if crosses(&field).may_not() {
-                    let bare = nikaia_std::block::Text::from(nikaia_std::block::Text::from(line.replace("pub(crate) ", "")).replace("pub ", ""));
+                    let bare = nikaia_std::search::replaced(nikaia_std::block::Text::from(line.replace("pub(crate) ", "")), &"pub ", &"");
                     let named = nikaia_std::index::or(bare.split(':').next(), || "");
                     let named = nikaia_std::index::or(named.split('(').next(), || "");
                     let named = nikaia_std::index::or(named.split('{').next(), || "");

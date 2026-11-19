@@ -165,14 +165,14 @@ fn check_function_grows(op: ref BinaryOp?, value: ref Expr) -> bool {
     }
 }
 
-fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String]) {
+fn check_function_grown_in(words: ref winnow_grammar::InternerContext, block: ref Block, mut out: collections::BTreeSet[String]) {
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Assign { target, op, value } => {
                 match target {
                     Expr::Variable(name, _) => {
                         if check_function_grows(op, value) {
-                            out.insert(here.text(name))
+                            out.insert(words.resolve(name).clone())
                         }
                     },
                     else => {},
@@ -184,8 +184,8 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
                     Expr::MethodCall { receiver, method, .. } => {
                         match receiver {
                             Expr::Variable(name, _) => {
-                                if changes_its_text(here.text(method)) {
-                                    out.insert(here.text(name))
+                                if changes_its_text(words.resolve(method)) {
+                                    out.insert(words.resolve(name).clone())
                                 }
                             },
                             else => {},
@@ -197,7 +197,7 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
             else => {},
         }
         for inner in check_visit_stmt_blocks(stmt.node) {
-            check_function_grown_in(here, inner, out)
+            check_function_grown_in(words, inner, out)
         }
     }
 }
@@ -208,9 +208,34 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
 /// for the same reason - `+` and an f-string can only hand back owned text,
 /// where a name or a call may hand back a view.
 fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> collections::BTreeSet[String] {
+    return grown_text_of(here.words, body)
+}
+
+/// The same, asked of the words a walk has: the keeps walk asks it too
+/// (`keeps.nika`), for the cut a grown name is given.
+fn grown_text_of(words: ref winnow_grammar::InternerContext, body: ref Block) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-    check_function_grown_in(here, body, out)
+    check_function_grown_in(words, body, out)
     return out
+}
+
+/// **The text a cut is cut from** (ADR-text-reuse-1 D2, #1589): `line[a..b]`
+/// of a name. A `let mut` that grows such a cut is given `line`'s text, which
+/// it then changes. The trims wait for their result tier (text_tiers).
+fn given_cut_source(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    match value {
+        Expr::Index { base, index, .. } => {
+            match index {
+                Expr::Range { .. } => {},
+                else => return null,
+            }
+            return match base {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => null,
+            }
+        },
+        else => return null,
+    }
 }
 
 /// Whether an `if`, a `match` or a block ends, on some path, in a field read

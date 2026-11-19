@@ -1,7 +1,8 @@
 // scripts/drive.nika --fixed-in LOG N...: the queued numbers that a commit
 // message in LOG already finishes with a `Fixes #N[, #M]` line; the driver
 // leaves them out of the lane's batch (#1678). `Part of #N` and a prose
-// mention finish nothing.
+// mention finish nothing. A newer `Reopens #N` takes an older `Fixes #N`
+// back, and a newer `Fixes` wins over an older `Reopens` (#2152).
 use std::fs
 use std::process
 
@@ -23,8 +24,8 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain()
     let log = "target/drive_queue_fixed_log.txt"
-    fs::write(f"{repo}/{log}", fs::Root::Anywhere, "docs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--fixed-in", log.clone(), "1662", "1400", "1501", "1300", "166", "1500"]; dir: repo)
+    fs::write(f"{repo}/{log}", fs::Root::Anywhere, "redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--fixed-in", log.clone(), "1662", "1400", "1501", "1300", "166", "1500", "1700", "1800"]; dir: repo)
     println(out.stdout.trim())
     fs::remove(f"{repo}/{log}", fs::Root::Anywhere)
 }

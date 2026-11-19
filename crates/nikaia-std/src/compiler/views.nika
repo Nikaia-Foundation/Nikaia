@@ -2065,6 +2065,9 @@ struct ResultSrcFlow {
     // and what is kept there. Empty outside `places_stored`.
     places: collections::BTreeSet[String],
     stores: collections::BTreeMap[String, collections::BTreeSet[String]],
+    // The names the body grows (`grown_text_of`): a cut bound `mut` to one is
+    // given its text and carries no view (ADR-text-reuse-1 D2, #1589).
+    grown: collections::BTreeSet[String],
 }
 
 fn rsrc_none() -> collections::BTreeSet[String] {
@@ -2171,7 +2174,7 @@ fn rsrc_all_loose(entries: ref collections::BTreeSet[String]) -> collections::BT
 
 fn rsrc_flow(at: ref Span) -> ResultSrcFlow {
     let env: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap(), built: collections::BTreeMap(), places: rsrc_none(), stores: collections::BTreeMap() }
+    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap(), built: collections::BTreeMap(), places: rsrc_none(), stores: collections::BTreeMap(), grown: rsrc_none() }
 }
 
 fn rsrc_shadow(asked: ref Asked, here: ref Here, name: ref String, mut flow: ResultSrcFlow) {
@@ -2723,7 +2726,10 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
                         else => {}
                     }
                 }
-                if !own_buffer(value) {
+                // **A cut a `let mut` grows is given its source's text**
+                // (ADR-text-reuse-1 D2, #1589): a buffer of its own.
+                let given = names.len() == 1 && flow.grown.contains(asked.names.resolve(names[0])) && given_cut_source(value, asked.names) != null
+                if !own_buffer(value) && !given {
                     for name in names {
                         rsrc_bind(flow, asked.names.resolve(name), reach)
                     }
@@ -3326,6 +3332,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             while rounds < 64 {
                 flow.ways = []
                 flow.depth = 0
+                flow.grown = grown_text_of(asked.names, body)
                 let tail = rsrc_block(unit, asked, walked_here, known, own_buffer, body, flow)
                 rsrc_tail(body, tail, flow)
                 let now = rsrc_size(flow)
@@ -3741,6 +3748,7 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
             while rounds < 64 {
                 flow.ways = []
                 flow.depth = 0
+                flow.grown = grown_text_of(asked.names, body)
                 let tail = rsrc_block(unit, asked, here, known, own_buffer, body, flow)
                 let mut now = rsrc_size(flow)
                 for (_, kept) in flow.stores {

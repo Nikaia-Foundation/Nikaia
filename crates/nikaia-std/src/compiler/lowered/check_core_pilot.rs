@@ -3,7 +3,7 @@
 
 pub(crate) fn check_specialised(function: &str, on: &str) -> String {
     let mut tail: String = nikaia_std::block::Text::from(on.to_string());
-    for (from, to) in [("::", "__"), (" -> ", "_to_"), (", ", "_"), ("[", "_"), ("]", "_"), ("(", "_of_"), (")", "_"), ("?", "_maybe"), (" ", "_")] { tail = nikaia_std::block::Text::from(tail.replace(AsRef::<str>::as_ref(from), AsRef::<str>::as_ref(&(to)))); }
+    for (from, to) in [("::", "__"), (" -> ", "_to_"), (", ", "_"), ("[", "_"), ("]", "_"), ("(", "_of_"), (")", "_"), ("?", "_maybe"), (" ", "_")] { nikaia_std::search::replace_in(&mut tail, &from, &to); }
     format!("{}__{}", function, tail)
 }
 

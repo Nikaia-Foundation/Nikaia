@@ -4397,31 +4397,38 @@ fn drive_not_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
 }
 
 // The numbers among NUMBERS that a commit message in LOG (the bodies of
-// `git log`) finishes: named on a line `Fixes #N[, #M]` (CLAUDE.md). Such an
-// issue stays open until `promote` brings the commit to `main`, so it is no
-// work for a builder (#1678: #1662 was briefed after eaed1a6f fixed it).
+// `git log`, newest first) finishes: named on a line `Fixes #N[, #M]`
+// (CLAUDE.md). Such an issue stays open until `promote` brings the commit to
+// `main`, so it is no work for a builder (#1678: #1662 was briefed after
+// eaed1a6f fixed it). A line `Reopens #N[, #M]` in a newer commit takes that
+// back: the newest of the two lines decides (#2152: its `Fixes` commit
+// 31989371 was reverted by 99ab826a and the redo was skipped as fixed).
 fn drive_fixed_in(log: String, numbers: Vec[String]) -> Vec[String] {
-	let mut named: Vec[String] = []
+	let mut fixed: Vec[String] = []
+	let mut decided: Vec[String] = []
 	for l in log.split("\n") {
 		let line = l.trim().clone()
-		if !line.starts_with("Fixes ") { continue }
+		let fixes = line.starts_with("Fixes ")
+		if !fixes && !line.starts_with("Reopens ") { continue }
 		for w in line.replace(",", " ").split(" ") {
 			let n = (w.trim().strip_prefix("#") ?? "").clone()
-			if n != "" { named.push(n) }
+			if n == "" || decided.contains(n.clone()) { continue }
+			decided.push(n.clone())
+			if fixes { fixed.push(n) }
 		}
 	}
 	let mut out: Vec[String] = []
 	for n in numbers {
-		if named.contains(n.clone()) { out.push(n.clone()) }
+		if fixed.contains(n.clone()) { out.push(n.clone()) }
 	}
 	return out
 }
 
 // The numbers among NUMBERS that a commit of the last 400 on HEAD (`develop`)
-// finishes (drive_fixed_in).
+// finishes and no newer one reopens (drive_fixed_in).
 fn drive_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
 	if numbers.len() == 0 { return [] }
-	let got = process::run("git", ["log", "-400", "--format=%B", "--grep=^Fixes "])
+	let got = process::run("git", ["log", "-400", "--format=%B", "--grep=^Fixes ", "--grep=^Reopens "])
 	if !got.ok { return [] }
 	return drive_fixed_in(got.stdout, numbers)
 }

@@ -723,6 +723,94 @@ pub fn replacen(s: &str, from: impl Needle, to: &str, count: usize, place: Place
     text
 }
 
+/// **`text` with every `from` replaced by `to`, in its own buffer**
+/// ([ADR-text-reuse-1](../../../../docs/specification/adr/adr-text-reuse-1.md)
+/// D4): what [`replace`] makes, where the old text is not read again.
+pub fn replace_in<N: Needle + Copy>(text: &mut Text, from: N, to: &str) {
+    replacen_in(text, from, to, usize::MAX);
+}
+
+/// **`text` with the first `count` of `from` replaced by `to`, in its own
+/// buffer** (ADR-text-reuse-1 D4): what [`replacen`] makes, with no new
+/// allocation where the room suffices. A replacement not longer than the
+/// match is one pass forward and then a cut; a longer one first moves the
+/// text back by what it grows (room is reserved for that), and the same pass
+/// then writes from the front, which never overtakes what it reads. An empty
+/// needle, which matches between every two characters, is made as
+/// [`replacen`] makes it.
+pub fn replacen_in<N: Needle + Copy>(text: &mut Text, from: N, to: &str, count: usize) {
+    let mut found = 0;
+    let mut matched = 0;
+    let mut empty = false;
+    for (_, it) in from.found_in(text.as_str()).take(count) {
+        empty |= it.is_empty();
+        found += 1;
+        matched += it.len();
+    }
+    if empty {
+        *text = replacen(text.as_str(), from, to, count, text.place());
+        return;
+    }
+    if found == 0 {
+        return;
+    }
+    let old = text.len();
+    let new = old - matched + found * to.len();
+    let shift = new.saturating_sub(old);
+    if shift > 0 {
+        text.reserve(shift);
+    }
+    let base = text.bytes.as_mut_ptr();
+    if shift > 0 {
+        // SAFETY: `reserve` made room for `old + shift == new` bytes; the
+        // text moves back by `shift` (`copy` allows the overlap), and every
+        // byte below `new` is then written, so `set_len` exposes no
+        // uninitialised byte.
+        unsafe {
+            std::ptr::copy(base, base.add(shift), old);
+            text.bytes.set_len(new);
+        }
+    }
+    let end = shift + old;
+    let mut read = shift;
+    let mut write = 0;
+    for _ in 0..found {
+        // SAFETY: `read..end` is the old text from a character's boundary on
+        // (the start or the end of a match), not yet written over: `write`
+        // stays at or below `read`, since the growth so far is at most the
+        // `shift` the text was moved by. The `str` ends before any write.
+        let (at, len) = {
+            let rest = unsafe {
+                std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                    base.add(read),
+                    end - read,
+                ))
+            };
+            match from.found_in(rest).next() {
+                Some((at, it)) => (at, it.len()),
+                None => break,
+            }
+        };
+        // SAFETY: both ranges lie below `end`, within the buffer; `copy`
+        // allows the overlap of what is kept, and `to` is not this buffer
+        // (it is borrowed apart from the `&mut` text). `write + at +
+        // to.len()` stays at or below `read + at + len`, so nothing unread is
+        // written over.
+        unsafe {
+            std::ptr::copy(base.add(read), base.add(write), at);
+            std::ptr::copy_nonoverlapping(to.as_ptr(), base.add(write + at), to.len());
+        }
+        write += at + to.len();
+        read += at + len;
+    }
+    // SAFETY: the rest of the old text moves to `write`, at or below `read`;
+    // what stands below `write + end - read == new` is whole characters.
+    unsafe {
+        std::ptr::copy(base.add(read), base.add(write), end - read);
+        text.bytes.set_len(write + end - read);
+    }
+}
+
 /// **`s`, `times` over, built at `place`**, as `str::repeat` makes it.
 pub fn repeat(s: &str, times: usize, place: Place) -> Text {
     let Some(len) = s.len().checked_mul(times) else {
@@ -842,7 +930,30 @@ mod tests {
             assert_eq!(replace(s, 'Σ', "x", at), s.replace('Σ', "x"));
             assert_eq!(replace(s, &Text::from("ü"), "u", at), s.replace("ü", "u"));
             assert_eq!(repeat(s, 3, at), s.repeat(3));
+            for (needle, with, count) in [
+                ("Σ", "<>", usize::MAX),
+                ("Σ", "x", usize::MAX),
+                ("ΣΣ", "", usize::MAX),
+                ("s", "", 1),
+                ("", "-", usize::MAX),
+                ("ü", "ue", 1),
+                ("a", "a", usize::MAX),
+            ] {
+                let mut text = Text::from_str_in(s, at);
+                replacen_in(&mut text, needle, with, count);
+                assert_eq!(text, s.replacen(needle, with, count));
+            }
+            let mut text = Text::from_str_in(s, at);
+            replace_in(&mut text, 'Σ', "σσσ");
+            assert_eq!(text, s.replace('Σ', "σσσ"));
         }
+        let mut aaa = Text::with_capacity_in(16, at);
+        aaa.push_str("aaaa");
+        let room = aaa.as_ptr();
+        replace_in(&mut aaa, "aa", "b");
+        assert_eq!((aaa.as_str(), aaa.as_ptr()), ("bb", room));
+        replace_in(&mut aaa, "b", "ccc");
+        assert_eq!((aaa.as_str(), aaa.as_ptr()), ("cccccc", room));
         assert_eq!(join(&["a", "b", "c"], ", ", at), ["a", "b", "c"].join(", "));
         assert_eq!(join::<String>(&[], ", ", at), "");
         let n = 42;

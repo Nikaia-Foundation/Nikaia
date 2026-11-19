@@ -1227,11 +1227,11 @@ pub(crate) fn loop_list_word(arena: &logic::TermArena, parts: &[i64]) -> String 
     nikaia_std::block::Text::from(words.join(","))
 }
 
-pub(crate) fn loop_name_word(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(name.replace('%', "%25")).replace('(', "%28")).replace(')', "%29")).replace(',', "%2C")).replace(';', "%3B")).replace('=', "%3D")).replace('|', "%7C")).replace(' ', "%20")) }
+pub(crate) fn loop_name_word(name: &str) -> String { nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(name.replace('%', "%25")), &"(", &"%28"), &")", &"%29"), &",", &"%2C"), &";", &"%3B"), &"=", &"%3D"), &"|", &"%7C"), &" ", &"%20") }
 
 pub(crate) fn loop_name_of(word: &str) -> Option<String> {
     if word.is_empty() || word.contains('?') { return None; }
-    Some(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(word.replace("%20", " ")).replace("%7C", "|")).replace("%3D", "=")).replace("%3B", ";")).replace("%2C", ",")).replace("%29", ")")).replace("%28", "(")).replace("%25", "%")))
+    Some(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(word.replace("%20", " ")), &"%7C", &"|"), &"%3D", &"="), &"%3B", &";"), &"%2C", &","), &"%29", &")"), &"%28", &"("), &"%25", &"%"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

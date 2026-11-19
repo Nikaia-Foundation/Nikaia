@@ -1001,3 +1001,55 @@ where
 {
     target.set(key, value);
 }
+
+/// **Where a cut lies in the text it was cut from** (ADR-text-reuse-1 D2,
+/// #1589): its first byte and the byte after its last, found by where its
+/// bytes are, so any form the cut was written in (`line[a..]`, `line.trim()`)
+/// is read the same. The borrow ends here, and the text can then be given.
+#[inline]
+pub fn cut_span<W: AsRef<str> + ?Sized, P: AsRef<str> + ?Sized>(
+    whole: &W,
+    part: &P,
+) -> (usize, usize) {
+    let whole = whole.as_ref();
+    let part = part.as_ref();
+    let start = part.as_ptr() as usize - whole.as_ptr() as usize;
+    debug_assert!(start + part.len() <= whole.len());
+    (start, start + part.len())
+}
+
+/// **Text a changed cut is given** (ADR-text-reuse-1 D2, #1589): owned text
+/// gives its buffer, cut down to the span in place; a view is copied, since
+/// it is not ours to give.
+pub trait GivenText {
+    fn given(self, span: (usize, usize)) -> crate::block::Text;
+}
+
+impl GivenText for crate::block::Text {
+    #[inline]
+    fn given(mut self, (start, end): (usize, usize)) -> crate::block::Text {
+        self.truncate(end);
+        self.drain(..start);
+        self
+    }
+}
+
+impl GivenText for std::string::String {
+    #[inline]
+    fn given(self, span: (usize, usize)) -> crate::block::Text {
+        crate::block::Text::from(self).given(span)
+    }
+}
+
+impl<T: AsRef<str> + ?Sized> GivenText for &T {
+    #[inline]
+    fn given(self, (start, end): (usize, usize)) -> crate::block::Text {
+        crate::block::Text::from(&self.as_ref()[start..end])
+    }
+}
+
+/// `text` cut down to `span`, in its own buffer where it owns one.
+#[inline]
+pub fn given_cut<G: GivenText>(text: G, span: (usize, usize)) -> crate::block::Text {
+    text.given(span)
+}
