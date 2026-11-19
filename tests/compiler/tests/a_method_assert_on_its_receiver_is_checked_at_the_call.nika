@@ -1,0 +1,16 @@
+/// A method's top-of-body assert over its receiver's fields is a
+/// precondition (ADR-269 D15, #2231): `b.below(7)` on `k: 5` breaks it at
+/// the call.
+struct Box { k: i64 }
+
+impl Box {
+	fn below(ref self, i: i64) -> i64 sync {
+		assert(i < self.k)
+		return self.k - i
+	}
+}
+
+fn main() throws {
+	let b = Box { k: 5 }
+	println(b.below(7).to_string())
+}

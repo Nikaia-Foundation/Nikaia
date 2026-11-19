@@ -1,0 +1,10 @@
+error[NK1302]: `names[pick]` is not proved in bounds, and `pick` comes from outside the program.
+   --> tests/an_index_on_an_http_query_value_is_refused.nika:12:2
+    |
+ 12 | 	println(names[pick])
+    |  ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `pick` comes from `http1::Buffer::head`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: What is known here does not exclude `names.len()` can be 3, `pick` can be -1, for which `0 <= pick < names.len()` fails.
+    = help: Check it where it arrives, with a guard the program handles: `throw BadInput(pick) if !(0 <= pick && pick < names.len())`, or the early `return` that rejects it. After that line, the index is proved.
+1 type error

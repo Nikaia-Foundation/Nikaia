@@ -456,6 +456,13 @@ pub struct CheckFlow {
     /// **The names a `let` bound to a view of another**, by that other's
     /// binding: a read of the view after a clone keeps the clone needed.
     pub clone_loans: Vec[(String, i64?)],
+    /// **The `replace`s on a `let`'s text that may be its last use**
+    /// (ADR-text-reuse-1 D4, #1589), asked where the body ends: those no
+    /// read follows work in the text's own buffer.
+    pub replaces: Vec[CheckClone],
+    /// **The names no view is ever taken of** in the body (`lone_texts_of`):
+    /// only such a text can be handed to a `replace` at its last use.
+    pub lone_texts: collections::BTreeSet[String],
     /// **The `let`s bound to a value made there**, by binding: a call's, a
     /// literal's; only their clone can be the last use (`NK1350`).
     pub clone_owners: collections::BTreeSet[i64],
@@ -636,6 +643,8 @@ impl CheckFlow {
             pushed_receiver: -1,
             clones: [],
             clone_loans: [],
+            replaces: [],
+            lone_texts: collections::BTreeSet(),
             clone_owners: collections::BTreeSet(),
             place_clones: [],
             changes_seen: [],

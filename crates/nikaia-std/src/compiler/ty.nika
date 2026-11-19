@@ -1625,6 +1625,14 @@ pub struct FnContract {
     /// Part III 13.5 `trusted`): each marked call of a source, as
     /// `SOURCE at FILE:LINE`, sorted by place. Empty where it marks none.
     pub trusted: Vec[String],
+    /// **Whose text a source hands back, decided by its first argument**
+    /// (ADR-397 D1, D2): `"name"` where that argument names one variable of
+    /// the environment (`env::var`), `"prefix"` where it starts the names of
+    /// several (`env::vars`). The read is the operator's where the argument
+    /// is a literal no name a CGI host fills can match; else `provenance`
+    /// holds. Empty for every other function, and for every function of a
+    /// build whose environment is `"untrusted"` (ADR-397 D4).
+    pub provenance_by: String,
     pub signature: Signature?,
     pub borrows: Vec[String],
     /// **Each view's own sources, by its path** (ADR-views-3 D8, D10):
@@ -1721,6 +1729,7 @@ impl FnContract {
             touches_known: false,
             provenance: null,
             trusted: [],
+            provenance_by: "",
             signature: null,
             borrows: [],
             returns: "",

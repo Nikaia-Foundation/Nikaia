@@ -466,6 +466,7 @@ impl EmitState {
                             spelled = emit_fn_code_that_changes(&spelled);
                             reference = format!("{}mut ", reference);
                         }
+                        if runs && (*ty.code).is_some() && !ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(&key, &pname) { spelled = emit_fn_code_that_crosses(&spelled); }
                         walk.in_parameter = inside;
                         walk.code_parameter_runs = held;
                     }
@@ -605,7 +606,7 @@ impl EmitState {
                                     let escaped_type = escaped_name(&emit_text(world, t.name));
                                     let before = format!("{}<{}>", escaped_type, self.lifetime_args(&emit_text(world, t.name), "'r"));
                                     let after = format!("{}<{}>", escaped_type, nikaia_std::block::Text::from(found.fields.join(", ")));
-                                    returned = nikaia_std::search::replacen(&returned, &before, &after, 1);
+                                    nikaia_std::search::replacen_in(&mut returned, &before, &after, 1);
                                 },
                                 None => { },
                             }
@@ -904,6 +905,11 @@ impl EmitState {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         nikaia_std::list::contains(&contract.at_once, &param)
     }
+}
+
+pub(crate) fn emit_fn_code_that_crosses(spelled: &str) -> String {
+    if !spelled.starts_with("impl ") && !spelled.starts_with("dyn ") { return nikaia_std::block::Text::from(spelled.to_string()); }
+    format!("({} + std::marker::Send + std::marker::Sync)", spelled)
 }
 
 pub(crate) fn emit_fn_code_that_changes(spelled: &str) -> String {

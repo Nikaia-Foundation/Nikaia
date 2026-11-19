@@ -1,0 +1,71 @@
+// What `std` hands on it does not copy (ADR-400 D1 counts it): each count
+// of `mem::allocations()` is read before and after one operation and printed
+// only after both, since printing may allocate. A control that does copy
+// shows the count moves. These were Rust tests of `concat.rs`,
+// `either_text.rs`, `html.rs` and `bytes.rs` that held a buffer's pointer
+// (#2215).
+use std::collections
+use std::html
+use std::mem
+
+fn main() throws {
+    // A left text with room keeps its buffer when a literal is added.
+    let mut left = String()
+    for _ in 0..<41 {
+        left.push('l')
+    }
+    let before = mem::allocations()
+    let joined = left + "right"
+    let after = mem::allocations()
+    println(f"{joined.len()} bytes joined, requests: {after - before}")
+
+    // A trimmed line is a view of the line: its length costs nothing.
+    let line = "  oslo  "
+    let before = mem::allocations()
+    let trimmed = line.trim().len()
+    let after = mem::allocations()
+    println(f"trimmed to {trimmed} bytes, requests: {after - before}")
+
+    // The lines of a text are views of it, also as a map's keys.
+    let text = "oslo\nbergen\noslo"
+    let before = mem::allocations()
+    let mut total = 0
+    for l in text.lines() {
+        total = total + l.len()
+    }
+    let after = mem::allocations()
+    println(f"{total} bytes in lines, requests: {after - before}")
+    let mut counted = collections::HashMap()
+    counted.insert(text.lines().next() ?? "", 1)
+    let before = mem::allocations()
+    for l in text.lines().skip(1) {
+        counted.insert(l, 1)
+    }
+    let after = mem::allocations()
+    println(f"{counted.len()} lines as keys, requests: {after - before}")
+
+    // Text with nothing to escape is handed back as it is.
+    let before = mem::allocations()
+    let ascii = html::escape("Additional fortune added at request time.")
+    let wide = html::escape("nothing to escape 日本語")
+    let after = mem::allocations()
+    println(f"escaped {ascii.len()} and {wide.len()} bytes, requests: {after - before}")
+    let before = mem::allocations()
+    let markup = html::escape("a < b & c")
+    let after = mem::allocations()
+    println(f"{markup}, more requests: {after > before}")
+
+    // `Bytes(list)` takes the list's memory; a second holder shares it.
+    let mut list: Vec[u8] = []
+    for _ in 0..<100000 {
+        list.push(7)
+    }
+    let start = mem::usage()
+    let bytes = Bytes(list)
+    let grown = mem::usage()
+    println(f"{bytes.len()} bytes handed over, grew under 1000 bytes: {grown - start < 1000}")
+    let before = mem::allocations()
+    let second = bytes.clone()
+    let after = mem::allocations()
+    println(f"two holders of {second.len()} and {bytes.len()} bytes, requests: {after - before}")
+}

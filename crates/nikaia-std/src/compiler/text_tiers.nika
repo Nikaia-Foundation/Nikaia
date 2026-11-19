@@ -914,6 +914,10 @@ struct TierWalk {
     /// type's result owns its text - `-> String` without `from` (ADR-views-3
     /// D14, #1263) - so its last value is kept there.
     closure_owns: bool,
+    /// The names the function grows (`grown_text_of`): a cut bound `mut` to
+    /// one is given its source's text, so it is text of its own
+    /// (ADR-text-reuse-1 D2, #1589).
+    grown: collections::BTreeSet[String],
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -2965,8 +2969,21 @@ fn handed_by_name(stmt: ref Stmt, block: ref Block, at: i64, ask: ref TierAsk) -
 /// Walk a statement; what it is worth as a block's last value.
 fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     match stmt {
-        Stmt::Let { names, value, ty, .. } => {
+        Stmt::Let { names, value, ty, mutable, .. } => {
             tier_let(names, value, ty, at, ask, walk)
+            // **A cut a `let mut` grows is given its source's text**
+            // (ADR-text-reuse-1 D2, #1589): text of its own, which views
+            // nothing, whatever the cut viewed.
+            if mutable && names.len() == 1 && walk.grown.contains(ask.names.resolve(names[0])) && given_cut_source(value, ask.names) != null {
+                let name = ask.names.resolve(names[0]).clone()
+                let mut local = tier_local(name, walk) ?? return no_kinds()
+                local.kinds = owned_kinds()
+                local.from = null
+                local.through = []
+                local.unkept = false
+                bind_tier_local(name, local, walk)
+                return no_kinds()
+            }
             tie_bound(names, value, ask, walk)
         }
         // A local `comptime` text is still text, as one at the top is
@@ -7406,6 +7423,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     }
     let key = tier_key(target, own_name(name, ask.names))
     walk.function = own_name(name, ask.names)
+    walk.grown = grown_text_of(ask.names, body)
     walk.locals.clear()
     walk.ties.clear()
     walk.frames = []
@@ -8096,7 +8114,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names, ask.beside_calls)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), late_lent: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), late_lent: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false, grown: collections::BTreeSet() }
     let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args

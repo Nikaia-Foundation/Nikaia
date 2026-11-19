@@ -1,0 +1,26 @@
+// A `@stream` entry whose items are emitted takes values and options as any
+// entry does (ADR-grammar-1 D2, ADR-grammar-2 D7, amended 2026-11-18, #1443):
+// the rules it reaches see them, an option left out has its default.
+
+struct Item {
+	word: String,
+}
+
+struct Lim {
+	depth: i64,
+}
+
+grammar Words {
+	@stream entry rule items(lim: Lim; tag: i64 = 1) -> Item = opened group(lim.depth, tag)*
+	rule opened = "" -> { emit Item { word: "open" } }
+	rule group(d: i64, t: i64) = w:until(";") ";" -> { emit Item { word: f"{w} {d} {t}" } }
+}
+
+fn main() throws {
+	for it in Words::items("a;b;", Lim { depth: 3 }) {
+		println(it.word)
+	}
+	for it in Words::items("c;", Lim { depth: 4 }; tag: 7) {
+		println(it.word)
+	}
+}

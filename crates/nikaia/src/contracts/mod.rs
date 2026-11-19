@@ -469,9 +469,44 @@ impl LedgerOps for Ledger {
 /// that adds a package's own entries takes [`std_library`], a copy. It failing to parse is a broken compiler, not a broken program:
 /// `crates/nikaia/tests/contracts.rs` reads the same bytes and would have said
 /// so long before a user got here.
+///
+/// **Where the build's environment is untrusted** (ADR-397 D4,
+/// [`environment_untrusted`]) it is the same ledger with `provenance_by`
+/// cleared on every entry: `env::var` and `env::vars` are then untrusted by
+/// whatever name they read, as their `provenance` says.
 pub(crate) fn std_ledger() -> &'static Ledger {
     static PARSED: std::sync::OnceLock<Ledger> = std::sync::OnceLock::new();
-    PARSED.get_or_init(|| Ledger::parse(STD).expect("std ships a ledger this compiler can read"))
+    static UNTRUSTED: std::sync::OnceLock<Ledger> = std::sync::OnceLock::new();
+    let parsed = PARSED
+        .get_or_init(|| Ledger::parse(STD).expect("std ships a ledger this compiler can read"));
+    if !ENVIRONMENT_UNTRUSTED.load(std::sync::atomic::Ordering::Relaxed) {
+        return parsed;
+    }
+    UNTRUSTED.get_or_init(|| {
+        let mut ledger = parsed.clone();
+        for contract in ledger.functions.values_mut() {
+            contract.provenance_by = String::new();
+        }
+        ledger
+    })
+}
+
+/// Whether this build's environment is untrusted (ADR-397 D4): set once the
+/// settings are resolved, by the driver and by the wrapper, before anything
+/// reads [`std_ledger`].
+static ENVIRONMENT_UNTRUSTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// `[build] environment = "untrusted"`, or `--environment=untrusted`, for
+/// this process's build (ADR-397 D4).
+pub(crate) fn environment_untrusted(untrusted: bool) {
+    ENVIRONMENT_UNTRUSTED.store(untrusted, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether this build's environment is untrusted (ADR-397 D4): the emitter
+/// leaves out the stop of a privileged start then (D3).
+pub(crate) fn environment_is_untrusted() -> bool {
+    ENVIRONMENT_UNTRUSTED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// `std`'s ledger as a library to **build on**: the floor every package's

@@ -23,10 +23,12 @@ pub(crate) struct KeepsWalk {
     pub(crate) uses: Uses,
     pub(crate) aliases: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub(crate) views: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub(crate) grown: collections::BTreeSet<String>,
 }
 
 pub fn uses_in(body: &Block, interner: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger) -> Uses {
-    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet::new(), passed: vec![] }, aliases: collections::BTreeMap::new(), views: collections::BTreeMap::new() };
+    let grown = grown_text_of(interner, body);
+    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet::new(), passed: vec![] }, aliases: collections::BTreeMap::new(), views: collections::BTreeMap::new(), grown };
     keeps_block(body, interner, &mut *holes_of, context, own, library, &mut walk);
     if context.hands_back_its_last && !body.stmts.is_empty() {
         match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
@@ -52,7 +54,15 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
             let owned_declared = keeps_an_owned_declared((ty).as_ref());
             if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } } }
             let viewed = keeps_viewed_of(value, interner, context, own, library, &walk);
-            if mutable { for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } } }
+            if mutable {
+                for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
+                if names.len() == 1 && walk.grown.contains(interner.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) {
+                    match given_cut_source(value, interner) {
+                        Some(ref source) => { if context.parameters.contains(source) && !context.lent.contains(source) { walk.uses.kept.insert(nikaia_std::block::Text::from(source.to_string())); } },
+                        None => { },
+                    }
+                }
+            }
             if !reached.is_empty() {
                 for bound in names.iter() {
                     let bound = *bound;
@@ -1239,6 +1249,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut uses = no_uses();
                         if a_parse_that_views(view.words, (rule.ret_type).as_ref(), &package) { uses.kept.insert(nikaia_std::block::Text::from(INPUT_POSITION.to_string())); }
                         for arg in rule.args.iter() { if by_value(arg) { uses.kept.insert(view.text(arg.name)); } }
+                        if rule.stream && rule.ret_type.is_some() { for option in rule.config.iter() { if !option.ty.is_view { uses.kept.insert(view.text(option.name)); } } }
                         let called = view.text(rule.name);
                         graph.insert(format!("{}::{}", named, called), uses);
                     }

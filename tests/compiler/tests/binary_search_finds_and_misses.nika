@@ -1,0 +1,26 @@
+// **A search by halving answers a position or `null`** (Part I 4.5,
+// ADR-381 D5): the order is shown by a check where the list arrives, or
+// vouched for by the key the list was sorted by (#2158).
+
+struct Entry {
+    id: i64,
+    name: String,
+}
+
+fn by_id(e: ref Entry) -> i64 sync {
+    return e.id
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 5, 8]
+    return if !xs.is_sorted()
+    println(xs.binary_search(5)?.to_string() ?? "none")
+    println(xs.binary_search(4)?.to_string() ?? "none")
+    let empty: Vec[i64] = []
+    return if !empty.is_sorted()
+    println(empty.binary_search(1)?.to_string() ?? "none")
+    let es = [Entry { id: 1, name: "a" }, Entry { id: 4, name: "b" }, Entry { id: 9, name: "c" }]
+    unsafe { assume(es.is_sorted_by_key(by_id)) }
+    println(es.binary_search_by_key(4, by_id)?.to_string() ?? "none")
+    println(es.binary_search_by_key(5, by_id)?.to_string() ?? "none")
+}

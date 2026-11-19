@@ -517,7 +517,7 @@ impl CxJava {
         let library = nikaia_std::block::Text::from(package.replace('-', "_"));
         let class = cx_java_pascal(&library);
         let digest = CX_LEDGER_DIGEST;
-        let mut out = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(cx_java_head().replace("@package@", package)).replace("@library@", &library)).replace("@Class@", &class)).replace("@ledger@", digest)).replace("@prefix@", prefix));
+        let mut out = nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(cx_java_head().replace("@package@", package)), &"@library@", &library), &"@Class@", &class), &"@ledger@", &digest), &"@prefix@", &prefix);
         let boundary_names: [&str; 7] = ["Argument", "TooSmall", "NotRunning", "Panicked", "Reentrant", "Cleanup", "Cancelled"];
         let mut errors: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut taken: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -559,7 +559,7 @@ impl CxJava {
             let code = nikaia_std::num::value(code);
             cases.push_str(&format!("            case {} -> new {}(said);\n", code, name));
         }
-        out.push_str(&nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(cx_java_helpers().replace("@Class@", &class)).replace("@prefix@", prefix)).replace("@cases@", &cases)));
+        out.push_str(&nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(cx_java_helpers().replace("@Class@", &class)), &"@prefix@", &prefix), &"@cases@", &cases));
         for plain in ctx.plains.iter() { out.push_str(&format!("    /** `{}`, numbered as the header numbers it. */\n    public enum {} {{\n        {}\n    }}\n\n", plain.name, plain.name, nikaia_std::block::Text::from(plain.variants.join(", ")))); }
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
@@ -569,7 +569,7 @@ impl CxJava {
         while ((at) as usize) < ctx.handles.len() {
             if *nikaia_std::index::get(&held, (at) as usize) {
                 let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (at) as usize) }.name.to_string());
-                out.push_str(&nikaia_std::block::Text::from(nikaia_std::block::Text::from(cx_java_handle().replace("@T@", &ty)).replace("@prefix@", prefix)));
+                out.push_str(&nikaia_std::search::replaced(nikaia_std::block::Text::from(cx_java_handle().replace("@T@", &ty)), &"@prefix@", &prefix));
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
                     let members = match own { Some(__nikaia_value) => __nikaia_value, None => return out };

@@ -84,7 +84,10 @@ reports under *Briefs and reports*.
   k tokens). CI logs: the proxy refuses the blob download; failing test names
   come from `gh api .../check-runs/<job id>/annotations`. A red run gets a
   fix-forward from the supervisor (a `ready` issue, its `#N` line first in the
-  lane's `batch.txt`), or a revert.
+  lane's `batch.txt`), or a revert. A revert of a commit that said `Fixes #N`
+  says `Reopens #N` on a line of its own: the driver skips an issue a `Fixes`
+  on `develop` names until a newer `Reopens` takes it back (#2152), and the
+  issue is reopened by hand if `promote` closed it.
 
 ## Trunk, CI and issues
 

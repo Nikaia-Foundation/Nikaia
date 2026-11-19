@@ -1,0 +1,19 @@
+error[NK1300]: `Vec::binary_search: self.is_sorted()` is not proved: nothing before the call shows it.
+   --> tests/a_change_after_a_sort_owes_the_order_again.nika:22:5
+    |
+ 22 |     println(xs.binary_search(2)?.to_string() ?? "none")
+    |     ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+error[NK1300]: `Vec::binary_search_by_key: self.is_sorted_by_key(f)` is not proved: nothing before the call shows it.
+   --> tests/a_change_after_a_sort_owes_the_order_again.nika:25:5
+    |
+ 25 |     println(es.binary_search_by_key(4, by_id)?.to_string() ?? "none")
+    |     ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+2 type errors

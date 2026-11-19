@@ -3,17 +3,6 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn is_word(part: &str) -> bool {
-    if part.is_empty() { return false; }
-    for c in part.chars() {
-        let fits = matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '.' | '/' | ':' | '=' | '@' | '%' | '+' | ',' | '-');
-        if !fits { return false; }
-    }
-    true
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub fn is_plain(part: &str) -> bool {
     for c in part.chars() {
         let steers = matches!(c, '&' | '<' | '>' | '"' | '\'');

@@ -607,6 +607,23 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") {
         state.facts.text_finds.insert(id_of(receiver) as i64)
     }
+    // **A `replace` on the text a `replace` made works in its buffer**
+    // (ADR-text-reuse-1 D4): the link after the first of a chain is
+    // handed a temporary nobody reads again.
+    let replacing = name == "replace" || name == "replacen"
+    if text && replacing {
+        state.facts.text_replaces.insert(id_of(receiver) as i64)
+        match receiver {
+            Expr::MethodCall { receiver: made_on, method: made_by, .. } => {
+                let made = world.words.resolve(made_by)
+                if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(id_of(made_on) as i64) {
+                    state.facts.replaced_in_place.insert(id_of(receiver) as i64)
+                }
+            },
+            else => {}
+        }
+        state.a_replace_seen(world, receiver, args, span)
+    }
     // **A view of the receiver** (ADR-views-3 D9, #1478): `s.trim()` points
     // into `s`, so a change to `s` while it is used is NK2305.
     if text && views_what_it_is_called_on(name) {

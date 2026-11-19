@@ -1211,6 +1211,25 @@ impl EmitState {
                 return
             }
         }
+        // **A `replace` on the text a `replace` made works in its buffer**
+        // (ADR-text-reuse-1 D4, `replaced_in_place`): the temporary is
+        // handed over whole and nobody reads it again.
+        // A `let`'s text at its last use (`replaced_last_uses`) is handed
+        // over the same way.
+        if receiver != null && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(on_node) || self.facts.replaced_last_uses.contains(on_node)) {
+            let text = receiver ?? return
+            let call: String = if name == "replacen" { "replacedn" } else { "replaced" }
+            out.push(f"nikaia_std::search::{call}(")
+            self.emit_core_nested(world, walk, out, host, text, 255, depth, flow, scope)
+            let mut i = 0
+            for arg in args {
+                out.push(if i < 2 { ", &" } else { ", " })
+                self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)
+                i += 1
+            }
+            out.push(")")
+            return
+        }
         // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
         // front of it, as for any `ref String` parameter. `replace`'s
         // replacement is lent the same way (#877). A block's text is lent as
@@ -1742,6 +1761,12 @@ impl EmitState {
                 out.push(".map(|at| at as i64)")
             }
         }
+        // **A list's search by halving answers a position or `null`** (Part I
+        // 4.5): Rust's `Result` with its insertion point is not exposed.
+        let callee = self.facts.method_callees[on_node] ?? ""
+        if callee == "Vec::binary_search" || callee == "Vec::binary_search_by_key" {
+            out.push(".ok().map(|at| at as i64)")
+        }
         if name == "enumerate" && receiver != null {
             let on = receiver ?? return
             if self.facts.counted.contains(node_key(on)) {
@@ -1867,7 +1892,8 @@ impl EmitState {
         // **`rfind` and `replacen` count in `i64`**, as `find` does: the
         // language below's own take and give a `usize`. **Each, and `find`,
         // takes a text or one scalar** (#877), lent with `&` whichever it is.
-        if (name == "rfind" || name == "replacen") && self.facts.text_finds.contains(node_key(receiver)) {
+        let replaced_here = self.facts.replaced_in_place.contains(node_key(receiver)) || self.facts.replaced_last_uses.contains(node_key(receiver))
+        if (name == "rfind" || (name == "replacen" && !replaced_here)) && self.facts.text_finds.contains(node_key(receiver)) {
             out.push(f"nikaia_std::search::{name}(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             let mut i = 0

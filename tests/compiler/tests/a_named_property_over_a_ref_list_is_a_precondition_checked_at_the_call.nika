@@ -1,0 +1,62 @@
+// #2164 (ADR-381 D3): a property at a function's entry over a `ref` list,
+// whose body reads an index, is the function's precondition, carried to the
+// caller: `--asserts` names it so, at `warn` it is checked at the call in
+// `main` (line 8), which stops the program there, and at `error` it is
+// refused as the precondition of `find`. Built by "Facts about data, step 1".
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn ran(tmp: String, file: String, text: String, args: Vec[String]) throws {
+	fs::write(f"{tmp}/{file}", fs::Root::Anywhere, text)
+	println(f"== {args.join(" ")}")
+	let out = process::run(toolchain(), args; dir: tmp)
+	println(shown(tmp, f"{out.stdout}{out.stderr}"))
+	println(f"exit {out.code}")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	ran(
+		tmp,
+		"find.nika",
+		"fn sorted(v: ref Vec[i64]) -> bool sync { v.len() < 2 || v[0] <= v[1] }\nfn find(v: ref Vec[i64], x: i64) -> bool sync {\n    assert(sorted(v))\n    v.contains(x)\n}\nfn main() throws {\n    let xs = [3, 1, 2]\n    println(find(xs, 2))\n}\n",
+		["check", "--asserts", "--unproved-claims=warn", "find.nika"],
+	)
+	ran(
+		tmp,
+		"find.nika",
+		"fn sorted(v: ref Vec[i64]) -> bool sync { v.len() < 2 || v[0] <= v[1] }\nfn find(v: ref Vec[i64], x: i64) -> bool sync {\n    assert(sorted(v))\n    v.contains(x)\n}\nfn main() throws {\n    let xs = [3, 1, 2]\n    println(find(xs, 2))\n}\n",
+		["run", "--unproved-claims=warn", "find.nika"],
+	)
+	ran(
+		tmp,
+		"find.nika",
+		"fn sorted(v: ref Vec[i64]) -> bool sync { v.len() < 2 || v[0] <= v[1] }\nfn find(v: ref Vec[i64], x: i64) -> bool sync {\n    assert(sorted(v))\n    v.contains(x)\n}\nfn main() throws {\n    let xs = [3, 1, 2]\n    println(find(xs, 2))\n}\n",
+		["check", "find.nika"],
+	)
+	process::run("rm", ["-rf", tmp])
+}

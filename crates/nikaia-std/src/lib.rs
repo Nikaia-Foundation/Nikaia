@@ -144,8 +144,8 @@ pub mod text {
 ///
 /// `unnecessary_cast`, as in `tools` below: a proved index at a literal is
 /// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27). `too_many_arguments`
-/// and `useless_conversion`, as there too: `process::shell` takes `run`'s
-/// options, and a `?? default` is lowered `index::or(x, || d.into())` (#1253).
+/// and `useless_conversion`, as there too: a `?? default` is lowered
+/// `index::or(x, || d.into())` (#1253).
 /// `needless_borrow`, as there too: a `Bytes` local is lowered a `&[u8]` and
 /// still handed on and indexed as `&b` (`text_float.nika`, #2024).
 #[doc(hidden)]
@@ -292,10 +292,15 @@ pub mod runtime {
 /// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
 /// (`bounds_rules.nika`'s `rules_exit`, #1330).
 ///
+/// **And `get_first`**: `args.get(0) ?? return null` lowers as written
+/// (`trust.nika`'s `first_literal`, #2216); `.first()` there lowers a
+/// `ref` binding Rust refuses under a reference.
+///
 /// **And `result_large_err`**: an error enum a `.nika` throws holds its values
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
+    clippy::get_first,
     clippy::result_large_err,
     clippy::no_effect,
     clippy::eq_op,

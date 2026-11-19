@@ -44,6 +44,29 @@ pub use crate::runtime::vars;
 /// their Nikaia half, `runtime/env.nika` (#2034).
 pub use crate::runtime::{EXE_VAR, MAIN_VAR, launcher_var};
 
+/// **A privileged start ends here** ([ADR-397](../../../docs/specification/adr/adr-397.md)
+/// D3): a program started with more rights than its caller (setuid, setgid,
+/// file capabilities; crate `privileged-start`, which holds the `unsafe`)
+/// writes one line on standard error, `runtime/env.nika`'s
+/// `privileged_start_line`, and ends with status 1. The emitted `main`
+/// calls it first, unless the build takes the environment as data from
+/// outside (`[build] environment = "untrusted"`, D4). The exit is Rust's
+/// because nothing of the program has started: no `main` to leave with
+/// `process::Exit`.
+pub fn stop_a_privileged_start() {
+    if !privileged_start::privileged() {
+        return;
+    }
+    let started = std::env::args_os().next().unwrap_or_default();
+    let program = std::path::Path::new(&started)
+        .file_name()
+        .unwrap_or(&started)
+        .to_string_lossy()
+        .into_owned();
+    eprintln!("{}", crate::runtime::privileged_start_line(&program));
+    std::process::exit(1)
+}
+
 /// One of the launcher's variables, where it is set and not empty.
 fn handed(name: &str) -> Option<crate::fs::Path> {
     std::env::var_os(name)

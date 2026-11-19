@@ -1,11 +1,10 @@
-// `process::shell(command)` runs `/bin/sh -c command` and hands back what
-// `process::run` would (ADR-raw-sinks-1 §4, #1253). A text written in the
-// program is no part from outside, so it needs no proof.
+// `std` runs no shell, on any platform (ADR-raw-sinks-1 D9, #2197): a call
+// to `process::shell` is refused while building, `NK1314`, and the help
+// writes the command as `process::run(program, args)` (ADR-243).
 
 use std::process
 
 fn main() throws {
     let out = process::shell("echo hi; echo there | tr a-z A-Z")
     print(out.stdout)
-    println(out.code)
 }

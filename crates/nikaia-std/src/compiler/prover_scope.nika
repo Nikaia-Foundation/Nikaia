@@ -153,6 +153,10 @@ impl ProverScope {
         for n in self.ints {
             if (n.starts_with(under) || n.starts_with(element) || n.ends_with(index)) && n != own {
                 parts.insert((n.strip_suffix(".len()") ?? n).clone())
+            } else if n.ends_with(")") && property_reads(n, name) {
+                // **A named property goes with any argument** (ADR-381
+                // D1): `xs.prop@p(n)` with `n`.
+                parts.insert(n.clone())
             }
         }
         for part in parts {
@@ -453,6 +457,11 @@ impl ProverScope {
         let mut names: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(term, names)
         for name in names {
+            // **A property of more arguments, or in method form, is not
+            // carried** (ADR-381 D3, `property_carried`).
+            if property_base(name) != null && !property_carried(name) {
+                return null
+            }
             if name != result_name() && (property_base(name) ?? "") != result_name() && !is_a_parameter(name, params) {
                 return null
             }

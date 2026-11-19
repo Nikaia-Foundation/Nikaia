@@ -8,6 +8,56 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1461] — 2026-11-19
+
+**A changed trim takes its source's text too, and NK2302 offers the copy**
+- A trimmed text that is changed reuses its buffer too: `let mut rest = line.trim(); rest += "?"` trims `line` in place instead of failing to build, and NK2302 on a lent parameter now offers `.clone()` beside `keep` (ADR-text-reuse-1 D2, D3).
+
+## [0.0.1460] — 2026-11-19
+
+**Builders' changes**
+- `yaml::Yaml::events(bytes; limits:)` walks a YAML stream's events one at a time (`for ev in ...`); a `break` ends the parse there, so a later error is never read. Event's strings are owned.
+- A rule that commits after a `count(p)` or `here` is no longer refused with NK1370. An emitting `@stream` entry may take values and options and have more than one repetition (the one whose items emit is folded); a cross-package walk takes its options by value; a bound `text(p)` in a streamed parse reads the right bytes.
+
+## [0.0.1459] — 2026-11-19
+
+**std runs no shell: process::shell and process::is_word leave std, a call is refused with NK1314 (ADR-raw-sinks-1 D9) (#2197)**
+- std runs no shell (ADR-raw-sinks-1 D9): `process::shell` and `process::is_word` are gone from std, and a call to `process::shell` is refused with NK1314, whose help writes the command as `process::run("PROGRAM", ["ARG", ...])`.
+
+## [0.0.1458] — 2026-11-19
+
+**A privileged start ends before main unless the environment is untrusted (ADR-397 D3), the check in crates/unsafe/privileged-start (#2239)**
+- A program started with more rights than its caller (setuid, setgid, file capabilities) ends before main with one line on stderr and exit status 1, unless its manifest declares [build] environment = "untrusted" (ADR-397 D3); the question is asked by the new crate crates/unsafe/privileged-start
+
+## [0.0.1457] — 2026-11-19
+
+**Builders' changes (#2152)**
+- Replacing text reuses its buffer: `x = x.replace(a, b)` and every `replace` after the first in a chain write into the existing text instead of allocating a new one (ADR-text-reuse-1 D4).
+- Replacing text reuses its buffer: x = x.replace(a, b) and every link after the first of a replace chain write into the existing text instead of making a new one (ADR-text-reuse-1 D4).
+- A cut that is changed reuses its text's buffer: `let mut rest = line[m..]; rest += "!"` cuts `line` down in place instead of copying, and a later read of `line` is refused as a use of a value given away (ADR-text-reuse-1 D2, D3).
+- Faster first comptime: the build-time bundle a `comptime` links against leaves out std's sockets and TLS (rustls, ring, rustls-native-certs, polled, file-ring), 55 rlibs instead of 75; the program that computes a value leaves out what names `std::net`, so a file that uses sockets still computes its comptime values.
+- Driver merges: a `MERGE timing` line per merge; a round that changed only LOWERED_DIGEST counts as settled, which saves a build and a cold lower-std; the ledgers reuse the settled binary
+
+## [0.0.1456] — 2026-11-19
+
+**Code a function runs from tasks at once is Send + Sync where user code overlaps (ADR-292 D6) (#2158, #2165)**
+- Fixed: a function, or a trait method, that runs its code parameter from tasks at once (`xs.par_iter().for_each(f)`) builds at `user-parallelism = "yes"`; it reached rustc as NK1343 because the parameter lacked `Send + Sync`
+
+## [0.0.1455] — 2026-11-19
+
+**Grammar: emit statement for @stream entries, checked (NK1371, NK1370, NK1349)**
+- Grammar actions get `emit item`: the rules a `@stream` entry reaches hand items to its walk; emit outside such a rule is NK1371, an emit the parse could still undo is NK1370 (checked; running it follows).
+
+## [0.0.1454] — 2026-11-19
+
+**Builders' changes (#2158, #2163, #2175, #2225, #2231, #2234)**
+- A list's search by halving requires its order: `xs.binary_search(v)` requires `xs.is_sorted()` and `xs.binary_search_by_key(k, f)` requires `xs.is_sorted_by_key(f)` with the same named `f`; shown by a guard, an assert or `unsafe { assume(...) }`, else refused with NK1300 (Part I 4.5, ADR-381 D5).
+- Named properties (ADR-381 D2): a guard that leaves when a property is false (`return if !is_sorted(xs)`, `if !p(xs) { return }`, an `else` that leaves) makes it known after it; `--asserts` says "known from the guard".
+- A named property may have several arguments or be a method: `assert(within(xs, n))` or `assert(b.holds(n))` proves the same claim after it until any of its arguments may change (ADR-381 D1).
+- Fixed: a method's precondition is now held at a call on any receiver, not only `self` (ADR-269 D20): `b.take(n)` with an unproved `n` is NK1300 where it ran and panicked in the checked entry before
+- A method's top-of-body `assert` over its receiver's fields is now a precondition its callers prove (ADR-269 D15); a `pub` method's claim on a private field still is not (D16).
+- `xs.sort()` now makes `xs.is_sorted()` known, and `xs.sort_by_key(f)` makes `xs.is_sorted_by_key(f)` known for the same named `f`, so a search by halving right after owes nothing; a change of the list in between loses it (ADR-381 D5).
+
 ## [0.0.1453] — 2026-11-19
 
 **Builders' changes (#2203, #2204, #2205, #2210)**

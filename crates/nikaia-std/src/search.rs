@@ -16,6 +16,9 @@ pub trait TextNeedle {
     fn last_in(&self, text: &str) -> Option<usize>;
     /// `text` with the first `count` matches replaced by `to`.
     fn replaced_in(&self, text: &str, to: &str, count: usize) -> String;
+    /// The first `count` matches in `text` replaced by `to`, in `text`'s
+    /// own buffer (ADR-text-reuse-1 D4).
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize);
 }
 
 impl TextNeedle for str {
@@ -40,6 +43,13 @@ impl TextNeedle for str {
             None => text.replacen(self, to, count),
         }
     }
+    #[inline]
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize) {
+        match one_byte(self) {
+            Some(byte) => task_block::text::replacen_in(text, byte, to, count),
+            None => task_block::text::replacen_in(text, self, to, count),
+        }
+    }
 }
 
 impl TextNeedle for String {
@@ -54,6 +64,10 @@ impl TextNeedle for String {
     #[inline]
     fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
         self.as_str().replaced_in(text, to, count)
+    }
+    #[inline]
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize) {
+        self.as_str().replaced_in_place(text, to, count);
     }
 }
 
@@ -71,6 +85,10 @@ impl TextNeedle for crate::block::Text {
     fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
         self.as_str().replaced_in(text, to, count)
     }
+    #[inline]
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize) {
+        self.as_str().replaced_in_place(text, to, count);
+    }
 }
 
 impl TextNeedle for char {
@@ -86,6 +104,10 @@ impl TextNeedle for char {
     fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
         text.replacen(*self, to, count)
     }
+    #[inline]
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize) {
+        task_block::text::replacen_in(text, *self, to, count);
+    }
 }
 
 impl<T: TextNeedle + ?Sized> TextNeedle for &T {
@@ -100,6 +122,10 @@ impl<T: TextNeedle + ?Sized> TextNeedle for &T {
     #[inline]
     fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
         (**self).replaced_in(text, to, count)
+    }
+    #[inline]
+    fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize) {
+        (**self).replaced_in_place(text, to, count);
     }
 }
 
@@ -162,4 +188,52 @@ pub fn replacen<N: TextNeedle + ?Sized>(
     count: i64,
 ) -> crate::block::Text {
     crate::block::Text::from(from.replaced_in(text, to, usize::try_from(count).unwrap_or(0)))
+}
+
+/// **`text = text.replace(from, to)` works in the text's buffer**
+/// ([ADR-text-reuse-1](../../../docs/specification/adr/adr-text-reuse-1.md)
+/// D4): the emitter writes this call where the old text is not read again.
+/// Rust because the bytes are written in place (approved for #1589).
+#[inline]
+pub fn replace_in<N: TextNeedle + ?Sized>(text: &mut crate::block::Text, from: &N, to: &str) {
+    from.replaced_in_place(text, to, usize::MAX);
+}
+
+/// `replace_in` of the first `count` matches; a `count` of 0 or less
+/// replaces nothing, as [`replacen`].
+#[inline]
+pub fn replacen_in<N: TextNeedle + ?Sized>(
+    text: &mut crate::block::Text,
+    from: &N,
+    to: &str,
+    count: i64,
+) {
+    from.replaced_in_place(text, to, usize::try_from(count).unwrap_or(0));
+}
+
+/// **A `replace` on the text another `replace` made works in that text's
+/// buffer** (ADR-text-reuse-1 D4): the link after the first of a chain, or
+/// a `let`'s text at its last use (a view is copied).
+#[inline]
+pub fn replaced<G: crate::index::GivenText, N: TextNeedle + ?Sized>(
+    text: G,
+    from: &N,
+    to: &str,
+) -> crate::block::Text {
+    let mut text = text.given_whole();
+    replace_in(&mut text, from, to);
+    text
+}
+
+/// `replaced` of the first `count` matches.
+#[inline]
+pub fn replacedn<G: crate::index::GivenText, N: TextNeedle + ?Sized>(
+    text: G,
+    from: &N,
+    to: &str,
+    count: i64,
+) -> crate::block::Text {
+    let mut text = text.given_whole();
+    replacen_in(&mut text, from, to, count);
+    text
 }

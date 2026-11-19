@@ -165,14 +165,14 @@ fn check_function_grows(op: ref BinaryOp?, value: ref Expr) -> bool {
     }
 }
 
-fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String]) {
+fn check_function_grown_in(words: ref winnow_grammar::InternerContext, block: ref Block, mut out: collections::BTreeSet[String]) {
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Assign { target, op, value } => {
                 match target {
                     Expr::Variable(name, _) => {
                         if check_function_grows(op, value) {
-                            out.insert(here.text(name))
+                            out.insert(words.resolve(name).clone())
                         }
                     },
                     else => {},
@@ -184,8 +184,8 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
                     Expr::MethodCall { receiver, method, .. } => {
                         match receiver {
                             Expr::Variable(name, _) => {
-                                if changes_its_text(here.text(method)) {
-                                    out.insert(here.text(name))
+                                if changes_its_text(words.resolve(method)) {
+                                    out.insert(words.resolve(name).clone())
                                 }
                             },
                             else => {},
@@ -197,7 +197,7 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
             else => {},
         }
         for inner in check_visit_stmt_blocks(stmt.node) {
-            check_function_grown_in(here, inner, out)
+            check_function_grown_in(words, inner, out)
         }
     }
 }
@@ -208,9 +208,134 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
 /// for the same reason - `+` and an f-string can only hand back owned text,
 /// where a name or a call may hand back a view.
 fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> collections::BTreeSet[String] {
+    return grown_text_of(here.words, body)
+}
+
+/// **The names no view is ever taken of in a body** (ADR-text-reuse-1 D4,
+/// #1589): each place a name is read is the receiver of a method that
+/// answers no view of it (`len`, `find`, `replace`, ...), a side of an
+/// operator, a hole of an f-string or an argument of `print`. Whatever else
+/// reads it (a cut, a field, an argument, a `let`, a `return`) may lend it,
+/// and the name is left out. By name, so a name bound twice is asked of
+/// both: it can only leave a name out that could have been in.
+fn lone_texts_of(words: ref winnow_grammar::InternerContext, body: ref Block) -> collections::BTreeSet[String] {
+    let seen = visited_in_block(body)
+    let mut plain: collections::BTreeSet[i64] = collections::BTreeSet()
+    for each in seen {
+        match each {
+            Expr::MethodCall { receiver, method, .. } => {
+                if lone_reads_only(words.resolve(method)) {
+                    plain.insert(id_of(receiver) as i64)
+                }
+            },
+            Expr::Binary { lhs, rhs, .. } => {
+                plain.insert(id_of(lhs) as i64)
+                plain.insert(id_of(rhs) as i64)
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            plain.insert(id_of(expr) as i64)
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Expr::Call { func, args, .. } => {
+                let printed = match func {
+                    Expr::Variable(name, _) => {
+                        let called = words.resolve(name)
+                        called == "print" || called == "println" || called == "eprint" || called == "eprintln"
+                    },
+                    else => false,
+                }
+                if printed {
+                    for arg in args {
+                        plain.insert(id_of(arg) as i64)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
+    for each in seen {
+        match each {
+            Expr::Variable(name, _) => {
+                let written = words.resolve(name).clone()
+                if plain.contains(id_of(each) as i64) {
+                    named.insert(written)
+                } else {
+                    lent.insert(written)
+                }
+            },
+            else => {},
+        }
+    }
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-    check_function_grown_in(here, body, out)
+    for name in named {
+        if !lent.contains(name) {
+            out.insert(name.clone())
+        }
+    }
     return out
+}
+
+/// A text method that answers no view of its receiver and keeps none.
+fn lone_reads_only(method: ref String) -> bool {
+    for one in LONE_READS {
+        if one == method {
+            return true
+        }
+    }
+    return false
+}
+
+comptime LONE_READS: Array[ref String, 17] = ["len", "is_empty", "contains", "starts_with", "ends_with", "find", "rfind", "replace", "replacen", "clone", "to_uppercase", "to_lowercase", "repeat", "push_str", "push", "parse", "compare"]
+
+/// The same, asked of the words a walk has: the keeps walk asks it too
+/// (`keeps.nika`), for the cut a grown name is given.
+fn grown_text_of(words: ref winnow_grammar::InternerContext, body: ref Block) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    check_function_grown_in(words, body, out)
+    return out
+}
+
+/// **The text a cut is cut from** (ADR-text-reuse-1 D2, #1589): `line[a..b]`
+/// of a name. A `let mut` that grows such a cut is given `line`'s text, which
+/// it then changes. A trim (`line.trim()`, `line.trim_end()`) is a cut too:
+/// its result lies inside `line` as well.
+fn given_cut_source(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            if !a_trim(words.resolve(method)) {
+                return null
+            }
+            return match receiver {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => null,
+            }
+        },
+        Expr::Index { base, index, .. } => {
+            match index {
+                Expr::Range { .. } => {},
+                else => return null,
+            }
+            return match base {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => null,
+            }
+        },
+        else => return null,
+    }
+}
+
+/// **A trim's result is a cut of its receiver** (ADR-text-reuse-1 D2): the
+/// text methods of `VIEWS` that hand back one piece of it, never null.
+fn a_trim(method: ref String) -> bool {
+    return method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches"
 }
 
 /// Whether an `if`, a `match` or a block ends, on some path, in a field read
@@ -321,6 +446,20 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
     for rule in gram.rules {
         if rule.stream {
             let emitted = grammar_entry_emits(world, gram, world.words.resolve(rule.name), rules)
+            if emitted {
+                state.facts.emitting_entries.insert(f"{named}::{world.words.resolve(rule.name)}")
+                // The rules its body calls that reach an `emit`: the lowering
+                // folds the repetition of one of them (#1443).
+                let mut called: collections::BTreeSet[String] = collections::BTreeSet()
+                for alt in rule.alts {
+                    grammar_called_rules(world, alt.pattern.node, rules, called)
+                }
+                for one in called {
+                    if grammar_entry_emits(world, gram, one, rules) {
+                        state.facts.emitting_rules.insert(f"{named}::{one}")
+                    }
+                }
+            }
             match grammar_stream_refused(world, rule, state.rule_results, rules, emitted) {
                 refused => state.findings.push(refused),
                 null => {},
@@ -869,6 +1008,8 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.flow.grown_text = check_function_grown_text(world.here, body)
     let outer_mixed = state.flow.mixed_text.clone()
     state.flow.mixed_text = check_function_mixed_text(world.here, body, state.flow.grown_text)
+    let outer_lone = state.flow.lone_texts.clone()
+    state.flow.lone_texts = lone_texts_of(world.here.words, body)
     let tail = check_core_block(state, world, host, body)
     state.flow.grown_text = outer_grown
     state.flow.mixed_text = outer_mixed
@@ -916,6 +1057,9 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     // Before `handed` is cleared: a place clone handed over is no copy only read.
     state.needless_place_clones_said()
     state.data_handed_over_is_used_again()
+    // Before `needless_clones_said`, which clears the loans it reads.
+    state.replaces_at_last_use_said()
+    state.flow.lone_texts = outer_lone
     state.needless_clones_said()
     state.reads_on_paths.clear()
     state.flow.read_index.clear()

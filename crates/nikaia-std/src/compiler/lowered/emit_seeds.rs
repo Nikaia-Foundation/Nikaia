@@ -611,7 +611,7 @@ pub(crate) fn emit_seeds_end(walk: &mut EmitWalk, seeded: bool, base: i64) -> Em
 pub fn emit_seeds_seeded(tables: &EmitSeedsTables, walk: &mut EmitWalk, trusted: bool, written: String) -> String {
     let floor = walk.floor;
     let mut text = written;
-    if floor { text = nikaia_std::block::Text::from(nikaia_std::block::Text::from(text.replace("TrustedMap", "HashMap")).replace("TrustedSet", "HashSet")); }
+    if floor { text = nikaia_std::search::replaced(nikaia_std::block::Text::from(text.replace("TrustedMap", "HashMap")), &"TrustedSet", &"HashSet"); }
     if tables.is_empty() { return text; }
     emit_seeds_write(&text, &mut walk.place, trusted && !floor, tables)
 }

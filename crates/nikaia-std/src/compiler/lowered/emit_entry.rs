@@ -35,6 +35,7 @@ impl EmitState {
         let vis = if self.as_a_module() { "pub " } else { "" };
         text = format!("{}#[allow(dead_code)]\n{}fn main(){} {{\n", text, vis, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
+        if !self.environment_untrusted { text = format!("{}    nikaia_std::env::stop_a_privileged_start();\n", text); }
         text = format!("{}{}", text, reads);
         let mut body: &'static str = "__nikaia_main";
         if !reads.is_empty() && self.facts.entries.contains_key("main") { body = "__nikaia_main__unchecked"; }

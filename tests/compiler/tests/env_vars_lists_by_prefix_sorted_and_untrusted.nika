@@ -1,8 +1,10 @@
 // #1601, ADR-397: `env::vars(prefix)` lists the variables whose name starts
 // with `prefix`, sorted by name, and leaves out an empty value as `env::var`
 // does. The child gets its variables through `process::run`'s `env:`. The
-// values are untrusted: an `assert` about one is `NK1202`, and `trusted:
-// true` makes it a claim as any other, which `--trust` names with its place.
+// values are the operator's (ADR-397 D1, #2216): an `assert` about one is a
+// claim as any other (`NK1300`), unless a name a CGI host fills can start
+// with the prefix (D2): `env::vars("")`, `env::vars("HTTP")` and
+// `env::vars("REMOTE")` are untrusted, an `assert` about one is `NK1202`.
 //
 // A value that is not Unicode is not tested: `env:` is `Vec[(String,
 // String)]` and cannot hand a child one.
@@ -36,20 +38,14 @@ fn main() throws {
     let head = "use std::env\nuse std::text\n\nfn main() throws {\n"
     let listed = "    for (name, value) in env::vars(\"NKV_\") {\n        println(f\"{name}={value}\")\n    }\n    println(f\"count {env::vars(\"\").len() > 3}\")\n}\n"
     said(nikaia, tmp, "the prefix, the order, no empty value", f"{head}{listed}", ["run"])
-    let plain = "    let n: i64 = text::parse_i64(env::vars(\"NKV_MID\")[0].1) ?? 8\n"
-    let marked = "    let n: i64 = text::parse_i64(env::vars(\"NKV_MID\"; trusted: true)[0].1) ?? 8\n"
     let tail = "    assert(n > 0)\n    println(n)\n}\n"
-    said(nikaia, tmp, "an assert on env::vars", f"{head}{plain}{tail}", ["check"])
-    said(nikaia, tmp, "trusted: true, a claim as any other", f"{head}{marked}{tail}", ["check"])
-    let map = "use std::env\nuse std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    for (name, value) in env::vars(\"NKV_\""
-    let rest = ") {\n        m.insert(value, name)\n    }\n    println(m.len())\n}\n"
-    said(nikaia, tmp, "a map keyed by env::vars, no marker", f"{map}{rest}", ["lower", "--trust", "-o", "p.rs"])
-    said(nikaia, tmp, "a map keyed by env::vars, trusted: true", f"{map}; trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
-    println("-- the ledger")
-    for line in fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere).lines() {
-        if line.starts_with("[fn.") || line.starts_with("trusted") {
-            println(line)
-        }
+    for prefix in ["NKV_MID", "", "HTTP", "REMOTE"] {
+        let read = f"    let n: i64 = text::parse_i64(env::vars(\"{prefix}\")[0].1) ?? 8\n"
+        said(nikaia, tmp, f"an assert on env::vars(\"{prefix}\")", f"{head}{read}{tail}", ["check"])
     }
+    let map = "use std::env\nuse std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    for (name, value) in env::vars(\""
+    let rest = "\") {\n        m.insert(value, name)\n    }\n    println(m.len())\n}\n"
+    said(nikaia, tmp, "a map keyed by env::vars(\"NKV_\")", f"{map}NKV_{rest}", ["lower", "--trust", "-o", "p.rs"])
+    said(nikaia, tmp, "a map keyed by env::vars(\"\")", f"{map}{rest}", ["lower", "--trust", "-o", "p.rs"])
     process::run("rm", ["-rf", tmp])
 }

@@ -1,0 +1,19 @@
+error[NK2105]: You're using `line` again, but it was given to `rest`, which changes it.
+  --> tests/a_source_read_after_its_changed_cut_is_refused.nika:9:5
+   |
+ 9 |     println(line)
+   |     ^
+   |
+   = note: `line` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+   = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+   = help: If both need it, hand over a copy: `line.clone()`.
+error[NK2302]: `lent` keeps `line`, but `line` is not marked `keep`.
+   --> tests/a_source_read_after_its_changed_cut_is_refused.nika:16:5
+    |
+ 16 |     rest += "."
+    |     ^^^^^^^^^^^
+    |
+    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+    = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
+    = help: Write `keep line` in the signature of `lent`; or let `rest` change a copy: write `.clone()` after the cut it is bound to, and `line` stays its caller's.
+1 view kept past the call that was given it

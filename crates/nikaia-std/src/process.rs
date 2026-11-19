@@ -34,13 +34,6 @@ use std::time::{Duration, Instant};
 
 use crate::io::IoError;
 
-/// `process::is_word(part)`: its Nikaia half, `runtime/raw_sinks.nika`, the
-/// precondition of `process::shell` (ADR-raw-sinks-1 D2, #1253).
-pub use crate::runtime::is_word;
-/// `process::shell(command)`: its Nikaia half, `runtime/shell.nika`, the
-/// one raw sink of this module (ADR-raw-sinks-1 §4).
-pub use crate::runtime::shell;
-
 /// What a program that ran to its end left behind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
@@ -776,17 +769,6 @@ pub fn ended<T, E: Ending>(outcome: Result<T, E>) -> Result<T, E> {
         std::process::exit(code);
     }
     outcome
-}
-
-#[cfg(test)]
-mod exit_tests {
-    use super::Ending;
-
-    #[test]
-    fn exit_throws_its_code() {
-        let thrown = super::exit(3).unwrap_err();
-        assert_eq!(thrown.exit_code(), Some(3));
-    }
 }
 
 // Kept as Rust (#2082): names compared without case is the Windows half of
