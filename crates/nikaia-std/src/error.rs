@@ -739,15 +739,48 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
             None => false,
         }
-        || match error.downcast_ref::<crate::net::ReadFailed>() {
-            Some(crate::net::ReadFailed::Io(e)) => (e as &dyn Error).is::<E>(),
-            Some(crate::net::ReadFailed::TimedOut(e)) => (e as &dyn Error).is::<E>(),
-            None => false,
-        }
+        || read_failed_holds::<E>(error)
         || error
             .downcast_ref::<crate::supervisor::Handed>()
             .and_then(crate::supervisor::Handed::itself)
             .is_some_and(|itself| itself.is::<E>())
+}
+
+/// Whether `error` is a socket read's failure (`net::ReadFailed`) carrying an
+/// `E`: never where `std` was built without sockets (`async-io`, #2152).
+#[cfg(feature = "async-io")]
+fn read_failed_holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
+    match error.downcast_ref::<crate::net::ReadFailed>() {
+        Some(crate::net::ReadFailed::Io(e)) => (e as &dyn Error).is::<E>(),
+        Some(crate::net::ReadFailed::TimedOut(e)) => (e as &dyn Error).is::<E>(),
+        None => false,
+    }
+}
+
+#[cfg(not(feature = "async-io"))]
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "the same call as the version with sockets"
+)]
+fn read_failed_holds<E: Error + 'static>(_error: &(dyn Error + 'static)) -> bool {
+    false
+}
+
+/// A socket read's failure, as the error it carries; any other error as it is.
+#[cfg(feature = "async-io")]
+fn read_failed_opened(error: Box<dyn Error>) -> Box<dyn Error> {
+    match error.downcast::<crate::net::ReadFailed>() {
+        Ok(failed) => match *failed {
+            crate::net::ReadFailed::Io(e) => Box::new(e),
+            crate::net::ReadFailed::TimedOut(e) => Box::new(e),
+        },
+        Err(error) => error,
+    }
+}
+
+#[cfg(not(feature = "async-io"))]
+fn read_failed_opened(error: Box<dyn Error>) -> Box<dyn Error> {
+    error
 }
 
 /// **The child's own error a supervisor's hand-over carries**, if it is an
@@ -772,13 +805,7 @@ pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
         },
         Err(error) => error,
     };
-    let error: Box<dyn Error> = match error.downcast::<crate::net::ReadFailed>() {
-        Ok(failed) => match *failed {
-            crate::net::ReadFailed::Io(e) => Box::new(e),
-            crate::net::ReadFailed::TimedOut(e) => Box::new(e),
-        },
-        Err(error) => error,
-    };
+    let error = read_failed_opened(error);
     let error: Box<dyn Error> = if error.is::<E>() {
         error
     } else {

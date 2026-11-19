@@ -45,9 +45,11 @@
 //!
 //! **Which one is chosen is decided when the program starts, never when it is
 //! compiled.** A binary built on a machine with `io_uring` runs on one without
-//! it. The only compile-time gate is on `io_uring`'s *bindings*, which do not
-//! exist off Linux at all; on Linux the choice is [`Method::Auto`] probing the
-//! kernel, or an operator pinning it (D5).
+//! it. The only compile-time gates are on `io_uring`'s *bindings*, which do not
+//! exist off Linux at all, and on the `async-io` feature, which the build-time
+//! bundle turns off (#2152): without it there is no ring and no poller, and a
+//! file takes the blocking path. On Linux with it the choice is
+//! [`Method::Auto`] probing the kernel, or an operator pinning it (D5).
 
 pub mod config;
 /// The executor (ADR-055 D3): what drives a program that can pause.
@@ -58,13 +60,42 @@ pub mod pool;
 pub mod timer;
 pub mod worker;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "async-io"))]
 use file_ring as uring;
 
 pub use config::{Config, Method};
 pub use worker::Interest;
 
+#[cfg(feature = "async-io")]
 pub(crate) mod readiness;
+
+/// **The readiness waits still outstanding**: none where `std` was built
+/// without the poller (`async-io`, #2152), since nothing could arm one.
+fn readiness_outstanding() -> usize {
+    #[cfg(feature = "async-io")]
+    return readiness::registry().outstanding();
+    #[cfg(not(feature = "async-io"))]
+    return 0;
+}
+
+/// [`readiness_outstanding`], without starting the poller to ask.
+fn readiness_outstanding_if_started() -> usize {
+    #[cfg(feature = "async-io")]
+    return readiness::outstanding_if_started();
+    #[cfg(not(feature = "async-io"))]
+    return 0;
+}
+
+/// The readiness waits left when `deadline` passed: none without the poller.
+fn readiness_drain(deadline: std::time::Duration) -> usize {
+    #[cfg(feature = "async-io")]
+    return readiness::registry().drain(deadline);
+    #[cfg(not(feature = "async-io"))]
+    {
+        let _ = deadline;
+        0
+    }
+}
 
 use std::path::Path;
 use std::sync::{Condvar, Mutex, OnceLock};
@@ -111,7 +142,7 @@ pub struct Runtime {
     user_code: UserCode,
     files: Files,
     workers: worker::Workers,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     ring: Option<Mutex<uring::Ring>>,
     /// **The bell a worker rings to wake a park on `ring`**
     /// ([ADR-121](../../../docs/specification/adr/adr-121.md) D1), or `None`
@@ -123,15 +154,15 @@ pub struct Runtime {
     /// a second `Runtime` gets a second ring with a bell of its own, and
     /// publishing that one as *the* bell left the process's own park deaf. Found
     /// by `the_compilers_pair_answers_the_same_either_way` hanging.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     bell: Option<uring::Bell>,
     /// How many threads wait for the ring's lock to submit or poll
     /// (`with_ring`): a park lets them have it first (#693).
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     wanting: std::sync::atomic::AtomicUsize,
     /// How many parks wait on the bell because somebody else has the ring
     /// (`park_in_ring`): whoever lets the ring go tells them.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     parkers: std::sync::atomic::AtomicUsize,
     /// The executor for user tasks, at `user_parallelism = yes` and not
     /// otherwise.
@@ -192,7 +223,7 @@ pub(crate) fn ring_the_bell() {
     // `get` and not `handle`: this runs on a thread the runtime started, so the
     // runtime exists - and a worker that somehow rings while the `OnceLock` is
     // still being filled has nothing parked on a ring to wake.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     if let Some(runtime) = RUNTIME.get()
         && let Some(bell) = &runtime.bell
     {
@@ -348,7 +379,7 @@ impl Started {
         // writes to — and the deadline is exactly what bounds it (ADR-297 D6).
         // Counted, not waited for a second deadline's worth: what is left of
         // the first one is what is left.
-        left + readiness::registry().drain(deadline)
+        left + readiness_drain(deadline)
     }
 }
 
@@ -418,7 +449,7 @@ impl Runtime {
     fn build(user_code: UserCode, config: Config) -> Runtime {
         let workers = worker::Workers::start(config.io_workers);
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         let ring = match config.io_method {
             // **Run-time detection.** `IoUring::new` is the probe: an older
             // kernel answers `ENOSYS` and a sandbox that forbids the syscall
@@ -439,13 +470,13 @@ impl Runtime {
             Method::Blocking => None,
         };
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         let files = if ring.is_some() {
             Files::Completion
         } else {
             Files::Blocking
         };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", feature = "async-io")))]
         let files = Files::Blocking;
 
         let user_pool = match user_code {
@@ -455,7 +486,7 @@ impl Runtime {
 
         // Read out of the ring before the lock closes over it: a `write` may
         // not wait for a park (D1), so the number lives beside the lock.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         let bell = ring
             .as_ref()
             .map(|ring| ring.lock().unwrap_or_else(|e| e.into_inner()).bell());
@@ -465,13 +496,13 @@ impl Runtime {
             user_code,
             files,
             workers,
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             ring,
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             bell,
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             wanting: std::sync::atomic::AtomicUsize::new(0),
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             parkers: std::sync::atomic::AtomicUsize::new(0),
             user_pool,
         }
@@ -505,7 +536,7 @@ impl Runtime {
         // there: the park asks *is anything outstanding* before it sleeps, and
         // ADR-297 D6's drain asks it before it lets a program go. What changed
         // in 0.0.165 is the mechanism and not the answer ([`readiness`]).
-        self.workers.pending() + readiness::registry().outstanding()
+        self.workers.pending() + readiness_outstanding()
     }
 
     /// One line naming what started and how, for `--runtime` and for a bug
@@ -528,7 +559,7 @@ impl Runtime {
         )
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     fn with_ring<T>(&self, f: impl FnOnce(&mut uring::Ring) -> T) -> Option<T> {
         let ring = self.ring.as_ref()?;
         // A panic inside a file operation poisons this lock and must not lose
@@ -574,7 +605,7 @@ impl Runtime {
     /// **`FINISHED` is held while the ring is tried**, and `with_held` takes it
     /// to tell the parkers after it has let the ring go, so a ring let go
     /// between the try and the wait still wakes this wait.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     fn park_in_ring(&self, since: u64, limit: Option<std::time::Duration>) -> bool {
         use std::sync::atomic::Ordering;
         let ring = self
@@ -620,7 +651,7 @@ impl Runtime {
 
     /// Run `f` on the ring already held, count what it reaped, and let the
     /// ring go.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     fn with_held<T>(
         &self,
         mut held: std::sync::MutexGuard<'_, uring::Ring>,
@@ -667,7 +698,9 @@ impl Runtime {
 /// caller cannot tell - which is what makes a change of mechanism a `std`
 /// change.
 pub mod io {
-    use super::{Files, Interest, Path, handle, worker};
+    #[cfg(feature = "async-io")]
+    use super::Interest;
+    use super::{Files, Path, handle, worker};
     use std::io::{Error, Result};
 
     /// The invariant ADR-037 D2 rests on, checked rather than assumed.
@@ -717,11 +750,11 @@ pub mod io {
     fn read_all(paths: &[&Path]) -> Vec<Result<Vec<u8>>> {
         let runtime = handle();
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             Files::Completion => runtime
                 .with_ring(|ring| ring.read_many(paths))
                 .expect("`Files::Completion` means there is a ring"),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             Files::Blocking => blocking_read_all(paths),
         }
@@ -785,11 +818,11 @@ pub mod io {
         off_the_io_thread();
         let runtime = handle();
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             Files::Completion => runtime
                 .with_ring(|ring| ring.write(path, bytes.to_vec(), append, create))
                 .expect("`Files::Completion` means there is a ring"),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             // One operation, and the caller is going to wait for it: a worker
             // would cost a wake-up and buy no overlap.
@@ -806,7 +839,7 @@ pub mod io {
     /// needs for one that suspends instead.
     pub enum InFlight {
         /// A slot on the ring.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         Ring(usize),
         /// An I/O worker's reply, on its own channel.
         Worker(std::sync::mpsc::Receiver<Result<Vec<u8>>>),
@@ -832,7 +865,7 @@ pub mod io {
         /// The buffer is *not* freed here, and that is the soundness rule
         /// rather than an omission.
         fn drop(&mut self) {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             if let InFlight::Ring(slot) = self {
                 let slot = *slot;
                 handle().with_ring(|ring| ring.abandon(slot));
@@ -853,13 +886,13 @@ pub mod io {
     static RING_HELD: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
     impl InFlight {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         fn held(slot: usize) -> InFlight {
             RING_HELD.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             InFlight::Ring(slot)
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         fn let_go() {
             RING_HELD.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         }
@@ -896,7 +929,7 @@ pub mod io {
             && !super::timer::armed()
             && RING_HELD.load(std::sync::atomic::Ordering::Acquire) == 0
             && runtime.workers.pending() == 0
-            && super::readiness::outstanding_if_started() == 0
+            && super::readiness_outstanding_if_started() == 0
             && runtime.user_pool().is_none_or(|pool| pool.live() == 0)
     }
 
@@ -929,7 +962,7 @@ pub mod io {
 
     /// The same for a write: opened as the ring opens it, and written here if
     /// what opened is a regular file.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "async-io"))]
     fn write_here(
         path: &Path,
         bytes: &[u8],
@@ -971,7 +1004,7 @@ pub mod io {
             return InFlight::Done(Some(done));
         }
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             Files::Completion => {
                 match runtime
                     .with_ring(|ring| ring.begin_read(path))
@@ -983,7 +1016,7 @@ pub mod io {
                     Err(e) => InFlight::Done(Some(Err(e))),
                 }
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             Files::Blocking => {
                 let (reply, answer) = std::sync::mpsc::channel();
@@ -1013,7 +1046,7 @@ pub mod io {
         let runtime = handle();
         // **ADR-263 D1**, on the path that has a ring to skip: the fallback
         // below already writes on this thread.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
         if runtime.files() == Files::Completion
             && idle(runtime)
             && let Some(done) = write_here(path, bytes, append, create)
@@ -1021,7 +1054,7 @@ pub mod io {
             return InFlight::Done(Some(done));
         }
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             Files::Completion => {
                 match runtime
                     .with_ring(|ring| ring.begin_write(path, bytes.to_vec(), append, create))
@@ -1031,7 +1064,7 @@ pub mod io {
                     Err(e) => InFlight::Done(Some(Err(e))),
                 }
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             Files::Blocking => InFlight::Done(Some(
                 worker::blocking_write(path, bytes, append, create).map(|()| Vec::new()),
@@ -1046,7 +1079,7 @@ pub mod io {
     /// the two cannot be missed.
     pub fn poll(operation: &mut InFlight) -> Option<Result<Vec<u8>>> {
         match operation {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             InFlight::Ring(slot) => {
                 let slot = *slot;
                 let done = handle()
@@ -1219,7 +1252,7 @@ pub mod io {
     pub fn park_for(since: u64, limit: Option<std::time::Duration>) -> bool {
         let runtime = handle();
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             // **A worker operation is something to wait for here too**
             // ([ADR-121](../../../docs/specification/adr/adr-121.md) D1): the
             // bell is armed on the ring, so a worker's reply posts a completion
@@ -1227,7 +1260,7 @@ pub mod io {
             // one coming, because D2 keeps the bell out of its job count - so
             // the worker count is read here and handed down.
             Files::Completion => runtime.park_in_ring(since, limit),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             Files::Blocking => {
                 let mut count = super::FINISHED.lock().unwrap_or_else(|e| e.into_inner());
@@ -1292,6 +1325,7 @@ pub mod io {
     ///
     /// The wait happens on an I/O worker, which is already running - so
     /// waiting costs a message rather than a thread.
+    #[cfg(feature = "async-io")]
     pub fn wait(
         socket: &impl std::os::fd::AsFd,
         interest: Interest,
@@ -1323,6 +1357,7 @@ pub mod io {
     /// it is registered, whatever the caller does with its own; and a `Waiting`
     /// dropped before its answer deletes the registration and closes the
     /// duplicate (ADR-303 D12).
+    #[cfg(feature = "async-io")]
     pub fn waiting(
         socket: &impl std::os::fd::AsFd,
         interest: Interest,
@@ -1396,6 +1431,7 @@ pub mod io {
     /// ([`super::readiness`]): a readiness wait used to occupy an I/O worker
     /// for its whole duration, and `io-workers` is `1` by default — so a wait
     /// that had not answered blocked every other wait in the process.
+    #[cfg(feature = "async-io")]
     pub type Waiting = super::readiness::Armed;
 
     /// **A worker's reply, as something that can be awaited**
@@ -1461,6 +1497,7 @@ mod tests {
     /// returns. D3 keeps the test and inverts the claim, because *a hang is the
     /// failure this may not have*: what went red the day the defect existed goes
     /// red the day it comes back.
+    #[cfg(feature = "async-io")]
     #[test]
     fn a_worker_operation_wakes_the_park_on_either_path() {
         let runtime = handle();
@@ -1553,6 +1590,7 @@ mod tests {
     /// that landed *before* the round that would have waited for it: the park
     /// then has nothing to wait for and rings nobody's alarm, and a task whose
     /// future stores no waker is never polled again (`exec::block_on`).
+    #[cfg(feature = "async-io")]
     #[test]
     fn a_future_fed_from_a_worker_finishes_under_block_on() {
         for _ in 0..20 {
@@ -1560,6 +1598,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "async-io")]
     fn a_future_fed_from_a_worker_finishes_under_block_on_once() {
         use std::io::Write;
         use std::sync::Arc;
@@ -1691,6 +1730,7 @@ mod tests {
     /// decision was half built: the **status** is D1, and the **message on
     /// standard error** is D2, which is the default panic hook's doing and
     /// therefore any hook's.
+    #[cfg(feature = "async-io")]
     #[test]
     fn an_expired_cleanup_deadline_is_exit_70_on_the_panic_path() {
         const NAME: &str = "an_expired_cleanup_deadline_is_exit_70_on_the_panic_path";
@@ -1824,14 +1864,14 @@ mod tests {
     /// rather than only whichever one this machine chose.
     fn read_through(runtime: &Runtime, path: &Path) -> Vec<u8> {
         match runtime.files() {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "async-io"))]
             Files::Completion => runtime
                 .with_ring(|ring| ring.read_many(&[path]))
                 .expect("a ring")
                 .pop()
                 .expect("one answer")
                 .expect("read"),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
             Files::Completion => unreachable!(),
             Files::Blocking => {
                 let (reply, answer) = std::sync::mpsc::channel();
@@ -1921,6 +1961,7 @@ mod tests {
     /// the whole reason the two halves have different mechanisms behind one
     /// `std` surface - so this is the test that the socket half is reachable
     /// from where a program would reach it.
+    #[cfg(feature = "async-io")]
     #[test]
     fn a_socket_reports_readiness_through_the_std_surface() {
         use std::io::{Read, Write};

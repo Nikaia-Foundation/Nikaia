@@ -1,0 +1,28 @@
+// #2152: a `comptime` over text, a map and a list runs against the
+// build-time bundle, whose `std` is built without sockets, TLS and the
+// file ring: what such code reaches is all there.
+use std::collections
+
+fn tally(words: String) -> String sync {
+	let mut counts: collections::HashMap[String, i64] = collections::HashMap()
+	let mut order: Vec[String] = []
+	for word in words.split(" ") {
+		let key = word.to_uppercase()
+		if !counts.contains_key(key) {
+			order.push(key.clone())
+		}
+		let seen = counts.get(key) ?? 0
+		counts[key] = seen + 1
+	}
+	let mut parts: Vec[String] = []
+	for key in order {
+		parts.push(f"{key}={counts.get(key) ?? 0}")
+	}
+	return parts.join(",")
+}
+
+comptime TALLY: String = tally("to be or not to be")
+
+fn main() throws {
+	println(TALLY)
+}
