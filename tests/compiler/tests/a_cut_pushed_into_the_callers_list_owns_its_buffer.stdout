@@ -1,0 +1,7 @@
+fn tails(all: &mut Vec<String>, lines: &[String]) {
+all.push(nikaia_std::index::shrunk({ let __cut = nikaia_std::index::get(&line, nikaia_std::index::at(m + 1..)); let __span = nikaia_std::index::cut_span(&line, __cut); nikaia_std::index::given_cut(line, __span) }));
+fn echoed<'k>(all: &mut Vec<&'k str>, lines: &[String], __keep: &'k nikaia_std::tether::Keep) -> Result<(), nikaia_std::error::Thrown<io::IoError>> {
+let line = __keep.put_viewed(nikaia_std::block::Text::from(nikaia_std::concat::plus(each, "?")));
+Bonn;3?
+12!,7!
+3?

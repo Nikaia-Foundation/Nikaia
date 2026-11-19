@@ -207,7 +207,7 @@ fn numbers_field_defs(fields: Vec[FieldDef], mut st: NodeNumbersState) -> Vec[Fi
             let given = f.default ?? FieldDefault { value: Expr::LitNull(node_id::NodeId::numbered(0)), span: Span::nowhere() }
             default = FieldDefault { value: numbers_expr(given.value, st), span: given.span }
         }
-        out.push(FieldDef { name: f.name, ty: f.ty, is_public: f.is_public, span: f.span, default: default, attributes: attributes })
+        out.push(FieldDef { name: f.name, ty: f.ty, is_public: f.is_public, span: f.span, default: default, attributes: attributes, doc: f.doc })
     }
     return out
 }

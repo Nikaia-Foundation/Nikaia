@@ -173,7 +173,7 @@ pub(crate) fn numbers_field_defs(fields: Vec<FieldDef>, st: &mut NodeNumbersStat
             let given = nikaia_std::index::or(f.default, || FieldDefault { value: Expr::LitNull(node_id::NodeId::numbered(0u32)), span: Span::nowhere() });
             default = Some(FieldDefault { value: numbers_expr(given.value, st), span: given.span });
         }
-        out.push(FieldDef { name: f.name, ty: f.ty, is_public: f.is_public, span: f.span, default, attributes });
+        out.push(FieldDef { name: f.name, ty: f.ty, is_public: f.is_public, span: f.span, default, attributes, doc: f.doc });
     }
     out
 }

@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1470] — 2026-11-19
+
+**Builders' changes (#2243, #2285, #2291)**
+- A cut, trim or replace on text nobody reads afterwards no longer copies the kept part: 100k given cuts drop from 300k to 200k allocations and 23 % fewer instructions.
+- Moving a text while a cut of it is still read no longer fails with an internal error (NK1343): the moved place gets a view, and a cut that is changed while another view of its source is read is refused with NK2305.
+- A `return` inside an expression (`p.find(";") ?? return p`) now counts as keeping a `keep` parameter, as a `return` statement does.
+- A cut of a local text pushed into a caller's list, where the local is not read again, takes the local's buffer and is shrunk, so the caller keeps no whole lines alive
+
 ## [0.0.1469] — 2026-11-19
 
 **adr-rename: follow a citation whose decisions start on the next line (#2298)**

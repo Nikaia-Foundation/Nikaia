@@ -30,7 +30,7 @@ pub(crate) fn check_handed_follow(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_closed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, closed: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_handed_closed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, closed: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Fn { name, is_public, is_extern, .. } => {
@@ -56,11 +56,11 @@ pub(crate) fn check_handed_closed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_valued_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) { for item in view.items.iter() { check_handed_valued(view, &item.node, closed, valued); } }
+pub(crate) fn check_handed_valued_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) { for item in view.items.iter() { check_handed_valued(view, &item.node, closed, valued); } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_seed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) {
+pub(crate) fn check_handed_seed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Fn { .. } => { check_handed_seed(view, &item.node, None, closed, held); },
@@ -72,7 +72,7 @@ pub(crate) fn check_handed_seed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, cl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_round_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_round_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
     let mut changed = false;
     for item in view.items.iter() {
         match &item.node {
@@ -86,7 +86,7 @@ pub(crate) fn check_handed_round_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, target: Option<&str>) -> String {
+pub(crate) fn check_handed_name(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, target: Option<&str>) -> String {
     let mut own_name: String = String::from("new");
     match name {
         Some(sym) => { own_name = view.text(sym); },
@@ -102,7 +102,7 @@ pub(crate) fn check_handed_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_params(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item) -> Vec<String> {
+pub(crate) fn check_handed_params(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     match item {
         Item::Fn { receiver, args, .. } => {
@@ -116,7 +116,7 @@ pub(crate) fn check_handed_params(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ite
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_valued(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_handed_valued(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) {
     match item {
         Item::Fn { body, .. } => { check_handed_valued_block(view, body, closed, valued); },
         Item::Impl { methods, .. } => { for method in methods.iter() { check_handed_valued(view, &method.node, closed, valued); } },
@@ -126,7 +126,7 @@ pub(crate) fn check_handed_valued(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ite
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_valued_block(view: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_handed_valued_block(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, block: &Block, closed: &collections::BTreeSet<String>, valued: &mut collections::BTreeSet<String>) {
     for stmt in block.stmts.iter() {
         let exprs = check_visit_stmt(&stmt.node);
         let mut called: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -157,7 +157,7 @@ pub(crate) fn check_handed_valued_block(view: &ParsedView<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_seed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) {
+pub(crate) fn check_handed_seed(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) {
     match item {
         Item::Fn { name, is_public, .. } => {
             let is_public = *is_public; let name = *name;
@@ -172,7 +172,7 @@ pub(crate) fn check_handed_seed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_round(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_round(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
     match item {
         Item::Fn { name, body, .. } => {
             let name = *name;
@@ -213,7 +213,7 @@ pub(crate) fn check_handed_insert(held: &mut collections::BTreeMap<String, Strin
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_holds(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, name: winnow_grammar::Symbol, number: u32, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_holds(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, name: winnow_grammar::Symbol, number: u32, held: &collections::BTreeMap<String, String>) -> Option<String> {
     let at = match held.get(&check_handed_key(key, &format!("@{}", number))) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -230,7 +230,7 @@ pub(crate) fn check_handed_holds(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_mark(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, exprs: &[&Expr], state: &collections::BTreeMap<String, String>, held: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_mark(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, exprs: &[&Expr], state: &collections::BTreeMap<String, String>, held: &mut collections::BTreeMap<String, String>) -> bool {
     let mut changed = false;
     for expr in exprs.iter() {
         let expr = *expr;
@@ -262,7 +262,7 @@ pub(crate) fn check_handed_bind(state: &mut collections::BTreeMap<String, String
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, block: &Block, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>, state: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, block: &Block, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>, state: &mut collections::BTreeMap<String, String>) -> bool {
     let mut changed = false;
     let outer = state.copy_owned();
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -396,7 +396,7 @@ pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
     let mut changed = false;
     match expr {
         Expr::Call { func, args, .. } => {
@@ -444,7 +444,7 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_owner(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, receiver: &Expr) -> Option<String> {
+pub(crate) fn check_handed_owner(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, receiver: &Expr) -> Option<String> {
     match receiver {
         Expr::StructLit { name, .. } => { let name = *name; return Some(view.text(name)); },
         Expr::Variable(name, _) => {
@@ -463,7 +463,7 @@ pub(crate) fn check_handed_owner(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_defines(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, named: &str) -> bool {
+pub(crate) fn check_handed_defines(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> bool {
     if check_handed_params_in(view, named).is_some() { return true; }
     for unit in world.beside.iter() { if check_handed_params_in(unit, named).is_some() { return true; } }
     false
@@ -471,7 +471,7 @@ pub(crate) fn check_handed_defines(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_typed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, name: &str) -> Option<String> {
+pub(crate) fn check_handed_typed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, name: &str) -> Option<String> {
     for item in view.items.iter() {
         match &item.node {
             Item::Fn { name: own, .. } => {
@@ -497,7 +497,7 @@ pub(crate) fn check_handed_typed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, k
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_typed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, name: &str) -> Option<String> {
+pub(crate) fn check_handed_typed(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, name: &str) -> Option<String> {
     let mut found: Vec<String> = vec![];
     match item {
         Item::Fn { args, body, .. } => {
@@ -513,14 +513,14 @@ pub(crate) fn check_handed_typed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> Option<String> {
+pub(crate) fn check_handed_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty: &Type) -> Option<String> {
     if ty.is_tuple || ty.is_nullable || (*ty.code).is_some() || !ty.generics.is_empty() { return None; }
     Some(view.text(ty.name))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_typed_block(view: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, name: &str, found: &mut Vec<String>) -> bool {
+pub(crate) fn check_handed_typed_block(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, found: &mut Vec<String>) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Let { names, ty, value, .. } => {
@@ -570,7 +570,7 @@ pub(crate) fn check_handed_typed_block(view: &ParsedView<'_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_callee(view: &ParsedView<'_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
+pub(crate) fn check_handed_callee(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(view.text(name)) },
         Expr::Path(segments, _) => {
@@ -587,7 +587,7 @@ pub(crate) fn check_handed_callee(view: &ParsedView<'_, '_, '_, '_, '_, '_>, fun
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_params_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, callee: &str) -> Vec<String> {
+pub(crate) fn check_handed_params_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, callee: &str) -> Vec<String> {
     let mine = check_handed_params_in(view, callee);
     if mine.is_some() { return nikaia_std::index::or(mine, || vec![].into()); }
     for unit in world.beside.iter() {
@@ -599,7 +599,7 @@ pub(crate) fn check_handed_params_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_params_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, callee: &str) -> Option<Vec<String>> {
+pub(crate) fn check_handed_params_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, callee: &str) -> Option<Vec<String>> {
     for item in unit.items.iter() {
         match &item.node {
             Item::Fn { name, .. } => {
@@ -625,7 +625,7 @@ pub(crate) fn check_handed_params_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_root(view: &ParsedView<'_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
+pub(crate) fn check_handed_root(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
     match place {
         Expr::Variable(name, _) => { let name = *name; Some(view.text(name)) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_handed_root(view, base) },
@@ -636,7 +636,7 @@ pub(crate) fn check_handed_root(view: &ParsedView<'_, '_, '_, '_, '_, '_>, place
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
     match expr {
         Expr::Variable(name, id) => { let id = *id; let name = *name; return check_handed_holds(view, key, name, id.get(), held); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return check_handed_carries(world, view, key, base, held); },
@@ -695,7 +695,7 @@ pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_carries_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, block: &Block, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_carries_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, block: &Block, held: &collections::BTreeMap<String, String>) -> Option<String> {
     let count = block.stmts.len() as i64;
     if count == 0 { return None; }
     match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
@@ -733,7 +733,7 @@ pub(crate) fn check_handed_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_pattern_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+pub(crate) fn check_handed_pattern_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     match pattern {
         MatchPattern::Path(segments) => { if segments.len() == 1 { out.push(view.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) })); } },

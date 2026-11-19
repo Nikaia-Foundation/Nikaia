@@ -84,6 +84,13 @@ impl Text {
         self.bytes.capacity()
     }
 
+    /// **Give back the room the text does not use** (ADR-text-reuse-1 D2,
+    /// #1589): usually a `realloc` in place.
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        self.bytes.shrink_to_fit();
+    }
+
     /// Room for `more` bytes, or the task ends (D6).
     #[inline]
     pub fn reserve(&mut self, more: usize) {

@@ -1064,6 +1064,17 @@ impl<T: AsRef<str> + ?Sized> GivenText for &T {
     }
 }
 
+/// **A given cut's text where it leaves** (ADR-text-reuse-1 D2, #1589):
+/// returned, pushed or stored, text that fills less than half its buffer
+/// gives the rest back, so a short tail does not hold a long line's memory.
+#[inline]
+pub fn shrunk(mut text: crate::block::Text) -> crate::block::Text {
+    if text.len() < text.capacity() / 2 {
+        text.shrink_to_fit();
+    }
+    text
+}
+
 /// `text` cut down to `span`, in its own buffer where it owns one.
 #[inline]
 pub fn given_cut<G: GivenText>(text: G, span: (usize, usize)) -> crate::block::Text {

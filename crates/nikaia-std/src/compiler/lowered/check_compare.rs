@@ -272,7 +272,7 @@ pub struct CompareDeclared {
     pub hashes: Vec<String>,
 }
 
-pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> CompareDeclared {
+pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> CompareDeclared {
     let mut declared: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in here.items.iter() {
         match &item.node {
@@ -520,7 +520,7 @@ pub(crate) fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeM
     bounds.copy_owned()
 }
 
-pub(crate) fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
+pub(crate) fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for item in here.items.iter() {
         match &item.node {
@@ -535,7 +535,7 @@ pub(crate) fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_
     refused
 }
 
-pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return None };
     let trait_text = here.text(symbol);
     if trait_text != "Eq" && trait_text != "Ord" && trait_text != "Hash" || asking.own.traits.contains_key(&trait_text) { return None; }

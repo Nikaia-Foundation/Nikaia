@@ -40,7 +40,7 @@ fn check_function_walks_the_fields_of(here: ref ParsedView, body: ref Block, par
     return false
 }
 
-/// **Whether this body asks `P::kind` or `P::name`** (ADR-330 D2), other than
+/// **Whether this body asks `P::kind`, `P::name`, `P::access` or `P::doc`** (ADR-330 D2), other than
 /// as a function it calls.
 fn check_function_reflects_on(here: ref ParsedView, body: ref Block, parameter: ref String) -> bool {
     let mut called: collections::BTreeSet[u32] = collections::BTreeSet()
@@ -60,7 +60,7 @@ fn check_function_reflects_on(here: ref ParsedView, body: ref Block, parameter: 
             Expr::Path(segments, at) => {
                 if segments.len() == 2 && !called.contains(at.get()) {
                     let member = here.text(segments[1])
-                    if here.text(segments[0]) == parameter && (member == "kind" || member == "name") {
+                    if here.text(segments[0]) == parameter && (member == "kind" || member == "name" || member == "access" || member == "doc") {
                         return true
                     }
                 }
@@ -301,6 +301,85 @@ fn grown_text_of(words: ref winnow_grammar::InternerContext, body: ref Block) ->
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     check_function_grown_in(words, body, out)
     return out
+}
+
+/// **Where a given cut's text leaves the function** (ADR-text-reuse-1 D2,
+/// #1589): a use of a name bound to a giving cut (`given_names`) that is
+/// returned, put into a container (`push`, `insert`, ...), stored in a place
+/// that is not a local (`row.name = rest`, `xs[i] = rest`) or is the body's
+/// last value. There the emitter shrinks the buffer (`shrunk_leaves`); a use
+/// that stays a local is not shrunk, since it may grow again.
+fn check_function_shrunk_leaves(mut state: CheckState, words: ref winnow_grammar::InternerContext, body: ref Block) sync {
+    if state.facts.given_names.is_empty() {
+        return
+    }
+    let mut leaving: Vec[ref Expr] = []
+    check_function_leaving_in(body, leaving)
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Return(value, _) => {
+                match value {
+                    null => {},
+                    left => leaving.push(left),
+                }
+            },
+            Expr::MethodCall { method, args, .. } => {
+                if puts_its_argument(words.resolve(method)) {
+                    for arg in args {
+                        leaving.push(arg)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    if body.stmts.len() > 0 {
+        match body.stmts[body.stmts.len() - 1].node {
+            Stmt::Expr(value) => leaving.push(value),
+            else => {},
+        }
+    }
+    for value in leaving {
+        match value {
+            Expr::Variable(_, _) => {
+                let named = state.facts.declared.get(node_key(value)) ?? continue
+                match named {
+                    CheckDeclared::Binding(id) => {
+                        if state.facts.given_names.contains(id) {
+                            state.facts.shrunk_leaves.insert(node_key(value))
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// The `return`s and the stores into a place that is not a local, in a block
+/// and the blocks inside it.
+fn check_function_leaving_in(block: ref Block, mut out: Vec[ref Expr]) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Return(value) => {
+                match value {
+                    null => {},
+                    left => out.push(left),
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                match target {
+                    Expr::Variable(_, _) => {},
+                    else => out.push(value),
+                }
+            },
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            check_function_leaving_in(inner, out)
+        }
+    }
 }
 
 /// **The text a cut is cut from** (ADR-text-reuse-1 D2, #1589): `line[a..b]`
@@ -1059,6 +1138,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.data_handed_over_is_used_again()
     // Before `needless_clones_said`, which clears the loans it reads.
     state.replaces_at_last_use_said()
+    check_function_shrunk_leaves(state, world.here.words, body)
     state.flow.lone_texts = outer_lone
     state.needless_clones_said()
     state.reads_on_paths.clear()
