@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1450] — 2026-11-19
+
+**Builders' changes (#1962, #2108, #2161, #797)**
+- The prover now states an i64's and a u64's overflow goal within ±2^62 and proves guarded outside-data operations; NK1207 for an i64 only where the operation really leaves the type.
+- `nikaia run scripts/solver.nika -- run --cases N` gives the new engine a case budget past the build-time one; the solver's regression set pins the rings_preprocessed file ours now proves in about 8 s (z3 and cvc5 also solve it)
+- Solver: QF_LIA 20220307-SMPT solves 356 of 371, up from 338: the equality elimination substitutes in place and tidies only the bounds that changed, and two sorted assumption sets are merged instead of looked up literal by literal, in the solver and the certificate checker
+- `--bounds` now gives an outside operation over a `let mut` whole number a goal when the prover cannot read the binding's value or a reassignment: the binding is a fresh loose name of its type (ADR-361 D9), so examples/http row 434 reads "not proved within ±2^62".
+- `nikaia check --bounds` proves an index by a `comptime` whose value a call computed, as it did for a literal one, and its report now checks the file as the build does (with the program's files and reads, as `--asserts`)
+- Named properties (ADR-381): `assert(is_sorted(xs))` is proved by name, holds until `xs` may change, is carried to callers as a precondition, known after a call from its postcondition and wherever a type's rule says it, and checked once at the first caller; `--asserts` says where a proved claim is known from.
+
 ## [0.0.1449] — 2026-11-19
 
 **NK1301 refuses .to_string() on text, with a fix edit; the sites are migrated (ADR-text-reuse-1 D1)**
