@@ -299,5 +299,7 @@ carried it before they were archived.
 | [032](adr-032.md) D5 | [035](adr-035.md) | a brace deciding a literal's type — the `f` decides it now |
 | [350](adr-350.md) | A Test That Proves a `T?` Is Not `null` Makes It a `T` | [ADR-382](../../specification/adr/adr-382.md) | D1→D1, D2→D2, D3→D3, D4→D4-D6 |
 | [339](adr-339.md) | A Grammar Can Say Where a Match Was (`span(p)`, `here`) and Whether a Line Break Precedes It (`same_line`); `///` Is a Rule, and No Grammar Declares a State or an `extern rule` | [ADR-grammar-syntax-v1](../../specification/adr/adr-grammar-syntax-v1.md) | D1→D16, D2→D17, D3→D18, D4→D19 |
+| [366](adr-366.md) | A Grammar Reads `Bytes` as Readily as Text; What Becomes Text Is Checked Where It Becomes Text | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D5 |
+| [388](adr-388.md) | The Table a Grammar Interns Into Is the Caller's, Handed to the Entry as `words:` | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D10, D2→D11, D3→D12 |
 | [353](adr-353.md) | A Result's Views Point Where the Body Says, and a Viewed Buffer Outlives Its Owner's Name | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D8, D2→D8, D3→D9, D4→D9, D5→D10, D6→D9, D7→D10, D8→D9, D9→D9, D10→D10 |
 | [354](adr-354.md) | An Element or a Field Read off a Place Is a View Where a `ref T` Is Declared, and a Word Is Not | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D5, D2→D4, D3→D4 |

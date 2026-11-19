@@ -4,7 +4,7 @@ error[NK1330]: `words::Interned::all` hands back `Vec[winnow_grammar::Symbol]`, 
  6 | 	println(words::Interned::all("x;y;").len())
    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+   = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-grammar-input-v1 D11).
    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `words::Interned::all(input; words: table)`; `table.resolve(symbol)` reads a name back.
 error[NK1109]: `words::Interned::plain` has no option called `words`.
   --> TMP/app/src/main.nika:7:2

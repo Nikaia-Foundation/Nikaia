@@ -472,7 +472,7 @@ pub fn read_dir(path: impl AsRef<FilePath>, root: &Root) -> Result<DirEntries, c
 /// D5): mapping checks nothing, and [`Mapped::text`] checks the whole of it
 /// as UTF-8 the first time it is asked for and never again.
 ///
-/// ADR-296 D15 allows a large read-only mapping to be left to the OS at process
+/// ADR-grammar-input-v1 D13 allows a large read-only mapping to be left to the OS at process
 /// exit. Nothing here does that yet: the mapping is released when the value is
 /// dropped, and the drop is what `main` returning costs.
 ///

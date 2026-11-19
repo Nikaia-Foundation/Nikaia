@@ -96,14 +96,14 @@ pub enum Extent {
 }
 
 /// What a grammar's entry reads. Today every entry takes text or `Bytes`
-/// (ADR-366 D1), both held whole.
+/// (ADR-grammar-input-v1 D1), both held whole.
 ///
 /// **ADR-367 D2: this is the one place that decides the extent.** An entry
 /// that reads input arriving while it parses (a winnow `Partial`, a stream)
 /// must answer [`Extent::Unbounded`] here, and so must any kind of input this
 /// function does not know yet: there is no step count over a stream.
 pub fn input_extent(_grammar: &GrammarDef) -> Extent {
-    // No grammar reads a stream today (ADR-366 D1): text and `Bytes` only.
+    // No grammar reads a stream today (ADR-grammar-input-v1 D1): text and `Bytes` only.
     // When one does, its entry is told apart here and gives `Unbounded`.
     Extent::Known
 }

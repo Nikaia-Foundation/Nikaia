@@ -147,7 +147,7 @@ where
 }
 
 /// [`parse`] interning into the caller's table
-/// ([ADR-388](../../../docs/specification/adr/adr-388.md) D1, D3):
+/// ([ADR-grammar-input-v1](../../../docs/specification/adr/adr-grammar-input-v1.md) D10, D12):
 /// `G::rule(text; words: table)`, so every symbol the parse yields reads its
 /// text from `words` after the call.
 pub fn parse_in<'a, S, O>(
@@ -220,7 +220,7 @@ fn in_pieces<O: Send>(
     crate::par::on_workers(options.limit, move || run(how))
 }
 
-/// [`parse`] over a `Bytes` (ADR-366 D1): `rule` is the entry of the grammar's
+/// [`parse`] over a `Bytes` (ADR-grammar-input-v1 D1): `rule` is the entry of the grammar's
 /// copy that declares `input bytes;`, and a failure is rendered against the
 /// bytes.
 pub fn parse_bytes<'a, O>(
@@ -320,7 +320,7 @@ pub fn covered<'a, S: Clone + std::fmt::Debug>(
 }
 
 /// [`covered`] over a `Bytes`: the covered bytes checked as UTF-8 where they
-/// become text, failing as the backend's `text(p)` does (ADR-366 D2).
+/// become text, failing as the backend's `text(p)` does (ADR-grammar-input-v1 D2).
 #[doc(hidden)]
 pub fn covered_bytes<'a, S, E>(
     input: &mut winnow_grammar::ParseBytes<'a, S>,

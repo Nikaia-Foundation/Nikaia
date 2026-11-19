@@ -2,7 +2,7 @@
 //
 // **The grammars the emitter writes**, moved from `emit/mod.rs` (ADR-294,
 // #125, #558, E10-1): `grammar! { .. }` for a grammar and, after it, its copy
-// over bytes (ADR-366 D1), the options of a `par_fold` entry (ADR-372 D6), and
+// over bytes (ADR-grammar-input-v1 D1), the options of a `par_fold` entry (ADR-372 D6), and
 // each rule with its alternatives and actions. A pattern and a type are
 // written by the host; an action is a block of Nikaia.
 
@@ -216,7 +216,7 @@ fn emit_text_binding(world: ref EmitWorld, walk: ref EmitWalk, said: String, arg
 }
 
 /// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
-/// action to see as bytes (ADR-366 D4).
+/// action to see as bytes (ADR-grammar-input-v1 D4).
 fn emit_bytes_bindings(world: ref EmitWorld, pattern: ref Pattern, mut found: Vec[String]) {
     match pattern {
         Pattern::Bind { name, pat } => {
@@ -273,7 +273,7 @@ fn emit_parallel_fold(spec: ref FoldSpec) -> FoldSpec? {
 
 impl EmitState {
     /// A grammar, and where a call enters it with a `Bytes`, its copy over
-    /// bytes after it (ADR-366 D1): the backend reads one input per grammar
+    /// bytes after it (ADR-grammar-input-v1 D1): the backend reads one input per grammar
     /// (winnow-grammar ADR 25).
     fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
         let name = emit_text(world, def.name)
@@ -346,7 +346,7 @@ impl EmitState {
     /// values, owned, then each option as `Option`, `None` where the caller
     /// left it out: the default is evaluated here, where it is declared and
     /// visible (ADR-grammar-syntax-v1 D12, #1512), and last the caller's `words:`
-    /// table, shared, where it hands one (ADR-388 D1).
+    /// table, shared, where it hands one (ADR-grammar-input-v1 D10).
     fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
@@ -651,7 +651,7 @@ impl EmitState {
                     self.emit_pattern(world, walk, out, host, alt.pattern)
                     out.push("\n            -> ")
                     // In a text grammar the backend has no `bytes(p)`: it is
-                    // `text(p)` there, and the action sees its bytes (ADR-366
+                    // `text(p)` there, and the action sees its bytes (ADR-grammar-input-v1
                     // D4).
                     let mut as_bytes: Vec[String] = []
                     if !bytes {

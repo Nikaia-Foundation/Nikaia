@@ -1,4 +1,4 @@
-// ADR-388 D1, D2 (#1198): an entry whose result holds a `Symbol` runs when it
+// ADR-grammar-input-v1 D10, D11 (#1198): an entry whose result holds a `Symbol` runs when it
 // is handed the table, a table the caller owns lent as to a `ref` parameter,
 // the symbol in a field or a variant; an entry that interns only on the way,
 // its result holding no symbol, still runs without `words:`.
