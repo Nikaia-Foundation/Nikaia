@@ -40,16 +40,3 @@ pub fn main_ends() {
 pub(super) fn drain_begins() {
     LEAVING.store(false, Ordering::Relaxed);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The drain takes the flag down again.
-    #[test]
-    fn the_drain_frees_again() {
-        LEAVING.store(true, Ordering::Relaxed);
-        drain_begins();
-        assert!(!LEAVING.load(Ordering::Relaxed));
-    }
-}

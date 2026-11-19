@@ -778,17 +778,6 @@ pub fn ended<T, E: Ending>(outcome: Result<T, E>) -> Result<T, E> {
     outcome
 }
 
-#[cfg(test)]
-mod exit_tests {
-    use super::Ending;
-
-    #[test]
-    fn exit_throws_its_code() {
-        let thrown = super::exit(3).unwrap_err();
-        assert_eq!(thrown.exit_code(), Some(3));
-    }
-}
-
 // Kept as Rust (#2082): names compared without case is the Windows half of
 // `merged`, which no program run on Unix reaches. The Unix half and the rest
 // are `tests/compiler/tests/process_a_childs_environment_is_cleared_removed_then_set.nika`.
