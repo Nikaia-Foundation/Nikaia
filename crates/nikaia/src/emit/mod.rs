@@ -318,6 +318,31 @@ pub fn emit_program(parsed: &Parsed, build: Build) -> Result<Lowered> {
     Emitter::new(parsed, build, trust.provenance).program()
 }
 
+/// The same, handed the ledger of `parsed` and its checked unit, both of
+/// the ledger's pass over this one file against `std` that the caller already
+/// ran (`Ledger::infer_package_checked`): neither is inferred again (#2150).
+/// What [`emit_program`] does, with the two passes it runs left out.
+pub fn emit_program_inferred(
+    parsed: &Parsed,
+    build: Build,
+    own: crate::contracts::Ledger,
+    checked: &[crate::check::Checked],
+) -> Result<Lowered> {
+    let trust = crate::contracts::trust::analyse_checked(parsed, std_ledger(), checked);
+    Emitter::with_contracts(
+        parsed,
+        &[],
+        build,
+        trust.provenance,
+        own,
+        &crate::contracts::Ledger::blank(),
+        &Reads::none().building_nowhere(),
+        None,
+        None,
+    )
+    .program()
+}
+
 /// The same, told what this build may read while it builds
 /// ([ADR-310](../../docs/specification/adr/adr-310.md)).
 ///

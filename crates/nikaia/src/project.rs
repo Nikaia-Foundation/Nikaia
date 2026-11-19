@@ -4330,8 +4330,14 @@ fn runtime_dependencies(
         // a program that declined it builds `std` without it. The compiled-`std`
         // cache keys on the word too (`Sysroot::rlib_cache`), or the second
         // project on this machine would link the first one's answer.
+        // The rest of the default stays on: a program's `std` is whole, sockets
+        // and the file ring with it (`async-io`, #2152).
         if !reentrancy_check.is_on() {
             table.insert("default-features".to_string(), toml::Value::Boolean(false));
+            table.insert(
+                "features".to_string(),
+                toml::Value::Array(std::vec![toml::Value::String("async-io".to_string())]),
+            );
         }
         out.insert("nikaia-std".to_string(), toml::Value::Table(table));
     }

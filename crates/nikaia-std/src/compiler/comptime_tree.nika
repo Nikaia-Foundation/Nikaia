@@ -6,6 +6,8 @@
 // hands its items here, with the interner that answers the copy's symbols.
 
 use std::collections
+use std::fs
+use std::hash
 
 /// The name the sub-program hands the value back under.
 pub comptime VALUE_FN: ref String = "__nikaia_comptime_value"
@@ -810,9 +812,10 @@ pub trait ComptimeComputeHost {
     /// The ledger `units` come to against `std` and `packages`, each under
     /// its name.
     fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
-    /// Unit `unit` lowered alone, its steps counted; `null` where the
-    /// emitter refused it.
-    fn lowered_alone(ref self, unit: i64) -> ComptimeLowered? sync
+    /// Unit `unit` lowered alone, its steps counted, from `derived`, the
+    /// ledger `derived` gave it (#2150: not inferred again); `null` where
+    /// the emitter refused it.
+    fn lowered_alone(ref self, unit: i64, derived: ref Ledger) -> ComptimeLowered? sync
     /// `units` lowered as one program with `units[here]` as the entry, its
     /// steps counted (`comptime_lowered_units`); `null` where the emitter
     /// refused one.
@@ -842,6 +845,19 @@ pub trait ComptimeComputeHost {
     /// type `ty` came to. `value` is part of the key: a constant in a turn
     /// has one name and a value per field.
     fn remember(ref self, here: i64, bound: ref String, value: ref Expr, ty: ref Ty, came_to: ref BuildValue) sync
+    /// **What `bound` in file `here`, written `value`, with type `ty`, is
+    /// kept on disk under** (ADR-321 D4, #2149), as text: the program's
+    /// files read from their sources (not from an interner's numbers, which
+    /// differ between processes), the constant, the bounds of the run, the
+    /// compiler, the toolchain, the bundle's stamp and the CPU level; empty
+    /// where there is no build-time directory or bundle to compute it in.
+    fn value_key(ref self, here: i64, bound: ref String, value: ref Expr, ty: ref Ty) -> String sync
+    /// Where the user's cache is (`Layout::user_cache_dir`).
+    fn user_cache_dir(ref self) -> fs::Path sync
+    /// The cache entry `at` marked used, so that a pruning sees it.
+    fn use_entry(ref self, at: ref fs::Path) sync
+    /// A path beside `path` that no other build writes.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
     /// The `comptime`s file `at` declares, in order (`comptime_declared_of`).
     fn comptimes_of(ref self, at: i64) -> Vec[ComptimeDeclared] sync
     /// `value` of file `at` folded as literals, with `known` for the constants.
@@ -855,7 +871,56 @@ pub trait ComptimeComputeHost {
 /// for what earlier `comptime`s came to. The rule is asked first (D2), of the
 /// ledger entry derived for the function that hands the value back: every
 /// call it reaches, by name or on a value.
-pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> CheckComputed sync {
+///
+/// **A value unchanged since it was last computed is read from disk first**
+/// (ADR-321 D4, #2149), before its program is made: the key is the program's
+/// sources, the constant, the toolchain and the build's parameters
+/// (`value_key`), so a hit costs what a literal does and asks neither the
+/// rule nor the emitter. The rule is asked on a miss only, which is sound:
+/// everything it reads is in the key. A wall is not kept: it is cheap to
+/// meet again, and its words name the program.
+pub fn comptime_value_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> CheckComputed {
+    match host.remembered(here, bound, value, ty) {
+        null => {},
+        value => return CheckComputed::Value(value),
+    }
+    let mut answered: String = ""
+    let key = host.value_key(here, bound, value, ty)
+    if key.is_empty() {
+        return comptime_computed(host, here, bound, value, ty, known, typed, answered)
+    }
+    let bytes: Vec[u8] = key.bytes().collect()
+    let entry = host.user_cache_dir().join(COMPTIME_VALUE_DIR).join(hash::sha256_hex(bytes))
+    let kept = entry.join("answer")
+    host.use_entry(entry)
+    match fs::read_to_string(kept, fs::Root::Anywhere) catch { null } {
+        null => {},
+        text => {
+            match host.decode(text) {
+                null => {},
+                found => {
+                    host.remember(here, bound, value, ty, found)
+                    return CheckComputed::Value(found)
+                },
+            }
+        },
+    }
+    let computed = comptime_computed(host, here, bound, value, ty, known, typed, answered)
+    // **A value that could not be kept is computed again next time**: the
+    // cache saves work and decides nothing, so a write that failed is not
+    // the check's refusal.
+    if !answered.is_empty() {
+        comptime_bundle_write_if_changed(kept, answered, host.unique_beside(kept)) catch {}
+    }
+    return computed
+}
+
+/// Where a computed value is kept, under the user's cache.
+pub comptime COMPTIME_VALUE_DIR: ref String = "comptime-value"
+
+/// **Compute the value of `comptime` `bound`** in file `here`; `answered` is
+/// set to the text the run handed back where a run answered.
+pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, mut answered: String) -> CheckComputed sync {
     let not_here: fn(ref String) -> CheckComputed sync = fn(why) { CheckComputed::NotHere(why.clone()) }
     match host.remembered(here, bound, value, ty) {
         null => {},
@@ -908,7 +973,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
             return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn")
         }
         let known = fn(name) { known(name) ?? ahead.get(name)?.clone() }
-        return comptime_computed(host, here, bound, value, ty, known, typed)
+        return comptime_computed(host, here, bound, value, ty, known, typed, answered)
     }
     // **A dependency's functions are the program's to call** (ADR-321 D13):
     // each package's units are derived on their own, and the program's
@@ -942,6 +1007,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
         null => not_here(COMPTIME_NOT_READ),
         computed => {
             host.remember(here, bound, value, ty, computed)
+            answered = answer.clone()
             CheckComputed::Value(computed)
         },
     }
@@ -989,7 +1055,7 @@ fn comptime_forbidden_callee[H: ComptimeComputeHost](host: ref H, here: i64, val
 /// reports a stop, computes the value and writes it (`cr_with_driver`).
 fn comptime_driven[H: ComptimeComputeHost](host: ref H, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger], ty: ref Ty) -> ComptimeDriven sync {
     let found: ComptimeLowered? = match units.len() {
-        1 => host.lowered_alone(units[here]),
+        1 => host.lowered_alone(units[here], derived),
         else => host.lowered_units(units, here, derived, packages),
     }
     let lowered = found ?? return ComptimeDriven::NotLowered
@@ -1031,7 +1097,8 @@ fn comptime_worked_out_ahead[H: ComptimeComputeHost](host: ref H, bound: String,
                     null => null,
                     written => {
                         let ty = host.ty_of(at, written)
-                        match comptime_computed(host, at, named, item.value, ty, known, typed) {
+                        let mut answered: String = ""
+                        match comptime_computed(host, at, named, item.value, ty, known, typed, answered) {
                             CheckComputed::Value(value) => value,
                             else => null,
                         }

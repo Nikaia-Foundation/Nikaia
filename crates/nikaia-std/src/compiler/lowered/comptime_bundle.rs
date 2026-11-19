@@ -107,6 +107,125 @@ pub(crate) fn comptime_bundle_artifacts(messages: &str, named: &[String], librar
 
 pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { nikaia_std::block::Text::from(name.to_string()) }).collect::<Vec<_>>() }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeBundleToolchain {
+    pub version: String,
+    pub verbose: String,
+}
+
+pub async fn comptime_bundle_toolchain<H: ComptimeBundleHost>(host: &H) -> ComptimeBundleToolchain {
+    let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into());
+    let outer = comptime_bundle_digest(&comptime_bundle_toolchain_stamp(&rustc, host));
+    let short: String = outer.chars().take(16).collect();
+    let held_at = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(host.user_cache_dir()), std::path::Path::new(&("toolchain")))), std::path::Path::new(&(short)));
+    let held = match fs::read_to_string(&held_at, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    };
+    match comptime_bundle_toolchain_held(&held, &outer) {
+        None => { },
+        Some(answers) => { return answers; },
+    }
+    let start = nikaia_std::fs::path::display(&(host.where_tools_start()));
+    let printed = match process::run(&rustc, vec![String::from("--print"), String::from("sysroot")], &start, vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
+        Ok(value) => Some(value),
+        Err(_error) => { None },
+    };
+    let sysroot = match printed {
+        None => "",
+        Some(ref ran) if ran.ok => ran.stdout.trim(),
+        _ => "",
+    };
+    let inner = comptime_bundle_toolchain_inner(sysroot);
+    let asked = match process::run(&rustc, vec![String::from("-vV")], &start, vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
+        Ok(value) => value,
+        Err(_error) => { return ComptimeBundleToolchain { version: String::from(""), verbose: String::from("") }; },
+    };
+    let verbose = &asked.stdout;
+    let answers = ComptimeBundleToolchain { version: comptime_bundle_first_line(verbose), verbose: nikaia_std::block::Text::from(verbose.to_string()) };
+    if !asked.ok || verbose.is_empty() || sysroot.is_empty() || inner.contains(" -\n") { return answers; }
+    let text = format!("{}\n{}\n{}\n{}", outer, sysroot, comptime_bundle_digest(&inner), verbose);
+    match comptime_bundle_write_if_changed(&held_at, &text, &host.unique_beside(&held_at)).await {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
+    answers
+}
+
+pub(crate) fn comptime_bundle_toolchain_held(text: &str, outer: &str) -> Option<ComptimeBundleToolchain> {
+    let (first, rest) = match text.split_once("\n") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if AsRef::<str>::as_ref(&(first)) != AsRef::<str>::as_ref(&(outer)) { return None; }
+    let (sysroot, after) = match rest.split_once("\n") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (inner, verbose) = match after.split_once("\n") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if verbose.is_empty() || AsRef::<str>::as_ref(&(inner)) != AsRef::<str>::as_ref(&(comptime_bundle_digest(&comptime_bundle_toolchain_inner(sysroot)))) { return None; }
+    Some(ComptimeBundleToolchain { version: comptime_bundle_first_line(verbose), verbose: nikaia_std::block::Text::from(verbose.to_string()) })
+}
+
+pub(crate) fn comptime_bundle_first_line(text: &str) -> String {
+    match text.split_once("\n") {
+        None => format!("{}\n", text),
+        Some((line, _)) => format!("{}\n", line),
+    }
+}
+
+pub(crate) fn comptime_bundle_toolchain_stamp<H: ComptimeBundleHost>(rustc: &str, host: &H) -> String {
+    let mut stamp: String = String::from("");
+    for name in ["RUSTC", "RUSTUP_TOOLCHAIN", "RUSTUP_HOME", "CARGO_HOME", "HOME"] {
+        let line = match env::var(name) {
+            None => format!("{} unset\n", name),
+            Some(ref value) => format!("{}={}\n", name, value),
+        };
+        stamp.push_str(&line);
+    }
+    if rustc.contains('/') {
+        let named: fs::Path = std::path::PathBuf::from(rustc);
+        stamp.push_str(&comptime_bundle_file_stamp(&named));
+    }
+    let path = nikaia_std::index::or(env::var("PATH"), || "".into());
+    for dir in path.split(':') {
+        let at: fs::Path = std::path::PathBuf::from(dir);
+        let candidate = nikaia_std::fs::path::join(&(at), std::path::Path::new(&("rustc")));
+        let meta = match fs::metadata(&candidate, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        if meta.is_file() { stamp.push_str(&comptime_bundle_file_stamp(&candidate)); }
+    }
+    let home = nikaia_std::index::or(env::var("HOME"), || "".into());
+    let rustup = nikaia_std::index::or(env::var("RUSTUP_HOME"), || format!("{}/.rustup", home).into());
+    let rustup_home: fs::Path = std::path::PathBuf::from(rustup);
+    stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("settings.toml")))));
+    stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("toolchains")))));
+    let mut dir = host.where_tools_start();
+    stamp.push_str(&format!("start {}\n", nikaia_std::fs::path::display(&(dir))));
+    loop {
+        for name in ["rust-toolchain", "rust-toolchain.toml"] { stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))))); }
+        let up = match nikaia_std::fs::path::parent(&(dir)) { Some(__nikaia_value) => __nikaia_value, None => break };
+        dir = nikaia_std::fs::path::clone(&(up));
+    }
+    stamp
+}
+
+pub(crate) fn comptime_bundle_toolchain_inner(sysroot: &str) -> String {
+    let root: fs::Path = std::path::PathBuf::from(sysroot);
+    let mut stamp = comptime_bundle_file_stamp(&root);
+    stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("bin")))), std::path::Path::new(&("rustc")))));
+    stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("lib")))));
+    stamp
+}
+
+pub(crate) fn comptime_bundle_file_stamp(path: &std::path::Path) -> String {
+    let meta = match fs::metadata(path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return format!("{} -\n", nikaia_std::fs::path::display(&(path))); },
+    };
+    let id = match meta.file_id() {
+        None => String::from("?"),
+        Some((dev, ino)) => format!("{}:{}", dev, ino),
+    };
+    format!("{} {} {} {}\n", nikaia_std::fs::path::display(&(path)), meta.len() as i64, meta.modified().in_nanos(), id)
+}
+
 pub(crate) fn comptime_bundle_digest(text: &str) -> String {
     let bytes: Vec<u8> = text.bytes().collect::<Vec<_>>();
     hash::sha256_hex(&bytes)
@@ -224,8 +343,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let named = COMPTIME_BUNDLE_NAMED.len() as i64;
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(3).take(nikaia_std::count::of(named)).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14845| {
-        let (name, rlib) = __nikaia_tuple14845;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(3).take(nikaia_std::count::of(named)).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple21834| {
+        let (name, rlib) = __nikaia_tuple21834;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != named { return None; }

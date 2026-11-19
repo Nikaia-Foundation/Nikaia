@@ -1,0 +1,44 @@
+// #2149, ADR-321 D4: a `comptime` whose program's sources did not change
+// since it was last computed is read from the user's cache before its
+// build-time program is written. The key holds the program's sources, so a
+// change to the callee's body is a miss and gives the new value; a change to
+// a file the initialiser does not reach misses too and gives the same value.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn ran(nikaia: String, p: String) -> String throws {
+	let out = process::run(nikaia, ["run"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0")])
+	return f"{out.stdout.trim()} (exit {out.code})"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let p = f"{tmp}/p"
+	process::run("mkdir", ["-p", f"{p}/src"])
+	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"side\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, "fn square(n: i64) -> i64 sync {\n\treturn n * n\n}\n\ncomptime SIDE: i64 = square(12)\n\nfn main() throws {\n\tprintln(SIDE)\n}\n")
+	fs::write(f"{p}/src/other.nika", fs::Root::Anywhere, "pub fn unrelated() -> i64 {\n\treturn 1\n}\n")
+	println(f"first: {ran(nikaia, p)}")
+	println(f"again: {ran(nikaia, p)}")
+	process::run("sed", ["-i", "s/n \\* n/n * n + 1/", "src/main.nika"]; dir: p.clone())
+	println(f"callee changed: {ran(nikaia, p)}")
+	process::run("sed", ["-i", "s/return 1/return 2/", "src/other.nika"]; dir: p.clone())
+	println(f"other file changed: {ran(nikaia, p)}")
+	process::run("rm", ["-rf", tmp])
+}

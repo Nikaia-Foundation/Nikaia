@@ -110,6 +110,17 @@ pub fn analyse_package_checked(
     join(package, None, library, Some(checked))
 }
 
+/// [`analyse`], for a caller that already ran the ledger's pass over this
+/// one file against this `library`: its checked unit is what the join would
+/// compute again (#2150).
+pub fn analyse_checked(
+    parsed: &Parsed,
+    library: &Ledger,
+    checked: &[crate::check::Checked],
+) -> Trust {
+    join(&[parsed], Some(parsed), library, Some(checked))
+}
+
 /// One file's roots, with the provenance and the reasons of the **package**
 /// it is a file of: what `--trust` prints per file, and what the emitter
 /// writes for it, are the one answer.
