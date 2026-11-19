@@ -114,7 +114,7 @@ fn the_emitted_rust_is_the_file_this_test_compiles() {
 #[test]
 fn a_frame_becomes_the_backend_attribute() {
     let emitted = emit(FIXTURE, Build::default());
-    // ADR-296 D9: keyed, and the boundary keeps its escape - the backend is
+    // ADR-grammar-parallel-v1 D1: keyed, and the boundary keeps its escape - the backend is
     // handed the same "\n" the source wrote.
     assert!(
         emitted.contains(r#"#[frame(boundary = "\n")]"#),
@@ -145,7 +145,7 @@ fn a_view_takes_the_input_lifetime_and_the_struct_with_it() {
 #[test]
 fn a_bare_par_fold_gets_the_binding_its_rule_needs() {
     let emitted = emit(FIXTURE, Build::default());
-    // A `par_fold` is the whole body of its rule (ADR-296 D10), so there is
+    // A `par_fold` is the whole body of its rule (ADR-grammar-parallel-v1 D2), so there is
     // nothing for an action to add - and the emitter supplies the one the
     // backend wants rather than making the user write it.
     assert!(
@@ -195,7 +195,7 @@ fn summarize() {
 
 #[test]
 fn user_parallelism_chooses_the_parallelism_and_nothing_else() {
-    // ADR-296 D10 and ADR-037 D2: parallelism is not a dialect. The same source
+    // ADR-grammar-parallel-v1 D2 and ADR-037 D2: parallelism is not a dialect. The same source
     // compiles at either setting; at `0` the driver is told not to cut, which
     // is what "degrades to a sequential fold" means in code.
     let parallel = emit(WITH_DSL, Build::parallel());
@@ -248,7 +248,7 @@ fn a_target_without_threads_pins_the_driver_sequential() {
 #[test]
 fn a_sequential_entry_rule_gets_no_piece_driver() {
     // Without a `par_fold` there is nothing to cut and nothing to merge, so the
-    // lowering drives the rule's own parser over the whole input (ADR-296 D19).
+    // lowering drives the rule's own parser over the whole input (ADR-grammar-parallel-v1 D5).
     let source = format!("{DIGITS}\n\nfn read() {{\n    let p = Digits::pair(data)\n}}\n");
     let emitted = emit(&source, Build::default());
 
@@ -286,7 +286,7 @@ fn a_dsl_with_a_catch_is_handed_the_result_and_not_the_value() {
 /// The backend's error knows an offset and not the text it came from, so only
 /// the driver can turn one into a line and a column - and it is the only place
 /// that has both. Without this a program that rejects a file says *what* was
-/// expected and never *where* (ADR-296 D11, `docs/error-corpus.md`).
+/// expected and never *where* (ADR-grammar-parallel-v1 D3, `docs/error-corpus.md`).
 ///
 /// **And what comes out of it has a name**
 /// ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md) D4): the rendered

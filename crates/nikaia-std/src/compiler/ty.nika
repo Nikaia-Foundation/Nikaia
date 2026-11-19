@@ -1677,7 +1677,7 @@ pub struct FnContract {
     /// `t.counts: from(word)`, `seen: keyed`. A map no line covers is keyed.
     pub maps: Vec[String],
     pub ends_by_length: bool,
-    /// **A grammar entry whose body is a `par_fold`** (ADR-296 D19, #521):
+    /// **A grammar entry whose body is a `par_fold`** (ADR-grammar-parallel-v1 D5, #521):
     /// a consumer in another package drives it in pieces, as the grammar's own
     /// file does. Written only where it holds.
     pub pieces: bool,

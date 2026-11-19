@@ -402,7 +402,7 @@ const cases = [
     // scope on a word the language still has and a program still writes, so
     // what this holds is the rule - an attribute is coloured as one - rather
     // than a word that left.
-    name: "an attribute is a modifier (ADR-296 D9)",
+    name: "an attribute is a modifier (ADR-grammar-parallel-v1 D1)",
     src: `grammar Log {\n    @frame(boundary: "\\n")\n    rule LINE -> i64 = n:dec[i64](digit+) -> { n }\n}\n`,
     expect: [["@frame", "storage.modifier.attribute.nika"]],
   },

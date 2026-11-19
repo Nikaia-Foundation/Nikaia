@@ -356,6 +356,12 @@ impl EmitState {
             out.push("\"")
             return
         }
+        // **`field.ty::access` is a `meta::Access` case** (ADR-330 D8).
+        let reached = self.reflected_field_type(world, walk, base, name, "ty::access")
+        if reached != null {
+            out.push(f"nikaia_std::meta::Access::{emit_access_of(reached ?? "")}")
+            return
+        }
         // **`field.ty::name` is the field's type as text** (ADR-330 D2, D5).
         let typed = self.reflected_field_type(world, walk, base, name, "ty::name")
         if typed != null {

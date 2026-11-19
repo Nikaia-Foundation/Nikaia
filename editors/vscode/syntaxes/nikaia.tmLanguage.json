@@ -684,7 +684,7 @@
     },
 
     "frame-attribute": {
-      "comment": "ADR-296 D9. `@frame`, `@frame(boundary: \"\\n\")`, `@frame(boundary: \"\\n\", unchecked)` — a keyed list, so a later cut-point key can be added without changing what the existing ones mean.",
+      "comment": "ADR-grammar-parallel-v1 D1. `@frame`, `@frame(boundary: \"\\n\")`, `@frame(boundary: \"\\n\", unchecked)` — a keyed list, so a later cut-point key can be added without changing what the existing ones mean.",
       "match": "(@frame)\\b",
       "captures": {
         "1": { "name": "storage.modifier.attribute.frame.nika" }
@@ -729,7 +729,7 @@
     },
 
     "grammar-unchecked": {
-      "comment": "ADR-296 D9: `@frame(boundary: \"\\n\", unchecked)` skips the cut-point check. You assert the invariant, as with `unsafe`, and the word is there to grep for — so it gets a scope of its own.",
+      "comment": "ADR-grammar-parallel-v1 D1: `@frame(boundary: \"\\n\", unchecked)` skips the cut-point check. You assert the invariant, as with `unsafe`, and the word is there to grep for — so it gets a scope of its own.",
       "name": "keyword.other.unchecked.nika",
       "match": "\\bunchecked\\b"
     },

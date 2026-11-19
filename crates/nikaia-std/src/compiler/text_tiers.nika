@@ -5839,6 +5839,10 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::Field { base, .. } => field_kinds(expr, base, ask, walk),
         Expr::SafeField { base, .. } => field_kinds(expr, base, ask, walk),
         Expr::Index { base, index, .. } => {
+            // **A cut reads what it cuts**, as a method that views its
+            // receiver does (ADR-views-3 D12, #2321): `return s` beside
+            // `return s[i..]` lends `s` as it does beside `return s.trim()`.
+            walk.read_here = a_range(index)
             let received = tier_expr(base, ask, walk)
             tier_expr(index, ask, walk)
             // **A cut of a local that dies at its push into a parameter's
