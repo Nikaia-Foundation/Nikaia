@@ -1480,6 +1480,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {
         state.flow.text_paths.insert(id)
     }
+    // **An `f"…"` with a file's name in it takes its type from its first
+    // use** (ADR-319 D4, #2328): where that use asks for text, its holes are
+    // refused there.
+    if ty == null && check_core_stmt_a_path(bound) {
+        state.a_let_of_names_in_holes(world, id, value)
+    }
     if bound.is_unknown() || state.a_drivers_row(world, value) {
         state.flow.unknown_bound.insert(id)
     }

@@ -21,6 +21,28 @@ fn check_name_wants_text(want: ref Ty) -> bool {
     }
 }
 
+/// What a list literal's items are asked to be where the list is asked to be
+/// `want`: the element of a `Vec`, an `Array` or a run of one (#2328).
+fn check_name_element_wanted(want: ref Ty) -> Ty? {
+    return match want {
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && args.len() >= 1 { args[0].clone() } else { null },
+        Ty::Pointed { item, slice, .. } => if slice { item.clone() } else { null },
+        else => null,
+    }
+}
+
+/// A hole as the help writes it: a name or a field bare, the rest in
+/// parentheses.
+fn check_name_shown_hole(world: ref CheckWorld, hole: ref Expr) -> (String, String) {
+    let written = written_expression(world.words, hole)
+    let shown = match hole {
+        Expr::Variable(_, _) => written.clone(),
+        Expr::Field { .. } => written.clone(),
+        else => f"({written})",
+    }
+    return (written, shown)
+}
+
 impl CheckState {
     /// Whether a path expression is **made from text**, as far as this can
     /// see: a literal, a name that holds text or a name made from text, an
@@ -117,17 +139,67 @@ impl CheckState {
                 }
                 true
             },
+            // **A list's items are asked what its element is** (#2328):
+            // `[f"{p}/x"]` where a `Vec[String]` is asked holds text.
+            Expr::ListLit { items, .. } => {
+                let element = check_name_element_wanted(want) ?? return false
+                let mut answered = false
+                for item in items {
+                    if self.a_name_in_text(world, element, item, span) {
+                        answered = true
+                    }
+                }
+                answered
+            },
+            // **A `let` of such an `f"…"` takes its type from this use**
+            // (ADR-319 D4, #2328).
+            Expr::Variable(symbol, _) => {
+                if !check_name_wants_text(want) {
+                    return false
+                }
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                let holes = self.flow.path_lets[found.id]?.clone() ?? return false
+                for (written, shown) in holes {
+                    self.a_name_written_in_a_hole(written, shown, span)
+                }
+                true
+            },
             else => false,
         }
     }
 
-    fn a_name_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, span: ref Span) sync {
-        let written = written_expression(world.words, hole)
-        let shown = match hole {
-            Expr::Variable(_, _) => written.clone(),
-            Expr::Field { .. } => written.clone(),
-            else => f"({written})",
+    /// **The holes of a `let`'s `f"…"` that hold a file's name**, kept by
+    /// binding for the first use that asks for text (ADR-319 D4, #2328).
+    fn a_let_of_names_in_holes(ref mut self, world: ref CheckWorld, id: i64, value: ref Expr) sync {
+        match value {
+            Expr::LitInterpolated { parts, .. } => {
+                let names = self.facts.path_holes[id_of(value) as i64]?.clone() ?? return
+                let mut holes: Vec[(String, String)] = []
+                let mut index = 0
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            if index < names.len() && names[index] {
+                                holes.push(check_name_shown_hole(world, expr))
+                            }
+                            index = index + 1
+                        },
+                        else => {},
+                    }
+                }
+                self.flow.path_lets.insert(id, holes)
+            },
+            else => {},
         }
+    }
+
+    fn a_name_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, span: ref Span) sync {
+        let (written, shown) = check_name_shown_hole(world, hole)
+        self.a_name_written_in_a_hole(written, shown, span)
+    }
+
+    fn a_name_written_in_a_hole(ref mut self, written: ref String, shown: ref String, span: ref Span) sync {
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201", message: f"You can't put the file name `{written}` in an `f\"…\"` that is text.", notes: ["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text."], help: f"Write `{{{shown}.to_text()}}` to use it as text where it is text, or `{{{shown}.display()}}` to show it.", labels: [], edit: null })
     }
 }
