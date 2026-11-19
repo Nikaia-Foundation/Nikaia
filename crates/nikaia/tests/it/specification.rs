@@ -168,7 +168,7 @@ fn the_specifications_version_is_the_changelogs() {
 ///
 /// **Lowered a second time, from 50 to 49.** Part II 10.1's `grammar Json`
 /// writes a rule's action as the block after the pattern, with no second
-/// arrow ([ADR-296](../../../docs/specification/adr/adr-296.md) D33), and the
+/// arrow ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D9), and the
 /// parser does not take that form yet — so the page is ahead of the compiler
 /// by decision, which is the state every unbuilt record leaves its examples
 /// in. The block comes back as a program with ADR-296's first step, and

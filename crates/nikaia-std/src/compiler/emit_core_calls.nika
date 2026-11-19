@@ -555,7 +555,7 @@ impl EmitState {
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope) {
             return
         }
-        // **A grammar is entered by an ordinary call** (ADR-296 D24), through a
+        // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5), through a
         // **path** since ADR-140 D3: `Json::value(input)`, where `Json` names a
         // grammar in this file and `value` one of its `entry` rules. First,
         // because it is not a call to anything the recursion graph or the ledger
@@ -733,8 +733,8 @@ impl EmitState {
         }
     }
 
-    /// A grammar entered by a call: this file's (ADR-296 D24) or a package's
-    /// `pub grammar`, entered by its path (ADR-296 D25, #520). `true` where it
+    /// A grammar entered by a call: this file's (ADR-grammar-syntax-v1 D5) or a package's
+    /// `pub grammar`, entered by its path (ADR-grammar-syntax-v1 D6, #520). `true` where it
     /// has been written.
     fn emit_call_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         match func {
@@ -742,8 +742,8 @@ impl EmitState {
                 if args.len() == 0 {
                     return false
                 }
-                // **An entry takes values after its input** (ADR-grammar-1
-                // D2): `Yml::block(text, 2; c: Ctx::BlockOut)`.
+                // **An entry takes values after its input** (ADR-grammar-syntax-v1
+                // D12): `Yml::block(text, 2; c: Ctx::BlockOut)`.
                 if segments.len() == 2 && self.grammars.contains_key(emit_text(world, segments[0])) {
                     let parallelism = host.parallelism()
                     let mut values: Vec[Expr] = []
@@ -800,7 +800,7 @@ impl EmitState {
                 }
                 if streamed {
                     // **The values, then each option the entry declares, in
-                    // its order** (ADR-grammar-1 D2, #1512): one the call leaves
+                    // its order** (ADR-grammar-syntax-v1 D12, #1512): one the call leaves
                     // out is `None`, and the walk takes its default where it is
                     // declared; last the caller's `words:` table (ADR-388 D1),
                     // which is no option the rule declares.
@@ -1059,7 +1059,7 @@ impl EmitState {
         if self.emit_call_scalars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
             return
         }
-        // **A grammar is entered by an ordinary call** (ADR-296 D24); the dot is
+        // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5); the dot is
         // gone (ADR-140 D3). `NK1147` is what a program meets; this is here so
         // that a caller who lowers without checking gets the same sentence.
         if receiver != null && args.len() == 1 {

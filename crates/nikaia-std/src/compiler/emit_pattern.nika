@@ -54,8 +54,8 @@ impl EmitState {
             Pattern::Choice(parts) => self.emit_patterns(world, walk, out, host, parts, " | "),
             Pattern::Bind { name, pat: grouped } => {
                 let pat = emit_ungrouped(grouped)
-                // **`s:span(p)` is `p` with the range it covered** (ADR-339
-                // D1, #557): the backend's `(p) @ s`, which keeps a name `p`
+                // **`s:span(p)` is `p` with the range it covered** (ADR-grammar-syntax-v1
+                // D16, #557): the backend's `(p) @ s`, which keeps a name `p`
                 // binds when `p` is one element, and is read as a `text::Span`
                 // before the action. Over a sequence that binds names the
                 // backend's group would scope them (#1197), so the sequence is
@@ -155,8 +155,8 @@ impl EmitState {
                 if group {
                     out.push(")")
                 }
-                // **A computed bound starts with an integer** (ADR-grammar-1
-                // D3), which is how the engine tells a bound from a brace in
+                // **A computed bound starts with an integer** (ADR-grammar-syntax-v1
+                // D13), which is how the engine tells a bound from a brace in
                 // the input whatever the expression begins with.
                 out.push("{0i64 + (")
                 self.emit_grammar_value(world, walk, out, host, low)
@@ -227,14 +227,14 @@ impl EmitState {
         }
     }
 
-    /// **A value in a grammar** (ADR-grammar-1 D2-D4): an argument, a bound,
+    /// **A value in a grammar** (ADR-grammar-syntax-v1 D12-D14): an argument, a bound,
     /// a guard, written as the expression it is. It may not pause or fail,
     /// as an action may not (the checker says so), so it is plain.
     fn emit_grammar_value[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr) sync throws {
         self.emit_expr(world, walk, out, host, value, 0, EmitFlow::plain(), EmitScope::plain())
     }
 
-    /// **A rule of the grammar handed values** (ADR-grammar-1 D2): every
+    /// **A rule of the grammar handed values** (ADR-grammar-syntax-v1 D12): every
     /// parameter by name, in the rule's order, an option left out by its
     /// default. The engine matches by position and reads `name = expr` as a
     /// value whatever the expression is.
@@ -309,7 +309,7 @@ impl EmitState {
             out.push(")")
             return
         }
-        // **`count(p)` is an `i64`** (ADR-grammar-1 D5): a template rule the
+        // **`count(p)` is an `i64`** (ADR-grammar-syntax-v1 D15): a template rule the
         // grammar is given beside its own reads the engine's `usize`.
         if called == "count" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
             out.push(f"{emit_count_rule()}(p = (")
@@ -323,7 +323,7 @@ impl EmitState {
             out.push(emit_here_rule())
             return
         }
-        // `same_line` asks the record the grammar's `WS` keeps (ADR-339 D2),
+        // `same_line` asks the record the grammar's `WS` keeps (ADR-grammar-syntax-v1 D17),
         // through the `extern rule` the grammar is given.
         if called == "same_line" && generics.len() == 0 && args.len() == 0 && !walk.grammar_rules.contains(called) {
             out.push(emit_same_line_rule())

@@ -1,4 +1,4 @@
-// `same_line` (Part II 10.8, ADR-339 D2, #557) matches nothing and fails
+// `same_line` (Part II 10.8, ADR-grammar-syntax-v1 D17, #557) matches nothing and fails
 // where the whitespace skipped just before it held a line break: `a [0]` is an
 // index and `f (x)` a call, but `a\n[0]` is a name and then a list, and
 // `f\n(x)` a name and then a group. Over text and over a `Bytes` alike.

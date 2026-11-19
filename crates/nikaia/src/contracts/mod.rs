@@ -566,7 +566,7 @@ pub const UNNAMED_ERROR: &str = "?";
 pub const PARSE_ERROR: &str = "ParseError";
 
 /// The one parameter every grammar entry takes: the text to parse
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24).
+/// ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5).
 ///
 /// A name rather than four spellings of it, because three analyses have to
 /// agree on it: the loop below writes the signature, [`tether::infer`] writes

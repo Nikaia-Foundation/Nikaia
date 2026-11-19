@@ -1,5 +1,5 @@
 // A parameter of the calling function handed to an entry's value parameter
-// (ADR-grammar-1 D2, #1041): the entry keeps it as an ordinary call's owned
+// (ADR-grammar-syntax-v1 D12, #1041): the entry keeps it as an ordinary call's owned
 // parameter does, so the caller's parameter is owned, not lent; over text and
 // over `ref Bytes` alike.
 

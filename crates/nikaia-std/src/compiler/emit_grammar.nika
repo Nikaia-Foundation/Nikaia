@@ -43,13 +43,13 @@ fn emit_any_writes_a_list(world: ref EmitWorld, parts: ref Vec[Spanned[Pattern]]
     return false
 }
 
-/// The template rules `span(p)` and `here` lower to (Part II 10.8, ADR-339
-/// D1, #557).
+/// The template rules `span(p)` and `here` lower to (Part II 10.8, ADR-grammar-syntax-v1
+/// D16, #557).
 fn emit_span_rule() -> String {
     return "__nikaia_span"
 }
 
-/// The template rule `count(p)` lowers to (ADR-grammar-1 D5).
+/// The template rule `count(p)` lowers to (ADR-grammar-syntax-v1 D15).
 fn emit_count_rule() -> String {
     return "__nikaia_count"
 }
@@ -58,7 +58,7 @@ fn emit_here_rule() -> String {
     return "__nikaia_here"
 }
 
-/// The template rule `same_line` lowers to (ADR-339 D2): an `extern rule`
+/// The template rule `same_line` lowers to (ADR-grammar-syntax-v1 D17): an `extern rule`
 /// over the function written after the grammar (`emit_same_line_function`).
 fn emit_same_line_rule() -> String {
     return "__nikaia_same_line"
@@ -77,7 +77,7 @@ fn emit_default_ws() -> String {
     return "multispace0"
 }
 
-/// **The function behind a grammar's `same_line`** (ADR-339 D2, the Rust
+/// **The function behind a grammar's `same_line`** (ADR-grammar-syntax-v1 D17, the Rust
 /// parser's `same_line` in `parser/mod.rs`): it fails where the token at the
 /// current position came right after a skipped run that held a line break,
 /// and covers nothing. One per grammar copy, so the text copy and the one over
@@ -345,7 +345,7 @@ impl EmitState {
     /// the input, the failure rendered against it. It takes the entry's
     /// values, owned, then each option as `Option`, `None` where the caller
     /// left it out: the default is evaluated here, where it is declared and
-    /// visible (ADR-grammar-1 D2, #1512), and last the caller's `words:`
+    /// visible (ADR-grammar-syntax-v1 D12, #1512), and last the caller's `words:`
     /// table, shared, where it hands one (ADR-388 D1).
     fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
         let rule_name = emit_text(world, rule.name)
@@ -461,7 +461,7 @@ impl EmitState {
         }
         walk.grammar_values = valued
         walk.grammar_members = []
-        // **`same_line` asks what the last `WS` skipped held** (ADR-339 D2,
+        // **`same_line` asks what the last `WS` skipped held** (ADR-grammar-syntax-v1 D17,
         // D3): the lowering, not the grammar, gives the parser a state of
         // `LineBreaks`, a `WS` that records each run in it, and an `extern
         // rule` over the function written after the grammar that asks it.
@@ -518,8 +518,8 @@ impl EmitState {
                 }
             }
         }
-        // **`span(p)` and `here` are rules the backend is given** (ADR-339
-        // D1, #557), as `list` is: the range a pattern covered, and the
+        // **`span(p)` and `here` are rules the backend is given** (ADR-grammar-syntax-v1
+        // D16, #557), as `list` is: the range a pattern covered, and the
         // position, read from the backend's `p @ at`. A `span(p)` a name binds
         // directly is written in place (`emit_pattern`) and keeps what `p`
         // binds; these are for the rest.
@@ -597,7 +597,7 @@ impl EmitState {
             null => {},
         }
         // An entry is a `pub` rule to the backend: one function per entry
-        // (ADR-296 D25).
+        // (ADR-grammar-syntax-v1 D6).
         let vis = if rule.is_entry { "pub " } else { "" }
         let mut ret = ""
         match rule.ret_type {
@@ -611,7 +611,7 @@ impl EmitState {
             text => { label = f" # {rust_string(text)}" },
             null => {},
         }
-        // **The values a rule takes** (ADR-grammar-1 D2), its options after
+        // **The values a rule takes** (ADR-grammar-syntax-v1 D12), its options after
         // its parameters: the engine takes them by position.
         let mut values: Vec[String] = []
         let taken: GrammarRule = walk.grammar_values.get(emit_text(world, rule.name))?.clone() ?? rule.clone()
@@ -818,8 +818,8 @@ impl EmitState {
                         most => out.push(f", max = {most}"),
                         null => {},
                     }
-                    // **A bound that is a value** (`item{n}`, ADR-grammar-1
-                    // D3) is a computed `min` / `max` of the fold, read where
+                    // **A bound that is a value** (`item{n}`, ADR-grammar-syntax-v1
+                    // D13) is a computed `min` / `max` of the fold, read where
                     // the parser reaches it (winnow-grammar#31); it starts
                     // with an integer as the bounds of a repetition do.
                     match fold.low {
@@ -948,7 +948,7 @@ struct StreamFold {
     min: i64,
     max: i64?,
     /// `item{n}`, `item{n,}`, `item{n, m}`: the bounds that are values
-    /// (ADR-grammar-1 D3); `{n}` is both.
+    /// (ADR-grammar-syntax-v1 D13); `{n}` is both.
     low: Expr?,
     high: Expr?,
 }

@@ -1,5 +1,5 @@
 // An entry takes the values its rule declares after its input, an option by
-// name, left out by its default (ADR-grammar-1 D2); `count(p)` is an `i64`
+// name, left out by its default (ADR-grammar-syntax-v1 D12); `count(p)` is an `i64`
 // (D5); a bound may be a value (D3).
 
 grammar Fixed {
