@@ -169,7 +169,16 @@ touches = []
 views = ["t: borrowed"]
 signature = "(ref mut self, t: String)"
 
+[fn."Yaml::events"]
+pub = true
+sync = true
+throws = ["ParseError"]
+keeps = ["limits"]
+touches = []
+signature = "(input: ?; limits: Limits =) -> Seq[Event] sync throws"
+
 [fn."Yaml::stream"]
+pub = true
 sync = true
 throws = ["ParseError"]
 keeps = ["input", "lim"]
@@ -207,7 +216,6 @@ sync = true
 keeps = ["kind"]
 panics = false
 touches = []
-views = ["<result>: borrowed"]
 signature = "(kind: EventKind, start: u32, end: u32) -> Event"
 
 [fn."blank"]
@@ -291,6 +299,14 @@ touches = []
 views = ["s: borrowed"]
 signature = "(s: String, from: i64, radix: i64) -> bool"
 
+[fn."document_events"]
+sync = true
+keeps = ["d"]
+panics = true
+touches = []
+views = ["d: borrowed"]
+signature = "(d: ref Document, ended: bool, mut out: Vec[Event])"
+
 [fn."documents"]
 pub = true
 sync = true
@@ -361,10 +377,9 @@ signature = "(e: ref Event) -> String"
 [fn."events"]
 pub = true
 sync = true
-returns = "ref(docs)"
 panics = true
 touches = []
-views = ["docs: borrowed", "<result>: borrowed"]
+views = ["docs: borrowed"]
 signature = "(docs: ref Vec[Document]) -> Vec[Event]"
 
 [fn."explicit_indent"]
@@ -401,6 +416,14 @@ panics = true
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool) -> String"
+
+[fn."handed_over"]
+sync = true
+keeps = ["d"]
+panics = true
+touches = []
+views = ["d: borrowed"]
+signature = "(d: ref Document, ended: bool, last: bool) -> Vec[Event]"
 
 [fn."handles_once"]
 sync = true
@@ -593,7 +616,6 @@ sync = true
 keeps = ["kind"]
 panics = false
 touches = []
-views = ["<result>: borrowed"]
 signature = "(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event"
 
 [fn."marker_before"]
@@ -690,11 +712,10 @@ signature = "(t: ref String) -> bool"
 
 [fn."opening"]
 sync = true
-returns = "anchor: ref(n)"
 keeps = ["kind"]
 panics = false
 touches = []
-views = ["n: borrowed", "ds: borrowed", "<result>: borrowed"]
+views = ["n: borrowed", "ds: borrowed"]
 signature = "(kind: EventKind, n: ref Node, ds: ref Vec[Dir]) -> Event"
 
 [fn."pair_fits"]
@@ -945,7 +966,7 @@ sync = true
 keeps = ["n"]
 panics = true
 touches = []
-views = ["n: borrowed", "ds: borrowed", "out: borrowed"]
+views = ["n: borrowed", "ds: borrowed"]
 signature = "(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event])"
 
 [fn."write"]
@@ -1065,11 +1086,10 @@ copies = true
 
 [type."Event"]
 pub = true
-fields = ["pub kind: EventKind", "pub start: u32", "pub end: u32", "pub explicit: bool", "pub flow: bool", "pub anchor: ref String?", "pub tag: String?", "pub style: Style", "pub value: ref String", "pub text: String?"]
+fields = ["pub kind: EventKind", "pub start: u32", "pub end: u32", "pub explicit: bool", "pub flow: bool", "pub anchor: String?", "pub tag: String?", "pub style: Style", "pub value: String", "pub text: String?"]
 compares = true
 equates = true
 hashes = true
-tethered = ["anchor", "value"]
 
 [type."EventKind"]
 pub = true
