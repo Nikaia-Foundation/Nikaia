@@ -1,0 +1,9 @@
+error[NK1186]: `std` has no module called `std::rt`.
+  --> tests/std_private_module_refused.nika:4:1
+   |
+ 4 | use std::rt
+   | ^^^^^^^^^^^
+   |
+   = note: `rt` is `std`'s own: everything in it is private to `std`, for its test blocks, and a program cannot reach it.
+   = help: `std` offers: bool, bytes, channel, cleanup, cli, collections, env, foreign, fs, hash, html, http1, io, mem, net, par, path, process, regex, simd, supervisor, target, task, text, thread, time, winnow_grammar.
+1 type error

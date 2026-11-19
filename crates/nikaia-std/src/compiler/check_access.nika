@@ -313,13 +313,14 @@ fn a_last_segment(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], 
 }
 
 /// **`std` reaches its own helpers** (#1606): drops the `NK1110` of each call
-/// in `std_helpers_reached`. Only the caller that checks a file of `std`'s
+/// in `std_helpers_reached`, and the `NK1186` of each `use` of a module whose
+/// every entry is `std`'s own (`rt`, #2320). Only the caller that checks a file of `std`'s
 /// Nikaia knows the file is `std`'s; its Rust lives in the same crate as the
 /// helper, which is `pub(crate)` there or a sibling of it.
 pub fn check_access_inside_std(findings: ref Vec[CheckFinding], reached: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] {
     let mut kept: Vec[CheckFinding] = []
     for f in findings {
-        if f.code == "NK1110" && reached.contains(f.span.start as i64) {
+        if (f.code == "NK1110" || f.code == "NK1186") && reached.contains(f.span.start as i64) {
             continue
         }
         kept.push(f.clone())
