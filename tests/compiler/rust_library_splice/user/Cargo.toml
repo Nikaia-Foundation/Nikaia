@@ -1,4 +1,4 @@
-# A Rust crate over `../demo`, whose crate root is hand-written (ADR-393 D7),
+# A Rust crate over `../demo`, whose crate root is hand-written (ADR-rust-boundary-1 D23),
 # with the feature `cube`, by `tests/a_rust_library_splices_a_hand_written_root.nika`.
 [package]
 name = "user"

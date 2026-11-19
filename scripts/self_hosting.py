@@ -38,7 +38,7 @@ def source(name):
 COMPILER_NIKA = {
     "spelling.nika": "check: *did you mean* (0.0.238)",
     "dsl.nika": "dsl: a body's parameters, the shadow types, the drivers and the check of a call (0.0.248, 0.0.335)",
-    "rust.nika": "describe: reading a crate's Rust (ADR-290)",
+    "rust.nika": "describe: reading a crate's Rust (ADR-rust-boundary-1)",
     "fixed.nika": "fixed: FNV-1a and CHD (0.0.250)",
     "template.nika": "emit::template: the HTML scan (0.0.252)",
     "ledger.nika": "contracts: reading a ledger back, whole, and writing a signature in its spelling (0.0.258, 0.0.292, 0.0.333)",

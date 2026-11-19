@@ -1,6 +1,6 @@
 //! **`std::process`: another program, started and waited for**
 //! ([ADR-243](../../../docs/specification/adr/adr-243.md), on
-//! [ADR-290](../../../docs/specification/adr/adr-290.md) D14).
+//! [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D14).
 //!
 //! Every test here **runs a program**, at both settings of
 //! `user_parallelism`, because what is claimed is behaviour: the exit code and

@@ -1037,7 +1037,7 @@ pub fn open(
 }
 
 /// **Every file under a directory**, as names relative to it, `/` between the
-/// parts, in sorted order ([ADR-290](../../../docs/specification/adr/adr-290.md)
+/// parts, in sorted order ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D4).
 ///
 /// What a tool that reads a tree needs, and the shape `nikaia describe` reads a

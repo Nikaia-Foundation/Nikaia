@@ -67,9 +67,9 @@ pub fn sysroot_std_dir(root: ref fs::Path) -> fs::Path sync {
 /// only under its `compiler` feature (#723).
 ///
 /// `tools/rust.nika` is the reading half of `nikaia describe`
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D13), lowered the
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D13), lowered the
 /// same way `std`'s own Nikaia half is and reached by the compiler as an
-/// ordinary Rust module ([ADR-290](../../../docs/specification/adr/adr-290.md)
+/// ordinary Rust module ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D1). It lives in this crate because this is where the release step
 /// already looks, and in a directory of its own because **a `.nika` beside
 /// `lib.rs` means something**: that `std` offers it, and that

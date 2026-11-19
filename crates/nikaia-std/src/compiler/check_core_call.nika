@@ -712,7 +712,7 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     state.reachable(name, !world.own.functions.contains_key(key), contract, span)
     check_core_call_rust_owner(state, world, name, contract, args, span)
     // **A described call is asked too, where the description says the word**
-    // (ADR-290 D7).
+    // (ADR-rust-boundary-1 D7).
     if contract.threads.may() {
         state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, f"`{name}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one")
     }

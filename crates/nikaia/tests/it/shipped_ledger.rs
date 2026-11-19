@@ -1,5 +1,5 @@
 //! A Rust crate reached by `use`, and the reviewed ledger a crate ships beside
-//! its `Cargo.toml` ([ADR-290](../../../docs/specification/adr/adr-290.md)
+//! its `Cargo.toml` ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 //! D22, Part III 15.2): `nikaia describe` adopts it where its version and its
 //! sources still hold, and refuses it where they do not.
 

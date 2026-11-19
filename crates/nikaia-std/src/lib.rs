@@ -197,9 +197,9 @@ pub mod runtime {
 /// it.
 ///
 /// It lives in this crate anyway because this is where `nikaia lower-std`
-/// already looks for `.nika` sources (ADR-002 D4, ADR-290 D12), and because the
+/// already looks for `.nika` sources (ADR-002 D4, ADR-rust-boundary-1 D12), and because the
 /// compiler - which is Rust - reaches what is in here as an ordinary Rust
-/// module (ADR-290 D16). That is the whole interface: a call.
+/// module (ADR-rust-boundary-1 D16). That is the whole interface: a call.
 ///
 /// **What none of it is, is *refused***, and that is a defect rather than a
 /// decision: `use std::compiler` in a Nikaia program lowers, and `rustc` is what

@@ -30,7 +30,7 @@ pub struct ProjectMembersManifest {
     /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D23, D24).
     pub versions: Vec[(String, String)],
     /// The Rust crates it declares, under the name a call writes them by
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1).
     pub foreign: Vec[String],
     /// Whether it has a `[build]` or a `[build.<target>]` section.
     pub has_build: bool,
@@ -612,7 +612,7 @@ pub trait ProjectMembersForeignHost {
 /// thing is usually why the rest of the file reads strangely.
 ///
 /// **What this build links against, and what has been described**
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1).
 ///
 /// Two sets rather than one map, because the question is a difference: a crate
 /// the manifest declares and no ledger describes is the one D1 refuses. Both
@@ -641,7 +641,7 @@ pub struct ProjectMembersForeign {
     pub described: collections::BTreeSet[String],
     /// The described crates whose **sources have moved** since the description
     /// was reviewed, with the files that hash differently
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5, on
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5, on
     /// [ADR-100](../../../docs/specification/adr/adr-100.md) D3's rule).
     ///
     /// **Empty where nothing can be compared**, which is the polarity and not
@@ -788,7 +788,7 @@ impl ProjectMembersForeign {
 }
 
 /// Which of the files a description was derived from hash differently now
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5).
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5).
 ///
 /// **Only what can be compared is compared.** A description that recorded no
 /// `[sources]` and a crate whose sources this build cannot find both answer

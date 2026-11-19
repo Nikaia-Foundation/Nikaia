@@ -192,7 +192,7 @@ fn a_near_miss_is_named() {
 
 /// **A module the crate has and `std` does not offer gets its own sentence**, and
 /// that is the case that found this defect: `crates/nikaia-std/src/compiler/` holds
-/// [ADR-290](../../../docs/specification/adr/adr-290.md)'s Rust-signature
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)'s Rust-signature
 /// grammar, which the compiler calls and a program may not. *Nobody has written
 /// that down* would be false and would send the reader looking for a typo.
 #[test]

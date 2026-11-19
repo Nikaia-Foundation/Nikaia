@@ -243,7 +243,7 @@ pub struct Diagnostic {
     pub internal: Option<String>,
     /// What the backend wrote under the caret, where it wrote anything: the
     /// half of *mismatched types* that says which types
-    /// ([ADR-290](../../../../docs/specification/adr/adr-290.md) D21 reads it).
+    /// ([ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md) D21 reads it).
     pub label: Option<String>,
     /// Whether the message is a statement about the program rather than this
     /// compiler's defect: the parser backend's frame check (ADR-296 D18,
@@ -329,14 +329,14 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
 }
 
 /// **A boundary whose ledger may be stale**
-/// ([ADR-290](../../../../docs/specification/adr/adr-290.md) D21): a package
+/// ([ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md) D21): a package
 /// this program depends on, or a Rust crate it describes, by the word a call
 /// writes in front of `::`.
 pub use nikaia_std::compiler::boundaries::Boundary;
 
 /// **A boundary mismatch the backend reports is said as a stale ledger**
 /// ([ADR-100](../../../../docs/specification/adr/adr-100.md) D6,
-/// [ADR-290](../../../../docs/specification/adr/adr-290.md) D21). Which
+/// [ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md) D21). Which
 /// boundary, and what the message becomes, is **`tools/boundaries.nika`**'s
 /// answer (#125); where it has none, the message is left as the backend said
 /// it - this compiler's defect, reported as such (Part III C.1).

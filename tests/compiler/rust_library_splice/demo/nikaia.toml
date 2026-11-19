@@ -1,5 +1,5 @@
 # The package of `tests/a_rust_library_splices_a_hand_written_root.nika`
-# (ADR-393 D7): `rust/lib.rs` becomes the crate root, the lowered items
+# (ADR-rust-boundary-1 D23): `rust/lib.rs` becomes the crate root, the lowered items
 # `nikaia_demo::native`.
 [package]
 name = "demo"

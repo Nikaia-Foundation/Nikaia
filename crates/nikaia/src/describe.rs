@@ -3,7 +3,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/describe.rs
 //
 // `nikaia describe <crate>` — a draft ledger for a Rust crate's boundary
-// ([ADR-290](../../docs/specification/adr/adr-290.md) D2-D4).
+// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D2-D4).
 //
 // ## What it is for
 //
@@ -19,10 +19,10 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // does not give up a stable-only toolchain for it.
 //
 // **They are read by a grammar written in Nikaia**
-// ([ADR-290](../../docs/specification/adr/adr-290.md) D13):
+// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D13):
 // `crates/nikaia-std/src/compiler/rust.nika`, lowered ahead of time and reached
 // from here as an ordinary Rust module — `nikaia_std::compiler::rust`, a call and
-// nothing else ([ADR-290](../../docs/specification/adr/adr-290.md) D16). What
+// nothing else ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D16). What
 // stood here before was a hand-written character scanner that matched `pub fn`
 // at the start of a line and counted braces without knowing what a brace is;
 // on one crate it wrote entries for **four functions that do not exist**
@@ -93,16 +93,16 @@ pub struct Described {
     /// `?`, named so a reviewer knows what to fill rather than what to find.
     pub unanswered: Vec<String>,
     /// What the describer **saw and did not claim**
-    /// ([ADR-290](../../docs/specification/adr/adr-290.md) D8, D10), written
+    /// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D8, D10), written
     /// into the file as comments.
     pub notes: Notes,
     /// The crate's own reviewed ledger, where the description was adopted
-    /// from one rather than drafted (ADR-290 D22).
+    /// from one rather than drafted (ADR-rust-boundary-1 D22).
     pub adopted: Option<PathBuf>,
 }
 
 /// The file a crate ships its reviewed description in, beside its
-/// `Cargo.toml` (ADR-290 D22); its `[sources]` are in `nikaia.derived`.
+/// `Cargo.toml` (ADR-rust-boundary-1 D22); its `[sources]` are in `nikaia.derived`.
 pub const SHIPPED: &str = "nikaia.contracts";
 
 /// Write `contracts/<crate>.contracts` for the crate the program calls.
@@ -128,7 +128,7 @@ pub fn describe(root: &Path, crate_word: &str) -> Result<Described> {
     Ok(written)
 }
 
-/// **The crate's own reviewed ledger, where it ships one** (ADR-290 D22):
+/// **The crate's own reviewed ledger, where it ships one** (ADR-rust-boundary-1 D22):
 /// `nikaia.contracts` beside the `Cargo.toml` of a `path` dependency, copied
 /// into `contracts/<crate>.contracts` with its `nikaia.derived`. Nothing where
 /// the crate ships none, and the caller drafts.
@@ -219,7 +219,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
             relative.clone(),
             String::from(orchestrator::cache::sha256_hex(text.as_bytes())),
         );
-        // **Read by the grammar, offered by `tools/surface.nika`** (ADR-290
+        // **Read by the grammar, offered by `tools/surface.nika`** (ADR-rust-boundary-1
         // D3-D4): this drives the two and hands the items between them.
         let items = nikaia_std::compiler::rust::file(text)
             .map_err(|error| anyhow::anyhow!("{relative}: {error}"))?;
@@ -229,7 +229,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
 
     // **What the description holds is Nikaia's** (`tools/describe.nika`,
     // #125): the entries, the types they name and what the describer saw and
-    // did not claim ([ADR-290](../../docs/specification/adr/adr-290.md) D8,
+    // did not claim ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D8,
     // D10). The header is this file's.
     let drafted = describe::drafted(&surface, crate_word, &wanted);
     let mut ledger = Ledger::empty();
@@ -309,7 +309,7 @@ fn crate_sources(root: &Path, value: &toml::Value, crate_word: &str, key: &str) 
 }
 
 /// **Every description this build reads, as one digest**, for the cache key
-/// ([ADR-290](../../docs/specification/adr/adr-290.md) D5,
+/// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D5,
 /// [ADR-021](../../docs/specification/adr/adr-021.md) D7).
 ///
 /// Empty where the project describes nothing, which is most of them. The files

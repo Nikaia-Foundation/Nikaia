@@ -116,7 +116,7 @@ pub struct Build {
     pub called_from_c: bool,
     /// **The path of the lowered package's root** (#1447): `crate` for a
     /// crate whose root it is, `crate::<native>` where `[rust-library] root`
-    /// splices it under a hand-written root (ADR-393 D7). A generated error
+    /// splices it under a hand-written root (ADR-rust-boundary-1 D23). A generated error
     /// sum is written below it.
     pub crate_root: &'static str,
     /// **A package offered to Rust** (`artifact = "rust-library"`,
@@ -436,7 +436,7 @@ pub fn emit_module_body_at(
     build: Build,
     provenance: crate::contracts::Provenance,
     contracts: &crate::contracts::Ledger,
-    // **The described crates' boundary** (ADR-290 D20), for whether a call into
+    // **The described crates' boundary** (ADR-rust-boundary-1 D20), for whether a call into
     // one can fail. Empty where the program declares none.
     described: &crate::contracts::Ledger,
     entry: bool,
@@ -663,7 +663,7 @@ impl<'p> Emitter<'p> {
         build: Build,
         provenance: crate::contracts::Provenance,
         own_contracts: crate::contracts::Ledger,
-        // **The described crates' boundary** (ADR-290 D20): whether a call into
+        // **The described crates' boundary** (ADR-rust-boundary-1 D20): whether a call into
         // one can fail, and what it keeps, which the propagation below asks.
         described: &crate::contracts::Ledger,
         reads: &Reads,

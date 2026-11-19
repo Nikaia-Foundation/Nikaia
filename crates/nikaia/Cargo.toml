@@ -31,9 +31,9 @@ toml = "0.9"
 
 [dependencies]
 orchestrator = { workspace = true }
-# **`nikaia describe`'s parser is written in Nikaia** (ADR-290 D13), lowered
+# **`nikaia describe`'s parser is written in Nikaia** (ADR-rust-boundary-1 D13), lowered
 # ahead of time and reached from here as an ordinary Rust module
-# (ADR-290 D16, D18): `nikaia_std::compiler::rust`. There is no cycle — `nikaia-std`
+# (ADR-rust-boundary-1 D16, D18): `nikaia_std::compiler::rust`. There is no cycle — `nikaia-std`
 # may not depend on the compiler (ADR-002 D4), and its own manifest says so.
 # Measured before the edge was drawn: four packages the compiler did not
 # already resolve (`nikaia-std`, `memmap2`, `polling`, `io-uring`; `rayon` and

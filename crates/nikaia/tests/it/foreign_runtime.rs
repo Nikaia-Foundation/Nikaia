@@ -190,12 +190,12 @@ fn a_nikaia_program_serves_one_request_through_hyper() {
 /// permission nor a refusal.
 ///
 /// What decides it now is two things a **person wrote down**
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D6, D7):
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D6, D7):
 /// `crosses = false` on `hyper_shim::LocalHandle`, because the type holds an
 /// `Rc`, and `threads = true` on `hyper_shim::across_a_thread`, because it
 /// builds a `tokio` runtime and spawns. Neither is inferred and neither could
 /// be; both are in the committed description a reviewer reads
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5).
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5).
 #[test]
 #[ignore = "runs cargo and fetches hyper and tokio from crates.io"]
 fn a_value_that_may_not_cross_a_thread_is_refused_against_the_nika_line() {
@@ -254,7 +254,7 @@ fn a_value_that_may_not_cross_a_thread_is_refused_against_the_nika_line() {
 /// `unsafe impl<T> Send for Smuggled<T>` cannot change that line, because the
 /// line never asked Rust.
 ///
-/// **None of this is soundness** ([ADR-290](../../../docs/specification/adr/adr-290.md)
+/// **None of this is soundness** ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D3). A description that claimed `crosses = true` about the same type would
 /// get exactly as far as it did before. What moved is *who* has to be honest,
 /// and a `.contracts` file is committed and reviewed like code.

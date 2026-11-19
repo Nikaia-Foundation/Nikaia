@@ -1,5 +1,5 @@
 //! serde_yaml 0.9's reading surface over the native YAML parser (ADR-yaml-1
-//! D10; ADR-393 D7, option A): `from_str`, `from_slice`, `from_reader` and
+//! D10; ADR-rust-boundary-1 D23, option A): `from_str`, `from_slice`, `from_reader` and
 //! `Deserializer` (one document, or each of a stream) into any `Deserialize`
 //! type; `Value` with its indexing, `Tag` and `TaggedValue`, `Mapping`,
 //! `Number`, `from_value` and `to_value`; `with::singleton_map`; `Error`;

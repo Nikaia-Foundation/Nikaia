@@ -427,7 +427,7 @@ impl LedgerOps for Ledger {
     }
 
     /// The same file under a **description's** header
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5), in Nikaia.
+    /// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D5), in Nikaia.
     fn render_description(&self, crate_name: &str, version: &str, notes: &Notes) -> String {
         nikaia_std::compiler::ledger_text::description_text(self, crate_name, version, notes)
     }
@@ -438,7 +438,7 @@ impl LedgerOps for Ledger {
     }
 
     /// The same, with the describer's notes spliced above the entries they are
-    /// about ([ADR-290](../../../docs/specification/adr/adr-290.md) D3), in
+    /// about ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D3), in
     /// Nikaia.
     fn render_from_with(&self, out: &mut String, notes: &Notes) {
         out.push_str(&nikaia_std::compiler::ledger_text::contract_text(

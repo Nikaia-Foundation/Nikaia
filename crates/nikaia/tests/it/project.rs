@@ -2152,7 +2152,7 @@ fn a_trait_a_package_publishes_can_be_implemented_and_called() {
 /// can be believed without being checked** (a registry package's,
 /// [ADR-286](../../../docs/specification/adr/adr-286.md); a hand-written
 /// description of a foreign crate,
-/// [ADR-290](../../../docs/specification/adr/adr-290.md)) this test is what
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)) this test is what
 /// says so, and D6 becomes writable and testable in the same change.
 #[test]
 fn a_hand_edited_dependency_ledger_is_repaired_before_it_is_read() {
@@ -3001,7 +3001,7 @@ fn a_project_with_a_failing_crate(purpose: &str) -> PathBuf {
 }
 
 /// **A described call that can fail is a place that can fail, in the Rust
-/// too** ([ADR-290](../../../docs/specification/adr/adr-290.md) D20). The
+/// too** ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D20). The
 /// checker read the description's `throws` and the emitter did not, so the
 /// crate's `Result` reached `n + 1` and `rustc` said so about a file nobody
 /// wrote.
@@ -3044,7 +3044,7 @@ fn a_function_the_description_does_not_list_is_refused() {
 }
 
 /// **A boundary the backend disagrees with is said as a stale description**
-/// (ADR-100 D6, ADR-290 D21). The description is edited by hand, as D5 expects
+/// (ADR-100 D6, ADR-rust-boundary-1 D21). The description is edited by hand, as D5 expects
 /// a person to, and loses `throws`: the crate's sources have not moved, so
 /// nothing refuses the build, and the lowering believes the description. What
 /// `rustc` says about the `Result` is reported as the description of `fremd`

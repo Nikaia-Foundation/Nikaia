@@ -1,7 +1,7 @@
 // crates/nikaia-std/src/compiler/foreign.nika
 //
 // **Every qualified name a unit writes, and every call it makes by name**
-// (ADR-290 D1, D2; ADR-010 D7, ADR-108 D4), for the compiler's
+// (ADR-rust-boundary-1 D1, D2; ADR-010 D7, ADR-108 D4), for the compiler's
 // `foreign`: the refusal of a call into a crate nothing describes (`NK2504`,
 // `NK2505`) asks which crates a program reaches into, and `nikaia describe`
 // asks which names of one it reaches; `--trust` asks what each call is, and

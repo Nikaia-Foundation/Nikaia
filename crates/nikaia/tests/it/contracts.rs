@@ -749,9 +749,9 @@ fn the_shipped_std_ledger_agrees_with_its_nikaia_sources() {
 /// The test above says what a module beside `lib.rs` means: `std` offers it,
 /// and the shipped ledger has to carry every `pub` thing it declares. That rule
 /// is the reason `tools/` exists — `tools/rust.nika` is the reading half of
-/// `nikaia describe` ([ADR-290](../../../docs/specification/adr/adr-290.md)
+/// `nikaia describe` ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D3), which the compiler calls as an ordinary Rust module
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D16) and which no
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D16) and which no
 /// Nikaia program is offered.
 ///
 /// Written as a test because the failure it guards against is quiet: a `pub fn`
@@ -781,7 +781,7 @@ fn a_toolchain_module_is_not_part_of_std() {
                 !shipped.functions.contains_key(&key),
                 "std.contracts names `{key}`, which is the toolchain's and not \
                  std's. A module under `src/compiler` is not offered to a Nikaia \
-                 program (ADR-290 D16); move it beside `lib.rs` or take the \
+                 program (ADR-rust-boundary-1 D16); move it beside `lib.rs` or take the \
                  entry out."
             );
             checked += 1;

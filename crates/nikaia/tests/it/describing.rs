@@ -1,5 +1,5 @@
 //! `nikaia describe <crate>` — the draft a boundary is described by
-//! ([ADR-290](../../../docs/specification/adr/adr-290.md) D2-D4).
+//! ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D2-D4).
 //!
 //! D1 refuses a call into a crate nothing describes and names this command.
 //! What it writes is the file every analysis then reads there, so what it gets
@@ -90,8 +90,8 @@ fn entries(root: &Path) -> String {
 /// never report.
 ///
 /// The reading half is a grammar written in Nikaia now
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D13,
-/// [ADR-290](../../../docs/specification/adr/adr-290.md) D16), and this is the
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D13,
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D16), and this is the
 /// difference stated as an assertion. On the crate below the character scanner
 /// wrote entries for **four functions that do not exist** — `spectre` inside a
 /// block comment, `phantom` on the second line of a string literal, `hidden`
@@ -236,7 +236,7 @@ fn a_module_is_a_file_as_often_as_it_is_a_block() {
 }
 
 /// **The describer proposes and never claims**
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D8), and **flags the
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D8), and **flags the
 /// promise a toolchain cannot check** (D5) — both on the repository's own shim,
 /// which has all three of D4's shapes in it on purpose.
 ///
@@ -309,7 +309,7 @@ fn what_the_describer_saw_is_a_note_and_never_a_column() {
     );
 }
 
-/// **The row a bound cannot answer** — [ADR-290](../../../docs/specification/adr/adr-290.md)
+/// **The row a bound cannot answer** — [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md)
 /// D4's call graph, on the shim it was written from.
 ///
 /// `across_a_thread_unchecked` asks its caller for nothing: an
@@ -372,7 +372,7 @@ fn a_bound_that_was_taken_away_is_found_by_following_the_calls() {
 }
 
 /// **A `use` makes one function two strings**, and the table is what puts them
-/// back together ([ADR-290](../../../docs/specification/adr/adr-290.md) D9).
+/// back together ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D9).
 ///
 /// Written as its own test because the shim writes `tokio::spawn` in full, so
 /// the repository's own evidence never exercises the table — and a crate that
@@ -781,7 +781,7 @@ fn a_crate_nothing_declares_is_not_described() {
 /// the file a reviewer wrote by hand before this command existed.
 ///
 /// `examples/foreign-runtime/*/contracts/hyper_shim.contracts` is what
-/// [ADR-290](../../../docs/specification/adr/adr-290.md) calls *the file
+/// [ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) calls *the file
 /// `nikaia describe` will write, produced the way a reviewer would check it*.
 /// This is that claim, tested — and it needs no network, because the crate is
 /// in the tree.
@@ -790,7 +790,7 @@ fn a_crate_nothing_declares_is_not_described() {
 /// comments** — a reviewer's, and the only part of D5's review a command cannot
 /// do. `crosses = false` on `LocalHandle` **is** in the draft since the
 /// describer reads fields ([ADR-123](../../../docs/specification/adr/adr-123.md)
-/// D2), which is the line ADR-290 said the crossing refusals were waiting
+/// D2), which is the line ADR-rust-boundary-1 said the crossing refusals were waiting
 /// for.
 #[test]
 fn the_draft_for_the_experiment_is_the_file_a_reviewer_wrote() {
@@ -846,12 +846,12 @@ fn the_draft_for_the_experiment_is_the_file_a_reviewer_wrote() {
 /// `nikaia describe` reads a `pub struct`'s `Rc` field and writes
 /// `crosses = false` ([ADR-123](../../../docs/specification/adr/adr-123.md)
 /// D2); the build merges the description into the ledger the analyses read
-/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1); and `NK2501`
+/// ([ADR-rust-boundary-1](../../../docs/specification/adr/adr-rust-boundary-1.md) D1); and `NK2501`
 /// refuses a `spawn` that takes the value with it — in **this compiler's**
 /// words, on the `.nika` line, with a way out.
 ///
 /// **That chain is what three entries were waiting on**, each from its own end:
-/// ADR-290's *the day the describer reads fields*, ADR-123's *`NK2501` and
+/// ADR-rust-boundary-1's *the day the describer reads fields*, ADR-123's *`NK2501` and
 /// `NK2502` can fire, for the first time, on a described foreign type*, and
 /// issue #264's task refusals. Asserted from a **program** rather than from
 /// a hand-written ledger, because a hand-written one proves the last link and

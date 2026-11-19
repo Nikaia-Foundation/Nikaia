@@ -1,4 +1,4 @@
-// `[rust-library]` refused with NK1348 (ADR-393 D7, #1438): in a package
+// `[rust-library]` refused with NK1348 (ADR-rust-boundary-1 D23, #1438): in a package
 // whose artifact is not a rust-library, without `root`, and with a `root`
 // that names no file of the package. Each package of
 // `rust_library_splice/` is built in a scratch copy and its refusal printed.
