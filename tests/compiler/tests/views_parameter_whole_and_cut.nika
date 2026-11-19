@@ -1,0 +1,27 @@
+// #2321, ADR-views-3 D12: a parameter handed back whole on one path and cut
+// on another is lent on both, as beside a `trim()`: the result is a view of
+// it, whether the early return is a statement or inside a `??`, and whether
+// the caller hands it a literal, another call's result or text of its own.
+fn after(s: String) -> String {
+	let i = s.find("l")
+	if i == null {
+		return s
+	}
+	return s[i..]
+}
+
+fn from_l(s: String) -> String {
+	let i = s.find("l") ?? return s
+	return s[i..]
+}
+
+fn main() throws {
+	println(after(after("hello")))
+	println(from_l(from_l("hello")))
+	println(after("abc"))
+	let own = "say " + "hello"
+	println(after(own))
+	let mine = "well " + "hello"
+	println(from_l(mine))
+	println(mine)
+}

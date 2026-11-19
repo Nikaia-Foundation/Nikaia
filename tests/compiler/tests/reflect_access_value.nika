@@ -1,0 +1,45 @@
+// `T::access` is a value of the running program (ADR-330 D8): a
+// `meta::Access` case, kept, compared, matched and printed like any enum.
+
+struct P {
+    x: i64,
+}
+
+struct Holder {
+    name: String,
+    count: Shared[i64],
+    lock: SharedMut[i64],
+}
+
+fn access_of[T](_v: T) -> meta::Access {
+    return T::access
+}
+
+fn word(a: meta::Access) -> String {
+    return match a {
+        meta::Access::Owned => "owned",
+        meta::Access::Shared => "shared",
+        meta::Access::SharedMut => "shared, locked",
+    }
+}
+
+fn fields[T: Struct](_v: T) -> Vec[meta::Access] {
+    let mut out: Vec[meta::Access] = []
+    for field in T::fields {
+        out.push(field.ty::access)
+    }
+    return out
+}
+
+fn main() throws {
+    let a = P::access
+    println(f"{a == meta::Access::Owned}")
+    let kept = [a, access_of(Shared(1)), access_of(SharedMut(2))]
+    for k in kept {
+        println(f"{k:?}: {word(k)}")
+    }
+    let h = Holder { name: "a", count: Shared(2), lock: SharedMut(3) }
+    for f in fields(h) {
+        println(f"{f:?}")
+    }
+}

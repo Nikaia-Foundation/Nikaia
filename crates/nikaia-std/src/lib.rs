@@ -139,6 +139,14 @@ pub mod text {
     pub use crate::regex::Match;
 }
 
+/// **`std::meta`, what a program may keep of reflection at run time**
+/// ([ADR-330](../../../docs/specification/adr/adr-330.md) D8): `Access`, how a
+/// value is reached, written in `runtime/meta.nika`. `meta::Type` stays at
+/// build time (D6) and has no Rust here.
+pub mod meta {
+    pub use crate::runtime::Access;
+}
+
 /// **`std`'s own Nikaia, which every program runs** (#723): one package in
 /// `src/runtime`, lowered by `nikaia lower-std` into its `lowered.rs` (one file per `.nika` beside it) the way
 /// the tools are, and kept apart from them because a program compiles this
@@ -624,6 +632,8 @@ pub mod prelude {
     pub use crate::http1;
     pub use crate::io;
     pub use crate::list::ListExt;
+    // `meta::Access::Owned`, what `T::access` is (ADR-330 D8).
+    pub use crate::meta;
     pub use crate::target;
     // `x.low_bits(n)` on `u8`, `u32` and `u64` (Part I): a method needs its
     // trait in scope.
