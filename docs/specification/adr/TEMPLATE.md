@@ -1,8 +1,9 @@
-# ADR-<topic>-<n>: <The decision, written as a statement>
+# ADR-<topic>-v<n>: <The decision, written as a statement>
 
-*Copy this file to `adr-<topic>-<n>.md` (ADR-decision-records-1: one to three
-lowercase words and the topic's next number), fill every section, delete these
-italic notes.
+*Copy this file to `adr-<topic>-v<n>.md` (ADR-decision-records-v2: one to three
+lowercase words, the general one first, and the topic's next version; a topic
+has one live record, so a change to it is its next version, not a second
+record), fill every section, delete these italic notes.
 The title is the answer, not the topic: "A list has no `+`", not "Operators on
 lists".*
 

@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** October 28, 2026
 **Answers:** how a decision record is named, so that a reader finds it by what it decides and two sessions writing at once do not take the same name
-**Supersedes / Related:** [`README.md`](README.md) (*Writing a new one*, *Reserved numbers*: the next free number was the name), [`TEMPLATE.md`](TEMPLATE.md), `scripts/check-adr-refs.py` (one record per name, every citation resolves), [ADR-258](adr-258.md) (the weights a record is decided by)
+**Supersedes / Related:** [`README.md`](../../specification/adr/README.md) (*Writing a new one*, *Reserved numbers*: the next free number was the name), [`TEMPLATE.md`](../../specification/adr/TEMPLATE.md), `scripts/check-adr-refs.py` (one record per name, every citation resolves), [ADR-258](../../specification/adr/adr-258.md) (the weights a record is decided by)
 
 ## 1. Question
 
@@ -64,7 +64,7 @@ ones fits; the index lists the topics in use.
 No record is renamed. A numbered record leaves the live set the way records
 always have: a consolidating record of the new scheme states its decisions in
 their current form, the numbered record moves to
-[`docs/history/adr/`](../../history/adr/), and every citation of it moves to the
+[`docs/history/adr/`](.), and every citation of it moves to the
 new record in the same change. Nothing live cites an archived record, as
 before. The archive's README maps each archived decision to the live one.
 

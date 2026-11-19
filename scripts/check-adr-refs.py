@@ -2,11 +2,12 @@
 """Every `ADR-0NN Dn` / `ADR-topic-n Dn` / `… §x` citation must point at a heading
 that exists, and every ADR name belongs to exactly one record.
 
-A record is named `ADR-<topic>-<n>`: one to three lowercase words joined by `-`
-and a number (ADR-decision-records-1). The records from before carry a bare
-three-digit number until a consolidation replaces them; both are checked here.
-**Python, not Nikaia, for now** (ADR-decision-records-1 D5): the move waits
-for `std::regex` (#673 step 1), which this tool is made of.
+A record is named `ADR-<topic>-v<n>`: one to three lowercase words joined by `-`
+and the topic's version (ADR-decision-records-v2), and a topic has one live
+record. The records from before carry a bare three-digit number or a topic and
+a count (`ADR-grammar-1`) until a consolidation replaces them; all are checked
+here. **Python, not Nikaia, for now** (ADR-decision-records-v2 D6): it moves
+together with the rename tool of #904.
 
 A decision is only citable if the number is stable, so a dangling `D7` is a
 defect in the same way a dangling link is. Run from the repository root; exits
@@ -28,8 +29,9 @@ import re
 import sys
 
 # A record's name after `ADR-`: a number of the old scheme, or a topic of one to
-# three lowercase words and a number (ADR-decision-records-1 D1).
-TOPIC = r"[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,2}-[1-9][0-9]*"
+# three lowercase words and a version `v<n>` (ADR-decision-records-v2 D1; a
+# count without `v` is the scheme before it).
+TOPIC = r"[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,2}-v?[1-9][0-9]*"
 NAME = r"(?:\d{3}|" + TOPIC + r")"
 FILE = re.compile(r"adr-(" + NAME + r")\.md$")
 
@@ -114,6 +116,17 @@ def collisions():
     live = {name_of(p) for p in records(ADR_DIR)} - {None}
     for num in sorted(live & ({name_of(p) for p in records(ARCHIVE)} - {None})):
         wrong.append(f"ADR-{num}: a file both live and archived")
+    # A topic has one live record once it has a version (ADR-decision-records-v2
+    # D2, D4): no second `-v` beside it, and no record of the earlier count.
+    by_topic = {}
+    for num in live:
+        m = re.fullmatch(r"(.+)-(v?)[1-9][0-9]*", num)
+        if m and not num[:3].isdigit():
+            by_topic.setdefault(m.group(1), []).append((m.group(2), num))
+    for topic, names in sorted(by_topic.items()):
+        if any(v for v, _ in names) and len(names) > 1:
+            listed = ", ".join(sorted(n for _, n in names))
+            wrong.append(f"topic `{topic}`: more than one live record ({listed})")
     return wrong
 
 
