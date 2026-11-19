@@ -366,7 +366,11 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         for one in entries(value, n)? { touches.push(touch_of(&one)?); }
         entry.touches = touches;
         entry.touches_known = true;
-    } else if key == "provenance" { entry.provenance = Some(provenance_of(&unquoted(value, n)?, n)?); } else if key == "trusted" { entry.trusted = entries(value, n)?; } else if key == "views" {
+    } else if key == "provenance" { entry.provenance = Some(provenance_of(&unquoted(value, n)?, n)?); } else if key == "trusted" { entry.trusted = entries(value, n)?; } else if key == "provenance_by" {
+        let by = unquoted(value, n)?;
+        if by != "name" && by != "prefix" { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `provenance_by` is `name` or `prefix`, not `{}`", n, by)), &"function_key")); }
+        entry.provenance_by = nikaia_std::block::Text::from(by.to_string());
+    } else if key == "views" {
         let mut views: Vec<Held> = vec![];
         for held in entries(value, n)? {
             let read = held_of(&held);

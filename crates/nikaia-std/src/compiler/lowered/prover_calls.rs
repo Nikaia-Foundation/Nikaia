@@ -131,10 +131,10 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
             let name = *name;
             if tainted.contains(words.resolve(name)) { return true; }
         },
-        Expr::Call { func, config, .. } => {
+        Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let source = outside_source_named(func, words);
-            if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) { return true; }
+            if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) && !operator_read(library, nikaia_std::index::or(source.as_deref(), || ""), args) { return true; }
             if source.is_some() && state.outside.results.contains_key(&nikaia_std::index::or(source, || "".into())) { return true; }
         },
         Expr::MethodCall { receiver, method, config, .. } => {

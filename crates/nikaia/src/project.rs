@@ -197,6 +197,7 @@ impl Settings {
     /// target's words and the optimizations, in that order, after the words
     /// `project_settings` checked.
     fn of(words: ProjectWords) -> Result<Settings> {
+        crate::contracts::environment_untrusted(words.environment == "untrusted");
         symbol_prefix(&words.symbol_prefix)?;
         let mut build = Build::parse(
             &words.target,
@@ -234,6 +235,17 @@ impl Settings {
         self.words.unproved_checks =
             project_settings::project_settings_unproved_checks(&self.words, unproved)
                 .map_err(refusal)?;
+        Ok(())
+    }
+
+    /// **The command line's `--environment` over the manifest's**
+    /// (ADR-397 D4). The std ledger every analysis of this process reads
+    /// follows it.
+    pub fn environment(&mut self, environment: Option<&str>) -> Result<()> {
+        self.words.environment =
+            project_settings::project_settings_environment(&self.words, environment)
+                .map_err(refusal)?;
+        crate::contracts::environment_untrusted(self.words.environment == "untrusted");
         Ok(())
     }
 

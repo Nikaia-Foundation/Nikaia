@@ -146,6 +146,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         } { Some(__nikaia_value) => __nikaia_value, None => return out };
         out.push_str(&format!("provenance = \"{}\"\n", provenance.as_str()));
     }
+    if !contract.provenance_by.is_empty() { out.push_str(&format!("provenance_by = \"{}\"\n", contract.provenance_by)); }
     if !contract.trusted.is_empty() { out.push_str(&format!("trusted = [{}]\n", quoted_all(&contract.trusted))); }
     if !contract.views.is_empty() {
         let mut views: Vec<String> = vec![];
