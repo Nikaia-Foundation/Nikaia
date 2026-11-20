@@ -551,17 +551,17 @@ fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::Int
 fn expression_says(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::InternerContext) -> bool {
     return match seek {
         Seek::LengthChanged(list) => match expr {
-            Expr::MethodCall { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
-            Expr::SafeMethod { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
-            Expr::Call { args, .. } => any_holds_path(args, list, words),
+            Expr::MethodCall { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words),
+            Expr::SafeMethod { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words),
+            Expr::Call { args, .. } => false,
             Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(path_root(list)), words),
             Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(path_root(list)), words),
             else => false,
         },
         Seek::ElementsChanged(list) => match expr {
-            Expr::MethodCall { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
-            Expr::SafeMethod { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
-            Expr::Call { args, .. } => any_holds_path(args, list, words),
+            Expr::MethodCall { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words),
+            Expr::SafeMethod { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words),
+            Expr::Call { args, .. } => false,
             Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(path_root(list)), words),
             Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(path_root(list)), words),
             else => false,
