@@ -335,12 +335,20 @@ impl SvTh for SvTheory {
 			let b = book.bounds.get(f) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
 			held.push(SvHeld { row: b.row.clone(), src: SvSrc::Fact(f) })
 		}
+		// What the elimination derives stays in the book only where it
+		// refutes: a clause the search learns comes from it then, and from
+		// nothing of it otherwise (#2377).
+		let mark = book.mark()
 		let mut solved: Vec[SvSolved] = []
 		if self.exact {
 			let done = sv_eliminate(held, solved, book)
 			match done {
 				SvChecked::Consistent => {},
+				SvChecked::Conflict(_) => {
+					return done
+				},
 				else => {
+					book.rewind(mark)
 					return done
 				},
 			}
@@ -349,27 +357,31 @@ impl SvTh for SvTheory {
 		for h in held {
 			lins.push(sv_lin(h.row, self.names))
 		}
-		return match lg_contradictory(lins, limit) {
+		let got = match lg_contradictory(lins, limit) {
 			LgClosed::Refuted(refutation) => {
 				let clause = sv_written(refutation, held, book)
 					?? return SvChecked::Unknown(LgUnknown::Overflow)
-				SvChecked::Conflict(clause)
+				return SvChecked::Conflict(clause)
 			},
 			LgClosed::Consistent { found, values } => {
 				if !found {
 					// Consistent over the rationals without integer values:
 					// a branch may still split, a final check cannot tell.
-					if final {
-						return SvChecked::Unknown(LgUnknown::NoContradiction)
+					if final { SvChecked::Unknown(LgUnknown::NoContradiction) } else { SvChecked::Consistent }
+				} else {
+					match sv_back_substituted(values, solved, self.names) {
+						null => SvChecked::Unknown(LgUnknown::Overflow),
+						found_values => {
+							self.values = found_values
+							SvChecked::Consistent
+						},
 					}
-					return SvChecked::Consistent
 				}
-				self.values = sv_back_substituted(values, solved, self.names)
-					?? return SvChecked::Unknown(LgUnknown::Overflow)
-				SvChecked::Consistent
 			},
 			LgClosed::Unknown(why) => SvChecked::Unknown(why.clone()),
 		}
+		book.rewind(mark)
+		return got
 	}
 
 	/// `model()`: the values of the last consistent `check`, by name.
@@ -553,6 +565,59 @@ test "the interface's calls one by one leave a log sv_check replays" {
 		"check: conflict [1, 5]",
 		"backtrack to 1, check: consistent, shared []",
 		"log of 5 steps: checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+// A check that refutes nothing leaves the book as it found it (#2377): over
+// x <= y, y <= x and x + y <= 4 the elimination substitutes the equality,
+// a bound entry made for the row it rewrites, and drops it on its
+// consistent answer; with x >= 3 added the conflict keeps what it derived,
+// and the log replays.
+fn sv_theory_test_rewound() -> String {
+	let mut out: String = ""
+	let atoms = [
+		SvAtom { row: sv_theory_test_row1([1, -1], 0), rel: SvRel::Le },
+		SvAtom { row: sv_theory_test_row1([-1, 1], 0), rel: SvRel::Le },
+		SvAtom { row: sv_theory_test_row1([1, 1], -4), rel: SvRel::Le },
+		SvAtom { row: sv_theory_test_row1([-1], 3), rel: SvRel::Le },
+	]
+	let query = SvQuery { atoms: atoms, clauses: [[0], [2], [4], [6]], columns: 2, reals: [] }
+	let mut book = sv_book(query) ?? return "no book"
+	let c0 = book.input(0)
+	let c1 = book.input(1)
+	let c2 = book.input(2)
+	let c3 = book.input(3)
+	let budget = lg_budget()
+	let mut theory = sv_theory(["x", "y"])
+	theory.push_level()
+	theory.assert(0, book)
+	theory.assert(2, book)
+	theory.assert(4, book)
+	let steps = book.log.steps.len()
+	let first = theory.check(false, budget, book)
+	out = out + f"check: {sv_theory_test_said_by(first)}, log {steps} to {book.log.steps.len()} steps, {book.bounds.len()} bounds\n"
+	theory.assert(6, book)
+	let conflict = theory.check(true, budget, book)
+	out = out + f"check: {sv_theory_test_said_by(conflict)}\n"
+	match conflict {
+		SvChecked::Conflict(c) => {
+			book.learn([], [c0, c1, c2, c3, c.id])
+		},
+		else => {},
+	}
+	let v = sv_check(query, book.log.steps)
+	let said = if v.ok { "checked" } else { v.reason.clone() }
+	out = out + f"log: {said}\n"
+	return out
+}
+
+test "a check that refutes nothing leaves the log and the bounds as they were" {
+	let out = sv_theory_test_rewound()
+	let expected = [
+		"check: consistent, log 4 to 4 steps, 0 bounds",
+		"check: conflict [1, 3, 5, 7]",
+		"log: checked",
 	]
 	assert(out == expected.join("\n") + "\n")
 }

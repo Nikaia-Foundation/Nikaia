@@ -196,12 +196,25 @@ panics = true
 touches = []
 signature = "(ref self, l: u32) -> SvBound?"
 
+[fn."SvBook::mark"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> SvMark"
+
 [fn."SvBook::real"]
 sync = "inferred"
 panics = false
 touches = []
 views = ["row: borrowed"]
 signature = "(ref self, row: ref SvRow) -> bool"
+
+[fn."SvBook::rewind"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["mark: borrowed"]
+signature = "(ref mut self, mark: ref SvMark)"
 
 [fn."SvBook::round"]
 sync = "inferred"
@@ -406,6 +419,13 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> bool"
+
+[fn."SvLog::rewind"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["mark: borrowed"]
+signature = "(ref mut self, mark: ref SvMark)"
 
 [fn."SvLog::round"]
 sync = "inferred"
@@ -4860,6 +4880,12 @@ touches = []
 views = ["ls: borrowed"]
 signature = "(ls: ref Vec[u32]) -> String"
 
+[fn."sv_theory_test_rewound"]
+sync = "inferred"
+panics = true
+places = true
+signature = "() -> String"
+
 [fn."sv_theory_test_row1"]
 sync = "inferred"
 panics = true
@@ -5616,6 +5642,13 @@ fields = ["pub steps: Vec[SvStep]", "pub entries: u32", "pub atoms: u32", "pub c
 compares = true
 equates = true
 hashes = true
+
+[type."SvMark"]
+fields = ["steps: i64", "entries: u32", "columns: u32"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."SvMove"]
 fields = ["col: i64", "delta: i64"]

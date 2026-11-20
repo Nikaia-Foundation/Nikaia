@@ -221,31 +221,41 @@ impl SvTh for SvTheory {
             let b = match book.bounds.get(&f) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::OutsideTheTheory) };
             held.push(SvHeld { row: b.row.clone(), src: SvSrc::Fact(f) });
         }
+        let mark = book.mark();
         let mut solved: Vec<SvSolved> = vec![];
         if self.exact {
             let done = sv_eliminate(&mut held, &mut solved, book);
             match done {
                 SvChecked::Consistent => { },
-                _ => { return done; },
+                SvChecked::Conflict(_) => { return done; },
+                _ => {
+                    book.rewind(&mark);
+                    return done;
+                },
             }
         }
         let mut lins: Vec<LgLin> = vec![];
         for h in held.iter() { lins.push(sv_lin(&h.row, &self.names)); }
-        match lg_contradictory(&lins, limit) {
+        let got = match lg_contradictory(&lins, limit) {
             LgClosed::Refuted(ref refutation) => {
                 let clause = match sv_written(refutation, &held, book) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
-                SvChecked::Conflict(clause)
+                return SvChecked::Conflict(clause);
             },
             LgClosed::Consistent { found, ref values } => {
-                if !found {
-                    if r#final { return SvChecked::Unknown(LgUnknown::NoContradiction); }
-                    return SvChecked::Consistent;
+                if !found { if r#final { SvChecked::Unknown(LgUnknown::NoContradiction) } else { SvChecked::Consistent } } else {
+                    match sv_back_substituted(values, &solved, &self.names) {
+                        None => SvChecked::Unknown(LgUnknown::Overflow),
+                        Some(found_values) => {
+                            self.values = found_values;
+                            SvChecked::Consistent
+                        },
+                    }
                 }
-                self.values = match sv_back_substituted(values, &solved, &self.names) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
-                SvChecked::Consistent
             },
             LgClosed::Unknown(why) => SvChecked::Unknown(why.clone()),
-        }
+        };
+        book.rewind(&mark);
+        got
     }
     fn model(&self) -> collections::BTreeMap<String, i64> { self.values.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { sv_rat_values(&self.values) }
@@ -377,7 +387,45 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn sv_theory_test_rewound() -> String {
+    let mut out: String = String::from("");
+    let atoms = vec![SvAtom { row: sv_theory_test_row1(&vec![1, -1], 0), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![-1, 1], 0), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![1, 1], -4), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![-1], 3), rel: SvRel::Le }];
+    let query = SvQuery { atoms, clauses: vec![vec![0], vec![2], vec![4], vec![6]], columns: 2, reals: vec![] };
+    let mut book = match sv_book(&query) { Some(__nikaia_value) => __nikaia_value, None => return String::from("no book") };
+    let c0 = book.input(0u32);
+    let c1 = book.input(1u32);
+    let c2 = book.input(2u32);
+    let c3 = book.input(3u32);
+    let budget = lg_budget();
+    let mut theory = sv_theory(vec![String::from("x"), String::from("y")]);
+    theory.push_level();
+    theory.assert(0u32, &mut book);
+    theory.assert(2u32, &mut book);
+    theory.assert(4u32, &mut book);
+    let steps = book.log.steps.len() as i64;
+    let first = theory.check(false, &budget, &mut book);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("check: {}, log {} to {} steps, {} bounds\n", sv_theory_test_said_by(&first), steps, book.log.steps.len() as i64, book.bounds.len() as i64)));
+    theory.assert(6u32, &mut book);
+    let conflict = theory.check(true, &budget, &mut book);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("check: {}\n", sv_theory_test_said_by(&conflict))));
+    match conflict {
+        SvChecked::Conflict(ref c) => { book.learn(vec![], vec![c0, c1, c2, c3, c.id]); },
+        _ => { },
+    }
+    let v = sv_check(&query, &book.log.steps);
+    let said = if v.ok { String::from("checked") } else { nikaia_std::block::Text::from(v.reason.to_string()) };
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("log: {}\n", said)));
+    out
+}
+
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let out = sv_theory_test_rewound();
+    let expected = vec!["check: consistent, log 4 to 4 steps, 0 bounds", "check: conflict [1, 3, 5, 7]", "log: checked"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("refused-function.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; An uninterpreted function: outside what the reader takes.", "(set-logic QF_UFLIA)", "(set-info :status sat)", "(declare-fun f (Int) Int)", "(assert (= (f 1) 2))", "(check-sat)"].join("\n")), "\n"))), ("sat-interval.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; A model: 1 <= x <= 3 and x != 2.", "(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x Int)", "(assert (<= 1 x))", "(assert (<= x 3))", "(assert (distinct x 2))", "(check-sat)"].join("\n")), "\n"))), ("unsat-bounds.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; The bounds check of ADR-270 D9: 0 <= i < n proves i < n + 1.", "(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const i Int)", "(declare-const n Int)", "(assert (<= 0 i))", "(assert (< i n))", "(assert (not (< i (+ n 1))))", "(check-sat)"].join("\n")), "\n"))), ("disjunctions-03.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(check-sat)", "(exit)"].join("\n")), "\n"))), ("disjunctions-04.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const x4 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (or (= x4 0) (= x4 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(assert (not (< i (+ k 1))))", "(check-sat)", "(exit)"].join("\n")), "\n")))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, source) in files.iter() {
@@ -394,6 +442,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn sv_theory_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("sv_theory::the_interface_s_calls_one_by_one_leave_a_log_sv_check_replays", __nikaia_test_0),
-        ("sv_theory::smoke_and_disjunction_files_are_answered_alike_by_lg_check_and_over_the_interface", __nikaia_test_1),
+        ("sv_theory::a_check_that_refutes_nothing_leaves_the_log_and_the_bounds_as_they_were", __nikaia_test_1),
+        ("sv_theory::smoke_and_disjunction_files_are_answered_alike_by_lg_check_and_over_the_interface", __nikaia_test_2),
     ]
 }
