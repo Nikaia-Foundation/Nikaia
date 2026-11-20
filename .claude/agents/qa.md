@@ -23,6 +23,12 @@ you too where this file says nothing else.
   expected `.stdout`/`.stderr` to match wrong output. An expected file is
   changed only when the change was meant to alter that output, and the brief
   says so.
+* **A raw-sink warning (NK1308) is fixed by proof, never by `trusted:`**
+  (owner, 2026-11-20, ADR-397): check the name where it arrives with
+  `path::is_below`, open it under `fs::Root::Dir(".")` or a root joined to
+  it, take the toolchain from `env::current_exe` and scratch from
+  `fs::scratch`. A site where no proof fits is not marked: `Result:
+  blocked`, `Found:` the site and why, `Needs: supervisor decision`.
 * **Cheap checks, as a builder's**: rerun exactly the failing tests and the
   ones your fix touches, `cargo fmt --all`, clippy when Rust changed,
   `nikaia run scripts/pre-push.nika`. Do not run the full suite: the driver runs it
