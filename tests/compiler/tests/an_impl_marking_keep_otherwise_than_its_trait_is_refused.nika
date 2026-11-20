@@ -1,5 +1,5 @@
 // A trait's signature fixes `keep` for every implementation: an impl that
-// marks a parameter otherwise is refused (NK2302, ADR-views-3 D2).
+// marks a parameter otherwise is refused (NK2302, ADR-views-v4 D2).
 trait Sink {
 	fn take(mut self, keep item: String)
 }

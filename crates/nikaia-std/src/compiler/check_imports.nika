@@ -14,7 +14,7 @@ use std::collections
 /// for every other question asked of `std`. It is the wrong one for a **refusal**:
 /// a module the specification promises and the compiler has not built is a
 /// correct program refused. `use std::db` is how
-/// [ADR-299](../../docs/specification/adr/adr-299.md)'s driver is reached, and
+/// [ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md)'s driver is reached, and
 /// the day it exists nothing about that line changes.
 ///
 /// So the refusal stands on the join of two lists, and this half is **written
@@ -22,9 +22,9 @@ use std::collections
 /// name is one a page or a record writes after `use std::`, and a name on
 /// neither list is one nobody has written down anywhere. Where each comes from,
 /// in the order they appear below: `use std::backend::x86`
-/// ([ADR-296](../../docs/specification/adr/adr-296.md), Part III 16); the build
+/// ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D20, Part III 16); the build
 /// script's own API (Part III 13.4);
-/// [ADR-299](../../docs/specification/adr/adr-299.md)'s driver protocol; Part III
+/// [ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md)'s driver protocol; Part III
 /// 17.1's *other key modules*; Part I 2.6's panic hook, `panic::on_panic`
 /// ([ADR-141](../../docs/specification/adr/adr-141.md)); Part III 17.2's table,
 /// which says what a target withholds; Part II 12.7's `task::scope`; and that
@@ -69,6 +69,23 @@ fn starts_with_a_capital(name: ref String) -> bool sync {
 /// `collections` is a method on `HashMap` and `collections` is imported by name.
 fn not_a_module(name: ref String) -> bool sync {
     return name == "f64" || name == "i32" || name == "i64" || name == "list" || name == "str"
+}
+
+/// **Whether `std`'s ledger has a public entry under `module`** (#2320): a
+/// function or a type keyed `module::...` without `pub = false`.
+fn something_public_in(world: ref CheckWorld, module: ref String) -> bool sync {
+    let prefix = f"{module}::"
+    for (key, contract) in world.library.functions {
+        if contract.public && key.starts_with(ref prefix) {
+            return true
+        }
+    }
+    for (key, contract) in world.library.types {
+        if contract.public && key.starts_with(ref prefix) {
+            return true
+        }
+    }
+    return false
 }
 
 impl CheckState {
@@ -128,7 +145,7 @@ impl CheckState {
             }
         }
         if !a_type {
-            self.a_std_module_nobody_declared(segments[1], segments, span)
+            self.a_std_module_nobody_declared(world, segments[1], segments, span)
             return
         }
         let mut help: String = f"Remove the line: `{last}` is always available, no `use` needed."
@@ -163,28 +180,45 @@ impl CheckState {
     /// starts at: `use std::db::postgres` is `db`'s question and
     /// `use std::backend::x86` is `backend`'s, which is the reading
     /// [ADR-140](../../docs/specification/adr/adr-140.md) already gave them.
-    fn a_std_module_nobody_declared(ref mut self, module: ref String, segments: ref Vec[String], span: ref Span) sync {
+    ///
+    /// **A module is offered when something under it is public** (#2320): one
+    /// whose every ledger entry is `pub = false` (`rt`) is `std`'s own, for its
+    /// test blocks (ADR-rust-boundary-1 D24), so a program's `use` of it is
+    /// refused and the list leaves it out. The refusal's span goes into
+    /// `std_helpers_reached`, so a file of `std`'s own keeps the line
+    /// (`check_access_inside_std`).
+    fn a_std_module_nobody_declared(ref mut self, world: ref CheckWorld, module: ref String, segments: ref Vec[String], span: ref Span) sync {
+        if is_promised(module) || (self.offers_as_a_module(module) && something_public_in(world, module)) {
+            return
+        }
         let mut offered: Vec[String] = []
         for name in self.std_modules {
-            if !starts_with_a_capital(name) && !not_a_module(name) {
+            if self.offers_as_a_module(name) && something_public_in(world, name) {
                 offered.push(name.clone())
             }
         }
         offered.sort()
-        if offered.contains(module) || is_promised(module) {
-            return
-        }
         let written = segments.join("::")
         let near = nearest_name(module, offered)
         let mut why: String = f"`{module}` is not one of the modules `std` offers."
         if module == "compiler" {
             why = "`compiler` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"
         }
+        if self.offers_as_a_module(module) {
+            why = f"`{module}` is `std`'s own: everything in it is private to `std`, for its test blocks, and a program cannot reach it"
+            self.facts.std_helpers_reached.insert(span.start as i64)
+        }
         let mut help: String = f"`std` offers: {offered.join(", ")}."
         if near != null {
             help = f"Did you mean `use std::{near ?? ""}`?"
         }
         self.findings.push(check_refusal("NK1186", span, f"`std` has no module called `{written}`.", [why], help))
+    }
+
+    /// A head of `std`'s ledger that reads as a module: not a type's name and
+    /// not one of the names the language has.
+    fn offers_as_a_module(ref self, name: ref String) -> bool sync {
+        return self.std_modules.contains(name) && !starts_with_a_capital(name) && !not_a_module(name)
     }
 
     /// A grammar's action blocks are Nikaia, and they build the rule's value.
@@ -195,7 +229,7 @@ impl CheckState {
     /// else is the mistake worth catching: a rule is where a struct literal is
     /// most often typed out in full.
     /// **Two names the engine has and a grammar may not write** (`NK1187`,
-    /// [ADR-grammar-syntax-v1](../../docs/specification/adr/adr-grammar-syntax-v1.md) D10).
+    /// [ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D10).
     ///
     /// `tag("x")` is `"x"` and `digit1` is `digit+`: each is the engine's
     /// spelling for something the grammar can already say, and D1 makes Part II

@@ -1,4 +1,4 @@
-// #1208, ADR-views-1 D2: a field of `mut self` taken by a keeper and not
+// #1208, ADR-views-v4 D19: a field of `mut self` taken by a keeper and not
 // given back before the method is left.
 struct LeftOutTrail {
 	trail: Vec[u32],

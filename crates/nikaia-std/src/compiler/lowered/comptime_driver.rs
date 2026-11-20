@@ -47,9 +47,9 @@ pub(crate) fn cr_bundle_manifest(name: &str, dependencies: &[(String, String)]) 
 
 [package]
 ");
-    manifest.push_str(&format!("name = \"{}\"\n", name));
+    { use ::core::fmt::Write as _; let _ = manifest.write_fmt(format_args!("name = \"{}\"\n", name)); };
     manifest.push_str("version = \"0.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\n");
-    for (dependency, value) in dependencies.iter() { manifest.push_str(&format!("{} = {}\n", dependency, value)); }
+    for (dependency, value) in dependencies.iter() { { use ::core::fmt::Write as _; let _ = manifest.write_fmt(format_args!("{} = {}\n", dependency, value)); }; }
     manifest.push_str(CR_DEPENDENCY_PROFILE);
     manifest
 }
@@ -126,7 +126,7 @@ pub(crate) fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &st
     let mut table: String = String::from("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");
     for (line, row) in placed.iter() {
         let line = nikaia_std::num::value(line);let row = *row;
-        table.push_str(&format!("    ({}, \"{}{}\", {}),\n", line, stopped_at, row.unit, row.byte));
+        { use ::core::fmt::Write as _; let _ = table.write_fmt(format_args!("    ({}, \"{}{}\", {}),\n", line, stopped_at, row.unit, row.byte)); };
     }
     table.push_str("];\n");
     let rest = nikaia_std::block::Text::from(nikaia_std::index::get(&rust, nikaia_std::index::at(end..)).to_string());

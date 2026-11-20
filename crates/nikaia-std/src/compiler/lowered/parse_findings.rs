@@ -41,7 +41,7 @@ pub fn parse_findings_failure(error: &Failure, source: &str, stops_at: &mut impl
 
 pub fn parse_findings_mut_name_in_a_tuple(at: i64) -> Finding {
     let span = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at + 3).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
-    Finding { code: String::from("NK1307"), span, message: String::from("`mut` in front of one name of a tuple pattern isn't supported yet."), notes: vec![String::from("This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry.")], help: Some(String::from("Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.")), warning: false, labels: vec![CheckLabel { span, word: String::from("mut"), text: String::from("not supported yet"), main: true }] }
+    Finding { code: String::from("NK1307"), span, message: String::from("`mut` in front of one name of a lambda's tuple parameter isn't supported yet."), notes: vec![String::from("This is not refused on purpose: the form is left for later. In a `let` or a `for` it marks that name alone.")], help: Some(String::from("Take the tuple whole and bind its parts in the body: `fn(pair) { let (a, mut b) = pair; … }`.")), warning: false, labels: vec![CheckLabel { span, word: String::from("mut"), text: String::from("not supported yet"), main: true }] }
 }
 
 pub fn parse_findings_misplaced_async(at: i64, word: &str) -> Finding {

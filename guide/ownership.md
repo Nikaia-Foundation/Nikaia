@@ -701,7 +701,7 @@ error[NK2302]: `Cart::add` keeps `item`, but `item` is not marked `keep`.
  15 |         self.items.push(item)           // does not compile: NK2302
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-v4 D2).
     = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
     = help: Write `keep item` in the signature of `Cart::add`.
 ```
@@ -756,7 +756,7 @@ need is to get a warning, `from` is to be required where there is no body to rea
 trait's method, a function type, a foreign function), and the ledger is to write the source in
 the same spelling, `-> String from a | b`, where it writes `-> ref(a | b) String` today.
 
-**Specification:** [ADR-views-3](../docs/specification/adr/adr-views-3.md) · [Part I, §6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing)
+**Specification:** [ADR-views-v4](../docs/specification/adr/adr-views-v4.md) · [Part I, §6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing)
 
 ---
 

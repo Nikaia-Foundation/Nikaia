@@ -188,7 +188,7 @@ fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref 
 /// **A parameter a function type keeps is given to it** (Part I 5.4 C,
 /// ADR-293 D29, #1990), as a named function's kept parameter is: a name
 /// handed there is gone after the call (`NK2105` at a later use), and a view
-/// is no value of its own (`NK1102`, ADR-views-3 D5). A text literal is text
+/// is no value of its own (`NK1102`, ADR-views-v4 D5). A text literal is text
 /// of its own there (`kept_arguments_are_its_own`).
 fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, given: ref Expr, found: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
     if a_text_literal_expr(given) || check_core_call_opaque(found) {
@@ -281,7 +281,7 @@ fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee
 }
 
 // **The arguments handed to parameters of code of a function of this
-// package or another one** (ADR-views-3 D17), kept until the whole file is
+// package or another one** (ADR-views-v4 D17), kept until the whole file is
 // walked: the callee's body alone decides whether it runs one from tasks at
 // once, which its ledger entry says for another file or package and the
 // file's own walk finds for this one.
@@ -615,7 +615,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         state.flow.guarded = guarded
     }
     // **A parameter of code run one call at a time, or from tasks at once**
-    // (ADR-views-3 D17).
+    // (ADR-views-v4 D17).
     if is_variable && state.run_code.contains(name) {
         state.a_code_parameter_named(name)
     }
@@ -704,6 +704,33 @@ fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name
         let notes: Vec[String] = [f"`{name}` takes its `{param}` as Rust's `{owner}`, and a {what} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", whence]
         state.findings.push(check_refusal("NK2506", check_span_at(world, arg, span), f"`{name}` takes `{written}` as its own, but the compiler can't follow it back to where it was built.", notes, f"Write `{written}.clone()` to hand `{name}` a copy."))
     }
+}
+
+/// **A method called by its path is refused** (Part III 17, #2336): one way
+/// to call a method, on a value. The help writes the first argument as the
+/// receiver, `T::m(x, y)` as `x.m(y)`, where the checker can write it (a
+/// literal, a name); with no argument, it names the type.
+fn check_core_call_a_method_by_its_path(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+    let parts: Vec[String] = name.split("::").map(fn(p) { p.clone() }).collect()
+    let method: String = parts.last()?.clone() ?? name.clone()
+    let owner: String = (name.strip_suffix(f"::{method}") ?? name).clone()
+    let mut notes: Vec[String] = []
+    let signature = contract.signature ?? return
+    notes.push(f"It's declared as `{name}{signature.shown(contract.keeps)}`.")
+    let mut help: String = f"Call it on a `{owner}`: `value.{method}()`."
+    if args.len() > 0 {
+        let mut rest: Vec[String] = []
+        for arg in args.iter().skip(1) {
+            rest.push(check_walked_written(arg, world.words))
+        }
+        let receiver = check_walked_written(args[0], world.words)
+        help = f"Write `{receiver}.{method}({rest.join(", ")})`."
+        // The checker writes a literal or a name; the rest is said in words.
+        if receiver == "…" {
+            help = f"Put the first argument before `.{method}`: `value.{method}({rest.join(", ")})`."
+        }
+    }
+    state.findings.push(check_refusal("NK1101", span, f"`{name}` is a method: it's called on a value, not by its path.", notes, help))
 }
 
 /// A call the ledger describes: reached, asked, and typed from its signature
@@ -1010,6 +1037,12 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return check_core_call_unresolved(state, world, host, func, name, args, found, config, passed, shadowed, span)
     }
     let contract: FnContract = callee ?? return Ty::Unknown
+    // **A method has one call form, `x.m()`** (Part III 17, #2336): its path
+    // form, `T::m(x)` or `T::m()`, is refused before its count is.
+    if contract.signature?.takes_a_receiver() ?? false {
+        check_core_call_a_method_by_its_path(state, world, name, contract, args, span)
+        return Ty::Unknown
+    }
     let described = check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
     // **`simd::Fixed::from([…])` takes the lanes as an array** (ADR-377 D3).
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
@@ -1040,7 +1073,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     // **A view of a parameter bound to a copied word is read at the call**
-    // (ADR-views-3 D12, D4, #1239): `hand(3)` of `fn hand[T](x: T) -> T` hands
+    // (ADR-views-v4 D12, D4, #1239): `hand(3)` of `fn hand[T](x: T) -> T` hands
     // back a view of `x`, and a view of a number is the number (ADR-279 D8);
     // so is a view of an open number, whose type its uses decide (#497).
     let open = args.len() > 0 && state.flow.open_calls.contains_key(id_of(args[0]) as i64)
@@ -1049,7 +1082,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return unviewed_type(made)
     }
     // **A view of a variable that holds a view of text is read at the call**
-    // (ADR-views-3 D12, #1498): the `&&str` the result is points into the
+    // (ADR-views-v4 D12, #1498): the `&&str` the result is points into the
     // call's own `&`, and its copy is the `&str` the arguments view.
     if check_core_call_hands_back_a_variable(contract) && state.facts.viewed_text_calls.contains(span.start as i64) {
         state.facts.copied_results.insert(id_of(func) as i64)

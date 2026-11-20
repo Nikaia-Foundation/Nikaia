@@ -297,7 +297,7 @@ impl EmitState {
     pub(crate) fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if config.is_empty() || !self.dsl_drivers.contains(callee) { return Ok(()); }
         let mut names: Vec<String> = vec![];
-        for a in config.iter() { names.push(emit_text(world, a.name)); }
+        names.reserve(config.iter().size_hint().0); for a in config.iter() { names.push(emit_text(world, a.name)); }
         if args > 0 { out.push(", "); }
         out.push(&format!("{} {{ ", type_name(&names)));
         let mut n = 0;
@@ -424,7 +424,7 @@ impl EmitState {
                     handed.push_str("&");
                 }
                 out.push("; ");
-                handed.push_str(&format!("__wg_value{}, ", i));
+                { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_value{}, ", i)); };
             }
             let mut j = 0;
             for option in rule.config.iter() {
@@ -438,7 +438,7 @@ impl EmitState {
                 }
                 if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
                 out.push("; ");
-                handed.push_str(&format!("__wg_option{}, ", j));
+                { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
                 j += 1;
             }
             let mut context = "winnow_grammar::ParseContext::<()>::default()";
@@ -451,10 +451,11 @@ impl EmitState {
                     context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)";
                 },
             }
-            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
-            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut {}, winnow_grammar::rt::Reading::default(), {}{}); ", lowered, rule_name, context, handed, each));
-            out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
+            out.push(&emit_stream_batched_start());
+            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
+            out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut {}, {}{}); ", lowered, rule_name, context, handed, each));
+            out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
+            out.push(" })");
             out.push(&format!("{}", question));
             return Ok(());
         }
@@ -560,7 +561,7 @@ impl EmitState {
             let mut message: String = String::from("the template has holes escaping cannot make safe\n");
             for (expr, at) in unsafe_holes.iter() {
                 let at = *at;
-                message.push_str(&format!("  {}\n", illegal_message(expr, &at)));
+                { use ::core::fmt::Write as _; let _ = message.write_fmt(format_args!("  {}\n", illegal_message(expr, &at))); };
             }
             return Err(nikaia_std::error::throwing(EmitRefused { message, at: None }, &"emit_core_template"));
         }

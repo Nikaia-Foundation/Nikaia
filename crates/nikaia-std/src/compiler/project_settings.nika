@@ -51,9 +51,9 @@ pub struct ProjectWords {
     /// the program (`NK1313`), each such site with the guard that proves it.
     pub unproved_checks: String,
     /// **What data from outside at a raw sink is, unproved and not allowed**
-    /// (ADR-raw-sinks-1 D3): `error`, the default, refuses the program
-    /// (`NK1308`); `warn` builds it, each such call a warning and a check
-    /// where it is reached. Read from the application's manifest only.
+    /// (ADR-raw-sinks-1 D3): `warn`, the default until our own code builds
+    /// under the check (D8), builds it, each such call a warning; `error`
+    /// refuses the program (`NK1308`). Read from the application's manifest only.
     pub raw_sinks: String,
     /// **Who sets the environment** ([ADR-397](../../../docs/specification/adr/adr-397.md)
     /// D4): `operator`, the default, makes what `env::var` and `env::vars`
@@ -233,9 +233,9 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // A build that refuses every unproved check must not take the lowering
     // of one that let them through (ADR-306 D29).
     let checks = if words.unproved_checks == "error" { "/unproved-checks:error" } else { "" }
-    // A build that checks a raw sink's data at run time lowers the check
-    // (ADR-raw-sinks-1 D3).
-    let sinks = if words.raw_sinks == "warn" { "/raw-sinks:warn" } else { "" }
+    // A build that refuses a raw sink's data must not take the lowering of
+    // one that let it through (ADR-raw-sinks-1 D3); `warn` is the default.
+    let sinks = if words.raw_sinks == "error" { "/raw-sinks:error" } else { "" }
     // What a program may claim about the environment, and whether its
     // `main` lets a privileged start in, depends on who sets it (ADR-397 D4).
     let environment = if words.environment == "untrusted" { "/environment:untrusted" } else { "" }
@@ -371,7 +371,7 @@ pub fn project_settings_resolve(manifest: fn(ref String, ref String) -> String s
     let refuted = manifest("refuted-claims", "error")
     let unproved = manifest("unproved-claims", "error")
     let checks = manifest("unproved-checks", "allow")
-    let sinks = manifest("raw-sinks", "error")
+    let sinks = manifest("raw-sinks", "warn")
     let environment = manifest("environment", "operator")
     let made = manifest("artifact", "program")
     let named = (package ?? "program").replace("-", "_")
@@ -389,7 +389,7 @@ pub fn project_settings_from_env[H: ProjectSettingsHost](default_target: String,
     let refuted = host.env_var(PROJECT_SETTINGS_REFUTED_VAR) ?? "error"
     let unproved = host.env_var(PROJECT_SETTINGS_UNPROVED_VAR) ?? "error"
     let checks = host.env_var(PROJECT_SETTINGS_UNPROVED_CHECKS_VAR) ?? "allow"
-    let sinks = host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR) ?? "error"
+    let sinks = host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR) ?? "warn"
     let environment = host.env_var(PROJECT_SETTINGS_ENVIRONMENT_VAR) ?? "operator"
     let made = host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR) ?? "program"
     let symbol_prefix = host.env_var(PROJECT_SETTINGS_PREFIX_VAR) ?? "program"
@@ -445,15 +445,27 @@ pub fn project_settings_environment(words: ref ProjectWords, flag: String?) -> S
     }
 }
 
-/// **What the build allows** (ADR-raw-sinks-1 D4, D5): the manifest's
-/// `[allow]` words, then each `--allow=KEY` or `--allow=PACKAGE:KEY`, a key
-/// outside the four refused naming them.
+/// **What the build allows** (ADR-raw-sinks-1 D4, D5, D15): the manifest's
+/// `[allow]` words, then each `--allow=KEY` or `--allow=PACKAGE:KEY`, a path
+/// key with `=SOURCE` for one source (`--allow=untrusted-paths-read=args`);
+/// a key or a source outside the known ones is refused naming them.
 pub fn project_settings_allowed(manifest: ref Vec[String], flags: ref Vec[String]) -> Vec[String] throws {
     let mut allowed = manifest.clone()
     for flag in flags {
-        let key = match flag.split_once(":") {
+        let named = match flag.split_once(":") {
             (_, key) => key,
             null => flag.clone(),
+        }
+        let mut key = named.clone()
+        match named.split_once("=") {
+            (before, source) => {
+                key = before.clone()
+                if !key.starts_with("untrusted-paths-") || !raw_sinks_allow_sources().iter().any(fn(known) { known == source }) {
+                    let sources = raw_sinks_allow_sources().join(", ")
+                    throw ProjectSettingsRefusal::Refused(f"`--allow={flag}` names no source of a path key. A path key takes one of: {sources}, after `=`.")
+                }
+            },
+            null => {}
         }
         if !raw_sinks_allow_keys().iter().any(fn(known) { known == key }) {
             let expected = raw_sinks_allow_keys().join(", ")

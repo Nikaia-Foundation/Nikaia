@@ -14,6 +14,12 @@ pub struct BodyShape {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RulesChecked {
+    pub reads: collections::BTreeMap<String, BoundsReturns>,
+    pub failed: collections::BTreeSet<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Around {
     pub functions: collections::BTreeMap<String, Vec<bool>>,
     pub changing_methods: collections::BTreeSet<String>,
@@ -21,6 +27,9 @@ pub struct Around {
     pub frames: collections::BTreeMap<String, BoundsChanged>,
     pub rules: Vec<BoundsRule>,
     pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
+    pub checked: collections::BTreeMap<String, RulesChecked>,
+    pub checked_fields: collections::BTreeMap<String, Range>,
+    pub checked_returning: collections::BTreeSet<String>,
     pub derived: Derived,
     pub fields: collections::BTreeSet<String>,
     pub field_writers: collections::BTreeSet<i64>,
@@ -67,7 +76,7 @@ pub(crate) fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTree
     seen.lost.extend(pinned.iter().cloned());
     look_block(body, &Look::Lost, false, around, words, &mut seen);
     let mut through: Vec<String> = vec![];
-    for name in seen.lost.iter() {
+    through.reserve(seen.lost.iter().size_hint().0); for name in seen.lost.iter() {
         let key = match seen.shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         through.push(key_root(&key));
     }

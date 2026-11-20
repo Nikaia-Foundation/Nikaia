@@ -108,7 +108,7 @@ pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
     let mut length: i64 = 0;
     let mut keep_alive = *unsafe { nikaia_std::proven::read(&written.words, (2) as usize) } != "HTTP/1.0";
     let mut headers: Vec<Header<'_>> = vec![];
-    for field in written.fields.iter() {
+    headers.reserve(written.fields.iter().size_hint().0); for field in written.fields.iter() {
         let name = nikaia_std::block::Text::from(field.name.trim().to_lowercase());
         let value = field.value.trim();
         if name == "content-length" {

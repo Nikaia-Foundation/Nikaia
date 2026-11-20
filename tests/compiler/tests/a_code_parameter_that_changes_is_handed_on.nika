@@ -1,5 +1,5 @@
 // Code that changes what it captures, handed on: a parameter lent on to a
-// parameter of the same kind, and a lambda that runs one (ADR-views-3 D17,
+// parameter of the same kind, and a lambda that runs one (ADR-views-v4 D17,
 // #1553). Code that changes nothing still fits.
 fn each(xs: Vec[i64], f: fn(i64)) { for x in xs { f(x) } }
 

@@ -185,7 +185,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
-        Expr::LitNull(_) => Ty::Nullable(std::boxed::Box::new(Ty::Unknown)),
+        Expr::LitNull(_) => Ty::Nullable(nikaia_std::block::Boxed::new(Ty::Unknown)),
         Expr::Variable(name, _) => {
             let name = *name;
             if state.run_code.contains(world.words.resolve(name)) { state.a_code_parameter_named(world.words.resolve(name)); }
@@ -518,7 +518,7 @@ pub(crate) fn check_core_expr_a_bare_case(ledger: &Ledger, owner: &str, variant:
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for segment in segments.iter() {
+    names.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
         let segment = *segment;
         names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
     }

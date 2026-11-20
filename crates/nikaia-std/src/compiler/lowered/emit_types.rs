@@ -9,7 +9,7 @@ pub(crate) fn emit_base(name: &str) -> String {
 
 pub(crate) fn emit_segments(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for symbol in path.iter() {
+    out.reserve(path.iter().size_hint().0); for symbol in path.iter() {
         let symbol = *symbol;
         out.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
     }
@@ -50,7 +50,7 @@ impl EmitState {
         self.is_boxed(owner, field)
     }
     pub(crate) fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
-        if self.is_boxed(owner, member) { return format!("std::boxed::Box<{}>", lowered); }
+        if self.is_boxed(owner, member) { return format!("nikaia_std::block::Boxed<{}>", lowered); }
         lowered
     }
     pub(crate) fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {

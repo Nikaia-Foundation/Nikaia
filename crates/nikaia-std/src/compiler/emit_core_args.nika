@@ -442,6 +442,149 @@ impl EmitState {
         return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
     }
 
+    /// Whether argument `i` is a text's `bytes().collect()` lent, as it is,
+    /// to a parameter declared `Vec[u8]` (#2385): one the callee only reads,
+    /// as `&[u8]`, so the text's own bytes are what it takes. Not where the
+    /// argument is nullable, changed, a type variable's or collected into a
+    /// declared type.
+    fn emit_arg_lent_text_bytes(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64) -> bool {
+        let node = node_key(arg)
+        if !self.facts.lent_args.contains(node) || self.facts.mut_args.contains(node) || self.facts.changing_code_args.contains_key(node) || self.facts.nullable_args.contains_key(node) {
+            return false
+        }
+        let collected = match arg {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if emit_text(world, method) != "collect" || args.len() != 0 {
+                    return false
+                }
+                receiver
+            },
+            else => return false,
+        }
+        let text = match collected {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if emit_text(world, method) != "bytes" || args.len() != 0 {
+                    return false
+                }
+                receiver
+            },
+            else => return false,
+        }
+        if (self.facts.method_callees[node_key(collected)]?.clone() ?? "") != "Seq::collect" || self.facts.collected_into.contains(node_key(collected)) {
+            return false
+        }
+        let bytes = self.facts.method_callees[node_key(text)]?.clone() ?? ""
+        if bytes != "String::bytes" && bytes != "str::bytes" {
+            return false
+        }
+        let key = method_callee ?? callee
+        let contract = self.own_contracts.functions.get(key) ?? world.library.functions.get(key) ?? return false
+        let signature = contract.signature ?? return false
+        let at = if method_callee != null && emit_takes_self(contract) { i + 1 } else { i }
+        if at < 0 || at >= signature.params.len() {
+            return false
+        }
+        return match signature.params[at].1 {
+            Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && names_u8(args[0]),
+            else => false,
+        }
+    }
+
+    /// **A text compared with an `f"…"` of text parts is checked in place**
+    /// (#2405): `t.starts_with(f"{a}[")`, `ends_with`, `contains`, `==` and
+    /// `!=` build no text. The text and the holes are lent first, in the order
+    /// written, each once, as `format!` reads them; then the parts are
+    /// stripped in turn (`strip_prefix`, `strip_suffix` from the end), `==`
+    /// compares the lengths first, and `contains` finds the first part and
+    /// checks the rest after each place it is found. `kind` is the method or
+    /// the operator, `text_first` whether the text is written before the
+    /// literal, `as_receiver` whether it is a method's receiver. False, and
+    /// nothing written, where the literal is not one of `text_formats` or a
+    /// hole is formatted otherwise: a file's name, an escaped, wrapped or
+    /// changing hole.
+    fn emit_format_compared[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, kind: ref String, text: ref Expr, literal: ref Expr, text_first: bool, as_receiver: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let key = node_key(literal)
+        if !self.facts.text_formats.contains(key) || self.facts.path_holes.contains_key(key) {
+            return false
+        }
+        let parts = match literal {
+            Expr::LitInterpolated { parts, .. } => parts,
+            else => return false,
+        }
+        let mut pieces: Vec[String] = []
+        let mut names: String = ""
+        for part in parts {
+            match part {
+                FPart::Text(written) => {
+                    let piece = written.replace("{{", "{").replace("}}", "}")
+                    if piece != "" {
+                        pieces.push(f"\"{piece}\"")
+                    }
+                },
+                FPart::Hole { expr, at, .. } => {
+                    if self.escaped_holes.contains(node_key(expr)) || self.hole_wraps.contains_key(at as i64) || self.emit_leaf_calls_a_changing_method(world, expr) {
+                        return false
+                    }
+                    let name = f"__nikaia_f{pieces.len()}"
+                    names.push_str(f"{name}, ")
+                    pieces.push(name)
+                },
+            }
+        }
+        out.push("::core::convert::identity(match (")
+        if text_first {
+            self.emit_format_compared_text(world, walk, out, host, text, as_receiver, depth, flow, scope)
+        }
+        for part in parts {
+            match part {
+                FPart::Hole { expr, at, .. } => {
+                    out.push("AsRef::<str>::as_ref(&(")
+                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                    out.push(")), ")
+                },
+                else => {},
+            }
+        }
+        if !text_first {
+            self.emit_format_compared_text(world, walk, out, host, text, as_receiver, depth, flow, scope)
+        }
+        let bound = if text_first { f"__nikaia_t, {names}" } else { f"{names}__nikaia_t, " }
+        out.push(f") {{ ({bound}) => {format_compared_check(kind, pieces)} }})")
+        return true
+    }
+
+    /// The text `emit_format_compared` lends, as the `str` it holds.
+    fn emit_format_compared_text[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, text: ref Expr, as_receiver: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("AsRef::<str>::as_ref(&(")
+        if as_receiver {
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+        } else {
+            self.emit_expr(world, walk, out, host, text, depth, flow, scope)
+        }
+        out.push(")), ")
+    }
+
+    /// Whether argument `i` of a call goes to a parameter the library's or a
+    /// described crate's entry names in `os_text` (Part III 13.5, #2351): one
+    /// its Rust function takes as `&OsStr`. This unit's own functions take
+    /// none.
+    fn emit_arg_os_text(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, i: i64) -> bool {
+        let key = method_callee ?? callee
+        if self.own_contracts.functions.contains_key(key) {
+            return false
+        }
+        let contract = world.library.functions.get(key) ?? self.described.functions.get(key) ?? return false
+        if contract.os_text.is_empty() {
+            return false
+        }
+        let signature = contract.signature ?? return false
+        let params = call_arguments(signature)
+        if i >= params.len() {
+            return false
+        }
+        return contract.os_text.contains(params[i].0)
+    }
+
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
     /// method of that name agrees on (#462). Empty where there is none. **A
@@ -510,6 +653,8 @@ impl EmitState {
         // inside one of these arguments does not see it.
         let boxed_mask: Vec[bool] = (walk.boxed_args?.clone() ?? [])
         walk.boxed_args = null
+        let boxed_built: String = if walk.boxed_placed { "placed" } else { "new" }
+        walk.boxed_placed = false
         let method_callee: String? = walk.method_callee?.clone()
         walk.method_callee = null
         let part_counts: Vec[Count] = (walk.variant_counts?.clone() ?? [])
@@ -524,15 +669,24 @@ impl EmitState {
             if i > 0 {
                 out.push(", ")
             }
+            // **A Rust `&OsStr` parameter** (Part III 13.5 `os_text`, 15.2,
+            // #2351): the `String` crosses for free, as `OsStr::new(arg)`.
+            let os_text = self.emit_arg_os_text(world, callee, method_callee, i)
+            if os_text {
+                out.push("std::ffi::OsStr::new(")
+            }
             if hoisted.contains(i) {
                 let mut one = EmitOut::empty()
-                self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
                 lets.push(f"let __nikaia_arg{i} = ")
                 lets.append(one)
                 lets.push("; ")
                 out.push(f"__nikaia_arg{i}")
             } else {
-                self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
+            }
+            if os_text {
+                out.push(")")
             }
             i += 1
         }
@@ -542,7 +696,7 @@ impl EmitState {
     }
 
     /// One argument.
-    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], boxed_built: ref String, part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A value a log sink writes escaped** (ADR-398 D3): written as its
         // text, escaped.
         if self.escaped_wholes.contains(node_key(arg)) {
@@ -588,11 +742,30 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A text's bytes collected only to be lent are the text's own**
+        // (#2385): `s.bytes().collect()` handed to a `Vec[u8]` the callee only
+        // reads is `s.as_bytes()`, the `&[u8]` it takes, without the list a
+        // collect would make, copy into and drop.
+        if self.emit_arg_lent_text_bytes(world, callee, method_callee, arg, i) {
+            match arg {
+                Expr::MethodCall { receiver: collected, .. } => {
+                    match collected {
+                        Expr::MethodCall { receiver: text, .. } => {
+                            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                            out.push(".as_bytes()")
+                            return
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
         // **A part of a variant that is boxed is built in its box** (ADR-246 D3),
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]
         if boxed_here {
-            out.push("std::boxed::Box::new(")
+            out.push(f"nikaia_std::block::Boxed::{boxed_built}(")
         }
         let node = node_key(arg)
         // **A lookup's key of no known type** (0.0.235): the reference the map
@@ -637,14 +810,14 @@ impl EmitState {
         // and made of a lent place, which the call only reads.
         let lent_path = self.facts.lent_args.contains(node) && emit_arg_made_a_path(self.facts.nullable_args, node)
         // A literal at a type variable the callee lends takes the `&` the
-        // parameter does (ADR-views-3 D2, #1342), `&"b"`.
+        // parameter does (ADR-views-v4 D2, #1342), `&"b"`.
         let mut lend = self.facts.lent_args.contains(node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node)) || self.facts.lent_literals.contains(node))
         if lent_path && !emit_arg_names_a_place(arg) {
             lend = false
         }
         // **And `&mut` for a parameter the callee declared `mut`** (D3), and
         // for code handed to a parameter that changes what it captures
-        // (ADR-views-3 D17): a lambda or other code lent `&mut`, a parameter of
+        // (ADR-views-v4 D17): a lambda or other code lent `&mut`, a parameter of
         // the same kind lent on, one lowered shared lent as code that is.
         let changing_code = self.facts.changing_code_args.get(node) ?? 0
         if changing_code == 3 {
@@ -877,7 +1050,7 @@ impl EmitState {
             out.push(")")
         }
         // **Text of its own lent where a type variable holds a view of text**
-        // (ADR-views-3 D12, #1498): `&o.as_str()`, the `&str` beside the
+        // (ADR-views-v4 D12, #1498): `&o.as_str()`, the `&str` beside the
         // literal's `&"p"`.
         if lend && self.facts.lent_text_views.contains(node) {
             out.push(".as_str()")
@@ -1008,7 +1181,7 @@ impl EmitState {
                 names.push(f"__nikaia_a{n}")
             }
             let joined = names.join(", ")
-            // **One `&` only** (ADR-views-3 D2, #1254): behind two, Rust no
+            // **One `&` only** (ADR-views-v4 D2, #1254): behind two, Rust no
             // longer reads the closure's signature off the `AsyncFn` bound,
             // and a lent parameter's lifetime is then not general enough. The
             // `&mut ` of code that changes what it captures is that one.
@@ -2290,7 +2463,7 @@ impl EmitState {
                     }
                     at += 1
                     // A type variable the copy's function lends is `&T` there
-                    // (ADR-views-3 D2, #1342): the argument takes the `&`.
+                    // (ADR-views-v4 D2, #1342): the argument takes the `&`.
                     if self.facts.lent_args.contains(node_key(arg)) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node_key(arg))) || self.facts.lent_literals.contains(node_key(arg))) {
                         out.push("&")
                     }

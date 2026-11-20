@@ -382,7 +382,7 @@ impl CheckState {
                     }
                 }
                 let built = match answered { Some(__nikaia_value) => __nikaia_value, None => return None };
-                if nullable { return Some(Ty::Nullable(std::boxed::Box::new(built))); }
+                if nullable { return Some(Ty::Nullable(nikaia_std::block::Boxed::new(built))); }
                 return Some(built);
             },
         }
@@ -522,7 +522,7 @@ pub(crate) fn named_arguments(ty: &Ty) -> Vec<Ty> {
 // this was written - see `contracts::sync`.
 pub(crate) fn refs_of(items: &[Expr]) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
-    for item in items.iter() { out.push(item); }
+    out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push(item); }
     out
 }
 

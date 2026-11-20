@@ -164,7 +164,7 @@ fn main() throws {
 /// **The half of it that was real is built**, and the help offers it: declaring
 /// the result a view is enough, and the `&` is the compiler's. What stays
 /// refused is the shape here — the result is declared `Vec[i64]` and one way
-/// out is an owned list, so the result is no view of `self` (ADR-views-3 D7
+/// out is an owned list, so the result is no view of `self` (ADR-views-v4 D7
 /// makes it one only where every way out is a place of `self`, #1257) and the
 /// field is moved out of a loan whatever the help says.
 #[test]
@@ -199,7 +199,7 @@ fn main() throws {
     // asked for one named a way out that does not exist ([Part III
     // C.2](../../../docs/specification/30-nikaia-tooling.md)). The other half —
     // *a result that is a view* — is real and is named, with no mark to
-    // write since ADR-views-3 D4 and D7 (#1403), never a `ref`.
+    // write since ADR-views-v4 D4 and D7 (#1403), never a `ref`.
     assert!(
         refusal
             .help
@@ -382,7 +382,7 @@ fn a_mut_parameter_given_away_whole_is_refused() {
     }
 }
 
-/// **The written `ref` is the compiler's line said twice** (#96, ADR-views-3 D4, D7):
+/// **The written `ref` is the compiler's line said twice** (#96, ADR-views-v4 D4, D7):
 /// at a `return` of a place inside a borrowed subject or a lent parameter it is
 /// `NK1137`. That the line without it lends - a parameter declared `ref Row`
 /// as a `ref self` does - is run in `tests/language/src/borrowed_subject.nika`.

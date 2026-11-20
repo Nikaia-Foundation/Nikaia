@@ -455,7 +455,7 @@ pub grammar Yaml {
 		s:count(" " | "\t") if(s > 0) v:Propped(ds, left, -1) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, -1) Eol Blanks -> { v }
-		| Eol Blanks v:Block(ds, left, -1) -> { v }
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, -1) -> { v }
 		| a:here Eol Blanks -> {
 			Node {
 				start: a,
@@ -480,9 +480,14 @@ pub grammar Yaml {
 	rule Eol = s:count(" " | "\t") (if(s > 0) Comment)? ("\n" | eof) -> { }
 	rule Comment = "#" until("\n" | eof) -> { }
 	// Lines holding nothing but spaces and a comment.
-	rule Blanks = Blank* LastBlank? -> { }
+	// A line is scanned for its spaces once: on a line with content, which
+	// every node's `Blanks` ends at, the alternatives after the spaces fail
+	// at its first character.
+	rule Blanks = BlankOrLast* -> { }
+	// One such line: with its line break, or the last one, at the end of the
+	// input, holding a comment or at least one space.
+	rule BlankOrLast = s:count(" " | "\t") (Comment? "\n" | Comment eof | if(s > 0) eof) -> { }
 	rule Blank = (" " | "\t")* Comment? "\n" -> { }
-	rule LastBlank = (" " | "\t")* Comment eof -> { } | s:count(" " | "\t") if(s > 0) eof -> { }
 
 	// A block node on the lines below its parent at indentation `n`, at the
 	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
@@ -490,9 +495,22 @@ pub grammar Yaml {
 	// indentation (`seq-spaces(n, block-out)`).
 	// `k` is the tag a property line above gave it.
 	rule Block(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
-		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
-		| not(Marker) m:count(" ") if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+		not(Marker) m:count(" ") v:BlockAt(ds, left, m, n; c: c, k: k) -> { v }
+	// The same after the `m` spaces of its first line, counted once: by
+	// `Block`, or by `Indentation` below a line that ends (`Eol`).
+	rule BlockAt(ds: Vec[Dir], left: i64, m: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
+		| if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
+		| if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+	// The lines below a line's end that hold nothing but spaces and a
+	// comment, and the spaces of the next line, how many: `Blanks` and the
+	// indentation `Block` counts, with each line's spaces scanned once. On
+	// that next line the step of the fold fails at its first character.
+	rule Indentation -> i64 =
+		m:count(" ") r:fold(BlankThenSpaces, no_line, fn(_a, s) { s }) -> { if r < 0 { m } else { r } }
+	rule BlankThenSpaces -> i64 = (" " | "\t")* Comment? "\n" m:count(" ") -> { m }
+	// No document marker begins a node: one stands at the start of a line.
+	rule Unmarked(m: i64) = if(m > 0) -> { } | not(Marker) -> { }
 	// A node after tabs past the indentation (`s-separate-in-line`): a tab
 	// never indents, so no block collection begins there (`s-indent` is
 	// spaces only), but properties, a block scalar or a flow node may.
@@ -615,12 +633,12 @@ pub grammar Yaml {
 	// a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
 		p:Props(ds) v:KeyTail(ds, left, p) -> { v }
-		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
+		| t:bytes(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
 			v
 		}
 	// What follows a key's properties `p`, read once: a node, or none.
 	rule KeyTail(ds: Vec[Dir], left: i64, p: Props) -> Node =
-		Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		Sep1 t:bytes(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -680,7 +698,7 @@ pub grammar Yaml {
 				value: v.value,
 			}
 		}
-		| Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -748,7 +766,7 @@ pub grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Propped(ds, left, m; c: c) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:BlockScalar(m) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, m) Eol Blanks -> { v }
-		| Eol Blanks v:Block(ds, left, m; c: c) -> { v }
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, m; c: c) -> { v }
 		| a:here Eol Blanks -> {
 			Node {
 				start: a,
@@ -835,7 +853,7 @@ pub grammar Yaml {
 				value: Value::Map([p]),
 			}
 		}
-		| kt:text(k:FlowAny(ds, left, n)) t:FlowTail(ds, left - 1, n; pair: true)?
+		| kt:bytes(k:FlowAny(ds, left, n)) t:FlowTail(ds, left - 1, n; pair: true)?
 		if(t == null || one_line(kt), "an implicit key on one line")
 		if(pair_fits(left, k, t), "nesting within the depth limit") -> {
 			let a = k.start
@@ -1071,7 +1089,7 @@ pub grammar Yaml {
 	// reads the text between the quotes as that kind, its shape checked by
 	// `mistagged` once the document is read.
 	rule Double(n: i64, k: TagKind) -> Node =
-		a:here "\"" s:text(DoublePlain*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
+		a:here "\"" s:text((not("\"") not("\\") not("\n") any)*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1127,14 +1145,14 @@ pub grammar Yaml {
 				value: v,
 			}
 		}
-	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
-	// characters, spaces inside a line, a folded line break (6.5), an escaped
-	// line break, an escape. A further line is indented past the parent at
-	// `n` (`s-flow-line-prefix(n)`) and is no document marker.
+	// characters, a folded line break (6.5), an escaped line break, an
+	// escape. A further line is indented past the parent at `n`
+	// (`s-flow-line-prefix(n)`) and is no document marker. Each run up to a
+	// quote, a backslash or a line break is one search for those three bytes
+	// (#2418); a run a line break ends leaves its spaces and tabs out.
 	rule DoublePart(n: i64) -> String =
-		t:text(DoubleWord+) -> { t.clone() }
-		| w:text((" " | "\t")+) not("\n") -> { w.clone() }
+		t:text((not("\"") not("\\") not("\n") any)+) e:AtBreak -> { line_part(t, e).clone() }
 		| (" " | "\t")* "\n" e:count(Empty) Indent(n) (" " | "\t")* -> {
 			if e == 0 {
 				" "
@@ -1151,7 +1169,7 @@ pub grammar Yaml {
 			one(scalar::from(v))
 		}
 		| "\\" x:any if(is_escape(x), "an escape") -> { escaped(x) }
-	rule DoubleWord = x:any if(x != '"' && x != '\\' && x != '\n' && x != ' ' && x != '\t') -> { }
+	rule AtBreak -> bool = peek("\n") -> { true } | "" -> { false }
 	rule Hex -> i64 = h:hex_digit -> { hex_value(h) }
 	rule Hex2 -> i64 = a:Hex b:Hex -> { a * 16 + b }
 	rule Hex4 -> i64 = a:Hex2 b:Hex2 -> { a * 256 + b }
@@ -1261,7 +1279,7 @@ pub grammar Yaml {
 	rule SingleChar(n: i64) =
 		"''" -> { }
 		| "\n" Empty* Indent(n) -> { }
-		| x:any if(x != '\'' && x != '\n') -> { }
+		| (not("'") not("\n") any)+ -> { }
 
 	// A plain scalar, resolved by the core schema. In flow the flow
 	// indicators end it; `multi` lets it go on over lines indented past `n`.
@@ -1313,9 +1331,19 @@ pub grammar Yaml {
 	rule Empty = (" " | "\t")* "\n" -> { }
 }
 
-// Whether an implicit key's text stays on its line.
-fn one_line(t: String) -> bool sync {
-	return !t.contains('\n')
+// A run of a double-quoted scalar: as written, or without the spaces and
+// tabs that end it when a line break follows (`s-flow-folded`, 6.5).
+fn line_part(t: String, at_break: bool) -> String sync {
+	let mut r = t
+	while at_break && (r.ends_with(" ") || r.ends_with("\t")) {
+		r = r.trim_end_matches(' ').trim_end_matches('\t')
+	}
+	return r
+}
+
+// Whether an implicit key's bytes stay on their line, read unchecked (#2409).
+fn one_line(t: ref Bytes) -> bool sync {
+	return t.find(10) == null
 }
 
 fn is_word(x: scalar) -> bool sync {
@@ -2717,6 +2745,11 @@ fn escape_event(v: String) -> String sync {
 
 // The content indentation an indentation indicator `d` gives under a parent
 // at `n`; a document's top node has none (`n` is -1) and counts from 0.
+// The start of `Indentation`'s fold: no blank line read yet.
+fn no_line() -> i64 sync {
+	return -1
+}
+
 fn explicit_indent(n: i64, d: i64) -> i64 sync {
 	if n < 0 {
 		return d
@@ -2837,6 +2870,10 @@ fn fold(raw: String, single: bool) -> String sync {
 			j += 1
 		}
 		if j >= n {
+			if start == 0 {
+				// Nothing to fold: the raw text, valid already.
+				return raw.clone()
+			}
 			out.push_str(bs[start..<j].text() catch { "" })
 			break
 		}

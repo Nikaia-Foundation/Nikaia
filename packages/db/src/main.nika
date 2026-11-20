@@ -1,6 +1,6 @@
 use std::collections
 
-// The official `db` package (ADR-299 D4-D8, ADR-338 D2): what two database
+// The official `db` package (ADR-database-v1 D4-D8, ADR-338 D2): what two database
 // drivers must agree on without depending on one another, and nothing else.
 // No SQL, no grammar, no dialect, no binding to a database library: a driver
 // package brings those, implements `Connection`, and a program runs
@@ -16,7 +16,7 @@ use std::collections
 // database is (Part III 17.1, ADR-010 D2): the language marks them, the
 // package does not.
 
-/// **A value a row may carry** (ADR-299 D4): the language's numbers, `bool`,
+/// **A value a row may carry** (ADR-database-v1 D4): the language's numbers, `bool`,
 /// `String`, `Bytes`, and `Null` for SQL's `NULL`, which a derived row type
 /// reads into a `T?` field (D18).
 pub enum Value {
@@ -65,7 +65,7 @@ impl Value {
     }
 }
 
-/// **A row as a connection hands it back** (ADR-299 D8): the column names and
+/// **A row as a connection hands it back** (ADR-database-v1 D8): the column names and
 /// the values, in the order the statement names its columns.
 pub struct Row {
     pub columns: Vec[String],
@@ -97,7 +97,7 @@ impl Row {
     }
 }
 
-/// **A connection to a database** (ADR-299 D8), the one method a driver
+/// **A connection to a database** (ADR-database-v1 D8), the one method a driver
 /// implements: run this text with these named values, and hand back the rows.
 /// The compiler turns each row into the row type a checked statement derived
 /// (D2); a driver never names a per-statement type.
@@ -108,7 +108,7 @@ pub trait Connection {
     fn run(mut self, keep text: String, keep parameters: collections::HashMap[String, Value]) -> Vec[Row] throws
 }
 
-/// **A transaction a connection began** (ADR-299 D4): it ends by `commit` or
+/// **A transaction a connection began** (ADR-database-v1 D4): it ends by `commit` or
 /// by `rollback`. A connection that offers transactions hands one out with
 /// `begin(mut self) -> T throws`, where `T` is the driver's own type that
 /// implements this trait.
@@ -117,7 +117,7 @@ pub trait Transaction {
     fn rollback(mut self) throws
 }
 
-/// **The protocol a statement speaks** (ADR-299 D4, D7): the text it hands a
+/// **The protocol a statement speaks** (ADR-database-v1 D4, D7): the text it hands a
 /// connection. A statement is the receiver of its own `execute`, with the
 /// connection as its subject and its parameters after the `;`:
 /// `statement.execute(conn; min_age: 18)`. A checked statement's `execute` and
@@ -128,12 +128,12 @@ pub trait Statement {
     fn text(self) -> String
 }
 
-/// **A statement written at run time** (ADR-299 D5): its rows are untyped.
+/// **A statement written at run time** (ADR-database-v1 D5): its rows are untyped.
 pub struct Raw {
     text: String,
 }
 
-/// **Dynamic SQL** (ADR-299 D5): a statement of `text` whose rows are the
+/// **Dynamic SQL** (ADR-database-v1 D5): a statement of `text` whose rows are the
 /// untyped `Row`s the connection hands back.
 pub fn raw(text: String) -> Raw {
     return Raw { text: text }
@@ -168,14 +168,14 @@ impl Statement for Raw {
 }
 
 impl Raw {
-    /// Run the statement on `connection` (ADR-299 D7) with the named values
+    /// Run the statement on `connection` (ADR-database-v1 D7) with the named values
     /// its text's holes take, and hand back the rows as they come.
     pub fn execute[C: Connection](self, mut connection: C; parameters: collections::HashMap[String, Value]? = null) -> Vec[Row] throws {
         return connection.run(self.text.clone(), parameters ?? collections::HashMap())
     }
 }
 
-/// **A `NULL` that arrived in a field that is not a `T?`** (ADR-299 D18): the
+/// **A `NULL` that arrived in a field that is not a `T?`** (ADR-database-v1 D18): the
 /// conversion of a row into a derived row type fails with the field, the
 /// column, and the column's table (empty where the column is no table's).
 pub struct NullInField {

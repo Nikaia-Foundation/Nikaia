@@ -1,0 +1,38 @@
+// A walk of a `@stream` entry over a `String` fails with the error the
+// in-memory parse of the same items gives: the same message at the same
+// line and column (ADR-grammar-typed-read-v1 D7, #2420). The walk runs the
+// engine's slice entry, whose steps are the plain rules.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	entry rule all -> Vec[Item] = xs:item* -> { xs }
+	rule item -> Item = "[" w:until("]") "]" ";" -> { Item { word: w.clone() } }
+}
+
+fn walk(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Words::items(text) {
+		println(it.word)
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	for text in ["[a];[b];", "[a];\n[b];x", "[a];[b", "[a];[b]"] {
+		let n = walk(text) catch {
+			println(f"walk: {error}")
+			-1
+		}
+		println(n)
+		let all = Words::all(text) catch {
+			println(f"whole: {error}")
+			[]
+		}
+		println(all.len())
+	}
+}

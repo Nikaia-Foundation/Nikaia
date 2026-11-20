@@ -46,9 +46,6 @@ pub(crate) fn compile(
     let Ok(bundle) = run_bundle() else {
         return Ok(None);
     };
-    let binary = dir.join(crate_name);
-    let key_file = dir.join("key");
-    let said = dir.join("messages");
     let key = crate::assets::digest(
         format!(
             "{rust}\n{}\n{}\n{crate_name}\n{}",
@@ -65,15 +62,34 @@ pub(crate) fn compile(
     // the program is in place; a run that waited finds it built below.
     let _ = std::fs::create_dir_all(dir);
     let _alone = orchestrator::cache::alone(&dir.join("lock"));
+    // **A place for each Rust the program was compiled from**: the same file
+    // run as `scripts/x.nika` and as `/abs/scripts/x.nika` names its path in
+    // the generated places table either way (ADR-300 D9), so its Rust and key
+    // differ; with one place, runs of the two kinds took it from each other
+    // and every run compiled the program again.
+    let slots = dir.join("slots");
+    let slot = slots.join(&key[..16]);
+    let binary = slot.join(crate_name);
+    let key_file = slot.join("key");
+    let said = slot.join("messages");
     // **Built before from the same Rust**: what `rustc` said then is said
-    // again, as Cargo replays a fresh crate's warnings.
+    // again, as Cargo replays a fresh crate's warnings. The key file's time
+    // says when the place was last used, which is what pruning keeps.
     if binary.is_file() && std::fs::read_to_string(&key_file).is_ok_and(|held| held == key) {
+        let _ = std::fs::File::options()
+            .append(true)
+            .open(&key_file)
+            .and_then(|file| file.set_modified(std::time::SystemTime::now()));
         return Ok(Some(Built {
             binary: Some(binary),
             messages: String::from(std::fs::read_to_string(&said).unwrap_or_default()),
         }));
     }
     let _ = std::fs::remove_file(&key_file);
+    // The single place of before, held by nothing now.
+    let _ = std::fs::remove_file(dir.join("key"));
+    let _ = std::fs::remove_file(dir.join("messages"));
+    let _ = std::fs::remove_file(dir.join(crate_name));
     let src = dir.join("src");
     let source = src.join(format!("{crate_name}.rs"));
     // **The bundle is linked because the program names it**: an `--extern`
@@ -171,16 +187,47 @@ pub(crate) fn compile(
     // of the same file at the same moment may have this path in hand, and a
     // removal before the rename left it nothing to start. The rename puts the
     // new program in place at once; one started already keeps the old.
+    std::fs::create_dir_all(&slot).with_context(|| format!("making {}", slot.display()))?;
     std::fs::rename(&built, &binary)
         .with_context(|| format!("moving {} to {}", built.display(), binary.display()))?;
     let _ = std::fs::remove_dir_all(&scratch);
     write_if_changed(&said, &messages).map_err(anyhow::Error::msg)?;
-    write_if_changed(&key_file, &key).map_err(anyhow::Error::msg)?;
+    std::fs::write(&key_file, key.as_bytes())
+        .with_context(|| format!("writing {}", key_file.display()))?;
+    prune_slots(&slots);
     Ok(Some(Built {
         binary: Some(binary),
         messages,
     }))
 }
+
+/// **The places used last are kept**, [`KEPT_SLOTS`] of them; the others
+/// are removed. A run that started a removed program keeps it, as after a
+/// rename over it.
+fn prune_slots(slots: &Path) {
+    let Ok(entries) = std::fs::read_dir(slots) else {
+        return;
+    };
+    let mut used: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .map(|slot| {
+            let when = std::fs::metadata(slot.join("key"))
+                .and_then(|meta| meta.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            (when, slot)
+        })
+        .collect();
+    used.sort_by_key(|slot| std::cmp::Reverse(slot.0));
+    for (_, slot) in used.into_iter().skip(KEPT_SLOTS) {
+        let _ = std::fs::remove_dir_all(slot);
+    }
+}
+
+/// How many compiled forms of one program the run cache keeps: the ways one
+/// file is run at the same time (a relative and an absolute path, with and
+/// without a setting) are few.
+const KEPT_SLOTS: usize = 4;
 
 /// **Whether the user's Cargo would link the program differently** (#786):
 /// a linker or flags for `triple` in a configuration file Cargo reads when

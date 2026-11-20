@@ -388,7 +388,7 @@ pub struct TextTiers {
     /// of the name, and the name is not moved (ADR-282 D7, D13, #712).
     pub viewed_arms: collections::BTreeSet[i64],
     /// **The names moved into a literal's position that must hold text of
-    /// its own while a view of them is still used** (ADR-views-3 D9), by their
+    /// its own while a view of them is still used** (ADR-views-v4 D9), by their
     /// nodes: each stays a move, and `view_changes` refuses it (`NK2305`).
     pub refused_moves: collections::BTreeMap[i64, TierRefusal],
     /// **The cuts of a local that dies where they are pushed into a
@@ -456,7 +456,7 @@ struct FnDecl {
     params: Vec[Type],
     /// Which parameters are `mut`: what is handed there may be changed.
     changes: Vec[bool],
-    /// Which parameters are written `keep` (ADR-views-3 D2, D12, #1491): the
+    /// Which parameters are written `keep` (ADR-views-v4 D2, D12, #1491): the
     /// callee owns what is handed there, so it is never lent, even where the
     /// body only hands it back.
     keeps: Vec[bool],
@@ -493,7 +493,7 @@ struct TextDeclared {
     /// The keys of the grammars' rules, `G::rule`.
     rules: collections::BTreeSet[String],
     /// The program's `comptime` constants of type `String`: views of text
-    /// fixed at build time (ADR-views-3 D15, #1254).
+    /// fixed at build time (ADR-views-v4 D15, #1254).
     comptime_texts: collections::BTreeSet[String],
     /// The structs this program declares and does not publish: the only ones a
     /// text field handed back lends (#1341), as their fields' text is the
@@ -553,7 +553,7 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext,
                 }
             }
             Item::Grammar(def) => declare_rules(def, names, declared),
-            // **A `comptime` text is a view of build-fixed text** (ADR-views-3
+            // **A `comptime` text is a view of build-fixed text** (ADR-views-v4
             // D15, #1254): read where a `String` position stands, it is still
             // text, as a literal is.
             Item::Comptime { name, ty, .. } => {
@@ -567,7 +567,7 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext,
     return declared
 }
 
-/// A `comptime` declared `String` (a view by ADR-views-3 D15).
+/// A `comptime` declared `String` (a view by ADR-views-v4 D15).
 fn comptime_text(ty: ref Type?, names: ref winnow_grammar::InternerContext) -> bool {
     let declared = ty ?? return false
     return declared.is_view && a_text_parameter(names, declared)
@@ -639,7 +639,7 @@ fn position_published(owner: ref TextOwner, declared: ref TextDeclared) -> bool 
 }
 
 /// Whether a position is a parameter written `keep`, or a place of one
-/// (ADR-views-3 D5, #1532).
+/// (ADR-views-v4 D5, #1532).
 fn a_keep_position(owner: ref TextOwner, declared: ref TextDeclared) -> bool {
     return match owner {
         TextOwner::Param(key, at) => {
@@ -843,10 +843,10 @@ struct Flows {
     /// function walked too, with this one's index (#740).
     kept_through: collections::BTreeSet[(String, i64)],
     /// The uses of each parameter that are an arm still read later, a view
-    /// of it whatever its callers hand (ADR-views-3 D9, #948), by its word.
+    /// of it whatever its callers hand (ADR-views-v4 D9, #948), by its word.
     arm_uses: collections::BTreeMap[String, i64],
     /// The first change in place of each position, by its word: what makes
-    /// it hold text of its own (ADR-views-3 D9).
+    /// it hold text of its own (ADR-views-v4 D9).
     forced: collections::BTreeMap[String, TierForced],
 }
 
@@ -900,7 +900,7 @@ struct TierWalk {
     /// choice that does not leave it (#716), by their nodes.
     late_params: collections::BTreeSet[i64],
     /// The names a `let`'s literal takes as they are, by their nodes
-    /// (ADR-views-3 D5, #1490): see `TierLateFound`.
+    /// (ADR-views-v4 D5, #1490): see `TierLateFound`.
     late_lent: collections::BTreeSet[i64],
     /// The cuts of a local pushed into a parameter's list where the local is
     /// not read again (#2291): see `TierLateFound`.
@@ -923,7 +923,7 @@ struct TierWalk {
     /// that a part with no text adds nothing to the tuple's tier (#999).
     tuple_items: collections::BTreeMap[i64, Vec[Kinds]],
     /// The next block walked is the body of a lambda handed where a function
-    /// type's result owns its text - `-> String` without `from` (ADR-views-3
+    /// type's result owns its text - `-> String` without `from` (ADR-views-v4
     /// D14, #1263) - so its last value is kept there.
     closure_owns: bool,
     /// The names the function grows (`grown_text_of`): a cut bound `mut` to
@@ -943,7 +943,7 @@ struct TextTie {
     through_text: bool,
     /// The callee hands back a value of a declared type, a struct or an
     /// enum: handed back out of the function walked, the local text it views
-    /// goes into the caller's keep (ADR-views-3 D10).
+    /// goes into the caller's keep (ADR-views-v4 D10).
     through_value: bool,
 }
 
@@ -2485,7 +2485,7 @@ fn handed_parameter(value: ref Expr?, ask: ref TierAsk, walk: ref TierWalk) -> S
             }
         },
         // `f(s)` through a `fn(s: String) -> String from s` hands back `s`
-        // (ADR-views-3 D14, #1254).
+        // (ADR-views-v4 D14, #1254).
         Expr::Call { .. } => {
             let argument = lent_through_code(given, ask, walk) ?? return null
             match argument {
@@ -2540,7 +2540,7 @@ fn flow_whole(going: ref TierGoing, value: ref Expr, ask: ref TierAsk, mut walk:
             for item in items {
                 // **An item of a list handed back was counted where the
                 // `return` walked the list** (#1507): named once, not twice,
-                // so a parameter in it can be lent (ADR-views-3 D16).
+                // so a parameter in it can be lent (ADR-views-v4 D16).
                 walk.read_here = handed_back
                 let mut kinds = tier_expr(item, ask, walk)
                 if beside_null && !a_null(item) {
@@ -2564,7 +2564,7 @@ fn flow_whole(going: ref TierGoing, value: ref Expr, ask: ref TierAsk, mut walk:
 }
 
 /// **What a list literal handed back as `result` is, its lendable `String`
-/// parameters left out** (ADR-views-3 D16, #1507); `kinds` for anything else.
+/// parameters left out** (ADR-views-v4 D16, #1507); `kinds` for anything else.
 fn kinds_beside_lent_items(value: ref Expr, result: ref Type, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let items = match value {
         Expr::ListLit { items, .. } => items,
@@ -2589,7 +2589,7 @@ fn kinds_beside_lent_items(value: ref Expr, result: ref Type, kinds: ref Kinds, 
 }
 
 /// **A parameter handed back as an element of a list or a part of a tuple
-/// the function hands back** goes in as nothing yet (ADR-views-3 D16, #1507):
+/// the function hands back** goes in as nothing yet (ADR-views-v4 D16, #1507):
 /// the decision lends it, and makes that element a view of it, where nothing
 /// else fills it with text of its own, as a field of a struct handed back
 /// does (`tier_struct_field`). `fn f(a: String, b: String) -> Vec[String] {
@@ -2921,7 +2921,7 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         if k + 1 == block.stmts.len() {
             tail = kinds
             // **A lambda handed where its result owns its text keeps its
-            // last value** (ADR-views-3 D14, #1263): a view of static text
+            // last value** (ADR-views-v4 D14, #1263): a view of static text
             // there is text of its own, as in a tuple's part (ADR-282 D29).
             if keeps && tail.still {
                 match stmt.node {
@@ -2999,7 +2999,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
             tie_bound(names, value, ask, walk)
         }
         // A local `comptime` text is still text, as one at the top is
-        // (ADR-views-3 D15, #1254); any other shadows a top one.
+        // (ADR-views-v4 D15, #1254); any other shadows a top one.
         Stmt::Comptime { name, ty, .. } => {
             let kinds = if comptime_text(ty, ask.names) { still_kinds() } else { owned_kinds() }
             bind_tier_local(ask.names.resolve(name).clone(), plain_local(kinds), walk)
@@ -3317,7 +3317,7 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
     let function = walk.declared.fns[key]?.clone() ?? return
     let result = function.result ?? return
     // **A body that ends in an `if` or a `match` hands back each arm's
-    // value**, as a `return` in each arm does (ADR-282 D12, ADR-views-3 D8,
+    // value**, as a `return` in each arm does (ADR-282 D12, ADR-views-v4 D8,
     // #1254): `if c { a } else { own(a) }` lends `a` as `if c { return a }
     // else { return own(a) }` does. Split only where an arm hands back a
     // lendable parameter; anything else goes in whole, as before.
@@ -3346,7 +3346,7 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
     // `ref self` method points into `self`, as `-> ref String` would.
     let mut handed = handed_kinds(value, kinds, ask, walk)
     // **A call through a function value written `from`** hands back what
-    // the argument its `from` names is (ADR-views-3 D14, #1254): static text
+    // the argument its `from` names is (ADR-views-v4 D14, #1254): static text
     // given there comes back static, as `return s` hands it back.
     let through = lent_through_code(value, ask, walk)
     if through != null {
@@ -3359,7 +3359,7 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
         }
     }
     // **A list literal handed back brings only what its other items are**
-    // (ADR-views-3 D16, #1507): each `String` parameter in it is lent by
+    // (ADR-views-v4 D16, #1507): each `String` parameter in it is lent by
     // `lent_back_in_part`, so its callers' kinds are not the list's.
     if !function.of_a_trait {
         handed = kinds_beside_lent_items(value, result, handed, ask, walk)
@@ -3440,7 +3440,7 @@ fn lendable_sides(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out
 }
 
 /// **A call through a function-typed parameter whose type writes `from`**
-/// (ADR-views-3 D14, #1254): `f(s)` for `f: fn(s: String) -> String from s`
+/// (ADR-views-v4 D14, #1254): `f(s)` for `f: fn(s: String) -> String from s`
 /// is a view of the argument the `from` names: that argument, handed back as
 /// it would be where it is a lendable parameter.
 fn lent_through_code(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Expr? {
@@ -3549,7 +3549,7 @@ fn lendable_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> 
     if function.of_a_trait || at >= function.params.len() || function.changes[at] {
         return null
     }
-    // **A `keep` parameter handed back is owned** (ADR-views-3 D12, #1491):
+    // **A `keep` parameter handed back is owned** (ADR-views-v4 D12, #1491):
     // `fn own(keep a: String) -> String { return a }` moves `a` out, so its
     // result owns and the caller gives `a` up.
     if at < function.keeps.len() && function.keeps[at] {
@@ -3724,7 +3724,7 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
         return
     }
     // **A value viewing what the body owns takes the caller's keep**
-    // (ADR-views-3 D10, ADR-283 D23): a struct or an enum a callee built over a
+    // (ADR-views-v4 D10, ADR-283 D23): a struct or an enum a callee built over a
     // local's text, handed back, leaves the callee's parameter lent.
     for tie in ties {
         if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) {
@@ -4058,7 +4058,7 @@ fn result_nullable_text(ask: ref TierAsk, walk: ref TierWalk) -> bool {
 }
 
 /// **An element a `String?` result reads off a lent list or map is a view of
-/// it** (ADR-282 D12, D13; ADR-views-3 D12; #1711): `xs.get(i)`,
+/// it** (ADR-282 D12, D13; ADR-views-v4 D12; #1711): `xs.get(i)`,
 /// `xs.first()`, `xs.last()`, `m.get(k)` and `m[k]` out of a lent parameter,
 /// as `xs[0]` is for a `String` result (#738).
 fn lent_nullable_element(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
@@ -4075,7 +4075,7 @@ fn lent_nullable_element(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) 
 }
 
 /// A parameter written with no mark, of a function that is not a trait's,
-/// which the body neither changes nor keeps (ADR-views-3 D2, D12), as
+/// which the body neither changes nor keeps (ADR-views-v4 D2, D12), as
 /// `lendable_parameter` asks a `String` one.
 fn lent_by_default(name: ref String, walk: ref TierWalk) -> bool {
     let local = tier_local(name, walk) ?? return false
@@ -4560,13 +4560,13 @@ struct TierLateFound {
     params: collections::BTreeSet[i64],
     /// The names moved into a literal's position while a view of them is
     /// still used, by their nodes: the position's word and how it is written
-    /// (ADR-views-3 D9).
+    /// (ADR-views-v4 D9).
     moved: collections::BTreeMap[i64, (String, String)],
     /// Those among them only a view made later out of their holder keeps
     /// (#948).
     held: collections::BTreeSet[i64],
     /// The names a `let`'s literal takes as they are, by their nodes
-    /// (ADR-views-3 D5, #1490): one read whole out of a position is a view
+    /// (ADR-views-v4 D5, #1490): one read whole out of a position is a view
     /// there, read again or not.
     lent: collections::BTreeSet[i64],
     /// **The cuts of a local pushed into a parameter's list** (#2291), by
@@ -4613,12 +4613,12 @@ struct TierLate {
     branch_args: Vec[TierLateArm],
     branches: i64,
     /// The functions of this program whose result may hold a view of a text
-    /// handed to them, by key, and the methods among them by name (ADR-views-3
+    /// handed to them, by key, and the methods among them by name (ADR-views-v4
     /// D8).
     viewing: collections::BTreeSet[String],
     viewing_methods: collections::BTreeSet[String],
     /// **The methods of `std` (and the libraries) whose result may view what
-    /// they are given** (ADR-views-3 D9, #1537), by name: the positions their
+    /// they are given** (ADR-views-v4 D9, #1537), by name: the positions their
     /// ledger entries name the result from (`-> ref(self) String`), -1 the
     /// receiver. A name the program declares a method by is left to its own.
     viewing_library: collections::BTreeMap[String, collections::BTreeSet[i64]],
@@ -4633,7 +4633,7 @@ struct TierLate {
     /// it lived, by its node: the position's word and how it is written.
     moved: collections::BTreeMap[i64, (String, String)],
     /// The methods of this program that change their subject and may hand
-    /// back a view of it, by name (ADR-views-3 D9, #948).
+    /// back a view of it, by name (ADR-views-v4 D9, #948).
     changing_methods: collections::BTreeSet[String],
     /// The text fields of the program's structs, `S.f`.
     text_fields: collections::BTreeSet[String],
@@ -4651,7 +4651,7 @@ struct TierLate {
     /// statement is a read before it, not its last.
     temporaries: collections::BTreeSet[String],
     /// The names built as they are into a literal a `let` binds, by their
-    /// nodes (ADR-views-3 D5, last paragraph, #1490): the literal lends them.
+    /// nodes (ADR-views-v4 D5, last paragraph, #1490): the literal lends them.
     lendable: collections::BTreeSet[i64],
     /// Those among them `late_moved` met outside a `return`, a lambda or a
     /// `spawn`.
@@ -4687,7 +4687,7 @@ fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk)
             }
         }
     }
-    // **A view a library method hands back is one too** (ADR-views-3 D9,
+    // **A view a library method hands back is one too** (ADR-views-v4 D9,
     // #1537): `s.trim()` is `-> ref(self) String`, so it views `s`, and
     // `pieces.next()` is `[T](self: Seq[T]) -> T?`, an element of what it is
     // called on, so it views what `pieces` views. Read off the ledger
@@ -5360,7 +5360,7 @@ fn late_temporary(call: ref Expr, ask: ref TierAsk, mut late: TierLate) {
     }
 }
 
-// --- A text moved into a literal while a view of it lives (ADR-views-3 D9) ---
+// --- A text moved into a literal while a view of it lives (ADR-views-v4 D9) ---
 
 /// Whether a value of `ty` may hold text: a `String`, or a type that holds
 /// one, a struct's field or a variant's payload of this program among them.
@@ -5608,7 +5608,7 @@ fn late_made(value: ref Expr) -> ref Expr {
     }
 }
 
-/// **A view made out of a struct by a method that changes it** (ADR-views-3 D9,
+/// **A view made out of a struct by a method that changes it** (ADR-views-v4 D9,
 /// ADR-282 D13, #948): `let e = p.next()`, where `next` takes `ref mut self`
 /// and hands back what may view `p`. Where `e` is read later, `p` cannot
 /// own the text it took: the view would outlive the method's hold on `p`.
@@ -5644,7 +5644,7 @@ fn late_held_view(name: ref String, value: ref Expr, ask: ref TierAsk, mut late:
     }
 }
 
-/// **A literal a `let` binds lends the names built into it** (ADR-views-3
+/// **A literal a `let` binds lends the names built into it** (ADR-views-v4
 /// D5, last paragraph, #1490): a struct literal, a list or a variant's
 /// value, and the literals nested in them, take a local as a call argument
 /// does. Where the name is read again, `late_moved` makes the part a view of
@@ -5685,7 +5685,7 @@ fn late_lendable_part(part: ref Expr, ask: ref TierAsk, mut late: TierLate) {
 }
 
 /// **A name moved as it is into a literal while a view of it is still used
-/// is a view of it** (ADR-views-3 D9): the literal is a variable of the function,
+/// is a view of it** (ADR-views-v4 D9): the literal is a variable of the function,
 /// and moving the text would end the view read next. A declared position it
 /// goes into is kept, by its word and as written.
 fn late_moved(value: ref Expr, position: (String, String)?, ask: ref TierAsk, mut late: TierLate) {
@@ -5840,7 +5840,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::SafeField { base, .. } => field_kinds(expr, base, ask, walk),
         Expr::Index { base, index, .. } => {
             // **A cut reads what it cuts**, as a method that views its
-            // receiver does (ADR-views-3 D12, #2321): `return s` beside
+            // receiver does (ADR-views-v4 D12, #2321): `return s` beside
             // `return s[i..]` lends `s` as it does beside `return s.trim()`.
             walk.read_here = a_range(index)
             let received = tier_expr(base, ask, walk)
@@ -6078,7 +6078,7 @@ fn a_range(index: ref Expr) -> bool {
     }
 }
 
-/// A name that is no local: a `comptime` text is still text (ADR-views-3
+/// A name that is no local: a `comptime` text is still text (ADR-views-v4
 /// D15, #1254), anything else owned.
 fn name_kinds(name: ref String, walk: ref TierWalk) -> Kinds {
     if walk.declared.comptime_texts.contains(name) {
@@ -6088,7 +6088,7 @@ fn name_kinds(name: ref String, walk: ref TierWalk) -> Kinds {
 }
 
 /// **A name read whole out of a position, taken as it is by a `let`'s
-/// literal, is lent to it** (ADR-views-3 D5, #1490): it is a view there, so
+/// literal, is lent to it** (ADR-views-v4 D5, #1490): it is a view there, so
 /// the literal cannot take it, read again or not.
 fn tier_lent_view(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
     if !walk.late_lent.contains(node_key(expr)) {
@@ -6268,7 +6268,7 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     // another file of the package: no position this walk sees says what
     // (ADR-282 D29).
     if names_a_type(last_segment(callee)) || !ask.library.functions.contains_key(callee) {
-        // **An argument a function value lends is not kept** (ADR-views-3
+        // **An argument a function value lends is not kept** (ADR-views-v4
         // D2, D14, #1254): `f(g)` through `f: fn(s: String) -> String from s`
         // or `f: fn(s: String) -> i64` lends `g`, so `g` goes in as a view,
         // as it does into a function's plain parameter.
@@ -6303,7 +6303,7 @@ fn a_lambda(value: ref Expr) -> bool {
     }
 }
 
-/// **Whether a function type's result owns its text** (ADR-views-3 D14):
+/// **Whether a function type's result owns its text** (ADR-views-v4 D14):
 /// `-> String` that writes no `from`.
 fn code_owns_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> bool {
     let written = ty ?? return false
@@ -6312,7 +6312,7 @@ fn code_owns_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> 
     return code.result_from.is_empty() && plain_string(names, result)
 }
 
-/// **The positions a function value's type lends** (ADR-views-3 D2, D14,
+/// **The positions a function value's type lends** (ADR-views-v4 D2, D14,
 /// `code_lends_at`): those its result's `from` names, as `s` in `f: fn(s:
 /// String, n: i64) -> String from s`, and every plain text parameter, as `s`
 /// in `f: fn(s: String) -> i64`.
@@ -6863,7 +6863,7 @@ fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Ex
             flow_value(going_into(place.owner, ty.generics[0], [0], true), args[0], given[0], ask, walk)
             flow_value(going_into(place.owner, ty.generics[1], [1], true), args[1], given[1], ask, walk)
         }
-        // **`m.extend(pairs)`** (ADR-collections-1 D6): the pairs' keys go
+        // **`m.extend(pairs)`** (ADR-collections-v3 D6): the pairs' keys go
         // into the keys and their values into the values, as `extend` of a
         // set puts its items into the elements.
         if method == "extend" && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
@@ -6905,7 +6905,7 @@ fn extends_linked(place: ref Declaring, items: ref Expr, ask: ref TierAsk, mut w
 }
 
 /// **A container extended from another declared one is of its tier**
-/// (ADR-collections-1 D3, D6): `extend` moves the elements over as they are,
+/// (ADR-collections-v3 D3, D6): `extend` moves the elements over as they are,
 /// so the two element positions are linked, as a list handed whole is
 /// (ADR-282 D16); `a.extend(b)` with literals in `b` and text of its own in
 /// `a` is one type below, not a `&str` going into an `EitherText`.
@@ -7620,7 +7620,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
 fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: collections::BTreeSet[String], mut unlent: collections::BTreeSet[String]) -> collections::BTreeMap[String, Tier] {
     let mut positions = flows.positions.clone()
     demoted.extend(flows.demoted.clone())
-    // **A `keep` parameter holds a value of its own** (ADR-views-3 D5,
+    // **A `keep` parameter holds a value of its own** (ADR-views-v4 D5,
     // #1532): its text and what it holds are never a view, so a view handed
     // to it is refused at the call with a `.clone()` help.
     for (word, position) in flows.known {
@@ -7800,7 +7800,7 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
         out.insert(word.clone(), Tier::View)
     }
     // **A parameter named only as arms that stay views of it is a view**
-    // (ADR-views-3 D9, Part I 6.5, #948): `Parser { input: text, .. }` bound to
+    // (ADR-views-v4 D9, Part I 6.5, #948): `Parser { input: text, .. }` bound to
     // a local while a view of `text`, or one made out of the local later,
     // is still read. Moving it in is no keeping, so its callers lend it.
     for (word, count) in flows.arm_uses {
@@ -8118,7 +8118,7 @@ fn viewed_param_arms(flows: ref Flows, before: ref collections::BTreeSet[i64]) -
 /// **A `String` parameter of a function of this file that keeps its text**
 /// (#716): not published - a published one is decided for the package
 /// (ADR-282 D22) - nor a trait's, `mut`, `String?` or written `ref`. **Nor
-/// one written `keep`** (ADR-views-3 D2, #1491): it owns what it is handed,
+/// one written `keep`** (ADR-views-v4 D2, #1491): it owns what it is handed,
 /// so a caller that reads its argument again is refused with `.clone()`,
 /// never handed a view in its place.
 fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
@@ -8333,7 +8333,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() })
     }
     // **A moved text whose position must hold text of its own stays a move**
-    // (ADR-views-3 D9): `view_changes` refuses it, with the place that makes it
+    // (ADR-views-v4 D9): `view_changes` refuses it, with the place that makes it
     // so.
     let mut viewed_arms = walk.flows.viewed_arms.clone()
     let mut refused_moves: collections::BTreeMap[i64, TierRefusal] = collections::BTreeMap()
@@ -8842,7 +8842,7 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 // --- A parameter handed back is a view of it, of any type -------------------
 
 /// **A result that hands back a lent parameter, or a field or an element of
-/// one, is a view of it** (ADR-views-3 D12, D8; Part I, 6.6; #1239). Text is
+/// one, is a view of it** (ADR-views-v4 D12, D8; Part I, 6.6; #1239). Text is
 /// decided by the walk above; this is every other type: `fn hand[T](x: T) ->
 /// T { return x }` is written as `fn hand[T](x: ref T) -> ref T`, so the
 /// inference does not count `x` as kept, the emitter ties the result to `x`
@@ -8887,7 +8887,7 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
 }
 
 /// **A `let` declared `Array[T]` with no length that is given a piece of a
-/// buffer is a view** (ADR-views-3 D8, D11; #1270): owning needs a length, so
+/// buffer is a view** (ADR-views-v4 D8, D11; #1270): owning needs a length, so
 /// `let r: Array[i64] = xs[1..]`, `= grid[0]` or `= rest(v)`, a call of a
 /// function of the file whose result is a view of what it is handed, is
 /// written as `ref Array[T]` and holds a view of the place, as a field or a
@@ -8895,7 +8895,7 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
 /// checker lends to it (#1362). A `mut` let, a tuple of names, and a value of
 /// its own (a call of anything else, a literal) stay as written, and
 /// `NK1182` says the type needs a length. A `let` declared `Bytes` given a
-/// cut or such a call is a view the same way (ADR-views-3 D15, #1271).
+/// cut or such a call is a view the same way (ADR-views-v4 D15, #1271).
 fn lv_let_views(mut program: Program, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
     for mut item in program.items {
         lv_item(item.node, words, views)
@@ -8950,7 +8950,7 @@ fn lv_a_piece(value: ref Expr, words: ref winnow_grammar::InternerContext, views
 }
 
 /// A cut (`b[1..]`) or a call: what makes a `let` declared `Bytes` a view
-/// (ADR-views-3 D15, #1271). An element of a list of `Bytes` is not.
+/// (ADR-views-v4 D15, #1271). An element of a list of `Bytes` is not.
 fn lv_a_cut_or_call(value: ref Expr) -> bool {
     return match value {
         Expr::Index { index, .. } => sf_a_cut(index),
@@ -8972,7 +8972,7 @@ fn lv_mark_run(mut ty: Type, words: ref winnow_grammar::InternerContext, cut_or_
 }
 
 /// **A field `Array[T]` with no length that the file fills only with a place
-/// is a view** (ADR-views-3 D5, D11; #1267): owning needs a length, so where
+/// is a view** (ADR-views-v4 D5, D11; #1267): owning needs a length, so where
 /// every struct literal of the file puts a piece of a buffer there - `a[1..]`
 /// of a lent parameter, a field or an element of one, a run handed in whole -
 /// the field is written as `ref Array[T]`, the struct holds a view and the
@@ -8981,7 +8981,7 @@ fn lv_mark_run(mut ty: Type, words: ref winnow_grammar::InternerContext, cut_or_
 /// stays as written, and `NK1182` says it needs a length.
 ///
 /// **A `Bytes` field the file fills only with pieces is a view too**
-/// (ADR-views-3 D15, #1271): where every literal puts a cut there (`a[1..]`)
+/// (ADR-views-v4 D15, #1271): where every literal puts a cut there (`a[1..]`)
 /// or a lent `Bytes` parameter, the field is written as `ref Bytes`. A
 /// `Bytes` may own its bytes, so a local or a kept parameter there leaves
 /// the field owning, as written.
@@ -9120,7 +9120,7 @@ fn sf_a_run(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
 }
 
 /// **A field of a type of the file that the file fills only with views is a
-/// view** (ADR-views-3 D5, Part I 6.6; #1218): where every struct literal of
+/// view** (ADR-views-v4 D5, Part I 6.6; #1218): where every struct literal of
 /// the file puts a piece of a buffer into a field of a struct or an enum the
 /// file declares - an element or a field of a lent parameter, of a plain
 /// `self` or of a local (`xs[0]`, `config.part`), a lent parameter itself
@@ -9364,7 +9364,7 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
     }
 }
 
-/// **An impl's method written `from` takes the trait's signature** (ADR-views-3
+/// **An impl's method written `from` takes the trait's signature** (ADR-views-v4
 /// D2, D8, D14, #1250): the trait lowers a plain `String` its `from` names,
 /// and a `String` result, as views (`emit_item_lent_view`), so the impl's are
 /// views too, whatever its body hands back; `return a` under `from a` then
@@ -9430,7 +9430,7 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
     }
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
-            // **A nullable result is a view as well** (ADR-views-3 D7, D8,
+            // **A nullable result is a view as well** (ADR-views-v4 D7, D8,
             // #1486): `-> U? from self`, or `-> U?` where every way out reads
             // `self`, is `ref U?`, as a plain `U` is `ref U`.
             let nullable = hb_nullable_may_be_a_view(ret_type, words, plain)
@@ -9481,7 +9481,7 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
 }
 
 /// **A plain struct parameter whose text field a text result hands back is
-/// lent** (ADR-views-3 D7, D8, D12; #1341): `fn pick(h: H, c: bool) ->
+/// lent** (ADR-views-v4 D7, D8, D12; #1341): `fn pick(h: H, c: bool) ->
 /// String { if c { h.name } else { own(h.name) } }`, or `-> String?`, reads
 /// `h` as `ref H`, as a plain `self` is read (`walk.lent_self`) and as a
 /// field of any other type is (`hb_roots`): the result is a view of `h`, or
@@ -9511,7 +9511,7 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
         handed.extend(hb_text_arms(way))
     }
     // **A published function hands back a view only where every way out is
-    // one** (ADR-views-3 D2, D7; ADR-282 D22, #1254): `pub fn first(v:
+    // one** (ADR-views-v4 D2, D7; ADR-282 D22, #1254): `pub fn first(v:
     // Vec[String]) -> String { return v[0] }` lends `v` and hands back the
     // element, as `pub fn same(s: String) -> String { return s }` does; beside
     // text of its own it keeps its text, one kind at the published position.
@@ -9560,7 +9560,7 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     let function = key ?? ""
     for value in handed {
         let root = hb_field_chain_root(value, words) ?? continue
-        // **A result written `from` views only what it names** (ADR-views-3
+        // **A result written `from` views only what it names** (ADR-views-v4
         // D8): a field or element read of another parameter is not lent here.
         if ret_from.len() > 0 && !ret_from.iter().any(fn(named) { words.resolve(named) == root }) {
             continue
@@ -9658,7 +9658,7 @@ fn hb_text_arms(value: ref Expr) -> Vec[ref Expr] {
 
 /// The name `x` of a field read `x.a` or `x.a.b`, or of an element read
 /// `x[0]` or `x.items[i]` (#1343: an element cannot move out of its list, so
-/// a lent list handed back by element is a view of it, ADR-views-3 D8); null
+/// a lent list handed back by element is a view of it, ADR-views-v4 D8); null
 /// for anything else.
 fn hb_field_chain_root(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     let base = match value {
@@ -9828,7 +9828,7 @@ fn hb_nullable_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerC
 /// A type a view of a parameter can stand in, whether or not it is one
 /// already: not text, not a word copied at a read, nothing a place cannot be.
 /// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
-/// piece of an `Array[T]` is (ADR-views-3 D15, D11).
+/// piece of an `Array[T]` is (ADR-views-v4 D15, D11).
 fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
         return false
@@ -9926,7 +9926,7 @@ fn hb_call_sources(expr: ref Expr, words: ref winnow_grammar::InternerContext, v
 }
 
 /// **An `Array[T]` parameter with no length is a run of the caller's**
-/// (ADR-views-3 D11): it has no value of its own a result could keep, so
+/// (ADR-views-v4 D11): it has no value of its own a result could keep, so
 /// handed back whole it is a view in any file, as a piece of it is.
 fn hb_a_name(expr: ref Expr) -> bool {
     return match expr {

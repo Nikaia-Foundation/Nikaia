@@ -107,7 +107,7 @@ pub const INFERENCE: &str =
 /// always meant - and the version is what tells a *reader* that the file it has
 /// may say more than it knows how to use.
 ///
-/// 4 since [ADR-views-3](../../../../docs/specification/adr/adr-views-3.md) D10: a
+/// 4 since [ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D10: a
 /// type's `tethered` lists its places in the order the fields are written, and
 /// a reading package takes one lifetime per place from it.
 pub const VERSION: u32 = 4;
@@ -661,9 +661,11 @@ fn computed_literal(
 
 /// **A package's ledger, its units checked on every core** where `parallel`
 /// (#1277): `lower-std`'s tools package, whose files are checked on worker
-/// threads for the lowering too. A project's build keeps one thread: its
-/// checker reads thread-local state the build sets around it (the proofs'
-/// file, a default's build-time directory).
+/// threads for the lowering too. A project's build checks its units on one
+/// thread; the panics proof runs on every core in both (#1949), with the
+/// thread-local state the build sets around it (the proofs' file, a
+/// default's build-time directory) carried to the workers by
+/// [`crate::proofs::in_parallel`].
 pub fn infer_package_parallel(
     units: &[&Parsed],
     library: &Ledger,
@@ -980,7 +982,6 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
                 self.library,
                 &self.resolved.borrow(),
                 &self.checked.borrow(),
-                self.parallel,
             )
         });
     }

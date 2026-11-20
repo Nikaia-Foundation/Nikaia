@@ -221,8 +221,19 @@ pub struct WrittenFn {
 /// signature names go into `mentioned`.
 pub fn contract(written: ref WrittenFn, crate_word: ref String, types: ref collections::BTreeSet[String], mut mentioned: collections::BTreeSet[String]) -> FnContract {
     let mut keeps: Vec[String] = []
+    let mut os_text: Vec[String] = []
     let mut params: Vec[(String, Ty)] = []
     for at in 0..<written.names.len() {
+        // **A `&OsStr` parameter is `ref String`, named in `os_text`** (Part
+        // III 13.5, 15.2, #2351): a Nikaia `String` is UTF-8, which every
+        // platform's `OsStr` holds, so the call hands it over as
+        // `OsStr::new(arg)`. Only the parameter itself: inside an `Option`
+        // or a list there is no argument to wrap, and it stays `?`.
+        if takes_os_text(written.types[at]) {
+            os_text.push(written.names[at].clone())
+            params.push((written.names[at].clone(), Ty::Named { name: "String", args: [], view: true }))
+            continue
+        }
         let translated = translate(written.types[at], crate_word, written.parameters, types, mentioned)
         if translated.kept {
             keeps.push(written.names[at].clone())
@@ -253,8 +264,16 @@ pub fn contract(written: ref WrittenFn, crate_word: ref String, types: ref colle
     entry.sync_claim = if written.pauses { Sync::No } else { Sync::Asserted }
     entry.fails_with = fails
     entry.keeps = keeps
+    entry.os_text = os_text
     entry.signature = signature
     return entry
+}
+
+/// Whether a parameter's written Rust type is `&OsStr`, by any of the paths
+/// a source names it with.
+fn takes_os_text(written: ref String) -> bool {
+    let text = written.trim()
+    return text == "&OsStr" || text == "&ffi::OsStr" || text == "&std::ffi::OsStr"
 }
 
 /// A view is not kept, a value is; the crate's own type is named by its path
@@ -283,6 +302,25 @@ test "a rust type reads as the ledgers" {
     assert(foreign.kept)
     let noted = mentioned.contains("Conn")
     assert(noted)
+}
+
+/// A `&OsStr` parameter is `ref String` in the signature and named in
+/// `os_text`; one inside an `Option` is not (Part III 13.5, #2351).
+test "an os str parameter reads as os text" {
+    let types: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut mentioned: collections::BTreeSet[String] = collections::BTreeSet()
+    let written = WrittenFn {
+        names: ["a", "b", "windows", "c"],
+        types: ["&OsStr", "&std::ffi::OsStr", "bool", "Option<&OsStr>"],
+        result: "bool",
+        pauses: false,
+        parameters: [],
+    }
+    let entry = contract(written, "process", types, mentioned)
+    assert(entry.os_text == ["a", "b"])
+    let said = entry.signature?.text() ?? ""
+    assert(said.starts_with("(a: ref String, b: ref String, windows: bool, c: "))
+    assert(!entry.keeps.contains("a"))
 }
 
 /// A `Result` throws the crate's own error by its path, and `?` for any

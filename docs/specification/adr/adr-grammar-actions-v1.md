@@ -9,10 +9,11 @@ what that failure carries, and how a rule's values reach it
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904),
 [#1548](https://github.com/Nikaia-Foundation/Nikaia/issues/1548))
 **Supersedes / Related:** takes the decisions on actions and failure from
-[ADR-296](adr-296.md) (its other decisions stay there) and the last decision of
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records) and the last decision of
 a record now in [`docs/history/adr/`](../../history/adr/README.md) (rule values
 lent); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule declares
-values as a function does); [ADR-views-3](adr-views-3.md) D1-D4 (lent, `keep`,
+values as a function does); [ADR-views-v4](adr-views-v4.md) D1-D4 (lent, `keep`,
 `ref` outside `extern "C"` refused); [ADR-292](adr-292.md) and Part II 12.6 (the
 other places `sync` is demanded); [ADR-280](adr-280.md) (how a failure travels);
 [ADR-186](adr-186.md) (what an entry keeps); Part II 10.1, 10.6
@@ -105,9 +106,9 @@ rule Two(ds: Vec[Dir]) -> Doc = …
 ```
 
 ADR-grammar-syntax-v1 D12 makes a rule's values a function's parameters, so
-[ADR-views-3](adr-views-3.md) D1-D4 hold for them: the caller writes nothing, a
+[ADR-views-v4](adr-views-v4.md) D1-D4 hold for them: the caller writes nothing, a
 plain value is lent, `keep` keeps it, and `ref` is refused as everywhere
-outside `extern "C"` (views-3 D4). The lowering hands the engine a borrow of a
+outside `extern "C"` (ADR-views-v4 D4). The lowering hands the engine a borrow of a
 lent value; it does not clone it at each call. **Why:** a clone per call is a
 cost the program never asked for, and a rule that differs from a function here
 is a second rule to learn.

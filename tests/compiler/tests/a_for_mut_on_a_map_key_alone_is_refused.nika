@@ -1,0 +1,11 @@
+// `mut` on a map's key is refused (NK1306): the key decides where the entry
+// stands (ADR-views-v4 D27).
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    m.insert(1, 1)
+    for (mut k, v) in m {
+        k += v
+    }
+}

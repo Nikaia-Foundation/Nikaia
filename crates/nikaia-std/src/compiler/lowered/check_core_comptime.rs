@@ -29,7 +29,7 @@ pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&Bui
     if (tys.len() as i64) != parts.len() as i64 { return found.clone(); }
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
-    for t in tys.iter() {
+    out.reserve(tys.iter().size_hint().0); for t in tys.iter() {
         let mut one = t.clone();
         if t.is_unknown() {
             match *unsafe { nikaia_std::proven::read(&parts, (at) as usize) } {
@@ -65,7 +65,7 @@ pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &Che
 pub(crate) fn check_core_comptime_arrives(want: &Ty) -> Ty {
     match want {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
-            Ty::Named { name, args, view } if { let view = *view; name == "String" && args.is_empty() && !view } => Ty::Nullable(std::boxed::Box::new(Ty::Named { name: String::from("str"), args: vec![], view: true })),
+            Ty::Named { name, args, view } if { let view = *view; name == "String" && args.is_empty() && !view } => Ty::Nullable(nikaia_std::block::Boxed::new(Ty::Named { name: String::from("str"), args: vec![], view: true })),
             _ => want.clone(),
         } },
         _ => want.clone(),
@@ -116,7 +116,7 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             };
             #[allow(unused_mut)] let mut each: Vec<String> = vec![];
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
-            for part in parts.iter() {
+            each.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                 let part_found: Ty = nikaia_std::index::or(nth_type(&declared, at), || Ty::Unknown).clone();
                 let one: Option<BuildValue> = Some(part.clone());
                 let held = match check_core_comptime_value_below(world, &part_found, (one).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -215,13 +215,13 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
     match value {
         Expr::Field { base, name, id } => {
             let base = nikaia_std::boxed::open(base); let id = *id; let name = *name;
-            if world.words.resolve(name) == "name" && check_core_comptime_a_field_local(state, world, base) { Expr::LitStr { text: nikaia_std::block::Text::from(field.to_string()), id: fresh_id() } } else { Expr::Field { base: std::boxed::Box::new(check_core_comptime_turned(state, world, base, field)), name, id } }
+            if world.words.resolve(name) == "name" && check_core_comptime_a_field_local(state, world, base) { Expr::LitStr { text: nikaia_std::block::Text::from(field.to_string()), id: fresh_id() } } else { Expr::Field { base: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, base, field)), name, id } }
         },
-        Expr::Call { func, args, config, id } => { let func = nikaia_std::boxed::open(func); let id = *id; Expr::Call { func: std::boxed::Box::new(func.clone()), args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
-        Expr::MethodCall { receiver, method, args, config, id } => { let receiver = nikaia_std::boxed::open(receiver); let id = *id; let method = *method; Expr::MethodCall { receiver: std::boxed::Box::new(check_core_comptime_turned(state, world, receiver, field)), method, args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
-        Expr::Binary { op, lhs, rhs, span, grouped, id } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped; let id = *id; Expr::Binary { op: op.clone(), lhs: std::boxed::Box::new(check_core_comptime_turned(state, world, lhs, field)), rhs: std::boxed::Box::new(check_core_comptime_turned(state, world, rhs, field)), span: span.clone(), grouped, id } },
-        Expr::Unary { op, expr, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; Expr::Unary { op: op.clone(), expr: std::boxed::Box::new(check_core_comptime_turned(state, world, expr, field)), id } },
-        Expr::Coalesce { value: inner, fallback, id } => { let inner = nikaia_std::boxed::open(inner); let fallback = nikaia_std::boxed::open(fallback); let id = *id; Expr::Coalesce { value: std::boxed::Box::new(check_core_comptime_turned(state, world, inner, field)), fallback: std::boxed::Box::new(check_core_comptime_turned(state, world, fallback, field)), id } },
+        Expr::Call { func, args, config, id } => { let func = nikaia_std::boxed::open(func); let id = *id; Expr::Call { func: nikaia_std::block::Boxed::new(func.clone()), args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
+        Expr::MethodCall { receiver, method, args, config, id } => { let receiver = nikaia_std::boxed::open(receiver); let id = *id; let method = *method; Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, receiver, field)), method, args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
+        Expr::Binary { op, lhs, rhs, span, grouped, id } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped; let id = *id; Expr::Binary { op: op.clone(), lhs: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, lhs, field)), rhs: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, rhs, field)), span: span.clone(), grouped, id } },
+        Expr::Unary { op, expr, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; Expr::Unary { op: op.clone(), expr: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, expr, field)), id } },
+        Expr::Coalesce { value: inner, fallback, id } => { let inner = nikaia_std::boxed::open(inner); let fallback = nikaia_std::boxed::open(fallback); let id = *id; Expr::Coalesce { value: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, inner, field)), fallback: nikaia_std::block::Boxed::new(check_core_comptime_turned(state, world, fallback, field)), id } },
         Expr::LitInterpolated { parts, id } => {
             let id = *id;
             let mut kept: Vec<FPart> = vec![];
@@ -246,7 +246,7 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
 
 pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[Expr], field: &str) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
-    for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
+    out.reserve(values.iter().size_hint().0); for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
     out
 }
 
@@ -454,7 +454,7 @@ pub(crate) fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckS
     }
     if !any { return Ty::Unknown; }
     let name = host.intern("__nikaia_dsl");
-    let call = Expr::Call { func: std::boxed::Box::new(Expr::Path(vec![target, host.intern(&entry)], fresh_id())), args: vec![Expr::LitStr { text: as_a_literal(content.trim()), id: fresh_id() }], config: vec![], id: fresh_id() };
+    let call = Expr::Call { func: nikaia_std::block::Boxed::placed(Expr::Path(vec![target, host.intern(&entry)], fresh_id())), args: vec![Expr::LitStr { text: as_a_literal(content.trim()), id: fresh_id() }], config: vec![], id: fresh_id() };
     let key = span.start as i64;
     let outer = state.facts.comptime_values.remove(&key);
     let none: Option<Type> = None;

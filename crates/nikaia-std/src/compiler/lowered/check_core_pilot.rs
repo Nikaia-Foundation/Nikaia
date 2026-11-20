@@ -115,7 +115,7 @@ pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_
             let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             if state.structs.contains_key(name) {
                 let fields = match state.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                for field in fields.iter() { parts.push(field.ty.clone()); }
+                parts.reserve(fields.iter().size_hint().0); for field in fields.iter() { parts.push(field.ty.clone()); }
             } else if state.enum_payloads.contains_key(name) {
                 let held = match state.enum_payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 parts = held.copy_owned();
@@ -353,7 +353,7 @@ pub(crate) fn check_reflect_plain(ty: &Ty) -> Ty {
             if plain == "str" { plain = String::from("String"); }
             Ty::Named { name: plain, args: args.iter().map(|a| { check_reflect_plain(a) }).collect::<Vec<_>>(), view: false }
         },
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(std::boxed::Box::new(check_reflect_plain(inner))) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(check_reflect_plain(inner))) },
         Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_reflect_plain(a) }).collect::<Vec<_>>()),
         Ty::Unknown => Ty::Named { name: String::from("i64"), args: vec![], view: false },
         _ => ty.clone(),
@@ -580,7 +580,7 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
     }
     let mut spelled: Vec<String> = vec![];
     if kind == "Struct" || kind == "Enum" || kind == "Fn" || kind == "Opaque" { spelled.push(nikaia_std::block::Text::from(written.to_string())); }
-    for part in parts.iter() { spelled.push(check_reflect_written(part)); }
+    spelled.reserve(parts.iter().size_hint().0); for part in parts.iter() { spelled.push(check_reflect_written(part)); }
     if !state.facts.type_kinds.contains_key(&written) { state.facts.type_kinds.insert(nikaia_std::block::Text::from(written.to_string()), nikaia_std::block::Text::from(kind.to_string())); }
     state.facts.type_parts.insert(nikaia_std::block::Text::from(written.to_string()), spelled);
     if kind == "Struct" {
@@ -678,7 +678,7 @@ pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &
     let mut seen: Ty = Ty::Unknown;
     let mut any = false;
     let mut agree = true;
-    for arm in arms.iter() {
+    answered.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
         let read: Option<(String, Vec<String>)> = check_reflect_arm(world.words, &arm.pattern);
         let (case, names) = nikaia_std::index::or(read, || ("?".into(), vec![].into()));
         if case != "" && check_reflect_case_parts(&case) != names.len() as i64 {
@@ -690,7 +690,7 @@ pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &
         #[allow(unused_mut)] let mut bounds: Vec<String> = vec![];
         if case == "Struct" || case == "Enum" { bounds.push(nikaia_std::block::Text::from(case.to_string())); }
         let mut held: Vec<(String, Option<Vec<String>>)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bounds = bounds;
-        for name in names.iter() {
+        held.reserve(names.iter().size_hint().0); for name in names.iter() {
             if name == "_" { continue; }
             held.push((nikaia_std::block::Text::from(name.to_string()), match state.type_parameters.get(name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

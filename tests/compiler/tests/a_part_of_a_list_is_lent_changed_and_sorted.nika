@@ -1,5 +1,5 @@
 // A part of a list goes to a lent and a `mut` `Array[T]`, a part sorts in
-// place and a list fills (ADR-views-3 D11, #1209).
+// place and a list fills (ADR-views-v4 D11, #1209).
 
 fn sum(xs: Array[u32]) -> u32 {
     let mut s: u32 = 0

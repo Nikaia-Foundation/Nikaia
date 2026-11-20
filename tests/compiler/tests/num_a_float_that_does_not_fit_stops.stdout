@@ -1,11 +1,11 @@
-i32 1e20: exit 101, convert.nika:9: the program stopped: the value does not fit in an `i32`: 100000000000000000000
-i32 -1e20: exit 101, convert.nika:9: the program stopped: the value does not fit in an `i32`: -100000000000000000000
-i32 nan: exit 101, convert.nika:9: the program stopped: the value is not a number, so it is no `i32`
-i64 1e30: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i64`: 1000000000000000000000000000000
-i64 -1e30: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i64`: -1000000000000000000000000000000
-i64 nan: exit 101, convert.nika:10: the program stopped: the value is not a number, so it is no `i64`
-i64 inf: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i64`: inf
-i64 9223372036854775807: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i64`: 9223372036854776000
-u64 -1: exit 101, convert.nika:11: the program stopped: the value does not fit in an `u64`: -1
-u64 1e30: exit 101, convert.nika:11: the program stopped: the value does not fit in an `u64`: 1000000000000000000000000000000
-f32 1e300: exit 101, convert.nika:12: the program stopped: the value does not fit in an `f32`: 1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+i32 1e20: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i32`: 100000000000000000000
+i32 -1e20: exit 101, convert.nika:10: the program stopped: the value does not fit in an `i32`: -100000000000000000000
+i32 nan: exit 101, convert.nika:10: the program stopped: the value is not a number, so it is no `i32`
+i64 1e30: exit 101, convert.nika:11: the program stopped: the value does not fit in an `i64`: 1000000000000000000000000000000
+i64 -1e30: exit 101, convert.nika:11: the program stopped: the value does not fit in an `i64`: -1000000000000000000000000000000
+i64 nan: exit 101, convert.nika:11: the program stopped: the value is not a number, so it is no `i64`
+i64 inf: exit 101, convert.nika:11: the program stopped: the value does not fit in an `i64`: inf
+i64 9223372036854775807: exit 101, convert.nika:11: the program stopped: the value does not fit in an `i64`: 9223372036854776000
+u64 -1: exit 101, convert.nika:12: the program stopped: the value does not fit in an `u64`: -1
+u64 1e30: exit 101, convert.nika:12: the program stopped: the value does not fit in an `u64`: 1000000000000000000000000000000
+f32 1e300: exit 101, convert.nika:13: the program stopped: the value does not fit in an `f32`: 1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

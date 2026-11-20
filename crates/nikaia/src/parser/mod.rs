@@ -15,7 +15,7 @@ pub use nikaia_std::compiler::parse_errors::RESERVED_WORDS;
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
 pub use nikaia_std::compiler::tree_build::{
     Postfix, counted_pattern, flat_shape, fold_binary, fold_postfix, grouped, guarded, lambda,
-    params_of, split_mut, unpacked,
+    marked_names, params_of, split_mut, unpacked,
 };
 
 /// A lambda's parameter: written `mut`, its name, and - for a tuple pattern -
@@ -44,8 +44,9 @@ pub struct Trivia {
     core: nikaia_std::compiler::parser_leaves::PrTrivia,
     /// The byte after the last `;` a statement read.
     semi_end: usize,
-    /// Where a `mut` stood in front of one name of a tuple pattern
-    /// (`NK1307`, ADR-views-2 D1): the first one is refused.
+    /// Where a `mut` stood in front of one name of a lambda's tuple pattern
+    /// (`NK1307`, ADR-views-v4 D24): the first one is refused. A `let`'s and
+    /// a `for`'s take it (section 6, #1133).
     mut_name: Option<usize>,
     /// Where an `async` stood before a `let`, a loop or a function's
     /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
@@ -76,7 +77,8 @@ impl Trivia {
         ast::Span::from(span.start..end)
     }
 
-    /// A `mut` stood at this byte in front of one name of a tuple pattern.
+    /// A `mut` stood at this byte in front of one name of a lambda's tuple
+    /// pattern.
     fn a_mut_name(&mut self, at: usize) {
         self.mut_name = Some(self.mut_name.map_or(at, |first| first.min(at)));
     }
@@ -353,7 +355,7 @@ pub struct Parsed {
     pub given_pushes: std::collections::BTreeSet<i64>,
     /// **The names moved into a literal's position that must hold text of
     /// its own while a view of them is still used**, by their nodes
-    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
+    /// ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D9):
     /// [`crate::view_changes`] refuses each (`NK2305`).
     pub refused_moves:
         std::collections::BTreeMap<i64, nikaia_std::compiler::text_tiers::TierRefusal>,
@@ -776,7 +778,8 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             refuse_parsing(finding, input)
         })?;
 
-    // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-2 D1).
+    // **`mut` in front of one name of a lambda's tuple pattern** (`NK1307`,
+    // ADR-views-v4 D24); a `let`'s and a `for`'s take it (section 6, #1133).
     if let Some(at) = stream.state.user_state.mut_name {
         let finding =
             nikaia_std::compiler::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
@@ -1505,9 +1508,9 @@ grammar! {
             b:bool_lit -> { b }
           | s:str_lit -> { s }
           | c:char_lit -> { c }
-          | "-" f:float_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: Box::new(f), id: NodeId::parsed() } }
+          | "-" f:float_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: nikaia_std::block::Boxed::new(f), id: NodeId::parsed() } }
           | f:float_lit -> { f }
-          | "-" i:int_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: Box::new(i), id: NodeId::parsed() } }
+          | "-" i:int_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: nikaia_std::block::Boxed::new(i), id: NodeId::parsed() } }
           | i:int_lit -> { i }
 
         rule receiver -> Receiver =
@@ -1516,7 +1519,7 @@ grammar! {
             }
           | KW_REF KW_SELF -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
           // **`self` looks, `mut self` changes the object, `keep self`
-          // consumes it** (ADR-views-3 D1, D2): a bare `self` is lent, as
+          // consumes it** (ADR-views-v4 D1, D2): a bare `self` is lent, as
           // `ref self` is, and `mut self` is what `ref mut self` is.
           | KW_MUT KW_SELF -> { Receiver { is_ref: true, is_mut: true, is_keep: false } }
           | KW_KEEP KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: true } }
@@ -1740,7 +1743,7 @@ grammar! {
         // its type, because the caller needs it - what `_` says is that this body
         // does not read the value, never that the signature is shorter.
         rule fn_arg_def -> FnArg @=
-            // **`keep item: Item`** (ADR-views-3 D2): the callee keeps the
+            // **`keep item: Item`** (ADR-views-v4 D2): the callee keeps the
             // argument. `keep` is no reserved word (D13): when no name follows,
             // this arm fails and `keep: i64` is a parameter called `keep`.
             attributes:attribute* KW_KEEP name:NAME ":" ty:type_ref -> {
@@ -1774,7 +1777,7 @@ grammar! {
         rule return_type_arrow -> Type =
             "->" ty:type_ref -> { ty }
 
-        // **`-> String from a | b`** (ADR-views-3 D8): the parameters the
+        // **`-> String from a | b`** (ADR-views-v4 D8): the parameters the
         // result's views point into, after a declaration's result type. `from`
         // is no reserved word (D13): it means the source only here, after a
         // result type, where no other form may stand.
@@ -1856,7 +1859,7 @@ grammar! {
                     is_view: view.is_some(),
                     is_tuple: false,
                     is_nullable: nullable.is_some(),
-                    code: Box::new(None),
+                    code: nikaia_std::block::Boxed::new(None),
                     count: None,
                     is_mut: mutable,
                     is_slice: false,
@@ -1882,7 +1885,7 @@ grammar! {
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
-                    code: Box::new(None),
+                    code: nikaia_std::block::Boxed::new(None),
                     count: i64::try_from(n.0).ok(),
                     is_mut: false,
                     is_slice: false,
@@ -1913,7 +1916,7 @@ grammar! {
                         is_view: false,
                         is_tuple: true,
                         is_nullable: nullable.is_some(),
-                        code: Box::new(None),
+                        code: nikaia_std::block::Boxed::new(None),
                         count: None,
                         is_mut: false,
                         is_slice: false,
@@ -1935,7 +1938,7 @@ grammar! {
           // `fn make() sync -> fn(i64) -> i64`.
           //
           // **A parameter may be named, and the result may write `from`**
-          // (ADR-views-3 D14): `fn(s: String, n: i64) -> String from s`. The
+          // (ADR-views-v4 D14): `fn(s: String, n: i64) -> String from s`. The
           // names serve the `from` and the reader; they are not part of the
           // type. `from` is greedy as the trailing words are.
           | KW_FN "(" params:code_params? ")" result:result_with_from?
@@ -1955,8 +1958,8 @@ grammar! {
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
-                    code: Box::new(Some(Code {
-                        result: Box::new(result),
+                    code: nikaia_std::block::Boxed::new(Some(Code {
+                        result: nikaia_std::block::Boxed::new(result),
                         is_sync: s.is_some(),
                         can_throw: t.is_some(),
                         param_names,
@@ -2027,7 +2030,7 @@ grammar! {
         // `mut` parameter of a named function is lent. The word is recorded
         // as `is_mut` without `is_view`, which no other position writes.
         // `fn(keep r: Row)` keeps what it is handed (Part I §C, #1466); a
-        // plain parameter is lent (ADR-views-3 D2). `keep` is no reserved
+        // plain parameter is lent (ADR-views-v4 D2). `keep` is no reserved
         // word: `fn(keep: i64)` names a parameter `keep`, so the plain arm
         // follows.
         rule code_params -> Vec<(Option<Symbol>, Type, bool)> =
@@ -2049,7 +2052,7 @@ grammar! {
                 (n, t, false)
             }
 
-        // `s:` in `fn(s: String)` (ADR-views-3 D14). The `not(":")` keeps a
+        // `s:` in `fn(s: String)` (ADR-views-v4 D14). The `not(":")` keeps a
         // path's `::` (`fn(collections::BTreeSet[i64])`) a type.
         rule code_param_name -> Symbol = n:NAME ":" not(":") -> { n }
 
@@ -2408,7 +2411,7 @@ grammar! {
 
         rule g_bind -> Spanned<Pattern> @=
             name:NAME ":" p:g_postfix -> {
-                Spanned::new(Pattern::Bind { name, pat: Box::new(p) }, Span::from(_span))
+                Spanned::new(Pattern::Bind { name, pat: nikaia_std::block::Boxed::new(p) }, Span::from(_span))
             }
 
         rule g_postfix -> Spanned<Pattern> @=
@@ -2423,7 +2426,7 @@ grammar! {
             }
           | a:g_atom rep:g_repeat? -> {
                 match rep {
-                    Some(r) => Spanned::new(Pattern::Repeat { pat: Box::new(a), rep: r }, Span::from(_span)),
+                    Some(r) => Spanned::new(Pattern::Repeat { pat: nikaia_std::block::Boxed::new(a), rep: r }, Span::from(_span)),
                     None => a,
                 }
             }
@@ -2469,9 +2472,9 @@ grammar! {
                 Spanned::new(
                     Pattern::Members {
                         ty,
-                        key: Box::new(key),
+                        key: nikaia_std::block::Boxed::new(key),
                         value,
-                        sep: Box::new(sep),
+                        sep: nikaia_std::block::Boxed::new(sep),
                         on_null: null,
                         on_unknown: unknown,
                         fields: Vec::new(),
@@ -2495,7 +2498,7 @@ grammar! {
 
         rule g_group -> Spanned<Pattern> @=
             "(" p:g_choice ")" -> {
-                Spanned::new(Pattern::Group(Box::new(p)), Span::from(_span))
+                Spanned::new(Pattern::Group(nikaia_std::block::Boxed::new(p)), Span::from(_span))
             }
 
         // **`if(cond)`, `if(cond, "what was expected")`** (ADR-grammar-syntax-v1 D14).
@@ -2729,7 +2732,7 @@ grammar! {
         // its own (ADR-023 D2).
         rule throw_stmt -> Stmt @=
             KW_THROW value:expr cond:exit_guard? semi? -> {
-                let jump = Stmt::Expr(Expr::Throw(Box::new(value), NodeId::parsed()));
+                let jump = Stmt::Expr(Expr::Throw(nikaia_std::block::Boxed::new(value), NodeId::parsed()));
                 match cond {
                     Some(cond) => guarded(jump, cond, Span::from(_span)),
                     None => jump,
@@ -2816,6 +2819,7 @@ grammar! {
                     names: vec![name],
                     shape: Vec::new(),
                     mutable: false,
+                    mut_names: Vec::new(),
                     deep: true,
                     ty,
                     value: val
@@ -2842,11 +2846,13 @@ grammar! {
             val:expr
             semi?
             -> {
-                let (names, shape) = head;
+                let (names, shape, marks) = head;
+                let (mutable, mut_names) = marked_names(mutable.is_some(), marks);
                 Stmt::Let {
                     names,
                     shape,
-                    mutable: mutable.is_some(),
+                    mutable,
+                    mut_names,
                     deep: false,
                     ty,
                     value: val
@@ -2867,51 +2873,62 @@ grammar! {
         // single-name form takes it too - so that `let _ = f()` reaches the
         // checker and gets `NK1144`'s sentence rather than a parse error at a
         // character. Two `_` in one list are fine: nothing is bound.
-        rule let_names -> (Vec<Symbol>, Vec<i64>) =
+        //
+        // **Each name says whether `mut` stood in front of it** (ADR-views-v4
+        // D24, section 6, #1133): `let (a, mut b) = …` is `let mut` on `b` alone.
+        rule let_names -> (Vec<Symbol>, Vec<i64>, Vec<bool>) =
             v:variant_head -> { v }
-          | p:tuple_pattern -> { flat_shape(p) }
-
-        // A variant in a head, kept only to be refused (`NK1259`).
-        rule variant_head -> (Vec<Symbol>, Vec<i64>) =
-            NAME path_segment* "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
-                let mut names = first.0;
-                for (n, _) in rest {
-                    names.extend(n);
-                }
-                (names, vec![-1])
+          | p:tuple_pattern -> {
+                let (names, shape, marks) = p;
+                let (names, shape) = flat_shape((names, shape));
+                (names, shape, marks.iter().map(Option::is_some).collect())
             }
 
-        // Names in written order and the shape in prefix order (a tuple's
-        // width, `0` for a name). `(p)` is `p`.
+        // A variant in a head, kept only to be refused (`NK1259`).
+        rule variant_head -> (Vec<Symbol>, Vec<i64>, Vec<bool>) =
+            NAME path_segment* "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
+                let mut names = first.0;
+                for (n, _, _) in rest {
+                    names.extend(n);
+                }
+                let marks = vec![false; names.len()];
+                (names, vec![-1], marks)
+            }
+
+        // Names in written order, the shape in prefix order (a tuple's
+        // width, `0` for a name), and for each name the byte a `mut` in front
+        // of it stood at. `(p)` is `p`.
         //
-        // **`mut` in front of one name is read and refused** (ADR-views-2 D1,
-        // `NK1307`): the grammar keeps the place for it, `parse_unrefined`
-        // says the refusal once the parse is through.
-        rule tuple_pattern -> (Vec<Symbol>, Vec<i64>) =
-            n:let_name -> { (vec![n], vec![0]) }
+        // **`mut` in front of one name** (ADR-views-v4 D24, section 6, #1133)
+        // is `let mut` on that name alone in a `let` or a `for`; a lambda's
+        // pattern still refuses it (`NK1307`, `closure_param`).
+        rule tuple_pattern -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) =
+            n:let_name -> { (vec![n], vec![0], vec![None]) }
           | "(" first:tuple_name_part rest:tuple_pattern_tail* ")" -> {
                 if rest.is_empty() {
                     first
                 } else {
                     let mut names = Vec::new();
                     let mut shape = vec![1 + rest.len() as i64];
-                    for (n, sh) in std::iter::once(first).chain(rest) {
+                    let mut marks = Vec::new();
+                    for (n, sh, m) in std::iter::once(first).chain(rest) {
                         names.extend(n);
                         shape.extend(sh);
+                        marks.extend(m);
                     }
-                    (names, shape)
+                    (names, shape, marks)
                 }
             }
 
-        rule mut_name -> () @=
-            KW_MUT -> { _state.user().a_mut_name(_span.start) }
+        rule mut_name -> usize @=
+            KW_MUT -> { _span.start }
 
-        // A part of a tuple, or a name written `mut` (`NK1307`).
-        rule tuple_name_part -> (Vec<Symbol>, Vec<i64>) =
+        // A part of a tuple, or a name written `mut`.
+        rule tuple_name_part -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) =
             p:tuple_pattern -> { p }
-          | mut_name n:let_name -> { (vec![n], vec![0]) }
+          | at:mut_name n:let_name -> { (vec![n], vec![0], vec![Some(at)]) }
 
-        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>) = "," p:tuple_name_part -> { p }
+        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) = "," p:tuple_name_part -> { p }
 
         // The ignore pattern carries the symbol `_`, which is what the emitter
         // writes below and what `NK1144` looks for. It is a symbol no `NAME` can
@@ -2937,14 +2954,15 @@ grammar! {
                 Stmt::While { cond, body }
             }
 
-        // **`mut` stands in front of the whole head** (ADR-views-2 D1), as it
+        // **`mut` stands in front of the whole head** (ADR-views-v4 D24), as it
         // stands in front of a `let`'s, and marks every name in it.
         rule for_stmt -> Stmt =
             KW_FOR mutable:kw_mut? head:let_names KW_IN
             iter:head_expr body:block semi?
             -> {
-                let (bindings, shape) = head;
-                Stmt::For { bindings, shape, mutable: mutable.is_some(), iter, body }
+                let (bindings, shape, marks) = head;
+                let (mutable, mut_names) = marked_names(mutable.is_some(), marks);
+                Stmt::For { bindings, shape, mutable, mut_names, iter, body }
             }
 
         // **A `for` head is a `let`'s pattern** (ADR-356): `for (_, bucket) in
@@ -3003,7 +3021,7 @@ grammar! {
                 match e {
                     Expr::Break(_) => Stmt::Break,
                     Expr::Continue(_) => Stmt::Continue,
-                    Expr::Return(value, _) => Stmt::Return(*value),
+                    Expr::Return(value, _) => Stmt::Return(value.into_inner()),
                     e => Stmt::Expr(e),
                 }
             }
@@ -3024,7 +3042,7 @@ grammar! {
         rule catch_expr_bare -> Expr =
             value:coalesce_expr handler:catch_tail? -> {
                 match handler {
-                    Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: NodeId::parsed() },
+                    Some(handler) => Expr::TryCatch { expr: nikaia_std::block::Boxed::new(value), handler, id: NodeId::parsed() },
                     None => value,
                 }
             }
@@ -3040,8 +3058,8 @@ grammar! {
             value:range_expr fallback:coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(value),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(value),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => value,
                 }
@@ -3099,8 +3117,8 @@ grammar! {
             head:unary_expr tail:coalesce_tail? not(subtract_minus) -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(head),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(head),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => head,
                 }
@@ -3154,8 +3172,12 @@ grammar! {
             mutable:kw_mut? name:NAME -> { (mutable.is_some(), name, None) }
           | UNDERSCORE -> { (false, _state.intern("_"), None) }
           | pattern:tuple_pattern -> {
+                let (names, shape, marks) = pattern;
+                if let Some(at) = marks.iter().flatten().next() {
+                    _state.user().a_mut_name(*at);
+                }
                 let hidden = _state.intern(&format!("__nikaia_tuple{}", _span.start));
-                (false, hidden, Some((flat_shape(pattern), Span::from(_span))))
+                (false, hidden, Some((flat_shape((names, shape)), Span::from(_span))))
             }
 
         rule closure_param_tail -> LambdaParam = "," p:closure_param -> { p }
@@ -3178,8 +3200,8 @@ grammar! {
             start:or_expr end:range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
-                        start: Box::new(start),
-                        end: Box::new(end),
+                        start: nikaia_std::block::Boxed::new(start),
+                        end: nikaia_std::block::Boxed::new(end),
                         inclusive, id: NodeId::parsed()
                     },
                     None => start,
@@ -3314,7 +3336,7 @@ grammar! {
         rule cast_expr_bare -> Expr =
             head:unary_expr casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
-                    expr: Box::new(expr),
+                    expr: nikaia_std::block::Boxed::new(expr),
                     ty,
                     id: NodeId::parsed(),
                 })
@@ -3344,7 +3366,7 @@ grammar! {
             // this was one number missing rather than a hole.
             n:negative_number_lit -> { crate::ast::numbered_int_literal(n.0, n.1, NodeId::parsed()) }
           | op:unary_op e:unary_expr -> {
-                Expr::Unary { op, expr: Box::new(e), id: NodeId::parsed() }
+                Expr::Unary { op, expr: nikaia_std::block::Boxed::new(e), id: NodeId::parsed() }
             }
           | e:postfix_expr -> { e }
 
@@ -3441,15 +3463,15 @@ grammar! {
           // fold writes as `a..<base.len()`, the one form a range has.
           | same_line "[" "..<" end:or_expr "]" -> {
                 Postfix::Index(Expr::Range {
-                    start: Box::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
-                    end: Box::new(end),
+                    start: nikaia_std::block::Boxed::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
+                    end: nikaia_std::block::Boxed::new(end),
                     inclusive: false, id: NodeId::parsed()
                 })
             }
           | same_line "[" ".." end:or_expr "]" -> {
                 Postfix::Index(Expr::Range {
-                    start: Box::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
-                    end: Box::new(end),
+                    start: nikaia_std::block::Boxed::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
+                    end: nikaia_std::block::Boxed::new(end),
                     inclusive: true, id: NodeId::parsed()
                 })
             }
@@ -3672,8 +3694,8 @@ grammar! {
           | j:jump_expr -> { j }
 
         rule jump_expr -> Expr =
-            KW_THROW e:expr -> { Expr::Throw(Box::new(e), NodeId::parsed()) }
-          | KW_RETURN e:returned? -> { Expr::Return(Box::new(e), NodeId::parsed()) }
+            KW_THROW e:expr -> { Expr::Throw(nikaia_std::block::Boxed::new(e), NodeId::parsed()) }
+          | KW_RETURN e:returned? -> { Expr::Return(nikaia_std::block::Boxed::new(e), NodeId::parsed()) }
           | KW_BREAK -> { Expr::Break(NodeId::parsed()) }
           | KW_CONTINUE -> { Expr::Continue(NodeId::parsed()) }
 
@@ -3733,7 +3755,7 @@ grammar! {
         rule head_expr_bare -> Expr =
             value:head_coalesce handler:catch_tail? -> {
                 match handler {
-                    Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: NodeId::parsed() },
+                    Some(handler) => Expr::TryCatch { expr: nikaia_std::block::Boxed::new(value), handler, id: NodeId::parsed() },
                     None => value,
                 }
             }
@@ -3745,8 +3767,8 @@ grammar! {
             value:head_range fallback:head_coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(value),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(value),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => value,
                 }
@@ -3774,8 +3796,8 @@ grammar! {
             head:head_unary tail:head_coalesce_tail? -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(head),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(head),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => head,
                 }
@@ -3788,8 +3810,8 @@ grammar! {
             start:head_or end:head_range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
-                        start: Box::new(start),
-                        end: Box::new(end),
+                        start: nikaia_std::block::Boxed::new(start),
+                        end: nikaia_std::block::Boxed::new(end),
                         inclusive, id: NodeId::parsed()
                     },
                     None => start,
@@ -3901,7 +3923,7 @@ grammar! {
         rule head_cast_bare -> Expr =
             head:head_unary casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
-                    expr: Box::new(expr),
+                    expr: nikaia_std::block::Boxed::new(expr),
                     ty,
                     id: NodeId::parsed(),
                 })
@@ -3912,7 +3934,7 @@ grammar! {
 
         rule head_unary_bare -> Expr =
             op:unary_op e:head_unary -> {
-                Expr::Unary { op, expr: Box::new(e), id: NodeId::parsed() }
+                Expr::Unary { op, expr: nikaia_std::block::Boxed::new(e), id: NodeId::parsed() }
             }
           | e:head_postfix -> { e }
 
@@ -4012,7 +4034,7 @@ grammar! {
         rule list_lit -> Expr @=
             "[" head:expr rest:list_rest "]" -> {
                 match rest {
-                    Ok(count) => Expr::ListRepeat { value: Box::new(head), count: Box::new(count), id: NodeId::parsed() },
+                    Ok(count) => Expr::ListRepeat { value: nikaia_std::block::Boxed::new(head), count: nikaia_std::block::Boxed::new(count), id: NodeId::parsed() },
                     Err(tail) => {
                         let mut items = vec![head];
                         items.extend(tail);
@@ -4052,11 +4074,11 @@ grammar! {
         rule async_expr -> Expr =
             KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: Box::new(body), written_async: true, child: false, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" h:async_task_head* OPT_HANDLE t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
                 let mut options: [Option<Expr>; 3] = [None, None, None];
@@ -4064,16 +4086,16 @@ grammar! {
                     options[which] = Some(value);
                 }
                 let [within, limit, admission] = options;
-                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(within), Box::new(limit), Box::new(admission))
+                Expr::AsyncGroup(b, NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(limit), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" async_built_options l:async_one_task_limit -> { l }
           | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
                 let [within, admission] = async_task_options(vec![head], t);
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(within), Box::new(admission))
+                Expr::Async(nikaia_std::block::Boxed::new(e), NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" peek(KW_FN) l:trailing_lambda -> {
                 let [within, admission] = async_task_options(vec![head], t);
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(within), Box::new(admission))
+                Expr::Async(nikaia_std::block::Boxed::new(l), NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" OPT_HANDLE ")" fail(
                 "`async(handle)` takes a lambda. Write `async(handle) fn { … }`."
@@ -4087,13 +4109,13 @@ grammar! {
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC peek("{") b:block not(KW_CATCH) -> {
-                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None), Box::new(None), Box::new(None))
+                Expr::AsyncGroup(b, NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None), Box::new(None))
+                Expr::Async(nikaia_std::block::Boxed::new(e), NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda -> {
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(None), Box::new(None))
+                Expr::Async(nikaia_std::block::Boxed::new(l), NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
                 "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
@@ -4175,16 +4197,16 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
-                    body: Box::new(Expr::Closure {
+                    body: nikaia_std::block::Boxed::new(Expr::Closure {
                         params: Vec::new(),
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed()
+                    written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
                 }
             }
 
@@ -4195,7 +4217,7 @@ grammar! {
         // before the marker, taken verbatim; what it *means* is the target
         // grammar's business and is decided when it is lowered.
         // **A grammar from a package is `package::Grammar`**
-        // ([ADR-299](../../../docs/specification/adr/adr-299.md) D20); one the
+        // ([ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md) D20); one the
         // program declares is bare.
         rule dsl_block_expr -> Expr =
             KW_DSL first:NAME rest:dsl_grammar? "{" body:until("} eod") "} eod" -> {
@@ -4239,7 +4261,7 @@ grammar! {
         // literal and take the arms for fields.
         rule match_expr -> Expr =
             KW_MATCH value:head_expr "{" arms:match_arm+ "}" -> {
-                Expr::Match { value: Box::new(value), arms, id: NodeId::parsed() }
+                Expr::Match { value: nikaia_std::block::Boxed::new(value), arms, id: NodeId::parsed() }
             }
 
         // **The guard is `if` and it stands on the arm**
@@ -4487,7 +4509,7 @@ grammar! {
         // polarity). `crates/nikaia/tests/reserved_below.rs` is what found it,
         // by writing the word in every position a name may stand.
         rule KW_REF = "ref" not(ident)
-        // Not reserved (ADR-views-3 D13): only the mark before a parameter or
+        // Not reserved (ADR-views-v4 D13): only the mark before a parameter or
         // `self` in a parameter list.
         rule KW_KEEP = "keep" not(ident)
 
@@ -4694,7 +4716,7 @@ grammar! {
             KW_IF cond:head_expr then_branch:block otherwise:else_branch?
             -> {
                 Expr::If {
-                    cond: Box::new(cond),
+                    cond: nikaia_std::block::Boxed::new(cond),
                     then_branch,
                     else_branch: otherwise, id: NodeId::parsed()
                 }
@@ -4840,19 +4862,19 @@ grammar! {
                     Expr::Path(segments, NodeId::parsed())
                 };
                 if let Some(index) = types {
-                    base = Expr::Index { base: Box::new(base), index: Box::new(index), id: NodeId::parsed() };
+                    base = Expr::Index { base: nikaia_std::block::Boxed::new(base), index: nikaia_std::block::Boxed::new(index), id: NodeId::parsed() };
                 }
                 match (args, lambda) {
                     (Some((mut args, config)), lambda) => {
                         args.extend(lambda);
                         Expr::Call {
-                            func: Box::new(base),
+                            func: nikaia_std::block::Boxed::new(base),
                             args,
                             config, id: NodeId::parsed()
                         }
                     }
                     (None, Some(lambda)) => Expr::Call {
-                        func: Box::new(base),
+                        func: nikaia_std::block::Boxed::new(base),
                         args: vec![lambda],
                         config: Vec::new(), id: NodeId::parsed()
                     },

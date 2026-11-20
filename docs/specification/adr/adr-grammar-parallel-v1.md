@@ -9,7 +9,8 @@ a fold's `init`, `step` and `merge` are checked
 ([#237](https://github.com/Nikaia-Foundation/Nikaia/issues/237),
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904))
 **Supersedes / Related:** takes the decisions on frames and folds from
-[ADR-296](adr-296.md) (its other decisions stay there);
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records);
 [ADR-372](adr-372.md) D4-D6 (pieces claimed while the work runs, `order:`,
 `piece:`, the same for `Par::fold`); [ADR-037](adr-037.md) D1 (a switch selects
 a build, not a dialect); [ADR-014](adr-014.md) (the mapping and the parallel

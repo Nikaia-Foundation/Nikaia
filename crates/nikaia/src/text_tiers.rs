@@ -161,7 +161,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     parsed.viewed_arms = decided.viewed_arms.clone();
     parsed.given_pushes = decided.given_pushes.clone();
     parsed.refused_moves = decided.refused_moves.clone();
-    // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
+    // A parameter handed back is a view of it, of any type (ADR-views-v4 D12, #1239).
     // Its text views in an impl of a trait were written `String` (#1250).
     // A list whose elements the walk found views is not lent for its element
     // (#1343): the element handed back is a view of the buffers.
@@ -222,7 +222,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
             is_view: false,
             is_tuple: false,
             is_nullable: false,
-            code: Box::new(None),
+            code: nikaia_std::block::Boxed::new(None),
             count: None,
             is_mut: false,
             is_slice: false,
@@ -241,7 +241,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
 }
 
 /// **A `comptime` declared `String` is a view of text the build fixed**
-/// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D15, #1257),
+/// ([ADR-views-v4](../../../docs/specification/adr/adr-views-v4.md) D15, #1257),
 /// as a `comptime` `Array[T]` is (D11): nothing allocates, so it means what
 /// `comptime X: ref String` means, and every later reader reads it so. Only a
 /// bare `String`; a `String?`, a `Vec[String]` or a struct with a `String`
@@ -469,7 +469,7 @@ fn wrap_item(item: &mut Item, wraps: &BTreeMap<usize, usize>, into: [winnow_gram
 fn wrapped(expr: &mut Expr, method: winnow_grammar::Symbol) {
     let value = std::mem::replace(expr, Expr::LitNull(crate::ast::NodeId::fresh()));
     *expr = Expr::MethodCall {
-        receiver: Box::new(value),
+        receiver: nikaia_std::block::Boxed::new(value),
         method,
         args: Vec::new(),
         config: Vec::new(),

@@ -1,5 +1,5 @@
 //! What a parse fails with — `ParseError`
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md)).
+//! ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md)).
 //!
 //! A `dsl` entry rule's ledger entry wrote `throws = ["?"]` — *something this
 //! compiler cannot name* — because a parse fails with a **rendered string** and
@@ -7,7 +7,7 @@
 //!
 //! **And naming it turned up something worse than a missing name.** A grammar's
 //! entry is written straight into the ledger
-//! ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5) rather than
+//! ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5) rather than
 //! inferred from an `Item::Fn`, so the `throws` fixpoint — which walks the
 //! graph it built from functions — had no set for it and **what a parse threw
 //! reached no caller at all**. That was invisible while the entry threw `"?"`:

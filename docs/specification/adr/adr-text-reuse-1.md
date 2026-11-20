@@ -10,7 +10,7 @@ whose source is not read again, must allocate new text, and whether
 [ADR-282](adr-282.md) D8 (`.to_string()` of text is the text itself; changed
 here for a receiver written as text), D7 (`.clone()` is the one word for a
 copy), D30 (`NK1301` on a literal; widened here);
-[ADR-views-3](adr-views-3.md) D1 (a give is not written), D2 / D9 (use after a
+[ADR-views-v4](adr-views-v4.md) D1 (a give is not written), D2 / D9 (use after a
 give), D6 / D10 (the ledger narrates);
 [ADR-005](adr-005.md) §3 (a copy is the program's to write);
 [ADR-258](adr-258.md) (the four weights);
@@ -36,7 +36,7 @@ Without an answer a changed cut either allocates a copy nobody asked for, or
 | Swift | Copy on write: a unique buffer is changed in place, checked at run time | One uniqueness test per change | from memory, not checked |
 
 What does not transfer: the run-time check. Ownership is static here
-(ADR-005, ADR-094, ADR-views-3), so the compiler knows who owns a text and
+(ADR-005, ADR-094, ADR-views-v4), so the compiler knows who owns a text and
 whether it is read later, with nothing to test while the program runs.
 
 ## 3. Options, weighed
@@ -60,7 +60,7 @@ let mut rest = line[m + 1..].own()
 
 | | D1 the special case pays | D2 the compiler works | D3 no cost for the common case | D4 consistent with itself | If it is wrong |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **A** | Only a program that later reads the source pays, with the existing use-after-give error and its `.clone()` help | Yes: the compiler finds the give | A give allocates nothing (`truncate` O(1), `drain` one move of the kept part) | A give is never written (ADR-views-3 D1); a changed literal already becomes text of its own unwritten (Part I 2.3) | A read added later turns the change into an error that names both places |
+| **A** | Only a program that later reads the source pays, with the existing use-after-give error and its `.clone()` help | Yes: the compiler finds the give | A give allocates nothing (`truncate` O(1), `drain` one move of the kept part) | A give is never written (ADR-views-v4 D1); a changed literal already becomes text of its own unwritten (Part I 2.3) | A read added later turns the change into an error that names both places |
 | **B** | Every changed cut writes the word | The developer marks what the compiler knows | Same cost | A second word beside `.clone()` for "text of its own", which Part I 2.3 refused on purpose (`NK1189`) | The word marks exactly the places where nothing is paid |
 
 `.own()` on a live source would either copy (then it is `.clone()`) or refuse
@@ -97,7 +97,7 @@ shrunk.
 ### D3 — After the give, the source is gone.
 
 A later read of the source, or a change of a second view of it, is the
-use-after-give error of ADR-views-3 D2 / D9, with its `.clone()` help; the help
+use-after-give error of ADR-views-v4 D2 / D9, with its `.clone()` help; the help
 names the change that gave the source. No new code. A view of a **lent**
 parameter cannot be given: changing it needs `.clone()`, or the parameter says
 `keep`, and the error names both.
@@ -116,7 +116,7 @@ before. No second method: one way to say it.
 ### D5 — The ledger narrates each give and each reuse.
 
 "`rest` takes the buffer of `line`", "`replace` works in the buffer of `x`"
-(ADR-views-3 D6 / D10); the language server shows each as a hint.
+(ADR-views-v4 D6 / D10); the language server shows each as a hint.
 
 ## 5. Consequences
 

@@ -228,6 +228,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
+    if !handed_back && state.facts.bytes_cuts.contains(&node_key(value)) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.shown())];
     let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path); #[allow(clippy::redundant_locals)] let notes = notes;
     if handed_back && !state.flow.lambda_returns.is_empty() { help = format!("Write `{}.clone()` for a copy: a lambda hands back a value of its own.", path); }
@@ -287,7 +288,7 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                 },
                 Expr::Path(segments, _) => {
                     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    for segment in segments.iter() {
+                    names.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                         let segment = *segment;
                         names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
                     }
@@ -391,9 +392,12 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
     let mut names: Vec<bool> = vec![];
     let mut seen: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut index: i64 = 0;
-    for (hole, bound) in walked.iter() {
+    let mut all_text = interpolated;
+    for spec in specs.iter() { if spec.is_some() { all_text = false; } }
+    names.reserve(walked.iter().size_hint().0); for (hole, bound) in walked.iter() {
+        if !bound.is_empty() { all_text = false; }
         let mut frame: Vec<CheckLocal> = vec![];
-        for (name, collection) in bound.iter() {
+        frame.reserve(bound.iter().size_hint().0); for (name, collection) in bound.iter() {
             let trimmed = collection.trim();
             let key: String = nikaia_std::block::Text::from(trimmed.to_string());
             let held: Option<Ty> = match *nikaia_std::index::get(&seen, &key) {
@@ -420,8 +424,10 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
         state.scope.pop();
         if ((index) as usize) < specs.len() { state.a_collection_in_a_hole(world, hole, &held, (*unsafe { nikaia_std::proven::read(&specs, (index) as usize) }).as_deref(), span); }
         names.push(check_core_is_a_path(&held));
+        if !is_text_type(&held.unseen()) { all_text = false; }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
+    if all_text { state.facts.text_formats.insert(id_of(literal) as i64); }
     if interpolated && names.contains(&true) { state.facts.path_holes.insert(id_of(literal) as i64, names); }
 }
 
@@ -431,7 +437,7 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
 pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, given: &[Ty], promised: &CheckPromises, span: &Span) -> (Ty, bool) {
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
-    for p in params.iter() {
+    frame.reserve(params.iter().size_hint().0); for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;
         if ((at) as usize) < given.len() { ty = (*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).clone(); }
@@ -443,7 +449,7 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
         frame.push(local);
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let first = if !frame.is_empty() { (unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id) } else { -1 };
+    let first = if !frame.is_empty() { unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id } else { -1 };
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
@@ -522,7 +528,7 @@ pub(crate) fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>
     let mut seen: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !ends_in_a_return { seen.push(tail.clone()); }
     let mut result: Ty = tail.clone();
-    for one in returns.iter() {
+    seen.reserve(returns.iter().size_hint().0); for one in returns.iter() {
         if first.is_none() && wholly_known(&one.ty) { first = Some(one.ty.clone()); }
         for other in seen.iter() {
             if !check_core_lambda_results_agree(other, &one.ty) {
@@ -549,7 +555,7 @@ pub(crate) fn check_core_lambda_some_at_plain_ends(state: &mut CheckState, retur
     if !nullable { return result; }
     if tail_plain { for value in block_tail(body) { state.some_at_the_tails(value); } }
     for one in returns.iter() { if !check_function_is_nullable(&one.ty) && check_core_lambda_plain(&one.ty) { for value in one.value.iter() { state.some_at_the_tails(value); } } }
-    Ty::Nullable(std::boxed::Box::new(held))
+    Ty::Nullable(nikaia_std::block::Boxed::new(held))
 }
 
 pub(crate) fn check_core_lambda_plain(ty: &Ty) -> bool { wholly_known(ty) && !check_core_lambda_a_unit(ty) && !check_function_is_nullable(ty) }

@@ -28,7 +28,7 @@ impl CxNode {
         let before = *nikaia_std::index::get(&self.members, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
+            list.reserve(held.iter().size_hint().0); for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
         }
         list.push(text);
         self.members.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -38,7 +38,7 @@ impl CxNode {
         let before = *nikaia_std::index::get(&self.methods, owner);
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for (a, b) in held.iter() { list.push((nikaia_std::block::Text::from(a.to_string()), nikaia_std::block::Text::from(b.to_string()))); }
+            list.reserve(held.iter().size_hint().0); for (a, b) in held.iter() { list.push((nikaia_std::block::Text::from(a.to_string()), nikaia_std::block::Text::from(b.to_string()))); }
         }
         list.push((name, function));
         self.methods.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -207,7 +207,7 @@ impl CxNode {
         let mut failed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if !calls.is_empty() {
             let mut each: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for one in calls.iter() { each.push(format!("{}.failed", one)); }
+            each.reserve(calls.iter().size_hint().0); for one in calls.iter() { each.push(format!("{}.failed", one)); }
             failed = format!("if ({}) goto done;\n    ", nikaia_std::block::Text::from(each.join(" || ")));
         }
         let check = format!("{}if (status != 0) {{\n        nk_fail(env, status);\n        goto done;\n    }}", failed); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
@@ -290,11 +290,11 @@ impl CxNode {
         if argc < 1 { argc = 1; }
         let function = cx_node_function(symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
-        for local in locals.iter() { text.push_str(&format!("    {}\n", local)); }
+        for local in locals.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    {}\n", local)); }; }
         text.push_str("    if (napi_get_cb_info(env, info, &argc, argv, &self, NULL) != napi_ok) goto done;\n");
-        if takes > 0 { text.push_str(&format!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }
-        for step in steps.iter() { text.push_str(&format!("    {}\n", step)); }
-        for step in body.iter() { text.push_str(&format!("    {}\n", step)); }
+        if takes > 0 { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }; }
+        for step in steps.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    {}\n", step)); }; }
+        for step in body.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    {}\n", step)); }; }
         text.push_str("done:\n    nk_release(kept);\n    (void)self;\n    (void)status;\n    return result;\n}\n");
         self.functions.push(text);
         let mut promised: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
@@ -322,10 +322,10 @@ impl CxNode {
                 }
             }
             let mut async_text = format!("static napi_value {}(napi_env env, void *at) {{\n    napi_value result = NULL;\n    {}\n    {}\n    return result;\n}}\n\n/* `{}`, as a Promise */\nstatic napi_value {}_async(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    nk_async *job = NULL;\n    int status = 0;\n    {}\n", finisher, read_out, finish_back, written, function, argc, argc, taken_out); #[allow(unused_mut, clippy::redundant_locals)] let mut out_arg = out_arg;
-            for local in locals.iter() { if !local.contains(" out = ") && !local.contains(" present = ") { async_text.push_str(&format!("    {}\n", local)); } }
+            for local in locals.iter() { if !local.contains(" out = ") && !local.contains(" present = ") { { use ::core::fmt::Write as _; let _ = async_text.write_fmt(format_args!("    {}\n", local)); }; } }
             async_text.push_str("    if (napi_get_cb_info(env, info, &argc, argv, &self, NULL) != napi_ok) goto done;\n");
-            if takes > 0 { async_text.push_str(&format!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }
-            for step in steps.iter() { async_text.push_str(&format!("    {}\n", step)); }
+            if takes > 0 { { use ::core::fmt::Write as _; let _ = async_text.write_fmt(format_args!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }; }
+            for step in steps.iter() { { use ::core::fmt::Write as _; let _ = async_text.write_fmt(format_args!("    {}\n", step)); }; }
             if !out_arg.is_empty() { async_text.push_str("    out = nk_keep(env, &kept, sizeof *out);\n    if (!out) goto done;\n    memset(out, 0, sizeof *out);\n"); }
             #[allow(unused_mut)] let mut handed_args = args.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut out_arg = out_arg;
             handed_args.extend(out_arg);
@@ -334,7 +334,7 @@ impl CxNode {
             handed_args.push(String::from("&job->ticket->op"));
             let mut started: &'static str = "NULL"; #[allow(unused_mut, clippy::redundant_locals)] let mut handed_args = handed_args;
             if has_out { started = "out"; }
-            async_text.push_str(&format!("    job = nk_start(env, &kept, {}, {}, &result);\n    if (!job) goto done;\n    status = {}_async({});\n    if (status != 0) nk_abandon(env, job, status);\ndone:\n    nk_release(kept);\n    (void)self;\n    return result;\n}}\n", started, finisher, symbol, nikaia_std::block::Text::from(handed_args.join(", "))));
+            { use ::core::fmt::Write as _; let _ = async_text.write_fmt(format_args!("    job = nk_start(env, &kept, {}, {}, &result);\n    if (!job) goto done;\n    status = {}_async({});\n    if (status != 0) nk_abandon(env, job, status);\ndone:\n    nk_release(kept);\n    (void)self;\n    return result;\n}}\n", started, finisher, symbol, nikaia_std::block::Text::from(handed_args.join(", ")))); };
             self.functions.push(async_text);
             promised = format!("{}_async", function);
         }
@@ -353,7 +353,7 @@ impl CxNode {
         let status_names: [&str; 7] = ["ARGUMENT", "TOO_SMALL", "NOT_RUNNING", "PANICKED", "REENTRANT", "CLEANUP", "CANCELLED"];
         let mut statuses: Vec<(i64, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut number = 0;
-        for name in status_names.iter() {
+        statuses.reserve(status_names.iter().size_hint().0); for name in status_names.iter() {
             let name = *name;
             number -= 1;
             statuses.push((number, format!("{}_E_{}", upper, name)));
@@ -366,7 +366,7 @@ impl CxNode {
                     None => None,
                 };
                 if errno.is_some() {
-                    errnos.push_str(&format!("    case {}: return true;\n", code.number));
+                    { use ::core::fmt::Write as _; let _ = errnos.write_fmt(format_args!("    case {}: return true;\n", code.number)); };
                     statuses.push((code.number, nikaia_std::index::or(errno, || "".into())));
                 } else { statuses.push((code.number, format!("{}_E_{}", upper, code.constant))); }
             }
@@ -374,7 +374,7 @@ impl CxNode {
         let mut cases: String = String::from("");
         for (code, name) in statuses.iter() {
             let code = nikaia_std::num::value(code);
-            cases.push_str(&format!("    case {}: return \"{}\";\n", code, name));
+            { use ::core::fmt::Write as _; let _ = cases.write_fmt(format_args!("    case {}: return \"{}\";\n", code, name)); };
         }
         let mut exported: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0;
@@ -387,7 +387,7 @@ impl CxNode {
             state_fields = String::from("");
             for place in exported.iter() {
                 let place = nikaia_std::num::value(place);
-                state_fields.push_str(&format!("    napi_ref {};\n", unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name));
+                { use ::core::fmt::Write as _; let _ = state_fields.write_fmt(format_args!("    napi_ref {};\n", unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name)); };
             }
         }
         let digest = CX_LEDGER_DIGEST;
@@ -419,8 +419,8 @@ impl CxNode {
         }
         out.push_str(&cx_node_init(prefix));
         let mut functions: Vec<String> = nikaia_std::block::List::from_array_in([String::from("{ \"init\", NULL, nk_init, NULL, NULL, NULL, napi_enumerable, NULL }"), String::from("{ \"shutdown\", NULL, nk_shutdown, NULL, NULL, NULL, napi_enumerable, NULL }")], nikaia_std::block::Place::Block);
-        for (name, function) in self.exported.iter() { functions.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
-        out.push_str(&format!("    {{\n        napi_property_descriptor functions[] = {{\n            {}\n        }};\n        napi_define_properties(env, exports, sizeof functions / sizeof *functions, functions);\n    }}\n", nikaia_std::block::Text::from(functions.join(",\n            "))));
+        functions.reserve(self.exported.iter().size_hint().0); for (name, function) in self.exported.iter() { functions.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_property_descriptor functions[] = {{\n            {}\n        }};\n        napi_define_properties(env, exports, sizeof functions / sizeof *functions, functions);\n    }}\n", nikaia_std::block::Text::from(functions.join(",\n            ")))); };
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
             let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name.to_string());
@@ -428,23 +428,23 @@ impl CxNode {
             let own = *nikaia_std::index::get(&self.members, &ty); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
             if own.is_some() {
                 let held = match own { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in held.iter() { members.push(nikaia_std::block::Text::from(one.to_string())); }
+                members.reserve(held.iter().size_hint().0); for one in held.iter() { members.push(nikaia_std::block::Text::from(one.to_string())); }
             }
-            out.push_str(&format!("    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value class;\n        napi_define_class(env, \"{}\", NAPI_AUTO_LENGTH, nk_class_{}, NULL, sizeof members / sizeof *members, members, &class);\n        napi_create_reference(env, class, 1, &state->{});\n        napi_set_named_property(env, exports, \"{}\", class);\n    }}\n", nikaia_std::block::Text::from(members.join(",\n            ")), ty, ty, ty, ty));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value class;\n        napi_define_class(env, \"{}\", NAPI_AUTO_LENGTH, nk_class_{}, NULL, sizeof members / sizeof *members, members, &class);\n        napi_create_reference(env, class, 1, &state->{});\n        napi_set_named_property(env, exports, \"{}\", class);\n    }}\n", nikaia_std::block::Text::from(members.join(",\n            ")), ty, ty, ty, ty)); };
         }
         for plain in ctx.plains.iter() {
             let mut values: String = String::from("");
             let mut at_value = 0;
             for variant in plain.variants.iter() {
-                values.push_str(&format!("        napi_set_named_property(env, choices, \"{}\", nk_from_i32(env, {}));\n", variant, at_value));
+                { use ::core::fmt::Write as _; let _ = values.write_fmt(format_args!("        napi_set_named_property(env, choices, \"{}\", nk_from_i32(env, {}));\n", variant, at_value)); };
                 at_value += 1;
             }
-            out.push_str(&format!("    {{\n        napi_value choices;\n        napi_create_object(env, &choices);\n{}        napi_object_freeze(env, choices);\n        napi_set_named_property(env, exports, \"{}\", choices);\n    }}\n", values, plain.name));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_value choices;\n        napi_create_object(env, &choices);\n{}        napi_object_freeze(env, choices);\n        napi_set_named_property(env, exports, \"{}\", choices);\n    }}\n", values, plain.name)); };
         }
         for (owner, methods) in self.methods.iter() {
             let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (name, function) in methods.iter() { listed.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
-            out.push_str(&format!("    {{\n        napi_value methods;\n        napi_property_descriptor listed[] = {{\n            {}\n        }};\n        napi_create_object(env, &methods);\n        napi_define_properties(env, methods, sizeof listed / sizeof *listed, listed);\n        napi_object_freeze(env, methods);\n        napi_set_named_property(env, exports, \"{}\", methods);\n    }}\n", nikaia_std::block::Text::from(listed.join(",\n            ")), owner));
+            listed.reserve(methods.iter().size_hint().0); for (name, function) in methods.iter() { listed.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_value methods;\n        napi_property_descriptor listed[] = {{\n            {}\n        }};\n        napi_create_object(env, &methods);\n        napi_define_properties(env, methods, sizeof listed / sizeof *listed, listed);\n        napi_object_freeze(env, methods);\n        napi_set_named_property(env, exports, \"{}\", methods);\n    }}\n", nikaia_std::block::Text::from(listed.join(",\n            ")), owner)); };
         }
         out.push_str("    return exports;\n}\n");
         out
@@ -500,15 +500,15 @@ pub(crate) fn cx_node_field_code(field: &str, part: &CxPart, owner: &str, at: &s
         CxPart::Array(element, count) => {
             let element = nikaia_std::boxed::open(element); let count = *count;
             let (read, write) = cx_node_pair(element, ctx, &what, &format!("out->{}{}[i]", at, field));
-            reads.push_str(&format!("    napi_get_named_property(env, value, \"{}\", &field);\n    if (!nk_length(env, field, \"{}\", &n)) return false;\n    if (n != {}) return nk_wrong(env, \"{}\", \"an array of {}\");\n    for (uint32_t i = 0; i < {}; i++) {{\n        napi_value one;\n        napi_get_element(env, field, i, &one);\n        {}\n    }}\n", field, what, count, what, count, count, read));
+            { use ::core::fmt::Write as _; let _ = reads.write_fmt(format_args!("    napi_get_named_property(env, value, \"{}\", &field);\n    if (!nk_length(env, field, \"{}\", &n)) return false;\n    if (n != {}) return nk_wrong(env, \"{}\", \"an array of {}\");\n    for (uint32_t i = 0; i < {}; i++) {{\n        napi_value one;\n        napi_get_element(env, field, i, &one);\n        {}\n    }}\n", field, what, count, what, count, count, read)); };
             let moved = nikaia_std::block::Text::from(write.replace("out->", "value->"));
-            writes.push_str(&format!("    napi_create_array_with_length(env, {}, &field);\n    for (uint32_t i = 0; i < {}; i++) {{\n        napi_set_element(env, field, i, {});\n    }}\n    napi_set_named_property(env, target, \"{}\", field);\n", count, count, moved, field));
+            { use ::core::fmt::Write as _; let _ = writes.write_fmt(format_args!("    napi_create_array_with_length(env, {}, &field);\n    for (uint32_t i = 0; i < {}; i++) {{\n        napi_set_element(env, field, i, {});\n    }}\n    napi_set_named_property(env, target, \"{}\", field);\n", count, count, moved, field)); };
         },
         _ => {
             let (read, write) = cx_node_pair(part, ctx, &what, &format!("out->{}{}", at, field));
-            reads.push_str(&format!("    {{\n        napi_value one;\n        napi_get_named_property(env, value, \"{}\", &one);\n        {}\n    }}\n", field, read));
+            { use ::core::fmt::Write as _; let _ = reads.write_fmt(format_args!("    {{\n        napi_value one;\n        napi_get_named_property(env, value, \"{}\", &one);\n        {}\n    }}\n", field, read)); };
             let moved = nikaia_std::block::Text::from(write.replace("out->", "value->"));
-            writes.push_str(&format!("    napi_set_named_property(env, target, \"{}\", {});\n", field, moved));
+            { use ::core::fmt::Write as _; let _ = writes.write_fmt(format_args!("    napi_set_named_property(env, target, \"{}\", {});\n", field, moved)); };
         },
     }
 }
@@ -531,8 +531,8 @@ pub(crate) fn cx_node_record_text(record: &CxRecord, ctx: &CxCtx) -> String {
             names.push(nikaia_std::block::Text::from(variant.name.to_string()));
             tag += 1;
         }
-        reads.push_str(&format!("    char kind[64];\n    size_t kind_len = 0;\n    napi_get_named_property(env, value, \"kind\", &field);\n    if (napi_get_value_string_utf8(env, field, kind, sizeof kind, &kind_len) != napi_ok)\n        return nk_wrong(env, name, \"a {} with a kind\");\n    {} else {{\n        return nk_wrong(env, name, \"a {}: {}\");\n    }}\n", ty, nikaia_std::block::Text::from(chosen.join(" else ")), ty, nikaia_std::block::Text::from(names.join(", "))));
-        writes.push_str(&format!("    switch (value->tag) {{\n{}    default:\n        break;\n    }}\n", nikaia_std::block::Text::from(cases.join(""))));
+        { use ::core::fmt::Write as _; let _ = reads.write_fmt(format_args!("    char kind[64];\n    size_t kind_len = 0;\n    napi_get_named_property(env, value, \"kind\", &field);\n    if (napi_get_value_string_utf8(env, field, kind, sizeof kind, &kind_len) != napi_ok)\n        return nk_wrong(env, name, \"a {} with a kind\");\n    {} else {{\n        return nk_wrong(env, name, \"a {}: {}\");\n    }}\n", ty, nikaia_std::block::Text::from(chosen.join(" else ")), ty, nikaia_std::block::Text::from(names.join(", ")))); };
+        { use ::core::fmt::Write as _; let _ = writes.write_fmt(format_args!("    switch (value->tag) {{\n{}    default:\n        break;\n    }}\n", nikaia_std::block::Text::from(cases.join("")))); };
     } else { for (field, part) in record.fields.iter() { cx_node_field_code(field, part, &format!("{}.", ty), "", ctx, &mut reads, &mut writes); } }
     cx_node_record(&ty, &ctx.prefix, &reads, &writes)
 }

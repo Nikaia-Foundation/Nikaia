@@ -43,6 +43,65 @@ end would be an answer shown by measured figures. Both are the project's
 estimates. Under each question a short note says what they rest on, and they
 change when the work or the evidence does.
 
+## Against z3 and cvc5
+
+The solver behind the prover is also measured on public problems, against z3
+and cvc5. The set is 578 QF_LIA and 519 QF_LRA files of SMT-LIB, taken from
+GitHub at fixed commits (`tests/solver/SOURCES.md`), each one query with a
+known answer. Each solver gets 10 seconds per file. The goal, per family and
+per logic, is to solve every file z3 solves within that limit, with no wrong
+answer. Across the set there are two more: no wrong answer on any file, and
+at most z3's instructions per solved file on the 50-file sample CI runs
+(median and total). These figures were measured on 2026-11-20 with version
+0.0.1481, against z3 5.3.3 and cvc5 1.4.2. The full table, with times, memory
+and the method, is §9 of
+[`docs/solver-workload.md`](https://github.com/Nikaia-Foundation/Nikaia/blob/develop/docs/solver-workload.md#9-against-z3-and-cvc5-on-smt-lib-1338).
+
+A family is reached where ours solves at least as many files as z3. Each bar
+below fills ours' share <span class="rq-key rq-key-conf"></span>, with z3's
+share marked by a line <span class="rq-key rq-key-goal"></span>. A family
+behind its goal is filled in the muted colour <span class="rq-key rq-key-behind"></span>.
+Most of what is left are files whose numbers leave the 64-bit integers the
+solver computes in. It answers those *unknown* on purpose rather than
+guess, and keeps them counted ([ADR-270](/docs/specification/adr/adr-270.html) D11).
+
+**Reached.** Two goals hold across the set:
+
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Files answered without a wrong answer: 1097 of 1097 (100 %), the goal is all of them"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">No wrong answer on the 1,097 files, and no disagreement with z3 or cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Median instructions per solved file of the CI sample: ours 3.2 M instructions, 23 % of z3's 14.0 M; the goal is at most z3's"><span style="width: 22.9%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">Median instructions per file over the 47 sample files all three solve: ours 3.2 M, z3 14.0 M, cvc5 18.9 M. The bar is ours as a share of z3's; the mark is z3's own figure, so a bar that ends before it is ahead.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Total instructions over the CI sample: ours 509 M instructions, 44 % of z3's 1167 M; the goal is at most z3's"><span style="width: 43.6%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">Total over the same 47 files: ours 509 M, z3 1,167 M, cvc5 2,367 M. Ours costs fewer instructions than z3 on each of the sample's four families.</p></div>
+
+These families are level with z3 or ahead of it (the bar is ours' share of the family's files, the mark z3's):
+
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA seeds: ours solves 499 of 499 files (100 %), the goal is z3's 499 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA seeds: ours 499 of 499, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA 20180326-Bromberger: ours solves 1 of 1 files (100 %), the goal is z3's 1 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA 20180326-Bromberger: ours 1 of 1, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA CAV_2009_benchmarks: ours solves 1 of 1 files (100 %), the goal is z3's 1 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA CAV_2009_benchmarks: ours 1 of 1, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA bofill-scheduling: ours solves 2 of 2 files (100 %), the goal is z3's 2 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA bofill-scheduling: ours 2 of 2, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA rings: ours solves 1 of 1 files (100 %), the goal is z3's 1 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA rings: ours 1 of 1, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA rings_preprocessed: ours solves 2 of 2 files (100 %), the goal is z3's 2 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA rings_preprocessed: ours 2 of 2, as z3 and cvc5; one file more than on 2026-11-18.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LIA nec-smt: ours solves 1 of 3 files (33 %), the goal is z3's 1 (33 %)"><span style="width: 33.3%"></span><span class="rq-metric-goal" style="left: 33.3%"></span></div><p class="rq-note">QF_LIA nec-smt: ours 1 of 3, as z3; cvc5 0. Neither solver answers the other two within the limit.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA keymaera: ours solves 2 of 2 files (100 %), the goal is z3's 2 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA keymaera: ours 2 of 2, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA sal: ours solves 3 of 3 files (100 %), the goal is z3's 3 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA sal: ours 3 of 3, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA spider_benchmarks: ours solves 2 of 2 files (100 %), the goal is z3's 2 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA spider_benchmarks: ours 2 of 2, as z3 and cvc5.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA tta_startup: ours solves 2 of 2 files (100 %), the goal is z3's 2 (100 %)"><span style="width: 100%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA tta_startup: ours 2 of 2, as z3 and cvc5; both are new since 2026-11-18.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA uart: ours solves 1 of 2 files (50 %), the goal is z3's 1 (50 %)"><span style="width: 50%"></span><span class="rq-metric-goal" style="left: 50%"></span></div><p class="rq-note">QF_LRA uart: ours 1 of 2, as z3 and cvc5; the other file none of the three answers within the limit.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="QF_LRA 2017-Heizmann: ours solves 0 of 4 files (0 %), the goal is z3's 0 (0 %)"><span style="width: 0%"></span><span class="rq-metric-goal" style="left: 0%"></span></div><p class="rq-note">QF_LRA 2017-Heizmann: none of the three answers these 4 files; ours answers each <code>unknown (overflow)</code>, since they leave <code>i64</code>.</p></div>
+
+**Behind.** These families are below z3's count; the note names the reason and the issue that works on it:
+
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA 20220307-SMPT: ours solves 362 of 371 files (98 %), the goal is z3's 367 (99 %)"><span style="width: 97.6%"></span><span class="rq-metric-goal" style="left: 98.9%"></span></div><p class="rq-note">QF_LIA 20220307-SMPT: ours 362 of 371, z3 367, cvc5 368. Nine files run to the limit, three of which no solver answers within it; the SMPT models that still hit the 10 s limit are <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2086">#2086</a>. Ours solves 23 files more than on 2026-11-18.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA seeds: ours solves 115 of 164 files (70 %), the goal is z3's 162 (99 %)"><span style="width: 70.1%"></span><span class="rq-metric-goal" style="left: 98.8%"></span></div><p class="rq-note">QF_LIA seeds: ours 115 of 164, z3 162, cvc5 157. 48 files leave <code>i64</code> and are answered <code>unknown (overflow)</code> on purpose (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D11); the integer elimination's double-width row combination, <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2307">#2307</a>, is the work that answers them. One more file runs to the limit.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA 20231117-c_inference: ours solves 27 of 31 files (87 %), the goal is z3's 30 (97 %)"><span style="width: 87.1%"></span><span class="rq-metric-goal" style="left: 96.8%"></span></div><p class="rq-note">QF_LIA 20231117-c_inference: ours 27 of 31, z3 30, cvc5 12. Four files run to the limit, one of which no solver answers within it; no issue is open for the other three yet.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA cut_lemmas: ours solves 0 of 1 files (0 %), the goal is z3's 1 (100 %)"><span style="width: 0%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA cut_lemmas: ours 0 of 1, z3 1, cvc5 0. The file leaves <code>i64</code>, answered <code>unknown (overflow)</code> on purpose; the QF_LIA overflows are the work of <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2307">#2307</a>.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA tightrhombus: ours solves 0 of 1 files (0 %), the goal is z3's 1 (100 %)"><span style="width: 0%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LIA tightrhombus: ours 0 of 1, z3 and cvc5 1. The file leaves <code>i64</code>, answered <code>unknown (overflow)</code> on purpose; the QF_LIA overflows are the work of <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2307">#2307</a>.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LRA clock_synchro: ours solves 1 of 4 files (25 %), the goal is z3's 3 (75 %)"><span style="width: 25%"></span><span class="rq-metric-goal" style="left: 75%"></span></div><p class="rq-note">QF_LRA clock_synchro: ours 1 of 4, z3 and cvc5 3. Three files leave <code>i64</code>, answered <code>unknown (overflow)</code> on purpose; no issue is open for them yet.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LRA LassoRanker: ours solves 0 of 1 files (0 %), the goal is z3's 1 (100 %)"><span style="width: 0%"></span><span class="rq-metric-goal" style="left: 100%"></span></div><p class="rq-note">QF_LRA LassoRanker: ours 0 of 1, z3 and cvc5 1. The file leaves <code>i64</code> in the simplex, answered <code>unknown (overflow)</code> on purpose; why its pivots fail is <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2101">#2101</a>.</p></div>
+
+Over each logic:
+
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LIA: ours solves 512 of 578 files (89 %), the goal is z3's 569 (98 %)"><span style="width: 88.6%"></span><span class="rq-metric-goal" style="left: 98.4%"></span></div><p class="rq-note">QF_LIA: ours 512 of 578, z3 569, cvc5 545. Of the 66 files ours leaves open, 50 leave <code>i64</code> and 16 run to the limit.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar rq-behind" role="img" aria-label="QF_LRA: ours solves 510 of 519 files (98 %), the goal is z3's 513 (99 %)"><span style="width: 98.3%"></span><span class="rq-metric-goal" style="left: 98.8%"></span></div><p class="rq-note">QF_LRA: ours 510 of 519, z3 and cvc5 513. Of the 9 files ours leaves open, 8 leave <code>i64</code> and 1 runs to the limit.</p></div>
+
 ## What is being built
 
 The solver that is to follow the reference solver is decided part by part in
@@ -190,13 +249,13 @@ that it cannot fall back.
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 30 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 40%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
 <div class="rq-row"><span>Evidence</span><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 5%"></span></div></div>
-<p class="rq-note">The rules that make arguments and views visible (ADR-views-3) are being built now. The reach of a small solver is suggestive, but the share owed to the language is not yet measured.</p>
+<p class="rq-note">The rules that make arguments and views visible (ADR-views-v4) are being built now. The reach of a small solver is suggestive, but the share owed to the language is not yet measured.</p>
 </div>
 
 A prover can only use what the code makes visible. In Nikaia a function
 declares whether it keeps, changes or only looks at each argument, and the
 compiler refuses a change to a value while a view of it is still in use
-([ADR-views-3](/docs/specification/adr/adr-views-3.html)). Lengths, guards and types are facts the
+([ADR-views-v4](/docs/specification/adr/adr-views-v4.html)). Lengths, guards and types are facts the
 prover reads directly. The working assumption is that a language designed for
 this needs a smaller prover, and fewer annotations, for the same reach. The
 question is how much of the reach measured above comes from the language and
@@ -407,7 +466,7 @@ programs above it.
 | A type's rule about its fields is proved where values are built and known where they are read | [ADR-369](/docs/specification/adr/adr-369.html) |
 | A pure `bool` call is a property the prover knows by name | [ADR-381](/docs/specification/adr/adr-381.html) |
 | A loop is a problem in Horn clauses, and invariants are found, checked, and may be proposed from outside | [ADR-361](/docs/specification/adr/adr-361.html) |
-| A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
+| A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-v4](/docs/specification/adr/adr-views-v4.html) |
 | The solver is written in Nikaia, untrusted, its proofs checked and committed | [ADR-270](/docs/specification/adr/adr-270.html) |
 | A strategy layer switches engines during a search, and effort is counted in work, not time | [ADR-270](/docs/specification/adr/adr-270.html) D14, D25, [ADR-306](/docs/specification/adr/adr-306.html) |
 | A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798) |

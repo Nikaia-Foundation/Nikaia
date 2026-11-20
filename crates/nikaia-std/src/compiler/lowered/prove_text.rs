@@ -31,7 +31,7 @@ pub(crate) fn rust_of(id: i64, term_of: &mut dyn FnMut(i64) -> logic::SolverTerm
 pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &mut dyn FnMut(i64) -> logic::SolverTerm, escape: &mut dyn FnMut(&str) -> String) -> String {
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for part in parts.iter() {
+    written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(rust_of(part, &mut &mut *term_of, &mut &mut *escape));
     }
@@ -58,7 +58,7 @@ pub(crate) fn rust_of_name(name: &str, escape: &mut impl FnMut(&str) -> String) 
 pub fn shown(values: &collections::BTreeMap<String, i64>) -> String {
     if values.is_empty() { return String::from("no value of its own; the claim is false as written"); }
     let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (name, value) in values.iter() {
+    said.reserve(values.iter().size_hint().0); for (name, value) in values.iter() {
         let value = nikaia_std::num::value(value);
         said.push(format!("`{}` is {}", name, value));
     }

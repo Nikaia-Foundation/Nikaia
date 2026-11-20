@@ -199,7 +199,7 @@ struct Setting {
 }
 
 fn load(path: String, mut into: collections::HashMap[ref String, ref String]) throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
+    let text = fs::read_to_string(path, fs::Root::Dir("."))
     for line in text.lines() {
         let parts: Vec[ref String] = line.split("=").collect()
         if parts.len() == 2 {

@@ -750,7 +750,7 @@ pub fn refuse_unproved_claims(checked: &mut Checked) {
 }
 
 /// **The written `keep` against the inferred keeps** (`NK2302`, `NK1334`,
-/// ADR-views-3 D2): `tools/check_keep_marks.nika`. The ledger `own` carries
+/// ADR-views-v4 D2): `tools/check_keep_marks.nika`. The ledger `own` carries
 /// what the keep inference decided; this hands it the file and its neighbours.
 pub fn check_keep_marks(
     parsed: &Parsed,
@@ -779,7 +779,7 @@ pub fn check_keep_marks(
 }
 
 /// **A result's written `from` against the body** (`NK1335`, `NK1336`,
-/// ADR-views-3 D8): `tools/check_result_from.nika`, handed what the views pass
+/// ADR-views-v4 D8): `tools/check_result_from.nika`, handed what the views pass
 /// finds each body reaches before a written `from` replaces it.
 pub fn check_result_from(parsed: &Parsed, own: &Ledger, library: &Ledger, checked: &mut Checked) {
     let view = parsed_view_of(parsed);
@@ -796,12 +796,16 @@ pub fn refuse_assumes_in_std(checked: &mut Checked) {
 }
 
 /// **`std` reaches its own helpers** (`NK1110`, #1606):
-/// `tools/check_access.nika`.
+/// `tools/check_access.nika`; and its `NK1308` are warnings, the default
+/// `raw-sinks` (`project_check_raw_sinks_in_std`).
 pub fn allow_std_helpers_in_std(checked: &mut Checked) {
     checked.findings = nikaia_std::compiler::check_access::check_access_inside_std(
         &checked.findings,
         &checked.facts.std_helpers_reached,
     );
+    // Built at the default `raw-sinks = "warn"` (ADR-raw-sinks-1 D3).
+    checked.findings =
+        nikaia_std::compiler::project_check::project_check_raw_sinks_in_std(&checked.findings);
 }
 
 /// **A package's own test programs see its private names** (`NK1110`,

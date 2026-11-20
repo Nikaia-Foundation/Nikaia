@@ -34,7 +34,7 @@ pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, keepers: ref co
         if !new.public || !mine(key) {
             continue
         }
-        // **Code run from tasks at once now** (ADR-views-3 D17): a caller's
+        // **Code run from tasks at once now** (ADR-views-v4 D17): a caller's
         // lambda that changes what it captures is refused there now.
         for param in new.at_once {
             if !old.at_once.contains(param) {

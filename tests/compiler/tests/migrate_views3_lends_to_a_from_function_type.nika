@@ -1,4 +1,4 @@
-// ADR-views-3 D14: `nikaia migrate views-3` writes no `keep` on an argument
+// ADR-views-v4 D14: `nikaia migrate views-3` writes no `keep` on an argument
 // handed to a function value whose type's `from` reads it: the call lends it.
 use std::fs
 use std::process

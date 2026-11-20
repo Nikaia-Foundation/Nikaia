@@ -140,24 +140,6 @@ pub fn to_f32(value: f64) -> f32 {
     near
 }
 
-/// A `f64` as a `usize`, or an abort.
-///
-/// This is D7's second neighbour - the width is the machine's, and what fits on a
-/// large machine does not on a small one. There is no constant here to get wrong
-/// per machine, which is [`to_int`]'s reason for going through `i128`.
-#[inline]
-#[track_caller]
-pub fn to_usize(value: impl Into<f64>) -> usize {
-    to_int(value.into())
-}
-
-/// A `f64` as an `isize`, or an abort. [`to_usize`]'s reason, signed.
-#[inline]
-#[track_caller]
-pub fn to_isize(value: impl Into<f64>) -> isize {
-    to_int(value.into())
-}
-
 /// **What a cast's operand is, where it arrived as a view**
 /// ([ADR-182](../../../docs/specification/adr/adr-182.md) D1).
 ///
@@ -383,26 +365,5 @@ impl LowBits for u8 {
         let (all, k) = n.split(8);
         let kept = u32::from(self) & ((1u32 << (k & 31)) - 1);
         if all { self } else { kept as u8 }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// `to_usize` and `to_isize` convert toward zero or stop. No program
-    /// reaches them (Part I 2.2 has no `usize` or `isize`), so this stays a
-    /// Rust test until the decision on unobservable `std` tests (#2082); the
-    /// rest of this module's tests are `tests/compiler` programs
-    /// (`num_a_number_converts_compares_and_keeps_its_low_bits`,
-    /// `num_a_float_that_does_not_fit_stops`).
-    #[test]
-    fn a_usize_and_an_isize_convert_toward_zero_or_stop() {
-        assert_eq!(to_usize(7.5), 7);
-        assert_eq!(to_isize(-7.5), -7);
-        assert_eq!(to_usize(-0.5), 0);
-        assert_eq!(to_usize(0.0), 0);
-        assert!(std::panic::catch_unwind(|| to_usize(-1.0)).is_err());
-        assert!(std::panic::catch_unwind(|| to_usize(1e30)).is_err());
     }
 }

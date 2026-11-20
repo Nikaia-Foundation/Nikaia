@@ -35,7 +35,7 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
     }
     let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if boundary.described { notes.push(format!("help: Run `nikaia describe {}` again, and review what changed in `contracts/{}.contracts`.", word, word)); } else { notes.push(format!("help: Build `{}` again: `nikaia build` without `--locked` rebuilds its ledger from its sources.", word)); }
-    for note in reported.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+    notes.reserve(reported.notes.iter().size_hint().0); for note in reported.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
     Some(Reported { level: nikaia_std::block::Text::from(reported.level.to_string()), message, label: match reported.label.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

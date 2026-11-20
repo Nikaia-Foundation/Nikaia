@@ -137,7 +137,7 @@ impl CheckState {
             return true;
         }
         if (names + owned.len() as i64) == 0 || (unsafe { nikaia_std::proven::add::<i64>(made.len() as i64, owned.len() as i64) }) == 0 { return false; }
-        for node in owned.iter() {
+        viewed.reserve(owned.iter().size_hint().0); for node in owned.iter() {
             let node = nikaia_std::num::value(node);
             self.facts.lent_reads.insert(node);
             viewed.push(node);
@@ -219,7 +219,7 @@ impl CheckState {
     pub(crate) fn choice_of_views_and_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, only_lent: bool, views_only: bool) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
-        let maybe_text = Ty::Nullable(std::boxed::Box::new(a_string_type()));
+        let maybe_text = Ty::Nullable(nikaia_std::block::Boxed::placed(a_string_type()));
         let mut views = 0;
         let mut owned = 0;
         let mut absent = false;
@@ -250,7 +250,7 @@ impl CheckState {
             }
         } else { self.note_mixed(world, value, absent); }
         let view = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
-        if absent { return Some(Ty::Nullable(std::boxed::Box::new(view))); }
+        if absent { return Some(Ty::Nullable(nikaia_std::block::Boxed::new(view))); }
         Some(view)
     }
 }

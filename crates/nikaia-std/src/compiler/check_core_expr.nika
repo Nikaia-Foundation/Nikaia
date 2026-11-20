@@ -824,7 +824,7 @@ fn check_core_expr_jump(mut state: CheckState, word: ref String, span: ref Span)
         state.a_jump_with_nowhere_to_go(word, span)
     }
     state.failing_cleanups_left(span)
-    // **A jump leaves the views bound inside its loop** (ADR-views-1 D2).
+    // **A jump leaves the views bound inside its loop** (ADR-views-v4 D19).
     state.a_way_out(word, "", span)
     return Ty::Unknown
 }
@@ -837,7 +837,7 @@ fn check_core_expr_one_entry(state: ref CheckState, name: ref String) -> bool {
 
 /// **A `dsl` block.** A package where a grammar stands is `NK1228`; a block
 /// over a grammar this program declares is run while the program is built
-/// (Part II 10.5, ADR-299 D20, #518); `dsl html` builds a `String` (#505) and
+/// (Part II 10.5, ADR-database-v1 D20, #518); `dsl html` builds a `String` (#505) and
 /// a statement with `:name` holes is its own text (ADR-grammar-build-time-v1 D12).
 fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, target: winnow_grammar::Symbol, package: winnow_grammar::Symbol?, context: winnow_grammar::Symbol?, content: ref String, span: ref Span) -> Ty sync {
     let bare = package == null

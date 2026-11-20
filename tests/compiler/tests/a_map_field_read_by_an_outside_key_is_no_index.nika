@@ -1,0 +1,27 @@
+// A map read through a field by an outside key reads a key, as a map
+// variable's does (ADR-396 D4, #2371): it has no bound to prove, so neither
+// read draws NK1302.
+use std::cli
+use std::collections
+
+struct Surface {
+    functions: collections::BTreeMap[String, i64],
+}
+
+fn look(surface: ref Surface, k: String) throws {
+    match surface.functions[k] {
+        null => println("none"),
+        v => println(f"{v}"),
+    }
+}
+
+fn main() throws {
+    let mut s = Surface { functions: collections::BTreeMap() }
+    s.functions.insert("a", 1)
+    let k = cli::args().nth(1) ?? ""
+    look(s, k)
+    match s.functions[k] {
+        null => println("none"),
+        v => println(f"{v}"),
+    }
+}

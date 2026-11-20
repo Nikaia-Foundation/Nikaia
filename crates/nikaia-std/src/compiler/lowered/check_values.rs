@@ -106,7 +106,7 @@ impl CheckState {
     pub(crate) fn a_failing_lambda_where_the_type_does_not_fail(&mut self, place: &Ty, span: &Span) {
         let shown = place.shown();
         let wanted: String = match place {
-            Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(match result {
+            Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: nikaia_std::block::Boxed::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }), is_sync, can_throw: true, spelled: CodeNames::none() }.shown() },

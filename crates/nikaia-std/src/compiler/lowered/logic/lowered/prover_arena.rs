@@ -101,7 +101,7 @@ impl TermArena {
     // this was written - see `contracts::sync`.
     pub fn variables(&self, id: i64, names: &mut collections::BTreeSet<String>) {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
-            SolverTerm::Var(name) => { names.insert(nikaia_std::block::Text::from(name.to_string())); },
+            SolverTerm::Var(name) => { if !names.contains(name) { names.insert(nikaia_std::block::Text::from(name.to_string())); } },
             SolverTerm::Neg(a) => { let a = *a; self.variables(a, names); },
             SolverTerm::Not(a) => { let a = *a; self.variables(a, names); },
             SolverTerm::Add(a, b) => { let a = *a; let b = *b; self.both_variables(a, b, names); },
@@ -276,7 +276,7 @@ impl TermArena {
             },
             SolverTerm::And(ref parts) => {
                 let mut changed: Vec<i64> = vec![];
-                for part in parts.iter() {
+                changed.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     changed.push(self.substitute(part, given));
                 }
@@ -284,7 +284,7 @@ impl TermArena {
             },
             SolverTerm::Or(ref parts) => {
                 let mut changed: Vec<i64> = vec![];
-                for part in parts.iter() {
+                changed.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     changed.push(self.substitute(part, given));
                 }
@@ -419,7 +419,7 @@ impl TermArena {
             },
             SolverTerm::And(ref parts) => {
                 let mut moved: Vec<i64> = vec![];
-                for part in parts.iter() {
+                moved.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     moved.push(self.copied_into(part, out));
                 }
@@ -427,7 +427,7 @@ impl TermArena {
             },
             SolverTerm::Or(ref parts) => {
                 let mut moved: Vec<i64> = vec![];
-                for part in parts.iter() {
+                moved.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     moved.push(self.copied_into(part, out));
                 }
@@ -449,7 +449,7 @@ impl TermArena {
 
 pub(crate) fn moved_by(parts: &[i64], base: i64) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
-    for p in parts.iter() {
+    out.reserve(parts.iter().size_hint().0); for p in parts.iter() {
         let p = nikaia_std::num::value(p);
         out.push(p + base);
     }

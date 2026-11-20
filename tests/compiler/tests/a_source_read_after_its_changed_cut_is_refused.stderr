@@ -13,7 +13,7 @@ error[NK2302]: `lent` keeps `line`, but `line` is not marked `keep`.
  16 |     rest += "."
     |     ^^^^^^^^^^^
     |
-    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-v4 D2).
     = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
     = help: Write `keep line` in the signature of `lent`; or let `rest` change a copy: write `.clone()` after the cut it is bound to, and `line` stays its caller's.
 1 view kept past the call that was given it

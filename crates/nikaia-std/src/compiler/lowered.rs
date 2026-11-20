@@ -3072,11 +3072,11 @@ pub mod bounds_report {
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
-    pub use super::{BoundsRule};
+    pub use super::{BoundsRule, rules_checked_keep};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, tracks};
+    pub use super::{BodyShape, RulesChecked, Around, tracks};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
@@ -3480,7 +3480,7 @@ pub mod emit_tables {
 }
 pub mod emit_text {
     #[allow(unused_imports)]
-    pub use super::{format_of, truncating, checked};
+    pub use super::{format_of, truncating, checked, format_compared_check};
 }
 pub mod emit_types {}
 pub mod emit_walk {
@@ -3517,7 +3517,7 @@ pub mod fold_bound {
 }
 pub mod foreign {
     #[allow(unused_imports)]
-    pub use super::{Seen, written_in, foreign_own_refused};
+    pub use super::{Seen, written_in, foreign_own_published, foreign_own_refused};
 }
 pub mod grammar_decode {
     #[allow(unused_imports)]
@@ -3586,7 +3586,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_described_at, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_sources, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_described_at, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3602,7 +3602,7 @@ pub mod migrate_views3 {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, SyncLost, lost_sync_all, lost_sync_against, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -3659,7 +3659,7 @@ pub mod project_batch {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_summary, project_check_raw_sinks_in_std, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
@@ -3715,7 +3715,7 @@ pub mod prover_calls {
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
+    pub use super::{UnwrittenCheck, ParamSink, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -3759,7 +3759,7 @@ pub mod rustc_words {
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, box_sites_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
 }
 pub mod signature {
     #[allow(unused_imports)]
@@ -3780,7 +3780,7 @@ pub mod surface {
 }
 pub mod sync {
     #[allow(unused_imports)]
-    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations};
+    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations, unit_pausing};
 }
 pub mod sysroot_cache {
     #[allow(unused_imports)]
@@ -3821,7 +3821,7 @@ pub mod traits {
 }
 pub mod tree_build {
     #[allow(unused_imports)]
-    pub use super::{Postfix, split_mut, unpacked, flat_shape, lambda, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
+    pub use super::{Postfix, split_mut, unpacked, flat_shape, marked_names, lambda, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
 }
 pub mod trust {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "e4c4eb9c89e2c3a88a44d7ad6d719ab3eab1d01460dc83ddf081322dafec2722";
+pub const LOWERED_DIGEST: &str = "87881e2844ff238e0d25fb6c3e3115e585ea1c8957f23322b83b98dd8fdba212";

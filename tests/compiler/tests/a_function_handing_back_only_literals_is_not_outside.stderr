@@ -1,0 +1,10 @@
+warning[NK1308]: `e` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_function_handing_back_only_literals_is_not_outside.nika:39:5
+    |
+ 39 |     println(fs::exists(f"d/{e}", fs::Root::Anywhere))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `e` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(e) if !path::is_component(e)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.

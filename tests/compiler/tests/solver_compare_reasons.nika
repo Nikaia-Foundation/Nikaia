@@ -1,0 +1,82 @@
+// `compare` splits ours' unsolved files by reason (#2259): a file that
+// leaves `i64` (the rod's `unknown (overflow)`, ADR-270 D11) counts as
+// `overflow`, a run past the limit as `timeout`, any other as `unknown`;
+// before, all three were one uncounted rest beside `solved`. z3 and cvc5
+// are named by paths that do not exist, so only ours runs; each row is cut
+// before its PAR-2, which is wall time.
+use std::fs
+use std::process
+
+// The running `nikaia`: the nearest ancestor whose executable has that name
+// (`nikaia run` replaces itself with its program, #1305).
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain()
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	// The script takes only names below the directory it runs in
+	// (ADR-raw-sinks-1 D14, #2364): it runs in `tmp` on `files`.
+	let dir = f"{tmp}/files"
+	process::run("mkdir", [dir.clone()])
+	let head = "(set-logic QF_LIA)\n(set-info :status sat)\n(declare-const x Int)\n"
+	// A numeral past `i64`: the reader answers `unknown (overflow)`.
+	fs::write(
+		f"{dir}/big.smt2",
+		fs::Root::Anywhere,
+		head + "(assert (<= 99999999999999999999 x))\n(check-sat)\n",
+	)
+	fs::write(
+		f"{dir}/small.smt2",
+		fs::Root::Anywhere,
+		head + "(assert (<= 1 x))\n(assert (<= x 3))\n(check-sat)\n",
+	)
+	let out = process::run(
+		"env",
+		[
+			"Z3=/nonexistent/z3",
+			"CVC5=/nonexistent/cvc5",
+			nikaia,
+			"run",
+			f"{repo}/scripts/solver.nika",
+			"--",
+			"compare",
+			"--files",
+			"files",
+		];
+		dir: tmp.clone(),
+	)
+	println(f"exit {out.code}")
+	for line in out.stdout.lines() {
+		let at = line.find(" PAR-2") ?? continue
+		println(line[0..<at].trim())
+	}
+	for line in out.stdout.lines() {
+		if line.contains("not on the path") { println(line.trim()) }
+	}
+	process::run("rm", ["-rf", tmp])
+}

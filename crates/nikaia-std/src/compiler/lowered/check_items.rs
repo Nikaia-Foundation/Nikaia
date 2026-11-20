@@ -51,7 +51,7 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
-    (unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either)
+    unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either
 }
 
 pub(crate) fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
@@ -241,7 +241,7 @@ pub(crate) fn item_fields_of(ledger: &Ledger, index: &mut collections::BTreeMap<
     for (key, contract) in ledger.types.iter() {
         let base = item_last_segment(key);
         let mut held = item_held(&index, &base);
-        for f in contract.fields.iter() { held.push(f.ty.clone()); }
+        held.reserve(contract.fields.iter().size_hint().0); for f in contract.fields.iter() { held.push(f.ty.clone()); }
         index.insert(base, held);
     }
 }
@@ -285,8 +285,8 @@ pub(crate) fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, ty
                             let mut tys: Vec<Ty> = vec![];
                             match &held.fields {
                                 VariantFields::Unit => { },
-                                VariantFields::Tuple(types) => { for t in types.iter() { tys.push(written_ty(view.words, view.aliases, t)); } },
-                                VariantFields::Named(fields) => { for f in fields.iter() { tys.push(written_ty(view.words, view.aliases, &f.ty)); } },
+                                VariantFields::Tuple(types) => { tys.reserve(types.iter().size_hint().0); for t in types.iter() { tys.push(written_ty(view.words, view.aliases, t)); } },
+                                VariantFields::Named(fields) => { tys.reserve(fields.iter().size_hint().0); for f in fields.iter() { tys.push(written_ty(view.words, view.aliases, &f.ty)); } },
                             }
                             return Some(tys);
                         }
@@ -366,7 +366,7 @@ pub(crate) fn item_placeholder_of_contract(name: &str, contract: &TypeContract) 
         let written = format!("{}::{}", name, vname);
         let mut tys: Vec<Ty> = vec![];
         let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for f in variant.holds.iter() {
+        tys.reserve(variant.holds.iter().size_hint().0); for f in variant.holds.iter() {
             tys.push(f.ty.clone());
             let fname = nikaia_std::block::Text::from(f.name.to_string());
             if variant.positional { holes.push(String::from("Default::default()")); } else { holes.push(format!("{}: Default::default()", fname)); }
@@ -396,7 +396,7 @@ pub(crate) fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_, '
 
 pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for v in variants.iter() { out.push(view.text(v.name)); }
+    out.reserve(variants.iter().size_hint().0); for v in variants.iter() { out.push(view.text(v.name)); }
     out
 }
 
@@ -420,7 +420,7 @@ impl CheckState {
         let parameters = self.struct_parameters.get(&name);
         if parameters.is_some() && !match parameters { Some(__nikaia_value) => __nikaia_value, None => return None }.is_empty() { return None; }
         let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for f in fields.iter() {
+        holes.reserve(fields.iter().size_hint().0); for f in fields.iter() {
             if !item_has_a_default(&f.ty) { return None; }
             let fname = nikaia_std::block::Text::from(f.name.to_string());
             holes.push(format!("{}: Default::default()", fname));
@@ -446,10 +446,10 @@ impl CheckState {
         }
         if (variants.len() as i64) != known.len() as i64 {
             variants = vec![];
-            for k in known.iter() { variants.push(nikaia_std::block::Text::from(k.to_string())); }
+            variants.reserve(known.iter().size_hint().0); for k in known.iter() { variants.push(nikaia_std::block::Text::from(k.to_string())); }
         }
         let mut out: Vec<FieldContract> = vec![];
-        for variant in variants.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(variant.to_string()), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
+        out.reserve(variants.iter().size_hint().0); for variant in variants.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(variant.to_string()), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
     pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
@@ -497,10 +497,10 @@ impl CheckState {
         declared = declared || item_ledger_has(world.own, &prefix) || item_ledger_has(world.library, &prefix) || imports_a_package(view, &head);
         if declared { return; }
         #[allow(unused_mut)] let mut heads: Vec<String> = vec![];
-        for m in self.std_modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
-        for m in self.modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
-        for (k, _) in self.structs.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
-        for (k, _) in self.enums.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
+        heads.reserve(self.std_modules.iter().size_hint().0); for m in self.std_modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
+        heads.reserve(self.modules.iter().size_hint().0); for m in self.modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
+        heads.reserve(self.structs.iter().size_hint().0); for (k, _) in self.structs.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
+        heads.reserve(self.enums.iter().size_hint().0); for (k, _) in self.enums.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
         let mut near: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut heads = heads;
         for known in heads.iter() { if near.is_none() && distance(&head, known) == 1 { near = Some(nikaia_std::block::Text::from(known.to_string())); } }
         if near.is_none() { near = nearest_name(&head, &heads); }
@@ -522,7 +522,7 @@ pub(crate) fn item_has_trait(ledger: &Ledger, written: &str, suffix: &str) -> bo
 
 pub(crate) fn item_contract_variants(contract: &TypeContract) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for v in contract.variants.iter() { out.push(nikaia_std::block::Text::from(v.name.to_string())); }
+    out.reserve(contract.variants.iter().size_hint().0); for v in contract.variants.iter() { out.push(nikaia_std::block::Text::from(v.name.to_string())); }
     out
 }
 
@@ -606,14 +606,14 @@ pub(crate) fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<S
 pub(crate) fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
     let mut out: Vec<ItemMember> = vec![];
     match node {
-        Item::Struct { fields, .. } => { for f in fields.iter() { out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() }); } },
+        Item::Struct { fields, .. } => { out.reserve(fields.iter().size_hint().0); for f in fields.iter() { out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() }); } },
         Item::Enum { variants, .. } => {
             for v in variants.iter() {
                 let variant = file.text(v.name);
                 match &v.fields {
                     VariantFields::Unit => { },
                     VariantFields::Tuple(types) => { for at in 0..types.len() as i64 { out.push(ItemMember { member: boxed_member(&variant, at, ""), ty: (*unsafe { nikaia_std::proven::read(&types, (at) as usize) }).clone() }); } },
-                    VariantFields::Named(fields) => { for f in fields.iter() { out.push(ItemMember { member: boxed_member(&variant, -1, &file.text(f.name)), ty: f.ty.clone() }); } },
+                    VariantFields::Named(fields) => { out.reserve(fields.iter().size_hint().0); for f in fields.iter() { out.push(ItemMember { member: boxed_member(&variant, -1, &file.text(f.name)), ty: f.ty.clone() }); } },
                 }
             }
         },
@@ -633,7 +633,7 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_, 
 impl CheckState {
     pub(crate) fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) {
         let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
-        for other in beside.iter() { files.push(other.clone()); }
+        files.reserve(beside.iter().size_hint().0); for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
         for file in files.iter() {
             for item in file.items.iter() {
@@ -642,9 +642,9 @@ impl CheckState {
                         let name = *name;
                         if !params.is_empty() {
                             let mut names: Vec<String> = vec![];
-                            for p in params.iter() { names.push(file.text(p.name)); }
+                            names.reserve(params.iter().size_hint().0); for p in params.iter() { names.push(file.text(p.name)); }
                             let mut members: Vec<Type> = vec![];
-                            for f in fields.iter() { members.push(f.ty.clone()); }
+                            members.reserve(fields.iter().size_hint().0); for f in fields.iter() { members.push(f.ty.clone()); }
                             generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members });
                         }
                     },

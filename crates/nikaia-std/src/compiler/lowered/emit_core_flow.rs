@@ -178,7 +178,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-        for p in params.iter() {
+        names.reserve(params.iter().size_hint().0); for p in params.iter() {
             let p = *p;
             names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
         }
@@ -320,7 +320,7 @@ impl EmitState {
         }
         if from_a_let {
             #[allow(unused_mut)] let mut each: Vec<&'static str> = vec![];
-            for p in params.iter() {
+            each.reserve(params.iter().size_hint().0); for p in params.iter() {
                 let p = *p;
                 each.push("_");
             }
@@ -351,6 +351,11 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push("))");
             return Ok(());
+        }
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.compared_formats.contains(&site) {
+            let kind: String = if op == BinaryOp::Eq { String::from("==") } else { String::from("!=") };
+            if self.emit_format_compared(world, walk, out, host, &kind, lhs, rhs, true, false, depth, wide, scope)? { return Ok(()); }
+            if self.emit_format_compared(world, walk, out, host, &kind, rhs, lhs, false, false, depth, wide, scope)? { return Ok(()); }
         }
         if self.facts.mixed_comparisons.contains_key(&site) {
             let unsigned_left = nikaia_std::index::or(self.facts.mixed_comparisons.get(&site), || false);
@@ -990,7 +995,7 @@ impl EmitState {
                 let mut at: u32 = 0u32;
                 if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
                 let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)));
-                let caught = Expr::TryCatch { expr: std::boxed::Box::new(guarded), handler: handler.clone(), id: numbered_id(id) };
+                let caught = Expr::TryCatch { expr: nikaia_std::block::Boxed::new(guarded), handler: handler.clone(), id: numbered_id(id) };
                 let wrapped = Block { stmts: vec![Spanned::new(Stmt::Expr(caught), Span { start: at, end: at })] };
                 self.emit_flow_task(world, walk, out, host, node_key(lambda), &wrapped, depth, &flow, scope)?;
             },

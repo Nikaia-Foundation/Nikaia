@@ -43,7 +43,7 @@ pub(crate) fn use_segments(names: &winnow_grammar::InternerContext, item: &Item)
     let mut out: Vec<String> = vec![];
     match item {
         Item::Import { path, .. } => {
-            for segment in path.iter() {
+            out.reserve(path.iter().size_hint().0); for segment in path.iter() {
                 let segment = *segment;
                 out.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
             }
@@ -78,7 +78,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let functions = if one { "1 pub function" } else { "pub functions" };
         let s = if one { "s" } else { "" };
         let es = if one { "es" } else { "" };
-        out.push_str(&format!("note: {}{} never pause{} and do{} not promise it: {}\n  help: write `sync` after the result, and callers in other packages can rely on it\n", count, functions, s, es, nikaia_std::block::Text::from(never.join(", "))));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("note: {}{} never pause{} and do{} not promise it: {}\n  help: write `sync` after the result, and callers in other packages can rely on it\n", count, functions, s, es, nikaia_std::block::Text::from(never.join(", ")))); };
     }
     if !through.is_empty() {
         let one = through.len() == 1;
@@ -87,7 +87,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let s = if one { "s" } else { "" };
         let they = if one { "it is" } else { "they are" };
         let es = if one { "es" } else { "" };
-        out.push_str(&format!("note: {}{} pause{} only where the lambdas {} given do, and do{} not promise it: {}\n  help: write `sync(f)` after the result, naming those lambdas, and callers in other packages can rely on it\n", count, functions, s, they, es, nikaia_std::block::Text::from(through.join(", "))));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("note: {}{} pause{} only where the lambdas {} given do, and do{} not promise it: {}\n  help: write `sync(f)` after the result, naming those lambdas, and callers in other packages can rely on it\n", count, functions, s, they, es, nikaia_std::block::Text::from(through.join(", ")))); };
     }
     out
 }
@@ -111,30 +111,45 @@ pub(crate) fn pause_path(chain: &[String]) -> String {
     nikaia_std::block::Text::from(steps.join(", which "))
 }
 
-pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String {
-    let mut out: String = String::from("");
+pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String { lost_sync_against(&lost_sync_all(contracts, theirs, pauses, &mut *render), committed) }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SyncLost {
+    pub key: String,
+    pub said: String,
+}
+
+pub fn lost_sync_all(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> Vec<SyncLost> {
+    let mut out: Vec<SyncLost> = vec![];
     for (key, now) in contracts.functions.iter() {
         if of_a_dependency(key, theirs) || !now.public || now.sync_claim.is_sync() { continue; }
-        let before = match *nikaia_std::index::get(&committed.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !inferred_sync(&before.sync_claim) { continue; }
         let message = format!("`{}` could not pause before, and now it can.", key);
         let help = format!("If `{}` should not pause, move this out of it; if it may, commit `nikaia.contracts`, and this is not said again.", key);
         let pause = match *nikaia_std::index::get(&pauses, key) { Some(__nikaia_value) => __nikaia_value, None => {
-            out.push_str(&lost_sync_unplaced(&message, &help));
+            out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: lost_sync_unplaced(&message, &help) });
             continue;
         } };
         let site = match match pause.site.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => {
-            out.push_str(&lost_sync_unplaced(&message, &help));
+            out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: lost_sync_unplaced(&message, &help) });
             continue;
         } };
         let mut notes: Vec<String> = vec![];
         if pause.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&pause.chain))); }
         notes.push(format!("{} can pause.", site.what));
         let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![], edit: None };
-        out.push_str(&render(&finding, pause.unit));
+        out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: render(&finding, pause.unit) });
+    }
+    out
+}
+
+pub fn lost_sync_against(all: &[SyncLost], committed: &Ledger) -> String {
+    let mut out: String = String::from("");
+    for lost in all.iter() {
+        let before = match *nikaia_std::index::get(&committed.functions, &lost.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if inferred_sync(&before.sync_claim) { out.push_str(&lost.said); }
     }
     out
 }
@@ -264,13 +279,13 @@ pub fn package_names(packages: &[Option<String>]) -> collections::BTreeSet<Strin
 
 pub fn is_single_file(units: i64) -> bool { units == 1 }
 
-pub(crate) fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
+pub fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
 
 pub fn test_dispatcher(cli: &str, with_use: bool, count: i64, dispatch: &str) -> String {
     let mut text: String = String::from("");
     if with_use { text.push_str("use std::cli\n"); }
-    text.push_str(&format!("fn {}() throws {{\n    let which = {}::args().nth(1) ?? \"\"\n", dispatch, cli));
-    for k in 0..count { text.push_str(&format!("    if which == \"{}\" {{\n        {}()\n        return\n    }}\n", k, test_function(k))); }
+    { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("fn {}() throws {{\n    let which = {}::args().nth(1) ?? \"\"\n", dispatch, cli)); };
+    for k in 0..count { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    if which == \"{}\" {{\n        {}()\n        return\n    }}\n", k, test_function(k))); }; }
     text.push_str("    panic(f\"this build has no test numbered `{which}`\")\n}\n");
     text
 }
@@ -332,7 +347,8 @@ pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, 
     tests
 }
 
-pub fn modules_test_wrappers(titles: &[String], stem: &str) -> String {
+pub fn modules_test_wrappers(titles: &[String], stem: &str, pausing: &[bool]) -> String {
+    let mut shims: String = String::from("");
     let mut text: String = format!("\n/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.\npub(crate) fn {}_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {{\n    vec![\n", stem);
     let mut k: i64 = 0;
     for title in titles.iter() {
@@ -343,17 +359,23 @@ pub fn modules_test_wrappers(titles: &[String], stem: &str) -> String {
             if c >= 48 && c <= 57 || c >= 97 && c <= 122 {
                 if gap && !slug.is_empty() { slug.push_str("_"); }
                 gap = false;
-                slug.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+                { use ::core::fmt::Write as _; let _ = slug.write_fmt(format_args!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
             } else if c >= 65 && c <= 90 {
                 if gap && !slug.is_empty() { slug.push_str("_"); }
                 gap = false;
-                slug.push_str(&format!("{}", (u8::try_from(unsafe { nikaia_std::proven::add::<i64>(c, 32) }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+                { use ::core::fmt::Write as _; let _ = slug.write_fmt(format_args!("{}", (u8::try_from(unsafe { nikaia_std::proven::add::<i64>(c, 32) }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
             } else { gap = true; }
         }
-        text.push_str(&format!("        (\"{}::{}\", {}),\n", stem, slug, test_function(k)));
+        let mut run = test_function(k);
+        if k < pausing.len() as i64 && *unsafe { nikaia_std::proven::read(&pausing, (k) as usize) } {
+            { use ::core::fmt::Write as _; let _ = shims.write_fmt(format_args!("\nfn {}_to_its_end() -> Result<(), std::boxed::Box<dyn std::error::Error>> {{\n    nikaia_std::rt::exec::block_on({}())?;\n    Ok(())\n}}\n", run, run)); };
+            run = format!("{}_to_its_end", run);
+        }
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("        (\"{}::{}\", {}),\n", stem, slug, run)); };
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     text.push_str("    ]\n}\n");
+    text.push_str(&shims);
     text
 }
 
@@ -422,7 +444,7 @@ pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BT
     let mut file: i64 = 0;
     for part in parts.iter() {
         let mut k: i64 = 0;
-        for name in part.names.iter() {
+        bodies.reserve(part.names.iter().size_hint().0); for name in part.names.iter() {
             if *nikaia_std::index::get(&part.tests, (k) as usize) { for word in (*nikaia_std::index::get(&part.calls, (k) as usize)).iter() { reached.insert(nikaia_std::block::Text::from(word.to_string())); } }
             if !name.is_empty() {
                 if candidates.contains_key(name) { twice.insert(nikaia_std::block::Text::from(name.to_string())); }
@@ -446,7 +468,7 @@ pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BT
     modules_close_over(&mut reached, &candidates, &bodies);
     modules_close_over(&mut live, &candidates, &bodies);
     let mut found: Vec<collections::BTreeSet<String>> = vec![];
-    for _ in parts.iter() { found.push(collections::BTreeSet::new()); }
+    found.reserve(parts.iter().size_hint().0); for _ in parts.iter() { found.push(collections::BTreeSet::new()); }
     for name in reached.iter() {
         if candidates.contains_key(name) && !live.contains(name) {
             let at = match home.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
@@ -477,7 +499,7 @@ pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
                 before = last;
                 start = at;
             }
-            word.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+            { use ::core::fmt::Write as _; let _ = word.write_fmt(format_args!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
             last = 97;
         } else {
             if !word.is_empty() {
@@ -507,7 +529,7 @@ pub(crate) fn modules_type_words(text: &str) -> Vec<(String, i64)> {
         let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
         if in_word {
             if word.is_empty() { start = at; }
-            word.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+            { use ::core::fmt::Write as _; let _ = word.write_fmt(format_args!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
         } else {
             if !word.is_empty() {
                 let first = nikaia_std::index::or(word.bytes().next(), || 0);
@@ -746,7 +768,7 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
             None => None,
         }, reachable, renames, &ModulesStanding::InProject, open, host).await?);
     }
-    for path in beside.iter() {
+    units.reserve(beside.iter().size_hint().0); for path in beside.iter() {
         units.push(modules_read_unit(path, match package {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -978,9 +1000,9 @@ pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) 
     let mut out: String = String::from("");
     for set in found.iter() {
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for name in set.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+        names.reserve(set.iter().size_hint().0); for name in set.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
         let line = nikaia_std::block::Text::from(names.join(" "));
-        out.push_str(&format!("[{}]\n", line));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("[{}]\n", line)); };
     }
     out
 }

@@ -85,7 +85,7 @@ pub(crate) fn every_count_plain(sharing: &mut Sharing) {
             None => None,
         }, || vec![].into());
         let mut plain: Vec<Class> = vec![];
-        for class in classes.iter() { plain.push(Class { members: class.members.copy_owned(), count: Count::Plain }); }
+        plain.reserve(classes.iter().size_hint().0); for class in classes.iter() { plain.push(Class { members: class.members.copy_owned(), count: Count::Plain }); }
         sharing.summaries.insert(nikaia_std::block::Text::from(function.to_string()), plain);
     }
 }
@@ -127,6 +127,13 @@ pub fn sharing_report(sharing: &Sharing) -> String {
         out.push_str(&format!("  {} {} - {}\n", mark, said, remedy));
     }
     out.push_str("The ones that need a contract get sharper as `std`'s contracts grow.\n");
+    out
+}
+
+pub fn box_sites_report(sites: &collections::BTreeMap<i64, String>) -> String {
+    if sites.is_empty() { return String::from(""); }
+    let mut out: String = String::from("\nBoxes of recursive types (ADR-327 D16):\n");
+    for (_, site) in sites.iter() { out.push_str(&format!("    {}\n", site)); }
     out
 }
 
@@ -458,7 +465,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
     let mut summaries: collections::BTreeMap<String, Vec<Class>> = collections::BTreeMap::new();
     for (function, roots) in classes.iter() {
         let mut found: Vec<Class> = vec![];
-        for (_, class) in roots.iter() { found.push(Class { members: sorted_once(&class.members), count: class.count }); }
+        found.reserve(roots.iter().size_hint().0); for (_, class) in roots.iter() { found.push(Class { members: sorted_once(&class.members), count: class.count }); }
         summaries.insert(nikaia_std::block::Text::from(function.to_string()), in_class_order(&found));
     }
     Sharing { decisions, summaries, counts }

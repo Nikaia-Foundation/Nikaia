@@ -636,6 +636,112 @@ sync = true
 touches = []
 signature = "(markup: ?) -> ?"
 
+# `text`, escaped: the safe way to build markup out of what is not markup yet.
+# `std`'s own, for its test blocks (ADR-rust-boundary-1 D24, D26, #2304).
+[fn."html::Raw::escaped"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(text: ref String) -> html::Raw"
+
+# The markup, for whoever writes it out. `std`'s own (#2304).
+[fn."html::Raw::as_str"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref html::Raw) -> ref String"
+
+# The `.nika` file and line for a line of the generated file. `std`'s own,
+# for its test blocks (#2310): the table is `comptime`, its text the build's.
+[fn."abort::lookup"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(table: ref Array[(u32, ref String, u32)], generated: u32) -> (ref String, u32)?"
+
+# The runtime a program starts with, and whether user code runs on a pool.
+# `std`'s own (#2304): a program finds the one runtime, never builds one.
+[type."rt::Runtime"]
+pub = false
+
+[type."rt::UserCode"]
+pub = false
+copies = true
+compares = true
+variants = ["Sequential", "Concurrent"]
+
+# A runtime of its own, built from `config`, so a test block can ask one
+# that is not the process's. `std`'s own (#2304).
+[fn."rt::Runtime::build"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(user_code: rt::UserCode, config: ?) -> rt::Runtime"
+
+# The runtime every `std` call finds (ADR-037 D4), `std`'s own: a test block
+# counts that asking for it again builds none (#2338).
+[fn."rt::handle"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "() -> ref rt::Runtime"
+
+# One line naming what started and how, for `--runtime`. `std`'s own (#2304).
+[fn."rt::Runtime::describe"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref rt::Runtime) -> String"
+
+# A pool of `threads` workers for tasks, `0` as many as the machine has, so a
+# test block can watch one of its own. `std`'s own (#2316).
+[type."rt::pool::Pool"]
+pub = false
+
+[fn."rt::pool::Pool::start"]
+pub = false
+panics = false
+sync = true
+signature = "(threads: i64) -> rt::pool::Pool"
+
+# How often an idle turn of the pool woke its workers. `std`'s own (#2316).
+[fn."rt::pool::Pool::rang"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref rt::pool::Pool) -> i64"
+
+# Stop the pool's workers. `std`'s own (#2316).
+[fn."rt::pool::Pool::close"]
+pub = false
+panics = false
+sync = true
+signature = "(self: ref rt::pool::Pool)"
+
+# The count of I/O completions the runtime has seen. `std`'s own (#2316).
+[fn."rt::io::generation"]
+pub = false
+panics = false
+sync = true
+signature = "() -> i64"
+
+# Whether the calling thread is one of the runtime's I/O workers, which a
+# thread running `std`'s user-facing functions never is (ADR-037 D2). `std`'s
+# own (#2316).
+[fn."rt::worker::on_io_worker"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "() -> bool"
+
 # The whole of standard input, as bytes.
 #
 # It may pause rather than holding the thread it is called on, and it fails
@@ -2994,7 +3100,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
 # name the language below gives it, for a program that wants the value it
 # replaced. The map keeps both, so both are handed over (ADR-293 D29).
 # Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
-# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# in the map, as `insert` would one by one (ADR-collections-v3 D6, D3): a later
 # pair with a key already there replaces its value.
 #
 # The map keeps them, so `pairs` is given away rather than lent.
@@ -3111,7 +3217,7 @@ touches = []
 signature = "() -> collections::HashSet[?]"
 
 # Put every element of a list, a set or a sequence in the set, as `insert` would
-# one by one (ADR-collections-1 D2, D3).
+# one by one (ADR-collections-v3 D2, D3).
 #
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::HashSet::extend"]
@@ -3174,7 +3280,7 @@ touches = []
 signature = "(self: ref collections::HashSet[?]) -> bool"
 
 # The elements, one at a time, lent; a set has no order of its own, so a program
-# that prints them says which order it means (ADR-collections-2 D3).
+# that prints them says which order it means (ADR-collections-v3 D9).
 [fn."collections::HashSet::iter"]
 pub = true
 panics = false
@@ -3191,7 +3297,7 @@ touches = []
 signature = "() -> collections::BTreeSet[?]"
 
 # Put every element of a list, a set or a sequence in the set, as `insert` would
-# one by one (ADR-collections-1 D2, D3).
+# one by one (ADR-collections-v3 D2, D3).
 #
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::BTreeSet::extend"]
@@ -3255,7 +3361,7 @@ sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> bool"
 
-# The elements, one at a time, lent, smallest first (ADR-collections-2 D3).
+# The elements, one at a time, lent, smallest first (ADR-collections-v3 D9).
 [fn."collections::BTreeSet::iter"]
 pub = true
 panics = false
@@ -3273,7 +3379,7 @@ touches = []
 signature = "() -> collections::BTreeMap[?, ?]"
 
 # Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
-# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# in the map, as `insert` would one by one (ADR-collections-v3 D6, D3): a later
 # pair with a key already there replaces its value.
 #
 # The map keeps them, so `pairs` is given away rather than lent.
@@ -3299,7 +3405,7 @@ signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: K, value: V)
 
 # The place in the map this key names, whether or not anything is there yet.
 #
-# The same contract as `collections::HashMap::entry` (ADR-collections-1 D1): the
+# The same contract as `collections::HashMap::entry` (ADR-collections-v3 D1): the
 # map **keeps** the key, and `Entry[V]` is one type for both maps.
 [fn."collections::BTreeMap::entry"]
 pub = true
@@ -3838,7 +3944,7 @@ sync = true
 touches = []
 signature = "(self: ref Array[?, ?], value: ?) -> bool"
 
-# **The elements, one at a time, lent** (ADR-collections-2 D1): what
+# **The elements, one at a time, lent** (ADR-collections-v3 D7): what
 # `Vec::iter` gives, on an array and on a run, so `zip`, `map`, `filter`,
 # `enumerate` and `rev` follow.
 [fn."Array::iter"]
@@ -3848,7 +3954,7 @@ sync = true
 touches = []
 signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
 
-# **A changeable run changes in place** (ADR-views-3 D11, #1209): an array
+# **A changeable run changes in place** (ADR-views-v4 D11, #1209): an array
 # of a `mut` place, a `mut xs: Array[T]` and a part `v[a..<b]` of a `mut`
 # list are sorted, swapped, turned round and filled as a list is. They are
 # Rust's `[T]` methods.
@@ -4543,7 +4649,7 @@ signature = "[T](mut self: ref Vec[T], length: i64, value: T)"
 # Add every element of another list to the end of this one, in order.
 #
 # The list **keeps** them, so the other list is given away rather than lent.
-# `items` is a list, a set or a sequence of owned `T` (ADR-collections-1 D3),
+# `items` is a list, a set or a sequence of owned `T` (ADR-collections-v3 D3),
 # which one parameter type cannot say, so it is `?`.
 [fn."Vec::extend"]
 pub = true
@@ -4598,7 +4704,7 @@ sync = true
 touches = []
 signature = "(mut self: ref Vec[?])"
 
-# **Every element set to one value, in place** (ADR-views-3 D11, #1209).
+# **Every element set to one value, in place** (ADR-views-v4 D11, #1209).
 #
 # The list **keeps** the value: each place gets a copy of it.
 [fn."Vec::fill"]
@@ -6782,7 +6888,7 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 #
 # The wait gives the thread up, so other tasks run while the program does.
 #
-# **It keeps every list and text it is handed** (ADR-views-3 D14, #1797):
+# **It keeps every list and text it is handed** (ADR-views-v4 D14, #1797):
 # `args`, `env`, `env_remove` and `stdin` are owned below, so a parameter
 # handed to one is moved, not lent.
 [fn."process::run"]

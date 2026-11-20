@@ -1,5 +1,5 @@
 // A result of a type other than text written `from` its subject is a view of
-// it (ADR-views-3 D7, D8, #1257): a list, a piece of one and a struct, as
+// it (ADR-views-v4 D7, D8, #1257): a list, a piece of one and a struct, as
 // `ref` of the same type is.
 struct Inner {
 	n: i64,

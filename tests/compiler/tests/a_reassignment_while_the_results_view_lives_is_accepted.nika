@@ -1,4 +1,4 @@
-// Giving `y` up while `r` lives is allowed: its buffer lives on with `r` (ADR-views-3 D9).
+// Giving `y` up while `r` lives is allowed: its buffer lives on with `r` (ADR-views-v4 D9).
 fn longest(a: String, b: String) -> String {
     if a.len() >= b.len() {
         return a.trim()

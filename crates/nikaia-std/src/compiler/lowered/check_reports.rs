@@ -129,8 +129,8 @@ impl CheckState {
         let mut label: String = String::from("");
         if why == "map" {
             message = String::from("`mut` here marks the key of a map, and a key can't be changed in place.");
-            note = String::from("The key decides where the entry stands in the map (its order, or its hash), so a key changed in place would leave the entry in the wrong place. A map's values can't be changed by a loop over the map yet either.");
-            help = String::from("Take the entry out and insert it again after the loop. To change a value, change `m[k]` in a loop over keys taken before it.");
+            note = String::from("The key decides where the entry stands in the map (its order, or its hash), so a key changed in place would leave the entry in the wrong place.");
+            help = String::from("To change the values in place, write `mut` in front of the value alone: `for (k, mut v) in m`. To change a key, take the entry out and insert it again after the loop.");
             label = String::from("marks the key");
         } else if why == "set" {
             message = String::from("`mut` here marks an element of a set, and a set's element can't be changed in place.");
@@ -150,10 +150,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_for_mut_over_a_list_not_mut(&mut self, list: &str, head: &str, a_parameter: bool, span: &Span) {
-        let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list);
-        if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list); }
+        let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for {} in {}.clone()`.", list, head, list);
+        if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for {} in {}.clone()`.", list, head, list); }
         let label = CheckLabel { span: span.clone(), word: nikaia_std::block::Text::from(list.to_string()), text: String::from("can't be changed here"), main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label], edit: None });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -241,7 +241,7 @@ impl CheckState {
         if known { return; }
         let suffix = format!("::{}", name);
         let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (key, _) in world.library.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
+        for (key, contract) in world.library.functions.iter() { if contract.public && key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
         if keys.len() != 1 { return; }
         let key = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string());
         let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();

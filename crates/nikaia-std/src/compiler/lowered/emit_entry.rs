@@ -129,7 +129,7 @@ impl EmitState {
         text = format!("{}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{}", text, reads);
         for check in checks.iter() {
             let mut operands: String = String::from("");
-            for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
+            for (name, value) in check.operands.iter() { { use ::core::fmt::Write as _; let _ = operands.write_fmt(format_args!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }; }
             text = format!("{}    if !{} {{ __nikaia_words.breach({}, &[{}]) }}\n", text, check.rust, rust_string(&main_claim(&check.written)), operands);
         }
         (text, nikaia_std::block::Text::from(passed.join(", ")))
@@ -230,7 +230,7 @@ pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerConte
     let mut text = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
     if !ty.generics.is_empty() {
         let mut inner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
+        inner.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
         text = format!("{}[{}]", text, nikaia_std::block::Text::from(inner.join(", ")));
     }
     if ty.is_nullable { text = format!("{}?", text); }

@@ -63,7 +63,7 @@ pub fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64
 // this was written - see `contracts::sync`.
 pub fn lg_loop_entry_query(problem: &LgLoop, invariant: i64) -> LgQuery {
     let mut facts = problem.fixed.copy_owned();
-    for fact in problem.entry.iter() {
+    facts.reserve(problem.entry.iter().size_hint().0); for fact in problem.entry.iter() {
         let fact = nikaia_std::num::value(fact);
         facts.push(fact);
     }
@@ -161,21 +161,21 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
         if primed_names.contains(&lg_primed(name)) { after.push(lg_symbol(&lg_primed(name))); } else { after.push(lg_symbol(name)); }
     }
     #[allow(unused_mut)] let mut with_primed = bound.copy_owned();
-    for name in problem.state.iter() { with_primed.push(format!("({} Int)", lg_symbol(&lg_primed(name)))); }
+    with_primed.reserve(problem.state.iter().size_hint().0); for name in problem.state.iter() { with_primed.push(format!("({} Int)", lg_symbol(&lg_primed(name)))); }
     let inv_head = format!("(inv {})", nikaia_std::block::Text::from(at_head.join(" "))); #[allow(unused_mut, clippy::redundant_locals)] let mut with_primed = with_primed;
     let inv_after = format!("(inv {})", nikaia_std::block::Text::from(after.join(" "))); #[allow(unused_mut, clippy::redundant_locals)] let mut with_primed = with_primed;
     let mut out: String = String::from("(set-logic HORN)\n"); #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts; #[allow(unused_mut, clippy::redundant_locals)] let mut with_primed = with_primed;
-    out.push_str(&format!("(declare-fun inv ({}) Bool)\n", nikaia_std::block::Text::from(sorts.join(" "))));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(declare-fun inv ({}) Bool)\n", nikaia_std::block::Text::from(sorts.join(" ")))); };
     let mut entry_parts = problem.fixed.copy_owned();
-    for fact in problem.entry.iter() {
+    entry_parts.reserve(problem.entry.iter().size_hint().0); for fact in problem.entry.iter() {
         let fact = nikaia_std::num::value(fact);
         entry_parts.push(fact);
     }
-    out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(bound.join(" ")), lg_horn_and(&arena, &entry_parts, ""), inv_head));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(bound.join(" ")), lg_horn_and(&arena, &entry_parts, ""), inv_head)); };
     let mut turn_parts = problem.fixed.copy_owned();
     if condition >= 0 { turn_parts.push(condition); }
     turn_parts.push(problem.step);
-    out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(with_primed.join(" ")), lg_horn_and(&arena, &turn_parts, &inv_head), inv_after));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(with_primed.join(" ")), lg_horn_and(&arena, &turn_parts, &inv_head), inv_after)); };
     for goal in problem.goals.iter() {
         let goal = nikaia_std::num::value(goal);
         let reached = lg_loop_primed(arena, problem, goal);
@@ -183,7 +183,7 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
             if exit.kind == "return" { continue; }
             let mut parts = problem.fixed.copy_owned();
             parts.push(exit.relation);
-            out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(with_primed.join(" ")), lg_horn_and(&arena, &parts, &inv_head), lg_term(&arena, reached)));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(assert (forall ({}) (=> {} {})))\n", nikaia_std::block::Text::from(with_primed.join(" ")), lg_horn_and(&arena, &parts, &inv_head), lg_term(&arena, reached))); };
         }
     }
     out.push_str("(check-sat)\n");
@@ -193,7 +193,7 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
 pub(crate) fn lg_horn_and(arena: &TermArena, parts: &[i64], first: &str) -> String {
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !first.is_empty() { written.push(nikaia_std::block::Text::from(first.to_string())); }
-    for part in parts.iter() {
+    written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
     }

@@ -186,7 +186,7 @@ pub(crate) fn list_at(value: &str, at: &str) -> Result<Vec<String>, nikaia_std::
         Err(_error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a list, found `{}`", at, value)), &"list_at")) },
     };
     let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let entries = entries;
-    for entry in entries.iter() {
+    out.reserve(entries.iter().size_hint().0); for entry in entries.iter() {
         let entry = *entry;
         out.push(unescaped(entry));
     }
@@ -352,7 +352,7 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         if spelled.mutates { entry.mutates = true; }
         if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.copy_owned(); }
         entry.signature = Some(spelled.signature);
-    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
+    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "os_text" { entry.os_text = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
         let said = value.trim();
         if said == "true" { entry.touches_a_lock = Lock::Holds; } else if said == "\"?\"" { entry.touches_a_lock = Lock::Undecided; } else { entry.touches_a_lock = Lock::No; }
     } else if key == "panics" {
@@ -893,7 +893,7 @@ pub(crate) fn spelled_signature(written: &str, key: &str) -> Result<Spelling, ni
         variables.insert(nikaia_std::block::Text::from(declared.name.to_string()));
         if !declared.traits.is_empty() || key.is_empty() {
             let mut traits: Vec<String> = vec![];
-            for one in declared.traits.iter() {
+            traits.reserve(declared.traits.iter().size_hint().0); for one in declared.traits.iter() {
                 let one = *one;
                 traits.push(nikaia_std::block::Text::from(one.to_string()));
             }
@@ -931,7 +931,7 @@ pub(crate) fn spelled_signature(written: &str, key: &str) -> Result<Spelling, ni
         first = false;
     }
     let mut config: Vec<ConfigContract> = vec![];
-    for setting in parts.settings.iter() { config.push(ConfigContract { name: nikaia_std::block::Text::from(setting.name.to_string()), ty: typed(setting.ty, &variables), default: nikaia_std::block::Text::from(setting.default.to_string()) }); }
+    config.reserve(parts.settings.iter().size_hint().0); for setting in parts.settings.iter() { config.push(ConfigContract { name: nikaia_std::block::Text::from(setting.name.to_string()), ty: typed(setting.ty, &variables), default: nikaia_std::block::Text::from(setting.default.to_string()) }); }
     let mut result: Option<Ty> = None;
     #[allow(unused_mut)] let mut borrows: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed; #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
     let result_text = nikaia_std::index::or(parts.result, || ""); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order; #[allow(unused_mut, clippy::redundant_locals)] let mut borrows = borrows;
@@ -1080,7 +1080,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         borrows_said = true;
     }
     #[allow(unused_mut)] let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-    for entry in declared.iter() { seen.push(before_colon(entry)); }
+    seen.reserve(declared.iter().size_hint().0); for entry in declared.iter() { seen.push(before_colon(entry)); }
     let mut body = joined_by(&written_parameters, ", "); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
     if semicolon >= 0 {
         let options = trimmed(&slice(&inside, unsafe { nikaia_std::proven::add::<i64>(semicolon, 1) }, inside.len() as i64));

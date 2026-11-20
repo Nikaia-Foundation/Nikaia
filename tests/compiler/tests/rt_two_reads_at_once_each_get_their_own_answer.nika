@@ -1,0 +1,38 @@
+// Two tasks read two files at once and each gets its own bytes (#2316). The
+// completion ring is one per process and any thread's poll reaps every answer
+// on it, so a read's answer is often taken off the queue by the thread of the
+// other read. Its reader then learns it came only from the ring's generation
+// count: an answer reaped elsewhere that left the count where it was makes the
+// reader wait for ever, and the test's time limit fails it (the arm64 CI job
+// that hung six hours, 0.0.259). Run under both settings, so with tasks on
+// several threads too, twenty rounds. Moved from the `nikaia-std` unit test
+// `an_answer_another_thread_reaps_moves_the_generation`.
+use std::fs
+use std::process
+
+fn read_one(name: String) -> String throws {
+	return fs::read(name, fs::Root::Anywhere).text().clone()
+}
+
+fn both(tmp: String) -> String throws {
+	let first = async(handle) fn { read_one(f"{tmp}/mine") }
+	let second = async(handle) fn { read_one(f"{tmp}/theirs") }
+	let mine = first.join()
+	let theirs = second.join()
+	return f"{mine} {theirs}"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(f"{tmp}/mine", fs::Root::Anywhere, "mine")
+	fs::write(f"{tmp}/theirs", fs::Root::Anywhere, "theirs")
+	let mut round = 0
+	while round < 20 {
+		let answers = both(tmp.clone())
+		if round == 0 || answers != "mine theirs" {
+			println(f"round {round}: {answers}")
+		}
+		round = round + 1
+	}
+	process::run("rm", ["-rf", tmp])
+}

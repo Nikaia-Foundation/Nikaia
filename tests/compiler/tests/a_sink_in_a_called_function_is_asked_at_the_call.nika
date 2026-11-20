@@ -1,0 +1,46 @@
+// A raw sink a function's parameter reaches is asked at each call, of the
+// argument (ADR-raw-sinks-1 D2, ADR-396 D1, #2354): data from outside handed
+// to a private function that runs it as a program or opens it under
+// `fs::Root::Anywhere` is `NK1308` at the call (here a warning,
+// `raw-sinks = "warn"`), as it is where the sink stands in the caller -
+// through a binding the callee makes of it, and through a chain of calls.
+// A literal argument is no outside data, and a callee that guards a name it
+// joins to a part of its own passes it (D14).
+use std::cli
+use std::fs
+use std::path
+use std::process
+
+fn run_it(exe: String) -> String throws {
+    return process::run(exe, []).stdout
+}
+
+fn opened(name: String) -> bool throws {
+    return fs::exists(name, fs::Root::Anywhere)
+}
+
+fn opened_as_text(name: String) -> bool throws {
+    let file = f"{name}.txt"
+    return fs::exists(file, fs::Root::Anywhere)
+}
+
+fn opened_further(name: String) -> bool throws {
+    return opened(name)
+}
+
+fn opened_checked(name: String) -> bool throws {
+    return false if !path::is_component(name)
+    return fs::exists(f"data/{name}", fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let name = cli::args().nth(1) ?? "notes"
+    if cli::args().len() > 5 {
+        println(run_it(name))
+    }
+    println(opened(name))
+    println(opened_as_text(name))
+    println(opened_further(name))
+    println(opened_checked(name))
+    println(opened("notes.txt"))
+}

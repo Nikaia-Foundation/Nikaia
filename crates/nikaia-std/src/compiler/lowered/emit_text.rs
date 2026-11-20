@@ -138,7 +138,7 @@ pub(crate) fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
     let mut inner: String = String::from("");
     if !args.is_empty() {
         let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in args.iter() { spelled.push(plain_rust_spelling(arg)); }
+        spelled.reserve(args.iter().size_hint().0); for arg in args.iter() { spelled.push(plain_rust_spelling(arg)); }
         inner = format!("<{}>", nikaia_std::block::Text::from(spelled.join(", ")));
     }
     if view {
@@ -147,5 +147,37 @@ pub(crate) fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
     }
     if name == "str" { return String::from("String"); }
     format!("{}{}", name, inner)
+}
+
+pub fn format_compared_check(kind: &str, pieces: &[String]) -> String {
+    if kind == "!=" { return format!("!({})", format_compared_check("==", pieces)); }
+    if pieces.is_empty() { return if kind == "==" { String::from("__nikaia_t.is_empty()") } else { String::from("true") }; }
+    if pieces.len() == 1 && kind != "==" { return format!("__nikaia_t.{}({})", kind, nikaia_std::block::Text::from(pieces.join(""))); }
+    if kind == "ends_with" {
+        let mut reversed = pieces.copy_owned();
+        reversed.reverse();
+        return format!("{}.is_some()", format_stripped("__nikaia_t", &reversed, 0, "strip_suffix"));
+    }
+    if kind == "==" {
+        let mut lengths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        lengths.reserve(pieces.iter().size_hint().0); for piece in pieces.iter() { lengths.push(format!("{}.len()", piece)); }
+        return format!("__nikaia_t.len() == {} && {}.is_some()", nikaia_std::block::Text::from(lengths.join(" + ")), format_stripped("__nikaia_t", pieces, 0, "strip_prefix"));
+    }
+    if kind == "contains" {
+        let first = nikaia_std::index::or(pieces.first(), || "");
+        let after = format_stripped(&format!("__nikaia_rest[__nikaia_i + {}.len()..]", first), pieces, 1, "strip_prefix");
+        return format!("{{ let mut __nikaia_rest: &str = __nikaia_t; loop {{ match __nikaia_rest.find({}) {{ Some(__nikaia_i) => {{ if {}.is_some() {{ break true; }} match __nikaia_rest[__nikaia_i..].chars().next() {{ Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, }} }}, None => break false, }} }} }}", first, after);
+    }
+    format!("{}.is_some()", format_stripped("__nikaia_t", pieces, 0, "strip_prefix"))
+}
+
+pub(crate) fn format_stripped(base: &str, pieces: &[String], from: i64, method: &str) -> String {
+    let mut chain: String = String::from("");
+    let mut i: i64 = 0;
+    for piece in pieces.iter() {
+        if i == from { chain = format!("{}.{}({})", base, method, piece); } else if i > from { { use ::core::fmt::Write as _; let _ = chain.write_fmt(format_args!(".and_then(|__nikaia_r| __nikaia_r.{}({}))", method, piece)); }; }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    chain
 }
 

@@ -1,5 +1,5 @@
 // A name moved into a struct's field while a cut of it is still read lends
-// the field a view, as a trim does (ADR-views-3 D8, D9, ADR-293 D23, #2243):
+// the field a view, as a trim does (ADR-views-v4 D8, D9, ADR-293 D23, #2243):
 // before, the cut was not seen as a view, the move stayed a move and rustc
 // refused it ("cannot move out of `line` because it is borrowed", NK1343).
 

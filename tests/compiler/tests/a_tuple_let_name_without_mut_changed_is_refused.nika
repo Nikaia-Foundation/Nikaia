@@ -1,0 +1,7 @@
+// A name of a tuple pattern without `mut` is not changed (Part I 3.3):
+// NK1139, where it was a Rust error (NK1343) before #1133.
+fn main() throws {
+    let (a, b) = (1, 2)
+    b += a
+    println(f"{b}")
+}

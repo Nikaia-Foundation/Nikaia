@@ -203,7 +203,7 @@ impl EmitState {
         let item = host.ty_named(walk, ty)?;
         out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), self.rust_result(), item));
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
+        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), false);
         out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), {}); ", name, rule_name, each));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
         Ok(())
@@ -218,14 +218,14 @@ impl EmitState {
         let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
         for i in 0..rule.args.len() as i64 {
             let value_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty)?;
-            params.push_str(&format!(", __wg_value{}: {}", i, value_ty));
+            { use ::core::fmt::Write as _; let _ = params.write_fmt(format_args!(", __wg_value{}: {}", i, value_ty)); };
             let lent = if self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name))) { "&" } else { "" };
-            handed.push_str(&format!("{}__wg_value{}, ", lent, i));
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("{}__wg_value{}, ", lent, i)); };
         }
         for j in 0..rule.config.len() as i64 {
             let option_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.ty)?;
-            params.push_str(&format!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty));
-            handed.push_str(&format!("__wg_option{}, ", j));
+            { use ::core::fmt::Write as _; let _ = params.write_fmt(format_args!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty)); };
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
         }
         out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), params, self.rust_result(), item));
         for j in 0..rule.config.len() as i64 {
@@ -233,11 +233,12 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.default, 0, EmitFlow::plain(), &EmitScope::plain())?;
             out.push(" }; ");
         }
-        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+        out.push(&emit_stream_batched_start());
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
-        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {}{}); ", name, rule_name, handed, each));
-        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
+        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
+        out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
+        out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
+        out.push(" }\n");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -335,18 +336,25 @@ impl EmitState {
         let mut heres = false;
         let mut counts = false;
         let mut covers = false;
+        let mut covers_bytes = false;
         for rule in def.rules.iter() {
             for alt in rule.alts.iter() {
                 spans = spans || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "span", 1);
                 heres = heres || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "here", 0);
                 counts = counts || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "count", 1);
                 covers = covers || emit_reads_a_text_in_a_guard(world, &walk, &alt.pattern);
+                covers_bytes = covers_bytes || emit_reads_bytes_in_a_guard(world, &walk, &alt.pattern);
             }
         }
         if covers {
             out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a str =\n", emit_covered_rule()));
             out.push("          empty\n");
             if bytes { out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n"); }
+        }
+        if covers_bytes {
+            out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a [u8] =\n", emit_covered_bytes_rule()));
+            out.push("          empty\n");
+            if bytes { out.push("            -> { ::nikaia_std::grammar::covered_raw(input, at.clone()) }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()).as_bytes() }\n"); }
         }
         if counts {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> i64 =\n", emit_count_rule()));
@@ -410,14 +418,14 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || rule.clone().into()); #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
-        for arg in taken.args.iter() {
+        values.reserve(taken.args.iter().size_hint().0); for arg in taken.args.iter() {
             let mut owned = arg.ty.clone();
             owned.is_view = false;
             let mut written = host.ty_named(walk, &owned)?;
             if arg.ty.is_view && written == "String" { written = String::from("&str"); } else if arg.ty.is_view { written = format!("&{}", written); }
             values.push(format!("{}: {}", emit_text(world, arg.name), written));
         }
-        for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
+        values.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(values.join(", "))) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { nikaia_std::block::Text::from(renamed.to_string()) };
         if rule.stream && rule.is_entry {
@@ -439,12 +447,14 @@ impl EmitState {
                     #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
                     let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
-                    for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
-                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
-                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![];
-                    let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes;
+                    #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
-                    for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
+                    for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
+                    let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
+                    emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
+                    for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
@@ -476,11 +486,11 @@ impl EmitState {
             None => return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")),
         };
         let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in rule.args.iter() {
+        handed.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() {
             let name = emit_text(world, arg.name);
             handed.push(format!("{} = {}", name, name));
         }
-        for option in rule.config.iter() {
+        handed.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() {
             let name = emit_text(world, option.name);
             handed.push(format!("{} = {}", name, name));
         }
@@ -494,7 +504,7 @@ impl EmitState {
         };
         let mut chosen: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut folds = 0;
-        for part in parts.iter() {
+        chosen.reserve(parts.iter().size_hint().0); for part in parts.iter() {
             let fold = stream_fold(world, &part.node).is_some() && (!emitting || stream_item_emits(world, &part.node, emitters));
             chosen.push(fold);
             if fold { folds += 1; }
@@ -581,11 +591,16 @@ pub(crate) fn stream_item_rule(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Patt
     }
 }
 
-pub(crate) fn emit_stream_each(item: &str, emitting: bool) -> String {
-    let send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }";
+pub(crate) fn emit_stream_each(item: &str, emitting: bool, batched: bool) -> String {
+    let mut send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }";
+    if batched { send = "{ __wg_batch.push(Ok(__wg_one.clone())); if __wg_batch.len() < 256 { ::std::ops::ControlFlow::Continue(()) } else { match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) } } }"; }
     if emitting { return format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", item, send); }
     format!("|__wg_one: &{}| {}", item, send)
 }
+
+pub(crate) fn emit_stream_batched_start() -> String { String::from("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(1); ::std::thread::spawn(move || { let mut __wg_batch = ::std::vec::Vec::with_capacity(256); ") }
+
+pub(crate) fn emit_stream_batched_end(rendered: &str) -> String { format!("if let Err(__wg_error) = __wg_parsed {{ __wg_batch.push(Err(nikaia_std::grammar::ParseError::of({}))); }} if !__wg_batch.is_empty() {{ let _ = __wg_tx.send(__wg_batch); }} }}); __wg_rx.into_iter().flatten()", rendered) }
 
 pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
     let mut found: Vec<GrammarRule> = vec![];
@@ -724,7 +739,7 @@ impl EmitState {
                         Some(ref d) => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, Some(None) => None, None => {} }}", i, d) } else { format!("match f{} {{ Some(Some(v)) => v, _ => {} }}", i, d) },
                         None => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, _ => None }}", i) } else { format!("match f{} {{ Some(Some(v)) => v, Some(None) => {}, None => {} }}", i, refused, missing) },
                     };
-                    if self.is_boxed_field(&owner, &field) { given = format!("std::boxed::Box::new({})", given); }
+                    if self.is_boxed_field(&owner, &field) { given = format!("nikaia_std::block::Boxed::new({})", given); }
                     built_fields.push(format!("{}: {}", escaped_name(&field), given));
                 }
                 out.push(&format!("{} {{ {} }} }}\n", escaped_name(&owner), nikaia_std::block::Text::from(built_fields.join(", "))));

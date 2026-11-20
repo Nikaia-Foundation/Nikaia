@@ -10,6 +10,9 @@ pub struct ProverScope {
     pub ints: collections::BTreeSet<String>,
     pub tainted: collections::BTreeSet<String>,
     pub sources: collections::BTreeMap<String, String>,
+    pub carried: collections::BTreeSet<String>,
+    pub carried_from: collections::BTreeMap<String, String>,
+    pub joined: collections::BTreeSet<String>,
     pub locals: collections::BTreeSet<String>,
     pub facts: Vec<i64>,
     pub entry: collections::BTreeMap<String, i64>,
@@ -38,12 +41,17 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new(), known_from: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), carried: collections::BTreeSet::new(), carried_from: collections::BTreeMap::new(), joined: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new(), known_from: collections::BTreeMap::new() } }
     pub(crate) fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
         scope.exact = true;
         scope
+    }
+    pub(crate) fn carry(&mut self, name: &str, from: Option<&str>) {
+        let parameter = match from { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.carried.insert(nikaia_std::block::Text::from(name.to_string()));
+        self.carried_from.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(parameter.to_string()));
     }
     pub(crate) fn rebind(&mut self, arena: &logic::TermArena, name: &str) {
         let under = format!("{}.", name);
@@ -57,6 +65,9 @@ impl ProverScope {
         self.ints.remove(name);
         self.ints.remove(&length);
         self.tainted.remove(name);
+        self.carried.remove(name);
+        self.carried_from.remove(name);
+        self.joined.remove(name);
         self.entry.remove(name);
         self.entry.remove(&length);
         self.locals.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -295,6 +306,9 @@ impl ProverScope {
         let mut scope = ProverScope::unknown();
         scope.tainted = self.tainted.copy_owned();
         scope.sources = self.sources.copy_owned();
+        scope.carried = self.carried.copy_owned();
+        scope.carried_from = self.carried_from.copy_owned();
+        scope.joined = self.joined.copy_owned();
         scope.locals = self.locals.copy_owned();
         scope.maps = self.maps.copy_owned();
         scope

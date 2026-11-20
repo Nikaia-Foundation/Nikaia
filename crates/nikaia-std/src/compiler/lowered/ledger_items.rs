@@ -59,7 +59,7 @@ pub(crate) fn is_a_number(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .
 
 pub(crate) fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, declarations: &[Spanned<TraitMethod>]) -> Vec<DeclaredFn> {
     let mut out: Vec<DeclaredFn> = vec![];
-    for declaration in declarations.iter() {
+    out.reserve(declarations.iter().size_hint().0); for declaration in declarations.iter() {
         let mut declared = declared_trait_method(words, aliases, "", &declaration.node, false);
         declared.contract.sync_claim = Sync::Asserted;
         declared.contract.fails_with = vec![];
@@ -71,7 +71,7 @@ pub(crate) fn declared_extern(words: &winnow_grammar::InternerContext, aliases: 
 pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
     let owner = nikaia_std::block::Text::from(words.resolve(definition.name).to_string());
     let mut out: Vec<DeclaredFn> = vec![];
-    for rule in definition.rules.iter() {
+    out.reserve(definition.rules.iter().size_hint().0); for rule in definition.rules.iter() {
         if !rule.is_entry { continue; }
         let mut pieces = false;
         for alt in rule.alts.iter() { if folds_in_parallel(&alt.pattern.node) { pieces = true; } }
@@ -87,12 +87,12 @@ pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases:
         }
         if rule.stream && result.is_some() {
             let item = nikaia_std::index::or(result, || Ty::Unknown);
-            result = Some(Ty::Seq { item: std::boxed::Box::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
+            result = Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
         }
         let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
-        for arg in rule.args.iter() { params.push((nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), written_ty(words, aliases, &arg.ty))); }
+        params.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() { params.push((nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), written_ty(words, aliases, &arg.ty))); }
         let mut options: Vec<ConfigContract> = vec![];
-        for option in rule.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(words.resolve(option.name).to_string()), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
+        options.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(words.resolve(option.name).to_string()), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
         contract.signature = Some(Signature { bounds: vec![], mutable: vec![], params, config: options, result });
         contract.interns = grammar_entry_interns(words, definition, words.resolve(rule.name));
         out.push(DeclaredFn { key: format!("{}::{}", owner, words.resolve(rule.name)), contract });
@@ -146,7 +146,7 @@ pub(crate) fn grammar_pattern_interns(words: &winnow_grammar::InternerContext, p
         Pattern::Members { key, value, sep, fields, .. } => {
             let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let value = *value;
             todo.push(nikaia_std::block::Text::from(words.resolve(value).to_string()));
-            for field in fields.iter() { todo.push(nikaia_std::block::Text::from(words.resolve(field.value).to_string())); }
+            todo.reserve(fields.iter().size_hint().0); for field in fields.iter() { todo.push(nikaia_std::block::Text::from(words.resolve(field.value).to_string())); }
             return grammar_pattern_interns(words, &key.node, rules, todo) || grammar_pattern_interns(words, &sep.node, rules, todo);
         },
         _ => return false,
@@ -180,7 +180,7 @@ pub fn literal_of(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String)
         BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
         BuildValue::Struct { name, fields } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (field, held) in fields.iter() {
+            written.reserve(fields.iter().size_hint().0); for (field, held) in fields.iter() {
                 let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
@@ -189,7 +189,7 @@ pub fn literal_of(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String)
         BuildValue::List(items) => {
             for item in items.iter() { if !is_a_scalar_value(item) { return None; } }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for item in items.iter() {
+            written.reserve(items.iter().size_hint().0); for item in items.iter() {
                 let text = match literal_of(item, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -198,7 +198,7 @@ pub fn literal_of(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String)
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for held in payload.iter() {
+            written.reserve(payload.iter().size_hint().0); for held in payload.iter() {
                 let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -206,7 +206,7 @@ pub fn literal_of(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> String)
         },
         BuildValue::Constant { constructor, parts } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for held in parts.iter() {
+            written.reserve(parts.iter().size_hint().0); for held in parts.iter() {
                 let text = match literal_of(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }

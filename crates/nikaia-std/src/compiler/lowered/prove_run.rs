@@ -26,6 +26,7 @@ pub struct ProveComptimes {
     pub arithmetic: collections::BTreeMap<i64, String>,
     pub divisions: collections::BTreeMap<i64, String>,
     pub unfit_numbers: collections::BTreeSet<i64>,
+    pub map_indices: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,8 +37,8 @@ pub struct ProveWalked {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, outside: &ProverOutside, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, divisions: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), field_owners: field_owners.copy_owned(), outside: outside.clone(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), divisions: divisions.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, outside: &ProverOutside, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, divisions: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>, map_indices: &collections::BTreeSet<i64>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), field_owners: field_owners.copy_owned(), outside: outside.clone(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), divisions: divisions.copy_owned(), unfit_numbers: unfit_numbers.copy_owned(), map_indices: map_indices.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -122,6 +123,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     state.arithmetic = comptimes.arithmetic.copy_owned();
     state.divisions = comptimes.divisions.copy_owned();
     state.unfit_numbers = comptimes.unfit_numbers.copy_owned();
+    state.map_indices = comptimes.map_indices.copy_owned();
     state.not_run = not_run.copy_owned();
     state.stopped = stopped.copy_owned();
     state.loops_recorded = recorded.copy_owned();
@@ -143,9 +145,9 @@ pub(crate) fn prove_summaries(walk: &ProverWalk, program: &Program, words: &winn
         let function = match prover_summed_function(program, words, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !function.options.is_empty() || exits.is_empty() { continue; }
         let mut chars: Vec<bool> = vec![];
-        for _ in function.params.iter() { chars.push(false); }
+        chars.reserve(function.params.iter().size_hint().0); for _ in function.params.iter() { chars.push(false); }
         let mut conditions: Vec<Vec<logic::SolverTerm>> = vec![];
-        for exit in exits.iter() { conditions.push(walk.arena.nodes_of(exit.term)); }
+        conditions.reserve(exits.iter().size_hint().0); for exit in exits.iter() { conditions.push(walk.arena.nodes_of(exit.term)); }
         out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params: function.params.copy_owned(), chars, options: vec![], conditions });
     }
     out
@@ -171,13 +173,13 @@ pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeS
     if to.iter().all(|c| { nikaia_std::list::contains(&from, &c) }) { return true; }
     let mut arena = logic::TermArena::empty();
     let mut facts: Vec<i64> = vec![];
-    for c in from.iter() {
+    facts.reserve(from.iter().size_hint().0); for c in from.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
         facts.push(arena.adopt(&nodes));
     }
     let mut goals: Vec<i64> = vec![];
-    for c in to.iter() {
+    goals.reserve(to.iter().size_hint().0); for c in to.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
         goals.push(arena.adopt(&nodes));
@@ -200,6 +202,10 @@ pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext,
     let mut state = ProverState::fresh();
     state.method_callees = method_callees.copy_owned();
     state.field_owners = field_owners.copy_owned();
+    let first = prover_outside(program, words, library, &state, &mut *holes_of);
+    state.outside.returning = first.returning;
+    state.outside.valued = first.valued;
+    state.outside.leads = first.leads;
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     for _ in 0..bound {
         let found = prover_outside(program, words, library, &state, &mut *holes_of);

@@ -206,7 +206,7 @@ impl CheckRepeats {
     pub(crate) fn takes_again(&self, path: &str) -> bool { !(self.leaves || self.revives(path)) }
     pub fn revives(&self, path: &str) -> bool {
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(path.split('.').next(), || "").to_string());
-        self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || path.starts_with(&*format!("{}.", part)) })
+        self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(part)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) })
     }
 }
 

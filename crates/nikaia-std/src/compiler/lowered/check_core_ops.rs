@@ -266,6 +266,8 @@ pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: 
     let lent_item = check_core_ops_lent_text_item(&state, world, lhs) || check_core_ops_lent_text_item(&state, world, rhs);
     if lent_item && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
     if names_a_path(left, right) { state.facts.path_comparisons.insert(at.start as i64); }
+    let formatted = state.facts.text_formats.contains(&(id_of(lhs) as i64)) || state.facts.text_formats.contains(&(id_of(rhs) as i64));
+    if formatted && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { state.facts.compared_formats.insert(at.start as i64); }
     check_core_ops_named("bool")
 }
 
@@ -399,7 +401,7 @@ pub(crate) fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world:
         if ask_right { state.number_asked(world, rhs, &left, at, true); }
         let mut both: Vec<i64> = state.open_numbers_in(world, lhs);
         let more: Vec<i64> = state.open_numbers_in(world, rhs);
-        for n in more.iter() {
+        both.reserve(more.iter().size_hint().0); for n in more.iter() {
             let n = nikaia_std::num::value(n);
             both.push(n);
         }
@@ -617,12 +619,36 @@ pub(crate) fn check_core_ops_a_word(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_a_boxed_move(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, left: &Ty) {
+    match value {
+        Expr::Field { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            if !state.facts.boxed_reads.contains(&(id_of(value) as i64)) || a_copy_by_value(left) { return; }
+            match base {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    let found = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    match found.ty {
+                        Ty::Named { view, .. } => { if !view { state.facts.boxed_moves.insert(id_of(value) as i64); } },
+                        _ => { },
+                    }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
     let outer = state.flow.read_a_map;
     state.flow.read_a_map = false;
     let lending = state.flow.lending_let;
     state.flow.lending_let = false;
     let left = check_core_expr(state, world, host, value, span);
+    check_core_ops_a_boxed_move(state, world, value, &left);
     let read_now = state.flow.read_a_map;
     state.flow.read_a_map = outer;
     if state.nothing_to_fall_back_from(world, value, &left, expr, span) {
@@ -800,7 +826,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
     };
     if parts != params.len() as i64 { return; }
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for p in params.iter() {
+    names.reserve(params.iter().size_hint().0); for p in params.iter() {
         let p = *p;
         let name = world.words.resolve(p);
         names.push(if name.starts_with("__nikaia_tuple") { String::from("(…)") } else { nikaia_std::block::Text::from(name.to_string()) });

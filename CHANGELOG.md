@@ -8,6 +8,139 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1504] — 2026-11-20
+
+**A walk of a @stream entry over a String or Bytes hands its items over in batches of 256**
+- A walk of a `@stream` entry over a `String` or `Bytes` hands its items from the parser's thread in batches of 256 instead of one at a time: deep.yaml's stream program falls from 239.6M to 212.2M instructions, with the same output, the same order and the same errors
+
+## [0.0.1503] — 2026-11-20
+
+**Builders' changes (#2409, #2411, #2418)**
+- yaml checks an implicit key's single line on its bytes, without the UTF-8 check: events on the deep input 7.6 % fewer instructions.
+- A grammar's `bytes(p)` now binds the names inside `p` for the action and a guard, as `text(p)` does; the bound bytes are read unchecked (Part II 10, the `x:p` row).
+- yaml counts the indentation below a line once instead of twice: events on the deep input 6.7 % fewer instructions
+- yaml reads a quoted scalar's runs as one vectorised search for its quote, backslash or line break: scalars 210.8 -> 125.0 M instructions (0.80 of saphyr-parser), large events 1.48 -> 1.43
+
+## [0.0.1502] — 2026-11-20
+
+**Builders' changes (#2303, #2336, #2354, #2369, #2370, #2371, #2375)**
+- Paths from outside reaching a file operation: NK1308 now warns by default (raw-sinks = "warn"), a fs::Root::Dir built from outside is a sink, a path::is_component/is_below guard proves a joined name, and [allow] untrusted-paths-read/-write/-remove/-anywhere take true or a list of sources.
+- A method called by its path (`T::m(x)`, `T::m()`) is refused with NK1101 naming `x.m()`, instead of a wrong argument count or a rustc error
+- A raw sink reached through a call is reported - NK1308 now follows an outside value into a private function's parameter and reports the call, naming the sink "through `f`".
+- A name from outside that passed `path::is_component` or `path::is_below` and is joined after a clean part (`f"/r/{key}/x"`) is admitted as the program `process::run` runs (ADR-raw-sinks-1 D14); a bare or leading name stays NK1308.
+- A binding of a guarded name joined after a clean part (`let kept = f"/r/{key}/x"` after `path::is_component(key)`) carries the proof to a path sink under `fs::Root::Anywhere` and to the program of `process::run` (ADR-raw-sinks-1 D14). A name that leads the text (`f"{key}/x"`) is NK1308 under `Anywhere`.
+- `let kept = f"/r/{key}/x"` after `path::is_component(key)` (or `path::is_below`) is admitted at a path sink under `fs::Root::Anywhere` and as the program of `process::run`, as the joined text itself is (ADR-raw-sinks-1 D14); a guarded name read through `.clone()` is proved too.
+- `fs::exists(f"{key}/x", fs::Root::Anywhere)` after `path::is_component(key)` is NK1308 again: the guard admits the name under `Anywhere` only with a clean part before it (ADR-raw-sinks-1 D14), as for the program of `process::run`.
+- A list or text filled by `push` (or another changing call) with outside data is outside, also when a loop's body fills it or a function hands it back, and draws NK1308 at a raw sink; an `enumerate` index counts from zero and a map read through a field by an outside key needs no bound
+- Safety: a function that returns a join of its arguments after a `path::is_component` guard (`return "" if !path::is_component(key)`) no longer makes its result outside; its result is outside only where an unguarded argument it returns is (ADR-raw-sinks-1 D14, #2375).
+
+## [0.0.1501] — 2026-11-20
+
+**A returned tree every caller keeps in the task is built in its block (ADR-327 D17) (#2348)**
+- Faster recursive builders: a tree a private function returns is built in the task's block when every call keeps it in the task (ADR-327 D17); binary-trees runs half the instructions with no malloc or free in bottom_up, and `--sharing` names each function placed this way.
+
+## [0.0.1500] — 2026-11-20
+
+**Builders' changes (#2260, #2307, #2377, #2395)**
+- The prover research page shows the solver against z3 and cvc5 as bars: 13 SMT-LIB families and the two set-wide goals (no wrong answer on 1,097 files, fewer instructions than z3 on the CI sample) reached, 7 families behind, each with its reason and issue.
+- The solver combines a simplex row whose products leave i64 in double width and reduces it by its gcd, so 12 of the 48 QF_LIA seeds overflows go (9 solved, models and certificates checked); 22 of the 36 left are rows that do not fit i64 even reduced (#2307).
+- The solver's Fourier-Motzkin theory no longer keeps the bounds a check derived when it refuted nothing: on SMPT Referendum-PT-0500-RF-00 the rod's peak memory stays at 950 MiB instead of growing 615 MiB a check until it runs out at 8 GiB (#2377).
+- A cold build infers each package's ledger once: the rustc wrapper's cache hit reads the notes, lost-sync warnings, contract-change inputs and exports stored with the entry instead of inferring the program again (about 35 s of a cold scripts/solver.nika).
+
+## [0.0.1499] — 2026-11-20
+
+**Builders' changes (#2405, #2406)**
+- Fewer allocations in lowered code: a text's bytes collected only to be lent are the text's own (as_bytes), and a list pushed once per turn of a for over a list is sized before the loop (#2385)
+- A text formatted only to be compared is not built: `s.starts_with(f"{a}[")`, `ends_with`, `contains` and `==` with an f-string of text parts check in place, with no allocation (bounding_in_elements: 350,002 fewer allocations per 100,001 calls).
+- Boxes in the task's block (ADR-327 D16): a recursive enum or struct built and used in one function takes its boxes from the task's block, one pointer each, freed by address; a tree that is returned, sent, stored or moved into another task is built outside, and --sharing names each site's place and why. A depth-16 tree goes from 66,041 mallocs to none, -53 % instructions.
+
+## [0.0.1498] — 2026-11-20
+
+**CI dates the sources the restored build was made from, so a warm cache no longer rebuilds every workspace crate**
+- CI: a warm build cache no longer rebuilds every workspace crate. Files unchanged since the cached commit are dated back before "Build the tests", and the step logs which crates it compiled (#2403).
+
+## [0.0.1497] — 2026-11-20
+
+**Builders' changes (#1133)**
+- `mut` on one name of a tuple pattern: `let (a, mut b) = …` and `for (k, mut v) in m` mark that name alone, and a map's values are written in place (`iter_mut()`, `values_mut()` under `_`); NK1307 remains for a lambda's tuple parameter.
+- The prover and its integer solver allocate a third less: Fourier-Motzkin elimination works on rank forms and borrows its atoms, key texts start with room, and `s.push_str(f"…")` formats into `s`; allocator Ir of a check 1,009M -> 678M, total Ir 2,764M -> 2,190M.
+
+## [0.0.1496] — 2026-11-20
+
+**mem::allocations is shown on a joined String with room ahead, in its test and in Part I 6.9 (#2112)**
+- Part I 6.9 shows mem::allocations() on `+` over a String with room ahead (String(capacity: n)), which requests nothing
+
+## [0.0.1495] — 2026-11-20
+
+**Builders' changes (#2367)**
+- A plain `b: Bytes` parameter that keeps only a cut or a clone of `b` now takes the `Bytes` with its owner, the way `ref Bytes` does: the cut or clone shares the owner instead of copying, the caller can still use `b`, and `keep b: Bytes` kept this way no longer warns NK1334 (ADR-views-3 D15, ADR-373 D4).
+- `s.push_str(f"…{x}…")` on a local lowers to `write_fmt` into the text, not `push_str(&format!(…))`: one String allocated and freed less per call; allocator Ir of a check 1,009M -> 912M.
+- The integer solver's elimination works on the bounds' rank forms (no LgLin rebuilt per pair), reads the branch's atoms by view instead of cloning them, moves names it no longer needs and pre-sizes its vectors; `lg_add` takes its first operand by value. Allocator Ir of a check 912M -> 693M, total 2,583M -> 2,224M, output unchanged.
+- `lg_written`, `LgNormal::text` and `proofs_written` pre-size their text, so a key is written without a chain of reallocations; allocator Ir of a check 693M -> 678M, total 2,224M -> 2,190M, output unchanged.
+
+## [0.0.1494] — 2026-11-20
+
+**A child's environment is assembled in Nikaia, its Windows case tested directly (#2119)**
+- A child process's environment (clear, remove, set; names without case on Windows) is decided in std's Nikaia (`runtime/env.nika`), and its Windows case is tested by a test block; nikaia-std has no Rust unit test left.
+
+## [0.0.1493] — 2026-11-20
+
+**The decisions on collections live in one record, ADR-collections-v3 (#2274)**
+- The decisions on collections (entry and extend on every map, extend on every set, iter() on arrays and sets) live in one record, ADR-collections-v3; ADR-collections-1 and -2 archived.
+
+## [0.0.1492] — 2026-11-20
+
+**solver: build the program as a package of files, rustc's lints capped**
+- The solver's program builds in about half the time when cold: it is built as a package of its files, and rustc's lints on it are capped.
+
+## [0.0.1491] — 2026-11-20
+
+**The decisions on views live in one record, ADR-views-v4 (#2273)**
+- The decisions on views (keep and lent parameters, no ref, a result's source with from, a let mut view that gives back what it takes, for mut) live in one record, ADR-views-v4; ADR-views-1, -2 and -3 archived.
+
+## [0.0.1490] — 2026-11-20
+
+**Builders' changes (#2208, #2297, #2310, #2316, #2320, #2346, #2351)**
+- An entry, a cut or a map's value read by index out of what a lock handed out (`order.get()[0]`) is typed and keeps the lock's stamp, instead of being refused NK1245.
+- An entry of a package's own Rust saying `pub = true` is refused once with NK2508 at its line in `contracts/crate.contracts`, whether anything calls it or not.
+- Six of std's Rust tests (html, the default restart policy, the runtime's --runtime description) are test blocks of runtime/*.nika that call std's own Rust through ADR-rust-boundary-1 D24; a trait method that std implements for a std type (`supervisor::Backoff().decide(h)`) is callable from Nikaia
+- A trait method that std's contracts give a std type through an `[impl]` (`policy.decide(history)` on `supervisor::Backoff`) is found by the checker and lowered with the trait in scope; it drew NK1171 before.
+- `rt::Runtime`, `rt::UserCode`, `rt::Runtime::build` (widened to `pub(crate)`) and `describe` are described with `pub = false`; the test that `--runtime`'s line names the chosen I/O mechanism is a `test` block of `runtime/run_config.nika`.
+- `html::Raw::escaped` and `as_str` are described with `pub = false` in std.contracts; the test that escaped text becomes markup, and is not escaped twice, is a `test` block of `runtime/raw_sinks.nika`, and html.rs has no Rust test left.
+- The default restart policy's tests (the delay grows under the ceiling and a long cycle gives up; a healthy run starts a new cycle) are `test` blocks of `runtime/restart_policy.nika`, which hand `supervisor::Backoff` a written-out history; supervision.rs has no Rust test left.
+- A described Rust function whose parameter holds `ref String` inside a list or tuple (`&'static str` in Rust) takes only a `comptime` value: a table built at run time is NK1102, naming `comptime`, not an internal compiler error. abort.rs's unknown-line test is test blocks of `runtime/abort_lines.nika`, and map.rs's entry/retain/drain test is a test program.
+- Runtime tests: rt/pool.rs, rt/worker.rs and rt/mod.rs keep only the runtime-identity test (for #2319). The idle-pool and I/O-worker checks are test blocks of runtime/run_config.nika over std-private contracts (rt::pool::Pool, rt::io::generation, rt::worker::on_io_worker); the reaped-answer and pair checks are the programs rt_two_reads_at_once_each_get_their_own_answer and rt_a_pair_of_reads_answers_the_same_on_either_mechanism. The pool counts its rings in every build.
+- `task::yield_now()` (Part II 11.1): the calling task pauses once and resumes after the tasks already ready, so a long loop lets the others run. The `rt::pool` unit test of a wake arriving during a poll is the program `task_yield_now_resumes`.
+- `lower-std`: a `test` block of std's Nikaia that pauses (a `time::sleep`, an `fs::read`) is lowered as an `async fn` and listed through a shim that runs it with `block_on`; before, it lowered to a plain `fn` holding `.await`, which rustc refused (E0728). Which tests pause is `sync::unit_pausing`, the check a `sync` promise makes.
+- That throwing and catching an error that carries only its site requests no memory, and that a call that can fail holds no memory more when it succeeds, is a program counting `mem::allocations()` and `mem::usage()`, with a joined second error as the control; the Rust test that read the tail's layout is gone.
+- That a borrowed left side joined to an owned right side keeps the right's buffer is a program counting `mem::allocations()`, with a control that grows the buffer; the Rust test that compared addresses is gone.
+- That a lock's `update` appends without copying and `access` reads a large value in place is a program counting `mem::allocations()`, with `get` and a growing append as controls; the two Rust tests that compared addresses are gone.
+- NK1186: `use std::rt` in a program is refused, and the `std offers:` list leaves out modules whose every entry is `pub = false` (rt, abort); std's own sources still reach them.
+- A `String` parameter put into an array, `Vec` or tuple of views is accepted as `ref String` is (ADR-282 D2).
+- A proved read whose part is read at a function's tail no longer draws rustc's unused_parens warning.
+- A Rust function taking `&OsStr` is callable from Nikaia: its contract entry names such parameters in `os_text`, each `ref String` in the signature, and the call hands a `String` over as `std::ffi::OsStr::new(arg)` (Part III 13.5, 15.2). `let e = a.get(k) ?? b.get(k) ?? return` now binds a reference like the single get.
+
+## [0.0.1489] — 2026-11-20
+
+**The decisions on database statements live in one record, ADR-database-v1 (#2272)**
+- The decisions on database statements (SQL a driver's grammar checks against a schema, the connection as subject typed by its schema, a row's namespaces and short names, -> T mapping, package::Grammar, the main entry) live in one record, ADR-database-v1; ADR-299 archived.
+
+## [0.0.1488] — 2026-11-20
+
+**Builders' changes (#2259)**
+- The comparison with z3 and cvc5 re-measured at 0.0.1481: ours solves 512 of 578 QF_LIA and 510 of 519 QF_LRA files; 50 and 8 of the rest leave i64 (ADR-270 D11), counted in their own column by `compare`; ours costs fewer instructions than z3 on every sample family.
+- `compare` splits ours' unsolved files by reason: overflow (the file leaves i64, ADR-270 D11), timeout, unknown.
+
+## [0.0.1487] — 2026-11-20
+
+**Builders' changes (#2214)**
+- Keeping a cut of a `ref Bytes` parameter (`out.push(b[0..<2])`) keeps the parameter: the function takes the `Bytes` with its owner and the cut shares it instead of copying, so a cut of a mapped file handed in keeps the file mapped (ADR-373 D4); it was refused with NK1131 before.
+
+## [0.0.1486] — 2026-11-20
+
+**ADR-296 moves to the history once every decision in it has a new record (#2271)**
+- ADR-296 is archived: each of its 42 decisions lives in one of the grammar-*-v1 records, and its full text is in the history.
+
 ## [0.0.1485] — 2026-11-20
 
 **Builders' changes (#2183, #2363)**

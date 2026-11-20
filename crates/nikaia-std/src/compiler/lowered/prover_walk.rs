@@ -59,7 +59,7 @@ pub(crate) fn prover_action(walk: &mut ProverWalk, def: &GrammarDef, rule: &Gram
     for option in rule.config.iter() { scope.locals.insert(nikaia_std::block::Text::from(words.resolve(option.name).to_string())); }
     let mut parts: Vec<Pattern> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match pattern {
-        Pattern::Seq(items) => { for item in items.iter() { parts.push(item.node.clone()); } },
+        Pattern::Seq(items) => { parts.reserve(items.iter().size_hint().0); for item in items.iter() { parts.push(item.node.clone()); } },
         _ => { parts.push(pattern.clone()); },
     }
     for part in parts.iter() {
@@ -172,6 +172,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             for arg in args.iter() {
                 let arg_name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
                 scope.locals.insert(nikaia_std::block::Text::from(arg_name.to_string()));
+                scope.carry(&arg_name, Some(&nikaia_std::block::Text::from(arg_name.to_string())));
                 let ty = words.resolve(arg.ty.name);
                 if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(nikaia_std::block::Text::from(arg_name.to_string()));
@@ -198,6 +199,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             for option in config.iter() {
                 let option_name = nikaia_std::block::Text::from(words.resolve(option.name).to_string());
                 scope.locals.insert(nikaia_std::block::Text::from(option_name.to_string()));
+                scope.carry(&option_name, Some(&nikaia_std::block::Text::from(option_name.to_string())));
                 let ty = words.resolve(option.ty.name);
                 if option.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(nikaia_std::block::Text::from(option_name.to_string()));
@@ -255,7 +257,18 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
             let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words);
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
+        let looped = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
+        if looped { ({ let __nikaia_arg1 = &outside_fills(&stmt.node, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of); prover_filled(scope, __nikaia_arg1) }); }
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition) { return true; }
+        let changes = match &stmt.node {
+            Stmt::Expr(_) => true,
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            Stmt::Let { .. } => !check_visit_stmt_blocks(&stmt.node).is_empty(),
+            Stmt::Assign { .. } => !check_visit_stmt_blocks(&stmt.node).is_empty(),
+            _ => false,
+        };
+        if changes { ({ let __nikaia_arg1 = &outside_fills(&stmt.node, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of); prover_filled(scope, __nikaia_arg1) }); }
         prover_follow_mutables(walk, &stmt.node, &stmt.span, scope, &untracked, &pinned, program, words);
         if !prover_a_branch(&stmt.node) && leaves_stmt(&stmt.node, &mut |e| { prover_throws(e, at, program, words, own, library, &mut &mut *unaliased) }, &mut &mut *holes_of, true) { scope.exact = false; }
     }
@@ -310,7 +323,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     None => None,
                 }, || BinaryOp::Add);
                 if given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul || given == BinaryOp::Div || given == BinaryOp::Rem {
-                    let written_out = Expr::Binary { op: given, lhs: std::boxed::Box::new(target.clone()), rhs: std::boxed::Box::new(value.clone()), span, grouped: false, id: fresh_id() };
+                    let written_out = Expr::Binary { op: given, lhs: nikaia_std::block::Boxed::placed(target.clone()), rhs: nikaia_std::block::Boxed::placed(value.clone()), span, grouped: false, id: fresh_id() };
                     prover_unwritten_check(walk, &written_out, span, &scope, &nested, words, library, &mut &mut *holes_of, &mut &mut *ask, &mut &mut *model, &mut &mut *written_of);
                 }
             }
@@ -319,6 +332,13 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     let name = *name;
                     let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
                     let tainted = from_outside(value, &scope.tainted, words, library, &walk.state, &mut &mut *holes_of) || op.is_some() && scope.tainted.contains(&n);
+                    let mut carried = carried_param(value, &scope, words, library, &walk.state, &mut &mut *holes_of);
+                    if carried.is_none() && op.is_some() {
+                        carried = match *nikaia_std::index::get(&scope.carried_from, &n) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                    }
                     if !prover_assigned(walk, &n, (op).as_ref(), value, &span, scope, words) {
                         let followed = scope.mutables.contains(&n) && scope.ints.contains(&n);
                         scope.rebind(&walk.arena, &n);
@@ -334,8 +354,9 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     if tainted {
                         let source = outside_source(value, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of);
                         if source.is_some() { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
-                        scope.tainted.insert(n);
+                        scope.tainted.insert(nikaia_std::block::Text::from(n.to_string()));
                     }
+                    scope.carry(&n, (carried).as_deref());
                 },
                 _ => { },
             }
@@ -560,16 +581,20 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     }
     let mut source: String = String::from("");
     if tainted { source = nikaia_std::index::or(outside_source(value, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of), || "".into()); }
+    let carried = carried_param(value, &scope, words, library, &walk.state, &mut &mut *holes_of);
+    let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, &scope, words, library, &mut &mut *holes_of, &mut &mut *ask);
     for name in names.iter() {
         let name = *name;
         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
         scope.rebind(&walk.arena, &n);
         scope.maps.remove(&n);
+        scope.carry(&n, (carried).as_deref());
         if tainted {
             scope.tainted.insert(nikaia_std::block::Text::from(n.to_string()));
             scope.loose.insert(nikaia_std::block::Text::from(n.to_string()));
             if source != "" { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
         }
+        if proved { scope.joined.insert(nikaia_std::block::Text::from(n.to_string())); }
     }
     if names.len() == 1 && prover_let_typed(&walk, ty, &span, words, 3) { scope.maps.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
     if names.len() == 1 && value_lin.is_none() && !tainted {
@@ -856,11 +881,11 @@ pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &Pr
                     pinned = prover_pinned_value(&mut walk.arena, &facts, d, &mut &mut *ask, &mut &mut *model);
                     if pinned.is_some() {
                         let mut said: Vec<String> = vec![];
-                        for bound in read.iter() {
+                        said.reserve(read.iter().size_hint().0); for bound in read.iter() {
                             let alts = match *nikaia_std::index::get(&scope.summed, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                             if alts.is_empty() { continue; }
                             let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                            for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
+                            whys.reserve(alts.iter().size_hint().0); for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
                             said.push(format!("`{}` is {}: {}.", nikaia_std::index::get(&alts, 0).call, nikaia_std::index::or(pinned, || 0), nikaia_std::block::Text::from(whys.join("; "))));
                         }
                         notes.extend(said.iter().cloned());
@@ -903,7 +928,7 @@ pub(crate) fn prover_summed(walk: &mut ProverWalk, callee: &str, written: &[Expr
         if length.is_some() && !walk.arena.mentions(nikaia_std::index::or(length, || 0), bound) { given.insert(length_of(unsafe { nikaia_std::proven::read(&function.params, (k) as usize) }), nikaia_std::index::or(length, || 0)); }
     }
     let mut alts: Vec<SummaryAlt> = vec![];
-    for exit in exits.iter() {
+    alts.reserve(exits.iter().size_hint().0); for exit in exits.iter() {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(exit.guard, &mut read);
         walk.arena.variables(exit.value, &mut read);
@@ -967,7 +992,7 @@ pub(crate) fn prover_summary_exits(walk: &mut ProverWalk, value: &Expr, scope: &
             grew = true;
             let name = nikaia_std::index::or(named, || "".into());
             let inner = match *nikaia_std::index::get(&here.summed, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            for c in inner.iter() {
+            next.reserve(inner.iter().size_hint().0); for c in inner.iter() {
                 if c.callee == function || walk.state.reaches(&c.callee, &function) { return None; }
                 let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
                 given.insert(nikaia_std::block::Text::from(name.to_string()), c.value);
@@ -984,7 +1009,7 @@ pub(crate) fn prover_summary_exits(walk: &mut ProverWalk, value: &Expr, scope: &
     let mut params = at.params.copy_owned();
     params.insert(result_name());
     let mut out: Vec<SummaryExit> = vec![];
-    for alt in alts.iter() {
+    out.reserve(alts.iter().size_hint().0); for alt in alts.iter() {
         let g = match here.at_entry(&mut walk.arena, alt.guard) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let v = match here.at_entry(&mut walk.arena, alt.value) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut parts = path.copy_owned();
@@ -1071,6 +1096,14 @@ pub(crate) fn prover_all_plain(exprs: &[Expr]) -> bool {
     true
 }
 
+pub(crate) fn prover_filled(scope: &mut ProverScope, fills: &collections::BTreeMap<String, String>) {
+    for (n, source) in fills.iter() {
+        scope.tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+        scope.joined.remove(n);
+        if !source.is_empty() { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
@@ -1122,11 +1155,13 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
     }
     scope.loops.extend(records.iter().cloned());
     if !changed.is_empty() { scope.exact = false; }
+    let carried = carried_param(iter, &scope, words, library, &walk.state, &mut &mut *holes_of);
     for binding in bindings.iter() {
         let binding = *binding;
         let n = nikaia_std::block::Text::from(words.resolve(binding).to_string());
         inner.rebind(&walk.arena, &n);
         inner.maps.remove(&n);
+        inner.carry(&n, (carried).as_deref());
         if tainted {
             let source = outside_source(iter, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of);
             if source.is_some() { inner.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
@@ -1171,6 +1206,22 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
                         }
                     } else { inner.loose.insert(nikaia_std::block::Text::from(name.to_string())); }
                     if leaves_block(body, &mut |e| { prover_throws(e, at, program, words, own, library, &mut &mut *unaliased) }, &mut &mut *holes_of, false) { inner.loose.insert(name); }
+                }
+            },
+            _ => { },
+        }
+    }
+    if bindings.len() >= 2 {
+        match iter {
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                if words.resolve(method) == "enumerate" && args.is_empty() {
+                    let name = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }).to_string());
+                    inner.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+                    let n = walk.arena.var(&name);
+                    let zero = walk.arena.int(0);
+                    let above = walk.arena.le(zero, n);
+                    inner.facts.push(above);
                 }
             },
             _ => { },
@@ -1238,7 +1289,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                 if from.is_some() && plain { held = ClaimHeld::ProvedThrough(format!("proved: known from {}", nikaia_std::index::or(from.as_deref(), || ""))); }
                 prover_properties_from(cond, &format!("`assert({})`", written_of(cond)), scope, &walk.state, program, words);
                 let mut findings: Vec<Finding> = vec![];
-                for found in outcome.findings.iter() {
+                findings.reserve(outcome.findings.iter().size_hint().0); for found in outcome.findings.iter() {
                     let mut one = found.clone();
                     if one.code == "NK1207" { for note in leaned.iter() { if !nikaia_std::list::contains(&one.notes, &note) { one.notes.push(nikaia_std::block::Text::from(note.to_string())); } } }
                     findings.push(one);
@@ -1505,7 +1556,7 @@ pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm
     let mut partly_leaves = false;
     let mut seen_true = false;
     let mut seen_false = false;
-    for arm in arms.iter() {
+    sides.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
         let mut fact = prover_pattern_fact(&mut walk.arena, &arm.pattern, truth, number, words);
         let literal = prover_bool_literal(&arm.pattern);
         if fact.is_none() && truth.is_some() && literal.is_none() && prover_catch_all(&arm.pattern) { if seen_true && !seen_false { fact = Some(walk.arena.not(nikaia_std::index::or(truth, || 0))); } else if seen_false && !seen_true { fact = std::convert::identity(truth); } }
@@ -1620,7 +1671,7 @@ pub(crate) fn prover_pattern_fact(arena: &mut logic::TermArena, pattern: &MatchP
         },
         MatchPattern::Or(alternatives) => {
             let mut parts: Vec<i64> = vec![];
-            for alternative in alternatives.iter() { parts.push(match prover_pattern_fact(arena, alternative, truth, number, words) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            parts.reserve(alternatives.iter().size_hint().0); for alternative in alternatives.iter() { parts.push(match prover_pattern_fact(arena, alternative, truth, number, words) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
             Some(arena.or(parts))
         },
         _ => None,
@@ -1743,7 +1794,10 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, &mut &mut *unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition); }
+            if callee.is_some() {
+                prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
+                prover_raw_sink(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, library, &mut &mut *holes_of, &mut &mut *ask, &mut &mut *written_of);
+            }
         },
         _ => { },
     }
@@ -1840,6 +1894,7 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
     match expr {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            if walk.state.map_indices.contains(&(id_of(base) as i64)) { return; }
             match base {
                 Expr::Variable(name, _) => {
                     let name = *name;
@@ -1972,6 +2027,296 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    if walk.state.in_test { return; }
+    if callee == "html::Raw" {
+        let mut parts: Vec<Expr> = vec![];
+        for arg in args.iter() { raw_sink_parts(arg, &mut *holes_of, &mut parts); }
+        let sink = ParamSink { index: -1, kind: String::from("markup"), sink: String::from("the markup of `html::Raw`, written to the page as it is"), operation: String::from(""), root_part: false, guard: String::from("html::is_plain") };
+        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    } else if callee == "process::run" && !args.is_empty() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
+        let mut guard = String::new();
+        if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
+        let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
+        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
+        for (i, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            let anywhere = raw_sink_anywhere(arg, words, &mut *written_of);
+            let mut root_parts: Vec<Expr> = vec![];
+            if !anywhere {
+                match raw_sink_dir(arg, words) {
+                    Some(ref dir) => { raw_sink_parts(dir, &mut *holes_of, &mut root_parts); },
+                    None => { continue; },
+                }
+            }
+            let mut root_outside = false;
+            for part in root_parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { root_outside = true; } }
+            let root = written_of(arg);
+            let mut whole = raw_sink_operation(callee, 0, config, words, &mut *written_of);
+            if i > 1 && raw_sink_operation(callee, 1, config, words, &mut *written_of) != whole { whole = String::from("anywhere"); }
+            let root_sink = ParamSink { index: -1, kind: String::from("path"), sink: format!("the root `{}` of `{}`, a directory a stranger may have chosen", root, callee), operation: whole, root_part: true, guard: String::from("") };
+            for part in root_parts.iter() { raw_sink_part(walk, &root_sink, &root_sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+            if !anywhere && !root_outside { continue; }
+            for j in 0..i {
+                let mut parts: Vec<Expr> = vec![];
+                raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
+                let joined = raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, scope, words, library, &walk.state, &mut *holes_of);
+                let mut guard = String::new();
+                if joined && !root_outside { guard.push_str("path"); }
+                let operation = raw_sink_operation(callee, j, config, words, &mut *written_of);
+                let sink = ParamSink { index: -1, kind: String::from("path"), sink: format!("the path `{}` opens under `{}`, which may name any file", callee, root), operation, root_part: false, guard };
+                for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+            }
+        }
+    } else { raw_sink_through(walk, callee, args, config, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_through(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    if scope.locals.contains(callee) { return; }
+    let sinks = match match *nikaia_std::index::get(&walk.state.known_sinks, callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let all = arguments_in_order(&function, args, config, words);
+    for sink in sinks.iter() {
+        if sink.index < 0 || sink.index >= all.len() as i64 { continue; }
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, &mut *holes_of, &mut parts);
+        let shown = format!("{}, through `{}`", sink.sink, callee);
+        for part in parts.iter() { raw_sink_part(walk, sink, &shown, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_part(walk: &mut ProverWalk, sink: &ParamSink, shown: &str, part: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) {
+        if walk.state.collecting || raw_sink_passes(walk, &sink.guard, part, scope, words, &mut *ask) { return; }
+        raw_sink_finding(walk, sink, shown, part, span, scope, words, library, &mut *holes_of, &mut *written_of);
+        return;
+    }
+    if !walk.state.collecting || !at.free { return; }
+    match part {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            if scope.ints.contains(words.resolve(name)) { return; }
+        },
+        _ => { },
+    }
+    let from = match carried_param(part, scope, words, library, &walk.state, &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if raw_sink_passes(walk, &sink.guard, part, scope, words, &mut *ask) { return; }
+    let owner = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let function = match free_function(program, words, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut index: i64 = -1;
+    for (k, name) in function.params.iter().enumerate().map(|(at, item)| (at as i64, item)) { if AsRef::<str>::as_ref(&(name)) == AsRef::<str>::as_ref(&(from)) && index < 0 { index = k; } }
+    if index < 0 { return; }
+    let carried = ParamSink { index, kind: nikaia_std::block::Text::from(sink.kind.to_string()), sink: nikaia_std::block::Text::from(sink.sink.to_string()), operation: nikaia_std::block::Text::from(sink.operation.to_string()), root_part: sink.root_part, guard: nikaia_std::block::Text::from(sink.guard.to_string()) };
+    let mut found = nikaia_std::index::or(walk.state.sinks.remove(&owner), || vec![].into());
+    let mut known = false;
+    for one in found.iter() { if one.same(&carried) { known = true; } }
+    if !known { found.push(carried); }
+    walk.state.sinks.insert(owner, found);
+}
+
+pub(crate) fn carried_param(expr: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<String> {
+    if scope.carried.is_empty() || !from_outside(expr, &scope.carried, words, library, state, &mut *holes_of) { return None; }
+    outside_source(expr, &scope.carried, &scope.carried_from, words, library, state, &mut *holes_of)
+}
+
+pub(crate) fn raw_sink_passes(walk: &mut ProverWalk, guard: &str, part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
+    if guard == "" { return false; }
+    if guard == "path" {
+        if raw_sink_joined_name(part, scope, words) { return true; }
+        return raw_sink_guarded(walk, part, "path::is_component", scope, words, &mut *ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, &mut *ask);
+    }
+    raw_sink_guarded(walk, part, guard, scope, words, &mut *ask)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_finding(walk: &mut ProverWalk, sink: &ParamSink, shown: &str, part: &Expr, span: Span, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, written_of: &mut impl FnMut(&Expr) -> String) {
+    if sink.kind == "path" {
+        raw_sink_path_finding(walk, part, shown, &sink.operation, sink.root_part, span, scope, words, library, &mut *holes_of, &mut *written_of);
+        return;
+    }
+    let first = written_of(part);
+    let source = outside_source(part, &scope.tainted, &scope.sources, words, library, &walk.state, &mut *holes_of);
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
+    let mut help: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    if sink.kind == "markup" {
+        notes.push(String::from("Markup from outside can carry a script that runs in the page of whoever opens it."));
+        help = format!("Check it where it arrives: `throw BadInput({}) if !html::is_plain({})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it.", first, first);
+    } else {
+        notes.push(String::from("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file."));
+        help = String::from("Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.");
+    }
+    walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches {}, and it comes from outside the program.", first, shown), notes, help: Some(help), warning: false, labels: vec![] });
+}
+
+pub(crate) fn raw_sink_outside(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
+    if !from_outside(part, &scope.tainted, words, library, state, &mut *holes_of) { return false; }
+    match part {
+        Expr::Variable(name, _) => { let name = *name; !scope.ints.contains(words.resolve(name)) },
+        _ => true,
+    }
+}
+
+pub(crate) fn raw_sink_guarded(walk: &mut ProverWalk, part: &Expr, predicate: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
+    let on = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let name = format!("{}.{}{}()", on, property_mark(), predicate);
+    if !scope.ints.contains(&name) { return false; }
+    let named = walk.arena.var(&name);
+    let one = walk.arena.int(1);
+    let goal = walk.arena.equal(named, one);
+    prover_proves_here(walk, goal, scope, &mut *ask)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_path_finding(walk: &mut ProverWalk, part: &Expr, sink: &str, operation: &str, root_part: bool, span: Span, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, written_of: &mut impl FnMut(&Expr) -> String) {
+    let first = written_of(part);
+    let source = outside_source(part, &scope.tainted, &scope.sources, words, library, &walk.state, &mut *holes_of);
+    let key = format!("untrusted-paths-{}", operation);
+    let class = raw_sink_source_class(nikaia_std::index::or(source.as_deref(), || ""));
+    let allowed = if class.is_empty() { format!("`{} = true`", key) } else { format!("`{} = [\"{}\"]`", key, class) };
+    let verb = match operation {
+        "read" => "read",
+        "write" => "write",
+        "remove" => "remove",
+        _ => "reach",
+    };
+    let from = if class.is_empty() { String::from("outside") } else { format!("`{}`", class) };
+    let manifest = format!("If the program means to {} paths from {}, {} under `[allow]` in the manifest builds it.", verb, from, allowed);
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
+    let mut help: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    if root_part {
+        notes.push(String::from("A root from outside keeps a path inside a directory a stranger chose, which may be `/`."));
+        help = format!("Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. {}", manifest);
+    } else {
+        notes.push(String::from("A path from outside may name any file the program can reach: `../`, or one that starts at `/`."));
+        help = format!("Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(\".\")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput({}) if !path::is_component({})` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. {}", first, first, manifest);
+    }
+    walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches {}, and it comes from outside the program.", first, sink), notes, help: Some(help), warning: false, labels: vec![] });
+}
+
+pub(crate) fn raw_sink_source_class(source: &str) -> &'static str {
+    if source.starts_with("cli::") { return "args"; }
+    if source.starts_with("io::") { return "stdin"; }
+    if source.starts_with("env::") { return "env"; }
+    if source.starts_with("http") { return "request"; }
+    if source.starts_with("fs::") { return "file"; }
+    if source.starts_with("process::") { return "process"; }
+    if source.starts_with("net::") { return "network"; }
+    ""
+}
+
+pub(crate) fn raw_sink_operation(callee: &str, j: i64, config: &[ConfigArg], words: &winnow_grammar::InternerContext, written_of: &mut impl FnMut(&Expr) -> String) -> String {
+    if callee == "fs::write" || callee == "fs::create" || callee == "fs::create_dir" { return String::from("write"); }
+    if callee == "fs::remove" { return String::from("remove"); }
+    if callee == "fs::rename" { return if j == 0 { String::from("remove") } else { String::from("write") }; }
+    if callee == "fs::copy" { return if j == 0 { String::from("read") } else { String::from("write") }; }
+    if callee == "fs::open" {
+        for option in config.iter() {
+            let named = words.resolve(option.name);
+            if (named == "write" || named == "append" || named == "create" || named == "truncate") && written_of(&option.value) != "false" { return String::from("write"); }
+        }
+    }
+    String::from("read")
+}
+
+pub(crate) fn raw_sink_dir(arg: &Expr, words: &winnow_grammar::InternerContext) -> Option<Expr> {
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                _ => String::from(""),
+            };
+            if named.ends_with("Root::Dir") && args.len() == 1 { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None }
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn raw_sink_joined(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
+    match arg {
+        Expr::LitInterpolated { .. } => true,
+        Expr::Binary { op, .. } => *op == BinaryOp::Add,
+        _ => raw_sink_joined_name(arg, scope, words),
+    }
+}
+
+pub(crate) fn raw_sink_name(part: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match part {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { None }
+        },
+        _ => path_of(part, words),
+    }
+}
+
+pub(crate) fn raw_sink_joined_name(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
+    let name = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    scope.joined.contains(&name)
+}
+
+pub(crate) fn raw_sink_proved_join(walk: &mut ProverWalk, value: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
+    if !raw_sink_joined(value, scope, words) { return false; }
+    if !raw_sink_joined_name(value, scope, words) && !raw_sink_clean_lead(value, scope, words, library, &walk.state, &mut *holes_of) { return false; }
+    let mut parts: Vec<Expr> = vec![];
+    raw_sink_parts(value, &mut *holes_of, &mut parts);
+    for part in parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) && !raw_sink_passes(walk, "path", part, scope, words, &mut *ask) { return false; } }
+    true
+}
+
+pub(crate) fn raw_sink_clean_lead(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    match arg {
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Text(text) => { if !text.is_empty() { return true; } },
+                    FPart::Hole { expr, .. } => { return raw_sink_clean_lead(expr, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(expr, scope, words) && !raw_sink_outside(expr, scope, words, library, state, &mut &mut *holes_of); },
+                }
+            }
+            false
+        },
+        Expr::Binary { op, lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); *op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(lhs, scope, words) && !raw_sink_outside(lhs, scope, words, library, state, &mut &mut *holes_of)) },
+        _ => raw_sink_joined_name(arg, scope, words),
+    }
+}
+
+pub(crate) fn raw_sink_parts(expr: &Expr, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { raw_sink_parts(&hole, &mut &mut *holes_of, out); } },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::Add {
+                raw_sink_parts(lhs, &mut &mut *holes_of, out);
+                raw_sink_parts(rhs, &mut &mut *holes_of, out);
+            } else { out.push(expr.clone()); }
+        },
+        _ => { out.push(expr.clone()); },
+    }
+}
+
+pub(crate) fn raw_sink_anywhere(arg: &Expr, words: &winnow_grammar::InternerContext, written_of: &mut impl FnMut(&Expr) -> String) -> bool {
+    match arg {
+        Expr::Path(segments, _) => path_text(segments, words).ends_with("Root::Anywhere"),
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                _ => String::from(""),
+            };
+            named.ends_with("Root::Dir") && args.len() == 1 && written_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) == "\"/\""
+        },
+        _ => false,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool, within: &str, site: i64) {
     let mut guard_at: i64 = -1;
     let mut condition: String = String::from("");
@@ -2056,7 +2401,7 @@ pub(crate) fn prover_overflow_goal(walk: &mut ProverWalk, expr: &Expr, op_at: i6
     let (least, most) = match prover_type_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut either: Vec<i64> = vec![];
     let bottom = walk.arena.int(least);
-    for result in calls.iter() {
+    either.reserve(calls.iter().size_hint().0); for result in calls.iter() {
         let result = nikaia_std::num::value(result);
         either.push(walk.arena.lt(result, bottom));
         if most.is_some() {
@@ -2212,11 +2557,11 @@ pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &Prove
         Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition); },
         Expr::Closure { params, mutable, body, .. } => {
             let mut names: Vec<String> = vec![];
-            for p in params.iter() {
+            names.reserve(params.iter().size_hint().0); for p in params.iter() {
                 let p = *p;
                 names.push(nikaia_std::block::Text::from(words.resolve(p).to_string()));
             }
-            for p in mutable.iter() {
+            names.reserve(mutable.iter().size_hint().0); for p in mutable.iter() {
                 let p = *p;
                 names.push(nikaia_std::block::Text::from(words.resolve(p).to_string()));
             }
@@ -2423,7 +2768,7 @@ pub(crate) fn prover_record_call(walk: &mut ProverWalk, callee: &str, params: &[
     if std_call.is_some() && !outcome.held.is_empty() {
         let key = (span.start as i64, nikaia_std::index::or(std_call, || 0));
         let mut conditions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for pre in claims.iter() { conditions.push(nikaia_std::index::or(claim_text_of((pre.computed).as_deref()), || nikaia_std::block::Text::from(pre.written.to_string()).into())); }
+        conditions.reserve(claims.iter().size_hint().0); for pre in claims.iter() { conditions.push(nikaia_std::index::or(claim_text_of((pre.computed).as_deref()), || nikaia_std::block::Text::from(pre.written.to_string()).into())); }
         walk.std_claims.insert(key, format!("{}: {}", callee, nikaia_std::block::Text::from(conditions.join(" && "))));
         walk.held.insert(key, prover_std_held(&outcome.held));
     }
@@ -2443,9 +2788,9 @@ pub(crate) fn prover_foreign_contract(walk: &mut ProverWalk, key: &str, own: &Le
     let contract = match *nikaia_std::index::get(&own.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let shape = foreign_shape(contract);
     let mut requires: Vec<i64> = vec![];
-    for text in contract.requires.iter() { requires.push(prover_condition_term(&mut walk.arena, text, &shape.names, &mut *condition)); }
+    requires.reserve(contract.requires.iter().size_hint().0); for text in contract.requires.iter() { requires.push(prover_condition_term(&mut walk.arena, text, &shape.names, &mut *condition)); }
     let mut ensures: Vec<i64> = vec![];
-    for text in contract.ensures.iter() { ensures.push(prover_condition_term(&mut walk.arena, text, &shape.names, &mut *condition)); }
+    ensures.reserve(contract.ensures.iter().size_hint().0); for text in contract.ensures.iter() { ensures.push(prover_condition_term(&mut walk.arena, text, &shape.names, &mut *condition)); }
     let foreign = foreign_from(contract, shape, &requires, &ensures);
     walk.state.foreign.insert(nikaia_std::block::Text::from(key.to_string()), Some(foreign.clone()));
     Some(foreign)
@@ -2457,7 +2802,7 @@ pub(crate) fn prover_std_requires(walk: &mut ProverWalk, key: &str, library: &Le
     let mut shape = foreign_shape(contract);
     let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..nikaia_std::index::or(nikaia_std::search::rfind(&key, &"::"), || 0))).to_string());
     let mut requires: Vec<i64> = vec![];
-    for text in contract.requires.iter() {
+    requires.reserve(contract.requires.iter().size_hint().0); for text in contract.requires.iter() {
         let property = prover_std_property_named(text, &owner, &walk.state.std_properties);
         if property.is_some() { shape.names.insert(nikaia_std::index::or(property, || "".into())); }
         requires.push(prover_condition_term(&mut walk.arena, text, &shape.names, &mut *condition));
@@ -2730,7 +3075,7 @@ pub(crate) fn prover_std_ensured(library: &Ledger, properties: &collections::BTr
         if !signature.takes_a_receiver() { continue; }
         let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..nikaia_std::index::or(nikaia_std::search::rfind(&key, &"::"), || 0))).to_string());
         #[allow(unused_mut)] let mut rests: Vec<String> = vec![];
-        for text in contract.ensures.iter() {
+        rests.reserve(contract.ensures.iter().size_hint().0); for text in contract.ensures.iter() {
             let named = match prover_std_property_named(text, &owner, properties) { Some(__nikaia_value) => __nikaia_value, None => continue };
             rests.push(nikaia_std::block::Text::from(match named.strip_prefix("self.") { Some(__nikaia_value) => __nikaia_value, None => continue }.to_string()));
         }

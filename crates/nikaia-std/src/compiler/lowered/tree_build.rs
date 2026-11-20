@@ -15,7 +15,7 @@ pub enum Postfix {
 pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_grammar::Symbol>, Vec<winnow_grammar::Symbol>) {
     let mut names: Vec<winnow_grammar::Symbol> = vec![];
     let mut mutable: Vec<winnow_grammar::Symbol> = vec![];
-    for param in params.iter() {
+    names.reserve(params.iter().size_hint().0); for param in params.iter() {
         names.push(param.1);
         if param.0 { mutable.push(param.1); }
     }
@@ -25,7 +25,7 @@ pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_gramm
 pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow_grammar::Symbol>, Vec<i64>, Span)]) {
     let mut at: i64 = 0;
     for u in unpacks.iter() {
-        let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
+        let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, mut_names: vec![], deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
         body.stmts.insert(nikaia_std::count::of(at), Spanned { node: open, span: u.3, doc: None, attributes: vec![] });
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
@@ -36,6 +36,13 @@ pub fn flat_shape(pattern: (Vec<winnow_grammar::Symbol>, Vec<i64>)) -> (Vec<winn
     let tuples = shape.iter().copied().filter(|&w| { w > 0 }).count() as i64;
     if tuples <= 1 { return (names, vec![]); }
     (names, shape)
+}
+
+pub fn marked_names(whole: bool, marks: Vec<bool>) -> (bool, Vec<bool>) {
+    let marked = marks.iter().copied().filter(|&m| { m }).count() as i64;
+    if whole || marked == 0 { return (whole, vec![]); }
+    if marked == marks.len() as i64 { return (true, vec![]); }
+    (true, marks)
 }
 
 pub fn lambda(params: &[(bool, winnow_grammar::Symbol, Option<((Vec<winnow_grammar::Symbol>, Vec<i64>), Span)>)], body: Block) -> Expr {
@@ -65,11 +72,11 @@ pub fn params_of(receiver: Option<Receiver>, args: Vec<FnArg>, zone: Option<Conf
     }
 }
 
-pub fn guarded(jump: Stmt, cond: Expr, span: Span) -> Stmt { Stmt::Expr(Expr::If { cond: std::boxed::Box::new(cond), then_branch: Block { stmts: vec![Spanned { node: jump, span, doc: None, attributes: vec![] }] }, else_branch: None, id: node_id::NodeId::parsed() }) }
+pub fn guarded(jump: Stmt, cond: Expr, span: Span) -> Stmt { Stmt::Expr(Expr::If { cond: nikaia_std::block::Boxed::new(cond), then_branch: Block { stmts: vec![Spanned { node: jump, span, doc: None, attributes: vec![] }] }, else_branch: None, id: node_id::NodeId::parsed() }) }
 
 pub fn fold_binary(head: Expr, tail: Vec<(BinaryOp, Expr, Span)>) -> Expr {
     let mut lhs = head;
-    for step in tail.into_iter() { lhs = Expr::Binary { op: step.0, lhs: std::boxed::Box::new(lhs), rhs: std::boxed::Box::new(step.1), span: step.2, grouped: false, id: node_id::NodeId::parsed() }; }
+    for step in tail.into_iter() { lhs = Expr::Binary { op: step.0, lhs: nikaia_std::block::Boxed::new(lhs), rhs: nikaia_std::block::Boxed::new(step.1), span: step.2, grouped: false, id: node_id::NodeId::parsed() }; }
     lhs
 }
 
@@ -77,7 +84,7 @@ pub fn grouped(e: Expr) -> Expr {
     match e {
         Expr::Binary { op, lhs, rhs, span, id, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            return Expr::Binary { op, lhs: std::boxed::Box::new(lhs), rhs: std::boxed::Box::new(rhs), span, grouped: true, id };
+            return Expr::Binary { op, lhs: nikaia_std::block::Boxed::new(lhs), rhs: nikaia_std::block::Boxed::new(rhs), span, grouped: true, id };
         },
         other => { return other; },
     }
@@ -88,13 +95,13 @@ pub fn fold_postfix(base: Expr, start: u32, tail: Vec<(Postfix, u32)>) -> Expr {
     for (step, end) in tail.into_iter() {
         let id = node_id::NodeId::parsed().at(start, end);
         recv = { let __nikaia_value = match step {
-            Postfix::Field(name) => Expr::Field { base: std::boxed::Box::new(recv), name, id },
-            Postfix::SafeField(name) => Expr::SafeField { base: std::boxed::Box::new(recv), name, id },
-            Postfix::SafeMethod(method, args, config) => Expr::SafeMethod { receiver: std::boxed::Box::new(recv), method, args, config, id },
-            Postfix::Method(method, args, config) => Expr::MethodCall { receiver: std::boxed::Box::new(recv), method, args, config, id },
-            Postfix::Index(index) => Expr::Index { base: std::boxed::Box::new(recv), index: std::boxed::Box::new(index), id },
-            Postfix::IndexFrom(start, len) => Expr::Index { base: std::boxed::Box::new(recv.clone()), index: std::boxed::Box::new(Expr::Range { start: std::boxed::Box::new(start), end: std::boxed::Box::new(Expr::MethodCall { receiver: std::boxed::Box::new(recv), method: len, args: vec![], config: vec![], id: node_id::NodeId::parsed() }), inclusive: false, id: node_id::NodeId::parsed() }), id },
-            Postfix::With(fields, at) => Expr::With { base: std::boxed::Box::new(recv), fields, at, id },
+            Postfix::Field(name) => Expr::Field { base: nikaia_std::block::Boxed::new(recv), name, id },
+            Postfix::SafeField(name) => Expr::SafeField { base: nikaia_std::block::Boxed::new(recv), name, id },
+            Postfix::SafeMethod(method, args, config) => Expr::SafeMethod { receiver: nikaia_std::block::Boxed::new(recv), method, args, config, id },
+            Postfix::Method(method, args, config) => Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(recv), method, args, config, id },
+            Postfix::Index(index) => Expr::Index { base: nikaia_std::block::Boxed::new(recv), index: nikaia_std::block::Boxed::new(index), id },
+            Postfix::IndexFrom(start, len) => Expr::Index { base: nikaia_std::block::Boxed::new(recv.clone()), index: nikaia_std::block::Boxed::new(Expr::Range { start: nikaia_std::block::Boxed::new(start), end: nikaia_std::block::Boxed::new(Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(recv), method: len, args: vec![], config: vec![], id: node_id::NodeId::parsed() }), inclusive: false, id: node_id::NodeId::parsed() }), id },
+            Postfix::With(fields, at) => Expr::With { base: nikaia_std::block::Boxed::new(recv), fields, at, id },
         }; __nikaia_value };
     }
     recv
@@ -120,9 +127,9 @@ pub fn counted_pattern(pat: Spanned<Pattern>, low: Expr, comma: bool, high: Opti
                 None => Repeat::AtLeast(n),
             };
         }
-        return Spanned { node: Pattern::Repeat { pat: std::boxed::Box::new(pat), rep }, span, doc: None, attributes: vec![] };
+        return Spanned { node: Pattern::Repeat { pat: nikaia_std::block::Boxed::new(pat), rep }, span, doc: None, attributes: vec![] };
     }
-    Spanned { node: Pattern::Counted { pat: std::boxed::Box::new(pat), low, high, comma }, span, doc: None, attributes: vec![] }
+    Spanned { node: Pattern::Counted { pat: nikaia_std::block::Boxed::new(pat), low, high, comma }, span, doc: None, attributes: vec![] }
 }
 
 pub(crate) fn tree_build_written_count(e: &Expr) -> Option<u32> {

@@ -46,7 +46,7 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
     let found = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position: i64 = 0;
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for field in found.fields.iter() {
+    written.reserve(found.fields.iter().size_hint().0); for field in found.fields.iter() {
         let mut value: String = String::from("");
         if field.default.is_empty() {
             if ((position) as usize) >= attribute.args.len() { return None; }
@@ -100,7 +100,7 @@ pub(crate) fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, 
 
 pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for (_, contract) in ledger.functions.iter() {
+    out.reserve(ledger.functions.iter().size_hint().0); for (_, contract) in ledger.functions.iter() {
         let borrows = nikaia_std::block::Text::from(contract.borrows.join("\n"));
         let stores = nikaia_std::block::Text::from(contract.stores.join("\n"));
         out.push(format!("{} | {} | {}", borrows, contract.returns, stores));
@@ -127,7 +127,7 @@ pub(crate) fn write_result_sources(ledger: &mut Ledger, units: i64, package: &mu
             for kept in stored(unit, &ledger, &shared) { fresh.insert(kept.key, kept.stores); }
         }
         let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (key, _) in ledger.functions.iter() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
+        keys.reserve(ledger.functions.iter().size_hint().0); for (key, _) in ledger.functions.iter() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
         for key in keys.iter() {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             contract.stores = nikaia_std::index::or(fresh.remove(key), || vec![].into());

@@ -332,7 +332,7 @@ impl CheckState {
     }
 
     /// A parameter that is a map (with `maps`) or a `Vec` (with `lists`),
-    /// written `ref`, or written with no mark and kept nowhere (ADR-views-3
+    /// written `ref`, or written with no mark and kept nowhere (ADR-views-v4
     /// D2, D12; #1711): the body only reads it, so it is lent.
     fn a_lent_container(ref self, world: ref CheckWorld, receiver: ref Expr, maps: bool, lists: bool) -> bool sync {
         let name = match receiver {
@@ -358,7 +358,7 @@ impl CheckState {
     }
 
     /// **A call through a function value whose type writes `from`**
-    /// (ADR-views-3 D14, #1254): `return f(s)` with `f: fn(s: String) ->
+    /// (ADR-views-v4 D14, #1254): `return f(s)` with `f: fn(s: String) ->
     /// String from s` hands back a view of the argument given for `s`, exactly
     /// as a direct call of a function `-> String from s` does. Where every
     /// argument the type reads is a parameter this function's result points
@@ -452,7 +452,7 @@ fn element_of(ty: ref Ty) -> Ty sync {
 }
 
 /// **The parameters a function of this file writes its result `from`**
-/// (ADR-views-3 D8), found by the ledger's key: `name`, or `Owner::name` for
+/// (ADR-views-v4 D8), found by the ledger's key: `name`, or `Owner::name` for
 /// a method. None where it writes no `from`.
 fn written_from_of(world: ref CheckWorld, key: ref String) -> Vec[String] sync {
     for item in world.here.items {
@@ -491,7 +491,7 @@ fn written_from_names(world: ref CheckWorld, name: winnow_grammar::Symbol?, owne
 }
 
 /// Whether a call through a function value of the type `params -> result`
-/// hands back a view of only what `borrows` names (ADR-views-3 D14): the
+/// hands back a view of only what `borrows` names (ADR-views-v4 D14): the
 /// result is a view, and each argument at a parameter the type lends (one its
 /// `from` reads) is one of those names. At least one argument is read.
 fn a_from_call_reads_only(world: ref CheckWorld, params: ref Vec[Ty], result: ref Ty?, args: ref Vec[Expr], borrows: ref Vec[String]) -> bool sync {

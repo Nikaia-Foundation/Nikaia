@@ -51,7 +51,12 @@ impl CheckState {
     /// or a view is lent (#465): its parts are views of the tuple's, and a
     /// number, a `bool` or a `char` among them is read out of its view where it
     /// is bound, as a loop binding is.
-    pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
+    ///
+    /// **A name changes only where it is `mut`** (ADR-views-v4 D24, section
+    /// 6, #1133): `mutable` and `mut_names` as `Stmt::Let` holds them, so
+    /// `let (a, mut b) = …` is `let mut` on `b` alone, and a change to `a`
+    /// is `NK1139`, as one to a `let` without `mut` is.
+    pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
         if written {
             self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.", ["The names are taken apart by position, and one type can't say which name it belongs to."], "Remove the type, or bind one name and read the parts from it."))
         }
@@ -89,7 +94,14 @@ impl CheckState {
             if self.facts.copied_tuple_parts.contains((at, bound.clone())) {
                 ty = ty.owned()
             }
-            self.bind_with(bound.clone(), ty, null)
+            let id = self.a_new_binding()
+            let mut local = CheckLocal::free(bound.clone(), ty, id)
+            let changeable = mutable && (mut_names.len() == 0 || mut_names[index])
+            local.written_mut = changeable
+            if !changeable {
+                local.without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: "" }
+            }
+            self.bind_local(local)
             // **A text among the parts that is a view** is `&String` or
             // `&&str` below, so a comparison reads it as `str` (#688).
             if check_owned_text(parts[index]) && (lent || parts[index].is_a_view()) {

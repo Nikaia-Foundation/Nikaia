@@ -354,16 +354,16 @@ pub(crate) const PROJECT_DRIVE_CARGO_READS: [&str; 10] = ["NIKAIA_TEST_BATCH", "
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn project_drive_handed<H: ProjectDriveHost>(host: &H, verb: &str, args: &[String], env: &[(String, String)], unset: &[String], shared: bool, manifest: &std::path::Path, rust: &[String], switched: &str) -> String {
     let mut text = format!("{}\n{}\n{}\n{}\n{}", verb, shared, nikaia_std::fs::path::display(&(manifest)), host.rustc_version(), switched);
-    for arg in args.iter() { if arg != "--quiet" { text.push_str(&format!("arg {}\n", arg)); } }
-    for (name, value) in env.iter() { text.push_str(&format!("env {}={}\n", name, value)); }
-    for name in unset.iter() { text.push_str(&format!("unset {}\n", name)); }
+    for arg in args.iter() { if arg != "--quiet" { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("arg {}\n", arg)); }; } }
+    for (name, value) in env.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("env {}={}\n", name, value)); }; }
+    for name in unset.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("unset {}\n", name)); }; }
     for name in PROJECT_DRIVE_CARGO_READS.iter() {
         let name = *name;
         let value = nikaia_std::index::or(env::var(name), || "".into());
-        text.push_str(&format!("var {}={}\n", name, value));
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("var {}={}\n", name, value)); };
     }
-    for code in rust.iter() { text.push_str(&format!("rust {}\n", hash::sha256_hex(&code.bytes().collect::<Vec<_>>()))); }
-    hash::sha256_hex(&text.bytes().collect::<Vec<_>>())
+    for code in rust.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("rust {}\n", hash::sha256_hex(code.as_bytes()))); }; }
+    hash::sha256_hex(text.as_bytes())
 }
 
 pub(crate) async fn project_drive_cargo_key(record: &std::path::Path, handed: &str) -> String {
@@ -387,9 +387,9 @@ pub(crate) async fn project_drive_cargo_key(record: &std::path::Path, handed: &s
             Ok(value) => value,
             Err(_error) => { continue; },
         };
-        text.push_str(&format!("member {}\n{}", name, member));
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("member {}\n{}", name, member)); };
     }
-    hash::sha256_hex(&text.bytes().collect::<Vec<_>>())
+    hash::sha256_hex(text.as_bytes())
 }
 
 pub(crate) fn project_drive_source_dirs(sources: &[fs::Path]) -> Vec<fs::Path> {
@@ -411,7 +411,7 @@ pub(crate) fn project_drive_listing(dir: &std::path::Path) -> Option<String> {
         Err(_error) => { return None; },
     }).iter().map(|name| { nikaia_std::fs::path::display(&(name)) }).collect::<Vec<_>>();
     names.sort();
-    Some(hash::sha256_hex(&nikaia_std::block::Text::from(names.join("\n")).bytes().collect::<Vec<_>>()))
+    Some(hash::sha256_hex(nikaia_std::block::Text::from(names.join("\n")).as_bytes()))
 }
 
 pub(crate) async fn project_drive_digest(path: &std::path::Path, a_dir: bool) -> Option<String> {
@@ -478,7 +478,7 @@ pub async fn project_drive_record(record: &std::path::Path, handed: &str, messag
             Err(_error) => { return; },
         };
         let digest = match project_drive_digest(&path, meta.is_dir()).await { Some(__nikaia_value) => __nikaia_value, None => return };
-        text.push_str(&format!("{}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), digest, nikaia_std::fs::path::display(&(path))));
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("{}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), digest, nikaia_std::fs::path::display(&(path)))); };
     }
     match fs::write(&nikaia_std::fs::path::with_extension(&(record), std::path::Path::new(&("messages"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(messages.to_string()), false, true).await {
         Ok(_) => {},
@@ -724,11 +724,11 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
         return Ok(0);
     } };
     let mut runs: Vec<(String, Vec<String>)> = nikaia_std::block::List::from_array_in([(String::from(""), vec![String::from("--no-default-features")])], nikaia_std::block::Place::Block);
-    for name in applied.names.iter() { runs.push((nikaia_std::block::Text::from(name.to_string()), vec![String::from("--no-default-features"), String::from("--features"), nikaia_std::block::Text::from(name.to_string())])); }
+    runs.reserve(applied.names.iter().size_hint().0); for name in applied.names.iter() { runs.push((nikaia_std::block::Text::from(name.to_string()), vec![String::from("--no-default-features"), String::from("--features"), nikaia_std::block::Text::from(name.to_string())])); }
     if applied.names.len() > 1 { runs.push((String::from("*"), vec![String::from("--all-features")])); }
     for run in runs.iter() {
         let mut args: Vec<String> = vec![String::from("--quiet")];
-        for arg in run.1.iter() { args.push(nikaia_std::block::Text::from(arg.to_string())); }
+        args.reserve(run.1.iter().size_hint().0); for arg in run.1.iter() { args.push(nikaia_std::block::Text::from(arg.to_string())); }
         let (code, said) = host.cargo_messages("check", &args)?;
         if code == 0 { continue; }
         let blamed = if !run.0.is_empty() && run.0 != "*" { nikaia_std::block::Text::from(run.0.to_string()) } else { features_blamed(&said, &applied, "") };
@@ -1141,7 +1141,7 @@ pub(crate) async fn project_drive_rustc_key(rustc: &str, args: &[String], rust: 
             k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             continue;
         }
-        text.push_str(&format!("arg {}\n", arg));
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("arg {}\n", arg)); };
         if arg == "--extern" {
             match next.split_once("=") {
                 None => { },
@@ -1151,14 +1151,14 @@ pub(crate) async fn project_drive_rustc_key(rustc: &str, args: &[String], rust: 
                         Ok(value) => value,
                         Err(_error) => { return None; },
                     };
-                    text.push_str(&format!("extern {} {}\n", crate_name, hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>())));
+                    { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("extern {} {}\n", crate_name, hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()))); };
                 },
             }
         }
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
-    text.push_str(&format!("rust {}\n", hash::sha256_hex(&rust.bytes().collect::<Vec<_>>())));
-    Some(hash::sha256_hex(&text.bytes().collect::<Vec<_>>()))
+    { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("rust {}\n", hash::sha256_hex(rust.as_bytes()))); };
+    Some(hash::sha256_hex(text.as_bytes()))
 }
 
 pub(crate) async fn project_drive_rustc_through<H: ProjectDriveWrapperHost>(host: &H, store: &ProjectDriveRustcStore) -> Result<i32, std::boxed::Box<dyn std::error::Error>> {
@@ -1168,7 +1168,7 @@ pub(crate) async fn project_drive_rustc_through<H: ProjectDriveWrapperHost>(host
         return Ok(0);
     }
     host.trace("rustc ran");
-    let side = hash::sha256_hex(&format!("{}\n{}", nikaia_std::fs::path::display(&(store.out_dir)), nikaia_std::fs::path::display(&(store.generated))).bytes().collect::<Vec<_>>());
+    let side = hash::sha256_hex(format!("{}\n{}", nikaia_std::fs::path::display(&(store.out_dir)), nikaia_std::fs::path::display(&(store.generated))).as_bytes());
     let staging = nikaia_std::fs::path::join(&(store.entry), std::path::Path::new(&(format!("new-{}", side))));
     match fs::remove(&staging, &fs::Root::Anywhere, true) {
         Ok(_) => {},
@@ -1282,13 +1282,13 @@ pub(crate) async fn project_drive_rustc_inputs(depends: &str, generated: &std::p
             Ok(value) => value,
             Err(_error) => { return None; },
         };
-        text.push_str(&format!("file\t{}\t{}\n", hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()), nikaia_std::fs::path::display(&(path))));
+        { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("file\t{}\t{}\n", hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()), nikaia_std::fs::path::display(&(path)))); };
     }
     for line in depends.lines() {
         let named = match line.strip_prefix("# env-dep:") { Some(__nikaia_value) => __nikaia_value, None => continue };
         match named.split_once("=") {
-            None => { text.push_str(&format!("env\t{}\t\u{0}\n", named)); },
-            Some((name, value)) => { text.push_str(&format!("env\t{}\t{}\n", name, value)); },
+            None => { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("env\t{}\t\u{0}\n", named)); }; },
+            Some((name, value)) => { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("env\t{}\t{}\n", name, value)); }; },
         }
     }
     Some(text)

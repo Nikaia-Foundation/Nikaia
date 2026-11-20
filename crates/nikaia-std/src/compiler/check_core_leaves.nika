@@ -43,13 +43,13 @@ fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: Check
     }
     let notes: Vec[String] = [f"`self` and `mut self` borrow the value, and `{field}` is a `{ty.shown()}`. Giving it away would take a piece out of something this method doesn't own."]
     let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
-    // **A view of `self` is handed back without a mark** (ADR-views-3 D4,
+    // **A view of `self` is handed back without a mark** (ADR-views-v4 D4,
     // D7, #1403): `ref` left the language, so the help never offers one,
     // which the next check would call redundant (`NK1261`).
     if what == "handed back" {
         help = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark."
     }
-    // **`mut self` changes `self` in place** (ADR-views-3 D3, #1208): it is
+    // **`mut self` changes `self` in place** (ADR-views-v4 D3, #1208): it is
     // not only borrowed, but it is still not this method's to give away.
     let mut message: String = f"You can't give away `self.{field}` here: this method only borrows `self`."
     if state.changing_self {
@@ -155,12 +155,12 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     let mut path: String = ""
     let mut root: String = ""
     match value {
-        // **The whole element of a `for mut`** (ADR-views-2 D5): a view of the
+        // **The whole element of a `for mut`** (ADR-views-v4 D28): a view of the
         // list, which the loop only borrows.
         Expr::Variable(name, _) => {
             let written = world.words.resolve(name).clone()
             let local = state.binding(written) ?? return
-            // **A `let mut` view given away whole** (ADR-views-1 D4).
+            // **A `let mut` view given away whole** (ADR-views-v4 D21).
             let a_let_view = local.view_of == "" && state.a_changing_view(written)
             if (local.view_of == "" && !a_let_view) || !keeps {
                 return
@@ -293,7 +293,7 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
         else => {},
     }
     // **A part of a `let mut` view is taken out**, to be given back
-    // (ADR-views-1 D1): `NK2108` asks that it is.
+    // (ADR-views-v4 D18): `NK2108` asks that it is.
     if !handed_back && !element && state.a_part_taken_out(world, path, ty) != null {
         return
     }
@@ -327,8 +327,14 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     if state.a_text_bytes_view(world, value) {
         return
     }
+    // **A cut of a `Bytes` kept is a count on its owner** (ADR-373 D1, D4,
+    // #2214), or a copy where there is no owner to count: nothing is taken
+    // out of the borrowed `Bytes`.
+    if !handed_back && state.facts.bytes_cuts.contains(node_key(value)) {
+        return
+    }
     let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.shown()}`. Giving it away would take a piece out of something this function doesn't own."]
-    // **The ways out in views-3's words** (ADR-views-3 D2, D4, D8, #1403):
+    // **The ways out in views-3's words** (ADR-views-v4 D2, D4, D8, #1403):
     // a view handed back on every way out needs no mark, and a parameter
     // that only reads is lent without `keep`; none of them writes `ref`.
     let mut help: String = f"Write `{path}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark."
@@ -512,7 +518,18 @@ fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let mut names: Vec[bool] = []
     let mut seen: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     let mut index = 0
+    // **Every hole text, with no spec and no bound name** (#2405): the
+    // literal compared with a text is checked in place.
+    let mut all_text = interpolated
+    for spec in specs {
+        if spec != null {
+            all_text = false
+        }
+    }
     for (hole, bound) in walked {
+        if !bound.is_empty() {
+            all_text = false
+        }
         let mut frame: Vec[CheckLocal] = []
         for (name, collection) in bound {
             let trimmed = collection.trim()
@@ -541,7 +558,13 @@ fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
             state.a_collection_in_a_hole(world, hole, held, specs[index], span)
         }
         names.push(check_core_is_a_path(held))
+        if !is_text_type(held.unseen()) {
+            all_text = false
+        }
         index += 1
+    }
+    if all_text {
+        state.facts.text_formats.insert(id_of(literal) as i64)
     }
     // An `f"…"` with a file's name in it is joined in the platform's encoding
     // (ADR-319 D4).
@@ -868,7 +891,7 @@ fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld
             state.facts.lent_returns.insert(span.start as i64)
         }
         // **A `T?` lent into a `ref T?` result is the option of a view**
-        // (ADR-views-3 D7, D8, #1486): `self.o.as_ref()`, not `&self.o`. A
+        // (ADR-views-v4 D7, D8, #1486): `self.o.as_ref()`, not `&self.o`. A
         // map read is the option of a view already.
         if lending && check_core_a_field(given) && check_core_a_nullable(found) && !found.is_a_view() && check_core_a_nullable(state.expected?.clone() ?? Ty::Unknown) {
             state.facts.lent_returns.remove(span.start as i64)
@@ -902,7 +925,7 @@ fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld
             read_off_a_loan = true
         } else if state.a_from_call_of_a_parameter(world, given) {
             // A view of what the result points into, returned as the direct
-            // call of a function `-> T from p` is: as `T` (ADR-views-3 D14).
+            // call of a function `-> T from p` is: as `T` (ADR-views-v4 D14).
             let owned = viewed_from_type(found)
             if owned.len() == 1 {
                 found = owned[0].clone()

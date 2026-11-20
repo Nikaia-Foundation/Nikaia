@@ -8,7 +8,7 @@ pub(crate) fn foreign_params(words: &winnow_grammar::InternerContext, items: &[S
             Item::Extern { declarations, .. } => {
                 for declaration in declarations.iter() {
                     let mut types: Vec<Type> = vec![];
-                    for arg in declaration.node.args.iter() { types.push(arg.ty.clone()); }
+                    types.reserve(declaration.node.args.iter().size_hint().0); for arg in declaration.node.args.iter() { types.push(arg.ty.clone()); }
                     out.insert(nikaia_std::block::Text::from(words.resolve(declaration.node.name).to_string()), types);
                 }
             },
@@ -81,7 +81,7 @@ pub(crate) fn declared_errors(words: &winnow_grammar::InternerContext, items: &[
 
 pub(crate) fn sum_name(members: &[String]) -> String {
     let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for member in members.iter() { spelled.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
+    spelled.reserve(members.iter().size_hint().0); for member in members.iter() { spelled.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
     format!("__NikaiaThrows_{}", nikaia_std::block::Text::from(spelled.join("__")))
 }
 
@@ -121,7 +121,7 @@ pub(crate) fn member_of(words: &winnow_grammar::InternerContext, declared: &coll
     }
     if path.len() < 2 { return None; }
     let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for symbol in path.iter() {
+    whole.reserve(path.iter().size_hint().0); for symbol in path.iter() {
         let symbol = *symbol;
         whole.push(nikaia_std::block::Text::from(words.resolve(symbol).to_string()));
     }

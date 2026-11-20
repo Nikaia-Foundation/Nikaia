@@ -133,7 +133,7 @@ pub enum Item {
         /// ADR-324 D6).
         is_extern: bool,
         /// `-> String from a | b`: the parameters the result's views point
-        /// into, as written ([ADR-views-3](../../../../docs/specification/adr/adr-views-3.md)
+        /// into, as written ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md)
         /// D8). Empty where no `from` is written; the check holds the body
         /// against it (`check_result_from.nika`).
         ret_from: Vec[winnow_grammar::Symbol],
@@ -308,7 +308,15 @@ pub enum Stmt {
         /// for a name. `(a, (b, c))` is `[2, 0, 2, 0, 0]`. `[-1]` is a variant
         /// written in the head, which the checker refuses (`NK1259`).
         shape: Vec[i64],
+        /// Whether a name is `mut`: every name where `mut_names` is empty,
+        /// else any of them.
         mutable: bool,
+        /// **`mut` in front of one name of a tuple pattern** (ADR-views-v4
+        /// D24, section 6, #1133): empty where every name follows `mutable`,
+        /// else one per name of `names`, true where that name is `mut`.
+        /// `let (a, mut b) = …` is `let mut` on `b` alone. A reader that asks
+        /// for the whole head reads `mutable`, which is true when any name is.
+        mut_names: Vec[bool],
         /// **`immutable x = e`** ([ADR-389](../../../docs/specification/adr/adr-389.md)
         /// D1, D2): one name, no `mut`, and nothing reachable from the value
         /// ever changes (`NK1331`). Lowered as a plain `let`.
@@ -344,8 +352,11 @@ pub enum Stmt {
         bindings: Vec[winnow_grammar::Symbol],
         /// How the bindings nest, as `Let::shape` (ADR-356).
         shape: Vec[i64],
-        /// `mut` in front of the whole head (ADR-views-2 D1), as `Let::mutable`.
+        /// `mut` in front of the whole head (ADR-views-v4 D24), as `Let::mutable`.
         mutable: bool,
+        /// `mut` in front of one name of the head, as `Let::mut_names`
+        /// (section 6, #1133): `for (k, mut v) in m`.
+        mut_names: Vec[bool],
         iter: Expr,
         body: Block,
     },
@@ -618,7 +629,7 @@ pub enum Expr {
     Dsl {
         target: winnow_grammar::Symbol,          // z.B. sql
         /// `dsl sqlite::Sql`: the package a grammar comes from
-        /// ([ADR-299](../../../docs/specification/adr/adr-299.md) D20). `None`
+        /// ([ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md) D20). `None`
         /// for a grammar the program declares, and for `html`.
         package: winnow_grammar::Symbol?,
         context: winnow_grammar::Symbol?, // z.B. db (optional)
@@ -1044,13 +1055,13 @@ pub struct Code {
     /// `fn(s: String, n: i64)`: each parameter's name, in `generics`' order,
     /// `null` where none is written. The names are part of nothing but the
     /// `from` and documentation: two function types that differ only in them
-    /// are the same type (ADR-views-3 D14).
+    /// are the same type (ADR-views-v4 D14).
     pub param_names: Vec[winnow_grammar::Symbol?],
     /// `-> String from s`: the parameters the result's views point into
     /// (D8, D14); a name that is no parameter is `NK1335`.
     pub result_from: Vec[winnow_grammar::Symbol],
     /// `fn(keep r: Row)`: which parameters the code keeps, in `generics'`
-    /// order (Part I §C, ADR-views-3 D2, #1466). A plain parameter is lent.
+    /// order (Part I §C, ADR-views-v4 D2, #1466). A plain parameter is lent.
     pub param_keeps: Vec[bool],
 }
 
@@ -1225,7 +1236,7 @@ pub struct TraitMethod {
     pub config: Vec[ConfigParam],
     pub ret_type: Type?,
     /// `-> String from a`: the parameters the result's views point into
-    /// (ADR-views-3 D8). A view result with no body to infer it from needs
+    /// (ADR-views-v4 D8). A view result with no body to infer it from needs
     /// one (`NK1336`).
     pub ret_from: Vec[winnow_grammar::Symbol],
     pub is_sync: bool,
@@ -1251,7 +1262,7 @@ pub struct FnArg {
     /// `keep item: Item`: the callee keeps the argument - stores it into
     /// something that outlives the call, gives it to a task, or hands it to a
     /// parameter that keeps it
-    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D2). The
+    /// ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D2). The
     /// check holds it against what the keep inference decides
     /// (`check_keep_marks.nika`).
     pub keep: bool,
@@ -1576,7 +1587,7 @@ pub struct Receiver {
     pub is_ref: bool,
     pub is_mut: bool,
     /// `keep self`: the method consumes the object
-    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D2).
+    /// ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D2).
     /// The only receiver taken by value: a bare `self` is lent (D1).
     pub is_keep: bool,
 }
@@ -1599,7 +1610,7 @@ impl FnParams {
 }
 
 /// What stands after the `;` in a declaration: options, or the typed spread of
-/// [ADR-296](../../../docs/specification/adr/adr-296.md) D5.
+/// [ADR-grammar-build-time-v1](../../../../docs/specification/adr/adr-grammar-build-time-v1.md) D12.
 ///
 /// Exclusive on purpose. An option has a default and a DSL parameter does not -
 /// it is required, and what makes it configuration is that it is named rather

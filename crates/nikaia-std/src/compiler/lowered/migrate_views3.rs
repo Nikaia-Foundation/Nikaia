@@ -254,7 +254,7 @@ pub(crate) fn migrate_in_params(tokens: &[MigrateToken]) -> Vec<bool> {
     let mut out: Vec<bool> = vec![];
     let mut params: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut fn_depth: i64 = -1;
-    for token in tokens.iter() {
+    out.reserve(tokens.iter().size_hint().0); for token in tokens.iter() {
         let t = nikaia_std::block::Text::from(token.text.to_string());
         match token.kind {
             MigrateKind::Open => {
@@ -428,7 +428,7 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
     if lent_self { return (last, unsafe { nikaia_std::proven::add::<i64>(close, 2) }, String::from("self"), vec![]); }
     if sources.len() == 1 { return (last, unsafe { nikaia_std::proven::add::<i64>(close, 2) }, nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&sources, (0) as usize) }).to_string()), vec![]); }
     let mut choices: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
-    for source in sources.iter() { choices.push(format!("`from {}`", source)); }
+    choices.reserve(sources.iter().size_hint().0); for source in sources.iter() { choices.push(format!("`from {}`", source)); }
     if sources.len() > 1 { choices.push(format!("`from {}`", nikaia_std::block::Text::from(sources.join(" | ")))); }
     (last, unsafe { nikaia_std::proven::add::<i64>(close, 2) }, String::from(""), choices)
 }
@@ -500,7 +500,7 @@ pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
                 }
                 let name = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(k, 1) })).text.to_string());
                 let help = if choices.is_empty() { String::from("or drop `ref` to hand back text of its own") } else { format!("write one of {} after its result type, or drop `ref` to hand back text of its own", nikaia_std::block::Text::from(choices.join(", "))) };
-                out.push(format!("{}: `{}` hands back a view but says of no parameter whose data it points into: {} (ADR-views-3 D14)", line, name, help));
+                out.push(format!("{}: `{}` hands back a view but says of no parameter whose data it points into: {} (ADR-views-v4 D14)", line, name, help));
             }
         }
     }
@@ -558,7 +558,7 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
     let in_params = migrate_in_params(tokens);
     let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     let mut kept_ref: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for _t in tokens.iter() { kept_ref.push(false); }
+    kept_ref.reserve(tokens.iter().size_hint().0); for _t in tokens.iter() { kept_ref.push(false); }
     let mut brackets: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut until: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;

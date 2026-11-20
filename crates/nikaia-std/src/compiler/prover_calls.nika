@@ -175,7 +175,8 @@ fn thrower_named(call: ref Expr, words: ref winnow_grammar::InternerContext, una
 /// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted
 /// without writing `trusted: true` (ADR-365 D2) and not as the operator's
 /// read of the environment (ADR-397 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
-/// expression, not into its blocks, the holes of its literals included.
+/// expression, not into its blocks, the holes of its literals included; an
+/// `if`, a `match` and a block by the value each ends in.
 fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     match expr {
         Expr::Variable(name, _) => {
@@ -189,6 +190,19 @@ fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], word
             // D2) is no outside data, by the name it reads.
             if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) && !operator_read(library, source ?? "", args) {
                 return true
+            }
+            // **A function that hands back its proof** (ADR-raw-sinks-1
+            // D10, D14): each value it returns is a literal or a guarded
+            // name joined to a clean part. A parameter it reads as that
+            // clean part must not come from outside here.
+            if source != null && state.outside.proved_result(source ?? "") {
+                let led = state.outside.leads.get(source ?? "")?.clone() ?? collections::BTreeSet()
+                for at in led {
+                    if at < args.len() && from_outside(args[at], tainted, words, library, state, holes_of) {
+                        return true
+                    }
+                }
+                return false
             }
             // **A function of the package whose result comes from outside**
             // (#1573): its value is as untrusted as its source.
@@ -246,13 +260,21 @@ fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], word
         Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, state, holes_of),
         Expr::Coalesce { value, fallback, .. } => from_outside(value, tainted, words, library, state, holes_of) || from_outside(fallback, tainted, words, library, state, holes_of),
         Expr::TryCatch { expr, .. } => from_outside(expr, tainted, words, library, state, holes_of),
-        Expr::If { cond, .. } => from_outside(cond, tainted, words, library, state, holes_of),
-        Expr::Match { value, arms, .. } => {
-            if from_outside(value, tainted, words, library, state, holes_of) {
+        // **An `if` or a `match` is the value of the branch taken**
+        // (ADR-raw-sinks-1 D10): a choice among the program's own values by
+        // an outside condition hands back one of them, not outside data, and
+        // an outside value in a branch makes the whole value outside.
+        Expr::If { then_branch, else_branch, .. } => {
+            if tail_from_outside(then_branch, tainted, words, library, state, holes_of) {
                 return true
             }
+            let other = else_branch ?? return false
+            tail_from_outside(other, tainted, words, library, state, holes_of)
+        },
+        Expr::Block(block, _) => tail_from_outside(block, tainted, words, library, state, holes_of),
+        Expr::Match { arms, .. } => {
             for arm in arms {
-                if maybe_from_outside(arm.guard, tainted, words, library, state, holes_of) || from_outside(arm.body, tainted, words, library, state, holes_of) {
+                if from_outside(arm.body, tainted, words, library, state, holes_of) {
                     return true
                 }
             }
@@ -290,6 +312,12 @@ fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], word
         },
         else => false,
     }
+}
+
+/// Whether the value `block` ends in comes from outside (`tail_value_of`).
+fn tail_from_outside(block: ref Block, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    let tail = tail_value_of(block) ?? return false
+    return from_outside(tail, tainted, words, library, state, holes_of)
 }
 
 fn maybe_from_outside(expr: ref Expr?, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
@@ -374,6 +402,31 @@ fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], so
         Expr::Index { base, index, .. } => return outside_source(index, tainted, sources, words, library, state, holes_of) ?? outside_source(base, tainted, sources, words, library, state, holes_of),
         Expr::Coalesce { value, fallback, .. } => return outside_source(value, tainted, sources, words, library, state, holes_of) ?? outside_source(fallback, tainted, sources, words, library, state, holes_of),
         Expr::TryCatch { expr, .. } => return outside_source(expr, tainted, sources, words, library, state, holes_of),
+        Expr::If { then_branch, else_branch, .. } => {
+            let then_tail = tail_value_of(then_branch)
+            if then_tail != null {
+                let first = outside_source(then_tail ?? return null, tainted, sources, words, library, state, holes_of)
+                if first != null {
+                    return first
+                }
+            }
+            let other = else_branch ?? return null
+            let else_tail = tail_value_of(other) ?? return null
+            return outside_source(else_tail, tainted, sources, words, library, state, holes_of)
+        },
+        Expr::Block(block, _) => {
+            let tail = tail_value_of(block) ?? return null
+            return outside_source(tail, tainted, sources, words, library, state, holes_of)
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                let found = outside_source(arm.body, tainted, sources, words, library, state, holes_of)
+                if found != null {
+                    return found
+                }
+            }
+            return null
+        },
         Expr::StructLit { fields, .. } => {
             for field in fields {
                 let named = words.resolve(field.name)
@@ -403,6 +456,165 @@ fn outside_source_in(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[St
         }
     }
     return null
+}
+
+/// **A list or a text a call fills from outside** (ADR-raw-sinks-1 D10,
+/// #2371): `rest.push(a)` with `a` from outside makes `rest` outside, as
+/// `rest = a` does. The name of the receiver a method of `std` that changes
+/// it (`mut self`, `ref mut self`) is handed an outside value, with the
+/// source it names (empty where none is named), else null.
+fn outside_filled(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> (String, String)? {
+    match expr {
+        Expr::Try(inner, _) => return outside_filled(inner, tainted, sources, words, library, state, holes_of),
+        Expr::MethodCall { receiver, args, .. } => {
+            let name = match receiver {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => return null,
+            }
+            let contract = library.functions[state.method_callees.get(id_of(receiver) as i64) ?? ""] ?? return null
+            if contract.mutates && any_from_outside(args, tainted, words, library, state, holes_of) {
+                return (name, outside_source_in(args, tainted, sources, words, library, state, holes_of) ?? "")
+            }
+            return null
+        },
+        else => return null,
+    }
+}
+
+/// **The names around a statement it fills from outside** (#2371), each
+/// with its source (empty where none is named): an assignment or a
+/// changing call (`outside_filled`) inside its blocks, to a name no `let`
+/// or `for` inside the statement binds. A loop's body is read twice, so a
+/// value a later turn reads is seen. A walk that reads a block in a scope
+/// of its own carries these out of it.
+fn outside_fills(stmt: ref Stmt, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> collections::BTreeMap[String, String] {
+    let mut fills: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut seen = tainted.clone()
+    let mut named = sources.clone()
+    let mut locals: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    outside_fills_stmt(stmt, seen, named, locals, declared, fills, words, library, state, holes_of)
+    return fills
+}
+
+fn outside_fills_block(block: ref Block, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], locals: ref collections::BTreeSet[String], mut fills: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    let mut seen = tainted.clone()
+    let mut named = sources.clone()
+    let mut inner = locals.clone()
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    for stmt in block.stmts {
+        outside_fills_stmt(stmt.node, seen, named, inner, declared, fills, words, library, state, holes_of)
+    }
+    for n in seen {
+        if !declared.contains(n) && !tainted.contains(n) {
+            tainted.insert(n.clone())
+            let source = named[n]?.clone()
+            if source != null {
+                sources.insert(n.clone(), source ?? "")
+            }
+        }
+    }
+}
+
+fn outside_fills_stmt(stmt: ref Stmt, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], mut locals: collections::BTreeSet[String], mut declared: collections::BTreeSet[String], mut fills: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            for inner in check_visit_stmt_blocks(stmt) {
+                outside_fills_block(inner, tainted, sources, locals, fills, words, library, state, holes_of)
+            }
+            let outside = from_outside(value, tainted, words, library, state, holes_of)
+            let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
+            for name in names {
+                let n = words.resolve(name).clone()
+                locals.insert(n.clone())
+                declared.insert(n.clone())
+                if outside {
+                    tainted.insert(n.clone())
+                    if !source.is_empty() {
+                        sources.insert(n.clone(), source.clone())
+                    }
+                } else {
+                    tainted.remove(n)
+                }
+            }
+            return
+        },
+        Stmt::For { bindings, iter, body, .. } => {
+            let outside = from_outside(iter, tainted, words, library, state, holes_of)
+            let source = outside_source(iter, tainted, sources, words, library, state, holes_of) ?? ""
+            let mut seen = tainted.clone()
+            let mut named = sources.clone()
+            let mut inner = locals.clone()
+            for binding in bindings {
+                let n = words.resolve(binding).clone()
+                inner.insert(n.clone())
+                if outside {
+                    seen.insert(n.clone())
+                    if !source.is_empty() {
+                        named.insert(n.clone(), source.clone())
+                    }
+                } else {
+                    seen.remove(n)
+                }
+            }
+            for _ in 0..<2 {
+                outside_fills_block(body, seen, named, inner, fills, words, library, state, holes_of)
+            }
+            for n in seen {
+                if !inner.contains(n) || locals.contains(n) {
+                    if !tainted.contains(n) {
+                        tainted.insert(n.clone())
+                        let source = named[n]?.clone()
+                        if source != null {
+                            sources.insert(n.clone(), source ?? "")
+                        }
+                    }
+                }
+            }
+            return
+        },
+        Stmt::While { body, .. } => {
+            for _ in 0..<2 {
+                outside_fills_block(body, tainted, sources, locals, fills, words, library, state, holes_of)
+            }
+            return
+        },
+        Stmt::Assign { target, value, .. } => {
+            match target {
+                Expr::Variable(name, _) => {
+                    if from_outside(value, tainted, words, library, state, holes_of) {
+                        let n = words.resolve(name).clone()
+                        let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
+                        tainted.insert(n.clone())
+                        if !source.is_empty() {
+                            sources.insert(n.clone(), source.clone())
+                        }
+                        if !locals.contains(n) {
+                            fills.insert(n, source)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        Stmt::Expr(inner) => {
+            let filled = outside_filled(inner, tainted, sources, words, library, state, holes_of)
+            if filled != null {
+                let (n, source) = filled ?? ("", "")
+                tainted.insert(n.clone())
+                if !source.is_empty() {
+                    sources.insert(n.clone(), source.clone())
+                }
+                if !locals.contains(n) {
+                    fills.insert(n, source)
+                }
+            }
+        },
+        else => {},
+    }
+    for inner in check_visit_stmt_blocks(stmt) {
+        outside_fills_block(inner, tainted, sources, locals, fills, words, library, state, holes_of)
+    }
 }
 
 /// **The source of a field a struct literal of the package filled from
@@ -455,15 +667,32 @@ fn untrusted(library: ref Ledger, name: ref String) -> bool {
 /// source each one reads: the functions whose result comes from outside,
 /// by the ledger's key, and the fields a struct literal fills with it, as
 /// `Type.field`. The walk follows a value through a call and a field of the
-/// package as it follows it through a binding.
+/// package as it follows it through a binding. `returning` holds the
+/// functions with a result and `valued` those of them that hand back a
+/// value that is not proved: one in `returning` but not in `valued` hands
+/// back only literals (ADR-raw-sinks-1 D10, as a `match` whose arms are
+/// literals) and guarded names joined to a clean part (D14, #2375), so its
+/// result is not outside, whatever its arguments are. `leads` holds, by
+/// function, the parameters (by position) such a join starts with: the
+/// clean part only where the call's argument there is not outside.
 pub struct ProverOutside {
     pub results: collections::BTreeMap[String, String],
     pub fields: collections::BTreeMap[String, String],
+    pub returning: collections::BTreeSet[String],
+    pub valued: collections::BTreeSet[String],
+    pub leads: collections::BTreeMap[String, collections::BTreeSet[i64]],
 }
 
 impl ProverOutside {
     pub fn nothing() -> ProverOutside {
-        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap() }
+        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap() }
+    }
+
+    /// Whether every value the function `key` hands back is proved: a
+    /// literal or a guarded name joined to a clean part (ADR-raw-sinks-1
+    /// D10, D14).
+    pub fn proved_result(ref self, key: ref String) -> bool {
+        return self.returning.contains(key) && !self.valued.contains(key)
     }
 }
 
@@ -473,7 +702,7 @@ impl ProverOutside {
 /// they are written, without branches told apart: a value that may come
 /// from outside is taken as coming from outside.
 fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
-    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone() }
+    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap() }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => prover_outside_function(found, item, null, words, library, state, holes_of),
@@ -493,14 +722,18 @@ fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerConte
 /// loop taints later is seen where it is read before.
 fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], owner: String?, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
     match item.node {
-        Item::Fn { name, body, ret_type, .. } => {
+        Item::Fn { name, body, ret_type, receiver, args, .. } => {
             let symbol = name ?? return
             let plain = words.resolve(symbol)
             let key = if owner != null { f"{owner ?? ""}::{plain}" } else { plain.clone() }
             let mut tainted: collections::BTreeSet[String] = collections::BTreeSet()
             let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+            if ret_type != null {
+                found.returning.insert(key.clone())
+            }
             for _ in 0..<2 {
-                prover_outside_block(found, body, key, ret_type != null, tainted, sources, words, library, state, holes_of)
+                let mut proof = OutsideProof::of(args, receiver != null, words)
+                prover_outside_block(found, body, key, ret_type != null, tainted, sources, proof, words, library, state, holes_of)
             }
         },
         else => {},
@@ -510,11 +743,14 @@ fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], ow
 /// The statements of `block`: what each binds from outside, each `return`
 /// and, where `tail` says the block's value is the result, its last
 /// expression; each struct literal's fields; then the blocks inside.
-fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref String, tail: bool, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref String, tail: bool, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], mut proof: OutsideProof, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
     let last = block.stmts.len() - 1
+    // What a guard or a binding proves holds to the end of its block.
+    let before = proof.clone()
     for (at, stmt) in block.stmts.iter().enumerate() {
         match stmt.node {
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, mutable, .. } => {
+                proof.bind(names, mutable, value, words, holes_of)
                 if from_outside(value, tainted, words, library, state, holes_of) {
                     let source: String = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
                     for name in names {
@@ -529,6 +765,7 @@ fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref Str
             Stmt::Assign { target, value, .. } => {
                 match target {
                     Expr::Variable(name, _) => {
+                        proof.forget(words.resolve(name))
                         if from_outside(value, tainted, words, library, state, holes_of) {
                             let n = words.resolve(name).clone()
                             let source = outside_source(value, tainted, sources, words, library, state, holes_of)
@@ -542,6 +779,9 @@ fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref Str
                 }
             },
             Stmt::For { bindings, iter, .. } => {
+                for name in bindings {
+                    proof.forget(words.resolve(name))
+                }
                 if from_outside(iter, tainted, words, library, state, holes_of) {
                     let source: String = outside_source(iter, tainted, sources, words, library, state, holes_of) ?? ""
                     for name in bindings {
@@ -555,46 +795,72 @@ fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref Str
             },
             Stmt::Return(value) => {
                 let returned = value ?? continue
-                prover_outside_result(found, returned, key, tainted, sources, words, library, state, holes_of)
+                prover_outside_result(found, returned, key, tainted, sources, proof, words, library, state, holes_of)
             },
             Stmt::Expr(inner) => {
+                let filled = outside_filled(inner, tainted, sources, words, library, state, holes_of)
+                if filled != null {
+                    let (n, source) = filled ?? ("", "")
+                    proof.forget(n)
+                    if !source.is_empty() {
+                        sources.insert(n.clone(), source.clone())
+                    }
+                    tainted.insert(n)
+                }
                 if tail && at == last {
-                    prover_outside_tail(found, inner, key, tainted, sources, words, library, state, holes_of)
+                    prover_outside_tail(found, inner, key, tainted, sources, proof, words, library, state, holes_of)
                 }
             },
             else => {},
         }
         for expr in check_visit_stmt(stmt.node) {
-            prover_outside_expr(found, expr, key, tainted, sources, words, library, state, holes_of)
+            prover_outside_expr(found, expr, key, tainted, sources, proof, words, library, state, holes_of)
         }
         for inner in check_visit_stmt_blocks(stmt.node) {
-            prover_outside_block(found, inner, key, false, tainted, sources, words, library, state, holes_of)
+            prover_outside_block(found, inner, key, false, tainted, sources, proof, words, library, state, holes_of)
         }
+        proof.guard(stmt.node, words)
     }
+    proof.restore(before)
 }
 
 /// A block's last expression where it is the function's result: an `if`'s
 /// and a block's by their own last expression, a `match` by each arm's.
-fn prover_outside_tail(mut found: ProverOutside, expr: ref Expr, key: ref String, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+fn prover_outside_tail(mut found: ProverOutside, expr: ref Expr, key: ref String, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], mut proof: OutsideProof, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
     match expr {
         Expr::If { then_branch, else_branch, .. } => {
-            prover_outside_block(found, then_branch, key, true, tainted, sources, words, library, state, holes_of)
+            prover_outside_block(found, then_branch, key, true, tainted, sources, proof, words, library, state, holes_of)
             let other = else_branch ?? return
-            prover_outside_block(found, other, key, true, tainted, sources, words, library, state, holes_of)
+            prover_outside_block(found, other, key, true, tainted, sources, proof, words, library, state, holes_of)
         },
-        Expr::Block(block, _) => prover_outside_block(found, block, key, true, tainted, sources, words, library, state, holes_of),
+        Expr::Block(block, _) => prover_outside_block(found, block, key, true, tainted, sources, proof, words, library, state, holes_of),
         Expr::Match { arms, .. } => {
             for arm in arms {
-                prover_outside_tail(found, arm.body, key, tainted, sources, words, library, state, holes_of)
+                prover_outside_tail(found, arm.body, key, tainted, sources, proof, words, library, state, holes_of)
             }
         },
-        else => prover_outside_result(found, expr, key, tainted, sources, words, library, state, holes_of),
+        else => prover_outside_result(found, expr, key, tainted, sources, proof, words, library, state, holes_of),
     }
 }
 
 /// `value` handed back by the function `key`: when it comes from outside,
-/// so does the function's result.
-fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+/// so does the function's result, unless it is proved (ADR-raw-sinks-1 D10,
+/// D14): a literal, or a guarded name joined to a clean part, the
+/// parameters it reads unguarded kept in `leads`.
+fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], proof: ref OutsideProof, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    let mut leads: collections::BTreeSet[i64] = collections::BTreeSet()
+    if !proof.proved(value, words, holes_of, leads) {
+        found.valued.insert(key.clone())
+    } else {
+        if !leads.is_empty() {
+            let mut known = found.leads.get(key)?.clone() ?? collections::BTreeSet()
+            for at in leads {
+                known.insert(at)
+            }
+            found.leads.insert(key.clone(), known)
+        }
+        return
+    }
     if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, holes_of) {
         return
     }
@@ -602,13 +868,286 @@ fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref Str
     found.results.insert(key.clone(), source)
 }
 
+/// Whether `value` is a literal without holes, or an `if`, a `match` or a
+/// block every value of which is one.
+fn literal_only(value: ref Expr) -> bool {
+    return match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitInt { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return false
+            literal_tail(then_branch) && literal_tail(other)
+        },
+        Expr::Block(block, _) => literal_tail(block),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if !literal_only(arm.body) {
+                    return false
+                }
+            }
+            true
+        },
+        else => false,
+    }
+}
+
+/// Whether the value `block` ends in is a literal (`literal_only`).
+fn literal_tail(block: ref Block) -> bool {
+    let tail = tail_value_of(block) ?? return false
+    return literal_only(tail)
+}
+
+/// **What proves the values a function hands back** (ADR-raw-sinks-1 D14,
+/// #2375), read in the order its statements are written, as the walk reads
+/// a guard before a sink but by the tree alone, since it runs before the
+/// walk: `params` the parameters by position (none for a method, whose
+/// call is not read by position), `fixed` the names no statement changes
+/// (bound without `mut`), `guarded` those of them a guard proved
+/// `path::is_component` or `path::is_below` of, and `joined` the names
+/// bound to a proved join, with the parameters it reads unguarded.
+struct OutsideProof {
+    params: collections::BTreeMap[String, i64],
+    fixed: collections::BTreeSet[String],
+    guarded: collections::BTreeSet[String],
+    joined: collections::BTreeMap[String, collections::BTreeSet[i64]],
+}
+
+impl OutsideProof {
+    fn of(args: ref Vec[FnArg], method: bool, words: ref winnow_grammar::InternerContext) -> OutsideProof {
+        let mut proof = OutsideProof { params: collections::BTreeMap(), fixed: collections::BTreeSet(), guarded: collections::BTreeSet(), joined: collections::BTreeMap() }
+        for (at, arg) in args.iter().enumerate() {
+            if arg.mutable {
+                continue
+            }
+            let n = words.resolve(arg.name).clone()
+            proof.fixed.insert(n.clone())
+            if !method {
+                proof.params.insert(n, at as i64)
+            }
+        }
+        return proof
+    }
+
+    fn restore(mut self, before: OutsideProof) {
+        self.params = before.params
+        self.fixed = before.fixed
+        self.guarded = before.guarded
+        self.joined = before.joined
+    }
+
+    /// `name` bound or changed again: nothing proved of it holds.
+    fn forget(mut self, name: ref String) {
+        self.params.remove(name)
+        self.fixed.remove(name)
+        self.guarded.remove(name)
+        self.joined.remove(name)
+    }
+
+    /// `let names = value`: a single name bound without `mut` to a proved
+    /// join carries its proof (D14, as `ProverScope::joined` does).
+    fn bind(mut self, names: ref Vec[winnow_grammar::Symbol], mutable: bool, value: ref Expr, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+        let mut leads: collections::BTreeSet[i64] = collections::BTreeSet()
+        let carried = names.len() == 1 && !mutable && !literal_only(value) && self.proved(value, words, holes_of, leads)
+        for name in names {
+            let n = words.resolve(name).clone()
+            self.forget(n)
+            if !mutable {
+                self.fixed.insert(n.clone())
+            }
+            if carried {
+                self.joined.insert(n, leads.clone())
+            }
+        }
+    }
+
+    /// `if cond { return ... }` (`return ... if cond`), whose block always
+    /// leaves: a name `cond` is true for where `!path::is_component(name)`
+    /// (or `path::is_below`) holds, by itself or as one side of an `||`, is
+    /// guarded after it.
+    fn guard(mut self, stmt: ref Stmt, words: ref winnow_grammar::InternerContext) {
+        match stmt {
+            Stmt::Expr(inner) => {
+                match inner {
+                    Expr::If { cond, then_branch, else_branch, .. } => {
+                        if else_branch == null && always_leaves(then_branch) {
+                            self.guard_cond(cond, words)
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn guard_cond(mut self, cond: ref Expr, words: ref winnow_grammar::InternerContext) {
+        match cond {
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if op == BinaryOp::Or {
+                    self.guard_cond(lhs, words)
+                    self.guard_cond(rhs, words)
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op != UnaryOp::Not {
+                    return
+                }
+                match expr {
+                    Expr::Call { func, args, config, .. } => {
+                        let called = outside_source_named(func, words) ?? return
+                        if (called != "path::is_component" && called != "path::is_below") || args.len() != 1 || !config.is_empty() {
+                            return
+                        }
+                        let on = raw_sink_name(args[0], words) ?? return
+                        if self.fixed.contains(on) {
+                            self.guarded.insert(on)
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    /// Whether `value` is proved: a literal, a name bound to a proved join,
+    /// or a join that starts with a clean part (a literal piece, a parameter
+    /// or such a name) whose every part is a literal, a guarded name, such a
+    /// name or a parameter, those parameters (and those such names start
+    /// with) added to `leads`; an `if`, a `match` or a one-statement block by
+    /// each value it ends in.
+    fn proved(ref self, value: ref Expr, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut leads: collections::BTreeSet[i64]) -> bool {
+        if literal_only(value) {
+            return true
+        }
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let other = else_branch ?? return false
+                return self.proved_tail(then_branch, words, holes_of, leads) && self.proved_tail(other, words, holes_of, leads)
+            },
+            Expr::Block(block, _) => return self.proved_tail(block, words, holes_of, leads),
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    if !self.proved(arm.body, words, holes_of, leads) {
+                        return false
+                    }
+                }
+                return true
+            },
+            Expr::LitInterpolated { .. } => {},
+            Expr::Binary { op, .. } => {
+                if op != BinaryOp::Add {
+                    return false
+                }
+            },
+            else => {
+                let name = raw_sink_name(value, words) ?? return false
+                let carried = self.joined.get(name) ?? return false
+                for at in carried {
+                    leads.insert(at)
+                }
+                return true
+            },
+        }
+        let lead = self.lead_of(value, words) ?? return false
+        if lead >= 0 {
+            leads.insert(lead)
+        }
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(value, holes_of, parts)
+        for part in parts {
+            if literal_only(part) {
+                continue
+            }
+            let name = raw_sink_name(part, words) ?? return false
+            if self.guarded.contains(name) {
+                continue
+            }
+            match self.joined.get(name) {
+                null => {},
+                carried => {
+                    for at in carried {
+                        leads.insert(at)
+                    }
+                    continue
+                },
+            }
+            let at = self.params.get(name) ?? return false
+            leads.insert(at)
+        }
+        return true
+    }
+
+    /// A block's value, where the block is that value alone: a binding
+    /// before it would be read with what holds outside the block.
+    fn proved_tail(ref self, block: ref Block, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut leads: collections::BTreeSet[i64]) -> bool {
+        if block.stmts.len() != 1 {
+            return false
+        }
+        let tail = tail_value_of(block) ?? return false
+        return self.proved(tail, words, holes_of, leads)
+    }
+
+    /// The clean part a join starts with: the position of a parameter, -1
+    /// for a literal piece or a name bound to a proved join (whose
+    /// parameters its parts add); null for anything else.
+    fn lead_of(ref self, value: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
+        match value {
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Text(text) => {
+                            if !text.is_empty() {
+                                return -1
+                            }
+                        },
+                        FPart::Hole { expr, .. } => return self.lead_of(expr, words),
+                    }
+                }
+                return null
+            },
+            Expr::LitStr { text, .. } => return if text.is_empty() { null } else { -1 },
+            Expr::Binary { op, lhs, .. } => return if op == BinaryOp::Add { self.lead_of(lhs, words) } else { null },
+            else => {
+                let name = raw_sink_name(value, words) ?? return null
+                if self.joined.contains_key(name) {
+                    return -1
+                }
+                return self.params.get(name)
+            },
+        }
+    }
+}
+
+/// Whether `block` always leaves where it ends: its last statement is a
+/// `return`, a `throw`, a `break` or a `continue`.
+fn always_leaves(block: ref Block) -> bool {
+    let last = block.stmts.last() ?? return false
+    return match last.node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(inner) => match inner {
+            Expr::Throw(_, _) => true,
+            Expr::Return(_, _) => true,
+            Expr::Break(_) => true,
+            Expr::Continue(_) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// One expression outside the blocks it holds: a `return` inside it hands
 /// its value back, a struct literal fills each field with what it is given.
-fn prover_outside_expr(mut found: ProverOutside, expr: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+fn prover_outside_expr(mut found: ProverOutside, expr: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], proof: ref OutsideProof, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
     match expr {
         Expr::Return(value, _) => {
             let returned = value ?? return
-            prover_outside_result(found, returned, key, tainted, sources, words, library, state, holes_of)
+            prover_outside_result(found, returned, key, tainted, sources, proof, words, library, state, holes_of)
         },
         Expr::StructLit { name, fields, .. } => {
             let owner = words.resolve(name)

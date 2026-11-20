@@ -1,0 +1,61 @@
+// crates/nikaia-std/src/runtime/restart_policy.nika
+//
+// **`std`'s default restart policy, asked by hand** (ADR-328 D5): the tests
+// of `supervisor::Backoff`, which is Rust (`src/supervision.rs`). A test
+// block hands it a supervisor's history written out, so neither the delays
+// nor the 300 s a cycle lasts before it gives up are waited for (#2304).
+
+use std::supervisor
+use std::time
+
+/// The `n`th failure, after an attempt that ran `ran`, `since` after the
+/// first: the supervisor's history, written by hand.
+fn failure(n: i64, ran: time::Duration, since: time::Duration) -> supervisor::Failures sync {
+	return supervisor::Failures { last_uptime: ran, consecutive: n, since_first: since }
+}
+
+/// The first failure restarts at once, then the delay grows, stays under the
+/// ceiling (the default's, 30 s), and a long cycle gives up.
+test "the default policy grows and gives up" {
+	let mut policy = supervisor::Backoff()
+	let first = policy.decide(failure(1, 0.seconds(), 0.seconds()))
+	assert(first == supervisor::Next::Immediate)
+	let ceiling = 30.seconds()
+	let mut last = 0.seconds()
+	for n in 0..<12 {
+		let next = policy.decide(failure(n + 2, 0.seconds(), n.seconds()))
+		match next {
+			supervisor::Next::Delay(d) => {
+				assert(d <= ceiling)
+				// For the first six, at least 1.2 times the last, or near
+				// the ceiling.
+				assert(n >= 6 || d.in_nanos() * 5 >= last.in_nanos() * 6 || d.in_nanos() * 4 >= ceiling.in_nanos() * 3)
+				last = d
+			},
+			else => assert(false; message: "a delay"),
+		}
+	}
+	let gave_up = policy.decide(failure(14, 0.seconds(), 301.seconds()))
+	assert(gave_up == supervisor::Next::Escalate)
+}
+
+/// An attempt that ran long enough (60 s, the default's) starts a new cycle.
+test "a healthy run starts a new cycle" {
+	let mut policy = supervisor::Backoff()
+	let first = policy.decide(failure(1, 0.seconds(), 0.seconds()))
+	assert(first == supervisor::Next::Immediate)
+	let second = policy.decide(failure(2, 0.seconds(), 0.seconds()))
+	let delayed = match second {
+		supervisor::Next::Delay(_) => true,
+		else => false,
+	}
+	assert(delayed)
+	let healthy = policy.decide(failure(3, 61.seconds(), 400.seconds()))
+	assert(healthy == supervisor::Next::Immediate)
+	let after = policy.decide(failure(4, 0.seconds(), 401.seconds()))
+	let delayed_again = match after {
+		supervisor::Next::Delay(_) => true,
+		else => false,
+	}
+	assert(delayed_again)
+}

@@ -43,7 +43,7 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
 }
 
 pub(crate) fn lg_written(arena: &TermArena, id: i64, shape: bool, turn: bool) -> String {
-    let mut out: String = String::from("");
+    let mut out = String::with_capacity(nikaia_std::count::of(128));
     lg_write(arena, id, shape, turn, &mut out);
     out
 }
@@ -68,7 +68,7 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
     }
     match node {
         SolverTerm::Bool(b) => { let b = *b; out.push_str(if b { "true" } else { "false" }); },
-        SolverTerm::Int(n) => { let n = *n; out.push_str(&format!("{}", n)); },
+        SolverTerm::Int(n) => { let n = *n; { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}", n)); }; },
         SolverTerm::Var(name) => { out.push_str(if shape { "?" } else { name }); },
         SolverTerm::Neg(a) => {
             let a = *a;
@@ -89,7 +89,7 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
             let a = *a; let k = *k;
             out.push_str("(quot ");
             lg_write(arena, a, shape, false, out);
-            out.push_str(&format!(" {})", k));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" {})", k)); };
         },
         SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_write_binary("<=", arena, a, b, shape, out); },
         SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_write_binary("<", arena, a, b, shape, out); },
@@ -150,7 +150,7 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
             },
             SolverTerm::And(parts) => {
                 let mut made: Vec<i64> = vec![];
-                for part in parts.iter() {
+                made.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     made.push(lg_copy(normal, from, part, renamed, true));
                 }
@@ -158,7 +158,7 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
             },
             SolverTerm::Or(parts) => {
                 let mut made: Vec<i64> = vec![];
-                for part in parts.iter() {
+                made.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
                     made.push(lg_copy(normal, from, part, renamed, true));
                 }
@@ -173,17 +173,12 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
         SolverTerm::Other => normal.arena.boolean(false),
         SolverTerm::Var(name) => {
             let known = renamed.get(name);
-            let mut fresh = format!("v{}", renamed.len() as i64);
-            if known.is_some() {
-                fresh = nikaia_std::index::or(match known {
-                    Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
-                    None => None,
-                }, || fresh.into());
-            } else {
-                normal.names.push(nikaia_std::block::Text::from(name.to_string()));
-                renamed.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(fresh.to_string()));
-            }
-            normal.arena.var(&fresh)
+            if known.is_some() { return normal.arena.var(match known { Some(__nikaia_value) => __nikaia_value, None => return -1 }); }
+            let fresh = format!("v{}", renamed.len() as i64);
+            normal.names.push(nikaia_std::block::Text::from(name.to_string()));
+            let made = normal.arena.var(&fresh);
+            renamed.insert(nikaia_std::block::Text::from(name.to_string()), fresh);
+            made
         },
         SolverTerm::Neg(a) => {
             let a = *a;
@@ -256,7 +251,7 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
         },
         SolverTerm::And(parts) => {
             let mut made: Vec<i64> = vec![];
-            for part in parts.iter() {
+            made.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
                 made.push(lg_copy(normal, from, part, renamed, false));
             }
@@ -264,7 +259,7 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
         },
         SolverTerm::Or(parts) => {
             let mut made: Vec<i64> = vec![];
-            for part in parts.iter() {
+            made.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
                 made.push(lg_copy(normal, from, part, renamed, false));
             }
@@ -277,7 +272,7 @@ impl LgNormal {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn text(&self) -> String {
-        let mut out: String = String::from("");
+        let mut out = String::with_capacity(nikaia_std::count::of(256 * (unsafe { nikaia_std::proven::add::<i64>(self.facts.len() as i64, 1) })));
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
             lg_write(&self.arena, fact, false, false, &mut out);
@@ -317,7 +312,7 @@ pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
     match certificate {
         LgCertificate::Refuted(refutation) => {
             let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for step in refutation.steps.iter() {
+            steps.reserve(refutation.steps.iter().size_hint().0); for step in refutation.steps.iter() {
                 let step = *step;
                 steps.push(lg_step_text(&step));
             }
@@ -326,7 +321,7 @@ pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
         LgCertificate::Split { disjunction, cases } => {
             let disjunction = *disjunction;
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for one in cases.iter() { parts.push(lg_certificate_text(one)); }
+            parts.reserve(cases.iter().size_hint().0); for one in cases.iter() { parts.push(lg_certificate_text(one)); }
             format!("S{}[{}]", disjunction, nikaia_std::block::Text::from(parts.join("|")))
         },
     }
@@ -407,7 +402,7 @@ pub(crate) fn lg_step_of(word: &str) -> Option<LgStep> {
 pub fn lg_model_text(model: &LgModel) -> String {
     if model.values.is_empty() { return String::from("-"); }
     let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (name, value) in model.values.iter() {
+    values.reserve(model.values.iter().size_hint().0); for (name, value) in model.values.iter() {
         let value = nikaia_std::num::value(value);
         values.push(format!("{}={}", name, value));
     }

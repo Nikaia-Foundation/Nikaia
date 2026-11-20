@@ -43,7 +43,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
         }
     }
     let mut starts: Vec<i64> = vec![];
-    for body in bodies.iter() {
+    starts.reserve(bodies.iter().size_hint().0); for body in bodies.iter() {
         let body = *body;
         starts.push(body.span.start as i64);
     }
@@ -63,6 +63,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                 let walked = bounds_aggressive(args, body, bp_names(&counters, words), &context, program, words, &mut |arena, known, goal| { ask_in(&function, at, arena, known, goal) });
                 record(&walked.loops);
                 for (of, holding) in walked.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
+                rules_checked_keep(&mut context, &walked.checked);
                 let entries = context.around.derived.entry.len() as i64;
                 derived_note(&mut context.around, &walked);
                 if (context.around.derived.entry.len() as i64) != entries { context.around.held.clear(); }
@@ -76,6 +77,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
     out.gates = derived_gates(&context.around.derived);
     let none: Vec<FnArg> = vec![];
     context.around.held.clear();
+    context.around.checked.clear();
     for item in program.items.iter() {
         match &item.node {
             Item::Grammar(def) => {

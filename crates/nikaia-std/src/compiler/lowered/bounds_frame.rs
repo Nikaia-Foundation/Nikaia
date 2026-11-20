@@ -6,7 +6,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
 pub(crate) fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], held: collections::BTreeMap::new(), derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
+    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], held: collections::BTreeMap::new(), checked: collections::BTreeMap::new(), checked_fields: collections::BTreeMap::new(), checked_returning: collections::BTreeSet::new(), derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, .. } => {
@@ -222,7 +222,7 @@ pub(crate) fn frame_source(expr: &Expr, roots: &collections::BTreeMap<String, St
 pub(crate) fn frame_pattern_names(pattern: &MatchPattern, words: &winnow_grammar::InternerContext, out: &mut Vec<String>) {
     match pattern {
         MatchPattern::Path(segments) => {
-            for s in segments.iter() {
+            out.reserve(segments.iter().size_hint().0); for s in segments.iter() {
                 let s = *s;
                 out.push(nikaia_std::block::Text::from(words.resolve(s).to_string()));
             }

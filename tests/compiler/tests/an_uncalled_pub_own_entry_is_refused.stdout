@@ -1,0 +1,28 @@
+--- uncalled: exit 1
+error[NK2508]: `words::thrice` is described with `pub = true`, and the package's own Rust stays the package's.
+   --> contracts/crate.contracts:13:1
+    |
+ 13 | [fn."words::thrice"]
+    | ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.
+    = help: Write `pub = false` in this entry.
+1 entry of the package's own Rust marked `pub = true`
+--- called and uncalled: exit 1
+error[NK2508]: `words::thrice` is described with `pub = true`, and the package's own Rust stays the package's.
+   --> contracts/crate.contracts:13:1
+    |
+ 13 | [fn."words::thrice"]
+    | ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.
+    = help: Write `pub = false` in this entry.
+error[NK2508]: `words::twice` is described with `pub = true`, and the package's own Rust stays the package's.
+  --> contracts/crate.contracts:5:1
+   |
+ 5 | [fn."words::twice"]
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.
+   = help: Write `pub = false` in this entry.
+2 entries of the package's own Rust marked `pub = true`

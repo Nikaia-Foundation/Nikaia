@@ -158,7 +158,7 @@ impl SvTseitin {
     }
     pub(crate) fn lits(&mut self, arena: &TermArena, items: &[i64], why: &mut LgWhy) -> Option<Vec<i64>> {
         let mut out: Vec<i64> = vec![];
-        for item in items.iter() {
+        out.reserve(items.iter().size_hint().0); for item in items.iter() {
             let item = nikaia_std::num::value(item);
             out.push(match self.lit(arena, item, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
         }
@@ -183,7 +183,7 @@ impl SvTseitin {
     }
     pub(crate) fn junction(&mut self, parts: &SvParts) -> Option<i64> {
         let mut lits: Vec<i64> = vec![];
-        for l in parts.lits.iter() {
+        lits.reserve(parts.lits.iter().size_hint().0); for l in parts.lits.iter() {
             let l = nikaia_std::num::value(l);
             lits.push(if parts.conjunction { sv_cnf_not(l) } else { l });
         }
@@ -246,7 +246,7 @@ impl SvTseitin {
     }
     pub(crate) fn add(&mut self, parts: &SvParts, holds: bool) {
         let mut lits: Vec<i64> = vec![];
-        for l in parts.lits.iter() {
+        lits.reserve(parts.lits.iter().size_hint().0); for l in parts.lits.iter() {
             let l = nikaia_std::num::value(l);
             lits.push(if holds { l } else { sv_cnf_not(l) });
         }
@@ -289,12 +289,12 @@ impl SvTseitin {
             },
             LgFormula::And(items) => {
                 let mut lits: Vec<i64> = vec![];
-                for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+                lits.reserve(items.iter().size_hint().0); for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
                 Some(match self.junction(&SvParts { conjunction: true, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None })
             },
             LgFormula::Or(items) => {
                 let mut lits: Vec<i64> = vec![];
-                for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+                lits.reserve(items.iter().size_hint().0); for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
                 Some(match self.junction(&SvParts { conjunction: false, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None })
             },
         }
@@ -310,7 +310,7 @@ pub(crate) fn sv_cnf_clause(lits: &[i64]) -> Option<Vec<u32>> {
     }
     out.sort();
     let mut kept: Vec<u32> = vec![];
-    for l in out.iter() {
+    kept.reserve(out.iter().size_hint().0); for l in out.iter() {
         let l = nikaia_std::num::value(l);
         let n = kept.len() as i64;
         if n > 0 && *unsafe { nikaia_std::proven::read(&kept, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) } == l { continue; }
@@ -481,9 +481,9 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
         a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
     }
     let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let cnf = cnf;
-    for clause in cnf.query.clauses.iter() {
+    texts.reserve(cnf.query.clauses.iter().size_hint().0); for clause in cnf.query.clauses.iter() {
         let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for l in clause.iter() {
+        parts.reserve(clause.iter().size_hint().0); for l in clause.iter() {
             let l = nikaia_std::num::value(l);
             parts.push(sv_cnf_test_lit(l));
         }
@@ -505,7 +505,7 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
     let mut code: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
     while code < total {
         let mut values: Vec<i64> = vec![];
-        for _ in cnf.names.iter() { values.push(0); }
+        values.reserve(cnf.names.iter().size_hint().0); for _ in cnf.names.iter() { values.push(0); }
         let mut env: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         let mut rest: i64 = code;
         for v in vars.iter() {

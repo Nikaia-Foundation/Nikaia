@@ -84,6 +84,46 @@ pub(crate) fn check_arguments_wrote_ref(value: Option<&Expr>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_holds_text_inside(ty: &Ty, depth: i64) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if depth > 0 && view && (name == "String" || name == "str") { return true; }
+            for arg in args.iter() { if check_arguments_holds_text_inside(arg, depth + 1) { return true; } }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_arguments_holds_text_inside(part, depth + 1) { return true; } }
+            false
+        },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); check_arguments_holds_text_inside(item, depth + 1) },
+        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); check_arguments_holds_text_inside(held, depth + 1) },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn check_arguments_a_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>) -> bool {
+        let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match value {
+            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); match op {
+                UnaryOp::Ref => self.check_arguments_a_comptime(world, Some(expr)),
+                _ => false,
+            } },
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
+                self.facts.comptime_names.contains(&name) && !(self.frame_holding(&name) > 0 && self.binding(&name).and_then(|__nikaia_it| __nikaia_it.built).is_none())
+            },
+            _ => false,
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_print(written: &str) -> bool { written == "println" || written == "eprintln" || written == "print" || written == "eprint" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -131,14 +171,14 @@ pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, keeps: &[String], wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-    for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
+    names.reserve(wanted.iter().size_hint().0); for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
     let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if !names.is_empty() { takes = names_listed(&names); }
     let message = format!("`{}` takes {} by position, but you passed {} and {} by position.", key, takes, counted(passed.len() as i64, "named argument"), given.len() as i64);
     let declared = format!("It's declared as `{}{}`.", key, signature.shown(keeps));
     if (unsafe { nikaia_std::proven::add::<i64>(given.len() as i64, passed.len() as i64) }) != wanted.len() as i64 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
     #[allow(unused_mut)] let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
+    texts.reserve(given.iter().size_hint().0); for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
     let mut at = given.len() as i64;
     while at < wanted.len() as i64 {
         let mut found: i64 = -1;
@@ -167,7 +207,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let mut help: String = format!("Call it without arguments: `{}()`.", key);
         if !wanted.is_empty() {
             let mut takes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.shown())); }
+            takes.reserve(wanted.iter().size_hint().0); for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.shown())); }
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
         if !passed.is_empty() {
@@ -299,6 +339,10 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let mut want = declared.clone();
         let mut found_here = argument.found.clone();
         if is_a_view_of_a_string(&found_here) { found_here = text_view.clone(); }
+        if contract.described && !own && check_arguments_holds_text_inside(&declared, 0) && !state.check_arguments_a_comptime(world, given_here) {
+            state.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be a `comptime` value: its `ref String` parts are text the build holds (`&'static str` in Rust).", key, name), vec![format!("It's declared as `{}{}`; a value built at run time lives only as long as its function.", key, signature.shown(&contract.keeps))], Some(nikaia_std::block::Text::from("Declare the value as `comptime` and pass it by name."))));
+            continue;
+        }
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.constant_fits(world, value, Some(&want), span);
@@ -487,7 +531,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+            notes.reserve(kept_why.notes.iter().size_hint().0); for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
             help = nikaia_std::block::Text::from(kept_why.help.to_string());
         } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
             notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.shown()));
@@ -576,7 +620,7 @@ impl CheckState {
                 any = true;
             } else { eased.push((*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone()); }
         }
-        any && Ty::Fn { params: eased, result: std::boxed::Box::new(result), is_sync, can_throw, spelled }.fits(want)
+        any && Ty::Fn { params: eased, result: nikaia_std::block::Boxed::new(result), is_sync, can_throw, spelled }.fits(want)
     }
 }
 

@@ -61,6 +61,7 @@ signature = "(ref mut self, e: Hit)"
 throws = ["?", "io::IoError"]
 locks = true
 panics = true
+trusted = ["cli::args at main.nika:115"]
 signature = "()"
 
 [type."Counts"]

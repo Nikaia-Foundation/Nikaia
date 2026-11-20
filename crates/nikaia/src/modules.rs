@@ -513,6 +513,100 @@ pub struct TestCase {
 /// place.
 const DISPATCH: &str = "__nikaia_tests";
 
+/// **A program's files, read and parsed, its ledger not yet inferred**
+/// (#2395): all a build's cache key is made of (the sources and the paths
+/// they are shown under), so a cache hit asks no more of it; a miss infers the
+/// ledger from it ([`Gathered::infer`]).
+pub struct Gathered {
+    units: Vec<Unit>,
+    foreign: crate::project::Foreign,
+    tests: Vec<TestCase>,
+}
+
+impl Gathered {
+    /// The files of [`Program::read_with_open`].
+    pub fn with_open(entry: &Path, dependencies: &[Dependency], open: &Open) -> Result<Gathered> {
+        Ok(Gathered {
+            units: collect_with(entry, dependencies, open)?,
+            foreign: foreign_beside(entry),
+            tests: Vec::new(),
+        })
+    }
+
+    /// The file of [`Program::read_one_open`].
+    pub fn one_open(entry: &Path, open: &Open) -> Result<Gathered> {
+        Ok(Gathered {
+            units: collect_one(entry, open)?,
+            foreign: no_foreign(),
+            tests: Vec::new(),
+        })
+    }
+
+    /// The files of [`Program::read_program_test_open`].
+    pub fn program_test_open(
+        entry: &Path,
+        dependencies: &[Dependency],
+        open: &Open,
+    ) -> Result<Gathered> {
+        Ok(Gathered {
+            units: collect_program_test(entry, dependencies, open)?,
+            foreign: no_foreign(),
+            tests: Vec::new(),
+        })
+    }
+
+    /// The files of [`Program::read_for_tests_open`], each `test` block a
+    /// function already.
+    pub fn for_tests_open(
+        entry: &Path,
+        dependencies: &[Dependency],
+        in_project: bool,
+        open: &Open,
+    ) -> Result<Gathered> {
+        let (units, foreign) = match in_project {
+            true => (
+                collect_with(entry, dependencies, open)?,
+                foreign_beside(entry),
+            ),
+            false => (collect_one(entry, open)?, no_foreign()),
+        };
+        let (units, tests) = with_tests_as_functions(units)?;
+        Ok(Gathered {
+            units,
+            foreign,
+            tests,
+        })
+    }
+
+    /// The paths of the files, as they were handed over.
+    pub fn paths(&self) -> Vec<PathBuf> {
+        self.units.iter().map(|unit| unit.path.clone()).collect()
+    }
+
+    /// [`Program::sources`], of the files as read.
+    pub fn sources(&self) -> Vec<&str> {
+        self.units.iter().map(|u| u.source.as_str()).collect()
+    }
+
+    /// [`Program::shown_paths`], the entry under `entry_shown_as`.
+    pub fn shown_paths(&self, entry_shown_as: Option<&str>) -> Vec<String> {
+        let paths: Vec<String> = self
+            .units
+            .iter()
+            .map(|u| u.path.display().to_text())
+            .collect();
+        nikaia_std::compiler::modules::shown_paths(&paths, entry_shown_as)
+    }
+
+    /// **The ledger inferred** over the files, with the packages they depend
+    /// on: the [`Program`].
+    pub fn infer(self, dependencies: &[Dependency]) -> Result<Program> {
+        let mut program = Program::of(self.units, dependencies, &self.foreign)?;
+        program.tests = self.tests;
+        Ok(program)
+    }
+}
+
 impl Program {
     /// Parse every file, and infer the contracts of all of them together.
     ///
@@ -538,11 +632,7 @@ impl Program {
         dependencies: &[Dependency],
         open: &Open,
     ) -> Result<Program> {
-        Self::of(
-            collect_with(entry, dependencies, open)?,
-            dependencies,
-            &foreign_beside(entry),
-        )
+        Gathered::with_open(entry, dependencies, open)?.infer(dependencies)
     }
 
     /// The entry compiled on its own - what `nikaia lower` outside a project is
@@ -553,7 +643,7 @@ impl Program {
 
     /// [`Program::read_one`] over [`Open`].
     pub fn read_one_open(entry: &Path, open: &Open) -> Result<Program> {
-        Self::of(collect_one(entry, open)?, &[], &no_foreign())
+        Gathered::one_open(entry, open)?.infer(&[])
     }
 
     /// **A test program as `nikaia test` builds it**
@@ -570,11 +660,7 @@ impl Program {
         dependencies: &[Dependency],
         open: &Open,
     ) -> Result<Program> {
-        Self::of(
-            collect_program_test(entry, dependencies, open)?,
-            dependencies,
-            &no_foreign(),
-        )
+        Gathered::program_test_open(entry, dependencies, open)?.infer(dependencies)
     }
 
     /// **The program as `nikaia test` builds it**
@@ -600,17 +686,7 @@ impl Program {
         in_project: bool,
         open: &Open,
     ) -> Result<Program> {
-        let (units, foreign) = match in_project {
-            true => (
-                collect_with(entry, dependencies, open)?,
-                foreign_beside(entry),
-            ),
-            false => (collect_one(entry, open)?, no_foreign()),
-        };
-        let (units, tests) = with_tests_as_functions(units)?;
-        let mut program = Self::of(units, dependencies, &foreign)?;
-        program.tests = tests;
-        Ok(program)
+        Gathered::for_tests_open(entry, dependencies, in_project, open)?.infer(dependencies)
     }
 
     fn of(
@@ -748,14 +824,14 @@ impl Program {
     }
 
     /// **[ADR-288](../../../docs/specification/adr/adr-288.md) D32's warning**
-    /// for every `pub` function of the program's own that could not pause in
-    /// the committed ledger and now can (`tools/modules.nika`).
-    pub fn lost_sync(&self, committed: &crate::contracts::Ledger) -> String {
-        nikaia_std::compiler::modules::lost_sync(
+    /// for every `pub` function of the program's own that can pause now, which
+    /// the committed ledger picks from (`tools/modules.nika`,
+    /// `lost_sync_against`).
+    pub fn lost_sync_all(&self) -> Vec<nikaia_std::compiler::modules::SyncLost> {
+        nikaia_std::compiler::modules::lost_sync_all(
             &self.contracts,
             &self.as_its_own,
             &self.pauses,
-            committed,
             &mut |finding: &crate::check::Finding, unit: i64| {
                 let unit = &self.units[unit as usize];
                 crate::diagnostics::render_finding(

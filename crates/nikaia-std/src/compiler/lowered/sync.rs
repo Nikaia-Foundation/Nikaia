@@ -32,7 +32,7 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
         if held(holds, name) || reach.blocked || reach.through_code.is_empty() { continue; }
         if reaches_one_that_pauses(&reach.calls, holds) { continue; }
         let mut parameters: Vec<String> = vec![];
-        for parameter in reach.through_code.iter() { parameters.push(nikaia_std::block::Text::from(parameter.to_string())); }
+        parameters.reserve(reach.through_code.iter().size_hint().0); for parameter in reach.through_code.iter() { parameters.push(nikaia_std::block::Text::from(parameter.to_string())); }
         out.insert(nikaia_std::block::Text::from(name.to_string()), parameters);
     }
     out
@@ -343,6 +343,30 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
     found
 }
 
+pub fn unit_pausing(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, wanted: &[String]) -> Vec<bool> {
+    let mut answers: Vec<bool> = vec![];
+    answers.reserve(wanted.iter().size_hint().0); for one in wanted.iter() {
+        let mut pauses = false;
+        for item in program.items.iter() {
+            match &item.node {
+                Item::Fn { name, args, body, .. } => {
+                    let name = *name;
+                    let key = key_of_function((name).as_ref(), "", names);
+                    if key == *one {
+                        let promise = match promise_of(&key, args, body, true, &vec![], names) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let mut found: Vec<Violation> = vec![];
+                        violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
+                        pauses = !found.is_empty();
+                    }
+                },
+                _ => { },
+            }
+        }
+        answers.push(pauses);
+    }
+    answers
+}
+
 pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bool, sync_by: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> Option<Promise> {
     if !is_sync && sync_by.is_empty() { return None; }
     let mut allowed: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -351,7 +375,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
         if declared.is_sync { allowed.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string())); }
     }
     #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for one in sync_by.iter() {
+    named.reserve(sync_by.iter().size_hint().0); for one in sync_by.iter() {
         let one = *one;
         let parameter = nikaia_std::block::Text::from(names.resolve(one).to_string());
         allowed.insert(nikaia_std::block::Text::from(parameter.to_string()));

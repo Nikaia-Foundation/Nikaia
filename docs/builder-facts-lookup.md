@@ -223,7 +223,7 @@ Paths: `check_`, `checker`, `text_tiers`, `tiers.nika`, `view_changes`, `keeps.n
 * A `from` fix for text must also be probed with a struct type: the trait lowers only text `from` as a view, so a fix in `keeps.nika` breaks the struct case. (issue-1250)
 * A text `+` is a `Binary` node that the emitter recognises by `facts.concatenations.contains(span.start as i64)`, using the operator span, not `node_key`. (issue-1251)
 * A `let` bound by `x ?? null` used to lose `x`'s `ref` (it was typed as the `null`); if a `&` appears in front of a `match` in the lowered code, check the checker's result type of the `??` first (`check_core_ops.nika`). (issue-1340)
-* a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and views-3 D12/D14, whatever an issue's expected output says. (issue-1263)
+* a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and ADR-views-v4 D12/D14, whatever an issue's expected output says. (issue-1263)
 * A text view in the checker's `Ty` is `Named { name: "str", view: true }` (printed as `ref String`), and `is_a_view_of_a_string` misses it; match `TEXT_VIEW` too. (issue-1264)
 * A refusal of a view handed back where `String` is wanted must exempt static text: ask `text_literal(world, a_string_type(), value, true)`, or `"x"` is refused too. (issue-1264)
 * A `let x: Array[T]` (no length) is made a view by `lv_let_views` in `text_tiers.nika`, like fields (`sf_slice_fields`) and results (`hb_fn`); extend those passes rather than the checker. (issue-1270)
@@ -600,8 +600,9 @@ Paths: `Partial:`, `autostash`, `MERGE_HEAD`, `sweep`, `two commits`
 
 ### Measuring
 
-Paths: `callgrind`, `measure`, `instructions`, `cost`
+Paths: `callgrind`, `measure`, `instructions`, `cost`, `bench`, `valgrind`
 
+* **A Nikaia program that reads standard input hangs under callgrind, silently, unless it runs with `io-method = "blocking"`** (#1874's `io_uring_enter` wait, `docs/measuring.md`): a game-bench binary counted by hand, outside `benches/game/game.nika`, runs as `NIKAIA_RUNTIME_CONFIG=target/game-bench/io-blocking.toml valgrind --tool=callgrind BIN < target/game-bench/out/NAME.input` (the file `game.nika`'s `nikaia_env` writes; elsewhere a file holding that one line), and with `timeout -s KILL`, since a plain `timeout` does not end the hang. (#2072, #2361)
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. To profile one phase, run it with `NIKAIA_LOWER_TIMES=1`: each phase and ledger pass prints a `lower-std~ NAME ended` line the moment it ends, so `callgrind_control -d` then dumps the phase so far (`--dump-after=` misses them, the phase functions are inlined). A criterion in instructions over a whole `lower-std` (ADR-361 D15) is counted on its parts as `docs/measuring.md` says. (issue-1473, #1979, #1980)
 * The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
 * **A Nikaia program counted by hand under callgrind needs `NIKAIA_RUNTIME_CONFIG`** naming a file with `io-method = "blocking"` (`docs/measuring.md`): valgrind 3.22 runs the executor's `io_uring_enter` wait without blocking, so a program reading standard input (a `benches/game` binary rerun outside `game.nika`) waits for ever, silently. `game.nika` writes that file as `target/game-bench/io-blocking.toml`: `NIKAIA_RUNTIME_CONFIG=target/game-bench/io-blocking.toml valgrind --tool=callgrind ... BIN < target/game-bench/out/NAME.input`. Bound every such run with `timeout -s KILL` (a plain `timeout` does not end it). (#1874, #2361)
@@ -691,8 +692,10 @@ fix it or wait; **[works]**: use it, do not copy an old way around.
   null,`), and a literal in any file of the package leaves it out: a field
   added to a struct with many literals (`CheckFinding`) gets one, not an
   `edit: null` in each; literals in hand-written Rust still name it;
-* [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
-  and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
+* [works, #1133] `mut` on one name of a tuple marks that name alone:
+  `let (a, mut b) = …`; `for (k, mut v) in m` lowers to `m.iter_mut()`,
+  `for (_, mut v) in m` to `m.values_mut()`; only a lambda's tuple parameter
+  is still `NK1307`;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the
   catch-all arm is `else =>`;
 * collections: [works] `m.iter()`, `for (k, v) in m`, `a.iter().zip(b.iter())`;

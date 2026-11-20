@@ -206,16 +206,16 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
         Pattern::Choice(parts) => { return Pattern::Choice(numbers_spanned_patterns(parts, st)); },
         Pattern::Bind { name, pat } => {
             let pat = nikaia_std::boxed::open(pat);
-            return Pattern::Bind { name, pat: std::boxed::Box::new(numbers_spanned_pattern(pat, st)) };
+            return Pattern::Bind { name, pat: nikaia_std::block::Boxed::new(numbers_spanned_pattern(pat, st)) };
         },
         Pattern::Ref { name, generics, args } => { return Pattern::Ref { name, generics, args: numbers_spanned_patterns(args, st) }; },
         Pattern::Repeat { pat, rep } => {
             let pat = nikaia_std::boxed::open(pat);
-            return Pattern::Repeat { pat: std::boxed::Box::new(numbers_spanned_pattern(pat, st)), rep };
+            return Pattern::Repeat { pat: nikaia_std::block::Boxed::new(numbers_spanned_pattern(pat, st)), rep };
         },
         Pattern::Group(pat) => {
             let pat = nikaia_std::boxed::open(pat);
-            return Pattern::Group(std::boxed::Box::new(numbers_spanned_pattern(pat, st)));
+            return Pattern::Group(nikaia_std::block::Boxed::new(numbers_spanned_pattern(pat, st)));
         },
         Pattern::Call { name, args, config } => { return Pattern::Call { name, args: numbers_exprs(args, st), config: numbers_config(config, st) }; },
         Pattern::Counted { pat, low, high, comma } => {
@@ -223,7 +223,7 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
             let inner = numbers_spanned_pattern(pat, st);
             let low2 = numbers_expr(low, st);
             let high2 = numbers_maybe_expr(high, st);
-            return Pattern::Counted { pat: std::boxed::Box::new(inner), low: low2, high: high2, comma };
+            return Pattern::Counted { pat: nikaia_std::block::Boxed::new(inner), low: low2, high: high2, comma };
         },
         Pattern::Guard { cond, expected } => { return Pattern::Guard { cond: numbers_expr(cond, st), expected }; },
         Pattern::Choose { value, arms } => {
@@ -239,7 +239,7 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
             let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
             let key2 = numbers_spanned_pattern(key, st);
             let sep2 = numbers_spanned_pattern(sep, st);
-            return Pattern::Members { ty, key: std::boxed::Box::new(key2), value, sep: std::boxed::Box::new(sep2), on_null, on_unknown, fields };
+            return Pattern::Members { ty, key: nikaia_std::block::Boxed::new(key2), value, sep: nikaia_std::block::Boxed::new(sep2), on_null, on_unknown, fields };
         },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st);
@@ -269,7 +269,7 @@ pub(crate) fn numbers_maybe_block(block: Option<Block>, st: &mut NodeNumbersStat
 
 pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
     match stmt {
-        Stmt::Let { names, shape, mutable, deep, ty, value } => { return Stmt::Let { names, shape, mutable, deep, ty, value: numbers_expr(value, st) }; },
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => { return Stmt::Let { names, shape, mutable, mut_names, deep, ty, value: numbers_expr(value, st) }; },
         Stmt::Comptime { name, ty, value, bounds } => {
             let value2 = numbers_expr(value, st);
             let bounds2 = numbers_config(bounds, st);
@@ -280,10 +280,10 @@ pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
             let value2 = numbers_expr(value, st);
             return Stmt::Assign { target: target2, op, value: value2 };
         },
-        Stmt::For { bindings, shape, mutable, iter, body } => {
+        Stmt::For { bindings, shape, mutable, mut_names, iter, body } => {
             let iter2 = numbers_expr(iter, st);
             let body2 = numbers_block(body, st);
-            return Stmt::For { bindings, shape, mutable, iter: iter2, body: body2 };
+            return Stmt::For { bindings, shape, mutable, mut_names, iter: iter2, body: body2 };
         },
         Stmt::While { cond, body } => {
             let cond2 = numbers_expr(cond, st);
@@ -359,14 +359,14 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
                 let body = numbers_expr(arm.body, st);
                 arms2.push(MatchArm { pattern, guard, body });
             }
-            return Expr::Match { value: std::boxed::Box::new(value2), arms: arms2, id: id2 };
+            return Expr::Match { value: nikaia_std::block::Boxed::new(value2), arms: arms2, id: id2 };
         },
         Expr::Range { start, end, inclusive, id } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
             let id2 = numbers_id(id, st);
             let start2 = numbers_expr(start, st);
             let end2 = numbers_expr(end, st);
-            return Expr::Range { start: std::boxed::Box::new(start2), end: std::boxed::Box::new(end2), inclusive, id: id2 };
+            return Expr::Range { start: nikaia_std::block::Boxed::new(start2), end: nikaia_std::block::Boxed::new(end2), inclusive, id: id2 };
         },
         Expr::Tuple(items, id) => {
             let id2 = numbers_id(id, st);
@@ -381,7 +381,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             let value2 = numbers_expr(value, st);
             let count2 = numbers_expr(count, st);
-            return Expr::ListRepeat { value: std::boxed::Box::new(value2), count: std::boxed::Box::new(count2), id: id2 };
+            return Expr::ListRepeat { value: nikaia_std::block::Boxed::new(value2), count: nikaia_std::block::Boxed::new(count2), id: id2 };
         },
         Expr::LitStr { text, id } => { return Expr::LitStr { text, id: numbers_id(id, st) }; },
         Expr::LitInterpolated { parts, id } => {
@@ -409,7 +409,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let within2 = numbers_maybe_expr(within, st);
             let limit2 = numbers_maybe_expr(limit, st);
             let admission2 = numbers_maybe_expr(admission, st);
-            return Expr::AsyncGroup(numbers_block(block, st), id2, std::boxed::Box::new(within2), std::boxed::Box::new(limit2), std::boxed::Box::new(admission2));
+            return Expr::AsyncGroup(numbers_block(block, st), id2, nikaia_std::block::Boxed::new(within2), nikaia_std::block::Boxed::new(limit2), nikaia_std::block::Boxed::new(admission2));
         },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st);
@@ -431,7 +431,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let cond2 = numbers_expr(cond, st);
             let then2 = numbers_block(then_branch, st);
             let else2 = numbers_maybe_block(else_branch, st);
-            return Expr::If { cond: std::boxed::Box::new(cond2), then_branch: then2, else_branch: else2, id: id2 };
+            return Expr::If { cond: nikaia_std::block::Boxed::new(cond2), then_branch: then2, else_branch: else2, id: id2 };
         },
         Expr::Call { func, args, config, id } => {
             let func = nikaia_std::boxed::open(func);
@@ -439,13 +439,13 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let func2 = numbers_expr(func, st);
             let args2 = numbers_exprs(args, st);
             let config2 = numbers_config(config, st);
-            return Expr::Call { func: std::boxed::Box::new(func2), args: args2, config: config2, id: id2 };
+            return Expr::Call { func: nikaia_std::block::Boxed::new(func2), args: args2, config: config2, id: id2 };
         },
         Expr::Spawn { body, written_async, child, within, admission, id } => {
             let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
-            return Expr::Spawn { body: std::boxed::Box::new(numbers_expr(body, st)), written_async, child, within: std::boxed::Box::new(within2), admission: std::boxed::Box::new(numbers_maybe_expr(admission, st)), id: id2 };
+            return Expr::Spawn { body: nikaia_std::block::Boxed::new(numbers_expr(body, st)), written_async, child, within: nikaia_std::block::Boxed::new(within2), admission: nikaia_std::block::Boxed::new(numbers_maybe_expr(admission, st)), id: id2 };
         },
         Expr::Dsl { target, package, context, content, id } => { return Expr::Dsl { target, package, context, content, id: numbers_id(id, st) }; },
         Expr::Path(segments, id) => { return Expr::Path(segments, numbers_id(id, st)); },
@@ -455,12 +455,12 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let receiver2 = numbers_expr(receiver, st);
             let args2 = numbers_exprs(args, st);
             let config2 = numbers_config(config, st);
-            return Expr::MethodCall { receiver: std::boxed::Box::new(receiver2), method, args: args2, config: config2, id: id2 };
+            return Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(receiver2), method, args: args2, config: config2, id: id2 };
         },
         Expr::Field { base, name, id } => {
             let base = nikaia_std::boxed::open(base);
             let id2 = numbers_id(id, st);
-            return Expr::Field { base: std::boxed::Box::new(numbers_expr(base, st)), name, id: id2 };
+            return Expr::Field { base: nikaia_std::block::Boxed::new(numbers_expr(base, st)), name, id: id2 };
         },
         Expr::StructLit { name, fields, id } => {
             let id2 = numbers_id(id, st);
@@ -471,7 +471,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             let base2 = numbers_expr(base, st);
             let fields2 = numbers_field_inits(fields, st);
-            return Expr::With { base: std::boxed::Box::new(base2), fields: fields2, at, id: id2 };
+            return Expr::With { base: nikaia_std::block::Boxed::new(base2), fields: fields2, at, id: id2 };
         },
         Expr::Closure { params, mutable, body, id } => {
             let id2 = numbers_id(id, st);
@@ -480,19 +480,19 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
         Expr::Unary { op, expr, id } => {
             let expr = nikaia_std::boxed::open(expr);
             let id2 = numbers_id(id, st);
-            return Expr::Unary { op, expr: std::boxed::Box::new(numbers_expr(expr, st)), id: id2 };
+            return Expr::Unary { op, expr: nikaia_std::block::Boxed::new(numbers_expr(expr, st)), id: id2 };
         },
         Expr::Binary { op, lhs, rhs, span, grouped, id } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             let id2 = numbers_id(id, st);
             let lhs2 = numbers_expr(lhs, st);
             let rhs2 = numbers_expr(rhs, st);
-            return Expr::Binary { op, lhs: std::boxed::Box::new(lhs2), rhs: std::boxed::Box::new(rhs2), span, grouped, id: id2 };
+            return Expr::Binary { op, lhs: nikaia_std::block::Boxed::new(lhs2), rhs: nikaia_std::block::Boxed::new(rhs2), span, grouped, id: id2 };
         },
         Expr::SafeField { base, name, id } => {
             let base = nikaia_std::boxed::open(base);
             let id2 = numbers_id(id, st);
-            return Expr::SafeField { base: std::boxed::Box::new(numbers_expr(base, st)), name, id: id2 };
+            return Expr::SafeField { base: nikaia_std::block::Boxed::new(numbers_expr(base, st)), name, id: id2 };
         },
         Expr::SafeMethod { receiver, method, args, config, id } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -500,29 +500,29 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let receiver2 = numbers_expr(receiver, st);
             let args2 = numbers_exprs(args, st);
             let config2 = numbers_config(config, st);
-            return Expr::SafeMethod { receiver: std::boxed::Box::new(receiver2), method, args: args2, config: config2, id: id2 };
+            return Expr::SafeMethod { receiver: nikaia_std::block::Boxed::new(receiver2), method, args: args2, config: config2, id: id2 };
         },
         Expr::Try(inner, id) => {
             let inner = nikaia_std::boxed::open(inner);
             let id2 = numbers_id(id, st);
-            return Expr::Try(std::boxed::Box::new(numbers_expr(inner, st)), id2);
+            return Expr::Try(nikaia_std::block::Boxed::new(numbers_expr(inner, st)), id2);
         },
         Expr::Async(inner, id, within, admission) => {
             let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
             let admission2 = numbers_maybe_expr(admission, st);
-            return Expr::Async(std::boxed::Box::new(numbers_expr(inner, st)), id2, std::boxed::Box::new(within2), std::boxed::Box::new(admission2));
+            return Expr::Async(nikaia_std::block::Boxed::new(numbers_expr(inner, st)), id2, nikaia_std::block::Boxed::new(within2), nikaia_std::block::Boxed::new(admission2));
         },
         Expr::Throw(inner, id) => {
             let inner = nikaia_std::boxed::open(inner);
             let id2 = numbers_id(id, st);
-            return Expr::Throw(std::boxed::Box::new(numbers_expr(inner, st)), id2);
+            return Expr::Throw(nikaia_std::block::Boxed::new(numbers_expr(inner, st)), id2);
         },
         Expr::Return(value, id) => {
             let value = nikaia_std::boxed::open(value);
             let id2 = numbers_id(id, st);
-            return Expr::Return(std::boxed::Box::new(numbers_maybe_expr(value, st)), id2);
+            return Expr::Return(nikaia_std::block::Boxed::new(numbers_maybe_expr(value, st)), id2);
         },
         Expr::Break(id) => { return Expr::Break(numbers_id(id, st)); },
         Expr::Continue(id) => { return Expr::Continue(numbers_id(id, st)); },
@@ -532,19 +532,19 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             let base2 = numbers_expr(base, st);
             let index2 = numbers_expr(index, st);
-            return Expr::Index { base: std::boxed::Box::new(base2), index: std::boxed::Box::new(index2), id: id2 };
+            return Expr::Index { base: nikaia_std::block::Boxed::new(base2), index: nikaia_std::block::Boxed::new(index2), id: id2 };
         },
         Expr::Cast { expr, ty, id } => {
             let expr = nikaia_std::boxed::open(expr);
             let id2 = numbers_id(id, st);
-            return Expr::Cast { expr: std::boxed::Box::new(numbers_expr(expr, st)), ty, id: id2 };
+            return Expr::Cast { expr: nikaia_std::block::Boxed::new(numbers_expr(expr, st)), ty, id: id2 };
         },
         Expr::Coalesce { value, fallback, id } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             let id2 = numbers_id(id, st);
             let value2 = numbers_expr(value, st);
             let fallback2 = numbers_expr(fallback, st);
-            return Expr::Coalesce { value: std::boxed::Box::new(value2), fallback: std::boxed::Box::new(fallback2), id: id2 };
+            return Expr::Coalesce { value: nikaia_std::block::Boxed::new(value2), fallback: nikaia_std::block::Boxed::new(fallback2), id: id2 };
         },
         Expr::Asm { bindings, code, id } => { return Expr::Asm { bindings, code, id: numbers_id(id, st) }; },
         Expr::Unsafe(block, id) => {
@@ -556,7 +556,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             let expr2 = numbers_expr(expr, st);
             let handler2 = numbers_block(handler, st);
-            return Expr::TryCatch { expr: std::boxed::Box::new(expr2), handler: handler2, id: id2 };
+            return Expr::TryCatch { expr: nikaia_std::block::Boxed::new(expr2), handler: handler2, id: id2 };
         },
     }
 }

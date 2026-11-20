@@ -64,7 +64,7 @@ impl EmitState {
         let found = self.field_contract(world, owner, field);
         let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("None") };
         if contract.default != "" {
-            let nullable = Ty::Nullable(std::boxed::Box::new(contract.ty.clone()));
+            let nullable = Ty::Nullable(nikaia_std::block::Boxed::placed(contract.ty.clone()));
             return held_literal(&contract.default, &nullable);
         }
         format!("None::<{}>", plain_rust_spelling(&contract.ty))
@@ -299,8 +299,9 @@ impl EmitState {
             None => None,
         };
         if taken.is_some() { if nikaia_std::index::or(taken.as_deref(), || "") == "" { out.push("std::mem::take(&mut "); } else { out.push("std::mem::replace(&mut "); } }
+        let moved = self.facts.boxed_moves.contains(&node_key(node));
         let boxed = self.facts.boxed_reads.contains(&node_key(node));
-        if boxed { out.push("(*"); }
+        if moved { out.push("nikaia_std::boxed::open("); } else if boxed { out.push("(*"); }
         let mut through = false;
         match base {
             Expr::Index { base: inner, index: at, .. } => {
@@ -486,6 +487,7 @@ impl EmitState {
         let cleaned = self.cleaned_types.contains(&owner);
         if cleaned { out.push(&format!("{}::new(", emit_cleaned(host.overlaps_user_code()))); }
         out.push(&format!("{} {{ ", owner));
+        let boxed_built: &'static str = if self.facts.placed_in_block.contains(&node_key(node)) { "placed" } else { "new" };
         let mut i = 0;
         let trusting = walk.trusting;
         for field in fields.iter() {
@@ -501,7 +503,7 @@ impl EmitState {
             let mut before = nikaia_std::block::Text::from(around_before.to_string());
             let mut after = nikaia_std::block::Text::from(around_after.to_string());
             if boxed {
-                before = format!("std::boxed::Box::new({}", around_before);
+                before = format!("nikaia_std::block::Boxed::{}({}", boxed_built, around_before);
                 after = format!("{})", around_after);
             }
             let either = self.either_field(world, &owner, field.name) && !emit_place_null((field.value).as_ref()) && !emit_place_mixed(&self.facts.mixed_choices, (field.value).as_ref());
@@ -541,12 +543,12 @@ impl EmitState {
                 if self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
                 if self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.stored_handle_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("{}.clone()", written); }
                 if wrapped { put = format!("Some({})", put); }
-                if boxed { out.push(&format!(": std::boxed::Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
+                if boxed { out.push(&format!(": nikaia_std::block::Boxed::{}({})", boxed_built, put)); } else { out.push(&format!(": {}", put)); }
             }
         }
         walk.trusting = trusting;
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for field in fields.iter() { names.push(emit_text(world, field.name)); }
+        names.reserve(fields.iter().size_hint().0); for field in fields.iter() { names.push(emit_text(world, field.name)); }
         let mut after_one = !fields.is_empty();
         for (field, default, ty) in self.field_defaults(world, &owner) {
             if nikaia_std::list::contains(&names, &field) { continue; }
@@ -560,7 +562,7 @@ impl EmitState {
     }
     pub(crate) fn emit_place_field_default(&self, owner: &str, field: &str, default: &str, ty: &Ty) -> String {
         let mut value = held_literal(default, ty);
-        if self.is_boxed_field(owner, field) { value = format!("std::boxed::Box::new({})", value); }
+        if self.is_boxed_field(owner, field) { value = format!("nikaia_std::block::Boxed::new({})", value); }
         format!("{}: {}", escaped_name(field), value)
     }
     pub(crate) fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
@@ -588,7 +590,7 @@ impl EmitState {
             let written = escaped_name(&emit_text(world, field.name));
             out.push(&written);
             if self.is_boxed_field(&owner, &emit_text(world, field.name)) {
-                out.push(": std::boxed::Box::new(");
+                out.push(": nikaia_std::block::Boxed::new(");
                 if field.value.is_some() {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                     self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;

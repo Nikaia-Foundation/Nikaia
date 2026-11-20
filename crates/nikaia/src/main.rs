@@ -18,6 +18,13 @@ use nikaia::{diagnostics, interpreter, parser, refuse};
 use nikaia_std::compiler::cli_commands::{self, CliCommandsRefusal};
 use nikaia_std::compiler::project_tests;
 
+/// **The compiler counts its heap like every program** (ADR-400 D1, #2338):
+/// the line `emit_program.nika`'s `EMIT_PROGRAM_COUNTING_HEAP` writes into an
+/// emitted program, so `mem::allocations()` counts in the test blocks
+/// `nikaia test --std` runs in this process. Host Rust: the binary's root.
+#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;
+
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
 #[derive(Parser, Debug)]
@@ -110,9 +117,8 @@ pub struct Cli {
     pub unproved_checks: Option<String>,
 
     /// What data from outside the program at a raw sink is, unproved and not
-    /// allowed (ADR-raw-sinks-1 D3): `error`, the default, refuses the
-    /// program; `warn` builds it and checks the data where the call is
-    /// reached.
+    /// allowed (ADR-raw-sinks-1 D3): `warn`, the default, builds it with a
+    /// warning; `error` refuses the program.
     ///
     /// Overrides `nikaia.toml`'s `[build] raw-sinks`.
     #[arg(long, global = true, value_name = "error|warn")]
@@ -129,9 +135,11 @@ pub struct Cli {
     pub environment: Option<String>,
 
     /// Allow one raw sink for this build, as `[allow]` does
-    /// (ADR-raw-sinks-1 D4, D5): `untrusted-shell`, `untrusted-sql`,
-    /// `untrusted-markup` or `untrusted-paths-anywhere`, or `PACKAGE:KEY` for a
-    /// dependency's. May be given more than once.
+    /// (ADR-raw-sinks-1 D4, D5, D15): `untrusted-shell`, `untrusted-sql`,
+    /// `untrusted-markup`, `untrusted-program`, `untrusted-paths-read`,
+    /// `-write`, `-remove` or `-anywhere` (a path key also as `KEY=SOURCE`,
+    /// one source), or `PACKAGE:KEY` for a dependency's. May be given more
+    /// than once.
     #[arg(long, global = true, value_name = "KEY")]
     pub allow: Vec<String>,
 
@@ -325,7 +333,7 @@ pub enum Command {
     },
     /// Rewrite `.nika` files and the Nikaia blocks of `.md` files to a new
     /// edition of the language: `views-3` drops `ref` outside `extern "C"`
-    /// and writes `keep` where the body keeps a parameter (ADR-views-3 D4);
+    /// and writes `keep` where the body keeps a parameter (ADR-views-v4 D4);
     /// `print-throws` writes `throws` on every function that can fail because
     /// it prints (ADR-392).
     Migrate {

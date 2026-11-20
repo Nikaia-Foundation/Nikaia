@@ -171,7 +171,7 @@ fn the_specifications_version_is_the_changelogs() {
 /// arrow ([ADR-grammar-syntax-v1](../../../docs/specification/adr/adr-grammar-syntax-v1.md) D9), and the
 /// parser does not take that form yet — so the page is ahead of the compiler
 /// by decision, which is the state every unbuilt record leaves its examples
-/// in. The block comes back as a program with ADR-296's first step, and
+/// in. The block comes back as a program with ADR-grammar-syntax-v1's first step, and
 /// the floor goes back up with it.
 ///
 /// **Lowered a third time, from 49 to 48**, for the same reason — and **raised

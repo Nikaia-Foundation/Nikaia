@@ -86,7 +86,7 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
         Some(ref said) => { if said != version { return Some(format!("`{}`'s shipped {} describes version {}, and the crate is {}. A description is reviewed for one version: review it again in the crate.", declared, nikaia_std::fs::path::display(&(shipped)), said, version)); } },
     }
     if ledger.sources.is_empty() { return Some(format!("`{}`'s shipped {} has no `[sources]` in {} beside it, so nothing says which sources it was reviewed against.", declared, nikaia_std::fs::path::display(&(shipped)), nikaia_std::fs::path::display(&(derived)))); }
-    let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), hash::sha256_hex(&entry.1.bytes().collect::<Vec<_>>())) }).collect();
+    let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), hash::sha256_hex(entry.1.as_bytes())) }).collect();
     let all: collections::BTreeSet<String> = now.keys().chain(ledger.sources.keys()).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
     let moved: Vec<String> = all.iter().filter(|&file| { now.get(nikaia_std::index::as_text(&file)) != ledger.sources.get(nikaia_std::index::as_text(&file)) }).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
     let first = match moved.first() { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -143,10 +143,10 @@ pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String
         };
         all.push_str(&nikaia_std::fs::path::text_of(&(name)));
         all.push_str("\0");
-        all.push_str(&hash::sha256_hex(&text.bytes().collect::<Vec<_>>()));
+        all.push_str(&hash::sha256_hex(text.as_bytes()));
         all.push_str("\0");
     }
-    hash::sha256_hex(&all.bytes().collect::<Vec<_>>())
+    hash::sha256_hex(all.as_bytes())
 }
 
 pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path::Path, crate_word: &str, contracts: &str, host: &H) -> collections::BTreeSet<String> {

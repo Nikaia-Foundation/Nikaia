@@ -18,7 +18,7 @@ at such a path is refused while the program is built)
 [ADR-397](adr-397.md), [ADR-399](adr-399.md) (which data is from outside);
 [ADR-017](adr-017.md) and [ADR-398](adr-398.md) (escaping in templates and in
 the log); [ADR-243](adr-243.md) (a process without a shell);
-[ADR-299](adr-299.md) D5 (dynamic SQL); [ADR-380](adr-380.md) D2 and
+[ADR-database-v1](adr-database-v1.md) D5 (dynamic SQL); [ADR-380](adr-380.md) D2 and
 [ADR-396](adr-396.md) D1, D2, D6 (a claim on outside data is proved, and the
 way out is a guard)
 
@@ -62,7 +62,7 @@ program says that it means it.
 The form a program writes first is the one that cannot be steered:
 
 1. SQL takes its values as parameters (`execute(conn; parameters:)`, a `dsl`
-   block, ADR-299);
+   block, ADR-database-v1);
 2. a process takes its arguments as a list, with no shell between (ADR-243);
 3. a path names its root, and `Dir` keeps it inside (ADR-108);
 4. text written to the log has its control characters and terminal sequences
@@ -298,6 +298,27 @@ after the guard as `html::is_plain`'s does (ADR-396 D2):
 |---|---|---|
 | `path::is_component(p)` | one component, no separator, not `.` or `..` | `p` under a `Dir` whose root passes D11, or joined to a part that is not outside |
 | `path::is_below(p)` | relative, no root, no drive, no `..` component | the same |
+
+"Joined to a part that is not outside" (supervisor, 2026-11-20, the
+question of #2358): the guarded name with a literal or another clean part
+before it, as in `f"{store}/{key}/bin"`, passes under `Anywhere`; the bare
+name under `Anywhere` does not, since it names a file wherever the program
+runs. The proof holds for the joined text as for the name: a binding made
+from it (`let kept = f"{store}/{key}/bin"`) carries it to the sink.
+
+The same join admits the program `process::run` runs (D10; supervisor,
+2026-11-20, the question of #2369): the guard keeps the name inside a
+directory the program chose, as it does for a file it opens. A whole
+program name from outside, with no clean part before it, stays `NK1308`:
+it is looked up on `PATH` or names any file.
+
+A function hands back its proof (supervisor, 2026-11-20, #2375): a call is
+not outside where every value its function returns is proved, a literal (D10)
+or a guarded name joined to a clean part. A parameter the function hands back
+unguarded is not proved there: it carries what the caller passes, so the call
+is outside exactly where the argument at that place is outside, and a clean or
+guarded argument keeps it clean. One returned value from outside makes the call
+outside, as one arm does for a `match`.
 
 Neither proves where a symlink points; under `Dir` the run time check does
 (ADR-108 D3), under `Anywhere` nothing does, as for a literal. A check of the

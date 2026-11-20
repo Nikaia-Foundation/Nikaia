@@ -55,7 +55,7 @@ impl CheckState {
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);
         let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for name in ring.iter() { named.push(format!("`{}`", name)); }
+        named.reserve(ring.iter().size_hint().0); for name in ring.iter() { named.push(format!("`{}`", name)); }
         self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", nikaia_std::block::Text::from(named.join(" → ")))], Some(String::from("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -417,6 +417,12 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if names_a_path(left, right) {
         state.facts.path_comparisons.insert(at.start as i64)
     }
+    // **A text compared with an `f"…"` of text parts** (#2405): checked in
+    // place, the formatted text never built.
+    let formatted = state.facts.text_formats.contains(id_of(lhs) as i64) || state.facts.text_formats.contains(id_of(rhs) as i64)
+    if formatted && is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+        state.facts.compared_formats.insert(at.start as i64)
+    }
     return check_core_ops_named("bool")
 }
 
@@ -676,7 +682,7 @@ fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value:
     return found.changing
 }
 
-/// **A field of a parameter the function lends** (ADR-views-3 D2, #1472):
+/// **A field of a parameter the function lends** (ADR-views-v4 D2, #1472):
 /// `c.signature ?? return -1` of a lent `c: C` reads the option in place.
 fn check_core_ops_field_of_a_lent_parameter(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -880,12 +886,42 @@ fn check_core_ops_a_word(ty: ref Ty) -> bool {
 }
 
 /// **`a ?? b`** (Part I 3.5, ADR-279, ADR-293): the first that has a value.
+/// **A boxed field of a value of its own, taken by `??`, leaves its box**
+/// (ADR-327 D16, #2406): `read.code ?? return …` moves the field, which the
+/// box's `open` does (`boxed_moves`); a field read off a view, or one that
+/// copies, is read through the box as before.
+fn check_core_ops_a_boxed_move(mut state: CheckState, world: ref CheckWorld, value: ref Expr, left: ref Ty) sync {
+    match value {
+        Expr::Field { base, .. } => {
+            if !state.facts.boxed_reads.contains(id_of(value) as i64) || a_copy_by_value(left) {
+                return
+            }
+            match base {
+                Expr::Variable(name, _) => {
+                    let found = state.binding(world.words.resolve(name)) ?? return
+                    match found.ty {
+                        Ty::Named { view, .. } => {
+                            if !view {
+                                state.facts.boxed_moves.insert(id_of(value) as i64)
+                            }
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
 fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
     let outer = state.flow.read_a_map
     state.flow.read_a_map = false
     let lending = state.flow.lending_let
     state.flow.lending_let = false
     let left = check_core_expr(state, world, host, value, span)
+    check_core_ops_a_boxed_move(state, world, value, left)
     let read_now = state.flow.read_a_map
     state.flow.read_a_map = outer
     // **The left side alone** (D13): the fallback is still checked, and what

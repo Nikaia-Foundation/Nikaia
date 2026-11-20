@@ -18,7 +18,7 @@ pub(crate) fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: 
     for _ in 0..sv_nl_rounds() {
         let mut scratch = arena.clone();
         let mut all = facts.copy_owned();
-        for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut scratch, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+        all.reserve(lemmas.iter().size_hint().0); for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut scratch, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
         let run = match sv_smt_engine_set(&scratch, &all, goal, budget, nikaia_std::block::Text::from(theory.to_string()), reals, &nikaia_std::block::Text::from(settings.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
         work += run.work;
         let values = match run.driven {
@@ -279,7 +279,7 @@ pub(crate) fn sv_nl_test_lemmas(source: &str) -> String {
     let goal = arena.boolean(false);
     let nl = match sv_nl_engine(&arena, &script.assertions, goal, &lg_budget(), "both", &reals, "", &defs) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for l in nl.lemmas.iter() { names.push(nikaia_std::block::Text::from(l.schema.to_string())); }
+    names.reserve(nl.lemmas.iter().size_hint().0); for l in nl.lemmas.iter() { names.push(nikaia_std::block::Text::from(l.schema.to_string())); }
     let out = format!("; lemmas [{}]", nikaia_std::block::Text::from(names.join(", ")));
     let steps = match nl.run.driven {
         SvDriven::Proved(_, ref s) => s.copy_owned(),

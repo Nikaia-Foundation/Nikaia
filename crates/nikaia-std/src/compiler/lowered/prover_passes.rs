@@ -23,9 +23,12 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
     let mut unwritten: collections::BTreeMap<String, Vec<UnwrittenCheck>> = collections::BTreeMap::new();
+    let mut sinks: collections::BTreeMap<String, Vec<ParamSink>> = collections::BTreeMap::new();
     for _ in 0..bound {
         walk.state.known = preconditions;
         walk.state.known_unwritten = unwritten;
+        walk.state.known_sinks = sinks;
+        walk.state.sinks.clear();
         walk.state.preconditions.clear();
         walk.state.candidates.clear();
         walk.state.unwritten.clear();
@@ -33,9 +36,11 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         prover_bodies(walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         preconditions = walk.state.preconditions.copy_owned();
         unwritten = walk.state.unwritten.copy_owned();
-        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) { break; }
+        sinks = walk.state.sinks.copy_owned();
+        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) && same_sinks(&sinks, &walk.state.known_sinks) { break; }
     }
     walk.state.known_unwritten.clear();
+    walk.state.known_sinks = sinks;
     walk.state.known.clear();
     walk.state.collecting = false;
     walk.state.preconditions = preconditions;
@@ -69,9 +74,19 @@ pub(crate) fn same_unwritten(now: &collections::BTreeMap<String, Vec<UnwrittenCh
     true
 }
 
+pub(crate) fn same_sinks(now: &collections::BTreeMap<String, Vec<ParamSink>>, before: &collections::BTreeMap<String, Vec<ParamSink>>) -> bool {
+    if (now.len() as i64) != before.len() as i64 { return false; }
+    for (function, found) in now.iter() {
+        let earlier = match before.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if (earlier.len() as i64) != found.len() as i64 { return false; }
+        for (one, other) in found.iter().zip(earlier.iter()) { if !one.same(other) { return false; } }
+    }
+    true
+}
+
 pub(crate) fn strike_broken(state: &mut ProverState) {
     let mut broken: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for one in state.broken.iter() { broken.push(one.clone()); }
+    broken.reserve(state.broken.iter().size_hint().0); for one in state.broken.iter() { broken.push(one.clone()); }
     let mut k = broken.len() as i64;
     while k > 0 {
         k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
@@ -87,9 +102,9 @@ pub(crate) fn same_preconditions(arena: &logic::TermArena, a: &collections::BTre
 
 pub(crate) fn precondition_texts(arena: &logic::TermArena, m: &collections::BTreeMap<String, Precondition>) -> Vec<(String, Vec<String>)> {
     let mut out: Vec<(String, Vec<String>)> = vec![];
-    for (function, pre) in m.iter() {
+    out.reserve(m.iter().size_hint().0); for (function, pre) in m.iter() {
         let mut claims: Vec<String> = vec![];
-        for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
+        claims.reserve(pre.claims.iter().size_hint().0); for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
         out.push((nikaia_std::block::Text::from(function.to_string()), claims));
     }
     out
@@ -99,11 +114,11 @@ pub(crate) fn checked_entries(walk: &ProverWalk, escape: &mut impl FnMut(&str) -
     let mut entries: collections::BTreeMap<String, Vec<PreconditionCheck>> = collections::BTreeMap::new();
     for (function, pre) in walk.state.preconditions.iter() {
         let mut checks: Vec<PreconditionCheck> = vec![];
-        for claim in pre.claims.iter() {
+        checks.reserve(pre.claims.iter().size_hint().0); for claim in pre.claims.iter() {
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(claim.term, &mut read);
             let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((property_shown(name), rust_of_name(name, &mut *escape))); }
+            operands.reserve(read.iter().size_hint().0); for name in read.iter() { operands.push((property_shown(name), rust_of_name(name, &mut *escape))); }
             checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, &mut *escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
         }
         entries.insert(nikaia_std::block::Text::from(function.to_string()), checks);
@@ -192,13 +207,13 @@ pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carr
         let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&next) { continue; }
         let mut calls = nikaia_std::index::or(*nikaia_std::index::get(&checked, &next), || 0);
-        if next != function { for found in findings.iter() { if found.code == "NK1207" && found.message.contains(&*format!("`{}`'s precondition", next)) { calls -= 1; } } }
+        if next != function { for found in findings.iter() { if found.code == "NK1207" && ::core::convert::identity(match (AsRef::<str>::as_ref(&(found.message)), AsRef::<str>::as_ref(&(next)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix("`'s precondition")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { calls -= 1; } } }
         if calls > 0 { total += calls; }
         let callers = match *nikaia_std::index::get(&carried, &next) { Some(__nikaia_value) => __nikaia_value, None => {
             seen.insert(next);
             continue;
         } };
-        for caller in callers.iter() { todo.push(nikaia_std::block::Text::from(caller.to_string())); }
+        todo.reserve(callers.iter().size_hint().0); for caller in callers.iter() { todo.push(nikaia_std::block::Text::from(caller.to_string())); }
         seen.insert(next);
     }
     total

@@ -20,6 +20,7 @@ signature = "(input: ?) -> Vec[Section]"
 [fn."main"]
 throws = ["io::IoError"]
 locks = true
+trusted = ["cli::args at main.nika:66"]
 signature = "()"
 
 [type."Section"]

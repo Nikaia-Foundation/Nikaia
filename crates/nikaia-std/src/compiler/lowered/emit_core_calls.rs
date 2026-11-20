@@ -11,7 +11,7 @@ pub(crate) fn emit_call_failed_check(check: &PreconditionCheck) -> String {
         shown = format!("Some(&{})", rust_string(&text));
     }
     let mut operands: String = String::from("");
-    for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
+    for (name, value) in check.operands.iter() { { use ::core::fmt::Write as _; let _ = operands.write_fmt(format_args!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }; }
     format!("if !{} {{ nikaia_std::abort::assertion_failed({}, {}, &[{}]) }} ", check.rust, rust_string(&check.written), shown, operands)
 }
 
@@ -176,7 +176,7 @@ impl EmitState {
         let callee = self.emit_call_callee(world, func);
         let mut lent: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0;
-        for arg in args.iter() {
+        lent.reserve(args.iter().size_hint().0); for arg in args.iter() {
             lent.push(self.facts.mut_args.contains(&node_key(arg)) || self.changes_at(&callee, at));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
@@ -261,7 +261,7 @@ impl EmitState {
         let callee = self.emit_call_checked_callee(world, func);
         if callee.is_some() {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for arg in args.iter() { written.push(host.written(arg)); }
+            written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(host.written(arg)); }
             let key = (nikaia_std::index::or(callee, || "".into()), nikaia_std::block::Text::from(written.join(", ")));
             if self.facts.reaches.contains_key(&key) {
                 let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -301,7 +301,7 @@ impl EmitState {
         let callee = format!("{}::{}", owner, name);
         if !self.facts.entries.contains_key(&callee) { return false; }
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in args.iter() { written.push(host.written(arg)); }
+        written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(host.written(arg)); }
         let key = (callee, nikaia_std::block::Text::from(written.join(", ")));
         let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(reach.clone(), CallReach::Proved)
@@ -536,7 +536,7 @@ impl EmitState {
                                 Some(result) => { streamed = a_sequence_type(result); },
                                 None => { },
                             }
-                            for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
+                            options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
                         },
                         None => { },
                     }
@@ -623,11 +623,12 @@ impl EmitState {
                 if self.is_variant(world, &owner, &variant) { for arg in args.iter() { if emit_call_builds_a_hull(world, arg) { holds_a_hull = true; } } }
                 if !any && !holds_a_hull { return Ok(false); }
                 walk.boxed_args = Some(mask);
+                walk.boxed_placed = self.facts.placed_in_block.contains(&node_key(func));
                 let mut counts: Vec<Count> = vec![];
                 for at in 0..args.len() as i64 { counts.push(self.count_at(host.crossings_are_possible(), "<field>", &variant_slot(&owner, &variant, at))); }
                 walk.variant_counts = Some(counts);
                 let mut names: Vec<String> = vec![];
-                for s in segments.iter() {
+                names.reserve(segments.iter().size_hint().0); for s in segments.iter() {
                     let s = *s;
                     names.push(emit_text(world, s));
                 }
@@ -635,6 +636,7 @@ impl EmitState {
                 out.push("(");
                 self.emit_core_args(world, walk, out, host, &variant, args, &vec![], depth, flow, scope)?;
                 walk.boxed_args = None;
+                walk.boxed_placed = false;
                 walk.variant_counts = None;
                 out.push(")");
                 return Ok(true);
@@ -646,6 +648,19 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let in_scope = emit_call_library_trait(world, &nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()));
+        if in_scope != "" { out.push(&format!("{{ use nikaia_std::{} as _; ", in_scope)); }
+        self.emit_core_method_call_hoisted(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)?;
+        if in_scope != "" { out.push(" }"); }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_method_call_hoisted<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let hoisted = self.emit_method_hoisted(world, receiver, args);
         if hoisted.is_empty() {
             walk.hoisted_args = None;
@@ -708,6 +723,23 @@ impl EmitState {
         }
         hoisted
     }
+    pub(crate) fn emit_call_formatted_into(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, receiver: Option<&Expr>, on_node: i64, name: &str, args: &[Expr]) -> bool {
+        if name != "push_str" || args.len() != 1 || walk.hoisted_args.is_some() { return false; }
+        if nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()) != "String::push_str" { return false; }
+        let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let local = match on {
+            Expr::Variable(v, _) => { let v = *v; emit_text(world, v) },
+            _ => return false,
+        };
+        if self.facts.path_holes.contains_key(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) || emit_mentions(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &local) { return false; }
+        match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+            Expr::LitInterpolated { parts, .. } => emit_leaf_has_holes(parts),
+            _ => false,
+        }
+    }
     pub(crate) fn emit_lends_mut(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
         for each in visited_in_expr(expr) {
             let lent = self.facts.mut_args.contains(&node_key(each)) || self.facts.mut_receivers.contains(&node_key(each));
@@ -721,6 +753,14 @@ impl EmitState {
     pub(crate) fn emit_core_method_call_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
         if self.emit_call_scalars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
+        if receiver.is_some() && args.len() == 1 && walk.hoisted_args.is_none() && (name == "starts_with" || name == "ends_with" || name == "contains") {
+            let callee = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if (::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "str::".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("str::").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "String::".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("String::").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some() })) && self.emit_format_compared(world, walk, out, host, &name, text, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, true, true, depth, flow, scope)? { return Ok(()); }
+        }
         if receiver.is_some() && args.len() == 1 {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             match on {
@@ -845,6 +885,20 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                 out.push(")");
                 return Ok(());
+            }
+        }
+        if self.emit_call_formatted_into(world, &walk, receiver, on_node, &name, args) {
+            let text = nikaia_std::index::get(&args, 0);
+            match text {
+                Expr::LitInterpolated { parts, .. } => {
+                    out.push("{ use ::core::fmt::Write as _; let _ = ");
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                    out.push(".write_fmt(format_args!(");
+                    self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)?;
+                    out.push(")); }");
+                    return Ok(());
+                },
+                _ => { },
             }
         }
         if receiver.is_some() && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(&on_node) || self.facts.replaced_last_uses.contains(&on_node)) {
@@ -1452,11 +1506,19 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple108115| {
-        let (i, word) = __nikaia_tuple108115;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111918| {
+        let (i, word) = __nikaia_tuple111918;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
     format!("({})", nikaia_std::block::Text::from(copies.join(", ")))
+}
+
+pub(crate) fn emit_call_library_trait(world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> String {
+    for (trait_name, _) in world.library.implementations.iter() {
+        let method = match key.strip_prefix(&*format!("{}::", trait_name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if trait_name.contains("::") && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+    }
+    String::from("")
 }
 

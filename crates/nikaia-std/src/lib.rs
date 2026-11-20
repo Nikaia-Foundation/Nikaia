@@ -300,11 +300,11 @@ pub mod runtime {
 ///
 /// **And `unnecessary_cast`**: `for (at, arg) in args.iter().enumerate()`
 /// then `sources.push(at as i64)` lowers the `as i64` over an `i64` already
-/// (`text_tiers.nika`, views-3 D15).
+/// (`text_tiers.nika`, ADR-views-v4 D15).
 ///
 /// **And `unused_parens`**: `let code = read.code ?? return ..` over a `let`
 /// of a `Type` lowers to `match (*read.code) { .. }` (`declared.nika`'s
-/// `written_ty`, ADR-views-3 D14).
+/// `written_ty`, ADR-views-v4 D14).
 ///
 /// **And `manual_is_multiple_of` and `manual_clear`**: the solver's
 /// `l % 2 == 0` (a literal's sign) and `watch.truncate(0)` lower as written
@@ -329,7 +329,13 @@ pub mod runtime {
 /// **And `blocks_in_conditions`**: `high.narrowing_div_rem(low, d) ?? return
 /// null` lowers the call as a block (it names the wide value once) inside the
 /// `match` of `??` (`sv_num.nika`, #2013).
+///
+/// **And `match_single_binding`**: a text formatted only to be compared
+/// (`p.starts_with(f"{a}[")`) is checked in place in a one-arm `match` that
+/// keeps a formatted hole's temporary alive, which a `let` would drop
+/// (`bounds_walk.nika`'s `bounding_in_elements`, #2405).
 #[allow(
+    clippy::match_single_binding,
     clippy::blocks_in_conditions,
     clippy::get_first,
     clippy::result_large_err,

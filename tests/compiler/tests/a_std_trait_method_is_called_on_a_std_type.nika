@@ -1,0 +1,12 @@
+// A method of a `std` trait is called on a `std` type that implements it
+// through `std.contracts`' `[impl]` (#2304): `supervisor::Backoff` is
+// `std`'s `supervisor::Restart`, so `decide` is its method.
+
+use std::supervisor
+
+fn main() throws {
+    let mut policy = supervisor::Backoff()
+    let history = supervisor::Failures { last_uptime: 0.seconds(), consecutive: 1, since_first: 0.seconds() }
+    let next = policy.decide(history)
+    println(next == supervisor::Next::Immediate)
+}

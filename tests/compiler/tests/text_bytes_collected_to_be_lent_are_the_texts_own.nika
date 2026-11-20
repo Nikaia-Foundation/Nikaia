@@ -1,0 +1,66 @@
+// A text's `bytes().collect()` handed to a `Vec[u8]` the callee only reads
+// is the text's own bytes (#2385): the lowered call lends `s.as_bytes()`, not
+// a list collected, copied into and dropped. A collect into a declared list,
+// or into a type variable's parameter, still collects.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let lines: Vec[String] = [
+        "use std::hash",
+        "use std::collections",
+        "",
+        "fn own_sum(data: Vec[u8]) -> i64 {",
+        "    let mut n = 0",
+        "    for b in data {",
+        "        n += b as i64",
+        "    }",
+        "    return n",
+        "}",
+        "",
+        "fn generic_len[T](_x: T) -> i64 {",
+        "    return 1",
+        "}",
+        "",
+        "fn of(s: String) -> String {",
+        "    return hash::sha256_hex(s.bytes().collect())",
+        "}",
+        "",
+        "fn main() throws {",
+        "    let s: String = \"ab\"",
+        "    println(hash::sha256_hex(s.bytes().collect()))",
+        "    println(of(s))",
+        "    println(hash::sha256_hex(\"ab\".bytes().collect()))",
+        "    let n = 3",
+        f"    println(hash::sha256_hex(f\"a{{n}}\".bytes().collect()))",
+        "    println(own_sum(s.bytes().collect()))",
+        "    let names: Vec[String] = [\"a\", \"b\"]",
+        "    println(own_sum(names.join(\"\\n\").bytes().collect()))",
+        "    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()",
+        "    m.insert(\"ab\", 1)",
+        "    for (k, v) in m {",
+        f"        println(f\"{{hash::sha256_hex(k.bytes().collect())}} {{v}}\")",
+        "    }",
+        "    let v: Vec[u8] = s.bytes().collect()",
+        "    println(own_sum(v))",
+        "    println(generic_len(s.bytes().collect()))",
+        "}",
+    ]
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, lines.join("\n") + "\n")
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
+    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    println(f"lent as the text's bytes: {rust.matches(".as_bytes()").count()}")
+    println(f"still collected: {rust.matches(".bytes().collect").count()}")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(ran.stdout.trim())
+    println(ran.stderr.trim())
+    process::run("rm", ["-rf", tmp])
+}

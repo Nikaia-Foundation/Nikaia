@@ -10,17 +10,18 @@ a grammar may write ([#202](https://github.com/Nikaia-Foundation/Nikaia/issues/2
 [#932](https://github.com/Nikaia-Foundation/Nikaia/issues/932),
 [#125](https://github.com/Nikaia-Foundation/Nikaia/issues/125))
 **Supersedes / Related:** takes the decisions on how a grammar is written from
-[ADR-296](adr-296.md) (its other decisions stay there), the rule values of a
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records), the rule values of a
 record now in the history (its last decision went to
 [ADR-grammar-actions-v1](adr-grammar-actions-v1.md)) and the whole of a record now in
 [`docs/history/adr/`](../../history/adr/README.md) (spans, `same_line`, `///`);
 [ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11 (the two ways a hole binds), D18 (the backend is handed
-the grammar's own strings), D27 (`asset("…")`); [ADR-299](adr-299.md) D20, D21
+the grammar's own strings), D27 (`asset("…")`); [ADR-database-v1](adr-database-v1.md) D20, D21
 (a package's grammar is `package::Grammar`; `main entry rule`);
 [ADR-140](adr-140.md) D3 (a path is `::`); Part I 5.1 (Subject ; Config);
 [ADR-037](adr-037.md) (the target decides nothing about what a program means);
 [ADR-375](adr-375.md) D5 (a position carries its fact); [ADR-135](adr-135.md)
-D3 (a `///` run belongs to the item after it); [ADR-views-3](adr-views-3.md)
+D3 (a `///` run belongs to the item after it); [ADR-views-v4](adr-views-v4.md)
 D1-D4 (how a value is passed); Part II 10.8 (the grammar's vocabulary);
 winnow-grammar's ADR 26 (values in the grammar), the engine a grammar is
 lowered to
@@ -119,7 +120,7 @@ from e` is refused at the parse with the call in the message; `dsl` takes a
 As the backend does: one function per entry. The compiler picks no rule as the
 grammar's main one - such a pick chooses wrong silently - so there is no
 *"grammar has no entry to enter through"* to refuse. The grammar's author may
-say which one is main (`main entry rule`, [ADR-299](adr-299.md) D21); that is a
+say which one is main (`main entry rule`, [ADR-database-v1](adr-database-v1.md) D21); that is a
 decision written down, not a pick. Naming a rule that is not an entry has its
 own message.
 
@@ -253,7 +254,7 @@ one.
 ### D20 — Hardware instructions leave the language core.
 
 `unsafe asm`, its register-constraint table and `clobber` are removed.
-Assembly is a library DSL, `dsl x86::Asm { … } eod` ([ADR-299](adr-299.md)
+Assembly is a library DSL, `dsl x86::Asm { … } eod` ([ADR-database-v1](adr-database-v1.md)
 D20), using [ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11's immediate capture. A core construct that
 cannot be given meaning on WebAssembly, a stack machine, is a defect in the
 core. `unsafe` stays reserved for FFI.

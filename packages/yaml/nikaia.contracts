@@ -592,6 +592,13 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> bool"
 
+[fn."line_part"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed", "<result>: borrowed"]
+signature = "(t: ref String, at_break: bool) -> ref(t) String"
+
 [fn."load"]
 pub = true
 sync = true
@@ -673,6 +680,15 @@ touches = []
 views = ["xs: borrowed"]
 signature = "(xs: ref Vec[i64]) -> i64"
 
+[fn."no_line"]
+sync = true
+panics = false
+touches = []
+ensures = ["result == -1"]
+inferred = ["result == -1"]
+from = ["return"]
+signature = "() -> i64"
+
 [fn."node"]
 pub = true
 sync = true
@@ -708,7 +724,7 @@ sync = true
 panics = false
 touches = []
 views = ["t: borrowed"]
-signature = "(t: ref String) -> bool"
+signature = "(t: ref Bytes) -> bool"
 
 [fn."opening"]
 sync = true

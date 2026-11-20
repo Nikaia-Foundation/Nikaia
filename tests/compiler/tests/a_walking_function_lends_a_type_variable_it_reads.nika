@@ -1,5 +1,5 @@
 // A function that walks `T::fields` is copied for each type, and a copy that
-// only reads its `T` lends it (ADR-views-3 D2, #1342): the caller's argument
+// only reads its `T` lends it (ADR-views-v4 D2, #1342): the caller's argument
 // takes the `&` there as in a plain generic call.
 
 struct Point {

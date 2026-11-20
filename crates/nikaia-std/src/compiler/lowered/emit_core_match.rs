@@ -128,7 +128,7 @@ pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWor
     };
     if !parts.is_empty() {
         let mut sliced: Vec<bool> = vec![];
-        for _ in parts.iter() { sliced.push(false); }
+        sliced.reserve(parts.iter().size_hint().0); for _ in parts.iter() { sliced.push(false); }
         for arm in arms.iter() { emit_match_list_positions(&arm.pattern, &mut sliced); }
         if sliced.contains(&true) {
             state.emit_core_tuple_sliced(world, walk, out, host, &parts, &sliced, depth, flow, scope)?;
@@ -173,7 +173,7 @@ pub(crate) fn emit_match_list_positions(pattern: &MatchPattern, sliced: &mut Vec
 
 pub(crate) fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for each in path.iter() {
+    parts.reserve(path.iter().size_hint().0); for each in path.iter() {
         let each = *each;
         parts.push(emit_text(world, each));
     }
@@ -500,7 +500,7 @@ impl EmitState {
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
             self.emit_core_nest_written(world, walk, &mut written, host, pattern, at, 0, false, depth, flow, scope)?;
-            taken_apart.push_str(&format!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at));
+            { use ::core::fmt::Write as _; let _ = taken_apart.write_fmt(format_args!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at)); };
         }
         let opened = self.boxed_bindings(world, pattern);
         let read = self.emit_holes_names_read(world, host, body);
@@ -552,9 +552,9 @@ impl EmitState {
         match body {
             Expr::Block(block, _) => {
                 let mut opening = nikaia_std::block::Text::from(taken_apart.to_string());
-                for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+                for name in opened.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = nikaia_std::boxed::open({}); ", name, name)); }; }
                 for copy in copied.iter() { opening.push_str(copy); }
-                for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
+                for name in cloned.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = {}.clone(); ", name, name)); }; }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(nikaia_std::block::Text::from(opening.trim_end().to_string()));
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;
@@ -562,9 +562,9 @@ impl EmitState {
             },
             Expr::AsyncGroup(block, _, _, _, _) => {
                 let mut opening = nikaia_std::block::Text::from(taken_apart.to_string());
-                for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+                for name in opened.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = nikaia_std::boxed::open({}); ", name, name)); }; }
                 for copy in copied.iter() { opening.push_str(copy); }
-                for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
+                for name in cloned.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = {}.clone(); ", name, name)); }; }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(nikaia_std::block::Text::from(opening.trim_end().to_string()));
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;
@@ -591,7 +591,7 @@ impl EmitState {
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(clippy::redundant_locals)] let members = members;
-        for arm in arms.iter() {
+        home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {
@@ -671,7 +671,7 @@ impl EmitState {
         #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
-        for arm in arms.iter() {
+        home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {

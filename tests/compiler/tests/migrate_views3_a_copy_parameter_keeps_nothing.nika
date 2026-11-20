@@ -1,4 +1,4 @@
-// #1254 step 1, ADR-views-3 D2: `nikaia migrate views-3` writes no `keep`
+// #1254 step 1, ADR-views-v4 D2: `nikaia migrate views-3` writes no `keep`
 // for a parameter of a copy type (a data-less enum, a struct of copied
 // fields) even where the body stores it: it is handed over as a copy, so no
 // caller's value goes with it. A by-value `Vec[String]` stored the same way

@@ -33,3 +33,44 @@ pub fn vars(prefix: &str) -> Vec<(String, String)> {
     listed
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn same_name(a: &[u8], b: &[u8], windows: bool) -> bool {
+    if windows { return a.eq_ignore_ascii_case(&b); }
+    a == b
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn merged(inherited: &[Bytes], clear: bool, remove: &[Bytes], set: &[Bytes], windows: bool) -> Vec<i64> {
+    let mut kept: Vec<i64> = vec![];
+    if !clear { for (i, name) in inherited.iter().enumerate().map(|(at, item)| (at as i64, item)) { if !remove.iter().any(|r| { same_name(name, r, windows) }) && !set.iter().any(|s| { same_name(name, s, windows) }) { kept.push(i); } } }
+    for (j, name) in set.iter().enumerate().map(|(at, item)| (at as i64, item)) { if !set.iter().skip(nikaia_std::count::of(j + 1)).any(|s| { same_name(name, s, windows) }) { kept.push(inherited.len() as i64 + j); } }
+    kept
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let inherited: Vec<Bytes> = vec![nikaia_std::bytes::Bytes::from("Path".as_bytes()), nikaia_std::bytes::Bytes::from("path".as_bytes())];
+    if !(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], true) == vec![2]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [], [\"PATH\".bytes], true) == [2])", None, &[("merged(inherited, false, [], [\"PATH\".bytes], true)", (&&nikaia_std::abort::Operand(&(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], true)))).shown()), ("[2]", (&&nikaia_std::abort::Operand(&(vec![2]))).shown()), ]) };
+    if !(merged(&inherited, false, &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], &vec![], true).is_empty()) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [\"PATH\".bytes], [], true).is_empty())", None, &[]) };
+    if !(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], false) == vec![0, 1, 2]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [], [\"PATH\".bytes], false) == [0, 1, 2])", None, &[("merged(inherited, false, [], [\"PATH\".bytes], false)", (&&nikaia_std::abort::Operand(&(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], false)))).shown()), ("[0, 1, 2]", (&&nikaia_std::abort::Operand(&(vec![0, 1, 2]))).shown()), ]) };
+    if !(merged(&inherited, false, &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], &vec![], false) == vec![0, 1]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [\"PATH\".bytes], [], false) == [0, 1])", None, &[("merged(inherited, false, [\"PATH\".bytes], [], false)", (&&nikaia_std::abort::Operand(&(merged(&inherited, false, &vec![nikaia_std::bytes::Bytes::from("PATH".as_bytes())], &vec![], false)))).shown()), ("[0, 1]", (&&nikaia_std::abort::Operand(&(vec![0, 1]))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let inherited: Vec<Bytes> = vec![nikaia_std::bytes::Bytes::from("A".as_bytes()), nikaia_std::bytes::Bytes::from("B".as_bytes())];
+    if !(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("B".as_bytes()), nikaia_std::bytes::Bytes::from("C".as_bytes()), nikaia_std::bytes::Bytes::from("b".as_bytes())], false) == vec![0, 2, 3, 4]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [], [\"B\".bytes, \"C\".bytes, \"b\".bytes], false) == [0, 2, 3, 4])", None, &[("merged(inherited, false, [], [\"B\".bytes, \"C\".bytes, \"b\".bytes], false)", (&&nikaia_std::abort::Operand(&(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("B".as_bytes()), nikaia_std::bytes::Bytes::from("C".as_bytes()), nikaia_std::bytes::Bytes::from("b".as_bytes())], false)))).shown()), ("[0, 2, 3, 4]", (&&nikaia_std::abort::Operand(&(vec![0, 2, 3, 4]))).shown()), ]) };
+    if !(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("B".as_bytes()), nikaia_std::bytes::Bytes::from("C".as_bytes()), nikaia_std::bytes::Bytes::from("b".as_bytes())], true) == vec![0, 3, 4]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, false, [], [\"B\".bytes, \"C\".bytes, \"b\".bytes], true) == [0, 3, 4])", None, &[("merged(inherited, false, [], [\"B\".bytes, \"C\".bytes, \"b\".bytes], true)", (&&nikaia_std::abort::Operand(&(merged(&inherited, false, &vec![], &vec![nikaia_std::bytes::Bytes::from("B".as_bytes()), nikaia_std::bytes::Bytes::from("C".as_bytes()), nikaia_std::bytes::Bytes::from("b".as_bytes())], true)))).shown()), ("[0, 3, 4]", (&&nikaia_std::abort::Operand(&(vec![0, 3, 4]))).shown()), ]) };
+    if !(merged(&inherited, true, &vec![], &vec![nikaia_std::bytes::Bytes::from("A".as_bytes())], false) == vec![2]) { nikaia_std::abort::assertion_failed("assert(merged(inherited, true, [], [\"A\".bytes], false) == [2])", None, &[("merged(inherited, true, [], [\"A\".bytes], false)", (&&nikaia_std::abort::Operand(&(merged(&inherited, true, &vec![], &vec![nikaia_std::bytes::Bytes::from("A".as_bytes())], false)))).shown()), ("[2]", (&&nikaia_std::abort::Operand(&(vec![2]))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn env_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("env::a_child_s_environment_names_compare_without_case_on_windows", __nikaia_test_0),
+        ("env::a_later_pair_of_a_name_replaces_an_earlier_one_and_clear_drops_all_inherited", __nikaia_test_1),
+    ]
+}

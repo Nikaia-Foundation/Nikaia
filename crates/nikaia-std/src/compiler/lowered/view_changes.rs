@@ -182,9 +182,9 @@ pub(crate) fn vc_watches(view: &VcView, root: &str, path: &str) -> bool {
     if view.used.is_none() || !view.roots.contains(root) { return false; }
     let mut read = false;
     for part in view.parts.iter() {
-        if part != root && !part.starts_with(&*format!("{}.", root)) { continue; }
+        if part != root && !::core::convert::identity(match (AsRef::<str>::as_ref(&(part)), AsRef::<str>::as_ref(&(root)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { continue; }
         read = true;
-        if part == path || part.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", part)) { return true; }
+        if part == path || ::core::convert::identity(match (AsRef::<str>::as_ref(&(part)), AsRef::<str>::as_ref(&(path)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(part)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return true; }
     }
     !read
 }
@@ -375,7 +375,7 @@ pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_,
     let place = matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. });
     let read = vc_path_of(expr, ask);
     if place && read != "" && !read.starts_with('.') {
-        if read == path || read.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", read)) { return true; }
+        if read == path || ::core::convert::identity(match (AsRef::<str>::as_ref(&(read)), AsRef::<str>::as_ref(&(path)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(read)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return true; }
         match expr {
             Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); return vc_reads_path(index, path, ask, &mut &mut *holes_of); },
             _ => { return false; },
@@ -503,7 +503,7 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             }
             if roots.is_empty() { return None; }
             let mut shown: Vec<String> = vec![];
-            for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
+            shown.reserve(args.iter().size_hint().0); for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
             let written = nikaia_std::block::Text::from(shown.join(", "));
             return Some(VcView { name: nikaia_std::block::Text::from(name.to_string()), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(nikaia_std::block::Text::from(callee.to_string())), shown, help: None, looped: false, exclusive: false });
         },
@@ -622,7 +622,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
     let contract = match *nikaia_std::index::get(&ask.own.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<VcView> = vec![];
-    for entry in contract.stores.iter() {
+    out.reserve(contract.stores.iter().size_hint().0); for entry in contract.stores.iter() {
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
         let place = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string()); ::core::mem::drop(pieces);
@@ -849,8 +849,8 @@ pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '
                 }
             }
         },
-        Expr::Tuple(items, _) => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
+        Expr::Tuple(items, _) => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
+        Expr::ListLit { items, .. } => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
         _ => { },
     }
     out
@@ -862,7 +862,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
             let of = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
-            for field in fields.iter() {
+            out.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                 let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let moved = match vc_variable(given, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 out.push((moved, node_key(given), format!("{} {{ {}: ", of, ask.names.resolve(field.name))));
@@ -871,7 +871,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = nikaia_std::index::or(vc_variable(func, ask), || nikaia_std::index::or(root_of(ask.names, func), || "".into()).into());
-            for arg in args.iter() {
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() {
                 let moved = match vc_variable(arg, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 out.push((moved, node_key(arg), format!("{}(", callee)));
             }
@@ -909,13 +909,13 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
     let part = vc_part_of(head);
     let mut help = format!("Hand over a copy: `{}{}.clone(){}`", head, root, close); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if part != "" {
-        help.push_str(&format!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close));
+        { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close)); };
         match &view.callee {
             None => { },
             Some(callee) => {
                 let mut given: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
-                help.push_str(&format!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", "))));
+                given.reserve(view.shown.iter().size_hint().0); for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
+                { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", ")))); };
             },
         }
     }
@@ -951,7 +951,7 @@ pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[
     let mut help = format!("Use `{}` first, or hand `{}` a copy: `{}({}.clone())`.", name, callee, callee, root); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     match &view.call {
         None => { },
-        Some(call) => { help.push_str(&format!(" Or copy `{}` itself: `let {} = {}.clone()`.", name, name, call)); },
+        Some(call) => { { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(" Or copy `{}` itself: `let {} = {}.clone()`.", name, name, call)); }; },
     }
     walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` gets `{}`, but `{}` still reads its text afterwards.", callee, root, name), notes, help: Some(help), warning: false, labels });
 }

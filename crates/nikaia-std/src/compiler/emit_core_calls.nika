@@ -266,7 +266,7 @@ impl EmitState {
             }
             i += 1
         }
-        // **And one that runs the code called** (ADR-views-3 D17): a
+        // **And one that runs the code called** (ADR-views-v4 D17): a
         // parameter of code is `&mut impl FnMut` below, which Rust holds for
         // the call from before its arguments, so `f(f(x))` is
         // `({ let a = f(x); f(a) })`.
@@ -918,6 +918,7 @@ impl EmitState {
                     return false
                 }
                 walk.boxed_args = mask
+                walk.boxed_placed = self.facts.placed_in_block.contains(node_key(func))
                 let mut counts: Vec[Count] = []
                 for at in 0..<args.len() {
                     counts.push(self.count_at(host.crossings_are_possible(), "<field>", variant_slot(owner, variant, at)))
@@ -931,6 +932,7 @@ impl EmitState {
                 out.push("(")
                 self.emit_core_args(world, walk, out, host, variant, args, [], depth, flow, scope)
                 walk.boxed_args = null
+                walk.boxed_placed = false
                 walk.variant_counts = null
                 out.push(")")
                 return true
@@ -953,6 +955,22 @@ impl EmitState {
         // borrows the receiver from before the arguments to the call, so
         // `w.add(g(w))` is `({ let a = g(&mut w); w.add(a) })`. Only on a
         // receiver that is a place, which nothing is done to evaluate.
+        // **A method of a trait a library's `impl` gives the type** (#2304):
+        // the checker keyed `supervisor::Restart::decide`, and the language
+        // below finds `decide` only with the trait in scope.
+        let in_scope = emit_call_library_trait(world, self.facts.method_callees[on_node]?.clone() ?? "")
+        if in_scope != "" {
+            out.push(f"{{ use nikaia_std::{in_scope} as _; ")
+        }
+        self.emit_core_method_call_hoisted(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)
+        if in_scope != "" {
+            out.push(" }")
+        }
+    }
+
+    /// `emit_core_method_call`, its arguments bound first where they lend the
+    /// receiver's local.
+    fn emit_core_method_call_hoisted[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let hoisted = self.emit_method_hoisted(world, receiver, args)
         if hoisted.len() == 0 {
             walk.hoisted_args = null
@@ -1027,6 +1045,31 @@ impl EmitState {
         return hoisted
     }
 
+    /// Whether a call is `String`'s `push_str` on a local, of an `f"…"` with
+    /// holes none of which reads that local (it is lent for the write) and
+    /// whose text is not a file's name (ADR-319 D4): formatted into the local
+    /// (#2382).
+    fn emit_call_formatted_into(ref self, world: ref EmitWorld, walk: ref EmitWalk, receiver: ref Expr?, on_node: i64, name: ref String, args: ref Vec[Expr]) -> bool {
+        if name != "push_str" || args.len() != 1 || walk.hoisted_args != null {
+            return false
+        }
+        if (self.facts.method_callees[on_node]?.clone() ?? "") != "String::push_str" {
+            return false
+        }
+        let on = receiver ?? return false
+        let local = match on {
+            Expr::Variable(v, _) => emit_text(world, v),
+            else => return false,
+        }
+        if self.facts.path_holes.contains_key(node_key(args[0])) || emit_mentions(world, args[0], local) {
+            return false
+        }
+        return match args[0] {
+            Expr::LitInterpolated { parts, .. } => emit_leaf_has_holes(parts),
+            else => false,
+        }
+    }
+
     /// Whether `expr` hands the local `name`, or a part of it, to a `mut`
     /// parameter or a `ref mut self` receiver anywhere in it.
     fn emit_lends_mut(ref self, world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
@@ -1048,6 +1091,15 @@ impl EmitState {
         // declares another thing to build.
         if self.emit_call_scalars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
             return
+        }
+        // **A text compared with an `f"…"` of text parts** (#2405): checked
+        // in place, the formatted text never built.
+        if receiver != null && args.len() == 1 && walk.hoisted_args == null && (name == "starts_with" || name == "ends_with" || name == "contains") {
+            let callee = self.facts.method_callees[on_node]?.clone() ?? ""
+            let text = receiver ?? return
+            if (callee == f"str::{name}" || callee == f"String::{name}") && self.emit_format_compared(world, walk, out, host, name, text, args[0], true, true, depth, flow, scope) {
+                return
+            }
         }
         // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5); the dot is
         // gone (ADR-140 D3). `NK1147` is what a program meets; this is here so
@@ -1239,6 +1291,23 @@ impl EmitState {
                 return
             }
         }
+        // **Formatted text appended is formatted into the text** (#2382):
+        // `s.push_str(f"…{x}…")` writes into `s`, without the `String` a
+        // `format!` would make, copy from and drop.
+        if self.emit_call_formatted_into(world, walk, receiver, on_node, name, args) {
+            let text = args[0]
+            match text {
+                Expr::LitInterpolated { parts, .. } => {
+                    out.push("{ use ::core::fmt::Write as _; let _ = ")
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                    out.push(".write_fmt(format_args!(")
+                    self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)
+                    out.push(")); }")
+                    return
+                },
+                else => {},
+            }
+        }
         // **A `replace` on the text a `replace` made works in its buffer**
         // (ADR-text-reuse-1 D4, `replaced_in_place`): the temporary is
         // handed over whole and nobody reads it again.
@@ -1367,7 +1436,7 @@ impl EmitState {
                 return
             }
         }
-        // **`s.extend(xs.clone())` is `s.extend(xs.iter().cloned())`** (ADR-collections-1
+        // **`s.extend(xs.clone())` is `s.extend(xs.iter().cloned())`** (ADR-collections-v3
         // D4): the elements are the copy, and no list is built in between.
         if name == "extend" && args.len() == 1 && receiver != null && self.facts.collection_clones.contains(node_key(args[0])) {
             let target = receiver ?? return
@@ -1382,7 +1451,7 @@ impl EmitState {
                 else => {}
             }
         }
-        // **`m.extend(other.clone())` of a map** (ADR-collections-1 D6, D4):
+        // **`m.extend(other.clone())` of a map** (ADR-collections-v3 D6, D4):
         // each pair is the copy, and no map is built in between.
         if name == "extend" && args.len() == 1 && receiver != null && self.facts.map_clones.contains(node_key(args[0])) {
             let target = receiver ?? return
@@ -2178,4 +2247,18 @@ fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
         return f"({copies[0]},)"
     }
     return f"({copies.join(", ")})"
+}
+
+/// **The trait a method call's ledger key names, where a library `impl` gives
+/// it a type** (#2304): `supervisor::Restart` for `supervisor::Restart::decide`,
+/// else `""`. Only a trait of a module, the path the language below writes
+/// under `nikaia_std::`.
+fn emit_call_library_trait(world: ref EmitWorld, key: ref String) -> String {
+    for (trait_name, _) in world.library.implementations {
+        let method = key.strip_prefix(f"{trait_name}::") ?? continue
+        if trait_name.contains("::") && !method.contains("::") {
+            return trait_name.clone()
+        }
+    }
+    return ""
 }

@@ -55,7 +55,14 @@ impl EmitOut {
             if (b as i64) == 123 { depth += 1; }
             if (b as i64) == 125 {
                 depth -= 1;
-                if depth == 0 { return ((at) as usize) < text.len(); }
+                if depth == 0 {
+                    if ((at) as usize) >= text.len() { return false; }
+                    let rest = match nikaia_std::bytes::text_of_a_cut(&*text, unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (text.as_bytes().len() as i64) as usize) }) {
+                        Ok(value) => value,
+                        Err(_error) => { return true; },
+                    };
+                    return !rest.starts_with('.') && !rest.starts_with('?');
+                }
             }
         }
         false

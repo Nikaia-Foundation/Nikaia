@@ -271,7 +271,7 @@ impl EmitState {
                 continue
             }
             // A part read off a place into a `ref T?` slot goes inside its
-            // option (ADR-views-3 D5, #655).
+            // option (ADR-views-v4 D5, #655).
             let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part))
             out.push(before)
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)
@@ -416,7 +416,7 @@ impl EmitState {
             return
         }
         // **A part taken out of a `mut` parameter or a `let mut` view** to be
-        // given back (ADR-views-1 D3): the place keeps its type's empty value,
+        // given back (ADR-views-v4 D20): the place keeps its type's empty value,
         // or a stand-in, until an assignment gives it back. Nothing is copied.
         let taken: String? = self.facts.taken_parts.get(node_key(node))?.clone()
         if taken != null {
@@ -428,8 +428,14 @@ impl EmitState {
         }
         // **A boxed field is read through its box** (ADR-246 D2):
         // `(*base.field)` is a place that behaves as the unboxed field would.
+        // **A boxed field of a value of its own taken by `??` leaves its
+        // box** (ADR-327 D16, #2406): `nikaia_std::boxed::open(read.code)`,
+        // since the box is not `Box`, out of which `*` moves.
+        let moved = self.facts.boxed_moves.contains(node_key(node))
         let boxed = self.facts.boxed_reads.contains(node_key(node))
-        if boxed {
+        if moved {
+            out.push("nikaia_std::boxed::open(")
+        } else if boxed {
             out.push("(*")
         }
         // **A field of an element is read through the reference the read
@@ -500,7 +506,7 @@ impl EmitState {
     /// language below's own.
     fn emit_core_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An element taken out of a `mut` place** to be given back
-        // (ADR-views-1 D3, #1208): the brackets are the place, and the
+        // (ADR-views-v4 D20, #1208): the brackets are the place, and the
         // element's empty value or stand-in stays there until it is.
         let taken: String? = self.facts.taken_parts.get(node_key(node))?.clone()
         if taken != null && !flow.in_a_place {
@@ -704,6 +710,8 @@ impl EmitState {
             out.push(f"{emit_cleaned(host.overlaps_user_code())}::new(")
         }
         out.push(f"{owner} {{ ")
+        // **A box site placed in the block** (ADR-327 D16, #2406).
+        let boxed_built: String = if self.facts.placed_in_block.contains(node_key(node)) { "placed" } else { "new" }
         let mut i = 0
         let trusting = walk.trusting
         for field in fields {
@@ -726,7 +734,7 @@ impl EmitState {
             let mut before = around_before.clone()
             let mut after = around_after.clone()
             if boxed {
-                before = f"std::boxed::Box::new({around_before}"
+                before = f"nikaia_std::block::Boxed::{boxed_built}({around_before}"
                 after = f"{around_after})"
             }
             // **Into a field both kinds of text flow into, each value goes as it
@@ -793,7 +801,7 @@ impl EmitState {
                     put = f"Some({put})"
                 }
                 if boxed {
-                    out.push(f": std::boxed::Box::new({put})")
+                    out.push(f": nikaia_std::block::Boxed::{boxed_built}({put})")
                 } else {
                     out.push(f": {put}")
                 }
@@ -828,7 +836,7 @@ impl EmitState {
     fn emit_place_field_default(ref self, owner: ref String, field: ref String, default: ref String, ty: ref Ty) -> String {
         let mut value = held_literal(default, ty)
         if self.is_boxed_field(owner, field) {
-            value = f"std::boxed::Box::new({value})"
+            value = f"nikaia_std::block::Boxed::new({value})"
         }
         return f"{escaped_name(field)}: {value}"
     }
@@ -875,7 +883,7 @@ impl EmitState {
             out.push(written)
             // **A boxed field is built in its box** (ADR-246 D3).
             if self.is_boxed_field(owner, emit_text(world, field.name)) {
-                out.push(": std::boxed::Box::new(")
+                out.push(": nikaia_std::block::Boxed::new(")
                 if field.value != null {
                     let value = field.value ?? return
                     self.emit_expr(world, walk, out, host, value, depth, flow, scope)

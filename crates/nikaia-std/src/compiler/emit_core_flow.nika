@@ -543,6 +543,17 @@ impl EmitState {
             out.push("))")
             return
         }
+        // **A text compared with an `f"…"` of text parts** (#2405): the
+        // lengths, then the parts, in place; the formatted text never built.
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.compared_formats.contains(site) {
+            let kind: String = if op == BinaryOp::Eq { "==" } else { "!=" }
+            if self.emit_format_compared(world, walk, out, host, kind, lhs, rhs, true, false, depth, wide, scope) {
+                return
+            }
+            if self.emit_format_compared(world, walk, out, host, kind, rhs, lhs, false, false, depth, wide, scope) {
+                return
+            }
+        }
         // **A `u64` and a signed integer compare as numbers** (ADR-285 D32): a
         // sign test and a compare, the sides in the order they were written.
         if self.facts.mixed_comparisons.contains_key(site) {

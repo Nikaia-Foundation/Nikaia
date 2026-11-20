@@ -4,6 +4,9 @@
 # aliasing models on nightly. With arguments, only those crate directories
 # (CI checks each crate on its own runner, side by side).
 set -e
+# Miri's nightly: pinned, since nightly 2026-11-19 ICEs in rustc borrowck on the
+# winnow-grammar dependency (task-block `collect`); CI sets it the same way.
+NIGHTLY=${NIGHTLY:-nightly-2026-11-18}
 [ $# -gt 0 ] || set -- crates/unsafe/*/
 for dir in "$@"; do
     echo "== $dir"
@@ -16,7 +19,7 @@ for dir in "$@"; do
         cargo test --quiet --all-features
         cargo clippy --quiet --all-targets -- -D warnings
         cargo clippy --quiet --all-features --all-targets -- -D warnings
-        cargo +nightly miri test --quiet --all-features
-        MIRIFLAGS=-Zmiri-tree-borrows cargo +nightly miri test --quiet --all-features
+        cargo +"$NIGHTLY" miri test --quiet --all-features
+        MIRIFLAGS=-Zmiri-tree-borrows cargo +"$NIGHTLY" miri test --quiet --all-features
     )
 done

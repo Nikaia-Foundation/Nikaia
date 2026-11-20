@@ -94,7 +94,7 @@ impl Host<'_> {
             _ => return not_run("It is not a call of a function by name."),
         };
         let value = Expr::Call {
-            func: Box::new(func),
+            func: nikaia_std::block::Boxed::new(func),
             args: args
                 .iter()
                 .map(|value| crate::ast::int_literal(value.unsigned_abs(), *value < 0))
@@ -442,6 +442,7 @@ impl CheckWalkedPasses for Host<'_> {
             &facts.arithmetic,
             &facts.divisions,
             &facts.unfit_numbers,
+            &facts.map_indices,
         );
         let runner = |call: &Expr, callee: &str, args: &[i64]| {
             self.run_for_a_claim(call, callee, args, &comptimes.by_name)

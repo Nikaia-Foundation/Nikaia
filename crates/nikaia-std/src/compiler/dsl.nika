@@ -439,8 +439,8 @@ fn bound_argument(args: ref Vec[Expr], words: ref winnow_grammar::InternerContex
 // A call that passes options with a bound statement among its subjects.
 // **The parameters arrive at a driver, or nowhere**: what stands after the
 // `;` becomes the shadow value only where the callee declared `...args:
-// Self::dsl`, and anywhere else it was dropped on the way down (ADR-grammar-build-time-v1 D12,
-// ADR-296).
+// Self::dsl`, and anywhere else it was dropped on the way down (ADR-grammar-build-time-v1
+// D12).
 fn a_parameter_call(callee: ref String, passed: Vec[String], subject: String?, span: ref Span, bound: ref collections::BTreeMap[String, Vec[String]], takers: ref Vec[String], mut found: Vec[Finding]) {
     if passed.len() == 0 {
         return

@@ -1,4 +1,4 @@
-// #1208, ADR-views-1 D2: an element of a `mut` list taken by a keeper and
+// #1208, ADR-views-v4 D19: an element of a `mut` list taken by a keeper and
 // not given back before the `return`.
 fn left_out_element_hold(keep ws: Vec[u32]) -> Vec[u32] {
 	return ws

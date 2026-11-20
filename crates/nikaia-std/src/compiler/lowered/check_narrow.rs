@@ -122,7 +122,7 @@ pub(crate) fn check_narrow_bound_where(state: &CheckState, name: &str) -> Option
 // this was written - see `contracts::sync`.
 pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: i64) -> Vec<CheckLocal> {
     let mut markers: Vec<CheckLocal> = vec![];
-    for name in names.iter() {
+    markers.reserve(names.iter().size_hint().0); for name in names.iter() {
         let path = name.contains('.');
         let root_name: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.split('.').next(), || "").to_string());
         let found: Option<CheckLocal> = state.binding(&root_name);
@@ -168,7 +168,7 @@ pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<
     for marker in markers.iter() { state.scope[nikaia_std::index::at(frame)].push(marker.clone()); }
 }
 
-pub fn check_narrow_ends(path: &str, written: &str) -> bool { path == written || path.starts_with(&*format!("{}.", written)) }
+pub fn check_narrow_ends(path: &str, written: &str) -> bool { path == written || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(written)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

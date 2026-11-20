@@ -579,10 +579,11 @@ impl EmitState {
         }
         // **A `@stream` entry hands its items over one at a time**
         // (ADR-grammar-typed-read-v1 D7, amended 2026-11-08): the engine's reader runs on
-        // a thread of its own over a copy of the input and hands each item,
-        // owned, through a channel that holds none; a walk that stops drops
-        // the receiver, `each` answers `Break` and the parse ends there. A
-        // failure is the sequence's next element.
+        // a thread of its own over a copy of the input and hands the items,
+        // owned, in batches (`emit_stream_batched_start`, #2433); a walk that
+        // stops drops the receiver, the next send fails, `each` answers
+        // `Break` and the parse ends there. A failure is the sequence's next
+        // element.
         let streamed = match entered {
             rule => rule.stream,
             null => false,
@@ -642,10 +643,11 @@ impl EmitState {
                     context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)"
                 },
             }
-            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
-            let each = emit_stream_each("_", self.facts.emitting_entries.contains(f"{name}::{rule_name}"))
-            out.push(f"let __wg_parsed = {lowered}::parse_{rule_name}_reader_each(&__wg_source[..], &mut {context}, winnow_grammar::rt::Reading::default(), {handed}{each}); ")
-            out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })")
+            out.push(emit_stream_batched_start())
+            let each = emit_stream_each("_", self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true)
+            out.push(f"let __wg_parsed = {lowered}::parse_{rule_name}_slice_each(&__wg_source[..], &mut {context}, {handed}{each}); ")
+            out.push(emit_stream_batched_end("__wg_error.render(&__wg_source[..])"))
+            out.push(" })")
             out.push(f"{question}")
             return
         }

@@ -197,7 +197,7 @@ pub(crate) fn comptime_bundle_toolchain_stamp<H: ComptimeBundleHost>(rustc: &str
     stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("settings.toml")))));
     stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("toolchains")))));
     let mut dir = host.where_tools_start();
-    stamp.push_str(&format!("start {}\n", nikaia_std::fs::path::display(&(dir))));
+    { use ::core::fmt::Write as _; let _ = stamp.write_fmt(format_args!("start {}\n", nikaia_std::fs::path::display(&(dir)))); };
     loop {
         for name in ["rust-toolchain", "rust-toolchain.toml"] { stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))))); }
         let up = match nikaia_std::fs::path::parent(&(dir)) { Some(__nikaia_value) => __nikaia_value, None => break };
@@ -259,8 +259,8 @@ pub(crate) async fn comptime_bundle_recorded<H: ComptimeBundleHost>(flavour: &Co
     }
     let bundle = comptime_bundle_bundle_of(&flavour, host).await?;
     let mut text = format!("{}\n{}\n{}\n", fingerprint, nikaia_std::fs::path::display(&(bundle.dylib)), nikaia_std::fs::path::display(&(bundle.libdir)));
-    for (name, rlib) in bundle.rlibs.iter() { text.push_str(&format!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }
-    for dir in bundle.deps.iter() { text.push_str(&format!("{}\n", nikaia_std::fs::path::display(&(dir)))); }
+    for (name, rlib) in bundle.rlibs.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }; }
+    for dir in bundle.deps.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("{}\n", nikaia_std::fs::path::display(&(dir)))); }; }
     comptime_bundle_write_if_changed(&record, &text, &host.unique_beside(&record)).await?;
     Ok(bundle)
 }
@@ -394,9 +394,9 @@ pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: &Compti
 
 pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String, fs::Path)], libdir: &std::path::Path) -> Result<String, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
     let mut files: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(dylib))], nikaia_std::block::Place::Block);
-    for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
+    files.reserve(rlibs.iter().size_hint().0); for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
     let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for file in files.iter() {
+    lines.reserve(files.iter().size_hint().0); for file in files.iter() {
         let meta = match fs::metadata(file, &fs::Root::Anywhere) {
             Ok(value) => value,
             Err(error) => { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(format!("{}: {}", nikaia_std::fs::path::display(&(file)), error)), &"comptime_bundle_stamp_of")) },

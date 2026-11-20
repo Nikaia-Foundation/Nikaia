@@ -154,7 +154,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
         <h3>Parsers built from a grammar</h3>
         <p>A format or a protocol is read by a parser the compiler builds from a grammar, and the parser of HTTP requests is one of them. Input that does not match is a parse error at its offset, for the program to handle. The <code>http</code> package's server caps a request's head at 16 KiB and its body at 1 MiB, limits how long it waits for the head, and answers 431, 413 or 408 past those limits.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-296.html" | relative_url }}">ADR-296 →</a>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-grammar-syntax-v1.html" | relative_url }}">ADR-grammar-syntax-v1 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked at the call</span>
@@ -166,7 +166,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>
         <h3>SQL checked against the schema</h3>
         <p>In the specification a database statement is SQL that the driver's grammar checks against the schema while the program is built, and the rows it returns are matched to the program's struct by name. <code>std::db</code> is not built yet.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-299.html" | relative_url }}">ADR-299 →</a>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-database-v1.html" | relative_url }}">ADR-database-v1 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked while the program runs</span>

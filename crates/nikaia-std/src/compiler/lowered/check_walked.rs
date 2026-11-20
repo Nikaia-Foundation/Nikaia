@@ -8,7 +8,7 @@ pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
     let mut untold = false;
     for f in state.findings.copy_owned() {
         match f.severity {
-            CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" { other_error = true; } },
+            CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" && f.code != "NK1308" { other_error = true; } },
             _ => { },
         }
     }
@@ -29,7 +29,7 @@ pub(crate) fn check_walked_articles(state: &mut CheckState) {
         let mut one = f;
         one.message = articles(&one.message);
         let mut notes: Vec<String> = vec![];
-        for note in one.notes.iter() { notes.push(articles(note)); }
+        notes.reserve(one.notes.iter().size_hint().0); for note in one.notes.iter() { notes.push(articles(note)); }
         one.notes = notes;
         let help_was: Option<String> = match one.help.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -40,7 +40,7 @@ pub(crate) fn check_walked_articles(state: &mut CheckState) {
             None => { },
         }
         let mut labels: Vec<CheckLabel> = vec![];
-        for label in one.labels.iter() {
+        labels.reserve(one.labels.iter().size_hint().0); for label in one.labels.iter() {
             let mut l = label.clone();
             l.text = articles(&l.text);
             labels.push(l);
@@ -84,10 +84,10 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
         Expr::Path(segments, _) => {
             if receiver && !args.is_empty() {
                 let first = args.remove(0);
-                Expr::MethodCall { receiver: std::boxed::Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
-            } else { Expr::Call { func: std::boxed::Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
+                Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
+            } else { Expr::Call { func: nikaia_std::block::Boxed::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
-        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: std::boxed::Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
+        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: nikaia_std::block::Boxed::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
         _ => panic("a kept function is a name or a path"),
     };
     (names, call)
@@ -97,7 +97,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 // this was written - see `contracts::sync`.
 pub(crate) fn check_walked_unsigned_slots(state: &mut CheckState, proven: &mut impl FnMut(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
-    for (_, held) in state.flow.unsigned_slots.copy_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
+    for (_, held) in state.flow.unsigned_slots.copy_owned() { slots.reserve(held.iter().size_hint().0); for slot in held.iter() { slots.push(slot.clone()); } }
     state.flow.unsigned_slots.clear();
     if slots.is_empty() { return; }
     let mut nodes: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -113,10 +113,10 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
         for ((written, on), fields) in unrolled.iter() {
             if written != function { continue; }
             any = true;
-            out.push_str(&format!("comptime: `{}` unrolled over `{}` as `{}`\n", function, on, check_specialised(function, on)));
-            for field in fields.iter() { out.push_str(&format!("    {}: {}\n", field.name, field.ty.shown())); }
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("comptime: `{}` unrolled over `{}` as `{}`\n", function, on, check_specialised(function, on))); };
+            for field in fields.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {}: {}\n", field.name, field.ty.shown())); }; }
         }
-        if !any { out.push_str(&format!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }
+        if !any { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }; }
     }
     out
 }
@@ -258,6 +258,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     if harvesting { return; }
     check_program_instantiations_beside(state, world, host);
     check_program_unroll(state, world, host);
+    check_core_place_returned(state, world);
     check_walked_unsigned_slots(state, &mut |facts, nodes| { passes.nonnegative(facts, nodes) });
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();

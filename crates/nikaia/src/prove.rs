@@ -89,6 +89,7 @@ pub fn comptimes_of(
     arithmetic: &BTreeMap<i64, String>,
     divisions: &BTreeMap<i64, String>,
     unfit_numbers: &BTreeSet<i64>,
+    map_indices: &BTreeSet<i64>,
 ) -> Comptimes {
     prove_run::prove_comptimes_of(
         &parsed.program,
@@ -102,6 +103,7 @@ pub fn comptimes_of(
         arithmetic,
         divisions,
         unfit_numbers,
+        map_indices,
     )
 }
 
@@ -180,6 +182,19 @@ pub fn totals() -> (usize, usize, usize) {
 /// How many claims were asked a second time on this thread so far.
 pub fn second_queries() -> usize {
     SECOND_QUERIES.with(|n| n.get())
+}
+
+/// This thread's two counts, runs and second queries, to hand back from a
+/// worker ([`crate::proofs::in_parallel`], #1949).
+pub(crate) fn thread_counts() -> (usize, usize) {
+    (claim_runs(), second_queries())
+}
+
+/// Add what a worker counted to this thread's counts, so a pass on every
+/// core counts as it would on one.
+pub(crate) fn add_thread_counts(counted: (usize, usize)) {
+    CLAIM_RUNS.with(|runs| runs.set(runs.get() + counted.0));
+    SECOND_QUERIES.with(|n| n.set(n.get() + counted.1));
 }
 
 /// The runner `prove_rounds` is lent, counting each run (#1117).

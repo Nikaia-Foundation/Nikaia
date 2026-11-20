@@ -211,11 +211,18 @@ pub fn report(
     crossings_are_possible: bool,
     facts: Option<&crate::check::CheckFacts>,
 ) -> String {
-    nikaia_std::compiler::sharing::sharing_report(&analyse_program(
+    let mut out = nikaia_std::compiler::sharing::sharing_report(&analyse_program(
         parsed,
         own,
         library,
         crossings_are_possible,
         facts,
-    ))
+    ));
+    // ADR-327 D16 (#2406): where each box of a recursive type is built.
+    if let Some(facts) = facts {
+        out.push_str(&nikaia_std::compiler::sharing::box_sites_report(
+            &facts.box_sites,
+        ));
+    }
+    out
 }

@@ -1,4 +1,4 @@
-// #1266, ADR-views-3 D4, D5, D8, D11: a call whose result is a view of its
+// #1266, ADR-views-v4 D4, D5, D8, D11: a call whose result is a view of its
 // parameter is handed to a plain parameter as the slice it stands for, for
 // an `Array[i64]`, a `String` and a `Bytes` result alike.
 fn rest(xs: Array[i64]) -> Array[i64] {

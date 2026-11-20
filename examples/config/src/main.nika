@@ -63,7 +63,7 @@ pub struct Section {
 }
 
 fn main() throws {
-    let path = cli::args().nth(1) ?? "app.conf"
+    let path = cli::args(trusted: true).nth(1) ?? "app.conf"
 
     // A configuration file is small, so it is read into a string.
     let text = fs::read_to_string(path, fs::Root::Anywhere) catch {

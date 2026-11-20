@@ -36,7 +36,7 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
         if written_parts.len() == 1 { return Translated { ty: Ty::Unknown, kept: true }; }
         let mut parts: Vec<Ty> = vec![];
         let mut kept = false;
-        for part in written_parts.iter() {
+        parts.reserve(written_parts.iter().size_hint().0); for part in written_parts.iter() {
             let one = translate(part, crate_word, parameters, types, mentioned);
             if one.kept { kept = true; }
             parts.push(one.ty);
@@ -46,7 +46,7 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     let optional = generic_of(text, "Option");
     if optional.is_some() {
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);
-        return Translated { ty: Ty::Nullable(std::boxed::Box::new(inner.ty)), kept: inner.kept };
+        return Translated { ty: Ty::Nullable(nikaia_std::block::Boxed::new(inner.ty)), kept: inner.kept };
     }
     let listed = generic_of(text, "Vec");
     if listed.is_some() {
@@ -143,9 +143,15 @@ pub struct WrittenFn {
 
 pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> FnContract {
     #[allow(unused_mut)] let mut keeps: Vec<String> = vec![];
-    let mut params: Vec<(String, Ty)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps;
+    #[allow(unused_mut)] let mut os_text: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps;
+    let mut params: Vec<(String, Ty)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps; #[allow(unused_mut, clippy::redundant_locals)] let mut os_text = os_text;
     for at in 0..written.names.len() as i64 {
-        let translated = translate(nikaia_std::index::get(&written.types, (at) as usize), crate_word, &written.parameters, types, mentioned);
+        if takes_os_text(nikaia_std::index::get(&written.types, (at) as usize)) {
+            os_text.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string()));
+            params.push((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string()), Ty::Named { name: String::from("String"), args: vec![], view: true }));
+            continue;
+        }
+        let translated = translate(unsafe { nikaia_std::proven::read(&written.types, (at) as usize) }, crate_word, &written.parameters, types, mentioned);
         if translated.kept { keeps.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string())); }
         params.push((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string()), translated.ty));
     }
@@ -168,8 +174,14 @@ pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTre
     entry.sync_claim = if written.pauses { Sync::No } else { Sync::Asserted };
     entry.fails_with = fails;
     entry.keeps = keeps;
+    entry.os_text = os_text;
     entry.signature = Some(signature);
     entry
+}
+
+pub(crate) fn takes_os_text(written: &str) -> bool {
+    let text = written.trim();
+    text == "&OsStr" || text == "&ffi::OsStr" || text == "&std::ffi::OsStr"
 }
 
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
@@ -200,6 +212,21 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let written = WrittenFn { names: vec![String::from("a"), String::from("b"), String::from("windows"), String::from("c")], types: vec![String::from("&OsStr"), String::from("&std::ffi::OsStr"), String::from("bool"), String::from("Option<&OsStr>")], result: String::from("bool"), pauses: false, parameters: vec![] };
+    let entry = contract(&written, "process", &types, &mut mentioned);
+    if !(entry.os_text == vec!["a", "b"]) { nikaia_std::abort::assertion_failed("assert(entry.os_text == [\"a\", \"b\"])", None, &[("entry.os_text", (&&nikaia_std::abort::Operand(&(entry.os_text))).shown()), ("[\"a\", \"b\"]", (&&nikaia_std::abort::Operand(&(vec!["a", "b"]))).shown()), ]) };
+    let said = nikaia_std::index::or(match entry.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.text()),
+        None => None,
+    }, || "".into());
+    if !(said.starts_with("(a: ref String, b: ref String, windows: bool, c: ")) { nikaia_std::abort::assertion_failed("assert(said.starts_with(\"(a: ref String, b: ref String, windows: bool, c: \"))", None, &[]) };
+    if !(!nikaia_std::list::contains(&entry.keeps, &"a")) { nikaia_std::abort::assertion_failed("assert(!entry.keeps.contains(\"a\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
     types.insert(String::from("Error"));
     let none: Vec<String> = vec![];
@@ -213,7 +240,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let variables = sends("T: Send + 'static, U: Clone, 'a: 'b");
     if !(variables == vec!["T"]) { nikaia_std::abort::assertion_failed("assert(variables == [\"T\"])", None, &[("variables", (&&nikaia_std::abort::Operand(&(variables))).shown()), ("[\"T\"]", (&&nikaia_std::abort::Operand(&(vec!["T"]))).shown()), ]) };
     let names: Vec<String> = vec![String::from("job"), String::from("name"), String::from("f")];
@@ -228,7 +255,8 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn signature_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("signature::a_rust_type_reads_as_the_ledgers", __nikaia_test_0),
-        ("signature::a_result_names_what_it_throws", __nikaia_test_1),
-        ("signature::a_send_bound_reaches_its_parameters", __nikaia_test_2),
+        ("signature::an_os_str_parameter_reads_as_os_text", __nikaia_test_1),
+        ("signature::a_result_names_what_it_throws", __nikaia_test_2),
+        ("signature::a_send_bound_reaches_its_parameters", __nikaia_test_3),
     ]
 }

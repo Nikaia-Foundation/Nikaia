@@ -2,7 +2,7 @@
 // parameter and handed to a call of `std` asking `Vec[String]` lowered as a
 // list of `EitherText` (NK1343, rustc: `List<EitherText>` where `List<Text>`
 // was wanted) when every caller handed the parameter literals. `extend` links
-// the two lists (ADR-collections-1 D3, D6), so they are one type below, here
+// the two lists (ADR-collections-v3 D3, D6), so they are one type below, here
 // text of its own, as with `let mut args: Vec[String] = [..]`.
 use std::process
 

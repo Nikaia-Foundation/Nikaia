@@ -1,5 +1,5 @@
 //! **`dsl G { … } eod` over a grammar this program declares** (#518, Part II
-//! 10.5, ADR-299 D20): the grammar's entry runs on the block's text while the
+//! 10.5, ADR-database-v1 D20): the grammar's entry runs on the block's text while the
 //! program is built, the value is built into the program, and the block's
 //! type is the entry's result.
 

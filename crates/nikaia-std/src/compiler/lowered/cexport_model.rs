@@ -97,15 +97,15 @@ pub enum CxPart {
     Value(CxByValue),
     Choice(i64),
     Record(i64),
-    Array(std::boxed::Box<CxPart>, i64),
+    Array(nikaia_std::block::Boxed<CxPart>, i64),
 }
 
 impl CxRecord {
     pub(crate) fn is_enum(&self) -> bool { !self.variants.is_empty() }
     pub fn parts(&self) -> Vec<CxPart> {
         let mut out: Vec<CxPart> = vec![];
-        for (_, part) in self.fields.iter() { out.push(cx_element(part)); }
-        for variant in self.variants.iter() { for (_, part) in variant.fields.iter() { out.push(cx_element(part)); } }
+        out.reserve(self.fields.iter().size_hint().0); for (_, part) in self.fields.iter() { out.push(cx_element(part)); }
+        for variant in self.variants.iter() { out.reserve(variant.fields.iter().size_hint().0); for (_, part) in variant.fields.iter() { out.push(cx_element(part)); } }
         out
     }
 }
@@ -285,7 +285,7 @@ pub(crate) fn cx_part(words: &winnow_grammar::InternerContext, plains: &[CxPlain
     if words.resolve(ty.name) == "Array" && ty.generics.len() == 2 {
         let element = cx_one_part(words, plains, declared, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         let count = unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count;
-        if element.is_some() && count.is_some() { found = Some(CxPart::Array(std::boxed::Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
+        if element.is_some() && count.is_some() { found = Some(CxPart::Array(nikaia_std::block::Boxed::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
     } else { found = cx_one_part(words, plains, declared, ty); }
     Ok(match found { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(written, "field of an `extern` struct or enum")), &"cx_part")) })
 }
@@ -313,7 +313,7 @@ pub(crate) fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spann
                 if !is_extern { continue; }
                 let ty = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 let mut made: Vec<(String, CxPart)> = vec![];
-                for field in fields.iter() {
+                made.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                     let field_name = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                     let at = cx_part(words, plains, &declared, &field.ty, &format!("{}.{}", ty, field_name))?;
                     made.push((field_name, at));
@@ -325,7 +325,7 @@ pub(crate) fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spann
                 if !is_extern { continue; }
                 let ty = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 let mut alternatives: Vec<CxAlternative> = vec![];
-                for variant in variants.iter() {
+                alternatives.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
                     let variant_name = nikaia_std::block::Text::from(words.resolve(variant.name).to_string());
                     let mut positional = false;
                     let mut fields: Vec<(String, CxPart)> = vec![];
@@ -334,14 +334,14 @@ pub(crate) fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spann
                         VariantFields::Tuple(types) => {
                             positional = true;
                             let mut at = 0;
-                            for field_ty in types.iter() {
+                            fields.reserve(types.iter().size_hint().0); for field_ty in types.iter() {
                                 let part = cx_part(words, plains, &declared, field_ty, &format!("{}::{}.{}", ty, variant_name, at))?;
                                 fields.push((format!("_{}", at), part));
                                 at += 1;
                             }
                         },
                         VariantFields::Named(named) => {
-                            for field in named.iter() {
+                            fields.reserve(named.iter().size_hint().0); for field in named.iter() {
                                 let field_name = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                                 let part = cx_part(words, plains, &declared, &field.ty, &format!("{}::{}.{}", ty, variant_name, field_name))?;
                                 fields.push((field_name, part));
@@ -401,7 +401,7 @@ pub(crate) fn cx_plain_enums(words: &winnow_grammar::InternerContext, items: &[S
                 if is_extern { continue; }
                 let mut plain = true;
                 let mut names: Vec<String> = vec![];
-                for variant in variants.iter() {
+                names.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
                     match &variant.fields {
                         VariantFields::Unit => { },
                         _ => { plain = false; },
@@ -520,7 +520,7 @@ pub(crate) fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPla
 
 pub(crate) fn cx_parameter_names(params: &[String]) -> Vec<String> {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for list in params.iter() {
+    names.reserve(params.iter().size_hint().0); for list in params.iter() {
         let mut depth = 0;
         let mut current: String = String::from("");
         let mut previous = ' ';
@@ -535,7 +535,7 @@ pub(crate) fn cx_parameter_names(params: &[String]) -> Vec<String> {
         names.push(nikaia_std::block::Text::from(current.trim().to_string()));
     }
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-    for param in names.iter() {
+    out.reserve(names.iter().size_hint().0); for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
         out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).trim().to_string()));
     }
@@ -567,7 +567,7 @@ pub(crate) fn cx_handled_structs(words: &winnow_grammar::InternerContext, items:
                 if !payload { continue; }
                 let ty = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 let mut made: Vec<CxShown> = vec![];
-                for variant in variants.iter() {
+                made.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
                     let variant_name = nikaia_std::block::Text::from(words.resolve(variant.name).to_string());
                     let path = format!("{}::{}", ty, cx_escaped(&variant_name));
                     let mut pattern = nikaia_std::block::Text::from(path.to_string());
@@ -577,7 +577,7 @@ pub(crate) fn cx_handled_structs(words: &winnow_grammar::InternerContext, items:
                         VariantFields::Tuple(types) => {
                             pattern = format!("{}(..)", path);
                             let mut at: i64 = 0;
-                            for field in types.iter() {
+                            fields.reserve(types.iter().size_hint().0); for field in types.iter() {
                                 #[allow(unused_mut)] let mut places: Vec<&'static str> = vec![];
                                 let mut other: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut places = places;
                                 while ((other) as usize) < types.len() {
@@ -590,7 +590,7 @@ pub(crate) fn cx_handled_structs(words: &winnow_grammar::InternerContext, items:
                         },
                         VariantFields::Named(named) => {
                             pattern = format!("{} {{ .. }}", path);
-                            for field in named.iter() {
+                            fields.reserve(named.iter().size_hint().0); for field in named.iter() {
                                 let label = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                                 fields.push((format!("{}_{}", variant_name, label), format!("{} {{ {}: __nikaia_v, .. }}", path, cx_escaped(&label)), field.ty.clone()));
                             }
@@ -696,7 +696,7 @@ pub(crate) fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &
                 let error = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 if !thrown.contains(&error) { continue; }
                 let mut codes: Vec<CxCode> = vec![];
-                for variant in variants.iter() {
+                codes.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
                     let variant_name = nikaia_std::block::Text::from(words.resolve(variant.name).to_string());
                     next += 1;
                     codes.push(CxCode { constant: nikaia_std::block::Text::from(variant_name.to_uppercase()), variant: Some(variant_name), number: unsafe { nikaia_std::proven::sub::<i64>(next, 1) }, errno: None });

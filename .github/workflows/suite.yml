@@ -61,11 +61,15 @@ jobs:
 
       # **Nothing built twice, across runs either.** The build is
       # incremental and its state is cached per commit: the next run restores
-      # the newest one and rustc recompiles only what changed (measured on 4
-      # cores: a whole test build 278 s, after a fresh checkout with a change
-      # in `std` 48-51 s). A cache keyed on `Cargo.lock` alone hit exactly
+      # the newest one and rustc recompiles only what changed (measured
+      # 2026-11-20, run 44726537733: arm64 with no cache 4:53; x86 with the cache of a
+      # commit 207 files back, 23 of 196 targets compiled, `std` once,
+      # 1:56). The sources unchanged since the cached commit are dated back
+      # first, or the checkout's fresh mtimes rebuild every crate (#2403).
+      # A cache keyed on `Cargo.lock` alone hit exactly
       # and was never saved again, so our own crates were rebuilt every time.
       - name: Restore the build of an earlier commit
+        id: incr
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -77,14 +81,43 @@ jobs:
             ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-
             ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-
 
+      # **Unchanged sources are dated back before the build** (#2403). Cargo
+      # holds a path crate fresh only while no source is newer than its
+      # dep-info, and the checkout writes every file at checkout time, so a
+      # warm cache rebuilt every workspace crate (3:08 with no crate changed,
+      # run 44711416045). The restored tree is the build of the commit the
+      # matched key ends in: every file that commit and this one share gets
+      # 2000-01-01, older than any build output; a file changed since keeps
+      # the checkout time and is rebuilt. Not every file to 2000: a changed
+      # one would then look older than its stale output. Only that commit is
+      # fetched, by sha, at depth 1: two trees are all `git diff` needs.
+      - name: Date the sources the restored build was made from
+        if: steps.incr.outputs.cache-matched-key != ''
+        env:
+          KEY: ${{ steps.incr.outputs.cache-matched-key }}
+        run: |
+          base=${KEY##*-}
+          if ! [[ $base =~ ^[0-9a-f]{40}$ ]]; then
+            echo "no commit in the matched key $KEY: nothing dated"; exit 0
+          fi
+          if [ "$base" != "$GITHUB_SHA" ] && ! git fetch -q --depth=1 origin "$base"; then
+            echo "commit $base of the cache is gone: nothing dated, all rebuilt"; exit 0
+          fi
+          git diff --name-only --no-renames "$base" "$GITHUB_SHA" >"$RUNNER_TEMP/changed"
+          echo "changed since the cached commit $base: $(wc -l <"$RUNNER_TEMP/changed") files"
+          git ls-files -z | grep -zvxFf "$RUNNER_TEMP/changed" |
+            xargs -0 -r touch -d '2000-01-01 00:00:00 UTC'
+
       # Every test binary and the directory cargo would run it in (its
-      # package's), one per line: what the shards run. **No library is
-      # compiled twice at release:** the integration tests and the binaries
-      # they start are built at release, in one cargo run; the unit tests
-      # (`--lib --bins`, each a second copy of its crate with `cfg(test)`) at
-      # `dev`, as `cargo test` builds them on a laptop, beside it at a lower
-      # priority. At release, `std`'s test harness was a second full
-      # optimised compile of the largest crate on the build's four cores.
+      # package's), one per line: what the shards run. **Each crate is
+      # compiled once** (#2083): the unit tests, the integration tests and the
+      # binaries they start are built in one cargo run, at release, and share
+      # every library. Only the `cfg(test)` copies of the crates that still
+      # have unit tests come on top; `std` has none (`test = false`, #2082),
+      # and `--tests` builds exactly the targets with `test = true` (`--lib`
+      # would build `std`'s harness all the same). Before, the unit
+      # tests were built at `dev` beside it, so every library they needed was
+      # compiled twice.
       - name: Build the tests
         env:
           CARGO_INCREMENTAL: 1
@@ -95,12 +128,15 @@ jobs:
             jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
                    | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"'
           }
-          nice -n 10 cargo test --workspace --no-run --lib --bins --message-format=json | list >"$RUNNER_TEMP/unit.tsv" &
-          unit=$!
-          cargo test --workspace --release --no-run --test '*' --message-format=json | list >"$RUNNER_TEMP/integration.tsv"
-          wait $unit
-          sort -u "$RUNNER_TEMP/unit.tsv" "$RUNNER_TEMP/integration.tsv" >target/release/test-binaries.tsv
+          cargo test --workspace --release --no-run --tests --message-format=json >"$RUNNER_TEMP/build.json"
+          list <"$RUNNER_TEMP/build.json" | sort -u >target/release/test-binaries.tsv
           cat target/release/test-binaries.tsv
+          # What was compiled, not taken fresh from the cache (#2403): with
+          # no crate changed, only the crates' names that a change reaches.
+          jq -r 'select(.reason == "compiler-artifact" and .fresh == false) | .target.name' "$RUNNER_TEMP/build.json" |
+            sort | uniq -c | sort -rn >"$RUNNER_TEMP/compiled"
+          echo "compiled: $(wc -l <"$RUNNER_TEMP/compiled") targets, fresh: $(jq -s '[.[] | select(.reason == "compiler-artifact" and .fresh)] | length' "$RUNNER_TEMP/build.json")"
+          head -40 "$RUNNER_TEMP/compiled"
 
       # What the test run did not need (the bench binaries): only links.
       - name: Build the rest of the workspace
@@ -167,17 +203,15 @@ jobs:
           sort "$trace" 2>/dev/null | uniq -c || true
 
       # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
-      # with `--extern` into `deps/`), the test binaries and the unit-test
-      # executables of `target/debug` (nothing else of it); not cargo's
+      # with `--extern` into `deps/`) and the test binaries; not cargo's
       # bookkeeping. Every shard runs on the same path, so the paths compiled
       # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
       - name: Pack the build
         run: |
           rustc -V >target/release/rustc-version
           rustc --print sysroot >target/release/rustc-sysroot
-          cut -f1 target/release/test-binaries.tsv | grep '/target/debug/' | sed "s|^$PWD/||" >"$RUNNER_TEMP/unit-binaries"
           tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' \
-            -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries" \
+            -cf "$RUNNER_TEMP/release.tar.zst" target/release \
             $(ls -d target/solver-rod 2>/dev/null)
 
       - uses: actions/upload-artifact@v4
@@ -201,8 +235,10 @@ jobs:
       # carry every earlier one along.
       - name: Keep the newest incremental session
         run: |
-          rm -rf target/nikaia-project-tests target/solver-rod
-          for d in target/release/incremental/*/ target/debug/incremental/*/; do
+          # `target/debug` is no longer built (#2083); a cache from before
+          # still holds one.
+          rm -rf target/nikaia-project-tests target/solver-rod target/debug
+          for d in target/release/incremental/*/; do
             ls -dt "$d"s-*/ 2>/dev/null | tail -n +2 | while read -r old; do
               rm -rf "$old" "${old%/}.lock"
             done
@@ -216,6 +252,19 @@ jobs:
       # the next commit could restore them (x64 missed in most runs). GitHub
       # lets a branch restore only its own and the default branch's entries,
       # so a `ci/*` run's saves served nobody but its own next run.
+      # The registry alone, for the shards' "Restore the cargo registry"
+      # (#2092): a cache hits only with the same path list, and nothing saved
+      # this one, so every shard missed. Once per `Cargo.lock`; a key that
+      # exists already is not written again.
+      - name: Save the cargo registry for the shards
+        if: github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+
       - name: Save the build for the next commit
         if: github.ref == 'refs/heads/develop'
         uses: actions/cache/save@v4

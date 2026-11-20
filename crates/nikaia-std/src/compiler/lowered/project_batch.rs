@@ -41,7 +41,7 @@ pub(crate) fn project_batch_cited(said: &str, ranges: &str, file: &str) -> Vec<S
 
 pub(crate) fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([project_batch_header()], nikaia_std::block::Place::Block);
-    for module in modules.iter() { parts.push(nikaia_std::block::Text::from(module.to_string())); }
+    parts.reserve(modules.iter().size_hint().0); for module in modules.iter() { parts.push(nikaia_std::block::Text::from(module.to_string())); }
     parts.push(String::from("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n"));
     for (name, k) in names.iter().zip(ks.iter().copied()) { parts.push(format!("        {:?} => std::process::Termination::report(p{}::main()),\n", name, k)); }
     parts.push(String::from("        _ => std::process::ExitCode::from(2),\n    }\n}\n"));
@@ -69,12 +69,13 @@ pub(crate) async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, 
     let mut modules: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     let mut sources: Vec<fs::Path> = vec![];
     for (k, made) in lowered.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if k >= listed.len() as i64 { continue; }
         let (rust, read) = match made { Some(__nikaia_value) => __nikaia_value, None => continue };
         let module = match project_batch_module(k, &rust) { Some(__nikaia_value) => __nikaia_value, None => continue };
         names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&listed, nikaia_std::index::at(k))).to_string()));
         ks.push(k);
         modules.push(module);
-        for source in read.iter() { sources.push(nikaia_std::fs::path::clone(&(source))); }
+        sources.reserve(read.iter().size_hint().0); for source in read.iter() { sources.push(nikaia_std::fs::path::clone(&(source))); }
     }
     let included = nikaia_std::fs::path::with_extension(&(list), std::path::Path::new(&("included")));
     match fs::write(&included, &fs::Root::Anywhere, nikaia_std::block::Text::from(names.iter().map(|name| { nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(name.to_string()), "\n")) }).collect::<Vec<_>>().join("")), false, true).await {

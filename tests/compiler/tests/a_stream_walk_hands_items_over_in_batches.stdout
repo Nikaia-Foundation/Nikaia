@@ -1,0 +1,36 @@
+w0
+w1
+w2
+stopped after 3
+3: failed after 3 items: expected end of input; found unexpected token `x` at line 1, column 16
+   1 | [w0];[w1];[w2];x
+                      ^
+note: also possible here: `[`
+in item
+in item 4
+in items
+3: walked 3
+512: failed after 512 items: expected end of input; found unexpected token `x` at line 1, column 3475
+   1 | …98];[w499];[w500];[w501];[w502];[w503];[w504];[w505];[w506];[w507];[w508];[w509];[w510];[w511];x
+                                                                                                       ^
+note: also possible here: `[`
+in item
+in item 513
+in items
+512: walked 512
+600: failed after 600 items: expected end of input; found unexpected token `x` at line 1, column 4091
+   1 | …86];[w587];[w588];[w589];[w590];[w591];[w592];[w593];[w594];[w595];[w596];[w597];[w598];[w599];x
+                                                                                                       ^
+note: also possible here: `[`
+in item
+in item 601
+in items
+600: walked 600
+2000: failed after 2000 items: expected end of input; found unexpected token `x` at line 1, column 14891
+   1 | …w1988];[w1989];[w1990];[w1991];[w1992];[w1993];[w1994];[w1995];[w1996];[w1997];[w1998];[w1999];x
+                                                                                                       ^
+note: also possible here: `[`
+in item
+in item 2001
+in items
+2000: walked 2000

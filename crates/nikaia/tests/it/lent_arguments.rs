@@ -123,7 +123,7 @@ fn a_copy_type_is_not_lent() {
 }
 
 /// **An own method's argument it does not keep is lent**, at the declaration
-/// and at the call alike (ADR-views-3 D1): the declaration is this program's, the
+/// and at the call alike (ADR-views-v4 D1): the declaration is this program's, the
 /// type checker knows which entry `s.measure(t)` goes to, and `lends_in_own`
 /// answers for it as for a free function's parameter.
 #[test]

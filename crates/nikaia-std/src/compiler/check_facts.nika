@@ -91,7 +91,8 @@ pub struct CheckAsyncWait {
 pub struct CheckFacts {
     /// **A call of a `std` helper** (`pub = false` in `std`'s ledger, #1606),
     /// by the start of the call's span: refused (`NK1110`) in a program, and
-    /// let through by `check_access_inside_std` where the file is `std`'s own.
+    /// let through by `check_access_inside_std` where the file is `std`'s own;
+    /// so is a `use` of a module with nothing public (`NK1186`, #2320).
     pub std_helpers_reached: collections::BTreeSet[i64],
     /// **A non-`pub` name of a package reached** (`NK1110`), by the start of
     /// the finding's span, with the package: let through by
@@ -169,7 +170,7 @@ pub struct CheckFacts {
     /// (ADR-010 D12): the emitter writes the part's own hash.
     pub hasher_adds: collections::BTreeSet[i64],
     /// **A method of text whose result is a view of the text it is called
-    /// on** (`s.trim()`, `s.split(",")`, ADR-views-3 D9, #1478), by the
+    /// on** (`s.trim()`, `s.split(",")`, ADR-views-v4 D9, #1478), by the
     /// call's node: the view-change walk watches the receiver while the
     /// result is used.
     pub receiver_views: collections::BTreeSet[i64],
@@ -191,6 +192,10 @@ pub struct CheckFacts {
     pub map_keys: collections::BTreeMap[(i64, bool), FactKeyForm],
     pub slice_indices: collections::BTreeSet[i64],
     pub list_indices: collections::BTreeSet[i64],
+    /// **The base of each index that reads a map's key** (ADR-396 D4,
+    /// #2371), by its node: such an index has no bound, so outside data in
+    /// its key is no `NK1302`, whatever the base is written as.
+    pub map_indices: collections::BTreeSet[i64],
     /// **A function value read by index is a copy** (Part I, *A function type stands wherever a type does*, #1018):
     /// the bases of the reads whose element is a `fn`, so the lowering clones
     /// the `Kept` handle the list holds instead of moving it out.
@@ -361,7 +366,9 @@ pub struct CheckFacts {
     /// D9, step 5 of #490), by the literal's node, and the texts by the
     /// `String` of their `String()`: the emitter writes `Place::Block`
     /// there, `Place::Outside` everywhere else
-    /// (`check_core_place_in_block`).
+    /// (`check_core_place_in_block`). And the box sites of a recursive type
+    /// (D16, #2406), by a variant call's callee or a struct literal: the
+    /// emitter writes `Boxed::placed` there (`check_core_place_boxes`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
     /// by the `let`'s start, with whether the list's `let` said `mut`: the
@@ -379,7 +386,7 @@ pub struct CheckFacts {
     pub in_place_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub taking_arms: collections::BTreeMap[i64, String],
     /// **A part taken out of a `mut` parameter or a `let mut` view** to be
-    /// given back (ADR-views-1 D3), by the field's node: what stands in its
+    /// given back (ADR-views-v4 D20), by the field's node: what stands in its
     /// place meanwhile, empty where the type's empty value does
     /// (`std::mem::take`).
     pub taken_parts: collections::BTreeMap[i64, String],
@@ -460,11 +467,11 @@ pub struct CheckFacts {
     /// a view** (#676), by the key: built into text of its own, as `insert`'s
     /// is.
     pub owned_entry_keys: collections::BTreeSet[i64],
-    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-1
+    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-v3
     /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
     /// no list in between.
     pub collection_clones: collections::BTreeSet[i64],
-    /// **`m.clone()` of a map**, by the call's id (ADR-collections-1 D6, D4):
+    /// **`m.clone()` of a map**, by the call's id (ADR-collections-v3 D6, D4):
     /// as the argument of `extend` it is written
     /// `m.iter().map(|(k, v)| (k.clone(), v.clone()))`, no map in between.
     pub map_clones: collections::BTreeSet[i64],
@@ -498,12 +505,12 @@ pub struct CheckFacts {
     /// no result.
     pub valueless_lambdas: collections::BTreeSet[i64],
     pub run_code_fails: collections::BTreeSet[i64],
-    /// **A run lambda that changes a binding bound outside it** (ADR-views-3
+    /// **A run lambda that changes a binding bound outside it** (ADR-views-v4
     /// D17): the first such binding, by the lambda's node.
     pub changing_lambdas: collections::BTreeMap[i64, String],
     /// The parameters of code a run lambda runs, by the lambda's node.
     pub lambda_runs: collections::BTreeMap[i64, Vec[String]],
-    /// **Code parameters run from tasks at once** (ADR-views-3 D17),
+    /// **Code parameters run from tasks at once** (ADR-views-v4 D17),
     /// `function::parameter`: lowered shared, where every other parameter of
     /// code a body runs lowers to code that changes what it captures. The
     /// package's ledger reads them into `FnContract.at_once`.
@@ -557,6 +564,13 @@ pub struct CheckFacts {
     pub path_comparisons: collections::BTreeSet[i64],
     pub mixed_comparisons: collections::BTreeMap[i64, bool],
     pub path_holes: collections::BTreeMap[i64, Vec[bool]],
+    /// **An `f"…"` whose holes are all text** (#2405), by the literal: no
+    /// spec, no bound names, every hole a `String` or a `str`. Compared with a
+    /// text, it is checked in place and never built.
+    pub text_formats: collections::BTreeSet[i64],
+    /// **`==` and `!=` of a text and a `text_formats` literal** (#2405), by
+    /// the operator's site: the lengths, then the parts, in place.
+    pub compared_formats: collections::BTreeSet[i64],
     /// A print call's argument that is `Bytes`, written as it is (ADR-019 D7).
     pub printed_bytes: collections::BTreeSet[i64],
     pub flattened_reaches: collections::BTreeSet[i64],
@@ -610,6 +624,13 @@ pub struct CheckFacts {
     pub lookup_keys: collections::BTreeSet[i64],
     pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
     pub boxed_reads: collections::BTreeSet[i64],
+    /// **The boxed field reads `??` takes out of their box** (ADR-327 D16,
+    /// #2406), off a value of its own: `nikaia_std::boxed::open(x.f)`.
+    pub boxed_moves: collections::BTreeSet[i64],
+    /// **Each box site of a recursive type, with its place and the reason**
+    /// (ADR-327 D16, #2406), by the site's key (`check_core_place_boxes`),
+    /// for `--sharing`.
+    pub box_sites: collections::BTreeMap[i64, String],
     pub copied_bindings: collections::BTreeSet[(i64, String)],
     /// **A number copied out that the arm changes** (#730): changed in
     /// place, or handed to a `mut` parameter. The copy is the arm's own (Part
@@ -635,9 +656,9 @@ pub struct CheckFacts {
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
     /// The calls whose result, a view of a parameter of a type bound to a
-    /// copied word, is read at the call (ADR-views-3 D12, #1239).
+    /// copied word, is read at the call (ADR-views-v4 D12, #1239).
     pub copied_results: collections::BTreeSet[i64],
-    /// **Text of its own lent as the view a type variable holds** (ADR-views-3
+    /// **Text of its own lent as the view a type variable holds** (ADR-views-v4
     /// D12, #1498): in `second(o, "p")` of `fn second[T](x: T, y: T) -> T`,
     /// `T` is the `&str` the literal is, so `o` goes as `&o.as_str()`.
     pub lent_text_views: collections::BTreeSet[i64],
@@ -707,7 +728,7 @@ pub struct CheckFacts {
     pub byte_literals: collections::BTreeSet[i64],
     pub owned_texts: collections::BTreeSet[i64],
     /// A text literal handed to a type variable the callee lends
-    /// (ADR-views-3 D2, #1342): the view it is, with the one `&` the
+    /// (ADR-views-v4 D2, #1342): the view it is, with the one `&` the
     /// parameter takes, `&"b"`.
     pub lent_literals: collections::BTreeSet[i64],
     /// A `catch` whose guarded value is a view of text and whose handler's is
@@ -761,7 +782,7 @@ pub struct CheckFacts {
     pub kept_text_bytes: collections::BTreeSet[i64],
     /// The `let`s, by start, that declare `Bytes` and are bound to a text's
     /// own bytes: the view, written without the annotation (ADR-320 D11,
-    /// ADR-views-3 D15, #1271).
+    /// ADR-views-v4 D15, #1271).
     pub text_bytes_typed_lets: collections::BTreeSet[i64],
     /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
     /// copied into a `Bytes` of its own (ADR-320 D11).
@@ -867,6 +888,7 @@ impl CheckFacts {
             map_keys: collections::BTreeMap(),
             slice_indices: collections::BTreeSet(),
             list_indices: collections::BTreeSet(),
+            map_indices: collections::BTreeSet(),
             kept_fn_reads: collections::BTreeSet(),
             kept_fn_copies: collections::BTreeSet(),
             kept_fn_fields: collections::BTreeSet(),
@@ -998,6 +1020,8 @@ impl CheckFacts {
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
             path_holes: collections::BTreeMap(),
+            text_formats: collections::BTreeSet(),
+            compared_formats: collections::BTreeSet(),
             printed_bytes: collections::BTreeSet(),
             flattened_reaches: collections::BTreeSet(),
             copied_reaches: collections::BTreeSet(),
@@ -1022,6 +1046,8 @@ impl CheckFacts {
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),
             boxed_reads: collections::BTreeSet(),
+            boxed_moves: collections::BTreeSet(),
+            box_sites: collections::BTreeMap(),
             copied_bindings: collections::BTreeSet(),
             changed_copies: collections::BTreeSet(),
             changed_bindings: collections::BTreeSet(),

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1485 (Draft)
+**Version:** 0.0.1504 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -244,7 +244,7 @@ answered with *write `while true`*, `const X = …` with *write `comptime`*, and
 **`seq` is an ordinary name.**
 
 **`keep` and `from` are not reserved; each means its construct in one position**
-([ADR-views-3](adr/adr-views-3.md) D13). `keep` is the mark only before a
+([ADR-views-v4](adr/adr-views-v4.md) D13). `keep` is the mark only before a
 parameter or `self` in a parameter list (6.5), `from` the source only after a
 result type (6.6); both are names everywhere else.
 
@@ -333,7 +333,7 @@ Nikaia provides basic types to represent simple values.
       `.len()`, `xs[i]` and `for`. Where it does not own, it is a **view** of
       the run, with the promise a view of text carries — *this points at
       elements somebody else keeps, no copy and no handle*
-      ([ADR-views-3](adr/adr-views-3.md) D11). `Array[u8]` is the byte buffer.
+      ([ADR-views-v4](adr/adr-views-v4.md) D11). `Array[u8]` is the byte buffer.
     * A lent **parameter** `xs: Array[T]` is a view, and `mut xs: Array[T]` a
       changeable one; the caller hands an `Array[T, N]`, a `Vec[T]` or a piece
       of either, so `total(xs)` for a `Vec[i64]` needs no word. A changeable
@@ -1235,12 +1235,14 @@ walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a 
 `NK1137` (6.5).
 
 **A `for` binding changes only with `mut`, and `mut` means what it means on a
-`let`** ([ADR-views-2](adr/adr-views-2.md)). A change to a binding without it is
+`let`** ([ADR-views-v4](adr/adr-views-v4.md) D24, D25). A change to a binding without it is
 refused with `NK1139`. `mut` stands in front of the whole head,
 `for mut p in team`, `for mut (a, b) in pairs`, as in front of a `let`'s, and
-marks every name in it. In front of one name of a tuple, `for (k, mut v) in m`
-or `let (tx, mut rx) = …`, it is not supported yet, `NK1307`: refused now,
-possible later, and the help writes `mut` in front of the whole pattern. Over a
+marks every name in it. In front of one name of a tuple, `let (tx, mut rx) = …`
+or `for (k, mut v) in m`, it marks that name alone, as `let mut` on it would;
+over a map, `for (k, mut v) in m` changes the values in place, and a `mut` on
+the key is `NK1306`. In a lambda's tuple parameter one marked name is not
+supported yet, `NK1307`. Over a
 list or an array that the function may change, the binding is a view of the
 element, and a change reaches the list:
 
@@ -1981,7 +1983,7 @@ length does not match `N` is refused with `NK1157` naming both numbers.
 `[v; n]` (4.5) is such a literal too: `let buf: Array[u8, 4096] = [0; 4096]`,
 where `n` is a number the build knows and equal to `N`.
 
-**An array is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)):
+**An array is walked as a list is** ([ADR-collections-v3](adr/adr-collections-v3.md)):
 `for x in a` lends it (3.3), and `a.iter()`, on an array and on a run of one,
 is the sequence a list's `iter()` is, so `a.iter().zip(b.iter())`, `map`,
 `filter` and `enumerate` follow. Nothing is copied.
@@ -2368,7 +2370,7 @@ The context of such a parameter is **inferred**, not written. A parameter the
 body only calls is immediate and borrows. Where the body calls it one call at
 a time, the lambda may change what it captures, with nothing written for it; a
 body that calls it from tasks that run at once refuses such a lambda with
-`NK2104`, naming the binding ([ADR-views-3](adr/adr-views-3.md) D17). A parameter the body keeps (stores,
+`NK2104`, naming the binding ([ADR-views-v4](adr/adr-views-v4.md) D17). A parameter the body keeps (stores,
 hands back, gives to a task) says `keep`, as every kept parameter does (6.5),
 and is detached and moves; there is no `@detached` to write. For an immediate
 parameter the lambda's `touches` count for the callee, while
@@ -2387,7 +2389,7 @@ it (an assignment, `+=`, a `mut` method) is refused with `NK2101`, naming the
 binding: the change would reach only the lambda's own copy, never the binding
 the reader sees (#2047). A kept lambda that only reads what it captures, or
 changes its own locals, is unchanged, and so is a lambda run in place, which
-changes the binding itself ([ADR-views-3](adr/adr-views-3.md) D17). A field that holds one is called like a method, `button.on_click(4)`, where the
+changes the binding itself ([ADR-views-v4](adr/adr-views-v4.md) D17). A field that holds one is called like a method, `button.on_click(4)`, where the
 struct has no method of that name. A named function stands where a function
 value is wanted. A kept value handed to a parameter that only runs it is lent.
 Two values of a type that holds a function are not compared (`NK1188`).
@@ -2855,7 +2857,7 @@ A function that only *looks at* a value, and does not own it, takes a
 **view** of it. The owner keeps the value, the borrower may read it, and the
 loan ends on its own.
 
-**A view is never written; the compiler infers it** ([ADR-views-3](adr/adr-views-3.md)
+**A view is never written; the compiler infers it** ([ADR-views-v4](adr/adr-views-v4.md)
 D4, D5). A parameter, a receiver, a field, an element, a local binding and a
 result are declared with their type (`String`, `Vec[Row]`, `Reading`), and
 whether each is a view or a value of its own is read off the program. `ref` is
@@ -2929,7 +2931,7 @@ wants a changeable copy writes `let mut v = x` inside.
 
 **A part taken out of a `mut` parameter is given back before the function is
 left**, and one taken out of a `let mut` view of a place before the view's block
-is left ([ADR-views-1](adr/adr-views-1.md)). A `match` arm that changes a part it binds takes it (3.4), and so does
+is left ([ADR-views-v4](adr/adr-views-v4.md) D18, D19). A `match` arm that changes a part it binds takes it (3.4), and so does
 handing a field to something that keeps it; assigning the part, or the whole,
 gives it back. On every way out of the function - its end, a `return`, a
 `throw` - the parameter is whole again, and between the taking and the giving
@@ -2947,7 +2949,7 @@ view to something that keeps it is `NK1131`, as for a `mut` parameter.
 A `for` **lends** its list, so the list is still there after the loop;
 iteration that takes the elements away is written `for x in xs.drain()`. A
 `for mut` over a list or an array the function may change is a
-`let mut` view of each element in turn ([ADR-views-2](adr/adr-views-2.md)),
+`let mut` view of each element in turn ([ADR-views-v4](adr/adr-views-v4.md) D25, D28),
 lowered as `iter_mut()`, and the rule above holds for each turn: a part taken
 out of `p` in `for mut p in v` is given back before the turn ends, and handing
 `p` whole to something that keeps it is `NK1131`. A
@@ -2959,7 +2961,7 @@ is copied ([ADR-387](adr/adr-387.md) D1). A
 where the value would otherwise have to move, and **takes** the part where
 the name is kept (handed to a keeper, returned, or assigned into a place) and
 the place is a part of a `mut` parameter, of `mut self` or of a `let mut`
-view ([ADR-views-1](adr/adr-views-1.md) D6): `let outer = walk.at;
+view ([ADR-views-v4](adr/adr-views-v4.md) D23): `let outer = walk.at;
 walk.at = P {..}; visit(walk); walk.at = outer` copies nothing. In a loop,
 such a part is given back before the turn ends, and a refusal that comes from
 the taking names the line that keeps the name.
@@ -3229,7 +3231,7 @@ the inferred contract. Contracts are stored in a generated file,
 **`nikaia.contracts`**, the ledger, which is committed alongside `nikaia.lock`
 (Part III, 13.5). It writes keeps per parameter and a result's sources in the
 source's spelling, `-> String from a | b`, a written `from` as written
-([ADR-views-3](adr/adr-views-3.md) D10). A change of either on a `pub` function
+([ADR-views-v4](adr/adr-views-v4.md) D10). A change of either on a `pub` function
 is a contract change.
 
 **The cleanup point moves with a kept value** (D6): a callee that keeps a
@@ -3317,6 +3319,14 @@ fn main() throws {
     println(grown > before)   // true: the list asked for memory as it grew
     println(read == grown)    // true: reading its length asked for none
     println(count)
+
+    let mut left = String(capacity: 64)
+    left.push_str("left-")
+    let start = mem::allocations()
+    let joined = left + "right"
+    let after = mem::allocations()
+    println(after == start)   // true: `+` kept left's buffer, it had room
+    println(joined)
 }
 ```
 

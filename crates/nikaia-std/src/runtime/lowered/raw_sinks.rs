@@ -11,3 +11,17 @@ pub fn is_plain(part: &str) -> bool {
     true
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let markup = html::Raw::escaped("a < b & c");
+    if !(markup.as_str() == "a &lt; b &amp; c") { nikaia_std::abort::assertion_failed("assert(markup.as_str() == \"a &lt; b &amp; c\")", None, &[("markup.as_str()", (&&nikaia_std::abort::Operand(&(markup.as_str()))).shown()), ]) };
+    if !(html::Raw::new(markup.as_str()).as_str() == "a &lt; b &amp; c") { nikaia_std::abort::assertion_failed("assert(html::Raw(markup.as_str()).as_str() == \"a &lt; b &amp; c\")", None, &[("html::Raw(markup.as_str()).as_str()", (&&nikaia_std::abort::Operand(&(html::Raw::new(markup.as_str()).as_str()))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn raw_sinks_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("raw_sinks::escaped_text_becomes_markup", __nikaia_test_0),
+    ]
+}

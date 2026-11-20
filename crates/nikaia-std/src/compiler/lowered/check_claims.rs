@@ -3,7 +3,7 @@
 
 pub fn check_claims_unproved(findings: &[CheckFinding], claims: &collections::BTreeMap<(i64, i64), FactClaim>) -> Vec<CheckFinding> {
     let mut unproved: Vec<CheckFinding> = vec![];
-    for ((start, _), claim) in claims.iter() {
+    unproved.reserve(claims.iter().size_hint().0); for ((start, _), claim) in claims.iter() {
         let start = nikaia_std::num::value(start);
         if claim.assumed || check_claims_refuted_at(findings, start) { continue; }
         let held = match match claim.held.as_ref() {
@@ -16,7 +16,7 @@ pub fn check_claims_unproved(findings: &[CheckFinding], claims: &collections::BT
             ClaimHeld::Precondition(ref f, n) => {
                 if f == "main" { continue; }
                 let mut broken: i64 = 0;
-                for r in findings.iter() { if r.code == "NK1207" && r.message.contains(&*format!("`{}`'s precondition", f)) { broken = unsafe { nikaia_std::proven::add::<i64>(broken, 1) }; } }
+                for r in findings.iter() { if r.code == "NK1207" && ::core::convert::identity(match (AsRef::<str>::as_ref(&(r.message)), AsRef::<str>::as_ref(&(f)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix("`'s precondition")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { broken = unsafe { nikaia_std::proven::add::<i64>(broken, 1) }; } }
                 let left = n - broken;
                 if left <= 0 { continue; }
                 let mut calls = String::from("one call does");
@@ -38,7 +38,7 @@ pub(crate) fn check_claims_refuted_at(findings: &[CheckFinding], start: i64) -> 
 
 pub fn check_claims_assumes_in_std(claims: &collections::BTreeMap<(i64, i64), FactClaim>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
-    for ((start, _), claim) in claims.iter() {
+    refused.reserve(claims.iter().size_hint().0); for ((start, _), claim) in claims.iter() {
         let start = nikaia_std::num::value(start);
         if !claim.assumed { continue; }
         let at = u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));

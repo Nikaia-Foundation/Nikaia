@@ -1,0 +1,25 @@
+// **A tree a function binds and then returns is built outside** (ADR-327
+// D16, #2406): `t` is handed on as a value, so `bound`'s node is
+// `Boxed::new`. The tree `straight` returns is built in the block (D17,
+// #2348): its one caller only counts it, so it never leaves the task.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn bound() -> Tree {
+    let t = Tree::Node(Tree::Leaf, Tree::Leaf)
+    return t
+}
+
+fn straight() -> Tree {
+    return Tree::Node(Tree::Leaf, Tree::Node(Tree::Leaf, Tree::Leaf))
+}
+
+fn main() throws {
+    println(f"{count(bound())} and {count(straight())} nodes returned")
+}

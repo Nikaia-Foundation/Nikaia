@@ -14,6 +14,7 @@ throws = ["io::IoError"]
 locks = true
 panics = true
 places = true
+trusted = ["cli::args at main.nika:60"]
 signature = "()"
 
 [fn."summary"]

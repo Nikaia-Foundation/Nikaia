@@ -323,7 +323,7 @@ pub(crate) fn buffer_plans(
         }
     }
     // The buffers given a new value in a nested block while a view of them is
-    // used afterwards (ADR-views-3 D9): they live in the frame's keep.
+    // used afterwards (ADR-views-v4 D9): they live in the frame's keep.
     let given_up: std::collections::BTreeMap<i64, String> = crate::view_changes::analyse(
         parsed,
         ledger,

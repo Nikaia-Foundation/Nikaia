@@ -1,0 +1,22 @@
+// A path from outside is proved by a property of its own (ADR-raw-sinks-1
+// D14): after the guard `path::is_component(name)` (or `path::is_below`),
+// `name` joined to a part that is not outside passes a sink under
+// `Anywhere`, and under a clean `Dir` root it was never one. Alone under
+// `Anywhere` it is still `NK1308` (here a warning, `raw-sinks = "warn"`):
+// one component is relative to the working directory, which no guard
+// proves. A guard on `is_below` admits a relative path the same way.
+use std::cli
+use std::fs
+use std::path
+
+fn main() throws {
+    let name = cli::args().nth(1) ?? "notes.txt"
+    let below = cli::args().nth(2) ?? "notes.txt"
+    return if !path::is_component(name)
+    println(fs::exists(f"data/{name}", fs::Root::Anywhere))
+    println(fs::exists(name, fs::Root::Dir(".")))
+    println(fs::exists(name, fs::Root::Anywhere))
+    return if !path::is_below(below)
+    println(fs::exists("data/" + below, fs::Root::Anywhere))
+    println("checked")
+}

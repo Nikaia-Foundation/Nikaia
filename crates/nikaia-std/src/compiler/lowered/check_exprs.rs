@@ -205,14 +205,14 @@ impl CheckState {
                 let mut an_enum = is_enum;
                 if is_struct {
                     let own_fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-                    for field in own_fields.iter() { fields.push(nikaia_std::block::Text::from(field.name.to_string())); }
+                    fields.reserve(own_fields.iter().size_hint().0); for field in own_fields.iter() { fields.push(nikaia_std::block::Text::from(field.name.to_string())); }
                 } else if from_a_package {
                     let contract = match package_type { Some(__nikaia_value) => __nikaia_value, None => return };
                     for field in contract.fields.iter() { if field.public { fields.push(nikaia_std::block::Text::from(field.name.to_string())); } }
                     an_enum = !contract.variants.is_empty();
                 } else if !is_enum {
                     let contract = match world.own.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-                    for field in contract.fields.iter() { fields.push(nikaia_std::block::Text::from(field.name.to_string())); }
+                    fields.reserve(contract.fields.iter().size_hint().0); for field in contract.fields.iter() { fields.push(nikaia_std::block::Text::from(field.name.to_string())); }
                     an_enum = !contract.variants.is_empty();
                 }
                 if an_enum {
@@ -228,7 +228,7 @@ impl CheckState {
                         if printed { help = format!("Print `f\"{{{}:?}}\"` for its debug form.", shown); }
                     } else {
                         let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                        for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
+                        holes.reserve(fields.iter().size_hint().0); for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
                         let listed = nikaia_std::block::Text::from(holes.join(", "));
                         help = format!("Write its fields in holes of their own: {}.", listed);
                         if printed { help = format!("Print its fields in holes of an `f\"…\"`: {}.", listed); }

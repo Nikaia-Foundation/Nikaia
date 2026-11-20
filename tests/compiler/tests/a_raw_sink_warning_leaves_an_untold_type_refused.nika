@@ -1,0 +1,13 @@
+// `NK1245`, a type the compiler can't tell, gives way to another refusal of
+// the file (ADR-286 D41), but not to `NK1308`: `raw-sinks = "warn"`, the
+// default, makes that a warning (ADR-raw-sinks-1 D3), and without `NK1245`
+// the build went on to Rust, which refused the index of `cli::Args`.
+use std::cli
+use std::fs
+
+fn main() throws {
+    let args = cli::args()
+    if args.len() > 1 {
+        println(fs::exists("n.txt", fs::Root::Dir(args[1])))
+    }
+}

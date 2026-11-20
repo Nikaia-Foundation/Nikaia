@@ -1,6 +1,6 @@
 // Code whose type keeps a parameter is given what is passed there (Part I
 // 5.4 C, ADR-293 D29, #1990), whether it is a parameter or a `let`: a name
-// used again after is NK2105, a view is NK1102 (ADR-views-3 D5).
+// used again after is NK2105, a view is NK1102 (ADR-views-v4 D5).
 struct Holder {
     name: String,
 }

@@ -74,10 +74,12 @@ fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     }
 }
 
-/// **A value `get` hands back past a jump** (D30).
+/// **A value `get` hands back past a jump** (D30), or one of a chain of
+/// `get`s the last of which jumps: `a.get(k) ?? b.get(k) ?? return` binds
+/// the reference either hands back, as one `get` does.
 fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && state.jumps(world, fallback),
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)),
         else => false,
     }
 }
@@ -392,7 +394,7 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
 
 /// A field path whose root is a `let` without `mut` that owns what it holds
 /// (#1142), or the binding of a `for` over elements the loop owns (`drain()`,
-/// a produced sequence; ADR-views-2): not a view of a place, not a `for`
+/// a produced sequence; ADR-views-v4 D26): not a view of a place, not a `for`
 /// binding over one, not a parameter.
 fn check_core_stmt_a_part_of_an_unchanged_let(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -638,7 +640,7 @@ fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names:
 }
 
 /// **An element or a field read off a place, under a `let` that declares a
-/// view of it** ([ADR-views-3](../../docs/specification/adr/adr-views-3.md) D5, #613):
+/// view of it** ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D5, #613):
 /// 1 where the read is lent, 2 where it is a word by its kind and is copied
 /// (`NK1257`), 0 where the rule has nothing to say.
 fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
@@ -646,6 +648,78 @@ fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, va
         return 0
     }
     return check_core_stmt_read_viewed(state, world, found, want)
+}
+
+/// **A parameter the function lends, put into a literal whose parts the `let`
+/// declares views, is the view** (ADR-282 D2, #2346): `name: String` says what
+/// `name: ref String` says, so `[(10, name, 3)]` under `Array[(u32, ref
+/// String, u32), 1]` holds the view the parameter already is. The literal's
+/// type with those parts as declared, or null where a part is not such a
+/// parameter: text built in the function stays its own, and `NK1103`'s.
+fn check_core_stmt_lent_parts_viewed(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> Ty? sync {
+    match value {
+        Expr::Variable(_, _) => {
+            if !state.a_lent_parameter(world, value) && !state.an_either_parameter(world, value) {
+                return null
+            }
+            if check_core_stmt_read_viewed(state, world, found, want) != 1 {
+                return null
+            }
+            return want.clone()
+        },
+        Expr::Tuple(given, _) => {
+            let found_parts: Vec[Ty] = match found {
+                Ty::Tuple(parts) => parts.clone(),
+                else => return null,
+            }
+            let wanted: Vec[Ty] = match want {
+                Ty::Tuple(parts) => parts.clone(),
+                else => return null,
+            }
+            if given.len() != found_parts.len() || given.len() != wanted.len() {
+                return null
+            }
+            let mut parts: Vec[Ty] = []
+            let mut any = false
+            for (k, part) in given.iter().enumerate() {
+                let viewed = check_core_stmt_lent_parts_viewed(state, world, part, found_parts[k], wanted[k])
+                if viewed != null {
+                    any = true
+                }
+                parts.push(viewed ?? found_parts[k].clone())
+            }
+            if !any {
+                return null
+            }
+            return Ty::Tuple(parts)
+        },
+        Expr::ListLit { items, .. } => {
+            let (name, args, view) = match found {
+                Ty::Named { name, args, view } => (name.clone(), args.clone(), view),
+                else => return null,
+            }
+            let wanted_item: Ty = match want {
+                Ty::Named { args, .. } => args.first()?.clone() ?? return null,
+                else => return null,
+            }
+            let found_item: Ty = args.first()?.clone() ?? return null
+            if items.len() == 0 {
+                return null
+            }
+            let mut item: Ty = found_item.clone()
+            for given in items {
+                item = check_core_stmt_lent_parts_viewed(state, world, given, found_item, wanted_item) ?? return null
+            }
+            let mut out: Vec[Ty] = [item]
+            for (k, arg) in args.iter().enumerate() {
+                if k > 0 {
+                    out.push(arg.clone())
+                }
+            }
+            return Ty::Named { name: name, args: out, view: view }
+        },
+        else => return null,
+    }
 }
 
 /// **The same rule for what a read is, wherever it was read**: an element
@@ -835,7 +909,7 @@ fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     }
 }
 
-fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
@@ -993,12 +1067,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let want = written_ty(world.words, world.here.aliases, t)
         seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
         // **A whole list or array under a `let` declared a view of a run is
-        // lent** (ADR-views-3 D11, #1362): `let c: Array[T] = v` cannot own,
+        // lent** (ADR-views-v4 D11, #1362): `let c: Array[T] = v` cannot own,
         // having no length, so it looks at what `v` holds and `v` stays.
         seen_through = seen_through || check_core_stmt_a_whole_run_viewed(found, want)
     }
     // **An element or a field read off a place under a `ref T` is a view of
-    // it** (ADR-views-3 D5, #613).
+    // it** (ADR-views-v4 D5, #613).
     let mut element_view = 0
     if names.len() == 1 && ty != null {
         let t: ref Type = ty ?? return check_core_stmt_unit()
@@ -1059,7 +1133,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **The place a `let mut` is a view of**, for the messages that name it
-    // (ADR-views-1).
+    // (ADR-views-v4 D18).
     if mutable && names.len() == 1 && shape.len() == 0 {
         let place = check_core_stmt_view_place(state, world, value)
         if place != null {
@@ -1072,7 +1146,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A tuple of names takes the value apart** (ADR-291).
     if names.len() >= 2 || shape.len() > 0 {
-        return state.tuple_let(world, names, shape, ty != null, found, value, span)
+        return state.tuple_let(world, names, shape, mutable, mut_names, ty != null, found, value, span)
     }
     let name: String = f"{world.words.resolve(names[0])}"
     // **`let _ = expr` is a statement wearing a `let`** (ADR-291 D7).
@@ -1097,14 +1171,19 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             found_kept = want.clone()
         } else if element_view == 2 {
             // **A word is copied at a read, so there is no view of it to
-            // declare** (ADR-views-3 D4).
+            // declare** (ADR-views-v4 D4).
             let shown = found.unseen().text()
             let written = check_core_stmt_read_shown(world, value)
             state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep."], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
             found_kept = want.clone()
+        } else if element_view == 0 {
+            let viewed = check_core_stmt_lent_parts_viewed(state, world, value, found_kept, want)
+            if viewed != null {
+                found_kept = viewed ?? want.clone()
+            }
         }
         // **A declared function that lends a parameter fits a function type
-        // that lends it** (ADR-views-3 D2, D14, #1254): `let k: fn(s: String)
+        // that lends it** (ADR-views-v4 D2, D14, #1254): `let k: fn(s: String)
         // -> i64 = count` with `count(s: String)`, as an argument does.
         if state.lends_where_a_function_type_reads(world, value, found_kept, want) {
             found_kept = want.clone()
@@ -1140,7 +1219,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let none_lent = lent == null
             bound = lent ?? found.clone()
             // **A plain `let` over a `String` place of a local is a view of
-            // it** (ADR-views-3 D5, #1404), as one read through a `ref`
+            // it** (ADR-views-v4 D5, #1404), as one read through a `ref`
             // parameter is (#839): the emitter lends it (`lent_lets`), so a
             // keeper handed it is refused here with a `.clone()` help instead
             // of by the language below.
@@ -1358,7 +1437,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     if bytes_view {
         state.text_bytes_lets.insert(id)
-        // **A `let` that declares `Bytes` holds the view too** (ADR-views-3
+        // **A `let` that declares `Bytes` holds the view too** (ADR-views-v4
         // D15, #1271): `let b: Bytes = s.bytes` is written without its
         // annotation, as `let b = s.bytes` is.
         if ty != null {
@@ -1850,7 +1929,7 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         state.gives.push(CheckGive { path: written.clone(), at: span.start as i64, choices: choices })
         state.written_at.push((written, span.start as i64))
     }
-    // **An element assigned gives back one taken out** (ADR-views-1 D1,
+    // **An element assigned gives back one taken out** (ADR-views-v4 D18,
     // #1208): `w[i] = []` after `keep(w[i])`.
     let element = state.an_element_path(world, target, false)
     if path == null && element != null {
@@ -2161,7 +2240,7 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
 
 /// Why the element a `for` walks cannot be changed in place, as a word: `map`
 /// (its key is part of the head), `set`, or `adapter` (it lends read-only
-/// views); empty where it can (ADR-views-2 D4).
+/// views); empty where it can (ADR-views-v4 D27).
 fn check_core_stmt_unwritable_element(state: ref CheckState, world: ref CheckWorld, iter: ref Expr, over: ref Ty) -> String sync {
     match over {
         Ty::Named { name, .. } => {
@@ -2207,7 +2286,7 @@ fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
 }
 
 /// **`for`** (Part I 3.3).
-fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     // **The methods a `.collect()` walked reach a frame of their own**
     // (`NK1354`, #1975): its steps are asked whether they are pure.
@@ -2333,7 +2412,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A `for` over a place lends** (ADR-094 D4).
     let lent = is_a_place(iter) && !owned
-    // **`mut` in front of the head** (ADR-views-2 D1-D3): over elements the loop
+    // **`mut` in front of the head** (ADR-views-v4 D24-D26): over elements the loop
     // owns (a range, `drain()`, a produced sequence) every name is a `let mut`
     // of the turn. Over a place, the element is a view of it (D2, step 2).
     let mut mut_view = false
@@ -2344,7 +2423,15 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A key, a set's element and a lending adapter's element take no `mut`**
     // (D4, section 6): `NK1306`, labelled at the `mut`.
-    let unwritable = if mutable { check_core_stmt_unwritable_element(state, world, iter, over) } else { "" }
+    let mut unwritable = if mutable { check_core_stmt_unwritable_element(state, world, iter, over) } else { "" }
+    // **`mut` on a map's value alone writes it in place** (section 6, #1133):
+    // `for (k, mut v) in m` leaves the key unmarked, and `v` is a `let mut`
+    // view of the entry's value, lowered `iter_mut()` (`values_mut()` under
+    // a `_` key).
+    let value_only = unwritable == "map" && mut_names.len() > 0 && !mut_names[0] && shape.len() == 0
+    if value_only {
+        unwritable = ""
+    }
     if unwritable != "" {
         state.a_for_mut_that_cannot_write(unwritable, iter, world, span)
     } else if mutable && lent {
@@ -2352,18 +2439,24 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // the element is a `let mut` view of it** (D2): lowered `iter_mut()`.
         let list: String? = dotted_path(world, iter)
         let mut names: Vec[String] = []
+        let mut index = 0
         for b in bindings {
-            names.push(f"{world.words.resolve(b)}")
+            let marked = mut_names.len() > 0 && mut_names[index]
+            names.push(if marked { f"mut {world.words.resolve(b)}" } else { f"{world.words.resolve(b)}" })
+            index += 1
         }
-        let head: String = if names.len() == 1 { names[0].clone() } else { f"({names.join(", ")})" }
-        if list != null && check_core_stmt_a_list_type(over) {
+        let mut head: String = if names.len() == 1 { names[0].clone() } else { f"({names.join(", ")})" }
+        if mut_names.len() == 0 {
+            head = f"mut {head}"
+        }
+        if list != null && (check_core_stmt_a_list_type(over) || value_only) {
             let written: String = list ?? ""
             let parts: Vec[ref String] = written.split(".").collect()
             let found = state.binding(parts[0]) ?? return check_core_stmt_unit()
             match found.without_mut {
                 null => {
                     mut_view = true
-                    state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
+                    state.facts.mut_view_reads.insert(id_of(iter) as i64, if value_only { "map" } else { "" })
                     // **The list is changed through its elements**: an arm's
                     // part walked so is opened `mut` (#734).
                     state.a_change_noted(f"{parts[0]}")
@@ -2384,6 +2477,10 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         let name: String = f"{world.words.resolve(b)}"
         let element = elements[at].clone()
+        // **A name is `mut` where the head or the name says so** (D24,
+        // section 6, #1133); over a map only the value is a view.
+        let name_mut = mutable && (mut_names.len() == 0 || mut_names[at])
+        let mut_view = mut_view && (!value_only || name_mut)
         at += 1
         let copied = lent && !mut_view && name != "_" && a_copy_by_value(element)
         if copied {
@@ -2426,15 +2523,15 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         state.declared_binding(id, span, name)
         let mut local = CheckLocal::free(name, bound, id)
-        local.written_mut = mutable
+        local.written_mut = name_mut
         if mut_view {
             local.view_of = dotted_path(world, iter) ?? ""
         }
         local.lent = lent && !mut_view && !copied && !a_view
         // **A `for` binding changes only with `mut`** (Part I 3.3, #734,
-        // ADR-views-2): its head is a `let`'s pattern, so a change to one
+        // ADR-views-v4 D24): its head is a `let`'s pattern, so a change to one
         // without it is `NK1139`.
-        if !mutable {
+        if !name_mut {
             local.without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
         }
         frame.push(local)
@@ -2546,8 +2643,8 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if collected && steps.len() == 0 {
         state.a_loop_over_a_needless_collect(world, iter, body, mutable, span)
     }
-    // **A turn's element is whole again where the turn ends** (ADR-views-1 D2,
-    // ADR-views-2).
+    // **A turn's element is whole again where the turn ends** (ADR-views-v4 D19,
+    // D28).
     if mut_view && body.stmts.len() > 0 {
         state.views_end(frame_at, body.stmts[body.stmts.len() - 1].span.end as i64)
     }
@@ -2581,7 +2678,7 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
         state.a_jump_with_nowhere_to_go(word, span)
     }
     state.failing_cleanups_left(span)
-    // **A jump leaves the views bound inside its loop** (ADR-views-1 D2).
+    // **A jump leaves the views bound inside its loop** (ADR-views-v4 D19).
     state.a_way_out(word, "", span)
     return Ty::Unknown
 }
@@ -2590,12 +2687,12 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
 fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
-        Stmt::Let { names, shape, mutable, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, deep, ty, value, span),
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span),
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, shape, mutable, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, mutable, iter, body, span),
+        Stmt::For { bindings, shape, mutable, mut_names, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, mutable, mut_names, iter, body, span),
         Stmt::Return(value) => check_core_stmt_return(state, world, host, value, span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
@@ -2802,6 +2899,7 @@ fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     }
     check_core_view_lists_end(state, world, block)
     check_core_place_in_block(state, world, block)
+    check_core_place_boxes(state, world, block)
     state.scope.pop()
     return tail
 }
@@ -3323,6 +3421,464 @@ fn check_core_ty_names(ty: ref Ty, viewed: ref String) -> bool sync {
     }
 }
 
+/// **Which boxes of a recursive type go in the task's block** (ADR-327
+/// D16, #2406). A box site - a variant with a boxed part, a struct with a
+/// boxed field (ADR-246) - is placed where the tree it builds cannot
+/// outlive the task, one function at a time: bound in this block by a
+/// `let` of its own, and every later use of the name proven local - lent
+/// to a `ref` parameter, matched with every name its arms bind used so in
+/// turn, read in a comparison or an `f"…"` hole, or rebuilt in place (`t =
+/// Tree::Node(t, …)`, whose site goes in the block too). Anything else -
+/// returned (that is D17's, across calls), handed over by value, moved
+/// into a value, a closure, a task or a group, every case not named here -
+/// keeps it outside (D9). Each site is written down with its place and
+/// the reason, for `--sharing`.
+fn check_core_place_boxes(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    if state.facts.boxed_members.len() == 0 {
+        return
+    }
+    let function = state.current?.clone() ?? ""
+    let count = block.stmts.len() as i64
+    let mut at = 0
+    while at < count {
+        match block.stmts[at].node {
+            Stmt::Let { names, value, .. } => {
+                if names.len() == 1 && check_core_box_site(state, world, value).len() > 0 {
+                    let name = f"{world.words.resolve(names[0])}"
+                    let mut reason: String = if check_core_view_list_bound_once(world, block, name) { "" } else { "its name is bound again in this block" }
+                    let mut later = at + 1
+                    while later < count && reason.len() == 0 {
+                        reason = check_core_tree_stays_in_stmt(state, world, block.stmts[later].node, name)
+                        later += 1
+                    }
+                    let mut sites: Vec[(i64, String)] = []
+                    check_core_box_sites_built(state, world, value, sites)
+                    let mut rest = at + 1
+                    while rest < count {
+                        check_core_tree_rebuilt_sites(state, world, block.stmts[rest].node, name, sites)
+                        rest += 1
+                    }
+                    for (key, site) in sites {
+                        if reason.len() == 0 {
+                            state.facts.placed_in_block.insert(key)
+                            state.facts.box_sites.insert(key, f"{function}: `{site}` in the block: `{name}` stays in this function")
+                        } else if !state.facts.box_sites.contains_key(key) {
+                            state.facts.box_sites.insert(key, f"{function}: `{site}` outside: `{name}` {reason}")
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+        at += 1
+    }
+    // **Every other site is built outside** (D9), with the reason its shape
+    // gives.
+    at = 0
+    while at < count {
+        let last = at == count - 1
+        match block.stmts[at].node {
+            Stmt::Let { value, .. } => check_core_box_sites_outside(state, world, value, function, "it is handed on as a value"),
+            Stmt::Expr(value) => check_core_box_sites_outside(state, world, value, function, if last { "it is its block's value, which leaves the block (across calls, ADR-327 D17)" } else { "it is handed on as a value" }),
+            Stmt::Return(value) => match value {
+                null => {},
+                given => check_core_box_sites_outside(state, world, given, function, "it is returned (across calls, ADR-327 D17)"),
+            },
+            Stmt::Assign { value, .. } => check_core_box_sites_outside(state, world, value, function, "it is stored into a place"),
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// **The box site `expr` is**, by its type (`Tree::Node`, `Tree`), or empty:
+/// a variant call with a boxed part, a struct literal with a boxed field
+/// (ADR-246), named as the emitter's `is_boxed` names them.
+fn check_core_box_site(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> String sync {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            match func {
+                Expr::Path(segments, _) => {
+                    if segments.len() < 2 {
+                        return ""
+                    }
+                    let owner = f"{world.words.resolve(segments[segments.len() - 2])}"
+                    let variant = f"{world.words.resolve(segments[segments.len() - 1])}"
+                    let members = state.facts.boxed_members.get(owner) ?? return ""
+                    for at in 0..<args.len() {
+                        if members.contains(boxed_member(variant, at as i64, "")) {
+                            return f"{owner}::{variant}"
+                        }
+                    }
+                    return ""
+                },
+                else => return "",
+            }
+        },
+        Expr::StructLit { name, fields, .. } => {
+            let written = f"{world.words.resolve(name)}"
+            let parts: Vec[String] = written.split("::").collect()
+            let mut owner = written.clone()
+            let mut variant: String = String()
+            if parts.len() >= 2 && state.facts.boxed_members.contains_key(parts[parts.len() - 2]) {
+                owner = parts[parts.len() - 2].clone()
+                variant = parts[parts.len() - 1].clone()
+            }
+            let members = state.facts.boxed_members.get(owner) ?? return ""
+            for field in fields {
+                let named = f"{world.words.resolve(field.name)}"
+                let member = if variant.len() > 0 { boxed_member(variant, -1, named) } else { named }
+                if members.contains(member) {
+                    return written
+                }
+            }
+            return ""
+        },
+        else => return "",
+    }
+}
+
+/// The key the emitter asks a box site by: a variant call's callee, a
+/// struct literal itself.
+fn check_core_box_site_key(expr: ref Expr) -> i64 sync {
+    return match expr {
+        Expr::Call { func, .. } => node_key(func),
+        else => node_key(expr),
+    }
+}
+
+/// **The box sites a tree is built by**: `expr` where it is one, and the
+/// sites written straight into its parts (`Tree::Node(Tree::Node(…), …)`).
+fn check_core_box_sites_built(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, mut sites: Vec[(i64, String)]) sync {
+    let site = check_core_box_site(state, world, expr)
+    if site.len() == 0 {
+        return
+    }
+    sites.push((check_core_box_site_key(expr), site))
+    match expr {
+        Expr::Call { args, .. } => {
+            for arg in args {
+                check_core_box_sites_built(state, world, arg, sites)
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                check_core_box_sites_built(state, world, field.value ?? continue, sites)
+            }
+        },
+        else => {},
+    }
+}
+
+/// The sites of each `name = …` that rebuilds the tree in place, in `stmt`
+/// and the loops and blocks under it.
+fn check_core_tree_rebuilt_sites(state: ref CheckState, world: ref CheckWorld, stmt: ref Stmt, name: ref String, mut sites: Vec[(i64, String)]) sync {
+    match stmt {
+        Stmt::Assign { target, value, .. } => {
+            if check_core_is_the_name(world, target, name) {
+                check_core_box_sites_built(state, world, value, sites)
+            }
+        },
+        Stmt::For { body, .. } => {
+            for inner in body.stmts {
+                check_core_tree_rebuilt_sites(state, world, inner.node, name, sites)
+            }
+        },
+        Stmt::While { body, .. } => {
+            for inner in body.stmts {
+                check_core_tree_rebuilt_sites(state, world, inner.node, name, sites)
+            }
+        },
+        else => {},
+    }
+}
+
+/// **The sites in `expr` no `let` of their own placed**, written down as
+/// built outside, for `reason`.
+fn check_core_box_sites_outside(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, function: ref String, reason: ref String) sync {
+    let site = check_core_box_site(state, world, expr)
+    if site.len() > 0 && !state.facts.box_sites.contains_key(check_core_box_site_key(expr)) {
+        state.facts.box_sites.insert(check_core_box_site_key(expr), f"{function}: `{site}` outside: {reason}")
+    }
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let inner = if site.len() > 0 { reason } else { "it is handed on as a value" }
+            check_core_box_sites_outside(state, world, func, function, inner)
+            for arg in args {
+                check_core_box_sites_outside(state, world, arg, function, inner)
+            }
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            check_core_box_sites_outside(state, world, receiver, function, "it is handed on as a value")
+            for arg in args {
+                check_core_box_sites_outside(state, world, arg, function, "it is handed on as a value")
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            let inner = if site.len() > 0 { reason } else { "it is moved into a value" }
+            for field in fields {
+                check_core_box_sites_outside(state, world, field.value ?? continue, function, inner)
+            }
+        },
+        Expr::Tuple(parts, _) => {
+            for part in parts {
+                check_core_box_sites_outside(state, world, part, function, "it is moved into a value")
+            }
+        },
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                check_core_box_sites_outside(state, world, item, function, "it is moved into a value")
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_core_box_sites_outside(state, world, arm.body, function, reason)
+            }
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            check_core_box_sites_outside(state, world, value, function, reason)
+            check_core_box_sites_outside(state, world, fallback, function, reason)
+        },
+        Expr::Try(inner, _) => check_core_box_sites_outside(state, world, inner, function, reason),
+        else => {},
+    }
+}
+
+/// **Whether a statement after the tree's `let` keeps it in its task**:
+/// empty where it does, else why it does not.
+fn check_core_tree_stays_in_stmt(state: ref CheckState, world: ref CheckWorld, stmt: ref Stmt, name: ref String) -> String sync {
+    return match stmt {
+        Stmt::Let { value, .. } => check_core_tree_stays_in(state, world, value, name),
+        Stmt::Comptime { value, .. } => check_core_tree_stays_in(state, world, value, name),
+        Stmt::Expr(value) => check_core_tree_stays_in(state, world, value, name),
+        Stmt::Emit(value) => check_core_tree_stays_in(state, world, value, name),
+        Stmt::Assign { target, value, .. } => {
+            if check_core_is_the_name(world, target, name) {
+                check_core_tree_rebuilt(state, world, value, name)
+            } else {
+                let at_target = check_core_tree_stays_in(state, world, target, name)
+                if at_target.len() > 0 { at_target } else { check_core_tree_stays_in(state, world, value, name) }
+            }
+        },
+        Stmt::For { iter, body, .. } => {
+            let over = check_core_tree_stays_in(state, world, iter, name)
+            if over.len() > 0 { over } else { check_core_tree_stays_in_block(state, world, body, name) }
+        },
+        Stmt::While { cond, body } => {
+            let asked = check_core_tree_stays_in(state, world, cond, name)
+            if asked.len() > 0 { asked } else { check_core_tree_stays_in_block(state, world, body, name) }
+        },
+        Stmt::Return(value) => check_core_tree_stays_in(state, world, value ?? return "", name),
+        Stmt::Break => "",
+        Stmt::Continue => "",
+    }
+}
+
+fn check_core_tree_stays_in_block(state: ref CheckState, world: ref CheckWorld, block: ref Block, name: ref String) -> String sync {
+    for stmt in block.stmts {
+        let reason = check_core_tree_stays_in_stmt(state, world, stmt.node, name)
+        if reason.len() > 0 {
+            return reason
+        }
+    }
+    return ""
+}
+
+/// **Whether `name = value` rebuilds the tree in place**: `value` does not
+/// read it, or is a box site whose parts are the tree itself, sites built
+/// so in turn, or parts that do not read it.
+fn check_core_tree_rebuilt(state: ref CheckState, world: ref CheckWorld, value: ref Expr, name: ref String) -> String sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(value, world.words, read)
+    if !read.contains(name) {
+        return ""
+    }
+    if check_core_box_site(state, world, value).len() == 0 {
+        return check_core_tree_stays_in(state, world, value, name)
+    }
+    let mut parts: Vec[Expr] = []
+    match value {
+        Expr::Call { args, .. } => {
+            for arg in args {
+                parts.push(arg.clone())
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                match field.value {
+                    null => return "it is moved into a field written without its value",
+                    given => parts.push(given.clone()),
+                }
+            }
+        },
+        else => {},
+    }
+    for part in parts {
+        if !check_core_is_the_name(world, part, name) {
+            let reason = check_core_tree_rebuilt(state, world, part, name)
+            if reason.len() > 0 {
+                return reason
+            }
+        }
+    }
+    return ""
+}
+
+/// Whether `expr` is the tree itself, or a field read off it.
+fn check_core_tree_read(world: ref CheckWorld, expr: ref Expr, name: ref String) -> bool sync {
+    return match expr {
+        Expr::Field { base, .. } => check_core_is_the_name(world, base, name) || check_core_tree_read(world, base, name),
+        else => check_core_is_the_name(world, expr, name),
+    }
+}
+
+/// **Whether `expr` keeps the tree `name` in its task**: empty where it
+/// does - it does not mention it, lends it to a `ref` parameter, matches
+/// it, compares it or formats it - else the reason it does not.
+fn check_core_tree_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, name: ref String) -> String sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, read)
+    if !read.contains(name) {
+        return ""
+    }
+    let mut parts: Vec[Expr] = []
+    match expr {
+        Expr::Variable(_, _) => return "is moved or handed on as a value",
+        Expr::Call { func, args, config, .. } => {
+            for arg in args {
+                if check_core_is_the_name(world, arg, name) {
+                    if !state.facts.lent_args.contains(node_key(arg)) {
+                        return "is handed to a call by value"
+                    }
+                } else {
+                    parts.push(arg.clone())
+                }
+            }
+            parts.push(func.clone())
+            for option in config {
+                parts.push(option.value.clone())
+            }
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            if check_core_tree_read(world, receiver, name) {
+                return "has a method called on it"
+            }
+            for arg in args {
+                if check_core_is_the_name(world, arg, name) {
+                    if !state.facts.lent_args.contains(node_key(arg)) {
+                        return "is handed to a call by value"
+                    }
+                } else {
+                    parts.push(arg.clone())
+                }
+            }
+            parts.push(receiver.clone())
+        },
+        Expr::Match { value, arms, .. } => {
+            let matched = check_core_is_the_name(world, value, name)
+            if !matched {
+                parts.push(value.clone())
+            }
+            for arm in arms {
+                let mut watched: Vec[String] = [name.clone()]
+                if matched {
+                    for bound in pattern_names(world, arm.pattern) {
+                        watched.push(bound)
+                    }
+                }
+                for one in watched {
+                    let reason = check_core_tree_stays_in(state, world, arm.body, one)
+                    if reason.len() > 0 {
+                        return reason
+                    }
+                    match arm.guard {
+                        null => {},
+                        guard => {
+                            let asked = check_core_tree_stays_in(state, world, guard, one)
+                            if asked.len() > 0 {
+                                return asked
+                            }
+                        },
+                    }
+                }
+            }
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            if !check_core_tree_read(world, lhs, name) {
+                parts.push(lhs.clone())
+            }
+            if !check_core_tree_read(world, rhs, name) {
+                parts.push(rhs.clone())
+            }
+        },
+        Expr::Unary { expr, .. } => parts.push(expr.clone()),
+        Expr::Cast { expr, .. } => parts.push(expr.clone()),
+        Expr::Try(inner, _) => parts.push(inner.clone()),
+        Expr::Tuple(items, _) => {
+            for item in items {
+                parts.push(item.clone())
+            }
+        },
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                parts.push(item.clone())
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                match field.value {
+                    null => {
+                        if f"{world.words.resolve(field.name)}" == name {
+                            return "is moved into a value"
+                        }
+                    },
+                    given => parts.push(given.clone()),
+                }
+            }
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            parts.push(value.clone())
+            parts.push(fallback.clone())
+        },
+        Expr::Throw(thrown, _) => parts.push(thrown.clone()),
+        Expr::Block(inner, _) => return check_core_tree_stays_in_block(state, world, inner, name),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let asked = check_core_tree_stays_in(state, world, cond, name)
+            if asked.len() > 0 {
+                return asked
+            }
+            let then = check_core_tree_stays_in_block(state, world, then_branch, name)
+            if then.len() > 0 {
+                return then
+            }
+            return check_core_tree_stays_in_block(state, world, else_branch ?? return "", name)
+        },
+        Expr::LitInterpolated { parts: pieces, .. } => {
+            for piece in pieces {
+                match piece {
+                    FPart::Hole { expr, .. } => {
+                        if !check_core_tree_read(world, expr, name) {
+                            parts.push(expr.clone())
+                        }
+                    },
+                    FPart::Text(_) => {},
+                }
+            }
+        },
+        Expr::Spawn { .. } => return "is taken into a task, which can outlive this one",
+        Expr::Async(..) => return "is taken into a task, which can outlive this one",
+        Expr::Closure { .. } => return "is taken into a closure, which can outlive this function",
+        else => return "is used where the compiler cannot follow it",
+    }
+    for part in parts {
+        let reason = check_core_tree_stays_in(state, world, part, name)
+        if reason.len() > 0 {
+            return reason
+        }
+    }
+    return ""
+}
+
 /// Whether one `let` of `block` binds `name`.
 fn check_core_view_list_bound_once(world: ref CheckWorld, block: ref Block, name: ref String) -> bool sync {
     let mut seen = 0
@@ -3686,5 +4242,402 @@ fn check_core_stmt_slot_read(value: ref Expr) -> ref Expr {
     return match value {
         Expr::Coalesce { value: read, .. } => read,
         else => value,
+    }
+}
+
+/// **Which returned trees stay in the task, across calls** (ADR-327 D17,
+/// #2348). After every body of the file is checked - the walk asks which
+/// arguments were lent - each call of a free function of this file is
+/// written down with where its result goes: kept in the caller (a `let`
+/// whose name D16 keeps in the function, an argument lent to its
+/// parameter, a box of a value placed in the block, a comparison, an
+/// `f"…"` hole, a statement whose value is dropped), the caller's own
+/// result, or anywhere else, which counts as leaving the task. A fixed
+/// point that starts from "task-local" turns a function to "outside" as
+/// soon as one call lets its result leave, or hands it to the result of a
+/// function that is outside. A function named anywhere but as a direct
+/// call (a function value, a task's body, a closure), `pub`, `extern` or
+/// `main` is outside, and a file with a grammar keeps every function
+/// outside. The box sites a task-local function returns are placed in
+/// the block (D16); `--sharing` names the function either way.
+fn check_core_place_returned(mut state: CheckState, world: ref CheckWorld) sync {
+    if state.facts.boxed_members.len() == 0 {
+        return
+    }
+    let mut candidates: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut has_grammar = false
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, is_public, is_extern, .. } => {
+                let sym = name ?? continue
+                let named = f"{world.words.resolve(sym)}"
+                if !is_public && !is_extern && named != "main" {
+                    candidates.insert(named)
+                }
+            },
+            Item::Grammar(_) => { has_grammar = true },
+            else => {},
+        }
+    }
+    if candidates.len() == 0 {
+        return
+    }
+    let mut calls: Vec[(String, String)] = []
+    let mut sites: Vec[(i64, String, String)] = []
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, body, config, .. } => {
+                let sym = name ?? continue
+                let owner = f"{world.words.resolve(sym)}"
+                for option in config {
+                    check_core_returned_leaves(world, option.default, owner, candidates, calls)
+                }
+                check_core_returned_block(state, world, body, owner, f"<{owner}", candidates, calls, sites)
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, config, .. } => {
+                            let sym = name ?? continue
+                            let owner = f"{world.here.text(target.name)}::{world.words.resolve(sym)}"
+                            for option in config {
+                                check_core_returned_leaves(world, option.default, owner, candidates, calls)
+                            }
+                            check_core_returned_block(state, world, body, owner, f"<{owner}", candidates, calls, sites)
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Item::Test { name, body } => check_core_returned_block(state, world, body, name, f"!{name}", candidates, calls, sites),
+            Item::Bench { name, body } => check_core_returned_block(state, world, body, name, f"!{name}", candidates, calls, sites),
+            Item::Comptime { value, .. } => check_core_returned_leaves(world, value, "a constant", candidates, calls),
+            Item::Struct { fields, rules, .. } => {
+                for field in fields {
+                    match field.default {
+                        null => {},
+                        given => check_core_returned_leaves(world, given.value, "a field's default", candidates, calls),
+                    }
+                }
+                for rule in rules {
+                    check_core_returned_leaves(world, rule.node, "a rule", candidates, calls)
+                }
+            },
+            else => {},
+        }
+    }
+    // **The fixed point**, from "task-local": a function turns outside at
+    // the first call that lets its result leave, and with it every
+    // function that returns its result.
+    let mut local: collections::BTreeSet[String] = if has_grammar { collections::BTreeSet() } else { candidates.clone() }
+    let mut why: collections::BTreeMap[String, String] = collections::BTreeMap()
+    if has_grammar {
+        for named in candidates {
+            why.insert(named.clone(), "a grammar in this file reads code the walk does not follow")
+        }
+    }
+    // A function the other files of the package name is called where this
+    // walk does not follow: it stays outside.
+    for named in check_core_returned_beside(world, candidates) {
+        if local.remove(named) {
+            why.insert(named.clone(), "another file of the package names it, where the walk does not follow")
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (callee, dest) in calls {
+            if !local.contains(callee) {
+                continue
+            }
+            let left: String? = match dest.strip_prefix("!") {
+                null => {
+                    match dest.strip_prefix("<") {
+                        null => null,
+                        given => if local.contains(given) { null } else { f"a call in `{given}` returns it, and the result of `{given}` leaves the task" },
+                    }
+                },
+                caller => f"a call in `{caller}` lets it leave the task",
+            }
+            match left {
+                null => {},
+                reason => {
+                    local.remove(callee)
+                    why.insert(callee.clone(), reason.clone())
+                    changed = true
+                },
+            }
+        }
+    }
+    for (key, site, owner) in sites {
+        if local.contains(owner) {
+            state.facts.placed_in_block.insert(key)
+            state.facts.box_sites.insert(key, f"{owner}: `{site}` in the block: its result stays in the task at every call (ADR-327 D17)")
+        } else if candidates.contains(owner) {
+            let reason = why.get(owner)?.clone() ?? "a call lets it leave the task"
+            state.facts.box_sites.insert(key, f"{owner}: `{site}` outside: it is returned, and {reason} (ADR-327 D17)")
+        }
+    }
+}
+
+/// Every function of `candidates` that `expr` names, written down as a
+/// call whose result leaves the task from `owner`.
+fn check_core_returned_leaves(world: ref CheckWorld, expr: ref Expr, owner: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)]) sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, read)
+    for named in read {
+        if candidates.contains(named) {
+            calls.push((named.clone(), f"!{owner}"))
+        }
+    }
+}
+
+/// **The candidates the other files of the package name**, in a body, a
+/// constant, a field's default or a rule; all of them where one of those
+/// files holds a grammar, whose code the walk does not read (ADR-327 D17).
+/// A name is enough: which of them hold a call of this file's function the
+/// walk does not tell, so the answer stays on the safe side. `lower-std`
+/// gives a file the package without it (`here_at` -1); a package's check
+/// gives it among them, and its own place is passed over.
+fn check_core_returned_beside(world: ref CheckWorld, candidates: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut at = -1
+    for other in world.beside {
+        at += 1
+        if at == world.here_at {
+            continue
+        }
+        for item in other.items {
+            match item.node {
+                Item::Fn { body, config, .. } => {
+                    for option in config {
+                        names_in(option.default, other.words, read)
+                    }
+                    names_in_block(body, other.words, read)
+                },
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { body, config, .. } => {
+                                for option in config {
+                                    names_in(option.default, other.words, read)
+                                }
+                                names_in_block(body, other.words, read)
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                Item::Test { body, .. } => names_in_block(body, other.words, read),
+                Item::Bench { body, .. } => names_in_block(body, other.words, read),
+                Item::Comptime { value, .. } => names_in(value, other.words, read),
+                Item::Struct { fields, rules, .. } => {
+                    for field in fields {
+                        match field.default {
+                            null => {},
+                            given => names_in(given.value, other.words, read),
+                        }
+                    }
+                    for rule in rules {
+                        names_in(rule.node, other.words, read)
+                    }
+                },
+                Item::Grammar(_) => {
+                    return candidates.clone()
+                },
+                else => {},
+            }
+        }
+    }
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in read {
+        if candidates.contains(name) {
+            named.insert(name.clone())
+        }
+    }
+    return named
+}
+
+/// **Where each statement of `block` sends the values it computes**, in
+/// `owner`; `dest` is where the block's own value goes: `=` kept in the
+/// task, `<f` the result of `f`, `!f` leaving it from `f`.
+fn check_core_returned_block(state: ref CheckState, world: ref CheckWorld, block: ref Block, owner: ref String, dest: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)], mut sites: Vec[(i64, String, String)]) sync {
+    let count = block.stmts.len() as i64
+    let leaves = f"!{owner}"
+    let result = f"<{owner}"
+    let mut at = 0
+    while at < count {
+        match block.stmts[at].node {
+            Stmt::Let { names, value, .. } => {
+                let mut kept = false
+                if names.len() == 1 {
+                    let name = f"{world.words.resolve(names[0])}"
+                    kept = check_core_view_list_bound_once(world, block, name)
+                    let mut later = at + 1
+                    while later < count && kept {
+                        kept = check_core_tree_stays_in_stmt(state, world, block.stmts[later].node, name).len() == 0
+                        later += 1
+                    }
+                }
+                check_core_returned_expr(state, world, value, owner, if kept { "=" } else { leaves }, candidates, calls, sites)
+            },
+            Stmt::Expr(value) => check_core_returned_expr(state, world, value, owner, if at == count - 1 { dest } else { "=" }, candidates, calls, sites),
+            Stmt::Return(value) => {
+                match value {
+                    null => {},
+                    given => check_core_returned_expr(state, world, given, owner, result, candidates, calls, sites),
+                }
+            },
+            Stmt::For { iter, body, .. } => {
+                check_core_returned_expr(state, world, iter, owner, leaves, candidates, calls, sites)
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites)
+            },
+            Stmt::While { cond, body } => {
+                check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites)
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites)
+            },
+            Stmt::Assign { target, value, .. } => {
+                check_core_returned_leaves(world, target, owner, candidates, calls)
+                check_core_returned_expr(state, world, value, owner, leaves, candidates, calls, sites)
+            },
+            Stmt::Comptime { value, .. } => check_core_returned_leaves(world, value, owner, candidates, calls),
+            Stmt::Emit(value) => check_core_returned_leaves(world, value, owner, candidates, calls),
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// **Where `expr`'s parts send their values**, `expr`'s own going to
+/// `dest` (`check_core_returned_block`): a call of a function of this file
+/// is written down with it, and a box site the caller's result is built
+/// by with the function whose result it is.
+fn check_core_returned_expr(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, owner: ref String, dest: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)], mut sites: Vec[(i64, String, String)]) sync {
+    let leaves = f"!{owner}"
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let site = check_core_box_site(state, world, expr)
+            let mut parts: String = leaves.clone()
+            if site.len() > 0 {
+                let key = check_core_box_site_key(expr)
+                if state.facts.placed_in_block.contains(key) {
+                    parts = "="
+                } else {
+                    match dest.strip_prefix("<") {
+                        null => {},
+                        returned => {
+                            sites.push((key, site.clone(), returned.clone()))
+                            parts = dest.clone()
+                        },
+                    }
+                }
+            } else {
+                let callee: String? = match func {
+                    Expr::Variable(sym, _) => f"{world.words.resolve(sym)}",
+                    Expr::Path(segments, _) => if segments.len() == 1 { f"{world.words.resolve(segments[0])}" } else { null },
+                    else => null,
+                }
+                match callee {
+                    null => check_core_returned_leaves(world, func, owner, candidates, calls),
+                    named => {
+                        if candidates.contains(named) {
+                            calls.push((named.clone(), dest.clone()))
+                        }
+                    },
+                }
+            }
+            for arg in args {
+                let lent = site.len() == 0 && state.facts.lent_args.contains(node_key(arg))
+                check_core_returned_expr(state, world, arg, owner, if lent { "=" } else { parts }, candidates, calls, sites)
+            }
+            for option in config {
+                check_core_returned_leaves(world, option.value, owner, candidates, calls)
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            let site = check_core_box_site(state, world, expr)
+            let mut parts: String = leaves.clone()
+            if site.len() > 0 {
+                let key = check_core_box_site_key(expr)
+                if state.facts.placed_in_block.contains(key) {
+                    parts = "="
+                } else {
+                    match dest.strip_prefix("<") {
+                        null => {},
+                        returned => {
+                            sites.push((key, site.clone(), returned.clone()))
+                            parts = dest.clone()
+                        },
+                    }
+                }
+            }
+            for field in fields {
+                check_core_returned_expr(state, world, field.value ?? continue, owner, parts, candidates, calls, sites)
+            }
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            check_core_returned_leaves(world, receiver, owner, candidates, calls)
+            for arg in args {
+                check_core_returned_expr(state, world, arg, owner, if state.facts.lent_args.contains(node_key(arg)) { "=" } else { leaves }, candidates, calls, sites)
+            }
+            for option in config {
+                check_core_returned_leaves(world, option.value, owner, candidates, calls)
+            }
+        },
+        Expr::Match { value, arms, .. } => {
+            check_core_returned_leaves(world, value, owner, candidates, calls)
+            for arm in arms {
+                match arm.guard {
+                    null => {},
+                    guard => check_core_returned_expr(state, world, guard, owner, "=", candidates, calls, sites),
+                }
+                check_core_returned_expr(state, world, arm.body, owner, dest, candidates, calls, sites)
+            }
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites)
+            check_core_returned_block(state, world, then_branch, owner, dest, candidates, calls, sites)
+            match else_branch {
+                null => {},
+                given => check_core_returned_block(state, world, given, owner, dest, candidates, calls, sites),
+            }
+        },
+        Expr::Block(inner, _) => check_core_returned_block(state, world, inner, owner, dest, candidates, calls, sites),
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr: hole, .. } => check_core_returned_expr(state, world, hole, owner, "=", candidates, calls, sites),
+                    else => {},
+                }
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let compared = match op {
+                BinaryOp::Eq => true,
+                BinaryOp::Ne => true,
+                BinaryOp::Lt => true,
+                BinaryOp::Le => true,
+                BinaryOp::Gt => true,
+                BinaryOp::Ge => true,
+                BinaryOp::And => true,
+                BinaryOp::Or => true,
+                else => false,
+            }
+            let parts: String = if compared { "=" } else { leaves }
+            check_core_returned_expr(state, world, lhs, owner, parts, candidates, calls, sites)
+            check_core_returned_expr(state, world, rhs, owner, parts, candidates, calls, sites)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            check_core_returned_expr(state, world, value, owner, dest, candidates, calls, sites)
+            check_core_returned_expr(state, world, fallback, owner, dest, candidates, calls, sites)
+        },
+        Expr::Try(inner, _) => check_core_returned_expr(state, world, inner, owner, dest, candidates, calls, sites),
+        Expr::Return(value, _) => {
+            match value {
+                null => {},
+                given => check_core_returned_expr(state, world, given, owner, f"<{owner}", candidates, calls, sites),
+            }
+        },
+        else => check_core_returned_leaves(world, expr, owner, candidates, calls),
     }
 }

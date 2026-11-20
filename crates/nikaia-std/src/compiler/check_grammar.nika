@@ -39,10 +39,12 @@ fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
     }
 }
 
-/// The built-in `text(..)` with a pattern inside, not a rule of that name.
+/// The built-in `text(..)` or `bytes(..)` with a pattern inside, not a rule
+/// of that name: what its pattern binds is the alternative's (Part II 10,
+/// #2409).
 fn grammar_a_text_call(world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> bool sync {
     return match pattern {
-        Pattern::Ref { name, generics, args } => generics.len() == 0 && args.len() >= 1 && world.words.resolve(name) == "text" && !rules.contains(world.words.resolve(name)),
+        Pattern::Ref { name, generics, args } => generics.len() == 0 && args.len() >= 1 && (world.words.resolve(name) == "text" || world.words.resolve(name) == "bytes") && !rules.contains(world.words.resolve(name)),
         else => false,
     }
 }
@@ -430,7 +432,7 @@ fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: re
 impl CheckState {
     /// **The values a rule takes** (ADR-grammar-syntax-v1 D12): its parameters and its
     /// options, each a local of its patterns and of its actions.
-    /// A value written plain or `ref` is lent (ADR-grammar-actions-v1 D7, ADR-views-3
+    /// A value written plain or `ref` is lent (ADR-grammar-actions-v1 D7, ADR-views-v4
     /// D1): the action reads the caller's, as a function's parameter does.
     /// Plain text is a view of text there, as in a function (ADR-282 D2).
     fn rule_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, rule: ref GrammarRule) -> Vec[CheckLocal] sync {

@@ -6,6 +6,13 @@ edition = "2024"
 # `RUST_FLOOR` says the same.
 rust-version = "1.88"
 
+# **No `cfg(test)` copy of std** (#2082): std's tests are test blocks of
+# `src/runtime/*.nika` and programs in `tests/compiler`, so `cargo test --lib`
+# has nothing to build here, and CI compiles std once instead of twice. The
+# fenced blocks in its doc comments are Nikaia or text, not Rust doctests.
+[lib]
+test = false
+
 # **The re-entrancy check is a build option** (ADR-281 D36, Part I 1.2). It is on
 # by default and a program that declines it is built with `default-features =
 # false`, which the orchestrator writes into the generated manifest from the

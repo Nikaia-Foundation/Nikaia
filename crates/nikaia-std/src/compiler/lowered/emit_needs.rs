@@ -76,7 +76,7 @@ impl EmitNeeds {
         out.push_str("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
         out.push_str(&block_types_import(true));
         if self.fails { out.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n"); }
-        for path in self.foreign_traits.iter() { out.push_str(&format!("#[allow(unused_imports)]\npub use {};\n", path)); }
+        for path in self.foreign_traits.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("#[allow(unused_imports)]\npub use {};\n", path)); }; }
         out
     }
 }
@@ -89,7 +89,7 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
     out.push_str("],\nbeside: &[");
     for name in beside.iter() {
         let crate_name = nikaia_std::block::Text::from(name.replace('-', "_"));
-        out.push_str(&format!("&::{}::__NIKAIA_PLACES, ", crate_name));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("&::{}::__NIKAIA_PLACES, ", crate_name)); };
     }
     out.push_str("],\n};\n");
     if has_main { out.push_str("const __NIKAIA_SITES: nikaia_std::abort::Places = __NIKAIA_PLACES;\n"); }
@@ -99,7 +99,7 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
 pub(crate) fn emit_needs_abort_rows(rust: &str, rows: &[(i64, i64, i64)], paths: &[String], sources: &[&str]) -> String {
     let starts = emit_needs_line_starts(rust);
     let mut nika: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for source in sources.iter() {
+    nika.reserve(sources.iter().size_hint().0); for source in sources.iter() {
         let source = *source;
         nika.push(emit_needs_line_starts(source));
     }
@@ -116,7 +116,7 @@ pub(crate) fn emit_needs_abort_rows(rust: &str, rows: &[(i64, i64, i64)], paths:
         let generated = nikaia_std::num::value(generated);let unit = nikaia_std::num::value(unit);let line = nikaia_std::num::value(line);
         let mut path = rust_string("<unknown>");
         if unit < paths.len() as i64 { path = rust_string(nikaia_std::index::get(&paths, nikaia_std::index::at(unit))); }
-        out.push_str(&format!("    ({}, {}, {}),\n", generated, path, line));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    ({}, {}, {}),\n", generated, path, line)); };
     }
     out
 }
