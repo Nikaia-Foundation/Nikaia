@@ -1,0 +1,52 @@
+a
+b
+2
+2
+a
+b
+walk: expected end of input; found unexpected token `x` at line 2, column 5
+   2 | [b];x
+           ^
+note: also possible here: `[`
+in item
+in item 3
+in items
+-1
+whole: expected end of input; found unexpected token `x` at line 2, column 5
+   2 | [b];x
+           ^
+note: also possible here: `[`
+in item
+in item 3
+in all
+0
+a
+walk: unexpected end of input, expected `]` at line 1, column 7
+   1 | [a];[b
+             ^
+in item
+in item 2
+in items
+-1
+whole: unexpected end of input, expected `]` at line 1, column 7
+   1 | [a];[b
+             ^
+in item
+in item 2
+in all
+0
+a
+walk: unexpected end of input, expected `;` at line 1, column 8
+   1 | [a];[b]
+              ^
+in item
+in item 2
+in items
+-1
+whole: unexpected end of input, expected `;` at line 1, column 8
+   1 | [a];[b]
+              ^
+in item
+in item 2
+in all
+0
