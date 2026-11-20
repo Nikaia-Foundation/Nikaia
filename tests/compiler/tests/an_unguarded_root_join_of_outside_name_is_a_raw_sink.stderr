@@ -1,0 +1,10 @@
+warning[NK1308]: `key` reaches the root `fs::Root::Dir(cache).join(key)` of `fs::read_to_string`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/an_unguarded_root_join_of_outside_name_is_a_raw_sink.nika:10:5
+    |
+ 10 |     let content = fs::read_to_string("file.txt", fs::Root::Dir(cache).join(key))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `key` comes from `fs::read_to_string`: whoever wrote the file chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(key) if !path::is_component(key)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `file`, `untrusted-paths-read = ["file"]` under `[allow]` in the manifest builds it.
