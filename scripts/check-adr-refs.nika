@@ -5,6 +5,9 @@
 //
 //     nikaia run scripts/check-adr-refs.nika [-- --root DIR]
 //
+// DIR is relative and stays below the directory it runs in
+// (`path::is_below`): no `/` first and no `..`.
+//
 // A record is named `ADR-<topic>-v<n>`: one to three lowercase words joined
 // by `-` and the topic's version (ADR-decision-records-v2), and a topic has
 // one live record. The records from before carry a bare three-digit number
@@ -32,6 +35,7 @@
 use std::cli
 use std::collections
 use std::fs
+use std::path
 use std::process
 use std::regex
 
@@ -39,11 +43,11 @@ use std::regex
 // to three lowercase words and a version `v<n>` (ADR-decision-records-v2 D1;
 // a count without `v` is the scheme before it).
 fn topic_re() -> String {
-    return "[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,2}-v?[1-9][0-9]*"
+	return "[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,2}-v?[1-9][0-9]*"
 }
 
 fn name_re() -> String {
-    return "(?:\\d{3}|" + topic_re() + ")"
+	return "(?:\\d{3}|" + topic_re() + ")"
 }
 
 fn adr_dir() -> String { return "docs/specification/adr" }
@@ -54,308 +58,329 @@ fn self_path() -> String { return "scripts/check-adr-refs.nika" }
 
 // What a record offers: its `Dn` and its top-level section numbers.
 struct Offers {
-    ds: Vec[String],
-    secs: Vec[String],
+	ds: Vec[String],
+	secs: Vec[String],
 }
 
 struct Cite {
-    adr: String,
-    label: String,
-    file: String,
+	adr: String,
+	label: String,
+	file: String,
 }
 
 // The text of ROOT/FILE as Python's text mode reads it: lines end in `\n`.
-fn refs_read(root: String, file: String) -> String throws {
-    let raw = fs::read(f"{root}/{file}", fs::Root::Anywhere) catch { return "" }
-    return raw.text_lossy().replace("\r\n", "\n").replace("\r", "\n")
+fn refs_read(root: fs::Root, file: String) -> String throws {
+	let raw = fs::read(file, root.clone()) catch { return "" }
+	return raw.text_lossy().replace("\r\n", "\n").replace("\r", "\n")
 }
 
 // The record's name from its file, or "" for a file that breaks the scheme.
 fn refs_name_of(file_re: regex::Regex[regex::Dynamic], path: String) -> String {
-    let caps = file_re.captures(path) ?? return ""
-    return (caps.group(1) ?? return "").text().clone()
+	let caps = file_re.captures(path) ?? return ""
+	return (caps.group(1) ?? return "").text().clone()
 }
 
 // The record files of a directory: every `adr-*.md`, sorted.
-fn refs_records(root: String, dir: String) -> Vec[String] throws {
-    let mut out: Vec[String] = []
-    let here = f"{root}/{dir}"
-    if !fs::exists(here.clone(), fs::Root::Anywhere) { return out }
-    for entry in fs::read_dir(here, fs::Root::Anywhere) {
-        let parts: Vec[String] = entry.to_text().split("/").collect()
-        let name = parts[parts.len() - 1]
-        if name.starts_with("adr-") && name.ends_with(".md") { out.push(f"{dir}/{name}") }
-    }
-    out.sort()
-    return out
+fn refs_records(root: fs::Root, dir: String) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	let here = dir.clone()
+	if !fs::exists(here.clone(), root.clone()) { return out }
+	for entry in fs::read_dir(here, root.clone()) {
+		let parts: Vec[String] = entry.to_text().split("/").collect()
+		let name = parts[parts.len() - 1]
+		if name.starts_with("adr-") && name.ends_with(".md") { out.push(f"{dir}/{name}") }
+	}
+	out.sort()
+	return out
 }
 
 // Whether FILE (relative to the root) is one the checks search: the
 // sources, tests, examples, docs and scripts, never the history, build
 // output or this file.
 fn refs_searched(file: String) -> bool {
-    if file.starts_with("docs/history/") || file == self_path() { return false }
-    if file.starts_with("crates/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with("/Cargo.toml") }
-    // A package's sources, tests and manifest; not its test data.
-    if file.starts_with("packages/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with(".md") || file.ends_with("/nikaia.toml") || file.ends_with("/Cargo.toml") }
-    for dir in ["tests/", "examples/", "benches/", "scripts/", "editors/"] {
-        if file.starts_with(dir) { return true }
-    }
-    if file.starts_with("docs/") || file.starts_with("guide/") { return file.ends_with(".md") }
-    for name in ["README.md", "manifesto.md", "rust-toolchain.toml", "index.html", "Cargo.toml"] {
-        if file == name { return true }
-    }
-    return file.ends_with("/Cargo.toml")
+	if file.starts_with("docs/history/") || file == self_path() { return false }
+	if file.starts_with("crates/") {
+		return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with("/Cargo.toml")
+	}
+	// A package's sources, tests and manifest; not its test data.
+	if file.starts_with("packages/") {
+		return file.ends_with(".rs")
+			|| file.ends_with(".nika")
+			|| file.ends_with(".md")
+			|| file.ends_with("/nikaia.toml")
+			|| file.ends_with("/Cargo.toml")
+	}
+	for dir in ["tests/", "examples/", "benches/", "scripts/", "editors/"] {
+		if file.starts_with(dir) { return true }
+	}
+	if file.starts_with("docs/") || file.starts_with("guide/") { return file.ends_with(".md") }
+	for name in ["README.md", "manifesto.md", "rust-toolchain.toml", "index.html", "Cargo.toml"] {
+		if file == name { return true }
+	}
+	return file.ends_with("/Cargo.toml")
 }
 
 // The searched files under DIR (ROOT/DIR; DIR "" for the root), relative to
 // ROOT. Hidden files, `target/` and `__pycache__/` are not searched.
-fn refs_walk(root: String, dir: String, mut out: Vec[String]) throws {
-    let mut here = root.clone()
-    if dir.len() > 0 { here = f"{root}/{dir}" }
-    for entry in fs::read_dir(here, fs::Root::Anywhere) {
-        let parts: Vec[String] = entry.to_text().split("/").collect()
-        let name = parts[parts.len() - 1]
-        if name.starts_with(".") || name == "target" || name == "__pycache__" { continue }
-        let mut rel = name.clone()
-        if dir.len() > 0 { rel = f"{dir}/{name}" }
-        if fs::metadata(f"{root}/{rel}", fs::Root::Anywhere).is_dir() {
-            refs_walk(root, rel, out)
-        } else if refs_searched(rel) {
-            out.push(rel)
-        }
-    }
+fn refs_walk(root: fs::Root, dir: String, mut out: Vec[String]) throws {
+	let mut here: String = "."
+	if dir.len() > 0 { here = dir.clone() }
+	for entry in fs::read_dir(here, root.clone()) {
+		let parts: Vec[String] = entry.to_text().split("/").collect()
+		let name = parts[parts.len() - 1]
+		if name.starts_with(".") || name == "target" || name == "__pycache__" { continue }
+		let mut rel = name.clone()
+		if dir.len() > 0 { rel = f"{dir}/{name}" }
+		if !path::is_below(rel) { continue }
+		if fs::metadata(rel.clone(), root.clone()).is_dir() {
+			refs_walk(root.clone(), rel, out)
+		} else if refs_searched(rel) {
+			out.push(rel)
+		}
+	}
 }
 
 // The group texts of every match of FIND in TEXT, read by WHOLE (FIND
 // anchored at both ends), "" for a group that took no part.
-fn refs_groups(find: regex::Regex[regex::Dynamic], whole: regex::Regex[regex::Dynamic], text: String, n: i64) -> Vec[Vec[String]] {
-    let mut out: Vec[Vec[String]] = []
-    for m in find.find_all(text) {
-        let caps = whole.captures(m.text()) ?? continue
-        let mut row: Vec[String] = []
-        for i in 1..<n + 1 {
-            let g = caps.group(i)
-            if g == null {
-                row.push("")
-            } else {
-                row.push((g ?? continue).text().clone())
-            }
-        }
-        out.push(row)
-    }
-    return out
+fn refs_groups(
+	find: regex::Regex[regex::Dynamic],
+	whole: regex::Regex[regex::Dynamic],
+	text: String,
+	n: i64,
+) -> Vec[Vec[String]] {
+	let mut out: Vec[Vec[String]] = []
+	for m in find.find_all(text) {
+		let caps = whole.captures(m.text()) ?? continue
+		let mut row: Vec[String] = []
+		for i in 1..<n + 1 {
+			let g = caps.group(i)
+			if g == null {
+				row.push("")
+			} else {
+				row.push((g ?? continue).text().clone())
+			}
+		}
+		out.push(row)
+	}
+	return out
 }
 
 fn refs_anchored(pattern: String) -> regex::Regex[regex::Dynamic] throws {
-    return regex::dynamic("^(?:" + pattern + ")$")
+	return regex::dynamic("^(?:" + pattern + ")$")
 }
 
 // What each record offers, by name; an archived record of the same name as a
 // live one is the one read.
-fn refs_headings(root: String, file_re: regex::Regex[regex::Dynamic]) -> collections::HashMap[String, Offers] throws {
-    let mut have: collections::HashMap[String, Offers] = collections::HashMap()
-    let d_find = regex::dynamic("(?m)^#{2,4}\\s+(D\\d+)\\b")
-    let d_whole = regex::dynamic("^#{2,4}\\s+(D\\d+)")
-    // `## 3. Consequences` and `### 4.2 — …` both name a section.
-    let s_find = regex::dynamic("(?m)^#{2,4}\\s+(\\d+(?:\\.\\d+)*)[.\\s]")
-    let s_whole = refs_anchored("#{2,4}\\s+(\\d+(?:\\.\\d+)*)[.\\s]")
-    let mut paths = refs_records(root, adr_dir())
-    for p in refs_records(root, archive_dir()) { paths.push(p) }
-    for path in paths {
-        let num = refs_name_of(file_re, path.clone())
-        if num.len() == 0 { continue }
-        let text = refs_read(root, path)
-        let mut ds: Vec[String] = []
-        for g in refs_groups(d_find, d_whole, text.clone(), 1) { ds.push(g[0].clone()) }
-        let mut secs: Vec[String] = []
-        for g in refs_groups(s_find, s_whole, text, 1) { secs.push(g[0].clone()) }
-        have.insert(num, Offers { ds: ds, secs: secs })
-    }
-    return have
+fn refs_headings(
+	root: fs::Root,
+	file_re: regex::Regex[regex::Dynamic],
+) -> collections::HashMap[String, Offers] throws {
+	let mut have: collections::HashMap[String, Offers] = collections::HashMap()
+	let d_find = regex::dynamic("(?m)^#{2,4}\\s+(D\\d+)\\b")
+	let d_whole = regex::dynamic("^#{2,4}\\s+(D\\d+)")
+	// `## 3. Consequences` and `### 4.2 — …` both name a section.
+	let s_find = regex::dynamic("(?m)^#{2,4}\\s+(\\d+(?:\\.\\d+)*)[.\\s]")
+	let s_whole = refs_anchored("#{2,4}\\s+(\\d+(?:\\.\\d+)*)[.\\s]")
+	let mut paths = refs_records(root.clone(), adr_dir())
+	for p in refs_records(root.clone(), archive_dir()) { paths.push(p) }
+	for path in paths {
+		let num = refs_name_of(file_re, path.clone())
+		if num.len() == 0 { continue }
+		let text = refs_read(root.clone(), path)
+		let mut ds: Vec[String] = []
+		for g in refs_groups(d_find, d_whole, text.clone(), 1) { ds.push(g[0].clone()) }
+		let mut secs: Vec[String] = []
+		for g in refs_groups(s_find, s_whole, text, 1) { secs.push(g[0].clone()) }
+		have.insert(num, Offers { ds: ds, secs: secs })
+	}
+	return have
 }
 
 // Every (record, label) pair cited anywhere, with the file that does it.
 // The history is read as it was written; a section it cites may since have
 // left a record. A brief may cite the decision it asks a builder to write:
 // it is a plan, checked once the decision exists.
-fn refs_citations(root: String, files: Vec[String]) -> Vec[Cite] throws {
-    let mut seen: Vec[Cite] = []
-    let tail = "((?:[^A-Za-z0-9]{0,4}(?:D\\d+|§[\\d.]+))+)"
-    // Two spellings reach the same place: a bare `ADR-023 D7`, and the
-    // markdown form `[ADR-023](adr-023.md) D7` that every ADR header uses.
-    let patterns: Vec[String] = [
-        "ADR[- ]?(\\d{3})" + tail,
-        "ADR-(" + topic_re() + ")" + tail,
-        "\\]\\((?:[\\w./-]*/)?adr-(" + name_re() + ")\\.md\\)" + tail,
-    ]
-    let mut finds: Vec[regex::Regex[regex::Dynamic]] = []
-    let mut wholes: Vec[regex::Regex[regex::Dynamic]] = []
-    for p in patterns {
-        finds.push(regex::dynamic(p.clone()))
-        wholes.push(refs_anchored(p))
-    }
-    let label = regex::dynamic("D\\d+|§[\\d.]+")
-    for file in files {
-        if file.starts_with("docs/briefs/") { continue }
-        let text = refs_read(root, file.clone())
-        for i in 0..<finds.len() {
-            for g in refs_groups(finds[i], wholes[i], text.clone(), 2) {
-                for l in label.find_all(g[1]) {
-                    seen.push(Cite { adr: g[0].clone(), label: l.text().clone(), file: file.clone() })
-                }
-            }
-        }
-    }
-    return seen
+fn refs_citations(root: fs::Root, files: Vec[String]) -> Vec[Cite] throws {
+	let mut seen: Vec[Cite] = []
+	let tail = "((?:[^A-Za-z0-9]{0,4}(?:D\\d+|§[\\d.]+))+)"
+	// Two spellings reach the same place: a bare `ADR-023 D7`, and the
+	// markdown form `[ADR-023](adr-023.md) D7` that every ADR header uses.
+	let patterns: Vec[String] = [
+		"ADR[- ]?(\\d{3})" + tail,
+		"ADR-(" + topic_re() + ")" + tail,
+		"\\]\\((?:[\\w./-]*/)?adr-(" + name_re() + ")\\.md\\)" + tail,
+	]
+	let mut finds: Vec[regex::Regex[regex::Dynamic]] = []
+	let mut wholes: Vec[regex::Regex[regex::Dynamic]] = []
+	for p in patterns {
+		finds.push(regex::dynamic(p.clone()))
+		wholes.push(refs_anchored(p))
+	}
+	let label = regex::dynamic("D\\d+|§[\\d.]+")
+	for file in files {
+		if file.starts_with("docs/briefs/") { continue }
+		let text = refs_read(root.clone(), file.clone())
+		for i in 0..<finds.len() {
+			for g in refs_groups(finds[i], wholes[i], text.clone(), 2) {
+				for l in label.find_all(g[1]) {
+					seen.push(Cite {
+						adr: g[0].clone(),
+						label: l.text().clone(),
+						file: file.clone(),
+					})
+				}
+			}
+		}
+	}
+	return seen
 }
 
 // An index row opens with `| [NAME](adr-NAME.md) |`: the names of the rows
 // of TEXT whose two names agree, and their second cells.
 fn refs_rows(text: String, cells: bool) -> Vec[Vec[String]] throws {
-    let mut row = "\\|\\s*\\[(" + name_re() + ")\\]\\(adr-(" + name_re() + ")\\.md\\)\\s*\\|"
-    if cells { row = row + "([^|]*)\\|" }
-    let find = regex::dynamic("(?m)^" + row)
-    let whole = refs_anchored(row)
-    let mut out: Vec[Vec[String]] = []
-    for g in refs_groups(find, whole, text, 3) {
-        if g[0] == g[1] { out.push(g) }
-    }
-    return out
+	let mut row = "\\|\\s*\\[(" + name_re() + ")\\]\\(adr-(" + name_re() + ")\\.md\\)\\s*\\|"
+	if cells { row = row + "([^|]*)\\|" }
+	let find = regex::dynamic("(?m)^" + row)
+	let whole = refs_anchored(row)
+	let mut out: Vec[Vec[String]] = []
+	for g in refs_groups(find, whole, text, 3) {
+		if g[0] == g[1] { out.push(g) }
+	}
+	return out
 }
 
 fn refs_count(list: Vec[String], name: String) -> i64 {
-    let mut n = 0
-    for x in list {
-        if x == name { n += 1 }
-    }
-    return n
+	let mut n = 0
+	for x in list {
+		if x == name { n += 1 }
+	}
+	return n
 }
 
 fn refs_sorted_set(list: Vec[String]) -> Vec[String] {
-    let mut out: Vec[String] = []
-    for x in list { out.push(x.clone()) }
-    out.sort()
-    out.dedup()
-    return out
+	let mut out: Vec[String] = []
+	for x in list { out.push(x.clone()) }
+	out.sort()
+	out.dedup()
+	return out
 }
 
 // One record per name: one index row, one file, and a title that agrees.
 // Reported rather than stopped at, so a run says everything that is wrong at
 // once.
-fn refs_collisions(root: String, file_re: regex::Regex[regex::Dynamic]) -> Vec[String] throws {
-    let mut wrong: Vec[String] = []
-    let index = refs_read(root, f"{adr_dir()}/README.md")
-    // Two other tables in the same file open the same way and are **not**
-    // ownership: the reserved table's rows hold a bare number and no link,
-    // and the amendments table's second cell is another ADR rather than
-    // prose - which is what tells them apart here.
-    let other = regex::dynamic("^\\s*\\[" + name_re() + "\\]\\(adr-" + name_re() + "\\.md\\)")
-    let mut rows: Vec[String] = []
-    for g in refs_rows(index, true) {
-        if !other.is_match(g[2]) { rows.push(g[0].clone()) }
-    }
-    for num in refs_sorted_set(rows) {
-        let n = refs_count(rows, num)
-        if n > 1 { wrong.push(f"ADR-{num}: {n} index rows") }
-    }
-    let archive = refs_read(root, f"{archive_dir()}/README.md")
-    let mut archived: Vec[String] = []
-    for g in refs_rows(archive, false) { archived.push(g[0].clone()) }
-    for num in refs_sorted_set(rows) {
-        if archived.contains(num) { wrong.push(f"ADR-{num}: indexed both as live and as archived") }
-    }
-    let title = regex::dynamic("^#\\s*ADR-(" + name_re() + "):")
-    let live_paths = refs_records(root, adr_dir())
-    let archive_paths = refs_records(root, archive_dir())
-    let mut paths = live_paths.clone()
-    for p in archive_paths { paths.push(p.clone()) }
-    for path in paths {
-        let num = refs_name_of(file_re, path.clone())
-        if num.len() == 0 {
-            wrong.push(f"{path}: not a record name - `adr-<topic>-<n>.md`, one to three lowercase words and a number")
-            continue
-        }
-        let text = refs_read(root, path.clone())
-        let lines: Vec[String] = text.split("\n").collect()
-        let first = lines[0].trim()
-        let said = title.captures(first)
-        if said == null {
-            wrong.push(f"{path}: the first line does not open `# ADR-{num}: …`")
-        } else {
-            let named = ((said ?? continue).group(1) ?? continue).text().clone()
-            if named != num { wrong.push(f"{path}: titled ADR-{named}") }
-        }
-        let mut listed = rows.contains(num)
-        if path.starts_with(archive_dir()) { listed = archived.contains(num) }
-        if !listed { wrong.push(f"ADR-{num}: a record with no index row") }
-    }
-    let mut live: Vec[String] = []
-    for p in live_paths {
-        let n = refs_name_of(file_re, p)
-        if n.len() > 0 { live.push(n) }
-    }
-    live = refs_sorted_set(live)
-    let mut gone: Vec[String] = []
-    for p in archive_paths {
-        let n = refs_name_of(file_re, p)
-        if n.len() > 0 { gone.push(n) }
-    }
-    for num in live {
-        if gone.contains(num) { wrong.push(f"ADR-{num}: a file both live and archived") }
-    }
-    // A topic has one live record once it has a version
-    // (ADR-decision-records-v2 D2, D4): no second `-v` beside it, and no
-    // record of the earlier count.
-    let versioned = regex::dynamic("^(.+)-(v?)[1-9][0-9]*$")
-    let digits = regex::dynamic("^[0-9]{3}")
-    let mut topics: Vec[String] = []
-    for num in live {
-        let caps = versioned.captures(num) ?? continue
-        if digits.is_match(num) { continue }
-        topics.push((caps.group(1) ?? continue).text().clone())
-    }
-    for topic in refs_sorted_set(topics) {
-        let mut names: Vec[String] = []
-        let mut any_v = false
-        for num in live {
-            let caps = versioned.captures(num) ?? continue
-            if digits.is_match(num) { continue }
-            if (caps.group(1) ?? continue).text() != topic { continue }
-            names.push(num.clone())
-            if (caps.group(2) ?? continue).text().len() > 0 { any_v = true }
-        }
-        if any_v && names.len() > 1 {
-            names.sort()
-            let mut shown = String()
-            for n in names {
-                if shown.len() > 0 { shown.push_str(", ") }
-                shown.push_str(n)
-            }
-            wrong.push(f"topic `{topic}`: more than one live record ({shown})")
-        }
-    }
-    return wrong
+fn refs_collisions(root: fs::Root, file_re: regex::Regex[regex::Dynamic]) -> Vec[String] throws {
+	let mut wrong: Vec[String] = []
+	let index = refs_read(root.clone(), f"{adr_dir()}/README.md")
+	// Two other tables in the same file open the same way and are **not**
+	// ownership: the reserved table's rows hold a bare number and no link,
+	// and the amendments table's second cell is another ADR rather than
+	// prose - which is what tells them apart here.
+	let other = regex::dynamic("^\\s*\\[" + name_re() + "\\]\\(adr-" + name_re() + "\\.md\\)")
+	let mut rows: Vec[String] = []
+	for g in refs_rows(index, true) {
+		if !other.is_match(g[2]) { rows.push(g[0].clone()) }
+	}
+	for num in refs_sorted_set(rows) {
+		let n = refs_count(rows, num)
+		if n > 1 { wrong.push(f"ADR-{num}: {n} index rows") }
+	}
+	let archive = refs_read(root.clone(), f"{archive_dir()}/README.md")
+	let mut archived: Vec[String] = []
+	for g in refs_rows(archive, false) { archived.push(g[0].clone()) }
+	for num in refs_sorted_set(rows) {
+		if archived.contains(num) { wrong.push(f"ADR-{num}: indexed both as live and as archived") }
+	}
+	let title = regex::dynamic("^#\\s*ADR-(" + name_re() + "):")
+	let live_paths = refs_records(root.clone(), adr_dir())
+	let archive_paths = refs_records(root.clone(), archive_dir())
+	let mut paths = live_paths.clone()
+	for p in archive_paths { paths.push(p.clone()) }
+	for path in paths {
+		let num = refs_name_of(file_re, path.clone())
+		if num.len() == 0 {
+			wrong.push(f"{path}: not a record name - `adr-<topic>-<n>.md`, one to three lowercase words and a number")
+			continue
+		}
+		let text = refs_read(root.clone(), path.clone())
+		let lines: Vec[String] = text.split("\n").collect()
+		let first = lines[0].trim()
+		let said = title.captures(first)
+		if said == null {
+			wrong.push(f"{path}: the first line does not open `# ADR-{num}: …`")
+		} else {
+			let named = ((said ?? continue).group(1) ?? continue).text().clone()
+			if named != num { wrong.push(f"{path}: titled ADR-{named}") }
+		}
+		let mut listed = rows.contains(num)
+		if path.starts_with(archive_dir()) { listed = archived.contains(num) }
+		if !listed { wrong.push(f"ADR-{num}: a record with no index row") }
+	}
+	let mut live: Vec[String] = []
+	for p in live_paths {
+		let n = refs_name_of(file_re, p)
+		if n.len() > 0 { live.push(n) }
+	}
+	live = refs_sorted_set(live)
+	let mut gone: Vec[String] = []
+	for p in archive_paths {
+		let n = refs_name_of(file_re, p)
+		if n.len() > 0 { gone.push(n) }
+	}
+	for num in live {
+		if gone.contains(num) { wrong.push(f"ADR-{num}: a file both live and archived") }
+	}
+	// A topic has one live record once it has a version
+	// (ADR-decision-records-v2 D2, D4): no second `-v` beside it, and no
+	// record of the earlier count.
+	let versioned = regex::dynamic("^(.+)-(v?)[1-9][0-9]*$")
+	let digits = regex::dynamic("^[0-9]{3}")
+	let mut topics: Vec[String] = []
+	for num in live {
+		let caps = versioned.captures(num) ?? continue
+		if digits.is_match(num) { continue }
+		topics.push((caps.group(1) ?? continue).text().clone())
+	}
+	for topic in refs_sorted_set(topics) {
+		let mut names: Vec[String] = []
+		let mut any_v = false
+		for num in live {
+			let caps = versioned.captures(num) ?? continue
+			if digits.is_match(num) { continue }
+			if (caps.group(1) ?? continue).text() != topic { continue }
+			names.push(num.clone())
+			if (caps.group(2) ?? continue).text().len() > 0 { any_v = true }
+		}
+		if any_v && names.len() > 1 {
+			names.sort()
+			let mut shown = String()
+			for n in names {
+				if shown.len() > 0 { shown.push_str(", ") }
+				shown.push_str(n)
+			}
+			wrong.push(f"topic `{topic}`: more than one live record ({shown})")
+		}
+	}
+	return wrong
 }
 
 // An ADR may point at a note ("the survey is over there"). It may not cite a
 // numbered section of one, because that is borrowing authority from a file
 // `docs/README.md` says holds nothing normative. The difference is the whole
 // line between "see the survey" and "per rule 6".
-fn refs_inversions(root: String) -> Vec[String] throws {
-    let notes = regex::dynamic("(?:docs/)?(?:\\.\\./\\.\\./)?(staging-candidates|handoff|error-corpus|technical_notes|toolchain_architecture|project_status_and_roadmap)\\.md[^\\n]{0,12}§[\\d.]+")
-    let mut found: Vec[String] = []
-    for path in refs_records(root, adr_dir()) {
-        let mut n = 0
-        for line in refs_read(root, path.clone()).split("\n") {
-            n += 1
-            if notes.is_match(line) {
-                let shown: String = line.trim().scalars.take(90).collect()
-                found.push(f"{path}:{n}: {shown}")
-            }
-        }
-    }
-    return found
+fn refs_inversions(root: fs::Root) -> Vec[String] throws {
+	let notes = regex::dynamic("(?:docs/)?(?:\\.\\./\\.\\./)?(staging-candidates|handoff|error-corpus|technical_notes|toolchain_architecture|project_status_and_roadmap)\\.md[^\\n]{0,12}§[\\d.]+")
+	let mut found: Vec[String] = []
+	for path in refs_records(root.clone(), adr_dir()) {
+		let mut n = 0
+		for line in refs_read(root.clone(), path.clone()).split("\n") {
+			n += 1
+			if notes.is_match(line) {
+				let shown: String = line.trim().scalars.take(90).collect()
+				found.push(f"{path}:{n}: {shown}")
+			}
+		}
+	}
+	return found
 }
 
 // A live file citing an archived record. An archived record was replaced by
@@ -363,147 +388,167 @@ fn refs_inversions(root: String) -> Vec[String] throws {
 // reader - or a model - at it sends them to the route rather than the answer
 // and costs a second read, so only the history may name it: `docs/history/`,
 // `docs/briefs/` and `CHANGELOG.md`.
-fn refs_banished(root: String, files: Vec[String], file_re: regex::Regex[regex::Dynamic]) -> Vec[String] throws {
-    let mut archived: Vec[String] = []
-    for p in refs_records(root, archive_dir()) {
-        let n = refs_name_of(file_re, p)
-        if n.len() > 0 { archived.push(n) }
-    }
-    archived = refs_sorted_set(archived)
-    let mut found: Vec[String] = []
-    if archived.len() == 0 { return found }
-    let mut names = String()
-    for n in archived {
-        if names.len() > 0 { names.push_str("|") }
-        names.push_str(n)
-    }
-    let pattern = regex::dynamic("(ADR[- ]?(?:" + names + "))(?:[^A-Za-z0-9_]|$)|(adr-(?:" + names + ")\\.md)")
-    for file in files {
-        if file.starts_with("docs/briefs/") || file == "CHANGELOG.md" { continue }
-        let mut n = 0
-        for line in refs_read(root, file.clone()).split("\n") {
-            n += 1
-            let caps = pattern.captures(line) ?? continue
-            let what = caps.group(1) ?? caps.group(2) ?? continue
-            found.push(f"{file}:{n}: {what.text()}")
-        }
-    }
-    return found
+fn refs_banished(
+	root: fs::Root,
+	files: Vec[String],
+	file_re: regex::Regex[regex::Dynamic],
+) -> Vec[String] throws {
+	let mut archived: Vec[String] = []
+	for p in refs_records(root.clone(), archive_dir()) {
+		let n = refs_name_of(file_re, p)
+		if n.len() > 0 { archived.push(n) }
+	}
+	archived = refs_sorted_set(archived)
+	let mut found: Vec[String] = []
+	if archived.len() == 0 { return found }
+	let mut names = String()
+	for n in archived {
+		if names.len() > 0 { names.push_str("|") }
+		names.push_str(n)
+	}
+	let pattern = regex::dynamic("(ADR[- ]?(?:" + names + "))(?:[^A-Za-z0-9_]|$)|(adr-(?:" + names + ")\\.md)")
+	for file in files {
+		if file.starts_with("docs/briefs/") || file == "CHANGELOG.md" { continue }
+		let mut n = 0
+		for line in refs_read(root.clone(), file.clone()).split("\n") {
+			n += 1
+			let caps = pattern.captures(line) ?? continue
+			let what = caps.group(1) ?? caps.group(2) ?? continue
+			found.push(f"{file}:{n}: {what.text()}")
+		}
+	}
+	return found
 }
 
 // A name of the topic scheme that no record carries, cited with or without a
 // `Dn`. The old numbers are checked only where a `Dn` or `§` follows; a topic
 // name is checked wherever it stands, because a name that looks right is the
 // easier one to get wrong (`ADR-regex-1` against `ADR-regexp-1`).
-fn refs_unknown(root: String, files: Vec[String], have: collections::HashMap[String, Offers]) -> Vec[String] throws {
-    let word = regex::dynamic("[A-Za-z0-9_]$")
-    let name = regex::dynamic("^(" + topic_re() + ")(?:[^A-Za-z0-9_]|$)")
-    let mut found: Vec[String] = []
-    for file in files {
-        // A brief or its report is a plan or a record of a run, like the
-        // history: it may quote a name of the scheme as an example.
-        if file.starts_with("docs/briefs/") { continue }
-        let mut n = 0
-        for line in refs_read(root, file.clone()).split("\n") {
-            n += 1
-            if !line.contains("ADR-") { continue }
-            let pieces: Vec[String] = line.split("ADR-").collect()
-            for i in 1..<pieces.len() {
-                if word.is_match(pieces[i - 1]) { continue }
-                // The next piece opens with the `A` of another `ADR-`.
-                let mut rest = pieces[i].clone()
-                if i + 1 < pieces.len() { rest.push_str("A") }
-                let caps = name.captures(rest) ?? continue
-                let cited = (caps.group(1) ?? continue).text().clone()
-                if !have.contains_key(cited) { found.push(f"{file}:{n}: ADR-{cited}") }
-            }
-        }
-    }
-    return found
+fn refs_unknown(
+	root: fs::Root,
+	files: Vec[String],
+	have: collections::HashMap[String, Offers],
+) -> Vec[String] throws {
+	let word = regex::dynamic("[A-Za-z0-9_]$")
+	let name = regex::dynamic("^(" + topic_re() + ")(?:[^A-Za-z0-9_]|$)")
+	let mut found: Vec[String] = []
+	for file in files {
+		// A brief or its report is a plan or a record of a run, like the
+		// history: it may quote a name of the scheme as an example.
+		if file.starts_with("docs/briefs/") { continue }
+		let mut n = 0
+		for line in refs_read(root.clone(), file.clone()).split("\n") {
+			n += 1
+			if !line.contains("ADR-") { continue }
+			let pieces: Vec[String] = line.split("ADR-").collect()
+			for i in 1..<pieces.len() {
+				if word.is_match(pieces[i - 1]) { continue }
+				// The next piece opens with the `A` of another `ADR-`.
+				let mut rest = pieces[i].clone()
+				if i + 1 < pieces.len() { rest.push_str("A") }
+				let caps = name.captures(rest) ?? continue
+				let cited = (caps.group(1) ?? continue).text().clone()
+				if !have.contains_key(cited) { found.push(f"{file}:{n}: ADR-{cited}") }
+			}
+		}
+	}
+	return found
 }
 
 fn main() throws {
-    let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
-    let mut root: String = "."
-    let mut k = 1
-    while k < args.len() {
-        if args[k] == "--root" && k + 1 < args.len() {
-            root = args[k + 1].clone()
-            k += 1
-        } else {
-            eprintln("usage: nikaia run scripts/check-adr-refs.nika [-- --root DIR]")
-            process::exit(2)
-        }
-        k += 1
-    }
-    let file_re = regex::dynamic("adr-(" + name_re() + ")\\.md$")
-    let have = refs_headings(root, file_re)
-    let mut files: Vec[String] = []
-    refs_walk(root, "", files)
-    files.sort()
-    let cites = refs_citations(root, files)
-    // Sorted as (record, label, file, reason), each once.
-    let mut bad: Vec[String] = []
-    for c in cites {
-        let mut why: String = ""
-        let offers = have.get(c.adr)
-        if offers == null {
-            why = "no such ADR"
-        } else {
-            let o = offers ?? continue
-            if c.label.starts_with("D") {
-                if !o.ds.contains(c.label) { why = "no such decision" }
-            } else {
-                let mut sec = c.label.clone()
-                while sec.starts_with("§") { sec = (sec.strip_prefix("§") ?? "").clone() }
-                while sec.ends_with(".") { sec = (sec.strip_suffix(".") ?? "").clone() }
-                if sec.len() > 0 && !o.secs.contains(sec) { why = "no such section" }
-            }
-        }
-        if why.len() > 0 { bad.push(f"{c.adr}\u{0}{c.label}\u{0}{c.file}\u{0}{why}") }
-    }
-    bad = refs_sorted_set(bad)
-    let inverted = refs_inversions(root)
-    let collided = refs_collisions(root, file_re)
-    let stale = refs_banished(root, files, file_re)
-    let missing = refs_unknown(root, files, have)
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut dir: String = "."
+	let mut k = 1
+	while k < args.len() {
+		if args[k] == "--root" && k + 1 < args.len() {
+			dir = args[k + 1].clone()
+			k += 1
+		} else {
+			eprintln("usage: nikaia run scripts/check-adr-refs.nika [-- --root DIR]")
+			process::exit(2)
+		}
+		k += 1
+	}
+	// DIR names a directory below the one it runs in, checked where it
+	// arrives and opened under it (ADR-raw-sinks-1 D12, D14): whoever runs
+	// it chooses it, and a name from outside may name any directory.
+	if !path::is_below(dir) {
+		eprintln(f"check-adr-refs: {dir} is not below the directory it runs in")
+		process::exit(2)
+	}
+	let root = fs::Root::Dir(".").join(dir)
+	let file_re = regex::dynamic("adr-(" + name_re() + ")\\.md$")
+	let have = refs_headings(root.clone(), file_re)
+	let mut files: Vec[String] = []
+	refs_walk(root.clone(), "", files)
+	files.sort()
+	let cites = refs_citations(root.clone(), files)
+	// Sorted as (record, label, file, reason), each once.
+	let mut bad: Vec[String] = []
+	for c in cites {
+		let mut why: String = ""
+		let offers = have.get(c.adr)
+		if offers == null {
+			why = "no such ADR"
+		} else {
+			let o = offers ?? continue
+			if c.label.starts_with("D") {
+				if !o.ds.contains(c.label) { why = "no such decision" }
+			} else {
+				let mut sec = c.label.clone()
+				while sec.starts_with("§") { sec = (sec.strip_prefix("§") ?? "").clone() }
+				while sec.ends_with(".") { sec = (sec.strip_suffix(".") ?? "").clone() }
+				if sec.len() > 0 && !o.secs.contains(sec) { why = "no such section" }
+			}
+		}
+		if why.len() > 0 { bad.push(f"{c.adr}\u{0}{c.label}\u{0}{c.file}\u{0}{why}") }
+	}
+	bad = refs_sorted_set(bad)
+	let inverted = refs_inversions(root.clone())
+	let collided = refs_collisions(root.clone(), file_re)
+	let stale = refs_banished(root.clone(), files, file_re)
+	let missing = refs_unknown(root, files, have)
 
-    if bad.len() > 0 {
-        println(f"{bad.len()} dangling ADR citation(s):")
-        for b in bad {
-            let f: Vec[String] = b.split("\u{0}").collect()
-            println(f"  {f[2]}: ADR-{f[0]} {f[1]} — {f[3]}")
-        }
-    }
-    if inverted.len() > 0 {
-        println(f"{inverted.len()} ADR(s) citing a section of a notes file as authority:")
-        for l in inverted { println(f"  {l}") }
-        println("  A note holds nothing normative (docs/README.md). Link the file,")
-        println("  or make the argument in the ADR.")
-    }
-    if collided.len() > 0 {
-        println(f"{collided.len()} ADR name(s) not owned by exactly one record:")
-        for l in collided { println(f"  {l}") }
-        println("  A name is taken when it is claimed in the index's reserved table,")
-        println("  and a record is written once. Two rows or a mismatched title means")
-        println("  two records are wearing one name - move the later one.")
-    }
-    if stale.len() > 0 {
-        println(f"{stale.len()} citation(s) of an archived ADR outside the history:")
-        for l in stale { println(f"  {l}") }
-        println("  Cite the record that replaced it (docs/history/adr/README.md maps")
-        println("  every archived decision to its live one).")
-    }
-    if missing.len() > 0 {
-        println(f"{missing.len()} ADR name(s) that no record carries:")
-        for l in missing { println(f"  {l}") }
-    }
-    if bad.len() > 0 || inverted.len() > 0 || collided.len() > 0 || stale.len() > 0 || missing.len() > 0 {
-        process::exit(1)
-    }
-    println(f"all ADR citations resolve ({cites.len()} checked)")
-    println("no ADR borrows authority from a note")
-    println(f"every ADR name belongs to one record ({have.len()} checked)")
-    println("no live file cites an archived record")
+	if bad.len() > 0 {
+		println(f"{bad.len()} dangling ADR citation(s):")
+		for b in bad {
+			let f: Vec[String] = b.split("\u{0}").collect()
+			println(f"  {f[2]}: ADR-{f[0]} {f[1]} — {f[3]}")
+		}
+	}
+	if inverted.len() > 0 {
+		println(f"{inverted.len()} ADR(s) citing a section of a notes file as authority:")
+		for l in inverted { println(f"  {l}") }
+		println("  A note holds nothing normative (docs/README.md). Link the file,")
+		println("  or make the argument in the ADR.")
+	}
+	if collided.len() > 0 {
+		println(f"{collided.len()} ADR name(s) not owned by exactly one record:")
+		for l in collided { println(f"  {l}") }
+		println("  A name is taken when it is claimed in the index's reserved table,")
+		println("  and a record is written once. Two rows or a mismatched title means")
+		println("  two records are wearing one name - move the later one.")
+	}
+	if stale.len() > 0 {
+		println(f"{stale.len()} citation(s) of an archived ADR outside the history:")
+		for l in stale { println(f"  {l}") }
+		println("  Cite the record that replaced it (docs/history/adr/README.md maps")
+		println("  every archived decision to its live one).")
+	}
+	if missing.len() > 0 {
+		println(f"{missing.len()} ADR name(s) that no record carries:")
+		for l in missing { println(f"  {l}") }
+	}
+	if bad.len() > 0
+		|| inverted.len() > 0
+		|| collided.len() > 0
+		|| stale.len() > 0
+		|| missing.len() > 0 {
+			process::exit(1)
+		}
+	println(f"all ADR citations resolve ({cites.len()} checked)")
+	println("no ADR borrows authority from a note")
+	println(f"every ADR name belongs to one record ({have.len()} checked)")
+	println("no live file cites an archived record")
 }

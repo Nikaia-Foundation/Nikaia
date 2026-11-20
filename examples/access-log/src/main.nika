@@ -112,7 +112,7 @@ impl Report {
 }
 
 fn main() throws {
-    let path = cli::args().nth(1) ?? "access.log"
+    let path = cli::args(trusted: true).nth(1) ?? "access.log"
 
     let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")

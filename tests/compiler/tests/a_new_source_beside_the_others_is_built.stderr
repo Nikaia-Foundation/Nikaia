@@ -1,0 +1,130 @@
+warning[NK1308]: `shim` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:58:2
+    |
+ 58 | 	fs::write(shim, fs::Root::Anywhere, SHIM)
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `shim` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(shim) if !path::is_component(shim)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:72:2
+    |
+ 72 | 	fs::write(
+    |  ^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:77:2
+    |
+ 77 | 	fs::write(f"{lib}/src/main.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n\treturn 1\n}\n")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:78:2
+    |
+ 78 | 	fs::write(
+    |  ^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:83:2
+    |
+ 83 | 	fs::write(f"{lib}/tests/b1.stdout", fs::Root::Anywhere, "2\n")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:84:2
+    |
+ 84 | 	let first = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:88:2
+    |
+ 88 | 	fs::write(f"{lib}/src/more.nika", fs::Root::Anywhere, "pub fn five() -> i64 {\n\treturn 5\n}\n")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:90:3
+    |
+ 90 | 		fs::write(
+    |   ^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:95:3
+    |
+ 95 | 		fs::write(f"{lib}/tests/b{k}.stdout", fs::Root::Anywhere, f"{k + 1}\n")
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_new_source_beside_the_others_is_built.nika:97:2
+    |
+ 97 | 	fs::write(
+    |  ^^^^^^^^^^
+    |
+    = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `lib` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+    --> tests/a_new_source_beside_the_others_is_built.nika:102:2
+     |
+ 102 | 	fs::write(f"{lib}/tests/five.stdout", fs::Root::Anywhere, "5\n")
+     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `lib` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+     = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+     = note: `raw-sinks = "warn"` lets this build through.
+     = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(lib) if !path::is_component(lib)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+    --> tests/a_new_source_beside_the_others_is_built.nika:103:2
+     |
+ 103 | 	let grown = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+     = note: `raw-sinks = "warn"` lets this build through.
+     = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `nikaia` reaches the program `process::run` runs, and it comes from outside the program.
+    --> tests/a_new_source_beside_the_others_is_built.nika:111:2
+     |
+ 111 | 	let again = process::run(nikaia, ["test"]; dir: lib, env: env)
+     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `nikaia` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+     = note: `raw-sinks = "warn"` lets this build through.
+     = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.

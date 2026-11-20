@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1502] — 2026-11-20
+
+**Builders' changes (#2303, #2336, #2354, #2369, #2370, #2371, #2375)**
+- Paths from outside reaching a file operation: NK1308 now warns by default (raw-sinks = "warn"), a fs::Root::Dir built from outside is a sink, a path::is_component/is_below guard proves a joined name, and [allow] untrusted-paths-read/-write/-remove/-anywhere take true or a list of sources.
+- A method called by its path (`T::m(x)`, `T::m()`) is refused with NK1101 naming `x.m()`, instead of a wrong argument count or a rustc error
+- A raw sink reached through a call is reported - NK1308 now follows an outside value into a private function's parameter and reports the call, naming the sink "through `f`".
+- A name from outside that passed `path::is_component` or `path::is_below` and is joined after a clean part (`f"/r/{key}/x"`) is admitted as the program `process::run` runs (ADR-raw-sinks-1 D14); a bare or leading name stays NK1308.
+- A binding of a guarded name joined after a clean part (`let kept = f"/r/{key}/x"` after `path::is_component(key)`) carries the proof to a path sink under `fs::Root::Anywhere` and to the program of `process::run` (ADR-raw-sinks-1 D14). A name that leads the text (`f"{key}/x"`) is NK1308 under `Anywhere`.
+- `let kept = f"/r/{key}/x"` after `path::is_component(key)` (or `path::is_below`) is admitted at a path sink under `fs::Root::Anywhere` and as the program of `process::run`, as the joined text itself is (ADR-raw-sinks-1 D14); a guarded name read through `.clone()` is proved too.
+- `fs::exists(f"{key}/x", fs::Root::Anywhere)` after `path::is_component(key)` is NK1308 again: the guard admits the name under `Anywhere` only with a clean part before it (ADR-raw-sinks-1 D14), as for the program of `process::run`.
+- A list or text filled by `push` (or another changing call) with outside data is outside, also when a loop's body fills it or a function hands it back, and draws NK1308 at a raw sink; an `enumerate` index counts from zero and a map read through a field by an outside key needs no bound
+- Safety: a function that returns a join of its arguments after a `path::is_component` guard (`return "" if !path::is_component(key)`) no longer makes its result outside; its result is outside only where an unguarded argument it returns is (ADR-raw-sinks-1 D14, #2375).
+
 ## [0.0.1501] — 2026-11-20
 
 **A returned tree every caller keeps in the task is built in its block (ADR-327 D17) (#2348)**

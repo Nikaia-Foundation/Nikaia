@@ -30,6 +30,15 @@ pub struct ProverState {
     /// them: asked of no caller, but a `pub` function that leaves one open
     /// is refused all the same (ADR-396 D6).
     pub unstated: collections::BTreeMap[String, Vec[UnwrittenCheck]],
+    /// **The raw sinks each function's parameters reach** (ADR-raw-sinks-1
+    /// D2, #2354), by function, as pass 1 found them: a call that hands one
+    /// data from outside is reported there (`NK1308`), as a private
+    /// function's index is asked at the call (ADR-396 D1).
+    pub sinks: collections::BTreeMap[String, Vec[ParamSink]],
+    /// **The walk before's `sinks`**, which pass 1 carries through a call to
+    /// the caller's parameters and pass 2 asks at each call: the pass
+    /// repeats until they stop changing.
+    pub known_sinks: collections::BTreeMap[String, Vec[ParamSink]],
     /// Which function calls which, by name: a call inside a cycle is not
     /// carried back, so that recursion cannot grow a precondition forever.
     pub edges: collections::BTreeSet[(String, String)],
@@ -82,6 +91,9 @@ pub struct ProverState {
     /// **Each statement the checker refused a folded number at with
     /// `NK1116`**, by its start: no overflow is refused there again.
     pub unfit_numbers: collections::BTreeSet[i64],
+    /// The checker's `map_indices`: the base of each index that reads a
+    /// map's key, by its node (ADR-396 D4, #2371).
+    pub map_indices: collections::BTreeSet[i64],
     /// **The `std` entry each method call resolved to**, by its receiver's
     /// node, as the checker's `method_callees` keys it (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
@@ -156,6 +168,8 @@ impl ProverState {
             unwritten: collections::BTreeMap(),
             known_unwritten: collections::BTreeMap(),
             unstated: collections::BTreeMap(),
+            sinks: collections::BTreeMap(),
+            known_sinks: collections::BTreeMap(),
             edges: collections::BTreeSet(),
             candidates: collections::BTreeMap(),
             postconditions: collections::BTreeMap(),
@@ -174,6 +188,7 @@ impl ProverState {
             arithmetic: collections::BTreeMap(),
             divisions: collections::BTreeMap(),
             unfit_numbers: collections::BTreeSet(),
+            map_indices: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
             std_properties: collections::BTreeSet(),
             std_ensured: collections::BTreeMap(),

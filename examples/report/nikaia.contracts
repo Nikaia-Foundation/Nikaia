@@ -21,6 +21,7 @@ signature = "(input: ?) -> Vec[Entry]"
 throws = ["io::IoError"]
 locks = true
 panics = true
+trusted = ["cli::args at main.nika:65", "cli::args at main.nika:66"]
 signature = "()"
 
 [fn."page"]

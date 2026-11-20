@@ -12,47 +12,41 @@
 // `unsat-fixed`, printed with the stub's reason and our engine's answer
 // (#2258). Each file stating `unsat` is then a disagreement and the run
 // exits 1; a file stating `sat` alone exits 0.
+use std::env
 use std::fs
 use std::process
 
-// The running `nikaia`: the nearest ancestor whose executable has that name.
-// `nikaia run` replaces itself with its program, so the compiler is not
-// always the parent (#1305). No path is guessed: without one the test stops
-// and says why.
+// The running `nikaia`: the one `nikaia test` started this program with
+// (`env::current_exe`, ADR-program-path-1 D3), which is no outside data
+// where it runs a program (ADR-397 D1). No path is guessed: without one the
+// test stops and says why.
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
-		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		eprintln("no running nikaia: run it with `nikaia test` (#1305)")
 		process::exit(2)
 	}
 	return exe
 }
 
+// The repository: a test program runs in its package's directory,
+// `tests/compiler` (#1398), two below the root; `.` where it is run from the
+// root. Literal paths, so nothing from outside names a file
+// (ADR-raw-sinks-1 D11).
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return if fs::exists("scripts/gate.nika", fs::Root::Dir(".")) { "." } else { "../.." }
 }
 
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let stub_dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	let stub = f"{stub_dir}/z3"
+	// The stub z3 is written into a directory `std` made
+	// (ADR-raw-sinks-1 D12), inside the test's own, removed with it.
+	let stub_dir = fs::scratch()
+	let stub = f"{stub_dir.path().display()}/z3"
 	fs::write(
-		stub.clone(),
-		fs::Root::Anywhere,
+		"z3",
+		stub_dir,
 		"#!/bin/sh\ncase \"$*\" in *rlimit=123*) ;; *) echo '(error \"no rlimit\")'; exit 0;; esac\ncase \"$*\" in *unsat-gcd*) echo unknown;; *unsat-fixed*) echo '(error \"stub\")'; echo unsat;; *) echo sat;; esac\n",
 	)
 	process::run("chmod", ["+x", stub.clone()])
@@ -80,5 +74,4 @@ fn main() throws {
 			println(out.stderr.trim())
 		}
 	}
-	process::run("rm", ["-rf", stub_dir])
 }

@@ -3586,7 +3586,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_described_at, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, raw_sinks_allow_keys, raw_sinks_allow_sources, raw_sinks_allow_key, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_described_at, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3659,7 +3659,7 @@ pub mod project_batch {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_summary, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_summary, project_check_raw_sinks_in_std, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
@@ -3715,7 +3715,7 @@ pub mod prover_calls {
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
+    pub use super::{UnwrittenCheck, ParamSink, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "72e29d3148258f6ebcad896764134ff6dee6f82d415302a9f909cceb8d140041";
+pub const LOWERED_DIGEST: &str = "2d448c1faa8ac2ea5d43abfc1d0c541a60e2b0f4ce7b94f8c59097d75b83dde4";

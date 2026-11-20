@@ -1,0 +1,24 @@
+// The program `process::run` runs is a raw sink (ADR-raw-sinks-1 D10). A
+// name from outside that passed `path::is_component` and is joined after a
+// clean part, `f"/r/{k}/x"`, names a file inside a directory the program
+// chose, so it is admitted, as for a path (D14, 2026-11-20). The bare name
+// after the same guard is looked up on `PATH`, and the joined name with no
+// guard may name any file: both stay `NK1308`, here warnings under
+// `raw-sinks = "warn"`, the default. The runs sit in a branch not taken.
+use std::cli
+use std::path
+use std::process
+
+fn main() throws {
+    let raw = cli::args().nth(1) ?? "abc"
+    if cli::args().nth(5) != null {
+        process::run(f"/r/{raw}/x", [])
+    }
+    let k = raw.clone()
+    return if !path::is_component(k)
+    if cli::args().nth(5) != null {
+        process::run(f"/r/{k}/x", [])
+        process::run(k, [])
+    }
+    println(f"guarded {k}")
+}

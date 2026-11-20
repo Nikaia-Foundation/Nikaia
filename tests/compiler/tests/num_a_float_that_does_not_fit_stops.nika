@@ -7,19 +7,14 @@
 // the_rounded_upper_limit_of_an_i64_is_refused, a_finite_f64_beyond_the_f32_range_aborts,
 // the_message_names_the_type_and_the_value}` and the `u64` twin of
 // `a_negative_number_is_no_usize` (#2082).
+use std::env
 use std::fs
 use std::process
 
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3), no outside
+// data where it runs a program (ADR-397 D1).
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
-    if exe.len() > 0 { return exe }
-    return "target/fast/nikaia"
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
 }
 
 fn stops(text: String) -> String {
@@ -32,11 +27,12 @@ fn stops(text: String) -> String {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
     fs::write(
-        f"{tmp}/convert.nika",
-        fs::Root::Anywhere,
-        "use std::cli\nuse std::text\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let into = args[args.len() - 2].clone()\n    let value = text::parse_f64(args[args.len() - 1]) ?? 0.0\n    if into == \"i32\" { println(value as i32) }\n    if into == \"i64\" { println(value as i64) }\n    if into == \"u64\" { println(value as u64) }\n    if into == \"f32\" { println(value as f32) }\n}\n",
+        "convert.nika",
+        root,
+        "use std::cli\nuse std::text\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    if args.len() < 2 { return }\n    let into = args[args.len() - 2].clone()\n    let value = text::parse_f64(args[args.len() - 1]) ?? 0.0\n    if into == \"i32\" { println(value as i32) }\n    if into == \"i64\" { println(value as i64) }\n    if into == \"u64\" { println(value as u64) }\n    if into == \"f32\" { println(value as f32) }\n}\n",
     )
     let cases = [
         ("i32", "1e20"), ("i32", "-1e20"), ("i32", "nan"),
@@ -51,5 +47,4 @@ fn main() throws {
         )
         println(f"{into} {value}: exit {out.code}, {out.stdout.trim()}{stops(out.stderr)}")
     }
-    process::run("rm", ["-rf", tmp])
 }

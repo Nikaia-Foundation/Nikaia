@@ -5,37 +5,29 @@
 // refusal names the missing path and, where joining it to the argument
 // before it gives one that exists, that path. `oracle` checks its targets the same
 // way, but only after it finds z3, so it is left out here.
+use std::env
 use std::fs
 use std::process
 
-// The running `nikaia`: the nearest ancestor whose executable has that name.
-// `nikaia run` replaces itself with its program, so the compiler is not
-// always the parent (#1305). No path is guessed: without one the test stops
-// and says why.
+// The running `nikaia`: the one `nikaia test` started this program with
+// (`env::current_exe`, ADR-program-path-1 D3), which is no outside data
+// where it runs a program (ADR-397 D1). No path is guessed: without one the
+// test stops and says why.
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
-		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		eprintln("no running nikaia: run it with `nikaia test` (#1305)")
 		process::exit(2)
 	}
 	return exe
 }
 
+// The repository: a test program runs in its package's directory,
+// `tests/compiler` (#1398), two below the root; `.` where it is run from the
+// root. Literal paths, so nothing from outside names a file
+// (ADR-raw-sinks-1 D11).
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return if fs::exists("scripts/gate.nika", fs::Root::Dir(".")) { "." } else { "../.." }
 }
 
 fn main() throws {
@@ -44,7 +36,7 @@ fn main() throws {
 	for args in [["compare", "--files", "tests/solver/", "smoke/sat-interval.smt2"], ["run", "--timeout", "5", "tests/solver/smoke", "tests/solver/no-such.smt2"]] {
 		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
 		for a in args { all.push(a.clone()) }
-		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
+		let out = process::run(nikaia.clone(), all; dir: repo.clone())
 		println(f"solver.nika {args.join(" ")}: exit {out.code}")
 		println(f"stdout: {out.stdout.trim()}")
 		println(out.stderr.trim())

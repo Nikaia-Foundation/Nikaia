@@ -536,6 +536,29 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_a_method_by_its_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
+    let parts: Vec<String> = name.split("::").map(|p| { nikaia_std::block::Text::from(p.to_string()) }).collect::<Vec<_>>();
+    let method: String = nikaia_std::index::or(match parts.last() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || nikaia_std::block::Text::from(name.to_string()).into());
+    let owner: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.strip_suffix(&*format!("::{}", method)), || std::convert::AsRef::<str>::as_ref(name)).to_string());
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    notes.push(format!("It's declared as `{}{}`.", name, signature.shown(&contract.keeps)));
+    let mut help: String = format!("Call it on a `{}`: `value.{}()`.", owner, method); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    if !args.is_empty() {
+        #[allow(unused_mut)] let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for arg in args.iter().skip(1) { rest.push(check_walked_written(arg, world.words)); }
+        let receiver = check_walked_written(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, world.words); #[allow(unused_mut, clippy::redundant_locals)] let mut rest = rest;
+        help = format!("Write `{}.{}({})`.", receiver, method, nikaia_std::block::Text::from(rest.join(", ")));
+        if receiver == "…" { help = format!("Put the first argument before `.{}`: `value.{}({})`.", method, method, nikaia_std::block::Text::from(rest.join(", "))); }
+    }
+    state.findings.push(check_refusal("NK1101", span, format!("`{}` is a method: it's called on a value, not by its path.", name), notes, Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
     state.reachable(name, !world.own.functions.contains_key(key), contract, span);
@@ -769,6 +792,13 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     }
     if !have { return check_core_call_unresolved(state, world, host, func, name, args, &found, config, &passed, shadowed, span); }
     let contract: FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    if nikaia_std::index::or(match contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.takes_a_receiver()),
+        None => None,
+    }, || false) {
+        check_core_call_a_method_by_its_path(state, world, name, &contract, args, span);
+        return Ty::Unknown;
+    }
     let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
         state.facts.array_literals.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);

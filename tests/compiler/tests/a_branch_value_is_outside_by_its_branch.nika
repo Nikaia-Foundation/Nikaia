@@ -1,0 +1,40 @@
+// An `if` or a `match` is the value of the branch it takes
+// (ADR-raw-sinks-1 D10): a choice among literals by an outside condition is
+// no outside data, so the `match` D10 writes for an untrusted name and its
+// `if` twin, and a function that hands back its own argument or `""` after
+// asking a program, pass a raw sink. An outside value in a branch, or at the
+// end of a block, makes the whole value outside: `NK1308` (here a warning,
+// `raw-sinks = "warn"`).
+use std::cli
+use std::fs
+use std::process
+
+fn found(name: String) -> String throws {
+    return if process::run("true", []).ok { name } else { "" }
+}
+
+fn main() throws {
+    let asked = cli::args().nth(1) ?? ""
+    let chosen = match asked {
+        "a.txt" => "a.txt",
+        "b.txt" => "b.txt",
+        else => "c.txt",
+    }
+    println(fs::exists(chosen, fs::Root::Anywhere))
+    let twin = if asked == "a.txt" { "a.txt" } else { "c.txt" }
+    println(fs::exists(twin, fs::Root::Anywhere))
+    println(fs::exists(found("d.txt"), fs::Root::Anywhere))
+    let wide = cli::args().len() > 7
+    let branch = if wide { "e.txt" } else { asked.clone() }
+    println(fs::exists(branch, fs::Root::Anywhere))
+    let arm = match wide {
+        true => asked.clone(),
+        false => "f.txt",
+    }
+    println(fs::exists(arm, fs::Root::Anywhere))
+    let block = {
+        let part = "g"
+        f"{part}{asked}"
+    }
+    println(fs::exists(block, fs::Root::Anywhere))
+}

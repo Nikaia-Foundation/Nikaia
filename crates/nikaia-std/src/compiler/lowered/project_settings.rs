@@ -125,7 +125,7 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
     let checks = if words.unproved_checks == "error" { "/unproved-checks:error" } else { "" };
-    let sinks = if words.raw_sinks == "warn" { "/raw-sinks:warn" } else { "" };
+    let sinks = if words.raw_sinks == "error" { "/raw-sinks:error" } else { "" };
     let environment = if words.environment == "untrusted" { "/environment:untrusted" } else { "" };
     let removed_bounds = match bounds {
         BoundsChecks::Kept => String::from(""),
@@ -229,7 +229,7 @@ pub fn project_settings_resolve(manifest: &mut impl FnMut(&str, &str) -> String,
     let refuted = manifest("refuted-claims", "error");
     let unproved = manifest("unproved-claims", "error");
     let checks = manifest("unproved-checks", "allow");
-    let sinks = manifest("raw-sinks", "error");
+    let sinks = manifest("raw-sinks", "warn");
     let environment = manifest("environment", "operator");
     let made = manifest("artifact", "program");
     let named = nikaia_std::block::Text::from(nikaia_std::index::or(package, || "program").replace('-', "_"));
@@ -245,7 +245,7 @@ pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, h
     let refuted = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_REFUTED_VAR), || "error".into());
     let unproved = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_UNPROVED_VAR), || "error".into());
     let checks = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_UNPROVED_CHECKS_VAR), || "allow".into());
-    let sinks = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR), || "error".into());
+    let sinks = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR), || "warn".into());
     let environment = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_ENVIRONMENT_VAR), || "operator".into());
     let made = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR), || "program".into());
     let symbol_prefix = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_PREFIX_VAR), || "program".into());
@@ -306,10 +306,21 @@ pub fn project_settings_environment(words: &ProjectWords, flag: Option<&str>) ->
 pub fn project_settings_allowed(manifest: &[String], flags: &[String]) -> Result<Vec<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     let mut allowed = manifest.copy_owned();
     allowed.reserve(flags.iter().size_hint().0); for flag in flags.iter() {
-        let key = match flag.split_once(":") {
+        let named = match flag.split_once(":") {
             Some((_, key)) => nikaia_std::either_text::either(key),
             None => nikaia_std::either_text::either(nikaia_std::block::Text::from(flag.to_string())),
         };
+        let mut key = nikaia_std::block::Text::from(named.to_string());
+        match named.split_once("=") {
+            Some((before, source)) => {
+                key = nikaia_std::block::Text::from(before.to_string());
+                if !key.starts_with("untrusted-paths-") || !raw_sinks_allow_sources().iter().any(|known| { AsRef::<str>::as_ref(&(known)) == AsRef::<str>::as_ref(&(source)) }) {
+                    let sources = nikaia_std::block::Text::from(raw_sinks_allow_sources().join(", "));
+                    return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--allow={}` names no source of a path key. A path key takes one of: {}, after `=`.", flag, sources)), &"project_settings_allowed"));
+                }
+            },
+            None => { },
+        }
         if !raw_sinks_allow_keys().iter().any(|known| { AsRef::<str>::as_ref(&(known)) == AsRef::<str>::as_ref(&(key)) }) {
             let expected = nikaia_std::block::Text::from(raw_sinks_allow_keys().join(", "));
             return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--allow={}` names no raw sink. The keys are: {}, each alone or after a package's name and `:`.", flag, expected)), &"project_settings_allowed"));

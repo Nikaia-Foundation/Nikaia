@@ -1,0 +1,19 @@
+// A method has one call form, `x.m()` (Part III 17, #2336): its path form,
+// `T::m(x)` or `T::m()`, is refused with NK1101 and a help that writes the
+// call on a value, and neither reaches rustc.
+
+use std::fs
+
+struct P { x: i64 }
+
+impl P {
+	fn get(self) -> i64 { self.x }
+}
+
+fn main() throws {
+	println(P::get(P { x: 3 }))
+	let p = P { x: 4 }
+	println(P::get(p))
+	println(P::get())
+	println(fs::Root::path(fs::scratch()))
+}

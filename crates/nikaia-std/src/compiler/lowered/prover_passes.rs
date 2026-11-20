@@ -23,9 +23,12 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
     let mut unwritten: collections::BTreeMap<String, Vec<UnwrittenCheck>> = collections::BTreeMap::new();
+    let mut sinks: collections::BTreeMap<String, Vec<ParamSink>> = collections::BTreeMap::new();
     for _ in 0..bound {
         walk.state.known = preconditions;
         walk.state.known_unwritten = unwritten;
+        walk.state.known_sinks = sinks;
+        walk.state.sinks.clear();
         walk.state.preconditions.clear();
         walk.state.candidates.clear();
         walk.state.unwritten.clear();
@@ -33,9 +36,11 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         prover_bodies(walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         preconditions = walk.state.preconditions.copy_owned();
         unwritten = walk.state.unwritten.copy_owned();
-        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) { break; }
+        sinks = walk.state.sinks.copy_owned();
+        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) && same_sinks(&sinks, &walk.state.known_sinks) { break; }
     }
     walk.state.known_unwritten.clear();
+    walk.state.known_sinks = sinks;
     walk.state.known.clear();
     walk.state.collecting = false;
     walk.state.preconditions = preconditions;
@@ -65,6 +70,16 @@ pub(crate) fn same_unwritten(now: &collections::BTreeMap<String, Vec<UnwrittenCh
         let earlier = match before.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if (earlier.len() as i64) != checks.len() as i64 { return false; }
         for (one, other) in checks.iter().zip(earlier.iter()) { if one.written != other.written || one.within != other.within || one.holds != other.holds { return false; } }
+    }
+    true
+}
+
+pub(crate) fn same_sinks(now: &collections::BTreeMap<String, Vec<ParamSink>>, before: &collections::BTreeMap<String, Vec<ParamSink>>) -> bool {
+    if (now.len() as i64) != before.len() as i64 { return false; }
+    for (function, found) in now.iter() {
+        let earlier = match before.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if (earlier.len() as i64) != found.len() as i64 { return false; }
+        for (one, other) in found.iter().zip(earlier.iter()) { if !one.same(other) { return false; } }
     }
     true
 }
