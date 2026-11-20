@@ -245,12 +245,14 @@
 // Disk (#1521): each batch ends with the cleanup (drive_cleanup: target/debug,
 // target/nikaia-example-tests, the sandboxes of dead `nikaia test` runs,
 // `nikaia cache prune` of target/nikaia-project-tests at 2G; under 6 GB after
-// that, target/*/incremental unless a build writes there) and its line
+// that, target/*/incremental and the old variants in target/*/deps unless a
+// build writes there) and its line
 // `CLEANUP freed <N> MB, <M> MB free: ...`; before each agent, under 6 GB free
 // (`df -m` of /) it runs at once (`DISK <M> MB free, under 6 GB: cleanup`),
 // and still under 3 GB the driver escalates instead of starting the agent.
 // NIKAIA_DRIVE_FREE_MB fakes the free figure (for tests, with `--dry-run`);
 // `--cleanup` runs the cleanup alone, in the directory it runs in.
+// `--old-deps DIR...` removes the old variants in each DIR alone (for tests).
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
 // `--wake DIR LINE...` prints each LINE's WAKE line (drive_wake_line).
@@ -3081,12 +3083,18 @@ fn drive_sweep() -> i64 throws {
 // no cargo or rustc building into them, cargo's incremental caches (target/fast,
 // target/release and the ledger tree's target/ledger-target/fast, often 9 GB
 // together; the last held 5 GB on 2026-11-17 while the cleanup missed it and
-// the driver stopped for disk; the next build only takes longer). Prints `CLEANUP freed <N> MB, <M> MB
-// free: ...`.
+// the driver stopped for disk; the next build only takes longer), and in the
+// same step the old variants in target/fast/deps, target/release/deps and
+// target/ledger-target/fast/deps (drive_old_deps, #2318: cargo never removes
+// a crate's build of an older fingerprint; on 2026-11-19 target/fast/deps held
+// 336 `nikaia-<hash>` test binaries, and removing the variants older than 3 h
+// with a newer one beside them freed 6.4 GB, 1498 files there and 162 in the
+// ledger tree, free space from 4.4 GB to 11 GB). Prints `CLEANUP freed <N> MB,
+// <M> MB free: ...`.
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
@@ -3126,10 +3134,23 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		["-c", "ps -eo comm=,args= | awk '$1 == \"cargo\" || $1 == \"rustc\"' | grep -E 'target/(fast|release)|--profile fast|--release'"],
 	).stdout.trim() == "" {
 		process::run("rm", ["-rf", "target/fast/incremental", "target/release/incremental", f"{drive_tree_target()}/fast/incremental"])
-		incremental = ", target/*/incremental"
+		let deps = drive_old_deps(["target/fast/deps", "target/release/deps", f"{drive_tree_target()}/fast/deps"])
+		incremental = f", target/*/incremental, {deps} old deps variants"
 	}
 	let after = drive_free()
 	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
+}
+
+// Removes, in each directory of DIRS, every file `<name>-<16 hex
+// digits><rest>` last changed more than 3 h ago for which a newer file of the
+// same `<name>` and another hash exists (#2318): the old variants cargo leaves
+// in target/*/deps. The newest hash of each name stays, whatever its age.
+// Returns how many files went.
+fn drive_old_deps(dirs: Vec[String]) -> i64 throws {
+	let mut args: Vec[String] = ["-c", "cut=$(($(date +%s) - 10800)); for d in \"$@\"; do [ -d \"$d\" ] || continue; find \"$d\" -maxdepth 1 -type f -printf '%T@ %f\\n' | sort -rn | awk -v cut=$cut -v d=\"$d\" '{ if (match($2, /-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/)) { name = substr($2, 1, RSTART - 1); h = substr($2, RSTART + 1, 16); if (!(name in keep)) keep[name] = h; else if (h != keep[name] && $1 + 0 < cut) print d \"/\" $2 } }'; done | { n=0; while read -r f; do rm -f \"$f\" && n=$((n + 1)); done; echo $n; }", "sh"]
+	for dir in dirs { args.push(dir.clone()) }
+	let out = process::run("sh", args)
+	return text::parse_i64(out.stdout.trim()) ?? 0
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and
@@ -5392,6 +5413,13 @@ fn main() throws {
 	// The cleanup alone (#1521), in the directory it runs in.
 	if args.len() == 2 && args[1] == "--cleanup" {
 		drive_cleanup(drive_exe(), false)
+		return
+	}
+	// The old deps variants step alone (#2318), on the directories named.
+	if args.len() >= 3 && args[1] == "--old-deps" {
+		let mut dirs: Vec[String] = []
+		for k in 2..<args.len() { dirs.push(args[k].clone()) }
+		println(f"{drive_old_deps(dirs)} old deps variants")
 		return
 	}
 	// The badges step alone (#1348), in the repository it runs in.

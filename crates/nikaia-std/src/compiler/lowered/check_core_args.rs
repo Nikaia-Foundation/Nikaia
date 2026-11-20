@@ -618,7 +618,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
     };
     state.flow.lambda_expected = None;
     let element: Option<Ty> = check_core_args_fn_element((declared).as_ref());
-    let mut walked: Vec<Ty> = vec![];
+    let mut walked: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         if check_core_args_a_closure(item) {
             state.flow.lambda_expected = match element.as_ref() {

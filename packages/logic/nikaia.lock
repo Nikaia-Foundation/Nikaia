@@ -56,6 +56,7 @@ paste = ["1.0.15"]
 pin-project-lite = ["0.2.17"]
 polled = ["0.1.0"]
 polling = ["3.11.0"]
+privileged-start = ["0.1.0"]
 proc-macro2 = ["1.0.107"]
 proven-index = ["0.1.0"]
 quote = ["1.0.47"]
@@ -117,4 +118,4 @@ zerocopy-derive = ["0.8.63"]
 zeroize = ["1.9.2"]
 
 [units."src/main.nika"]
-source = "63429daaa63991162160ed0f03c56b2f0569330d6239c02b099960250e9995bc"
+source = "e74f4d93df808a69332a6645ec6de8111e8a349414ce3bc8dee0cc6d990c51e6"

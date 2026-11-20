@@ -73,5 +73,21 @@ fn main() throws {
             if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia")) }
         }
     }
+    // The old variants in a deps directory (#2318): a name's files of an
+    // older hash go when over 3 h old; the newest hash stays at any age, a
+    // recent older hash stays, and a file without a hash stays.
+    let deps = f"{tmp}/deps"
+    process::run("mkdir", ["-p", deps.clone()])
+    let files = [
+        ("nikaia-0000000000000001", "-5 hours"), ("nikaia-0000000000000001.d", "-5 hours"),
+        ("nikaia-0000000000000002", "-4 hours"), ("nikaia-00000000000000a3", "-1 hours"),
+        ("libfoo-00000000000000b1.rlib", "-9 hours"), ("libfoo-00000000000000b2.rlib", "-8 hours"),
+        ("libfoo-00000000000000b2.rmeta", "-8 hours"), ("libbar-00000000000000c1.rlib", "-9 hours"),
+        ("plain", "-9 hours"),
+    ]
+    for (name, age) in files { process::run("touch", ["-d", f"{age}", f"{deps}/{name}"]) }
+    let old = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--old-deps", deps.clone(), f"{tmp}/missing"]; dir: tmp.clone())
+    println(old.stdout.trim())
+    for (name, _age) in files { println(f"{name}: {fs::exists(f"{deps}/{name}", fs::Root::Anywhere)}") }
     process::run("rm", ["-rf", tmp])
 }

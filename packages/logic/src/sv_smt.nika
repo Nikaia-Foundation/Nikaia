@@ -1118,8 +1118,8 @@ test "two-way disjunctions are searched with learned clauses over each theory" {
 	let expected = [
 		"bits-20.smt2: simplex proved 384; fm proved 402; both proved 384",
 		"  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0",
-		"bits-sat.smt2: simplex refuted 73; fm refuted 72; both refuted 73",
-		"  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0",
+		"bits-sat.smt2: simplex refuted 69; fm refuted 72; both refuted 69",
+		"  stats: conflicts 10, theory conflicts 2, lemmas 34 (repeated 0), decisions 26, restarts 0",
 	]
 	assert(out == expected.join("\n") + "\n")
 }
