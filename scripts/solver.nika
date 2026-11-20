@@ -16,7 +16,10 @@
 // not exist stops the script at once, before any build (#2006). The names
 // `run` prints are below the parent of the directory it was given, so
 // `run target/smtlib/qflra` prints `qflra/sal/F.smt2`, and one file of it is
-// `compare --files target/smtlib/qflra/sal/F.smt2`. Run by hand outside the
+// `compare --files target/smtlib/qflra/sal/F.smt2`. Every DIR, FILE and OUT
+// is relative and stays below the directory the script runs in
+// (`path::is_below`, ADR-raw-sinks-1 D14): no `/` first and no `..`; one
+// that is not stops the script with exit 2. Run by hand outside the
 // repository's own build (a `git archive` copy), the script takes its
 // `nikaia` from `$NIKAIA`.
 //
@@ -182,12 +185,12 @@ fn solver_manifest(repo: String) -> String {
 	return f"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[dependencies]\nlogic = {{ path = \"{repo}/packages/logic\" }}\n\n[build.x86_64-linux]\nopt-level = 3\n"
 }
 
-// Writes the program's package into `tmp`: its manifest and the rod's
-// `src/main.nika`.
-fn solver_program(repo: String, tmp: String) throws {
-	process::run("mkdir", ["-p", f"{tmp}/src"])
-	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, solver_manifest(repo.clone()))
-	process::run("cp", [f"{solver_rod_dir(repo)}/src/main.nika", f"{tmp}/src/"])
+// Writes the program's package into the working directory: its manifest
+// and the rod's `src/main.nika`.
+fn solver_program(repo: String) throws {
+	process::run("mkdir", ["-p", "src"])
+	fs::write("nikaia.toml", fs::Root::Dir("."), solver_manifest(repo.clone()))
+	process::run("cp", [f"{solver_rod_dir(repo)}/src/main.nika", "src/"])
 }
 
 // The environment the program builds in: the program's lints capped (#1949),
@@ -252,8 +255,8 @@ fn solver_cache_dir() -> String {
 // **Built in a fixed place** (ADR-021 D14, #2015): the program is written
 // into a slot of `<user cache>/solver/` (scripts/slot.nika), not a fresh
 // temporary directory, so a new `nikaia` whose emitted Rust is the same hits
-// the rustc store and skips rustc. This script, run again as
-// `--build-in <slot> REPO NIKAIA KEPT`, writes and builds it there.
+// the rustc store and skips rustc. This script, run again in the slot as
+// `--build-in KEY`, writes and builds it there.
 fn solver_build(repo: String, nikaia: String) -> String throws {
 	let key = solver_key(repo.clone(), nikaia.clone())
 	// The key is a hash `sha256sum` printed, one component by this guard
@@ -286,15 +289,17 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 			f"{repo}/scripts/slot.nika",
 			"--",
 			f"{solver_cache_dir()}/solver",
+			"sh",
+			"-c",
+			"cd \"$1\" && shift && exec \"$@\"",
+			"sh",
+			"{slot}",
 			nikaia.clone(),
 			"run",
 			main,
 			"--",
 			"--build-in",
-			"{slot}",
-			repo,
-			nikaia,
-			kept.clone(),
+			key.clone(),
 		]; stdout: process::Stream::Inherited,
 	)
 	if !built.ok || !fs::exists(f"{key}/solver_rod", store) {
@@ -304,15 +309,23 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 	return kept
 }
 
-// `--build-in DIR REPO NIKAIA KEPT`: writes the program into DIR, an empty
-// slot, builds it with NIKAIA and copies the binary to KEPT, under a name of
-// its own first and then renamed, so KEPT never holds half a binary. Exit 1,
-// after saying why, where it did not build.
-fn solver_build_in(dir: String, repo: String, nikaia: String, kept: String) throws {
-	solver_program(repo, dir.clone())
-	let built = process::run(nikaia, ["build"]; dir: dir.clone(), env: solver_build_env())
-	let bin = f"{dir}/target/nikaia/bin/solver_rod"
-	if !built.ok || !fs::exists(bin.clone(), fs::Root::Anywhere) {
+// `--build-in KEY`, run in an empty slot: writes the program into the
+// working directory, builds it with the `nikaia` that runs this script and
+// copies the binary to `target/solver-rod/KEY/solver_rod` of the repository,
+// under a name of its own first and then renamed, so it never holds half a
+// binary. Exit 1, after saying why, where it did not build. The slot, the
+// toolchain and the repository are not read from the arguments: an argument
+// may name any file (ADR-raw-sinks-1 D12, D14, #2364); KEY is one component.
+fn solver_build_in(repo: String, nikaia: String, key: String) throws {
+	if !path::is_component(key) {
+		eprintln(f"--build-in takes a key, one name: not {key}")
+		process::exit(2)
+	}
+	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
+	solver_program(repo)
+	let built = process::run(nikaia, ["build"]; env: solver_build_env())
+	let bin = "target/nikaia/bin/solver_rod"
+	if !built.ok || !fs::exists(bin, fs::Root::Dir(".")) {
 		println("the solver program did not build:")
 		for line in built.stderr.lines() {
 			if line.starts_with("error") || line.contains("-->") { println(line) }
@@ -343,10 +356,13 @@ struct SolverRow {
 }
 
 // The `.smt2` files of an argument, each with the directory it is counted
-// under: its path below the argument's parent.
+// under: its path below the argument's parent. The argument names a file or
+// directory below the working directory (`solver_below`), and so does every
+// path given back.
 fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	let mut out: Vec[(String, String)] = []
 	let trimmed = arg.trim_end_matches("/")
+	solver_below(trimmed)
 	let base = trimmed.split("/").last() ?? trimmed
 	if trimmed.ends_with(".smt2") {
 		let parts: Vec[String] = trimmed.split("/").collect()
@@ -355,9 +371,11 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 		return out
 	}
 	let mut rels: Vec[String] = []
-	for p in fs::walk(trimmed.clone(), fs::Root::Anywhere; trusted: true) {
+	for p in fs::walk(trimmed.clone(), fs::Root::Dir(".")) {
 		let rel = p.to_text()
-		if rel.ends_with(".smt2") { rels.push(rel) }
+		// A name the walk gives back is read from the disk: below the
+		// argument only where this guard says so (ADR-raw-sinks-1 D14).
+		if rel.ends_with(".smt2") && path::is_below(rel) { rels.push(rel) }
 	}
 	rels.sort()
 	for rel in rels {
@@ -377,6 +395,16 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	return out
 }
 
+// Stops the script with exit 2 where NAME, an argument, is not a relative
+// path below the working directory: whoever runs the script chooses it, and
+// a name from outside may name any file (ADR-raw-sinks-1 D12, D14, #2364).
+fn solver_below(name: String) throws {
+	if !path::is_below(name) {
+		eprintln(f"solver.nika: {name} is not below the directory it runs in")
+		process::exit(2)
+	}
+}
+
 // The `.smt2` files of the targets of `run`, `compare` and `oracle`, after a
 // check that each target exists. A target that does not stops the script
 // before the rod is built or any file answered (#2006): written
@@ -385,14 +413,15 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 // path meant was the two joined.
 fn solver_targets(targets: Vec[String]) -> Vec[(String, String)] throws {
 	let mut missing = false
+	for t in targets { solver_below(t) }
 	for k in 0..<targets.len() {
 		let t = targets[k]
-		if fs::exists(t.clone(), fs::Root::Anywhere) { continue }
+		if fs::exists(t.clone(), fs::Root::Dir(".")) { continue }
 		missing = true
 		eprintln(f"no such file or directory: {t}")
 		if k > 0 {
 			let joined = f"{targets[k - 1].trim_end_matches("/")}/{t}"
-			if fs::exists(joined.clone(), fs::Root::Anywhere) {
+			if path::is_below(joined) && fs::exists(joined.clone(), fs::Root::Dir(".")) {
 				eprintln(f"  did you mean `{joined}`, one argument? `{targets[k - 1]}` alone is a target of its own: every file below it")
 			}
 		}
@@ -588,7 +617,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			stats,
 		)
 		let file = path.split("/").last() ?? path
-		let status = solver_status(fs::read_to_string(path.clone(), fs::Root::Anywhere))
+		let status = solver_status(fs::read_to_string(path.clone(), fs::Root::Dir(".")))
 		let row = SolverRow {
 			group: group.clone(),
 			name: f"{group}/{file}",
@@ -758,7 +787,7 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 	// Our engine, built at the first file z3 refuses.
 	let mut bin: String = ""
 	for p in paths {
-		let source = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		let source = fs::read_to_string(p.clone(), fs::Root::Dir("."))
 		let said = solver_status(source.clone())
 		// A file that must be refused (`; EXPECT: error`) is `run`'s, not z3's.
 		if said == "error" { continue }
@@ -767,7 +796,7 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 		let z3 = solver_cli_answer(out.stdout.clone())
 		if said == "" {
 			if z3 == "sat" || z3 == "unsat" {
-				fs::write(p.clone(), fs::Root::Anywhere, solver_with_status(source, z3.clone()))
+				fs::write(p.clone(), fs::Root::Dir("."), solver_with_status(source, z3.clone()))
 				println(f"{p} {z3} written")
 			}
 			continue
@@ -894,6 +923,7 @@ fn solver_two(n: i64) -> String {
 
 fn solver_gen(args: Vec[String]) throws {
 	let dir = if args.len() > 0 { args[0].clone() } else { "tests/solver/stress" }
+	solver_below(dir)
 	let oracle = solver_z3_exe()
 	let mut written = 0
 	for family in ["guards", "disjunctions", "steps", "parity", "blank"] {
@@ -908,13 +938,13 @@ fn solver_gen(args: Vec[String]) throws {
 				else => solver_blank(n),
 			}
 			let path = f"{dir}/{family}/{family}-{solver_two(n)}.smt2"
-			fs::write(path.clone(), fs::Root::Anywhere, source.clone())
+			fs::write(path.clone(), fs::Root::Dir("."), source.clone())
 			if oracle != "" {
 				let z3 = solver_z3(oracle.clone(), path.clone(), solver_rlimit())
 				if z3 == "sat"
 					|| z3
 					== "unsat" {
-						fs::write(path, fs::Root::Anywhere, solver_with_status(source, z3))
+						fs::write(path, fs::Root::Dir("."), solver_with_status(source, z3))
 					}
 			}
 			written += 1
@@ -1302,7 +1332,7 @@ fn solver_tune_cost(rows: Vec[SolverRow]) -> i64 {
 
 fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut timeout = 30
-	let mut dir = f"{repo}/tests/solver/qflia"
+	let mut dir: String = "tests/solver/qflia"
 	let mut i = 0
 	while i < args.len() {
 		if args[i] == "--timeout" && i + 1 < args.len() {
@@ -1426,7 +1456,7 @@ fn solver_fetch_limit() -> i64 {
 
 // Runs `git ARGS` in `dir`, and stops the script where it fails.
 fn solver_git(dir: String, args: Vec[String]) -> String throws {
-	let out = process::run("git", args.clone(); dir: dir, trusted: true)
+	let out = process::run("git", args.clone(); dir: dir)
 	if !out.ok {
 		println(f"git {args.join(" ")} failed: {out.stderr.trim()}")
 		process::exit(1)
@@ -1436,17 +1466,18 @@ fn solver_git(dir: String, args: Vec[String]) -> String throws {
 
 // The source's files checked out at its commit in `clone`: a clone that is
 // already there at that commit is read again, anything else made anew, with
-// only the source's paths' blobs fetched.
+// only the source's paths' blobs fetched. CLONE is below the working
+// directory (`solver_fetch`).
 fn solver_checkout(s: SolverSource, clone: String) throws {
-	if fs::exists(f"{clone}/.git", fs::Root::Anywhere) {
+	if fs::exists(f"{clone}/.git", fs::Root::Dir(".")) {
 		let head = process::run(
 			"git",
 			["rev-parse", "HEAD"]; dir: clone.clone(),
 		).stdout.trim().clone()
 		if head == s.commit { return }
-		fs::remove(clone.clone(), fs::Root::Anywhere; recursive: true)
+		fs::remove(clone.clone(), fs::Root::Dir("."); recursive: true)
 	}
-	fs::create_dir(clone.clone(), fs::Root::Anywhere; recursive: true)
+	fs::create_dir(clone.clone(), fs::Root::Dir("."); recursive: true)
 	solver_git(clone.clone(), ["init", "-q"])
 	solver_git(clone.clone(), ["remote", "add", "origin", s.url.clone()])
 	solver_git(
@@ -1499,9 +1530,11 @@ fn solver_family(source: String, path: String) -> (String, String) {
 fn solver_fetch(args: Vec[String]) throws {
 	let dir = if args.len()
 		> 0 { args[0].trim_end_matches("/") } else { "target/smtlib" }
+	solver_below(dir)
+	let here = fs::Root::Dir(".")
 	for logic in ["qflia", "qflra"] {
-		if fs::exists(f"{dir}/{logic}", fs::Root::Anywhere) {
-			fs::remove(f"{dir}/{logic}", fs::Root::Anywhere; recursive: true)
+		if fs::exists(f"{dir}/{logic}", here.clone()) {
+			fs::remove(f"{dir}/{logic}", here.clone(); recursive: true)
 		}
 	}
 	let mut seen: Vec[String] = []
@@ -1520,13 +1553,15 @@ fn solver_fetch(args: Vec[String]) throws {
 			let tab = line.find("\t") ?? continue
 			let path = f"{line[tab + "\t".len()..]}"
 			let blob = f"{line.split(" ").nth(1) ?? ""}"
-			if !path.ends_with(".smt2") { continue }
+			// A name `git` printed comes from outside: read only below the
+			// clone (ADR-raw-sinks-1 D14).
+			if !path.ends_with(".smt2") || !path::is_below(path) { continue }
 			let full = f"{clone}/{path}"
-			if !fs::exists(full.clone(), fs::Root::Anywhere) { continue }
-			let size = fs::metadata(full.clone(), fs::Root::Anywhere).len() as i64
+			if !fs::exists(full.clone(), here.clone()) { continue }
+			let size = fs::metadata(full.clone(), here.clone()).len() as i64
 			let text = if size
 				> solver_fetch_limit() { "" } else {
-					fs::read_to_string(full.clone(), fs::Root::Anywhere)
+					fs::read_to_string(full.clone(), here.clone())
 				}
 			let logic = solver_logic_dir(text.clone())
 			let why = if size
@@ -1542,8 +1577,8 @@ fn solver_fetch(args: Vec[String]) throws {
 			}
 			seen.push(blob)
 			let (family, name) = solver_family(s.name.clone(), path)
-			fs::create_dir(f"{dir}/{logic}/{family}", fs::Root::Anywhere; recursive: true)
-			fs::copy(full, f"{dir}/{logic}/{family}/{name}", fs::Root::Anywhere)
+			fs::create_dir(f"{dir}/{logic}/{family}", here.clone(); recursive: true)
+			fs::copy(full, f"{dir}/{logic}/{family}/{name}", here.clone())
 			taken += 1
 			if logic == "qflia" { lia += 1 } else { lra += 1 }
 		}
@@ -1575,15 +1610,18 @@ fn solver_sample(args: Vec[String]) throws {
 	}
 	let dir = args[0].trim_end_matches("/")
 	let out = args[1].trim_end_matches("/")
+	solver_below(dir)
+	solver_below(out)
+	let here = fs::Root::Dir(".")
 	let n = if args.len() > 2 { text::parse_i64(args[2].clone()) ?? 25 } else { 25 }
 	for logic in ["qflia", "qflra"] {
 		let mut small: Vec[(String, String)] = []
 		for (group, path) in solver_files(f"{dir}/{logic}") {
-			if fs::metadata(path.clone(), fs::Root::Anywhere).len() as i64
+			if fs::metadata(path.clone(), here.clone()).len() as i64
 				<= 65536 { small.push((group, path)) }
 		}
-		if fs::exists(f"{out}/{logic}", fs::Root::Anywhere) {
-			fs::remove(f"{out}/{logic}", fs::Root::Anywhere; recursive: true)
+		if fs::exists(f"{out}/{logic}", here.clone()) {
+			fs::remove(f"{out}/{logic}", here.clone(); recursive: true)
 		}
 		let mut taken = 0
 		for i in 0..<n {
@@ -1593,8 +1631,8 @@ fn solver_sample(args: Vec[String]) throws {
 			if at < 0 || at >= small.len() { break }
 			let (group, path) = small[at].clone()
 			let file = f"{path.split("/").last() ?? ""}"
-			fs::create_dir(f"{out}/{group}", fs::Root::Anywhere; recursive: true)
-			fs::copy(path.clone(), f"{out}/{group}/{file}", fs::Root::Anywhere)
+			fs::create_dir(f"{out}/{group}", here.clone(); recursive: true)
+			fs::copy(path.clone(), f"{out}/{group}/{file}", here.clone())
 			taken += 1
 		}
 		println(f"{out}/{logic}: {taken} of {small.len()} files")
@@ -1863,7 +1901,7 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 	let mut runs: Vec[Vec[SolverRun]] = []
 	let mut disagree: Vec[bool] = []
 	for (group, path) in files {
-		let status = solver_status(fs::read_to_string(path.clone(), fs::Root::Anywhere))
+		let status = solver_status(fs::read_to_string(path.clone(), fs::Root::Dir(".")))
 		let mut row: Vec[SolverRun] = []
 		for k in 0..<solvers.len() {
 			row.push(solver_one(
@@ -1927,14 +1965,14 @@ fn main() throws {
 	let mut command: String = ""
 	let mut rest: Vec[String] = []
 	let mut at = 0
-	for a in cli::args(trusted: true) {
+	for a in cli::args() {
 		if at == 1 { command = a } else if at > 1 { rest.push(a) }
 		at += 1
 	}
 	let repo = solver_root()
 	let nikaia = solver_toolchain(repo.clone())
-	if command == "--build-in" && rest.len() == 4 {
-		solver_build_in(rest[0].clone(), rest[1].clone(), rest[2].clone(), rest[3].clone())
+	if command == "--build-in" && rest.len() == 1 {
+		solver_build_in(repo, nikaia, rest[0].clone())
 	} else if command == "run" {
 		solver_run(repo, nikaia, rest)
 	} else if command == "gen" {
