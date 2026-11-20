@@ -88,7 +88,7 @@ pub fn escape_control(s: &str) -> String {
         let code = c as i64;
         if c == '\n' { out.push_str("\\n"); } else if c == '\r' { out.push_str("\\r"); } else if c == '\t' { out.push_str("\\t"); } else if c == '\\' { out.push_str("\\\\"); } else if steers_a_log(code) {
             out.push_str("\\u{");
-            out.push_str(&format!("{:x}", code));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{:x}", code)); };
             out.push('}');
         } else { out.push(c); }
     }

@@ -165,11 +165,11 @@ pub(crate) fn sv_row_text(r: &SvRow) -> String {
         let size = nikaia_std::index::or(k.checked_abs(), || 0);
         let sign = if k < 0 { if i == 0 { "-" } else { " - " } } else if i == 0 { "" } else { " + " };
         let factor = if size == 1 { String::from("") } else { format!("{}·", size) };
-        out.push_str(&format!("{}{}x{}", sign, factor, *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) }));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}{}x{}", sign, factor, *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) })); };
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if r.cols.is_empty() { return format!("{}", r.constant); }
-    if r.constant > 0 { out.push_str(&format!(" + {}", r.constant)); } else if r.constant < 0 { out.push_str(&format!(" - {}", nikaia_std::index::or(r.constant.checked_abs(), || 0))); }
+    if r.constant > 0 { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" + {}", r.constant)); }; } else if r.constant < 0 { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" - {}", nikaia_std::index::or(r.constant.checked_abs(), || 0))); }; }
     out
 }
 

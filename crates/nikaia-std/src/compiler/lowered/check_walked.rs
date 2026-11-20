@@ -113,10 +113,10 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
         for ((written, on), fields) in unrolled.iter() {
             if written != function { continue; }
             any = true;
-            out.push_str(&format!("comptime: `{}` unrolled over `{}` as `{}`\n", function, on, check_specialised(function, on)));
-            for field in fields.iter() { out.push_str(&format!("    {}: {}\n", field.name, field.ty.shown())); }
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("comptime: `{}` unrolled over `{}` as `{}`\n", function, on, check_specialised(function, on))); };
+            for field in fields.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {}: {}\n", field.name, field.ty.shown())); }; }
         }
-        if !any { out.push_str(&format!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }
+        if !any { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }; }
     }
     out
 }

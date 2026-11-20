@@ -23,21 +23,21 @@ pub fn derived_text(ledger: &Ledger) -> String {
     out.push_str("# the sources. A consumer believes the contract while the sources hash\n");
     out.push_str("# as recorded here. Part III, 13.5.\n");
     out.push_str("version = 3\n");
-    out.push_str(&format!("toolchain = \"{}\"\n", ledger.toolchain));
-    out.push_str(&format!("inference = \"{}\"\n", ledger.inference));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("toolchain = \"{}\"\n", ledger.toolchain)); };
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("inference = \"{}\"\n", ledger.inference)); };
     if !ledger.sources.is_empty() {
         out.push_str("\n[sources]\n");
-        for (unit, hash) in ledger.sources.iter() { out.push_str(&format!("\"{}\" = \"{}\"\n", unit, hash)); }
+        for (unit, hash) in ledger.sources.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\"{}\" = \"{}\"\n", unit, hash)); }; }
     }
     out
 }
 
 pub fn description_text(ledger: &Ledger, crate_name: &str, version: &str, notes: &Notes) -> String {
     let mut out: String = String::from("");
-    out.push_str(&format!("# The boundary of `{}`, described before it is called\n", crate_name));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("# The boundary of `{}`, described before it is called\n", crate_name)); };
     out.push_str("# ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D2).\n");
     out.push_str("#\n");
-    out.push_str(&format!("# Written by `nikaia describe {}` from the crate's `pub` signatures,\n", crate_name));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("# Written by `nikaia describe {}` from the crate's `pub` signatures,\n", crate_name)); };
     out.push_str("# translated by Part III 15.2's table. **Committed and reviewed like code**,\n");
     out.push_str("# and a hand edit is expected: what a signature cannot say is written\n");
     out.push_str("# fail-closed, and what it says wrongly is caught by the reviewer or by\n");
@@ -48,10 +48,10 @@ pub fn description_text(ledger: &Ledger, crate_name: &str, version: &str, notes:
     out.push_str("# Neither is something a Rust signature can tell anybody, and reading\n");
     out.push_str("# silence as nothing at all is the polarity ADR-010 D1 forbids.\n");
     out.push_str("#\n");
-    out.push_str(&format!("# crate: {} {}\n", crate_name, version));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("# crate: {} {}\n", crate_name, version)); };
     if !notes.about_the_crate.is_empty() {
         out.push_str("#\n");
-        for line in notes.about_the_crate.iter() { out.push_str(&format!("# {}\n", line)); }
+        for line in notes.about_the_crate.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("# {}\n", line)); }; }
     }
     out.push_str(&contract_text(ledger, notes));
     out
@@ -65,7 +65,7 @@ pub(crate) fn quoted_all(items: &[String]) -> String {
     let mut out: String = String::from("");
     for item in items.iter() {
         if !out.is_empty() { out.push_str(", "); }
-        out.push_str(&format!("\"{}\"", item));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\"{}\"", item)); };
     }
     out
 }
@@ -80,14 +80,14 @@ pub fn contract_text(ledger: &Ledger, notes: &Notes) -> String {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        for line in about.iter() { out.push_str(&format!("# {}\n", line)); }
-        out.push_str(&format!("[fn.\"{}\"]\n", name));
+        for line in about.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("# {}\n", line)); }; }
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("[fn.\"{}\"]\n", name)); };
         out.push_str(&function_text(name, contract));
     }
-    for (name, _) in ledger.traits.iter() { out.push_str(&format!("\n[trait.\"{}\"]\n", name)); }
-    for (trait_name, types) in ledger.implementations.iter() { for ty in types.iter() { out.push_str(&format!("\n[impl.\"{} for {}\"]\n", trait_name, ty)); } }
+    for (name, _) in ledger.traits.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\n[trait.\"{}\"]\n", name)); }; }
+    for (trait_name, types) in ledger.implementations.iter() { for ty in types.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\n[impl.\"{} for {}\"]\n", trait_name, ty)); }; } }
     for (name, contract) in ledger.types.iter() {
-        out.push_str(&format!("\n[type.\"{}\"]\n", name));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\n[type.\"{}\"]\n", name)); };
         out.push_str(&type_text(contract));
     }
     out
@@ -100,10 +100,10 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         Sync::Asserted => { out.push_str("sync = true\n"); },
         Sync::Inferred => { out.push_str("sync = \"inferred\"\n"); },
         Sync::Unpromised => { out.push_str("sync = \"inferred\"\n"); },
-        Sync::From(lambda) => { out.push_str(&format!("sync = \"sync({})\"\n", lambda)); },
+        Sync::From(lambda) => { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("sync = \"sync({})\"\n", lambda)); }; },
         Sync::No => { },
     }
-    if !contract.fails_with.is_empty() { out.push_str(&format!("throws = {}\n", throws_text(&contract.fails_with))); }
+    if !contract.fails_with.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("throws = {}\n", throws_text(&contract.fails_with))); }; }
     let spelled = spelled_of(name, contract);
     let mut borrows_said = false;
     let mut mutates_said = false;
@@ -114,10 +114,10 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         mutates_said = said.mutates_said;
         signature_line = format!("signature = \"{}\"\n", ledger_escaped(&said.text));
     }
-    if !contract.returns.is_empty() { out.push_str(&format!("returns = \"{}\"\n", contract.returns)); } else if !contract.borrows.is_empty() && !borrows_said { out.push_str(&format!("returns = \"ref({})\"\n", nikaia_std::block::Text::from(contract.borrows.join(" | ")))); }
-    if !contract.keeps.is_empty() { out.push_str(&format!("keeps = [{}]\n", quoted_all(&contract.keeps))); }
-    if !contract.at_once.is_empty() { out.push_str(&format!("at_once = [{}]\n", quoted_all(&contract.at_once))); }
-    if !contract.os_text.is_empty() { out.push_str(&format!("os_text = [{}]\n", quoted_all(&contract.os_text))); }
+    if !contract.returns.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("returns = \"{}\"\n", contract.returns)); }; } else if !contract.borrows.is_empty() && !borrows_said { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("returns = \"ref({})\"\n", nikaia_std::block::Text::from(contract.borrows.join(" | ")))); }; }
+    if !contract.keeps.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("keeps = [{}]\n", quoted_all(&contract.keeps))); }; }
+    if !contract.at_once.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("at_once = [{}]\n", quoted_all(&contract.at_once))); }; }
+    if !contract.os_text.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("os_text = [{}]\n", quoted_all(&contract.os_text))); }; }
     if contract.mutates && !mutates_said { out.push_str("mutates = true\n"); }
     match contract.touches_a_lock {
         Lock::No => { },
@@ -138,32 +138,32 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
     if contract.touches_known {
         let mut touched: Vec<String> = vec![];
         for touch in contract.touches.iter() { touched.push(touch.text()); }
-        out.push_str(&format!("touches = [{}]\n", quoted_all(&touched)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("touches = [{}]\n", quoted_all(&touched))); };
     }
     if contract.provenance.is_some() {
         let provenance = match match contract.provenance.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return out };
-        out.push_str(&format!("provenance = \"{}\"\n", provenance.as_str()));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("provenance = \"{}\"\n", provenance.as_str())); };
     }
-    if !contract.provenance_by.is_empty() { out.push_str(&format!("provenance_by = \"{}\"\n", contract.provenance_by)); }
-    if !contract.trusted.is_empty() { out.push_str(&format!("trusted = [{}]\n", quoted_all(&contract.trusted))); }
+    if !contract.provenance_by.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("provenance_by = \"{}\"\n", contract.provenance_by)); }; }
+    if !contract.trusted.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("trusted = [{}]\n", quoted_all(&contract.trusted))); }; }
     if !contract.views.is_empty() {
         let mut views: Vec<String> = vec![];
         for held in contract.views.iter() { views.push(held.text()); }
-        out.push_str(&format!("views = [{}]\n", quoted_all(&views)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("views = [{}]\n", quoted_all(&views))); };
     }
     if !contract.sharing.is_empty() {
         let mut classes: Vec<String> = vec![];
         for class in contract.sharing.iter() { classes.push(class.text()); }
-        out.push_str(&format!("sharing = [{}]\n", quoted_all(&classes)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("sharing = [{}]\n", quoted_all(&classes))); };
     }
-    if !contract.maps.is_empty() { out.push_str(&format!("maps = [{}]\n", quoted_all(&contract.maps))); }
+    if !contract.maps.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("maps = [{}]\n", quoted_all(&contract.maps))); }; }
     if contract.ends_by_length { out.push_str("ends_by_length = true\n"); }
     if contract.pieces { out.push_str("pieces = true\n"); }
     if contract.interns { out.push_str("interns = true\n"); }
-    if !contract.consumers.is_empty() { out.push_str(&format!("consumers = [{}]\n", quoted_all(&contract.consumers))); }
+    if !contract.consumers.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("consumers = [{}]\n", quoted_all(&contract.consumers))); }; }
     out.push_str(&claims_text("requires", &contract.requires));
     out.push_str(&claims_text("ensures", &contract.ensures));
     out.push_str(&claims_text("ensures_each", &contract.ensures_each));
@@ -195,18 +195,18 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
             let default = if !field.default.is_empty() { format!(" = {}", field.default) } else { String::from("") };
             fields.push(ledger_escaped(&format!("{}{}: {}{}", word, field.name, field.ty.text(), default)));
         }
-        out.push_str(&format!("fields = [{}]\n", quoted_all(&fields)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("fields = [{}]\n", quoted_all(&fields))); };
         let mut attributes: Vec<String> = vec![];
         for field in contract.fields.iter() { for attribute in field.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", field.name, attribute))); } }
-        if !attributes.is_empty() { out.push_str(&format!("field_attributes = [{}]\n", quoted_all(&attributes))); }
+        if !attributes.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("field_attributes = [{}]\n", quoted_all(&attributes))); }; }
     }
     if !contract.variants.is_empty() {
         let mut variants: Vec<String> = vec![];
         for variant in contract.variants.iter() { variants.push(variant.text()); }
-        out.push_str(&format!("variants = [{}]\n", quoted_all(&variants)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("variants = [{}]\n", quoted_all(&variants))); };
         let mut attributes: Vec<String> = vec![];
         for variant in contract.variants.iter() { for attribute in variant.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", variant.name, attribute))); } }
-        if !attributes.is_empty() { out.push_str(&format!("variant_attributes = [{}]\n", quoted_all(&attributes))); }
+        if !attributes.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("variant_attributes = [{}]\n", quoted_all(&attributes))); }; }
     }
     match contract.crosses {
         Crosses::May => { out.push_str("crosses = true\n"); },
@@ -219,15 +219,15 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
     if contract.hashes { out.push_str("hashes = true\n"); }
     if contract.copies { out.push_str("copies = true\n"); }
     if contract.iterates_fallibly { out.push_str("iterates = \"throws\"\n"); }
-    if !contract.touches.is_empty() { out.push_str(&format!("touches = [{}]\n", quoted_all(&contract.touches))); }
-    if !contract.tethered.is_empty() { out.push_str(&format!("tethered = [{}]\n", quoted_all(&contract.tethered))); }
+    if !contract.touches.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("touches = [{}]\n", quoted_all(&contract.touches))); }; }
+    if !contract.tethered.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("tethered = [{}]\n", quoted_all(&contract.tethered))); }; }
     if !contract.attributes.is_empty() {
         let mut escaped: Vec<String> = vec![];
         for attribute in contract.attributes.iter() { escaped.push(ledger_escaped(attribute)); }
-        out.push_str(&format!("attributes = [{}]\n", quoted_all(&escaped)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("attributes = [{}]\n", quoted_all(&escaped))); };
     }
-    if !contract.mark.is_empty() { out.push_str(&format!("attribute = \"{}\"\n", contract.mark)); }
-    if !contract.constant.is_empty() { out.push_str(&format!("constant = \"{}\"\n", contract.constant)); }
+    if !contract.mark.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("attribute = \"{}\"\n", contract.mark)); }; }
+    if !contract.constant.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("constant = \"{}\"\n", contract.constant)); }; }
     out
 }
 

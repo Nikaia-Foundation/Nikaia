@@ -9,7 +9,7 @@ today (#973)
 Part I 5.4 C (the context of a code parameter is inferred, not written; stands, extended by D3);
 [ADR-277](adr-277.md) (a code parameter has the type `fn(A) -> R`, lowered by that type and by whether the body keeps it; D3 adds once-ness to what the lowering reads);
 [ADR-094](adr-094.md) D2 (`keeps` names the parameters a body keeps; `once` sits beside it);
-[ADR-collections-1](adr-collections-1.md) D1 (`entry` with `or_insert_with` and `and_modify` on both maps)
+[ADR-collections-v3](adr-collections-v3.md) D1 (`entry` with `or_insert_with` and `and_modify` on both maps)
 
 ## 1. Question
 

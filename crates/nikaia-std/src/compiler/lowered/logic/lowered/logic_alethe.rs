@@ -62,7 +62,7 @@ pub(crate) fn lg_negation(literal: &str) -> String {
 
 pub(crate) fn lg_spaced(lits: &[String]) -> String {
     let mut out: String = String::from("");
-    for lit in lits.iter() { out.push_str(&format!(" {}", lit)); }
+    for lit in lits.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" {}", lit)); }; }
     out
 }
 
@@ -369,7 +369,7 @@ pub(crate) fn lg_lemma_of(step: &LgStep, bounds: &[LgLin], source_text: &[String
             let r_atom = nikaia_std::block::Text::from((*nikaia_std::index::get(&made_atom, nikaia_std::index::at(right))).to_string());
             let scaled_left = match lg_scale(&l, by_left) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let scaled_right = match lg_scale(&r, by_right) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let bound = match lg_add(&scaled_left, &scaled_right) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let bound = match lg_add(scaled_left, &scaled_right) { Some(__nikaia_value) => __nikaia_value, None => return None };
             LgMade { bound: bound.clone(), lemma: format!("(cl (not {}) (not {}) {}) :rule la_generic :args ({} {} 1)", l_atom, r_atom, lg_atom(&bound), by_left, by_right) }
         },
     })

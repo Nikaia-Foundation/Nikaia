@@ -165,14 +165,14 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &mut dyn FnMut(i6
 
 pub fn gr_manifest(key: &str, dependencies: &[(String, String)]) -> String {
     let mut out: String = String::from("# GENERATED. A parser compiled so that a grammar can run while the program\n# is built (issue #178). Rewritten when the grammar changes.\n\n[workspace]\n\n[package]\n");
-    out.push_str(&format!("name = \"p{}\"\n", key));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("name = \"p{}\"\n", key)); };
     out.push_str("version = \"0.0.0\"\nedition = \"2024\"\n\n[[bin]]\n");
-    out.push_str(&format!("name = \"p{}\"\npath = \"src/main.rs\"\n\n", key));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("name = \"p{}\"\npath = \"src/main.rs\"\n\n", key)); };
     out.push_str("[dependencies]\n");
     let mut traced = false;
     for (name, value) in dependencies.iter() {
         if name == "\"winnow-grammar\"" { traced = true; }
-        out.push_str(&format!("{} = {}\n", name, value));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{} = {}\n", name, value)); };
     }
     if traced { out.push_str("\n[features]\ntrace = [\"winnow-grammar/trace\"]\n"); }
     out.push_str(CR_DEPENDENCY_PROFILE);

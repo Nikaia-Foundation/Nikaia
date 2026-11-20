@@ -465,11 +465,11 @@ pub struct CheckFacts {
     /// a view** (#676), by the key: built into text of its own, as `insert`'s
     /// is.
     pub owned_entry_keys: collections::BTreeSet[i64],
-    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-1
+    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-v3
     /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
     /// no list in between.
     pub collection_clones: collections::BTreeSet[i64],
-    /// **`m.clone()` of a map**, by the call's id (ADR-collections-1 D6, D4):
+    /// **`m.clone()` of a map**, by the call's id (ADR-collections-v3 D6, D4):
     /// as the argument of `extend` it is written
     /// `m.iter().map(|(k, v)| (k.clone(), v.clone()))`, no map in between.
     pub map_clones: collections::BTreeSet[i64],

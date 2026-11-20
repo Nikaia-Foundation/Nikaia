@@ -11,7 +11,7 @@ pub(crate) fn emit_call_failed_check(check: &PreconditionCheck) -> String {
         shown = format!("Some(&{})", rust_string(&text));
     }
     let mut operands: String = String::from("");
-    for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
+    for (name, value) in check.operands.iter() { { use ::core::fmt::Write as _; let _ = operands.write_fmt(format_args!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }; }
     format!("if !{} {{ nikaia_std::abort::assertion_failed({}, {}, &[{}]) }} ", check.rust, rust_string(&check.written), shown, operands)
 }
 
@@ -721,6 +721,23 @@ impl EmitState {
         }
         hoisted
     }
+    pub(crate) fn emit_call_formatted_into(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, receiver: Option<&Expr>, on_node: i64, name: &str, args: &[Expr]) -> bool {
+        if name != "push_str" || args.len() != 1 || walk.hoisted_args.is_some() { return false; }
+        if nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()) != "String::push_str" { return false; }
+        let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let local = match on {
+            Expr::Variable(v, _) => { let v = *v; emit_text(world, v) },
+            _ => return false,
+        };
+        if self.facts.path_holes.contains_key(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) || emit_mentions(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &local) { return false; }
+        match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+            Expr::LitInterpolated { parts, .. } => emit_leaf_has_holes(parts),
+            _ => false,
+        }
+    }
     pub(crate) fn emit_lends_mut(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
         for each in visited_in_expr(expr) {
             let lent = self.facts.mut_args.contains(&node_key(each)) || self.facts.mut_receivers.contains(&node_key(each));
@@ -858,6 +875,20 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                 out.push(")");
                 return Ok(());
+            }
+        }
+        if self.emit_call_formatted_into(world, &walk, receiver, on_node, &name, args) {
+            let text = nikaia_std::index::get(&args, 0);
+            match text {
+                Expr::LitInterpolated { parts, .. } => {
+                    out.push("{ use ::core::fmt::Write as _; let _ = ");
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                    out.push(".write_fmt(format_args!(");
+                    self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)?;
+                    out.push(")); }");
+                    return Ok(());
+                },
+                _ => { },
             }
         }
         if receiver.is_some() && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(&on_node) || self.facts.replaced_last_uses.contains(&on_node)) {
@@ -1465,8 +1496,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple109156| {
-        let (i, word) = __nikaia_tuple109156;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111161| {
+        let (i, word) = __nikaia_tuple111161;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

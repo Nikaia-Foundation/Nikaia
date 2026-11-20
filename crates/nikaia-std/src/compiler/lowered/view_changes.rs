@@ -909,13 +909,13 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
     let part = vc_part_of(head);
     let mut help = format!("Hand over a copy: `{}{}.clone(){}`", head, root, close); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if part != "" {
-        help.push_str(&format!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close));
+        { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close)); };
         match &view.callee {
             None => { },
             Some(callee) => {
                 let mut given: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
-                help.push_str(&format!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", "))));
+                { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", ")))); };
             },
         }
     }
@@ -951,7 +951,7 @@ pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[
     let mut help = format!("Use `{}` first, or hand `{}` a copy: `{}({}.clone())`.", name, callee, callee, root); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     match &view.call {
         None => { },
-        Some(call) => { help.push_str(&format!(" Or copy `{}` itself: `let {} = {}.clone()`.", name, name, call)); },
+        Some(call) => { { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(" Or copy `{}` itself: `let {} = {}.clone()`.", name, name, call)); }; },
     }
     walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` gets `{}`, but `{}` still reads its text afterwards.", callee, root, name), notes, help: Some(help), warning: false, labels });
 }

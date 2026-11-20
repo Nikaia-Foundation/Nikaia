@@ -197,7 +197,7 @@ pub(crate) fn comptime_bundle_toolchain_stamp<H: ComptimeBundleHost>(rustc: &str
     stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("settings.toml")))));
     stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(rustup_home), std::path::Path::new(&("toolchains")))));
     let mut dir = host.where_tools_start();
-    stamp.push_str(&format!("start {}\n", nikaia_std::fs::path::display(&(dir))));
+    { use ::core::fmt::Write as _; let _ = stamp.write_fmt(format_args!("start {}\n", nikaia_std::fs::path::display(&(dir)))); };
     loop {
         for name in ["rust-toolchain", "rust-toolchain.toml"] { stamp.push_str(&comptime_bundle_file_stamp(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))))); }
         let up = match nikaia_std::fs::path::parent(&(dir)) { Some(__nikaia_value) => __nikaia_value, None => break };
@@ -259,8 +259,8 @@ pub(crate) async fn comptime_bundle_recorded<H: ComptimeBundleHost>(flavour: &Co
     }
     let bundle = comptime_bundle_bundle_of(&flavour, host).await?;
     let mut text = format!("{}\n{}\n{}\n", fingerprint, nikaia_std::fs::path::display(&(bundle.dylib)), nikaia_std::fs::path::display(&(bundle.libdir)));
-    for (name, rlib) in bundle.rlibs.iter() { text.push_str(&format!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }
-    for dir in bundle.deps.iter() { text.push_str(&format!("{}\n", nikaia_std::fs::path::display(&(dir)))); }
+    for (name, rlib) in bundle.rlibs.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }; }
+    for dir in bundle.deps.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("{}\n", nikaia_std::fs::path::display(&(dir)))); }; }
     comptime_bundle_write_if_changed(&record, &text, &host.unique_beside(&record)).await?;
     Ok(bundle)
 }

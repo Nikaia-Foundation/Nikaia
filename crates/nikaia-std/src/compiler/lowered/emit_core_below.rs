@@ -386,7 +386,7 @@ impl EmitState {
             if boxed.contains(&name) && !read.contains(&name) { read.push(name); }
         }
         let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut read = read;
-        for name in read.iter() { out.push_str(&format!("let {} = nikaia_std::boxed::peek(&{}); ", name, name)); }
+        for name in read.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("let {} = nikaia_std::boxed::peek(&{}); ", name, name)); }; }
         out
     }
 }

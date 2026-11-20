@@ -629,7 +629,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && views_what_it_is_called_on(name) {
         state.facts.receiver_views.insert(id_of(expr) as i64)
     }
-    // **A copy of a list or a set** (ADR-collections-1 D4): `extend` takes its
+    // **A copy of a list or a set** (ADR-collections-v3 D4): `extend` takes its
     // elements one by one.
     let collection = match on {
         Ty::Named { name, args, .. } => args.len() == 1 && (name == "Vec" || name == "List" || name == "HashSet" || name == "BTreeSet" || name == "Set" || name == "collections::HashSet" || name == "collections::BTreeSet"),
@@ -638,7 +638,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if collection && name == "clone" && args.len() == 0 {
         state.facts.collection_clones.insert(id_of(expr) as i64)
     }
-    // **And of a map** (ADR-collections-1 D6): `extend` takes its pairs one
+    // **And of a map** (ADR-collections-v3 D6): `extend` takes its pairs one
     // by one.
     let map = match on {
         Ty::Named { name, args, .. } => args.len() == 2 && (name == "HashMap" || name == "BTreeMap" || name == "Map" || name == "collections::HashMap" || name == "collections::BTreeMap"),

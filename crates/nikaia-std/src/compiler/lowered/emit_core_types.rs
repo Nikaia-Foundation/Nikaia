@@ -216,31 +216,31 @@ impl EmitState {
             let shared = self.written_name(world, crossings, walk.trusting, "Shared", &count);
             let locked = self.written_name(world, crossings, walk.trusting, "Locked", &count);
             let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
-            out.push_str(&format!("{}<{}<{}>>", shared, locked, held));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}<{}<{}>>", shared, locked, held)); };
             return out;
         }
         if name == "simd::Mask" && ty.generics.len() == 1 {
             let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
-            out.push_str(&format!("simd::LanesMask<{}>", lane));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("simd::LanesMask<{}>", lane)); };
             return out;
         }
         if name == "Array" && ty.generics.len() == 2 && unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count.is_some() {
             let n = nikaia_std::index::or(unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count, || 0);
             let element = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
-            out.push_str(&format!("[{}; {}]", element, n));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("[{}; {}]", element, n)); };
             return out;
         }
         if walk.holding.is_some() && self.borrowing.contains(name) && ty.generics.is_empty() {
             let width = nikaia_std::index::or(walk.holding, || 0);
             let escaped = escaped_name(name);
-            out.push_str(&format!("nikaia_std::tether::Holding<__Views_{}, {}>", escaped, width));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("nikaia_std::tether::Holding<__Views_{}, {}>", escaped, width)); };
             return out;
         }
         out.push_str(&self.written_name(world, crossings, walk.trusting, name, &count));
         let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if self.borrowing.contains(name) || self.tethered.contains(name) { params.push(self.lifetime_args(name, &lifetimes.params())); }
         for part in ty.generics.iter() { params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, &lifetimes, &count)); }
-        if !params.is_empty() { out.push_str(&format!("<{}>", nikaia_std::block::Text::from(params.join(", ")))); }
+        if !params.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("<{}>", nikaia_std::block::Text::from(params.join(", ")))); }; }
         if self.cleaned_types.contains(name) {
             let wrapper = emit_cleaned(overlaps);
             return format!("{}<{}>", wrapper, out);

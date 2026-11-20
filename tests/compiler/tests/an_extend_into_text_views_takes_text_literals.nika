@@ -1,7 +1,7 @@
 use std::collections
 
 // A list or a set of text literals is one of views below (ADR-282), and
-// `extend` of more literals into it is no mismatch (ADR-collections-1 D3).
+// `extend` of more literals into it is no mismatch (ADR-collections-v3 D3).
 fn main() throws {
     let mut s: collections::BTreeSet[String] = collections::BTreeSet()
     s.extend(["b", "a"])

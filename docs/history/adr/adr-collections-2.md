@@ -9,8 +9,8 @@
 `Vec::iter()`, which was `NK1171` (#955, found by #953 at `ty.nika`'s
 `bind_code`); D3: whether `BTreeSet` and `HashSet` get it too (#1006)
 **Supersedes / Related:**
-[ADR-288](adr-288.md) D11 (what `std` offers is decided by the coherence of its types);
-[ADR-282](adr-282.md) D7 (no copy the program did not write);
+[ADR-288](../../specification/adr/adr-288.md) D11 (what `std` offers is decided by the coherence of its types);
+[ADR-282](../../specification/adr/adr-282.md) D7 (no copy the program did not write);
 [ADR-collections-1](adr-collections-1.md) D5 (what one set kind has, the other has, apart from hashing and order; applied by D3);
 Part I 3.3 (a `for` lends its list), 4.5 (`Array[T, N]`)
 

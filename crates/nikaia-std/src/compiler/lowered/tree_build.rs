@@ -25,7 +25,7 @@ pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_gramm
 pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow_grammar::Symbol>, Vec<i64>, Span)]) {
     let mut at: i64 = 0;
     for u in unpacks.iter() {
-        let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
+        let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, mut_names: vec![], deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
         body.stmts.insert(nikaia_std::count::of(at), Spanned { node: open, span: u.3, doc: None, attributes: vec![] });
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
@@ -36,6 +36,13 @@ pub fn flat_shape(pattern: (Vec<winnow_grammar::Symbol>, Vec<i64>)) -> (Vec<winn
     let tuples = shape.iter().copied().filter(|&w| { w > 0 }).count() as i64;
     if tuples <= 1 { return (names, vec![]); }
     (names, shape)
+}
+
+pub fn marked_names(whole: bool, marks: Vec<bool>) -> (bool, Vec<bool>) {
+    let marked = marks.iter().copied().filter(|&m| { m }).count() as i64;
+    if whole || marked == 0 { return (whole, vec![]); }
+    if marked == marks.len() as i64 { return (true, vec![]); }
+    (true, marks)
 }
 
 pub fn lambda(params: &[(bool, winnow_grammar::Symbol, Option<((Vec<winnow_grammar::Symbol>, Vec<i64>), Span)>)], body: Block) -> Expr {

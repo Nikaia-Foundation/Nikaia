@@ -3100,7 +3100,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
 # name the language below gives it, for a program that wants the value it
 # replaced. The map keeps both, so both are handed over (ADR-293 D29).
 # Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
-# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# in the map, as `insert` would one by one (ADR-collections-v3 D6, D3): a later
 # pair with a key already there replaces its value.
 #
 # The map keeps them, so `pairs` is given away rather than lent.
@@ -3217,7 +3217,7 @@ touches = []
 signature = "() -> collections::HashSet[?]"
 
 # Put every element of a list, a set or a sequence in the set, as `insert` would
-# one by one (ADR-collections-1 D2, D3).
+# one by one (ADR-collections-v3 D2, D3).
 #
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::HashSet::extend"]
@@ -3280,7 +3280,7 @@ touches = []
 signature = "(self: ref collections::HashSet[?]) -> bool"
 
 # The elements, one at a time, lent; a set has no order of its own, so a program
-# that prints them says which order it means (ADR-collections-2 D3).
+# that prints them says which order it means (ADR-collections-v3 D9).
 [fn."collections::HashSet::iter"]
 pub = true
 panics = false
@@ -3297,7 +3297,7 @@ touches = []
 signature = "() -> collections::BTreeSet[?]"
 
 # Put every element of a list, a set or a sequence in the set, as `insert` would
-# one by one (ADR-collections-1 D2, D3).
+# one by one (ADR-collections-v3 D2, D3).
 #
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::BTreeSet::extend"]
@@ -3361,7 +3361,7 @@ sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> bool"
 
-# The elements, one at a time, lent, smallest first (ADR-collections-2 D3).
+# The elements, one at a time, lent, smallest first (ADR-collections-v3 D9).
 [fn."collections::BTreeSet::iter"]
 pub = true
 panics = false
@@ -3379,7 +3379,7 @@ touches = []
 signature = "() -> collections::BTreeMap[?, ?]"
 
 # Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
-# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# in the map, as `insert` would one by one (ADR-collections-v3 D6, D3): a later
 # pair with a key already there replaces its value.
 #
 # The map keeps them, so `pairs` is given away rather than lent.
@@ -3405,7 +3405,7 @@ signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: K, value: V)
 
 # The place in the map this key names, whether or not anything is there yet.
 #
-# The same contract as `collections::HashMap::entry` (ADR-collections-1 D1): the
+# The same contract as `collections::HashMap::entry` (ADR-collections-v3 D1): the
 # map **keeps** the key, and `Entry[V]` is one type for both maps.
 [fn."collections::BTreeMap::entry"]
 pub = true
@@ -3944,7 +3944,7 @@ sync = true
 touches = []
 signature = "(self: ref Array[?, ?], value: ?) -> bool"
 
-# **The elements, one at a time, lent** (ADR-collections-2 D1): what
+# **The elements, one at a time, lent** (ADR-collections-v3 D7): what
 # `Vec::iter` gives, on an array and on a run, so `zip`, `map`, `filter`,
 # `enumerate` and `rev` follow.
 [fn."Array::iter"]
@@ -4649,7 +4649,7 @@ signature = "[T](mut self: ref Vec[T], length: i64, value: T)"
 # Add every element of another list to the end of this one, in order.
 #
 # The list **keeps** them, so the other list is given away rather than lent.
-# `items` is a list, a set or a sequence of owned `T` (ADR-collections-1 D3),
+# `items` is a list, a set or a sequence of owned `T` (ADR-collections-v3 D3),
 # which one parameter type cannot say, so it is `?`.
 [fn."Vec::extend"]
 pub = true
@@ -6898,19 +6898,6 @@ throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args", "env", "env_remove", "stdin"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
-
-# Whether two environment names are the same variable (ADR-243 D5): byte
-# for byte, or without regard to ASCII case where `windows`. `std`'s own, for
-# its test blocks (ADR-rust-boundary-1 D24, D26). Rust takes both names as
-# `&OsStr`, which a `String` crosses to as `OsStr::new` (Part III 15.2,
-# `os_text`, #2351).
-[fn."process::same_name"]
-pub = false
-panics = false
-sync = true
-touches = []
-os_text = ["a", "b"]
-signature = "(a: ref String, b: ref String, windows: bool) -> bool"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so

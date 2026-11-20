@@ -41,12 +41,7 @@ pub(crate) enum LgSearched {
 pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget, work: &mut LgWork) -> LgSearched {
     work.n += 1;
     if work.n > budget.cases { return LgSearched::Unknown(LgUnknown::TooManyCases); }
-    let mut bounds: Vec<LgLin> = vec![];
-    for atom in state.held_atoms.iter() {
-        let atom = nikaia_std::num::value(atom);
-        bounds.push((*nikaia_std::index::get(&indexed.atoms, nikaia_std::index::at(atom))).clone());
-    }
-    let closed = lg_contradictory(&bounds, budget);
+    let closed = lg_contradictory_at(&indexed.atoms, &state.held_atoms, budget);
     match closed {
         LgClosed::Refuted(ref refutation) => {
             let mut relies: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -155,14 +150,15 @@ pub(crate) fn lg_consistent_answer(arena: &TermArena, facts: &[i64], goal: i64, 
 }
 
 pub(crate) fn lg_bool_value(arena: &TermArena, id: i64, values: &collections::BTreeMap<String, i64>) -> Option<bool> {
-    let node = arena.at(id);
+    let node = nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id));
     match node {
-        SolverTerm::Bool(x) => Some(x),
+        SolverTerm::Bool(x) => { let x = *x; Some(x) },
         SolverTerm::Not(a) => {
+            let a = *a;
             let x = match lg_bool_value(arena, a, values) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(!x)
         },
-        SolverTerm::And(ref parts) => {
+        SolverTerm::And(parts) => {
             let mut all = true;
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
@@ -171,7 +167,7 @@ pub(crate) fn lg_bool_value(arena: &TermArena, id: i64, values: &collections::BT
             }
             Some(all)
         },
-        SolverTerm::Or(ref parts) => {
+        SolverTerm::Or(parts) => {
             let mut any = false;
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
@@ -180,12 +176,12 @@ pub(crate) fn lg_bool_value(arena: &TermArena, id: i64, values: &collections::BT
             }
             Some(any)
         },
-        SolverTerm::Le(a, b) => lg_compared(arena, a, b, 1, values),
-        SolverTerm::Lt(a, b) => lg_compared(arena, a, b, 0, values),
-        SolverTerm::Ge(a, b) => lg_compared(arena, a, b, 3, values),
-        SolverTerm::Gt(a, b) => lg_compared(arena, a, b, 2, values),
-        SolverTerm::Eq(a, b) => lg_compared(arena, a, b, 4, values),
-        SolverTerm::Ne(a, b) => lg_compared(arena, a, b, 5, values),
+        SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 1, values) },
+        SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 0, values) },
+        SolverTerm::Ge(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 3, values) },
+        SolverTerm::Gt(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 2, values) },
+        SolverTerm::Eq(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 4, values) },
+        SolverTerm::Ne(a, b) => { let a = *a; let b = *b; lg_compared(arena, a, b, 5, values) },
         _ => None,
     }
 }
@@ -332,7 +328,7 @@ pub(crate) fn lg_replayed(indexed: &LgIndexed, branch: &LgChecking, step: &LgSte
             if right < 0 || right >= at { return LgReplayed { lin: None, rejected: Some(reference) }; }
             let r = lg_scale(nikaia_std::index::get(&made, nikaia_std::index::at(right)), by_right);
             if r.is_none() { return LgReplayed { lin: None, rejected: Some(overflow) }; }
-            let sum = lg_add(&nikaia_std::index::or(l, || lg_constant(0).into()), &nikaia_std::index::or(r, || lg_constant(0).into()));
+            let sum = lg_add(nikaia_std::index::or(l, || lg_constant(0).into()), &nikaia_std::index::or(r, || lg_constant(0).into()));
             if sum.is_none() { return LgReplayed { lin: None, rejected: Some(overflow) }; }
             return LgReplayed { lin: std::convert::identity(sum), rejected: None };
         },

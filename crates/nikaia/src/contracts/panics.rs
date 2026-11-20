@@ -46,7 +46,6 @@ pub fn infer(
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
     checked: &[Checked],
-    parallel: bool,
 ) {
     let mut graph = PanicsGraph {
         methods: resolved
@@ -99,7 +98,9 @@ pub fn infer(
     }
     let first = nika::panics_of_graph(&graph, ledger);
     // The second: each check a site, but where the walk proved it. The units
-    // worth proving are proved on every core where `parallel` (#1277).
+    // worth proving are proved on every core (#1277), in a project's build as
+    // in `lower-std`'s (#1949): `proofs::in_parallel` carries the build's
+    // thread-local state to the workers.
     let worth: Vec<usize> = walked
         .iter()
         .enumerate()
@@ -129,11 +130,14 @@ pub fn infer(
             )
         })
     };
-    let threads = if parallel { None } else { Some(1) };
+    // The largest first, so no core is left with a long file at the end; the
+    // answers come back in the units' order either way.
+    let mut order = worth.clone();
+    order.sort_by_key(|at| std::cmp::Reverse(units[*at].program.items.len()));
     let mut proofs: BTreeMap<usize, crate::bounds::Proven> = worth
         .iter()
         .copied()
-        .zip(crate::proofs::in_parallel(&worth, threads, prove))
+        .zip(crate::proofs::in_parallel(&order, None, prove))
         .collect();
     for at in 0..units.len() {
         let proven = proofs.remove(&at).unwrap_or_default();

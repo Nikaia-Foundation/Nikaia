@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1491 (Draft)
+**Version:** 0.0.1497 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -1238,9 +1238,11 @@ walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a 
 `let`** ([ADR-views-v4](adr/adr-views-v4.md) D24, D25). A change to a binding without it is
 refused with `NK1139`. `mut` stands in front of the whole head,
 `for mut p in team`, `for mut (a, b) in pairs`, as in front of a `let`'s, and
-marks every name in it. In front of one name of a tuple, `for (k, mut v) in m`
-or `let (tx, mut rx) = …`, it is not supported yet, `NK1307`: refused now,
-possible later, and the help writes `mut` in front of the whole pattern. Over a
+marks every name in it. In front of one name of a tuple, `let (tx, mut rx) = …`
+or `for (k, mut v) in m`, it marks that name alone, as `let mut` on it would;
+over a map, `for (k, mut v) in m` changes the values in place, and a `mut` on
+the key is `NK1306`. In a lambda's tuple parameter one marked name is not
+supported yet, `NK1307`. Over a
 list or an array that the function may change, the binding is a view of the
 element, and a change reaches the list:
 
@@ -1981,7 +1983,7 @@ length does not match `N` is refused with `NK1157` naming both numbers.
 `[v; n]` (4.5) is such a literal too: `let buf: Array[u8, 4096] = [0; 4096]`,
 where `n` is a number the build knows and equal to `N`.
 
-**An array is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)):
+**An array is walked as a list is** ([ADR-collections-v3](adr/adr-collections-v3.md)):
 `for x in a` lends it (3.3), and `a.iter()`, on an array and on a run of one,
 is the sequence a list's `iter()` is, so `a.iter().zip(b.iter())`, `map`,
 `filter` and `enumerate` follow. Nothing is copied.
@@ -3317,6 +3319,14 @@ fn main() throws {
     println(grown > before)   // true: the list asked for memory as it grew
     println(read == grown)    // true: reading its length asked for none
     println(count)
+
+    let mut left = String(capacity: 64)
+    left.push_str("left-")
+    let start = mem::allocations()
+    let joined = left + "right"
+    let after = mem::allocations()
+    println(after == start)   // true: `+` kept left's buffer, it had room
+    println(joined)
 }
 ```
 

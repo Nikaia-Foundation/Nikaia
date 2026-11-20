@@ -342,22 +342,12 @@ pub fn invalid_entries(env: &[(String, String)], env_remove: &[String]) -> Vec<S
     found
 }
 
-/// Whether two environment names are the same variable: byte for byte, or
-/// without regard to ASCII case where `windows` (ADR-243 D5). `std`'s test
-/// blocks call it through `std.contracts` (#2351).
-pub(crate) fn same_name(a: &OsStr, b: &OsStr, windows: bool) -> bool {
-    if windows {
-        a.as_encoded_bytes()
-            .eq_ignore_ascii_case(b.as_encoded_bytes())
-    } else {
-        a == b
-    }
-}
-
 /// **The child's environment** (ADR-243 D5): `inherited`, or nothing where
 /// `clear`; without each name in `remove`; then each pair in `set`, in order,
-/// a later pair replacing an earlier one of the same name. Names compare as
-/// the platform compares them, `windows` saying which.
+/// a later pair replacing an earlier one of the same name. Which entries stay
+/// is decided in Nikaia (`runtime/env.nika`'s `merged`, on the names' bytes,
+/// `windows` saying how they compare); here the entries are only taken from
+/// Rust's `OsString`s, which Nikaia has no type for (#2131).
 pub fn merged(
     inherited: impl IntoIterator<Item = (OsString, OsString)>,
     clear: bool,
@@ -365,19 +355,29 @@ pub fn merged(
     set: &[(String, String)],
     windows: bool,
 ) -> Vec<(OsString, OsString)> {
-    let mut environment: Vec<(OsString, OsString)> = if clear {
+    let inherited: Vec<(OsString, OsString)> = if clear {
         Vec::new()
     } else {
         inherited.into_iter().collect()
     };
-    for name in remove {
-        environment.retain(|(held, _)| !same_name(held, OsStr::new(name), windows));
-    }
-    for (name, value) in set {
-        environment.retain(|(held, _)| !same_name(held, OsStr::new(name), windows));
-        environment.push((OsString::from(name), OsString::from(value)));
-    }
-    environment
+    let bytes = |name: &OsStr| crate::bytes::Bytes::from(name.as_encoded_bytes());
+    let names: Vec<crate::bytes::Bytes> = inherited.iter().map(|(name, _)| bytes(name)).collect();
+    let removed: Vec<crate::bytes::Bytes> =
+        remove.iter().map(|name| bytes(OsStr::new(name))).collect();
+    let named: Vec<crate::bytes::Bytes> = set
+        .iter()
+        .map(|(name, _)| bytes(OsStr::new(name)))
+        .collect();
+    crate::runtime::merged(&names, clear, &removed, &named, windows)
+        .into_iter()
+        .map(|at| match inherited.get(at as usize) {
+            Some(entry) => entry.clone(),
+            None => {
+                let (name, value) = &set[at as usize - inherited.len()];
+                (OsString::from(name), OsString::from(value))
+            }
+        })
+        .collect()
 }
 
 /// **Where `program` is started from** (ADR-243 D6): itself where it holds a
@@ -770,34 +770,4 @@ pub fn ended<T, E: Ending>(outcome: Result<T, E>) -> Result<T, E> {
         std::process::exit(code);
     }
     outcome
-}
-
-// Kept as Rust (#2304): names compared without case is the Windows half of
-// `merged`, which no program run on Unix reaches, and `merged` takes
-// `OsString` pairs, which Nikaia has no type for (NK1135). The Unix half and the rest
-// are `tests/compiler/tests/process_a_childs_environment_is_cleared_removed_then_set.nika`.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn pairs(list: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
-        list.iter()
-            .map(|(n, v)| (OsString::from(n), OsString::from(v)))
-            .collect()
-    }
-
-    #[test]
-    fn names_compare_without_case_on_windows() {
-        let inherited = pairs(&[("Path", "C:\\w"), ("path", "/u")]);
-        let windows = merged(
-            inherited.clone(),
-            false,
-            &[],
-            &[("PATH".to_string(), "x".to_string())],
-            true,
-        );
-        assert_eq!(windows, pairs(&[("PATH", "x")]));
-        let removed = merged(inherited, false, &["PATH".to_string()], &[], true);
-        assert!(removed.is_empty());
-    }
 }

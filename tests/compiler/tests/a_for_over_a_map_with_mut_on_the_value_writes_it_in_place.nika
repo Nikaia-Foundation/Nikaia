@@ -1,0 +1,26 @@
+// `for (k, mut v) in m` writes the map's values in place (`iter_mut()`),
+// `for (_, mut v) in m` too (`values_mut()`) (ADR-views-v4 section 6, #1133).
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("a", 1)
+    for (_, mut v) in m {
+        v += 1
+    }
+    println(f"{m["a"] ?? 0}")
+    m.insert("bcd", 10)
+    for (k, mut v) in m {
+        v += k.len()
+    }
+    println(f"{m["a"] ?? 0} {m["bcd"] ?? 0}")
+    let mut h: collections::HashMap[i64, String] = collections::HashMap()
+    h.insert(7, "x")
+    for (k, mut v) in h {
+        v.push_str(f"{k}")
+    }
+    for (_, mut v) in h {
+        v.push_str("!")
+    }
+    println(h[7] ?? "")
+}

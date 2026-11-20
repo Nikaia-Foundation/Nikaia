@@ -27,7 +27,7 @@ pub(crate) fn cx_java_camel(name: &str) -> String {
             up = !first;
             continue;
         }
-        if first { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_lowercase())); } else if up { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_uppercase())); } else { out.push_str(&format!("{}", c)); }
+        if first { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_lowercase())); } else if up { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_uppercase())); } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}", c)); }; }
         up = false;
         first = false;
     }
@@ -43,7 +43,7 @@ pub(crate) fn cx_java_pascal(name: &str) -> String {
             up = true;
             continue;
         }
-        if up { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_uppercase())); } else { out.push_str(&format!("{}", c)); }
+        if up { out.push_str(&nikaia_std::block::Text::from(format!("{}", c).to_uppercase())); } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}", c)); }; }
         up = false;
     }
     out
@@ -221,7 +221,7 @@ pub(crate) fn cx_java_set(part: &CxPart, offset: i64, value: &str, ctx: &CxCtx) 
 
 pub(crate) fn cx_java_indent(lines: &[String], by: &str) -> String {
     let mut out: String = String::from("");
-    for line in lines.iter() { out.push_str(&format!("{}{}\n", by, line)); }
+    for line in lines.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}{}\n", by, line)); }; }
     out
 }
 
@@ -557,10 +557,10 @@ impl CxJava {
         let mut cases: String = String::from("");
         for (name, code) in errors.iter() {
             let code = nikaia_std::num::value(code);
-            cases.push_str(&format!("            case {} -> new {}(said);\n", code, name));
+            { use ::core::fmt::Write as _; let _ = cases.write_fmt(format_args!("            case {} -> new {}(said);\n", code, name)); };
         }
         out.push_str(&nikaia_std::search::replaced(nikaia_std::search::replaced(nikaia_std::block::Text::from(cx_java_helpers().replace("@Class@", &class)), &"@prefix@", &prefix), &"@cases@", &cases));
-        for plain in ctx.plains.iter() { out.push_str(&format!("    /** `{}`, numbered as the header numbers it. */\n    public enum {} {{\n        {}\n    }}\n\n", plain.name, plain.name, nikaia_std::block::Text::from(plain.variants.join(", ")))); }
+        for plain in ctx.plains.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    /** `{}`, numbered as the header numbers it. */\n    public enum {} {{\n        {}\n    }}\n\n", plain.name, plain.name, nikaia_std::block::Text::from(plain.variants.join(", ")))); }; }
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
             out.push_str(&self.record(record, ctx));
@@ -579,7 +579,7 @@ impl CxJava {
                     }
                 }
                 out.push_str("    }\n\n");
-                out.push_str(&format!("    private static final MethodHandle {}_{}_free = nkHandle(\"{}_{}_free\", FunctionDescriptor.of(JAVA_INT, ADDRESS));\n\n", prefix, ty, prefix, ty));
+                { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    private static final MethodHandle {}_{}_free = nkHandle(\"{}_{}_free\", FunctionDescriptor.of(JAVA_INT, ADDRESS));\n\n", prefix, ty, prefix, ty)); };
             }
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
@@ -621,7 +621,7 @@ impl CxJava {
                 let java = cx_java_name(field);
                 components.push(format!("{} {}", cx_java_field_type(part, ctx), java));
                 reads.push(cx_java_get(part, *nikaia_std::index::get(&offsets, (at) as usize), ctx));
-                writes.push_str(&format!("            {}\n", cx_java_set(part, *nikaia_std::index::get(&offsets, (at) as usize), &java, ctx)));
+                { use ::core::fmt::Write as _; let _ = writes.write_fmt(format_args!("            {}\n", cx_java_set(part, *nikaia_std::index::get(&offsets, (at) as usize), &java, ctx))); };
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             return format!("    /** The `extern` struct `{}`, as C lays it out (ADR-284 D14). */\n    public record {}({}) {{\n        public static final MemoryLayout LAYOUT = {};\n\n        public static {} read(MemorySegment s) {{\n            return new {}({});\n        }}\n\n        public void write(MemorySegment s) {{\n{}        }}\n\n        public MemorySegment segment(Arena arena) {{\n            MemorySegment s = arena.allocate(LAYOUT);\n            write(s);\n            return s;\n        }}\n\n        static MemorySegment run(Arena arena, List<{}> values) {{\n            return nkRunOf(arena, LAYOUT, values, {}::write);\n        }}\n{}    }}\n\n", name, name, nikaia_std::block::Text::from(components.join(", ")), layout, name, name, nikaia_std::block::Text::from(reads.join(", ")), writes, name, name, members);
@@ -641,12 +641,12 @@ impl CxJava {
                 let java = cx_java_name(field);
                 components.push(format!("{} {}", cx_java_field_type(part, ctx), java));
                 got.push(cx_java_get(part, start + *nikaia_std::index::get(&offsets, (at) as usize), ctx));
-                put.push_str(&format!(" {}", cx_java_set(part, start + *nikaia_std::index::get(&offsets, (at) as usize), &format!("v.{}()", java), ctx)));
+                { use ::core::fmt::Write as _; let _ = put.write_fmt(format_args!(" {}", cx_java_set(part, start + *nikaia_std::index::get(&offsets, (at) as usize), &format!("v.{}()", java), ctx))); };
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            variants.push_str(&format!("        /** `{}::{}`. */\n        record {}({}) implements {} {{}}\n\n", name, variant.name, variant.name, nikaia_std::block::Text::from(components.join(", ")), name));
-            reads.push_str(&format!("                case {} -> new {}({});\n", tag, variant.name, nikaia_std::block::Text::from(got.join(", "))));
-            writes.push_str(&format!("                case {} v -> {{ s.set(JAVA_INT, 0, {});{} }}\n", variant.name, tag, put));
+            { use ::core::fmt::Write as _; let _ = variants.write_fmt(format_args!("        /** `{}::{}`. */\n        record {}({}) implements {} {{}}\n\n", name, variant.name, variant.name, nikaia_std::block::Text::from(components.join(", ")), name)); };
+            { use ::core::fmt::Write as _; let _ = reads.write_fmt(format_args!("                case {} -> new {}({});\n", tag, variant.name, nikaia_std::block::Text::from(got.join(", ")))); };
+            { use ::core::fmt::Write as _; let _ = writes.write_fmt(format_args!("                case {} v -> {{ s.set(JAVA_INT, 0, {});{} }}\n", variant.name, tag, put)); };
             tag += 1;
         }
         format!("    /** The `extern enum` `{}`: its tag and the union of its variants (ADR-284 D32). */\n    public sealed interface {} {{\n{}        MemoryLayout LAYOUT = {};\n\n        static {} read(MemorySegment s) {{\n            return switch (s.get(JAVA_INT, 0)) {{\n{}                default -> throw new ArgumentException(\"no variant of {} has the tag \" + s.get(JAVA_INT, 0));\n            }};\n        }}\n\n        default void write(MemorySegment s) {{\n            switch (this) {{\n{}            }}\n        }}\n\n        default MemorySegment segment(Arena arena) {{\n            MemorySegment s = arena.allocate(LAYOUT);\n            write(s);\n            return s;\n        }}\n\n        static MemorySegment run(Arena arena, List<{}> values) {{\n            return nkRunOf(arena, LAYOUT, values, {}::write);\n        }}\n{}    }}\n\n", name, name, variants, layout, name, reads, name, writes, name, name, members)
@@ -660,7 +660,7 @@ pub(crate) fn cx_java_after_comma(items: &[String]) -> String {
 
 pub(crate) fn cx_java_reindent(member: &str) -> String {
     let mut out: String = String::from("");
-    for line in member.lines() { if line.is_empty() { out.push_str("\n"); } else { out.push_str(&format!("    {}\n", line)); } }
+    for line in member.lines() { if line.is_empty() { out.push_str("\n"); } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {}\n", line)); }; } }
     out
 }
 

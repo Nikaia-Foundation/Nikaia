@@ -52,7 +52,7 @@ pub fn split_mut(params: ref Vec[(bool, winnow_grammar::Symbol)]) -> (Vec[winnow
 pub fn unpacked(mut body: Block, unpacks: Vec[(winnow_grammar::Symbol, Vec[winnow_grammar::Symbol], Vec[i64], Span)]) {
     let mut at = 0
     for u in unpacks {
-        let open = Stmt::Let { names: u.1.clone(), shape: u.2.clone(), mutable: false, deep: false, ty: null, value: Expr::Variable(u.0, node_id::NodeId::parsed()) }
+        let open = Stmt::Let { names: u.1.clone(), shape: u.2.clone(), mutable: false, mut_names: [], deep: false, ty: null, value: Expr::Variable(u.0, node_id::NodeId::parsed()) }
         body.stmts.insert(at, Spanned { node: open, span: u.3, doc: null, attributes: [] })
         at += 1
     }
@@ -67,6 +67,23 @@ pub fn flat_shape(pattern: (Vec[winnow_grammar::Symbol], Vec[i64])) -> (Vec[winn
         return (names, [])
     }
     return (names, shape)
+}
+
+/// **Which names of a head are `mut`** (ADR-views-v4 D24, section 6, #1133):
+/// `whole` is a `mut` in front of the head, `marks` one per name, true where
+/// `mut` stood in front of that name alone. Gives `mutable`, true where any
+/// name is `mut`, and `mut_names`, empty where every name follows `mutable`
+/// (no `mut` on a name, one in front of the head, or one in front of every
+/// name), else one per name.
+pub fn marked_names(whole: bool, marks: Vec[bool]) -> (bool, Vec[bool]) {
+    let marked = marks.iter().filter(fn(m) { m }).count()
+    if whole || marked == 0 {
+        return (whole, [])
+    }
+    if marked == marks.len() {
+        return (true, [])
+    }
+    return (true, marks)
 }
 
 /// A lambda from its parameters as written: a tuple pattern among them is a

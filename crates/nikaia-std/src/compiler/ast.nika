@@ -308,7 +308,15 @@ pub enum Stmt {
         /// for a name. `(a, (b, c))` is `[2, 0, 2, 0, 0]`. `[-1]` is a variant
         /// written in the head, which the checker refuses (`NK1259`).
         shape: Vec[i64],
+        /// Whether a name is `mut`: every name where `mut_names` is empty,
+        /// else any of them.
         mutable: bool,
+        /// **`mut` in front of one name of a tuple pattern** (ADR-views-v4
+        /// D24, section 6, #1133): empty where every name follows `mutable`,
+        /// else one per name of `names`, true where that name is `mut`.
+        /// `let (a, mut b) = …` is `let mut` on `b` alone. A reader that asks
+        /// for the whole head reads `mutable`, which is true when any name is.
+        mut_names: Vec[bool],
         /// **`immutable x = e`** ([ADR-389](../../../docs/specification/adr/adr-389.md)
         /// D1, D2): one name, no `mut`, and nothing reachable from the value
         /// ever changes (`NK1331`). Lowered as a plain `let`.
@@ -346,6 +354,9 @@ pub enum Stmt {
         shape: Vec[i64],
         /// `mut` in front of the whole head (ADR-views-v4 D24), as `Let::mutable`.
         mutable: bool,
+        /// `mut` in front of one name of the head, as `Let::mut_names`
+        /// (section 6, #1133): `for (k, mut v) in m`.
+        mut_names: Vec[bool],
         iter: Expr,
         body: Block,
     },

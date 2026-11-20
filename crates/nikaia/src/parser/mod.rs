@@ -15,7 +15,7 @@ pub use nikaia_std::compiler::parse_errors::RESERVED_WORDS;
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
 pub use nikaia_std::compiler::tree_build::{
     Postfix, counted_pattern, flat_shape, fold_binary, fold_postfix, grouped, guarded, lambda,
-    params_of, split_mut, unpacked,
+    marked_names, params_of, split_mut, unpacked,
 };
 
 /// A lambda's parameter: written `mut`, its name, and - for a tuple pattern -
@@ -44,8 +44,9 @@ pub struct Trivia {
     core: nikaia_std::compiler::parser_leaves::PrTrivia,
     /// The byte after the last `;` a statement read.
     semi_end: usize,
-    /// Where a `mut` stood in front of one name of a tuple pattern
-    /// (`NK1307`, ADR-views-v4 D24): the first one is refused.
+    /// Where a `mut` stood in front of one name of a lambda's tuple pattern
+    /// (`NK1307`, ADR-views-v4 D24): the first one is refused. A `let`'s and
+    /// a `for`'s take it (section 6, #1133).
     mut_name: Option<usize>,
     /// Where an `async` stood before a `let`, a loop or a function's
     /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
@@ -76,7 +77,8 @@ impl Trivia {
         ast::Span::from(span.start..end)
     }
 
-    /// A `mut` stood at this byte in front of one name of a tuple pattern.
+    /// A `mut` stood at this byte in front of one name of a lambda's tuple
+    /// pattern.
     fn a_mut_name(&mut self, at: usize) {
         self.mut_name = Some(self.mut_name.map_or(at, |first| first.min(at)));
     }
@@ -776,7 +778,8 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             refuse_parsing(finding, input)
         })?;
 
-    // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-v4 D24).
+    // **`mut` in front of one name of a lambda's tuple pattern** (`NK1307`,
+    // ADR-views-v4 D24); a `let`'s and a `for`'s take it (section 6, #1133).
     if let Some(at) = stream.state.user_state.mut_name {
         let finding =
             nikaia_std::compiler::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
@@ -2816,6 +2819,7 @@ grammar! {
                     names: vec![name],
                     shape: Vec::new(),
                     mutable: false,
+                    mut_names: Vec::new(),
                     deep: true,
                     ty,
                     value: val
@@ -2842,11 +2846,13 @@ grammar! {
             val:expr
             semi?
             -> {
-                let (names, shape) = head;
+                let (names, shape, marks) = head;
+                let (mutable, mut_names) = marked_names(mutable.is_some(), marks);
                 Stmt::Let {
                     names,
                     shape,
-                    mutable: mutable.is_some(),
+                    mutable,
+                    mut_names,
                     deep: false,
                     ty,
                     value: val
@@ -2867,51 +2873,62 @@ grammar! {
         // single-name form takes it too - so that `let _ = f()` reaches the
         // checker and gets `NK1144`'s sentence rather than a parse error at a
         // character. Two `_` in one list are fine: nothing is bound.
-        rule let_names -> (Vec<Symbol>, Vec<i64>) =
+        //
+        // **Each name says whether `mut` stood in front of it** (ADR-views-v4
+        // D24, section 6, #1133): `let (a, mut b) = …` is `let mut` on `b` alone.
+        rule let_names -> (Vec<Symbol>, Vec<i64>, Vec<bool>) =
             v:variant_head -> { v }
-          | p:tuple_pattern -> { flat_shape(p) }
-
-        // A variant in a head, kept only to be refused (`NK1259`).
-        rule variant_head -> (Vec<Symbol>, Vec<i64>) =
-            NAME path_segment* "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
-                let mut names = first.0;
-                for (n, _) in rest {
-                    names.extend(n);
-                }
-                (names, vec![-1])
+          | p:tuple_pattern -> {
+                let (names, shape, marks) = p;
+                let (names, shape) = flat_shape((names, shape));
+                (names, shape, marks.iter().map(Option::is_some).collect())
             }
 
-        // Names in written order and the shape in prefix order (a tuple's
-        // width, `0` for a name). `(p)` is `p`.
+        // A variant in a head, kept only to be refused (`NK1259`).
+        rule variant_head -> (Vec<Symbol>, Vec<i64>, Vec<bool>) =
+            NAME path_segment* "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
+                let mut names = first.0;
+                for (n, _, _) in rest {
+                    names.extend(n);
+                }
+                let marks = vec![false; names.len()];
+                (names, vec![-1], marks)
+            }
+
+        // Names in written order, the shape in prefix order (a tuple's
+        // width, `0` for a name), and for each name the byte a `mut` in front
+        // of it stood at. `(p)` is `p`.
         //
-        // **`mut` in front of one name is read and refused** (ADR-views-v4 D24,
-        // `NK1307`): the grammar keeps the place for it, `parse_unrefined`
-        // says the refusal once the parse is through.
-        rule tuple_pattern -> (Vec<Symbol>, Vec<i64>) =
-            n:let_name -> { (vec![n], vec![0]) }
+        // **`mut` in front of one name** (ADR-views-v4 D24, section 6, #1133)
+        // is `let mut` on that name alone in a `let` or a `for`; a lambda's
+        // pattern still refuses it (`NK1307`, `closure_param`).
+        rule tuple_pattern -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) =
+            n:let_name -> { (vec![n], vec![0], vec![None]) }
           | "(" first:tuple_name_part rest:tuple_pattern_tail* ")" -> {
                 if rest.is_empty() {
                     first
                 } else {
                     let mut names = Vec::new();
                     let mut shape = vec![1 + rest.len() as i64];
-                    for (n, sh) in std::iter::once(first).chain(rest) {
+                    let mut marks = Vec::new();
+                    for (n, sh, m) in std::iter::once(first).chain(rest) {
                         names.extend(n);
                         shape.extend(sh);
+                        marks.extend(m);
                     }
-                    (names, shape)
+                    (names, shape, marks)
                 }
             }
 
-        rule mut_name -> () @=
-            KW_MUT -> { _state.user().a_mut_name(_span.start) }
+        rule mut_name -> usize @=
+            KW_MUT -> { _span.start }
 
-        // A part of a tuple, or a name written `mut` (`NK1307`).
-        rule tuple_name_part -> (Vec<Symbol>, Vec<i64>) =
+        // A part of a tuple, or a name written `mut`.
+        rule tuple_name_part -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) =
             p:tuple_pattern -> { p }
-          | mut_name n:let_name -> { (vec![n], vec![0]) }
+          | at:mut_name n:let_name -> { (vec![n], vec![0], vec![Some(at)]) }
 
-        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>) = "," p:tuple_name_part -> { p }
+        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>, Vec<Option<usize>>) = "," p:tuple_name_part -> { p }
 
         // The ignore pattern carries the symbol `_`, which is what the emitter
         // writes below and what `NK1144` looks for. It is a symbol no `NAME` can
@@ -2943,8 +2960,9 @@ grammar! {
             KW_FOR mutable:kw_mut? head:let_names KW_IN
             iter:head_expr body:block semi?
             -> {
-                let (bindings, shape) = head;
-                Stmt::For { bindings, shape, mutable: mutable.is_some(), iter, body }
+                let (bindings, shape, marks) = head;
+                let (mutable, mut_names) = marked_names(mutable.is_some(), marks);
+                Stmt::For { bindings, shape, mutable, mut_names, iter, body }
             }
 
         // **A `for` head is a `let`'s pattern** (ADR-356): `for (_, bucket) in
@@ -3154,8 +3172,12 @@ grammar! {
             mutable:kw_mut? name:NAME -> { (mutable.is_some(), name, None) }
           | UNDERSCORE -> { (false, _state.intern("_"), None) }
           | pattern:tuple_pattern -> {
+                let (names, shape, marks) = pattern;
+                if let Some(at) = marks.iter().flatten().next() {
+                    _state.user().a_mut_name(*at);
+                }
                 let hidden = _state.intern(&format!("__nikaia_tuple{}", _span.start));
-                (false, hidden, Some((flat_shape(pattern), Span::from(_span))))
+                (false, hidden, Some((flat_shape((names, shape)), Span::from(_span))))
             }
 
         rule closure_param_tail -> LambdaParam = "," p:closure_param -> { p }

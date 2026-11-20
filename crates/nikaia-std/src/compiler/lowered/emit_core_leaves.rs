@@ -424,7 +424,7 @@ impl EmitState {
                     handed.push_str("&");
                 }
                 out.push("; ");
-                handed.push_str(&format!("__wg_value{}, ", i));
+                { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_value{}, ", i)); };
             }
             let mut j = 0;
             for option in rule.config.iter() {
@@ -438,7 +438,7 @@ impl EmitState {
                 }
                 if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
                 out.push("; ");
-                handed.push_str(&format!("__wg_option{}, ", j));
+                { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
                 j += 1;
             }
             let mut context = "winnow_grammar::ParseContext::<()>::default()";
@@ -560,7 +560,7 @@ impl EmitState {
             let mut message: String = String::from("the template has holes escaping cannot make safe\n");
             for (expr, at) in unsafe_holes.iter() {
                 let at = *at;
-                message.push_str(&format!("  {}\n", illegal_message(expr, &at)));
+                { use ::core::fmt::Write as _; let _ = message.write_fmt(format_args!("  {}\n", illegal_message(expr, &at))); };
             }
             return Err(nikaia_std::error::throwing(EmitRefused { message, at: None }, &"emit_core_template"));
         }
