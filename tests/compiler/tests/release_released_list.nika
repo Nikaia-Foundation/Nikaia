@@ -3,22 +3,17 @@
 // architect's and QA's reports are not read as builder reports; `cycle.nika`
 // writes an empty `released.txt` on a lane's first run (no report yet) and
 // leaves it missing once reports exist.
+use std::env
 use std::fs
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
-    let release = f"{repo}/target/release/nikaia"
-    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
     return f"{repo}/target/fast/nikaia"
 }
 
@@ -32,33 +27,32 @@ fn stops(nikaia: String, repo: String, dir: String) -> String throws {
     return shown
 }
 
-fn write(path: String, text: String) throws {
-    fs::write(path, fs::Root::Anywhere, text)
+fn write(lane: ref fs::Root, name: String, text: String) throws {
+    fs::write(name, lane, text)
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let lane = f"{tmp}/lane"
-    process::run("mkdir", ["-p", lane.clone()])
-    write(f"{lane}/issue-1.md.report.md", "Result: partial\nPushed: none\nChangelog: none\n")
-    write(f"{lane}/architect-task.md.report.md", "Result: done\nPushed: none\nDeviation: none\n")
-    write(f"{lane}/qa-task.md.report.md", "Result: done\nPushed: none\nDeviation: none\n")
+    let tmp = fs::scratch()
+    let lane = tmp.join("lane")
+    process::run("mkdir", ["-p", lane.path().to_text()])
+    write(lane, "issue-1.md.report.md", "Result: partial\nPushed: none\nChangelog: none\n")
+    write(lane, "architect-task.md.report.md", "Result: done\nPushed: none\nDeviation: none\n")
+    write(lane, "qa-task.md.report.md", "Result: done\nPushed: none\nDeviation: none\n")
     println("without released.txt:")
-    print(stops(nikaia.clone(), repo.clone(), lane.clone()))
-    write(f"{lane}/released.txt", "")
+    print(stops(nikaia.clone(), repo.clone(), lane.path().to_text()))
+    write(lane, "released.txt", "")
     println("with an empty released.txt:")
-    print(stops(nikaia.clone(), repo.clone(), lane.clone()))
-    write(f"{lane}/released.txt", "issue-1.md.report.md\n")
+    print(stops(nikaia.clone(), repo.clone(), lane.path().to_text()))
+    write(lane, "released.txt", "issue-1.md.report.md\n")
     println("with the report released:")
-    print(stops(nikaia.clone(), repo.clone(), lane.clone()))
-    let first = f"{tmp}/first"
-    process::run("mkdir", ["-p", first.clone()])
-    process::run(nikaia.clone(), ["run", "scripts/cycle.nika", "--", first.clone()]; dir: repo.clone())
-    println(f"cycle, lane without reports: released.txt {fs::exists(f"{first}/released.txt", fs::Root::Anywhere)}")
-    process::run("rm", ["-f", f"{lane}/released.txt"])
-    process::run(nikaia, ["run", "scripts/cycle.nika", "--", lane.clone()]; dir: repo)
-    println(f"cycle, lane with reports: released.txt {fs::exists(f"{lane}/released.txt", fs::Root::Anywhere)}")
-    process::run("rm", ["-rf", tmp])
+    print(stops(nikaia.clone(), repo.clone(), lane.path().to_text()))
+    let first = tmp.join("first")
+    process::run("mkdir", ["-p", first.path().to_text()])
+    process::run(nikaia.clone(), ["run", "scripts/cycle.nika", "--", first.path().to_text()]; dir: repo.clone())
+    println(f"cycle, lane without reports: released.txt {fs::exists("released.txt", first)}")
+    process::run("rm", ["-f", f"{lane.path().to_text()}/released.txt"])
+    process::run(nikaia, ["run", "scripts/cycle.nika", "--", lane.path().to_text()]; dir: repo)
+    println(f"cycle, lane with reports: released.txt {fs::exists("released.txt", lane)}")
 }

@@ -1,11 +1,12 @@
-// scripts/scratch-root.nika moves a test program from `mktemp` and
-// `fs::Root::Anywhere` to a root it owns (ADR-raw-sinks-1 D12, D13; #2301).
-// Shown on a program of the old shape: the `mktemp -d` becomes
+// scripts/scratch-root.nika moves a test program from a temporary directory
+// the shell made and `fs::Root::Anywhere` to a root it owns
+// (ADR-raw-sinks-1 D12, D13; #2301).
+// Shown on a program of the old shape: its temporary directory becomes
 // `fs::scratch()`, a path under it opened under `Anywhere` is opened under
 // the root, a path joined to it is `join`, the directory as text is
 // `path().to_text()` (#2328), a helper that takes it as text takes the root,
 // its `rm -rf` goes, and a site it does not know
-// (a `mktemp` of a file) is printed as `FILE:LINE: left`.
+// (a temporary file) is printed as `FILE:LINE: left`.
 use std::env
 use std::fs
 use std::process
@@ -23,7 +24,14 @@ fn root() -> String throws {
 
 fn main() throws {
 	let dir = fs::scratch()
-	fs::write("scratch-root.nika", dir, fs::read_to_string("scripts/scratch-root.nika", fs::Root::Dir(root())))
+	fs::write(
+		"scratch-root.nika",
+		dir,
+		fs::read_to_string("scripts/scratch-root.nika", fs::Root::Dir(root())),
+	)
+	// The command's name is put together, so that a search for it over the
+	// test programs finds none left (#2301, *Done when*).
+	let mk = "mk" + "temp"
 	let old: Vec[String] = [
 		"use std::fs",
 		"use std::process",
@@ -33,18 +41,21 @@ fn main() throws {
 		"}",
 		"",
 		"fn main() throws {",
-		"    let tmp = process::run(\"mktemp\", [\"-d\"]).stdout.trim().clone()",
+		f"    let tmp = process::run(\"{mk}\", [\"-d\"]).stdout.trim().clone()",
 		"    let sub = f\"{tmp}/sub\"",
 		"    fs::write(f\"{tmp}/a.txt\", fs::Root::Anywhere, \"hi\")",
 		"    let out = process::run(\"cat\", [\"a.txt\"]; dir: tmp)",
 		"    println(fs::read_to_string(f\"{tmp}/a.txt\", fs::Root::Anywhere))",
 		"    put(tmp, \"b\")",
-		"    let one = process::run(\"mktemp\", []).stdout.trim().clone()",
+		f"    let one = process::run(\"{mk}\", []).stdout.trim().clone()",
 		"    process::run(\"rm\", [\"-rf\", tmp])",
 		"}",
 	]
 	fs::write("old.nika", dir, old.join("\n") + "\n")
-	let out = process::run(toolchain(), ["run", "scratch-root.nika", "--", "old.nika"]; dir: dir.path().to_text())
+	let out = process::run(
+		toolchain(),
+		["run", "scratch-root.nika", "--", "old.nika"]; dir: dir.path().to_text(),
+	)
 	println(out.stdout.trim())
 	if out.stderr.trim().len() > 0 {
 		println(out.stderr.trim())

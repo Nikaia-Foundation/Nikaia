@@ -4,21 +4,18 @@
 // segment, a grammar built-in, an `f"…"` text and spec), each through an
 // entry of its own. The grammar file, `parse_numbers.nika` and the `slice` it
 // calls are copied beside a small driver and run.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // Each argument a file: a scan line `tokens`, or `RULE<TAB>input` through
@@ -62,12 +59,12 @@ fn slice_fn(ledger: String) -> String {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let tools = f"{repo}/crates/nikaia-std/src/compiler"
-    let rules = fs::read_to_string(f"{tools}/parser_grammar.nika", fs::Root::Anywhere)
-    let numbers = fs::read_to_string(f"{tools}/parse_numbers.nika", fs::Root::Anywhere)
-    let slice = slice_fn(fs::read_to_string(f"{tools}/ledger.nika", fs::Root::Anywhere))
-    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
+    let tmp = fs::scratch()
+    let tools = fs::Root::Dir(f"{repo}/crates/nikaia-std/src/compiler")
+    let rules = fs::read_to_string("parser_grammar.nika", tools)
+    let numbers = fs::read_to_string("parse_numbers.nika", tools)
+    let slice = slice_fn(fs::read_to_string("ledger.nika", tools))
+    fs::write("main.nika", tmp, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
     let q = "\""
     let b = "\\"
     let cases: Vec[String] = [
@@ -102,11 +99,10 @@ fn main() throws {
     let mut i = 0
     for c in cases {
         i += 1
-        fs::write(f"{tmp}/case{i}.txt", fs::Root::Anywhere, c)
+        fs::write(f"case{i}.txt", tmp, c)
         args.push(f"case{i}.txt")
     }
-    let out = process::run(nikaia, args; dir: tmp)
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(out.stdout.trim())
     if out.stdout.trim().len() == 0 { println(out.stderr) }
-    process::run("rm", ["-rf", tmp])
 }

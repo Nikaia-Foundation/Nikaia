@@ -10,22 +10,22 @@
 use std::fs
 use std::process
 
-fn read_one(name: String) -> String throws {
-	return fs::read(name, fs::Root::Anywhere).text().clone()
+fn read_one(tmp: ref fs::Root, name: String) -> String throws {
+	return fs::read(name, tmp).text().clone()
 }
 
-fn both(tmp: String) -> String throws {
-	let first = async(handle) fn { read_one(f"{tmp}/mine") }
-	let second = async(handle) fn { read_one(f"{tmp}/theirs") }
+fn both(tmp: fs::Root) -> String throws {
+	let first = async(handle) fn { read_one(tmp, "mine") }
+	let second = async(handle) fn { read_one(tmp, "theirs") }
 	let mine = first.join()
 	let theirs = second.join()
 	return f"{mine} {theirs}"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	fs::write(f"{tmp}/mine", fs::Root::Anywhere, "mine")
-	fs::write(f"{tmp}/theirs", fs::Root::Anywhere, "theirs")
+	let tmp = fs::scratch()
+	fs::write("mine", tmp, "mine")
+	fs::write("theirs", tmp, "theirs")
 	let mut round = 0
 	while round < 20 {
 		let answers = both(tmp.clone())
@@ -34,5 +34,4 @@ fn main() throws {
 		}
 		round = round + 1
 	}
-	process::run("rm", ["-rf", tmp])
 }
