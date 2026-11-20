@@ -338,7 +338,7 @@ impl EmitState {
     }
 
     /// **Another package's walk of a `@stream` entry** (ADR-grammar-typed-read-v1 D7,
-    /// #1505): the engine's `parse_<rule>_reader_each` is the crate's alone
+    /// #1505): the engine's `parse_<rule>_slice_each` is the crate's alone
     /// (#1464), so a `pub grammar` writes beside itself, public and hidden,
     /// the function a caller in another package walks: the form of the walk
     /// in the grammar's own file (`emit_core_grammar_entry`), over a copy of
@@ -346,7 +346,10 @@ impl EmitState {
     /// values, owned, then each option as `Option`, `None` where the caller
     /// left it out: the default is evaluated here, where it is declared and
     /// visible (ADR-grammar-syntax-v1 D12, #1512), and last the caller's `words:`
-    /// table, shared, where it hands one (ADR-grammar-input-v1 D10).
+    /// table, shared, where it hands one (ADR-grammar-input-v1 D10). The
+    /// input is all in memory, so the walk takes the engine's slice entry,
+    /// whose steps run the plain rules, not the edge-tracked ones a reader
+    /// needs (#2420).
     fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
@@ -374,7 +377,7 @@ impl EmitState {
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
         let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"))
-        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(&__wg_source[..], &mut __wg_context, {emit_walk_reading()}, {handed}{each}); ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_slice_each(&__wg_source[..], &mut __wg_context, {handed}{each}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n")
     }
 
@@ -745,7 +748,7 @@ impl EmitState {
     /// items through `each` (`nikaia_std::grammar::stream`). The rule is
     /// `pub(crate)`, and so is every function the engine writes for it
     /// (`parse_<rule>`, `parse_<rule>_reader`, `parse_<rule>_reader_each`,
-    /// #1464): the walk calls them inside the crate, and a Rust user reads
+    /// `parse_<rule>_slice_each`, #1464): the walk calls them inside the crate, and a Rust user reads
     /// the entry only through `G::<rule>_reader` (`emit_stream_reader`).
     ///
     /// **An entry whose items are emitted** (`emitting`, ADR-grammar-typed-read-v1 D7,
@@ -910,16 +913,6 @@ fn emit_stream_each(item: ref String, emitting: bool) -> String {
         return f"|__wg_item: &::std::option::Option<{item}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {send}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}"
     }
     return f"|__wg_one: &{item}| {send}"
-}
-
-/// **How a walk of a `@stream` entry reads its input** (ADR-grammar-typed-read-v1
-/// D7, #2282): a Nikaia walk takes a `String` or `Bytes`, so `__wg_source` is
-/// all in memory. The engine reads it in one block, not in windows that double
-/// and parse the item at the end again each time, and waits out an item as
-/// long as the input: the bound on memory `Reading::default()` sets for a
-/// reader (16 MiB) refused an item the forms over the whole input parse.
-fn emit_walk_reading() -> String {
-    return "winnow_grammar::rt::Reading { block: __wg_source.len() + 1, max_frame: __wg_source.len() }"
 }
 
 /// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-typed-read-v1
