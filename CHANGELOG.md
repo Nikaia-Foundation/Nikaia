@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1495] — 2026-11-20
+
+**Builders' changes (#2367)**
+- A plain `b: Bytes` parameter that keeps only a cut or a clone of `b` now takes the `Bytes` with its owner, the way `ref Bytes` does: the cut or clone shares the owner instead of copying, the caller can still use `b`, and `keep b: Bytes` kept this way no longer warns NK1334 (ADR-views-3 D15, ADR-373 D4).
+- `s.push_str(f"…{x}…")` on a local lowers to `write_fmt` into the text, not `push_str(&format!(…))`: one String allocated and freed less per call; allocator Ir of a check 1,009M -> 912M.
+- The integer solver's elimination works on the bounds' rank forms (no LgLin rebuilt per pair), reads the branch's atoms by view instead of cloning them, moves names it no longer needs and pre-sizes its vectors; `lg_add` takes its first operand by value. Allocator Ir of a check 912M -> 693M, total 2,583M -> 2,224M, output unchanged.
+- `lg_written`, `LgNormal::text` and `proofs_written` pre-size their text, so a key is written without a chain of reallocations; allocator Ir of a check 693M -> 678M, total 2,224M -> 2,190M, output unchanged.
+
 ## [0.0.1494] — 2026-11-20
 
 **A child's environment is assembled in Nikaia, its Windows case tested directly (#2119)**
