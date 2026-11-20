@@ -6,6 +6,7 @@
 // item to the lambda and the failure on to the walk, past a `skip` too.
 // Moved from the `nikaia-std` unit tests `seq::tests::*` (#2082).
 use std::collections
+use std::env
 use std::fs
 use std::process
 use std::time
@@ -15,16 +16,10 @@ fn slow(x: i64) -> i64 {
     return x
 }
 
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3), no outside
+// data where it runs a program (ADR-397 D1).
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
-    if exe.len() > 0 { return exe }
-    return "target/fast/nikaia"
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
 }
 
 fn main() throws {
@@ -53,8 +48,9 @@ fn main() throws {
     let mut b: collections::BTreeMap[i64, i64] = collections::BTreeMap()
     b.entry(1).or_insert_with(fn() { slow(2) })
     println(f"{b[1] ?? 0}")
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{tmp}/lines.nika", fs::Root::Anywhere, "use std::cli\nuse std::io\nuse std::text\nuse std::time\n\nfn slow(x: i64) -> i64 {\n    time::sleep(1.millis())\n    return x\n}\n\nfn n(line: String) -> i64 {\n    return text::parse_i64(line) ?? -1\n}\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let which = args[args.len() - 1]\n    if which == \"take\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { n(l) * 10 }).take(2).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"then\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { slow(n(l)) + 1 }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"past\" {\n        let got: Vec[i64] = io::lines().skip(3).filter(fn(l) { slow(n(l)) > 4 }).map(fn(l) { n(l) }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"count\" {\n        println(f\"{io::lines().filter(fn(l) { n(l) > 1 }).count()}\")\n    }\n    if which == \"nth\" {\n        println(f\"{io::lines().skip(3).step_by(2).nth(0) ?? \"none\"}\")\n    }\n    println(\"held\")\n}\n")
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    fs::write("lines.nika", root, "use std::cli\nuse std::io\nuse std::text\nuse std::time\n\nfn slow(x: i64) -> i64 {\n    time::sleep(1.millis())\n    return x\n}\n\nfn n(line: String) -> i64 {\n    return text::parse_i64(line) ?? -1\n}\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    if args.len() < 1 { return }\n    let which = args[args.len() - 1]\n    if which == \"take\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { n(l) * 10 }).take(2).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"then\" {\n        let got: Vec[i64] = io::lines().map(fn(l) { slow(n(l)) + 1 }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"past\" {\n        let got: Vec[i64] = io::lines().skip(3).filter(fn(l) { slow(n(l)) > 4 }).map(fn(l) { n(l) }).collect()\n        println(f\"[{got.iter().join(\", \")}]\")\n    }\n    if which == \"count\" {\n        println(f\"{io::lines().filter(fn(l) { n(l) > 1 }).count()}\")\n    }\n    if which == \"nth\" {\n        println(f\"{io::lines().skip(3).step_by(2).nth(0) ?? \"none\"}\")\n    }\n    println(\"held\")\n}\n")
     for case in ["take", "then", "past", "count", "nth"] {
         let out = process::run(
             "sh",
@@ -68,5 +64,4 @@ fn main() throws {
             }
         }
     }
-    process::run("rm", ["-rf", tmp])
 }
