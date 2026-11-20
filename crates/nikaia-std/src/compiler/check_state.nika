@@ -849,7 +849,7 @@ pub struct CheckState {
     /// runs, which stay closure arguments below.
     pub run_code: collections::BTreeSet[String],
     /// The functions that take a DSL's parameters as `...args: Self::dsl`
-    /// (ADR-296 D5), by name: what one hands back is the statement's
+    /// (ADR-grammar-build-time-v1 D12), by name: what one hands back is the statement's
     /// parameters, a type of each call site's own.
     pub dsl_drivers: collections::BTreeSet[String],
     /// The rings of constants this walk has already reported, by their members.

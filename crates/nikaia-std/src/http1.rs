@@ -196,8 +196,8 @@ pub struct Head {
     /// `transfer-encoding` and dropped the rest, so a handler could not ask.
     ///
     /// A `Vec` and not a map: a request head has a handful of headers, and a
-    /// scan over a handful beats hashing one ([ADR-296](../../../docs/specification/adr/adr-296.md)
-    /// D4 — and there is nothing here to measure yet, which is itself the
+    /// scan over a handful beats hashing one ([ADR-grammar-build-time-v1](../../../docs/specification/adr/adr-grammar-build-time-v1.md)
+    /// D11 — and there is nothing here to measure yet, which is itself the
     /// reason to take the shape with no allocation behind it).
     headers: Vec<(String, String)>,
 }
@@ -338,8 +338,8 @@ fn parse(text: &str, size: i64) -> Result<Head, IoError> {
 /// Where `needle` starts in `haystack`.
 ///
 /// A `memchr` here would be a dependency for a loop over a request head that
-/// nobody has measured ([ADR-296](../../../docs/specification/adr/adr-296.md)
-/// D4).
+/// nobody has measured ([ADR-grammar-build-time-v1](../../../docs/specification/adr/adr-grammar-build-time-v1.md)
+/// D11).
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.len() > haystack.len() {
         return None;

@@ -856,7 +856,7 @@ impl EmitState {
                     params.push(f"{local}: {spelled}")
                     j += 1
                 }
-                // ADR-296 D5: `...args: Self::dsl` is the one parameter whose
+                // ADR-grammar-build-time-v1 D12: `...args: Self::dsl` is the one parameter whose
                 // type the call site decides.
                 let mut has_dsl = false
                 match spread {

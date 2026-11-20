@@ -838,7 +838,7 @@ fn check_core_expr_one_entry(state: ref CheckState, name: ref String) -> bool {
 /// **A `dsl` block.** A package where a grammar stands is `NK1228`; a block
 /// over a grammar this program declares is run while the program is built
 /// (Part II 10.5, ADR-299 D20, #518); `dsl html` builds a `String` (#505) and
-/// a statement with `:name` holes is its own text (ADR-296 D5).
+/// a statement with `:name` holes is its own text (ADR-grammar-build-time-v1 D12).
 fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, target: winnow_grammar::Symbol, package: winnow_grammar::Symbol?, context: winnow_grammar::Symbol?, content: ref String, span: ref Span) -> Ty sync {
     let bare = package == null
     if bare && state.a_package_where_a_grammar_stands(world.here, target, span) {

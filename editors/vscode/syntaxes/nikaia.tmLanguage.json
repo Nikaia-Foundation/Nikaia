@@ -204,7 +204,7 @@
     },
 
     "self-dsl-type": {
-      "comment": "ADR-296 D5: `Self::dsl` is the parameter type a DSL string generates, and it is the only type a typed spread can have. The `dsl` in it is a type's name, not the keyword.",
+      "comment": "ADR-grammar-build-time-v1 D12: `Self::dsl` is the parameter type a DSL string generates, and it is the only type a typed spread can have. The `dsl` in it is a type's name, not the keyword.",
       "match": "\\b(Self)(::)(dsl)\\b",
       "captures": {
         "1": { "name": "support.class.nika" },
@@ -503,7 +503,7 @@
     },
 
     "spread-parameter": {
-      "comment": "ADR-296 D5: `...args: Self::dsl` is how a DSL driver accepts the deferred parameters a statement declared.",
+      "comment": "ADR-grammar-build-time-v1 D12: `...args: Self::dsl` is how a DSL driver accepts the deferred parameters a statement declared.",
       "match": "(\\.\\.\\.)([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(Self::dsl)",
       "captures": {
         "1": { "name": "keyword.operator.spread.nika" },
@@ -788,7 +788,7 @@
     },
 
     "dsl-sql": {
-      "comment": "A SQL body carries no `{…}` holes: its parameters are `:name`, resolved at run time as named arguments after the `;` (ADR-296 D5).",
+      "comment": "A SQL body carries no `{…}` holes: its parameters are `:name`, resolved at run time as named arguments after the `;` (ADR-grammar-build-time-v1 D12).",
       "name": "meta.embedded.block.sql.nika",
       "begin": "\\b(dsl)\\s+(mysql|postgres|postgresql|sqlite|sql)\\s*(\\{)",
       "beginCaptures": {
@@ -827,7 +827,7 @@
     },
 
     "dsl-parameter": {
-      "comment": "ADR-296 D5. A `:name` is a hole because the body wrote a colon and a name; a path (`a::b`) and a time (`12:30`) are not.",
+      "comment": "ADR-grammar-build-time-v1 D12. A `:name` is a hole because the body wrote a colon and a name; a path (`a::b`) and a time (`12:30`) are not.",
       "match": "(?<![:A-Za-z0-9_])(:)([A-Za-z_][A-Za-z0-9_]*)\\b(?!:)",
       "captures": {
         "1": { "name": "punctuation.definition.parameter.dsl.nika" },
@@ -891,7 +891,7 @@
               "patterns": [{ "include": "#dsl-hole" }]
             },
             {
-              "comment": "`<for r in :rows>` is written as an element so that an editor that highlights markup keeps working (ADR-296 D4).",
+              "comment": "`<for r in :rows>` is written as an element so that an editor that highlights markup keeps working (ADR-grammar-build-time-v1 D11).",
               "name": "keyword.control.template.nika",
               "match": "\\b(in)\\b"
             }

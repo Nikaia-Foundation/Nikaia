@@ -92,7 +92,7 @@ pub enum Segment {
     ///
     /// Written as an *element* because the file is markup and an editor that
     /// highlights it keeps working. The collection carries `:` because it is
-    /// captured from the enclosing scope (ADR-296 D4) - the colon is where the
+    /// captured from the enclosing scope (ADR-grammar-build-time-v1 D11) - the colon is where the
     /// template's names end and the program's begin.
     For { binding: String, collection: String, body: Vec[Segment] },
 }
@@ -291,7 +291,7 @@ impl Splitter {
         let binding = words[0].clone()
         let written = words[2].clone()
         if !written.starts_with(":") {
-            throw Refused::Because(f"`{written}` is captured from the enclosing scope, so it is written `:{written}` - the colon is where the template's names end and the program's begin (ADR-296 D4)")
+            throw Refused::Because(f"`{written}` is captured from the enclosing scope, so it is written `:{written}` - the colon is where the template's names end and the program's begin (ADR-grammar-build-time-v1 D11)")
         }
         let mut collection: String = ""
         let mut first = true

@@ -94,7 +94,7 @@ impl CheckState {
         }
     }
 
-    /// **What a DSL driver hands back** (ADR-296 D5): `db.prepare(query; id:
+    /// **What a DSL driver hands back** (ADR-grammar-build-time-v1 D12): `db.prepare(query; id:
     /// 501)`, the parameters that call gave, as a type of that call's own.
     fn a_drivers_row(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {

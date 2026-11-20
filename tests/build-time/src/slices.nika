@@ -27,7 +27,7 @@ test "a run crosses and the program reads it" {
 // **A `struct` field may be one**, which is the whole reason this type exists.
 // `Array[Setting, N]` cannot type a field whose run is a different length per
 // value, and a `Vec` owns memory a `const` cannot hold. This is the shape both
-// corpus grammars produce (ADR-177 §5's measurement).
+// corpus grammars produce (ADR-179 §1's measurement).
 struct SlicesSetting { key: ref String, value: ref String }
 struct SlicesSection { name: ref String, settings: ref Array[SlicesSetting] }
 

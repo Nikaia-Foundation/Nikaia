@@ -481,7 +481,7 @@ impl CheckState {
         // left it without a type was said there, or stood back for.
         let said = arith_a_name(expr)
         let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr)
-        // **A driver's parameters are each call site's own type** (ADR-296 D5).
+        // **A driver's parameters are each call site's own type** (ADR-grammar-build-time-v1 D12).
         let per_call = self.a_drivers_row(world, expr) || self.through_a_package_unread(world.here, world, expr) || self.refused_where_it_is_lowered(world, expr)
         // A member of a value that has no known type is unknown because of
         // that value, whose own refusal (or reason not to) was said.

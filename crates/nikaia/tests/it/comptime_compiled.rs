@@ -534,7 +534,7 @@ fn an_earlier_struct_or_variant_is_carried_into_a_later_run() {
 /// **A program that declares a grammar is compiled with it** (ADR-321 D3):
 /// the library build-time code links against names the grammar runtime too,
 /// so an ordinary call in such a program runs compiled. Running the grammar
-/// itself stays the grammar run's (ADR-177).
+/// itself stays the grammar run's (ADR-grammar-build-time-v1).
 #[test]
 fn a_program_with_a_grammar_compiles_its_other_comptimes() {
     let source = "struct Setting {\n\

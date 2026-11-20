@@ -512,7 +512,7 @@ hole and does not have to know which case it is. `examples/escaping/src/main.nik
 
 **Control flow is there too**: `<for row in :rows> … </for>`, written as an *element* because
 the file is markup and an editor that highlights it keeps working, with `:rows` captured from the
-enclosing scope (ADR-296 D4). The position check runs through a loop's body, so nothing becomes
+enclosing scope (ADR-grammar-build-time-v1 D11). The position check runs through a loop's body, so nothing becomes
 safe by being repeated. `fortunes.nika`'s `render` lowers and runs today; what that file still
 waits on is the `postgres` block and **G6**'s runtime binding — since
 [ADR-277](../docs/specification/adr/adr-277.md) removed the `fn:` form, the whole file parses.
