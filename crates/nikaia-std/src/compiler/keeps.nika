@@ -45,8 +45,9 @@ pub struct KeepsBody {
     pub own_methods: ref MethodIndex,
     pub library_methods: ref MethodIndex,
     /// **The `ref Bytes` parameters**, which a `.clone()` keeps (ADR-373 D1,
-    /// D4): the clone is a count on the caller's owner, so the parameter takes
-    /// the `Bytes` with its owner rather than a run of bytes to copy.
+    /// D4), as a cut kept does (#2214): the clone is a count on the caller's
+    /// owner, so the parameter takes the `Bytes` with its owner rather than a
+    /// run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
     /// **The parameters written `T?`**, text among them (ADR-views-3 D2,
     /// #1254, #1346): `p ?? e` over one whose result is only read keeps
@@ -1453,6 +1454,13 @@ fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, c
     if part != null {
         names.push(part ?? "")
     }
+    // **Keeping a cut of a `ref Bytes` keeps it** (ADR-373 D4, #2214): the
+    // cut is a view tethered to the parameter's owner, so the function takes
+    // the `Bytes` with its owner and the cut copies nothing.
+    match kept_cut_of_bytes(expr, interner, context) {
+        cut => names.push(cut),
+        null => {},
+    }
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) {
         names.push(one)
     }
@@ -1587,6 +1595,29 @@ fn part_of_a_parameter(expr: ref Expr, interner: ref winnow_grammar::InternerCon
         else => {
             return parameter_named(expr, interner, context)
         }
+    }
+}
+
+// The `ref Bytes` parameter `b` a cut `b[a..<c]` is cut from, through any
+// cuts between (`b[1..][0..<2]`), or null for any other expression: a single
+// byte `b[i]` copies.
+fn kept_cut_of_bytes(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
+    match expr {
+        Expr::Index { base, index, .. } => {
+            match index {
+                Expr::Range { .. } => {},
+                else => return null,
+            }
+            return match base {
+                Expr::Variable(ident, _) => {
+                    let name = interner.resolve(ident)
+                    if context.cloned_keeps.contains(name) { name.clone() } else { null }
+                },
+                Expr::Index { .. } => kept_cut_of_bytes(base, interner, context),
+                else => null,
+            }
+        }
+        else => return null,
     }
 }
 

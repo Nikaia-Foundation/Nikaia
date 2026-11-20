@@ -916,6 +916,10 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     let part = part_of_a_parameter(expr, interner, context); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if part.is_some() { names.push(nikaia_std::index::or(part, || "".into())); }
+    match kept_cut_of_bytes(expr, interner, context) {
+        Some(cut) => { names.push(cut); },
+        None => { },
+    }
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) { names.push(one); }
     match expr {
         Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); names.extend(keeps_handed(fallback, interner, context, own, library, walk)); },
@@ -1005,6 +1009,28 @@ pub(crate) fn part_of_a_parameter(expr: &Expr, interner: &winnow_grammar::Intern
             return not_self(parameter);
         },
         _ => { return parameter_named(expr, interner, context); },
+    }
+}
+
+pub(crate) fn kept_cut_of_bytes(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
+    match expr {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match index {
+                Expr::Range { .. } => { },
+                _ => { return None; },
+            }
+            return match base {
+                Expr::Variable(ident, _) => {
+                    let ident = *ident;
+                    let name = interner.resolve(ident);
+                    if context.cloned_keeps.contains(name) { Some(nikaia_std::block::Text::from(name.to_string())) } else { None }
+                },
+                Expr::Index { .. } => kept_cut_of_bytes(base, interner, context),
+                _ => None,
+            };
+        },
+        _ => return None,
     }
 }
 
