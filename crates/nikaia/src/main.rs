@@ -18,6 +18,15 @@ use nikaia::{diagnostics, interpreter, parser, refuse};
 use nikaia_std::compiler::cli_commands::{self, CliCommandsRefusal};
 use nikaia_std::compiler::project_tests;
 
+/// **The compiler's allocator is the one every program declares** (ADR-327
+/// D9, D10; #2338): the system's, counted, the same two lines
+/// `EMIT_PROGRAM_COUNTING_HEAP` writes into an emitted program. The `test`
+/// blocks `nikaia test --std` runs in this process read their thread's
+/// requests with `mem::allocations()` (ADR-400 D1), which only this allocator
+/// counts.
+#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;
+
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
 #[derive(Parser, Debug)]
