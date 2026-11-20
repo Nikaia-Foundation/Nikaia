@@ -314,9 +314,11 @@ it is looked up on `PATH` or names any file.
 
 A function hands back its proof (supervisor, 2026-11-20, #2375): a call is
 not outside where every value its function returns is proved, a literal (D10)
-or a guarded name joined to a clean part, whatever its arguments are. One
-returned value from outside makes the call outside, as one arm does for a
-`match`.
+or a guarded name joined to a clean part. A parameter the function hands back
+unguarded is not proved there: it carries what the caller passes, so the call
+is outside exactly where the argument at that place is outside, and a clean or
+guarded argument keeps it clean. One returned value from outside makes the call
+outside, as one arm does for a `match`.
 
 Neither proves where a symlink points; under `Dir` the run time check does
 (ADR-108 D3), under `Anywhere` nothing does, as for a literal. A check of the
