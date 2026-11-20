@@ -708,7 +708,7 @@ sync = true
 panics = false
 touches = []
 views = ["t: borrowed"]
-signature = "(t: ref String) -> bool"
+signature = "(t: ref Bytes) -> bool"
 
 [fn."opening"]
 sync = true

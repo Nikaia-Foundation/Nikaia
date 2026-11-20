@@ -620,12 +620,12 @@ pub grammar Yaml {
 	// a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
 		p:Props(ds) v:KeyTail(ds, left, p) -> { v }
-		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
+		| t:bytes(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
 			v
 		}
 	// What follows a key's properties `p`, read once: a node, or none.
 	rule KeyTail(ds: Vec[Dir], left: i64, p: Props) -> Node =
-		Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		Sep1 t:bytes(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -840,7 +840,7 @@ pub grammar Yaml {
 				value: Value::Map([p]),
 			}
 		}
-		| kt:text(k:FlowAny(ds, left, n)) t:FlowTail(ds, left - 1, n; pair: true)?
+		| kt:bytes(k:FlowAny(ds, left, n)) t:FlowTail(ds, left - 1, n; pair: true)?
 		if(t == null || one_line(kt), "an implicit key on one line")
 		if(pair_fits(left, k, t), "nesting within the depth limit") -> {
 			let a = k.start
@@ -1318,9 +1318,9 @@ pub grammar Yaml {
 	rule Empty = (" " | "\t")* "\n" -> { }
 }
 
-// Whether an implicit key's text stays on its line.
-fn one_line(t: String) -> bool sync {
-	return !t.contains('\n')
+// Whether an implicit key's bytes stay on their line, read unchecked (#2409).
+fn one_line(t: ref Bytes) -> bool sync {
+	return t.find(10) == null
 }
 
 fn is_word(x: scalar) -> bool sync {
