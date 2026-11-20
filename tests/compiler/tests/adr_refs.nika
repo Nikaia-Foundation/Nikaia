@@ -1,5 +1,6 @@
 // scripts/check-adr-refs.nika checks the ADR citations and names (#2263,
-// ADR-decision-records-v2 D6). Shown on a fixture tree given with `--root`:
+// ADR-decision-records-v2 D6). Shown on a fixture tree given with `--root`,
+// below the directory a copy of it runs in:
 // a clean tree, then one with a case per check - a dangling `D7` and `§9`, a
 // note's section cited as authority, two live versions of one topic, a title
 // that disagrees with its name, a record with no index row, a citation of an
@@ -42,10 +43,12 @@ fn put(tree: fs::Root, file: String, text: String) throws {
 	fs::write(path, tree, text.replace("~", "-"))
 }
 
-fn run(repo: String, nikaia: String, tree: String) throws {
+// Runs the copy of the script in `base` there, on `tree` below it: the
+// script opens only what is below the directory it runs in (`path::is_below`).
+fn run(base: String, nikaia: String) throws {
 	let out = process::run(
 		nikaia,
-		["run", "scripts/check-adr-refs.nika", "--", "--root", tree]; dir: repo,
+		["run", "check-adr-refs.nika", "--", "--root", "tree"]; dir: base,
 	)
 	println(masked(out.stdout.trim()))
 	if out.stderr.trim().len() > 0 { println(masked(out.stderr.trim())) }
@@ -58,7 +61,12 @@ fn main() throws {
 	let dir = fs::scratch()
 	fs::create_dir("tree", dir; recursive: true)
 	let tree = dir.join("tree")
-	let tree_path = f"{dir.path().display()}/tree"
+	fs::write(
+		"check-adr-refs.nika",
+		dir.clone(),
+		fs::read_to_string("scripts/check-adr-refs.nika", fs::Root::Dir(repo)),
+	)
+	let base = f"{dir.path().display()}"
 	put(
 		tree.clone(),
 		"docs/specification/adr/README.md",
@@ -81,7 +89,7 @@ fn main() throws {
 		"Cites ADR~alpha~v1 D1 and [ADR~alpha~v1](specification/adr/adr~alpha~v1.md) §2.\n",
 	)
 	println("--- clean")
-	run(repo.clone(), nikaia.clone(), tree_path.clone())
+	run(base.clone(), nikaia.clone())
 
 	put(
 		tree.clone(),
@@ -102,8 +110,12 @@ fn main() throws {
 		"// ADR~alpha~v1 D7, ADR~alpha~v1 §9 and ADR~old~v1 D1\n// ADR~alpha~v9 is no record; ADR~alpha~v1x is no name.\n",
 	)
 	put(tree.clone(), "packages/p/src/main.nika", "// ADR~alpha~v1 D8 in a package\n")
-	put(tree.clone(), "docs/briefs/a.md.report.md", "Friction: a name such as ADR~topic~1 stands for any record\n")
+	put(
+		tree.clone(),
+		"docs/briefs/a.md.report.md",
+		"Friction: a name such as ADR~topic~1 stands for any record\n",
+	)
 	put(tree, "packages/p/src/lib.nika", "// as ADR~old~v1 D1 said\n")
 	println("--- one case per check")
-	run(repo, nikaia, tree_path)
+	run(base, nikaia)
 }
