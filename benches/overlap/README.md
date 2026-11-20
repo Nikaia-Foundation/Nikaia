@@ -51,7 +51,7 @@ difference is the finding. The numbers, the method and the confound are in
 Everything above measures `nikaia_std` from Rust.
 [ADR-292](../../docs/specification/adr/adr-292.md) D6 is a **lowering**: at
 `user_parallelism = no` the branches of an `overlap { … }` block (Part I 8.1.2)
-are emitted onto `nikaia_std::task::overlap2`. `lowered.sh` counts that, through
+are emitted onto `nikaia_std::task::overlap2`. `lowered.nika` counts that, through
 the whole pipeline and not a reduction of it:
 
 | what | how |
@@ -60,12 +60,12 @@ the whole pipeline and not a reduction of it:
 | `sequential.nika` | the same two reads one after the other |
 
 ```sh
-benches/overlap/lowered.sh                          # both mechanisms, 20 000 pairs
-benches/overlap/lowered.sh /tmp/somewhere 2000      # ...quicker, in a named directory
-NIKAIA=target/fast/nikaia benches/overlap/lowered.sh  # with a compiler already built
+nikaia run benches/overlap/lowered.nika                         # both mechanisms, 20 000 pairs
+nikaia run benches/overlap/lowered.nika -- 2000 9              # ...quicker, 9 bytes a file
+NIKAIA=target/fast/nikaia nikaia run benches/overlap/lowered.nika  # with a compiler already built
 ```
 
-It greps the emitted Rust and stops unless `pair` holds `task::overlap2` and
+It builds in `target/overlap-bench`, greps the emitted Rust and stops unless `pair` holds `task::overlap2` and
 `sequential` does not, because two identical binaries would count a very stable
 nothing; it compares the two outputs byte for byte, then counts instructions and
 mispredicted branches per pair with callgrind, for `io-method = "auto"` (the
