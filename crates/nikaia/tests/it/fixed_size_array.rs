@@ -66,7 +66,9 @@ fn the_same_literal_is_a_vec_or_an_array_by_its_use() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
-    assert!(rust.contains("let list = vec![1, 2, 3];"), "{rust}");
+    assert!(rust.contains(
+        "let list = nikaia_std::block::List::from_array_in([1, 2, 3], nikaia_std::block::Place::Block);"
+    ), "{rust}");
     assert!(rust.contains("let array: [i64; 3] = [1, 2, 3];"), "{rust}");
 }
 

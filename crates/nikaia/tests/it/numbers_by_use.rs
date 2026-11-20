@@ -229,7 +229,7 @@ fn a_lists_decided_type_is_written() {
     assert!(rust.contains("let ys: Vec<u8> = vec![1, 2, 3];"), "{rust}");
     let rust =
         lowered("fn main() throws {\n    let xs = [1, 3000000000]\n    println(f\"{xs[1]}\")\n}\n");
-    assert!(rust.contains("vec![1, 3000000000i64]"), "{rust}");
+    assert!(rust.contains("[1, 3000000000i64]"), "{rust}");
 }
 
 /// **A map takes its types from what is written into it** (ADR-285 D43,

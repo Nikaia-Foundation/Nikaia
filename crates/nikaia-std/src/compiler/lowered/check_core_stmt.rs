@@ -2207,6 +2207,7 @@ pub(crate) fn check_core_a_plain_list(state: &CheckState, name: &str) -> bool {
         Ty::Named { ref name, ref args, view } => !view && name == "Vec" && args.len() == 1 && match *unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Ty::Named { view, .. } => !view,
             Ty::Tuple(_) => true,
+            Ty::Unknown => state.flow.open_elements.contains_key(&found.id),
             _ => false,
         },
         _ => false,

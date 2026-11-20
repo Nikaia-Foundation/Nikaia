@@ -131,7 +131,7 @@ pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    let lengths: Vec<i32> = vec![0, 1, 3, 4, 7, 8, 15, 16, 17, 32, 79];
+    let lengths: Vec<i32> = nikaia_std::block::List::from_array_in([0, 1, 3, 4, 7, 8, 15, 16, 17, 32, 79], nikaia_std::block::Place::Block);
     let words: Vec<u64> = nikaia_std::block::List::from_array_in([13552182361643986041u64, 13552182361643986040u64, 8720980428560979891u64, 15943463919513189350u64, 3602169621868155024u64, 8051753181644104093u64, 1133336279549358043u64, 1054198507191646062u64, 425125224765751966u64, 11958934662458840459u64, 11951584621460047258u64], nikaia_std::block::Place::Block);
     for k in 0..lengths.len() as i64 {
         let mut v: Vec<u8> = vec![];

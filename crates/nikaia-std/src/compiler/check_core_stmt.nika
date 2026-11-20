@@ -3060,13 +3060,16 @@ fn check_core_a_plain_text(state: ref CheckState, name: ref String) -> bool sync
 }
 
 /// Whether `name` is bound, in this scope, to a `Vec` whose elements are
-/// neither views nor functions.
+/// neither views nor functions. A list written in number literals no
+/// annotation typed (`[4, 5]`, ADR-285 D34) holds numbers whose type its
+/// uses decide later: `Unknown` here, and plain all the same (#2349).
 fn check_core_a_plain_list(state: ref CheckState, name: ref String) -> bool sync {
     let found = state.binding(name) ?? return false
     return match found.ty {
         Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && match args[0] {
             Ty::Named { view, .. } => !view,
             Ty::Tuple(_) => true,
+            Ty::Unknown => state.flow.open_elements.contains_key(found.id),
             else => false,
         },
         else => false,
