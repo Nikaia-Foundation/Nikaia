@@ -22,7 +22,7 @@ use std::collections
 /// name is one a page or a record writes after `use std::`, and a name on
 /// neither list is one nobody has written down anywhere. Where each comes from,
 /// in the order they appear below: `use std::backend::x86`
-/// ([ADR-296](../../docs/specification/adr/adr-296.md), Part III 16); the build
+/// ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D20, Part III 16); the build
 /// script's own API (Part III 13.4);
 /// [ADR-299](../../docs/specification/adr/adr-299.md)'s driver protocol; Part III
 /// 17.1's *other key modules*; Part I 2.6's panic hook, `panic::on_panic`
@@ -229,7 +229,7 @@ impl CheckState {
     /// else is the mistake worth catching: a rule is where a struct literal is
     /// most often typed out in full.
     /// **Two names the engine has and a grammar may not write** (`NK1187`,
-    /// [ADR-grammar-syntax-v1](../../docs/specification/adr/adr-grammar-syntax-v1.md) D10).
+    /// [ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D10).
     ///
     /// `tag("x")` is `"x"` and `digit1` is `digit+`: each is the engine's
     /// spelling for something the grammar can already say, and D1 makes Part II

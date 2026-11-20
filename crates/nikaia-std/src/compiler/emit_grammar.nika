@@ -679,7 +679,7 @@ impl EmitState {
                     }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
-                    // that value (ADR-296). The prelude opens the action's
+                    // that value (ADR-grammar-actions-v1). The prelude opens the action's
                     // own block, so no block is nested in another for it.
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" {

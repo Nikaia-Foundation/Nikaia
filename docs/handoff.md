@@ -309,11 +309,11 @@ pushed and green: 28 tests, `cargo fmt --check` clean, clippy clean. This file
 is updated on `claude/nika-2-branches-offene-aufgaben-kd77u1`, which is that
 branch plus this note.
 
-ADR-296 no longer sits below it: its two commits landed on `main` on their own
+The grammar protocol's record no longer sits below it: its two commits landed on `main` on their own
 (PR #10), so what PR #9 still adds is the Stage 0 lowering and everything
 after it.
 
-* `Cargo.lock` is on upstream `024e3d3`. The measurements in ADR-296 were
+* `Cargo.lock` is on upstream `024e3d3`. The grammar protocol's measurements were
   taken on `2f0d5da` and say so.
 * `examples/1brc.nika` runs and prints what the benchmark asks for.
 * The 203 explicit `_sp:skip_ws` bindings are gone (commit `8888c3c`). **That is

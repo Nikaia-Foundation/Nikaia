@@ -494,7 +494,7 @@ fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: ref c
     return out
 }
 
-/// **A grammar's actions, checked** (ADR-296): each rule's own key for its
+/// **A grammar's actions, checked** (ADR-grammar-actions-v1): each rule's own key for its
 /// answers, the fold lambdas in the pattern's frame, the action's block against
 /// the rule's declared type. An action may not pause (D35), so the flag is
 /// set around the folds and the block alike.
