@@ -15,7 +15,7 @@ pub enum Postfix {
 pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_grammar::Symbol>, Vec<winnow_grammar::Symbol>) {
     let mut names: Vec<winnow_grammar::Symbol> = vec![];
     let mut mutable: Vec<winnow_grammar::Symbol> = vec![];
-    for param in params.iter() {
+    names.reserve(params.iter().size_hint().0); for param in params.iter() {
         names.push(param.1);
         if param.0 { mutable.push(param.1); }
     }

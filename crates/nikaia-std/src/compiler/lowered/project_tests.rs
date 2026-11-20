@@ -169,7 +169,7 @@ pub async fn output_tests(root: &std::path::Path) -> Result<Vec<OutputTest>, nik
     names.extend(project_tests_stems(&dir, ".out", true));
     names.extend(project_tests_stems(&dir, ".stops", false));
     let mut tests: Vec<OutputTest> = vec![];
-    for name in names.iter() {
+    tests.reserve(names.iter().size_hint().0); for name in names.iter() {
         if project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", name))))) { continue; }
         let stdout = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdout", name))))).await?;
         let out = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.out", name))));
@@ -586,7 +586,7 @@ pub fn project_tests_times_file(cache: &std::path::Path, root: &std::path::Path)
 
 pub fn project_tests_places(cache: &std::path::Path, root: &std::path::Path) -> fs::Path {
     let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
-    let tag: String = hash::sha256_hex(&shown.bytes().collect::<Vec<_>>()).chars().take(16).collect();
+    let tag: String = hash::sha256_hex(shown.as_bytes()).chars().take(16).collect();
     nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-places")))), std::path::Path::new(&(tag)))
 }
 
@@ -609,7 +609,7 @@ pub async fn project_tests_order(programs: &[ProgramTest], file: &std::path::Pat
     let times = project_tests_times_read(file).await;
     let mut keyed: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut k = 0;
-    for program in programs.iter() {
+    keyed.reserve(programs.iter().size_hint().0); for program in programs.iter() {
         let ms = nikaia_std::index::or(times.get(&program.name), || -1);
         keyed.push((if ms < 0 { i64::MIN } else { unsafe { nikaia_std::proven::neg::<i64>(ms) } }, k));
         k += 1;
@@ -666,7 +666,7 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
         fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &fs::Root::Anywhere, project_tests_batch_carrier(), false, true).await?;
         let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for program in chunk.iter() {
+        lines.reserve(chunk.iter().size_hint().0); for program in chunk.iter() {
             let at = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), std::path::Path::new(&(program.name)));
             fs::create_dir(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
             fs::write(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
@@ -1026,13 +1026,13 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
     for (title, path, line, number) in blocks.iter() {
         let line = nikaia_std::num::value(line);let number = nikaia_std::num::value(number);
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, number)?)); }
+        outcomes.reserve(test_builds.iter().size_hint().0); for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, number)?)); }
         let label = format!("test \"{}\" ({}:{})", title, shown_path(path, root), line);
         if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
     }
     for output in outputs.iter() {
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in programs.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.output_outcome(binary, output)?)); }
+        outcomes.reserve(programs.iter().size_hint().0); for (setting, binary) in programs.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.output_outcome(binary, output)?)); }
         let label = project_tests_output_label(output);
         if bless {
             let blessed = project_tests_bless(output, &outcomes).await?;

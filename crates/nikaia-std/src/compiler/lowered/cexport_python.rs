@@ -42,7 +42,7 @@ impl CxPython {
         let before = *nikaia_std::index::get(&self.classes, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
+            list.reserve(held.iter().size_hint().0); for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
         }
         list.push(text);
         self.classes.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -265,7 +265,7 @@ impl CxPython {
                 lines.push(format!("        raise {}[0]", held));
             }
         }
-        for kept in keep.iter() { lines.push(format!("del {}", kept)); }
+        lines.reserve(keep.iter().size_hint().0); for kept in keep.iter() { lines.push(format!("del {}", kept)); }
         lines.extend(after);
         let mut streams: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         position = 0;
@@ -334,7 +334,7 @@ impl CxPython {
         let mut errors: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut taken: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut number = 0;
-        for name in boundary_names.iter() {
+        errors.reserve(boundary_names.iter().size_hint().0); for name in boundary_names.iter() {
             let name = *name;
             number -= 1;
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(BoundaryError):\n    code = {}\n\n\n", name, number)); };
@@ -344,7 +344,7 @@ impl CxPython {
         for raising in ctx.codes.iter() {
             let error = nikaia_std::block::Text::from(raising.error.to_string());
             let spelled = nikaia_std::block::Text::from(error.replace("::", ""));
-            for code in raising.codes.iter() {
+            errors.reserve(raising.codes.iter().size_hint().0); for code in raising.codes.iter() {
                 let word: String = nikaia_std::index::or(match code.variant.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -378,7 +378,7 @@ impl CxPython {
             }
         }
         let mut table: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (name, code) in errors.iter() {
+        table.reserve(errors.iter().size_hint().0); for (name, code) in errors.iter() {
             let code = nikaia_std::num::value(code);
             table.push(format!("{}: {}", code, name));
         }
@@ -399,7 +399,7 @@ impl CxPython {
             if record.is_enum() {
                 let ty = nikaia_std::block::Text::from(record.name.to_string());
                 #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for variant in record.variants.iter() {
+                members.reserve(record.variants.iter().size_hint().0); for variant in record.variants.iter() {
                     if variant.fields.is_empty() { continue; }
                     { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class _{}_{}(ctypes.Structure):\n    _fields_ = [{}]\n\n\n", ty, variant.name, cx_python_laid_out(&variant.fields, ctx))); };
                     members.push(format!("(\"{}\", _{}_{})", variant.member, ty, variant.name));
@@ -463,7 +463,7 @@ pub(crate) fn cx_python_field_type(part: &CxPart, ctx: &CxCtx) -> String {
 
 pub(crate) fn cx_python_laid_out(fields: &[(String, CxPart)], ctx: &CxCtx) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (field, part) in fields.iter() { parts.push(format!("(\"{}\", {})", field, cx_python_field_type(part, ctx))); }
+    parts.reserve(fields.iter().size_hint().0); for (field, part) in fields.iter() { parts.push(format!("(\"{}\", {})", field, cx_python_field_type(part, ctx))); }
     nikaia_std::block::Text::from(parts.join(", "))
 }
 

@@ -38,7 +38,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         let mut segments: Vec<String> = vec![];
-        for part in path.iter() {
+        segments.reserve(path.iter().size_hint().0); for part in path.iter() {
             let part = *part;
             segments.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }

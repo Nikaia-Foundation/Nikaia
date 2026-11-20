@@ -235,7 +235,7 @@ pub(crate) fn sv_nl_same_place(t: &SvNl, u: &SvNl, values: &collections::BTreeMa
 pub(crate) fn sv_lemma_query(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma]) -> Option<SvCnf> {
     let mut work = arena.clone();
     let mut all = facts.copy_owned();
-    for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut work, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    all.reserve(lemmas.iter().size_hint().0); for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut work, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     let mut why = lg_why();
     sv_cnf_sorted(&work, &all, goal, reals, &mut why)
 }

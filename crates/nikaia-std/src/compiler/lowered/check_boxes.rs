@@ -18,7 +18,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for symbol in path.iter() {
+                written.reserve(path.iter().size_hint().0); for symbol in path.iter() {
                     let symbol = *symbol;
                     written.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
                 }
@@ -225,7 +225,7 @@ impl CheckState {
         let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match pattern {
             MatchPattern::Path(path) => {
-                for symbol in path.iter() {
+                parts.reserve(path.iter().size_hint().0); for symbol in path.iter() {
                     let symbol = *symbol;
                     parts.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
                 }
@@ -285,7 +285,7 @@ pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
     if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string())); } else if n >= 2 {
         out.insert(format!("{}::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) })));
         let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for symbol in path.iter() {
+        whole.reserve(path.iter().size_hint().0); for symbol in path.iter() {
             let symbol = *symbol;
             whole.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
         }

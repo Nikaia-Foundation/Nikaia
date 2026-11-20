@@ -454,7 +454,7 @@ impl SvSmtReader {
         }
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut values: Vec<SvVal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for binding in bindings.iter() {
+        names.reserve(bindings.iter().size_hint().0); for binding in bindings.iter() {
             let pair = match binding.clone() {
                 LgSexp::List(inside) => inside,
                 LgSexp::Atom(_) => { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); },
@@ -565,7 +565,7 @@ impl SvSmtReader {
         }
         let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for name in names.iter() { todo.push(nikaia_std::block::Text::from(name.to_string())); }
+        todo.reserve(names.iter().size_hint().0); for name in names.iter() { todo.push(nikaia_std::block::Text::from(name.to_string())); }
         while !todo.is_empty() {
             let name = nikaia_std::index::or(todo.pop(), || "".into());
             if done.contains(&name) { continue; }
@@ -591,7 +591,7 @@ impl SvSmtReader {
             self.side.push(definition);
             let mut more: collections::BTreeSet<String> = collections::BTreeSet::new();
             self.reads(definition, &mut seen, &mut more);
-            for m in more.iter() { todo.push(nikaia_std::block::Text::from(m.to_string())); }
+            todo.reserve(more.iter().size_hint().0); for m in more.iter() { todo.push(nikaia_std::block::Text::from(m.to_string())); }
         }
         let mut unread: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, _) in self.ites.iter() { if !done.contains(name) { unread.push(nikaia_std::block::Text::from(name.to_string())); } }
@@ -800,7 +800,7 @@ impl SvSmtReader {
             LgSexp::Atom(_) => { return Some(SvReadWhy::Unsupported(lg_show(command))); },
         };
         let mut names: Vec<String> = vec![];
-        for param in params.iter() {
+        names.reserve(params.iter().size_hint().0); for param in params.iter() {
             let pair = match param.clone() {
                 LgSexp::List(inside) => inside,
                 LgSexp::Atom(_) => { return Some(SvReadWhy::Unsupported(lg_show(command))); },
@@ -933,13 +933,13 @@ pub(crate) fn sv_smtlib_script(source: &str) -> SvSmtRead {
     }
     let mut assertions: Vec<i64> = vec![];
     for level in stack.iter() {
-        for id in level.iter() {
+        assertions.reserve(level.iter().size_hint().0); for id in level.iter() {
             let id = nikaia_std::num::value(id);
             assertions.push(id);
         }
     }
     let mut facts = assertions.copy_owned();
-    for id in reader.side.iter() {
+    facts.reserve(reader.side.iter().size_hint().0); for id in reader.side.iter() {
         let id = nikaia_std::num::value(id);
         facts.push(id);
     }
@@ -947,7 +947,7 @@ pub(crate) fn sv_smtlib_script(source: &str) -> SvSmtRead {
         None => { },
         Some(ref why) => { return SvSmtRead::Failed(why.clone()); },
     }
-    for id in reader.side.iter() {
+    assertions.reserve(reader.side.iter().size_hint().0); for id in reader.side.iter() {
         let id = nikaia_std::num::value(id);
         assertions.push(id);
     }
@@ -981,12 +981,12 @@ pub(crate) fn sv_smtlib_test_row(name: &str, source: &'static str) -> String {
     match sv_smtlib_script(source) {
         SvSmtRead::Script(ref s, ref sorts) => {
             #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for id in s.assertions.iter() {
+            shown.reserve(s.assertions.iter().size_hint().0); for id in s.assertions.iter() {
                 let id = nikaia_std::num::value(id);
                 shown.push(s.arena.text(id));
             }
             let mut reals: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for r in sorts.reals.iter() { reals.push(nikaia_std::block::Text::from(r.to_string())); }
+            reals.reserve(sorts.reals.iter().size_hint().0); for r in sorts.reals.iter() { reals.push(nikaia_std::block::Text::from(r.to_string())); }
             let real = if !reals.is_empty() { format!("; reals {}", nikaia_std::block::Text::from(reals.join(" "))) } else { String::from("") }; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
             format!("{}: yes, {}: {}{}\n", name, s.assertions.len() as i64, nikaia_std::block::Text::from(shown.join(" ; ")), real)
         },

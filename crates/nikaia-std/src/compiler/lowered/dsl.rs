@@ -356,7 +356,7 @@ pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<
     }
     let listed = parameter_list(declared);
     for parameter in declared.iter() { if !nikaia_std::list::contains(&passed, &parameter) { found.push(refusal("NK1112", span.clone(), format!("`{}` needs `:{}`, but this call doesn't pass it.", name, parameter), vec![format!("The statement's parameters are {}.", listed)], format!("Pass it after the `;`: `{}: …`.", parameter))); } }
-    for given in passed.iter() {
+    found.reserve(passed.iter().size_hint().0); for given in passed.iter() {
         if nikaia_std::list::contains(&declared, &given) { continue; }
         let note: String = if declared.is_empty() { format!("`{}` has no parameters at all.", name) } else { format!("The statement's parameters are {}.", listed) };
         let near = nearest_parameter(given, declared);
@@ -370,7 +370,7 @@ pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<
 
 pub(crate) fn option_names(config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<String> {
     let mut passed: Vec<String> = vec![];
-    for setting in config.iter() { passed.push(nikaia_std::block::Text::from(words.resolve(setting.name).to_string())); }
+    passed.reserve(config.iter().size_hint().0); for setting in config.iter() { passed.push(nikaia_std::block::Text::from(words.resolve(setting.name).to_string())); }
     passed
 }
 

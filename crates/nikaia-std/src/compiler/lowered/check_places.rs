@@ -5,7 +5,7 @@
 // this was written - see `contracts::sync`.
 pub(crate) fn members_named(members: &[Ty]) -> String {
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for member in members.iter() { names.push(format!("`{}`", member.shown())); }
+    names.reserve(members.iter().size_hint().0); for member in members.iter() { names.push(format!("`{}`", member.shown())); }
     nikaia_std::block::Text::from(names.join(", "))
 }
 

@@ -43,7 +43,7 @@ pub(crate) fn use_segments(names: &winnow_grammar::InternerContext, item: &Item)
     let mut out: Vec<String> = vec![];
     match item {
         Item::Import { path, .. } => {
-            for segment in path.iter() {
+            out.reserve(path.iter().size_hint().0); for segment in path.iter() {
                 let segment = *segment;
                 out.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
             }
@@ -429,7 +429,7 @@ pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BT
     let mut file: i64 = 0;
     for part in parts.iter() {
         let mut k: i64 = 0;
-        for name in part.names.iter() {
+        bodies.reserve(part.names.iter().size_hint().0); for name in part.names.iter() {
             if *nikaia_std::index::get(&part.tests, (k) as usize) { for word in (*nikaia_std::index::get(&part.calls, (k) as usize)).iter() { reached.insert(nikaia_std::block::Text::from(word.to_string())); } }
             if !name.is_empty() {
                 if candidates.contains_key(name) { twice.insert(nikaia_std::block::Text::from(name.to_string())); }
@@ -453,7 +453,7 @@ pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BT
     modules_close_over(&mut reached, &candidates, &bodies);
     modules_close_over(&mut live, &candidates, &bodies);
     let mut found: Vec<collections::BTreeSet<String>> = vec![];
-    for _ in parts.iter() { found.push(collections::BTreeSet::new()); }
+    found.reserve(parts.iter().size_hint().0); for _ in parts.iter() { found.push(collections::BTreeSet::new()); }
     for name in reached.iter() {
         if candidates.contains_key(name) && !live.contains(name) {
             let at = match home.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
@@ -753,7 +753,7 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
             None => None,
         }, reachable, renames, &ModulesStanding::InProject, open, host).await?);
     }
-    for path in beside.iter() {
+    units.reserve(beside.iter().size_hint().0); for path in beside.iter() {
         units.push(modules_read_unit(path, match package {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -985,7 +985,7 @@ pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) 
     let mut out: String = String::from("");
     for set in found.iter() {
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for name in set.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+        names.reserve(set.iter().size_hint().0); for name in set.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
         let line = nikaia_std::block::Text::from(names.join(" "));
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("[{}]\n", line)); };
     }

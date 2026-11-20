@@ -140,7 +140,7 @@ pub(crate) fn cx_java_record_laid(record: &CxRecord, ctx: &CxCtx) -> (String, i6
     #[allow(unused_mut)] let mut union_members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut union_size: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
     let mut union_align: i64 = 1; #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
-    for variant in record.variants.iter() {
+    union_members.reserve(record.variants.iter().size_hint().0); for variant in record.variants.iter() {
         if variant.fields.is_empty() { continue; }
         let (members, _, size, align) = cx_java_fields_laid(&variant.fields, ctx);
         union_members.push(format!("MemoryLayout.structLayout({}).withName(\"{}\")", nikaia_std::block::Text::from(members.join(", ")), variant.member));
@@ -233,7 +233,7 @@ impl CxJava {
         let before = *nikaia_std::index::get(&self.classes, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
+            list.reserve(held.iter().size_hint().0); for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
         }
         list.push(text);
         self.classes.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -480,7 +480,7 @@ impl CxJava {
             lines.push(format!("    {}", call));
             if !after.is_empty() { lines.push(format!("    {}", *unsafe { nikaia_std::proven::read(&after, (0) as usize) })); }
             lines.push(String::from("} finally {"));
-            for held in raising.iter() { lines.push(format!("    nkRaise({});", held)); }
+            lines.reserve(raising.iter().size_hint().0); for held in raising.iter() { lines.push(format!("    nkRaise({});", held)); }
             lines.push(String::from("}"));
             after = vec![];
         }
@@ -488,7 +488,7 @@ impl CxJava {
         #[allow(unused_mut)] let mut body: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
         if arena {
             body.push(String::from("try (Arena arena = Arena.ofConfined()) {"));
-            for line in lines.iter() { body.push(format!("    {}", line)); }
+            body.reserve(lines.iter().size_hint().0); for line in lines.iter() { body.push(format!("    {}", line)); }
             body.push(String::from("}"));
         } else { body = lines; }
         let java = cx_java_camel(&entry.name); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
@@ -500,7 +500,7 @@ impl CxJava {
         let owner = nikaia_std::block::Text::from(owner_text.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
         if made_here {
             let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for one in params.iter() {
+            names.reserve(params.iter().size_hint().0); for one in params.iter() {
                 names.push(nikaia_std::index::or(match one.split(' ').last() {
                     Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                     None => None,
@@ -522,7 +522,7 @@ impl CxJava {
         let mut errors: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut taken: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut number: i64 = 0;
-        for name in boundary_names.iter() {
+        errors.reserve(boundary_names.iter().size_hint().0); for name in boundary_names.iter() {
             let name = *name;
             number = unsafe { nikaia_std::proven::sub::<i64>(number, 1) };
             out.push_str(&cx_java_exception(&format!("{}Exception", name), &format!("{}BoundaryException", class), number, &format!("The boundary's status {}.", number)));
@@ -532,7 +532,7 @@ impl CxJava {
         for raising in ctx.codes.iter() {
             let error = nikaia_std::block::Text::from(raising.error.to_string());
             let spelled = cx_java_pascal(&nikaia_std::block::Text::from(error.replace("::", "_")));
-            for code in raising.codes.iter() {
+            errors.reserve(raising.codes.iter().size_hint().0); for code in raising.codes.iter() {
                 let word: String = nikaia_std::index::or(match code.variant.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

@@ -472,7 +472,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut green: Vec<String> = vec![];
     green.extend(proved);
     green.extend(preconditions);
-    for row in derived.iter() { green.push(format!("  {}  derived  {}", path, row)); }
+    green.reserve(derived.iter().size_hint().0); for row in derived.iter() { green.push(format!("  {}  derived  {}", path, row)); }
     out.push_str(&check_report_rows(&red, "\x1b[31m", colour));
     out.push_str(&check_report_rows(&arrives, "\x1b[94m", colour));
     out.push_str(&check_report_rows(&assumed, "\x1b[33m", colour));

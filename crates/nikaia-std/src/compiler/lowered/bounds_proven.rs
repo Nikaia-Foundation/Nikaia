@@ -43,7 +43,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
         }
     }
     let mut starts: Vec<i64> = vec![];
-    for body in bodies.iter() {
+    starts.reserve(bodies.iter().size_hint().0); for body in bodies.iter() {
         let body = *body;
         starts.push(body.span.start as i64);
     }

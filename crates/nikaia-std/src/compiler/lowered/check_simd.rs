@@ -162,7 +162,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
         _ => return None,
     };
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for part in parts.iter() {
+    written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = *part;
         written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
     }
@@ -173,7 +173,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
         _ => return None,
     };
     let mut out: Vec<i64> = vec![];
-    for item in items.iter() {
+    out.reserve(items.iter().size_hint().0); for item in items.iter() {
         let n = check_simd_literal(item);
         if n < 0 { return None; }
         out.push(n);

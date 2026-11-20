@@ -85,7 +85,7 @@ pub(crate) fn every_count_plain(sharing: &mut Sharing) {
             None => None,
         }, || vec![].into());
         let mut plain: Vec<Class> = vec![];
-        for class in classes.iter() { plain.push(Class { members: class.members.copy_owned(), count: Count::Plain }); }
+        plain.reserve(classes.iter().size_hint().0); for class in classes.iter() { plain.push(Class { members: class.members.copy_owned(), count: Count::Plain }); }
         sharing.summaries.insert(nikaia_std::block::Text::from(function.to_string()), plain);
     }
 }
@@ -458,7 +458,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
     let mut summaries: collections::BTreeMap<String, Vec<Class>> = collections::BTreeMap::new();
     for (function, roots) in classes.iter() {
         let mut found: Vec<Class> = vec![];
-        for (_, class) in roots.iter() { found.push(Class { members: sorted_once(&class.members), count: class.count }); }
+        found.reserve(roots.iter().size_hint().0); for (_, class) in roots.iter() { found.push(Class { members: sorted_once(&class.members), count: class.count }); }
         summaries.insert(nikaia_std::block::Text::from(function.to_string()), in_class_order(&found));
     }
     Sharing { decisions, summaries, counts }

@@ -29,7 +29,7 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
     let mut outer: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in host.impl_parameters(target) { outer.insert(name, vec![]); }
     let mut arguments: Vec<Ty> = vec![];
-    for g in target.generics.iter() { arguments.push(host.type_of(g)); }
+    arguments.reserve(target.generics.iter().size_hint().0); for g in target.generics.iter() { arguments.push(host.type_of(g)); }
     let named: Option<String> = Some(world.here.text(target.name));
     for method in methods.iter() {
         state.enclosing = outer.copy_owned();
@@ -193,7 +193,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 pub(crate) fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_program_copies_called(state, world);
     let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); }
+    instantiations.reserve(state.facts.unrolled.iter().size_hint().0); for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); }
     for (name, on, fields) in instantiations.iter() {
         for item in world.here.items.iter() {
             match &item.node {
@@ -243,7 +243,7 @@ pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, w
 // this was written - see `contracts::sync`.
 pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
     let mut pending: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (key, _) in state.facts.unrolled.iter() { pending.push(key.clone()); }
+    pending.reserve(state.facts.unrolled.iter().size_hint().0); for (key, _) in state.facts.unrolled.iter() { pending.push(key.clone()); }
     while !pending.is_empty() {
         let next = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let reached = check_program_reached(&state, &next.1);

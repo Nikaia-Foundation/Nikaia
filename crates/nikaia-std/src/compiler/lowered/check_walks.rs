@@ -223,7 +223,7 @@ impl CheckState {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
                     let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    for name in names.iter() {
+                    bound.reserve(names.iter().size_hint().0); for name in names.iter() {
                         let name = *name;
                         bound.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
                     }
@@ -234,9 +234,9 @@ impl CheckState {
             }
         }
         let mut operations: Vec<Accounted> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
+        operations.reserve(block.stmts.iter().size_hint().0); for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
         let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
-        for stmt in block.stmts.iter() {
+        mentioned.reserve(block.stmts.iter().size_hint().0); for stmt in block.stmts.iter() {
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
             match &stmt.node {
                 Stmt::Expr(value) => { names_in(value, world.words, &mut names); },
@@ -408,7 +408,7 @@ impl CheckState {
             },
             Expr::Path(segments, _) => {
                 let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for segment in segments.iter() {
+                parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                     let segment = *segment;
                     parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
                 }

@@ -122,7 +122,7 @@ pub(crate) fn check_narrow_bound_where(state: &CheckState, name: &str) -> Option
 // this was written - see `contracts::sync`.
 pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: i64) -> Vec<CheckLocal> {
     let mut markers: Vec<CheckLocal> = vec![];
-    for name in names.iter() {
+    markers.reserve(names.iter().size_hint().0); for name in names.iter() {
         let path = name.contains('.');
         let root_name: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.split('.').next(), || "").to_string());
         let found: Option<CheckLocal> = state.binding(&root_name);

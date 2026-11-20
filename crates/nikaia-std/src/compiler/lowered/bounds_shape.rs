@@ -67,7 +67,7 @@ pub(crate) fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTree
     seen.lost.extend(pinned.iter().cloned());
     look_block(body, &Look::Lost, false, around, words, &mut seen);
     let mut through: Vec<String> = vec![];
-    for name in seen.lost.iter() {
+    through.reserve(seen.lost.iter().size_hint().0); for name in seen.lost.iter() {
         let key = match seen.shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         through.push(key_root(&key));
     }

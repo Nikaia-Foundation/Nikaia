@@ -9,7 +9,7 @@ pub(crate) fn call_written_name(words: &winnow_grammar::InternerContext, func: &
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for segment in segments.iter() {
+            parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
             }
@@ -98,7 +98,7 @@ pub(crate) fn call_joined_throws(words: &winnow_grammar::InternerContext, aliase
         set.extend(errors.iter().cloned());
     }
     let mut out: Vec<String> = vec![];
-    for error in set.iter() { out.push(nikaia_std::block::Text::from(error.to_string())); }
+    out.reserve(set.iter().size_hint().0); for error in set.iter() { out.push(nikaia_std::block::Text::from(error.to_string())); }
     out
 }
 

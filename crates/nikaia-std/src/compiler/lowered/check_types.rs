@@ -229,7 +229,7 @@ pub(crate) fn code_as_written(ty: &Ty) -> Option<String> {
         Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for part in params.iter() { listed.push(code_param_as_written(part)); }
+            listed.reserve(params.iter().size_hint().0); for part in params.iter() { listed.push(code_param_as_written(part)); }
             let bare = Ty::Fn { params: vec![], result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,

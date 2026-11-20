@@ -25,7 +25,7 @@ pub fn stale_units(ledger: &Ledger, sources: &collections::BTreeMap<String, Stri
     }
     for (unit, _) in ledger.sources.iter() { if !sources.contains_key(unit) { moved.insert(nikaia_std::block::Text::from(unit.to_string())); } }
     let mut out: Vec<String> = vec![];
-    for unit in moved.iter() { out.push(nikaia_std::block::Text::from(unit.to_string())); }
+    out.reserve(moved.iter().size_hint().0); for unit in moved.iter() { out.push(nikaia_std::block::Text::from(unit.to_string())); }
     out
 }
 
@@ -57,10 +57,10 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
                 None => None,
             }, || Signature::empty());
             let mut params: Vec<(String, Ty)> = vec![];
-            for (param, ty) in signature.params.iter() { params.push((nikaia_std::block::Text::from(param.to_string()), qualified_ty(ty, &prefix, qualified, &declared, &kept))); }
+            params.reserve(signature.params.iter().size_hint().0); for (param, ty) in signature.params.iter() { params.push((nikaia_std::block::Text::from(param.to_string()), qualified_ty(ty, &prefix, qualified, &declared, &kept))); }
             signature.params = params;
             let mut options: Vec<ConfigContract> = vec![];
-            for option in signature.config.iter() {
+            options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() {
                 let mut changed = option.clone();
                 changed.ty = qualified_ty(&option.ty, &prefix, qualified, &declared, &kept);
                 if qualified { changed.default = qualified_default(&option.default, &prefix, &declared); }
@@ -86,13 +86,13 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
     for (name, contract) in other.types.iter() {
         let mut entry = contract.clone();
         let mut fields: Vec<FieldContract> = vec![];
-        for field in contract.fields.iter() {
+        fields.reserve(contract.fields.iter().size_hint().0); for field in contract.fields.iter() {
             let mut changed = field.clone();
             changed.ty = qualified_ty(&field.ty, &prefix, qualified, &declared, &kept);
             if qualified {
                 changed.default = qualified_default(&field.default, &prefix, &declared);
                 let mut attributes: Vec<String> = vec![];
-                for attribute in field.attributes.iter() { attributes.push(qualified_default(attribute, &prefix, &declared)); }
+                attributes.reserve(field.attributes.iter().size_hint().0); for attribute in field.attributes.iter() { attributes.push(qualified_default(attribute, &prefix, &declared)); }
                 changed.attributes = attributes;
             }
             fields.push(changed);
@@ -100,14 +100,14 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
         entry.fields = fields;
         if qualified {
             let mut attributes: Vec<String> = vec![];
-            for attribute in contract.attributes.iter() { attributes.push(qualified_default(attribute, &prefix, &declared)); }
+            attributes.reserve(contract.attributes.iter().size_hint().0); for attribute in contract.attributes.iter() { attributes.push(qualified_default(attribute, &prefix, &declared)); }
             entry.attributes = attributes;
         }
         let mut variants: Vec<VariantContract> = vec![];
-        for variant in contract.variants.iter() {
+        variants.reserve(contract.variants.iter().size_hint().0); for variant in contract.variants.iter() {
             let mut changed = variant.clone();
             let mut holds: Vec<FieldContract> = vec![];
-            for held in variant.holds.iter() {
+            holds.reserve(variant.holds.iter().size_hint().0); for held in variant.holds.iter() {
                 let mut part = held.clone();
                 part.ty = qualified_ty(&held.ty, &prefix, qualified, &declared, &kept);
                 if qualified { part.default = qualified_default(&held.default, &prefix, &declared); }
@@ -116,7 +116,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
             changed.holds = holds;
             if qualified {
                 let mut held: Vec<String> = vec![];
-                for attribute in variant.attributes.iter() { held.push(qualified_default(attribute, &prefix, &declared)); }
+                held.reserve(variant.attributes.iter().size_hint().0); for attribute in variant.attributes.iter() { held.push(qualified_default(attribute, &prefix, &declared)); }
                 changed.attributes = held;
             }
             variants.push(changed);

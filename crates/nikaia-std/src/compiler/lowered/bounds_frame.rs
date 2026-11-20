@@ -222,7 +222,7 @@ pub(crate) fn frame_source(expr: &Expr, roots: &collections::BTreeMap<String, St
 pub(crate) fn frame_pattern_names(pattern: &MatchPattern, words: &winnow_grammar::InternerContext, out: &mut Vec<String>) {
     match pattern {
         MatchPattern::Path(segments) => {
-            for s in segments.iter() {
+            out.reserve(segments.iter().size_hint().0); for s in segments.iter() {
                 let s = *s;
                 out.push(nikaia_std::block::Text::from(words.resolve(s).to_string()));
             }

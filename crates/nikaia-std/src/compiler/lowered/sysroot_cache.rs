@@ -195,23 +195,23 @@ pub(crate) fn sysroot_item_names(item: &Spanned<Item>, unit: &ParsedView<'_, '_,
         Item::Enum { name, variants, .. } => {
             let name = *name;
             names.push(unit.text(name));
-            for variant in variants.iter() { names.push(unit.text(variant.name)); }
+            names.reserve(variants.iter().size_hint().0); for variant in variants.iter() { names.push(unit.text(variant.name)); }
         },
         Item::Trait { name, methods, .. } => {
             let name = *name;
             names.push(unit.text(name));
-            for method in methods.iter() { names.push(unit.text(method.node.name)); }
+            names.reserve(methods.iter().size_hint().0); for method in methods.iter() { names.push(unit.text(method.node.name)); }
         },
         Item::Impl { trait_name: None, methods, .. } => {
             for method in methods.iter() {
                 let said = sysroot_item_names(method, unit);
                 if said.is_empty() { return vec![]; }
-                for one in said.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
+                names.reserve(said.iter().size_hint().0); for one in said.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
             }
         },
         Item::Extern { declarations, opaque, .. } => {
-            for declaration in declarations.iter() { names.push(unit.text(declaration.node.name)); }
-            for one in opaque.iter() { names.push(unit.text(one.node.name)); }
+            names.reserve(declarations.iter().size_hint().0); for declaration in declarations.iter() { names.push(unit.text(declaration.node.name)); }
+            names.reserve(opaque.iter().size_hint().0); for one in opaque.iter() { names.push(unit.text(one.node.name)); }
         },
         _ => { return vec![]; },
     }
@@ -243,7 +243,7 @@ pub fn sysroot_names(compiler: &str, salt: &str, setting: &str, names: &[String]
         sysroot_part(&mut read, nikaia_std::index::get(&wholes, nikaia_std::index::at(at)));
     }
     let mut all: Vec<SysrootDeclared> = vec![];
-    for file in declared.iter() { for one in file.iter() { all.push(one.clone()); } }
+    for file in declared.iter() { all.reserve(file.iter().size_hint().0); for one in file.iter() { all.push(one.clone()); } }
     let none: Vec<String> = vec![];
     for (key, row) in own.functions.iter() { sysroot_row(&mut all, key, &none, format!("function {} {:?}", key, row)); }
     for (key, row) in own.types.iter() { sysroot_row(&mut all, key, &none, format!("type {} {:?}", key, row)); }
@@ -301,7 +301,7 @@ pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_COMPILER_PACKAGE.to_string())], nikaia_std::block::Place::Block);
     names.extend(sysroot_stale(dir, &vec![]));
     let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-    for name in names.iter() {
+    files.reserve(names.iter().size_hint().0); for name in names.iter() {
         let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere).await {
             Ok(value) => value,
             Err(_error) => { String::from("") },
@@ -359,7 +359,7 @@ pub(crate) fn sysroot_generated(dir: &std::path::Path) -> Vec<String> {
         Ok(value) => value,
         Err(_error) => { vec![] },
     };
-    for entry in listed.iter() {
+    names.reserve(listed.iter().size_hint().0); for entry in listed.iter() {
         let name = format!("{}/{}", SYSROOT_COMPILER_FILES, nikaia_std::fs::path::text_of(&(entry)));
         let meta = match fs::metadata(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere) {
             Ok(value) => value,
@@ -374,7 +374,7 @@ pub(crate) fn sysroot_generated(dir: &std::path::Path) -> Vec<String> {
             Ok(value) => value,
             Err(_error) => { vec![] },
         };
-        for file in theirs.iter() { names.push(format!("{}/{}/{}", name, SYSROOT_COMPILER_FILES, nikaia_std::fs::path::text_of(&(file)))); }
+        names.reserve(theirs.iter().size_hint().0); for file in theirs.iter() { names.push(format!("{}/{}/{}", name, SYSROOT_COMPILER_FILES, nikaia_std::fs::path::text_of(&(file)))); }
     }
     names
 }

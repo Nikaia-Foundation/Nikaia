@@ -288,7 +288,7 @@ pub(crate) fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, wor
                 },
                 Expr::Path(segments, _) => {
                     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    for segment in segments.iter() {
+                    names.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                         let segment = *segment;
                         names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
                     }
@@ -392,9 +392,9 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
     let mut names: Vec<bool> = vec![];
     let mut seen: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut index: i64 = 0;
-    for (hole, bound) in walked.iter() {
+    names.reserve(walked.iter().size_hint().0); for (hole, bound) in walked.iter() {
         let mut frame: Vec<CheckLocal> = vec![];
-        for (name, collection) in bound.iter() {
+        frame.reserve(bound.iter().size_hint().0); for (name, collection) in bound.iter() {
             let trimmed = collection.trim();
             let key: String = nikaia_std::block::Text::from(trimmed.to_string());
             let held: Option<Ty> = match *nikaia_std::index::get(&seen, &key) {
@@ -432,7 +432,7 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
 pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, given: &[Ty], promised: &CheckPromises, span: &Span) -> (Ty, bool) {
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
-    for p in params.iter() {
+    frame.reserve(params.iter().size_hint().0); for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;
         if ((at) as usize) < given.len() { ty = (*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).clone(); }
@@ -523,7 +523,7 @@ pub(crate) fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>
     let mut seen: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !ends_in_a_return { seen.push(tail.clone()); }
     let mut result: Ty = tail.clone();
-    for one in returns.iter() {
+    seen.reserve(returns.iter().size_hint().0); for one in returns.iter() {
         if first.is_none() && wholly_known(&one.ty) { first = Some(one.ty.clone()); }
         for other in seen.iter() {
             if !check_core_lambda_results_agree(other, &one.ty) {

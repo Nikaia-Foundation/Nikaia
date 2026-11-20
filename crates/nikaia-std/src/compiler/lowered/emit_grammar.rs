@@ -410,14 +410,14 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || rule.clone().into()); #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
-        for arg in taken.args.iter() {
+        values.reserve(taken.args.iter().size_hint().0); for arg in taken.args.iter() {
             let mut owned = arg.ty.clone();
             owned.is_view = false;
             let mut written = host.ty_named(walk, &owned)?;
             if arg.ty.is_view && written == "String" { written = String::from("&str"); } else if arg.ty.is_view { written = format!("&{}", written); }
             values.push(format!("{}: {}", emit_text(world, arg.name), written));
         }
-        for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
+        values.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(values.join(", "))) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { nikaia_std::block::Text::from(renamed.to_string()) };
         if rule.stream && rule.is_entry {
@@ -476,11 +476,11 @@ impl EmitState {
             None => return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")),
         };
         let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in rule.args.iter() {
+        handed.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() {
             let name = emit_text(world, arg.name);
             handed.push(format!("{} = {}", name, name));
         }
-        for option in rule.config.iter() {
+        handed.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() {
             let name = emit_text(world, option.name);
             handed.push(format!("{} = {}", name, name));
         }
@@ -494,7 +494,7 @@ impl EmitState {
         };
         let mut chosen: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut folds = 0;
-        for part in parts.iter() {
+        chosen.reserve(parts.iter().size_hint().0); for part in parts.iter() {
             let fold = stream_fold(world, &part.node).is_some() && (!emitting || stream_item_emits(world, &part.node, emitters));
             chosen.push(fold);
             if fold { folds += 1; }

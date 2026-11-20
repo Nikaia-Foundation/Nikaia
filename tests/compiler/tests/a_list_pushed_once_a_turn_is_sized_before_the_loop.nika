@@ -1,0 +1,67 @@
+// A `for` over a list it lends, whose body pushes onto one local list once a
+// turn, asks that list for room first (#2385): the lowered loop starts with
+// one `reserve` of the walk's length instead of growing push by push. Not
+// where the body pushes twice, onto a name it rebinds, or walks a range.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let lines: Vec[String] = [
+        "fn doubled(xs: Vec[i64]) -> Vec[i64] {",
+        "    let mut out: Vec[i64] = []",
+        "    for x in xs {",
+        "        let y = x * 2",
+        "        out.push(y)",
+        "    }",
+        "    return out",
+        "}",
+        "",
+        "fn twice(xs: Vec[i64]) -> Vec[i64] {",
+        "    let mut out: Vec[i64] = []",
+        "    for x in xs {",
+        "        out.push(x)",
+        "        out.push(x)",
+        "    }",
+        "    return out",
+        "}",
+        "",
+        "fn kept(xs: Vec[i64]) -> Vec[i64] {",
+        "    let mut out: Vec[i64] = []",
+        "    for x in xs {",
+        "        if x > 1 {",
+        "            out.push(x)",
+        "        }",
+        "    }",
+        "    return out",
+        "}",
+        "",
+        "fn main() throws {",
+        "    let xs: Vec[i64] = [1, 2, 3]",
+        "    let mut names: Vec[String] = []",
+        "    for x in xs {",
+        "        names.push(f\"n{x}\")",
+        "    }",
+        "    let mut squares: Vec[i64] = []",
+        "    for i in 0..4 {",
+        "        squares.push(i * i)",
+        "    }",
+        "    println(f\"{doubled(xs).len()} {twice(xs).len()} {kept(xs).len()} {names.join(\",\")} {squares.len()}\")",
+        "}",
+    ]
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, lines.join("\n") + "\n")
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
+    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    println(f"sized before the loop: {rust.matches(".reserve(").count()}")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(ran.stdout.trim())
+    println(ran.stderr.trim())
+    process::run("rm", ["-rf", tmp])
+}

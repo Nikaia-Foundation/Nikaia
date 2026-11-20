@@ -461,7 +461,7 @@ pub(crate) fn check_attributes_an_attribute_read(state: &mut CheckState, world: 
 pub(crate) fn check_attributes_names_of(contract: &TypeContract) -> Option<Vec<String>> {
     if contract.variants.is_empty() { return None; }
     let mut names: Vec<String> = vec![];
-    for variant in contract.variants.iter() { names.push(nikaia_std::block::Text::from(variant.name.to_string())); }
+    names.reserve(contract.variants.iter().size_hint().0); for variant in contract.variants.iter() { names.push(nikaia_std::block::Text::from(variant.name.to_string())); }
     Some(names)
 }
 
@@ -473,7 +473,7 @@ pub(crate) fn check_attributes_variants_of_type(state: &CheckState, world: &Chec
     if state.enums.contains_key(name) {
         let set = match state.enums.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut names: Vec<String> = vec![];
-        for variant in set.iter() { names.push(nikaia_std::block::Text::from(variant.to_string())); }
+        names.reserve(set.iter().size_hint().0); for variant in set.iter() { names.push(nikaia_std::block::Text::from(variant.to_string())); }
         return Some(names);
     }
     let own = world.own.types.get(name);

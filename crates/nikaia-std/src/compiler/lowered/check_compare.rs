@@ -70,7 +70,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for arg in args.iter() { written.push(arg.text()); }
+            written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(arg.text()); }
             key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
         if seen.contains(&key) { return true; }
@@ -134,7 +134,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for arg in args.iter() { written.push(arg.text()); }
+            written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(arg.text()); }
             key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
         if seen.contains(&key) { return true; }
@@ -238,7 +238,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 }
             }
             let mut parts: Vec<Ty> = vec![];
-            for field in fields.iter() { parts.push(substitute(&field.ty, &bound)); }
+            parts.reserve(fields.iter().size_hint().0); for field in fields.iter() { parts.push(substitute(&field.ty, &bound)); }
             return parts;
         }
         if self.enums.contains_key(name) { return self.payloads_of(name); }
@@ -251,7 +251,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         let mut all: Vec<Ty> = vec![];
         for ledger in [self.own, self.library] {
             let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for variant in contract.variants.iter() { for field in variant.holds.iter() { all.push(field.ty.clone()); } }
+            for variant in contract.variants.iter() { all.reserve(variant.holds.iter().size_hint().0); for field in variant.holds.iter() { all.push(field.ty.clone()); } }
         }
         all
     }
@@ -287,7 +287,7 @@ pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
         let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if asking.payloads.contains_key(name) { parts = match asking.payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue }.copy_owned(); } else if asking.structs.contains_key(name) {
             let fields = match asking.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for field in fields.iter() { parts.push(field.ty.clone()); }
+            parts.reserve(fields.iter().size_hint().0); for field in fields.iter() { parts.push(field.ty.clone()); }
         }
         let mut compares = true;
         let mut totally = true;
@@ -410,7 +410,7 @@ pub(crate) fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '
     let mut refused: Vec<CheckFinding> = vec![];
     for (parameter, traits) in wanted.iter() {
         let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for wanted_trait in traits.iter() {
+        refused.reserve(traits.iter().size_hint().0); for wanted_trait in traits.iter() {
             if wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Hash" && wanted_trait != "Clone" || asking.own.traits.contains_key(wanted_trait) { continue; }
             if wanted_trait == "Hash" {
                 let own_bounds = compare_parameter_bounds(&held, parameters);
@@ -463,9 +463,9 @@ pub(crate) fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_
                     let note: String = String::from("A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
                     refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some(String::from("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))));
                 }
-                for arg in args.iter() { stack.push(arg.clone()); }
+                stack.reserve(args.iter().size_hint().0); for arg in args.iter() { stack.push(arg.clone()); }
             },
-            Ty::Tuple(ref parts) => { for part in parts.iter() { stack.push(part.clone()); } },
+            Ty::Tuple(ref parts) => { stack.reserve(parts.iter().size_hint().0); for part in parts.iter() { stack.push(part.clone()); } },
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); stack.push(inner.clone()); },
             _ => { },
         }
@@ -482,9 +482,9 @@ pub(crate) fn compare_keys_that_do_not_hash(asking: &CheckComparable<'_, '_, '_,
             Ty::Named { ref name, ref args, .. } => {
                 let last = compare_base(name);
                 if (last == "HashMap" || last == "HashSet") && !args.is_empty() && !asking.hashes(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { refused.push(compare_unhashed_refusal(asking, &last, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span)); }
-                for arg in args.iter() { stack.push(arg.clone()); }
+                stack.reserve(args.iter().size_hint().0); for arg in args.iter() { stack.push(arg.clone()); }
             },
-            Ty::Tuple(ref parts) => { for part in parts.iter() { stack.push(part.clone()); } },
+            Ty::Tuple(ref parts) => { stack.reserve(parts.iter().size_hint().0); for part in parts.iter() { stack.push(part.clone()); } },
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); stack.push(inner.clone()); },
             _ => { },
         }

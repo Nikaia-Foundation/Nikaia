@@ -213,7 +213,7 @@ pub(crate) fn proofs_known(t: &mut ProofsThread, written: &str) -> Option<Proofs
 pub fn proofs_ask(t: &mut ProofsThread, arena: &logic::TermArena, facts: &[i64], goal: i64) -> ProofsAsked {
     if t.book.is_none() {
         let normal = logic::lg_normal_of(arena, facts, goal);
-        let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
+        let key = hash::sha256_hex(normal.text().as_bytes());
         let again = proofs_answered(&t, &normal, &key);
         if again.is_some() { return nikaia_std::index::or(again, || ProofsAsked::Unknown); }
         let found = proofs_search(&normal);
@@ -225,7 +225,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &logic::TermArena, facts: &[i64],
     let known = proofs_known(t, &written);
     if known.is_some() { return known.unwrap(); }
     let normal = logic::lg_normal_of(arena, facts, goal);
-    let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
+    let key = hash::sha256_hex(normal.text().as_bytes());
     let mut recorded: Option<ProofsEntry> = None;
     {
         let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return ProofsAsked::Unknown };
@@ -331,7 +331,7 @@ pub(crate) fn proofs_dump(normal: &logic::LgNormal, asked: &ProofsAsked) { nikai
     let logic = "(set-logic QF_LIA)\n";
     let rest = script.strip_prefix(AsRef::<str>::as_ref(logic));
     if status != "" && rest.is_some() { text = format!("{}(set-info :status {})\n{}", logic, status, rest.as_ref().unwrap()); }
-    let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
+    let key = hash::sha256_hex(normal.text().as_bytes());
     match fs::create_dir(std::path::Path::new(&(dir)), &fs::Root::Anywhere, true) {
         Ok(_) => {},
         Err(_error) => { return; },
@@ -535,7 +535,7 @@ pub async fn proofs_book_read(root: &std::path::Path) -> ProofsBook {
     }) {
         if line.kind == "invariant" {
             let pair = match line.body.split_once(" ") { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if hash::sha256_hex(&pair.0.bytes().collect::<Vec<_>>()) == line.key { book.invariants.insert(nikaia_std::block::Text::from(pair.0.to_string()), nikaia_std::block::Text::from(pair.1.to_string())); }
+            if hash::sha256_hex(pair.0.as_bytes()) == line.key { book.invariants.insert(nikaia_std::block::Text::from(pair.0.to_string()), nikaia_std::block::Text::from(pair.1.to_string())); }
             continue;
         }
         if line.kind == "proved" && logic::sv_log_written(&line.body) { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::ProvedLog(nikaia_std::block::Text::from(line.body.to_string()))); } else if line.kind == "proved" { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Proved(nikaia_std::block::Text::from(line.body.to_string()))); } else if line.kind == "refuted" { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Refuted(nikaia_std::block::Text::from(line.body.to_string()))); } else { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Unknown(nikaia_std::block::Text::from(line.body.to_string()))); }
@@ -555,7 +555,7 @@ pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
         };
         lines.push(line);
     }
-    for (place, parts) in book.invariants.iter() { if book.used.contains(nikaia_std::index::as_text(&place)) { lines.push(PbLine { key: hash::sha256_hex(&place.bytes().collect::<Vec<_>>()), kind: String::from("invariant"), body: format!("{} {}", place, parts) }); } }
+    for (place, parts) in book.invariants.iter() { if book.used.contains(nikaia_std::index::as_text(&place)) { lines.push(PbLine { key: hash::sha256_hex(place.as_bytes()), kind: String::from("invariant"), body: format!("{} {}", place, parts) }); } }
     lines.sort_by_key(|line| { nikaia_std::block::Text::from(line.key.to_string()) });
     pb_render(&lines, PROOFS_LONG)
 }

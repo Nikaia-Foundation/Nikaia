@@ -191,7 +191,7 @@ pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_,
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
             let mut stmts: Vec<Spanned<Stmt>> = vec![];
-            for stmt in body.stmts.iter() {
+            stmts.reserve(body.stmts.iter().size_hint().0); for stmt in body.stmts.iter() {
                 stmts.push(stmt.clone());
                 let prefix = Item::Fn { name, generics: generics.copy_owned(), receiver: match receiver {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),

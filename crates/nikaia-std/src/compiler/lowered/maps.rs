@@ -52,7 +52,7 @@ pub(crate) fn mp_structs(held: &MpHeld<'_, '_>) -> collections::BTreeMap<String,
                 Item::Struct { name, fields, .. } => {
                     let name = *name;
                     let mut own: Vec<MpField> = vec![];
-                    for f in fields.iter() { own.push(MpField { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(f.name).to_string()), ty: f.ty.clone() }); }
+                    own.reserve(fields.iter().size_hint().0); for f in fields.iter() { own.push(MpField { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(f.name).to_string()), ty: f.ty.clone() }); }
                     by_name.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(name).to_string()), MpStruct { unit: u, fields: own });
                 },
                 _ => { },
@@ -646,7 +646,7 @@ impl<'a> MpBody<'a> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
+        todo.reserve(dep.names.iter().size_hint().0); for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
         while !todo.is_empty() {
             let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(todo.len() as i64, 1) }))).to_string());
             todo.pop();
@@ -659,7 +659,7 @@ impl<'a> MpBody<'a> {
             if local.is_some() {
                 let l = nikaia_std::index::or(local, || mp_unknown().into());
                 if l.unknown { return None; }
-                for n in l.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
+                todo.reserve(l.names.iter().size_hint().0); for n in l.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
             } else if self.params.contains(&name) { out.insert(name); } else { return None; }
         }
         Some(out)
@@ -772,7 +772,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         classes.insert(class, labels);
     }
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
-    for (class, found) in classes.iter() {
+    out.reserve(classes.iter().size_hint().0); for (class, found) in classes.iter() {
         let class = nikaia_std::num::value(class);
         #[allow(unused_mut)] let mut labels = found.copy_owned();
         labels.sort();
@@ -787,7 +787,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
             let h = nikaia_std::index::or(entry, || MpHow { known: false, names: collections::BTreeSet::new() });
             if h.known {
                 let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for n in h.names.iter() { from.push(nikaia_std::block::Text::from(n.to_string())); }
+                from.reserve(h.names.iter().size_hint().0); for n in h.names.iter() { from.push(nikaia_std::block::Text::from(n.to_string())); }
                 said = format!("from({})", nikaia_std::block::Text::from(from.join(", ")));
             }
         }
@@ -828,7 +828,7 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &mut impl FnMut(i64, &Type) -> Str
                     if !is_public || receiver.is_some() || name.is_none() { continue; }
                     let fname = nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string());
                     let mut params: Vec<MpParam> = vec![];
-                    for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
+                    params.reserve(args.iter().size_hint().0); for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                     let found = mp_lines(held, &structs, &mut *key, &mut *arity, u, fname, None, &params, (ret_type).as_ref(), body, true);
                     if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                 },
@@ -843,7 +843,7 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &mut impl FnMut(i64, &Type) -> Str
                                 let fname = format!("{}::{}", target_name, (*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
                                 let mut params: Vec<MpParam> = vec![];
                                 if receiver.is_some() { params.push(MpParam { name: mp_self(), ty: target.clone() }); }
-                                for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
+                                params.reserve(args.iter().size_hint().0); for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                                 let found = mp_lines(held, &structs, &mut *key, &mut *arity, u, fname, Some(target), &params, (ret_type).as_ref(), body, trait_name.is_none());
                                 if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                             },

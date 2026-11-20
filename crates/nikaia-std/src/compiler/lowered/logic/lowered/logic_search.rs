@@ -283,7 +283,7 @@ pub(crate) fn lg_follow(indexed: &LgIndexed, branch: &LgChecking, certificate: &
 pub(crate) fn lg_replay(indexed: &LgIndexed, branch: &LgChecking, refutation: &LgRefutation, case: i64) -> Option<LgRejected> {
     let mut made: Vec<LgLin> = vec![];
     let mut at: i64 = 0;
-    for step in refutation.steps.iter() {
+    made.reserve(refutation.steps.iter().size_hint().0); for step in refutation.steps.iter() {
         let step = *step;
         let bound = lg_replayed(indexed, branch, &step, &made, at, case);
         if bound.rejected.is_some() {

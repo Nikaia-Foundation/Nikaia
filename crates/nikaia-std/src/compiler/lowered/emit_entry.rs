@@ -230,7 +230,7 @@ pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerConte
     let mut text = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
     if !ty.generics.is_empty() {
         let mut inner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
+        inner.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
         text = format!("{}[{}]", text, nikaia_std::block::Text::from(inner.join(", ")));
     }
     if ty.is_nullable { text = format!("{}?", text); }
