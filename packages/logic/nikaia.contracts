@@ -983,7 +983,7 @@ sync = "inferred"
 panics = true
 places = true
 touches = []
-signature = "(ref mut self, r: i64, j: i64) -> bool"
+signature = "(ref mut self, r: i64, j: i64, exact: bool) -> bool"
 
 [fn."SvSimplex::pivots"]
 sync = "inferred"
@@ -4165,6 +4165,20 @@ touches = []
 views = ["r: borrowed", "s: borrowed"]
 signature = "(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow?"
 
+[fn."sv_row_combine_exact"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed", "s: borrowed"]
+signature = "(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow?"
+
+[fn."sv_row_combine_wide"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed", "s: borrowed"]
+signature = "(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow?"
+
 [fn."sv_row_constant"]
 sync = "inferred"
 panics = false
@@ -4179,6 +4193,13 @@ views = ["r: borrowed"]
 signature = "(r: ref SvRow) -> i64?"
 
 [fn."sv_row_eliminate"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed", "s: borrowed"]
+signature = "(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow?"
+
+[fn."sv_row_eliminate_exact"]
 sync = "inferred"
 panics = true
 touches = []
@@ -5063,6 +5084,25 @@ touches = []
 views = ["params: borrowed"]
 inferred = ["!(moves <= 0 || params.moves_per_unit <= 0) || result == 0"]
 signature = "(moves: i64, params: ref SvWalkParams) -> i64"
+
+[fn."sv_wide_mul_add"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(a: i64, x: i64, b: i64, y: i64) -> (u64, i64)?"
+
+[fn."sv_wide_reduced"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["lows: borrowed", "highs: borrowed"]
+signature = "(lows: ref Vec[u64], highs: ref Vec[i64]) -> Vec[i64]?"
+
+[fn."sv_wide_rest"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(low: u64, high: i64, g: i64) -> i64?"
 
 [fn."sv_written"]
 sync = "inferred"

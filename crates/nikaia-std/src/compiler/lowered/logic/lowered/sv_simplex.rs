@@ -243,7 +243,7 @@ impl SvSimplex {
         for c in cols.iter() {
             let c = nikaia_std::num::value(c);
             let at = *nikaia_std::index::get(&self.row_of, nikaia_std::index::at(c as i64));
-            if at >= 0 && sv_row_coef(&row, c) != 0 { row = match sv_row_eliminate(&row, nikaia_std::index::get(&self.rows, nikaia_std::index::at(at)), c) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+            if at >= 0 && sv_row_coef(&row, c) != 0 { row = match sv_row_eliminate_exact(&row, nikaia_std::index::get(&self.rows, nikaia_std::index::at(at)), c) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
         }
         self.rows.push(row);
         self.row_dirty.push(true);
@@ -402,7 +402,7 @@ impl SvSimplex {
         let inverse = match sv_rat(1, d) { Some(__nikaia_value) => __nikaia_value, None => return None };
         sv_delta_scale(&sum, &inverse)
     }
-    pub(crate) fn pivot(&mut self, r: i64, j: i64) -> bool {
+    pub(crate) fn pivot(&mut self, r: i64, j: i64, exact: bool) -> bool {
         let col = match u32::try_from(j).ok() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let turn = sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), col) > 0;
         let mut changed: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -410,7 +410,8 @@ impl SvSimplex {
         let mut t: i64 = 0;
         while t < self.rows.len() as i64 {
             if t != r && sv_row_coef(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, col) != 0 {
-                made.push(match sv_row_eliminate(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }, col) { Some(__nikaia_value) => __nikaia_value, None => return false });
+                let row = if exact { sv_row_eliminate_exact(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }, col) } else { sv_row_eliminate(unsafe { nikaia_std::proven::read(&self.rows, (t) as usize) }, unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }, col) };
+                made.push(match row { Some(__nikaia_value) => __nikaia_value, None => return false });
                 changed.push(t);
             }
             t = unsafe { nikaia_std::proven::add::<i64>(t, 1) };
@@ -498,9 +499,18 @@ impl SvSimplex {
             let mut pivoted = false;
             for j in candidates.iter() {
                 let j = nikaia_std::num::value(j);
-                if self.pivot(r, j) {
+                if self.pivot(r, j, false) {
                     pivoted = true;
                     break;
+                }
+            }
+            if !pivoted {
+                for j in candidates.iter() {
+                    let j = nikaia_std::num::value(j);
+                    if self.pivot(r, j, true) {
+                        pivoted = true;
+                        break;
+                    }
                 }
             }
             if !pivoted { return self.overflow(); }

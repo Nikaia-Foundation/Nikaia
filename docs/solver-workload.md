@@ -490,7 +490,7 @@ unsolved files, each a timeout):
 | QF_LIA nec-smt | 3 | 1 (16.1 s) | 0 | 1 (14.6 s) | 0 | level with z3, ahead of cvc5 | 2 timeouts nobody solves |
 | QF_LIA rings | 1 | 1 | 0 | 1 | 1 | level | |
 | QF_LIA rings_preprocessed | 2 | 2 (1.2 s) | 0 | 2 (0.0 s) | 2 (3.5 s) | level | |
-| QF_LIA seeds | 164 | 115 (5.9 s) | 48 | 162 (0.3 s) | 157 (1.2 s) | behind | 1 timeout z3 solves |
+| QF_LIA seeds | 164 | 124 (4.9 s) | 36 | 162 (0.3 s) | 157 (1.2 s) | behind | 4 unknown z3 solves (#2307: 12 overflows fewer, 9 solved) |
 | QF_LIA tightrhombus | 1 | 0 | 1 | 1 | 1 | behind | |
 | QF_LRA 2017-Heizmann | 4 | 0 | 4 | 0 | 0 | level | |
 | QF_LRA LassoRanker | 1 | 0 | 1 | 1 | 1 | behind | |
@@ -501,11 +501,15 @@ unsolved files, each a timeout):
 | QF_LRA spider_benchmarks | 2 | 2 | 0 | 2 | 2 | level | |
 | QF_LRA tta_startup | 2 | 2 (1.0 s) | 0 | 2 (0.0 s) | 2 (0.1 s) | level | |
 | QF_LRA uart | 2 | 1 (14.2 s) | 0 | 1 (11.0 s) | 1 (13.7 s) | level | 1 timeout nobody solves |
-| **QF_LIA** | 578 | 512 (2.6 s) | 50 | 569 (0.4 s) | 545 (1.4 s) | behind | 16 timeouts |
+| **QF_LIA** | 578 | 521 (2.3 s) | 38 | 569 (0.4 s) | 545 (1.4 s) | behind | 15 timeouts, 4 unknown |
 | **QF_LRA** | 519 | 510 (0.3 s) | 8 | 513 (0.2 s) | 513 (0.2 s) | behind | 1 timeout |
 
-Of the 66 QF_LIA files ours does not solve, 50 leave `i64`; of the 9 QF_LRA
-files, 8. Without them ours is behind by the 16 QF_LIA timeouts and the one
+Of the 57 QF_LIA files ours does not solve, 38 leave `i64`; of the 9 QF_LRA
+files, 8. Since #2307 a simplex pivot whose row leaves `i64` is combined in
+double width and reduced by its gcd: the seeds overflows fell from 48 to 36
+(9 files solved, 4 now `unknown`); of the 36, 22 rows do not fit `i64`
+reduced, and in 14 no entry fits, so no gcd is taken. Without them ours is
+behind by the 15 QF_LIA timeouts, the 4 seeds `unknown` and the one
 QF_LRA timeout, of which 7 neither z3 nor cvc5 solves within the limit
 either: what is left to catch up on is 10 files, 6 of them SMPT. Level on
 twelve of the twenty families, ahead of cvc5 on c_inference (27 against 12)

@@ -256,8 +256,20 @@ fn sv_rat_add(a: ref SvRat, b: ref SvRat) -> SvRat? {
 /// denominator `da·(b.den / g2)`. The result is reduced by construction, so
 /// `null` only where it does not fit `i64` itself.
 fn sv_rat_add_wide(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRat? {
-	let (l1, h1) = a.num.widening_mul(db)
-	let (l2, h2) = b.num.widening_mul(da)
+	let (low, high) = sv_wide_mul_add(a.num, db, b.num, da) ?? return null
+	let rest = sv_wide_rest(low, high, g) ?? return null
+	let g2 = sv_gcd(rest, g) ?? return null
+	let (num, _) = high.narrowing_div_rem(low, g2) ?? return null
+	let den = da.checked_mul(b.den / g2) ?? return null
+	return SvRat { num: num, den: den }
+}
+
+/// `a·x + b·y` in double width (#2307), the halves as `widening_mul` gives
+/// them: `(low, high)` of `high·2^64 + low`. `null` only where the sum
+/// leaves 128 bits, which two products of `i64` never do.
+fn sv_wide_mul_add(a: i64, x: i64, b: i64, y: i64) -> (u64, i64)? {
+	let (l1, h1) = a.widening_mul(x)
+	let (l2, h2) = b.widening_mul(y)
 	let (low, carry) = l1.overflowing_add(l2)
 	// Each high half lies within `±2^62`, so their sum and the carry fit.
 	let (top, over) = h1.overflowing_add(h2)
@@ -265,8 +277,13 @@ fn sv_rat_add_wide(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRa
 	if over || past {
 		return null
 	}
-	// `t mod g` through `|t|`, unsigned: its high half reduced first, so
-	// the quotient of the 128-by-64 division fits and the rest is there.
+	return (low, high)
+}
+
+/// `|t| mod g` of the double-width `t = high·2^64 + low` for `g > 0`, through
+/// `|t|` unsigned: its high half reduced first, so the quotient of the
+/// 128-by-64 division fits and the rest is there. `null` for `g <= 0`.
+fn sv_wide_rest(low: u64, high: i64, g: i64) -> i64? {
 	let zero: u64 = 0
 	let mut size_low = low
 	let mut size_high = high
@@ -276,11 +293,57 @@ fn sv_rat_add_wide(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRa
 	}
 	let by = g.checked_u64() ?? return null
 	let up = size_high.checked_u64() ?? return null
+	if by == 0 {
+		return null
+	}
 	let (_, rest) = (up % by).narrowing_div_rem(size_low, by) ?? return null
-	let g2 = sv_gcd(rest.checked_i64() ?? return null, g) ?? return null
-	let (num, _) = high.narrowing_div_rem(low, g2) ?? return null
-	let den = da.checked_mul(b.den / g2) ?? return null
-	return SvRat { num: num, den: den }
+	return rest.checked_i64()
+}
+
+/// **Double-width entries divided by their gcd** (#2307, D11): the values
+/// `highs[i]·2^64 + lows[i]`, each divided by the gcd of all, as `i64`.
+/// The gcd is begun on the entries that fit `i64` and taken on through the
+/// others' rests (`sv_wide_rest`), so no 128-bit division is needed; `null`
+/// where a quotient does not fit `i64`, or where no non-zero entry fits.
+fn sv_wide_reduced(lows: ref Vec[u64], highs: ref Vec[i64]) -> Vec[i64]? {
+	if lows.len() != highs.len() {
+		return null
+	}
+	let mut g: i64 = 0
+	let mut wide = false
+	let mut i = 0
+	while i < lows.len() {
+		let small = highs[i].narrowing_div_rem(lows[i], 1)
+		if small == null {
+			wide = true
+		} else {
+			let (k, _) = small ?? (0, 0)
+			g = sv_gcd(g, k) ?? return null
+		}
+		i += 1
+	}
+	if wide {
+		i = 0
+		while i < lows.len() {
+			if g <= 1 {
+				return null
+			}
+			if highs[i].narrowing_div_rem(lows[i], 1) == null {
+				let rest = sv_wide_rest(lows[i], highs[i], g) ?? return null
+				g = sv_gcd(rest, g) ?? return null
+			}
+			i += 1
+		}
+	}
+	let by = if g <= 0 { 1 } else { g }
+	let mut out: Vec[i64] = Vec(capacity: lows.len())
+	i = 0
+	while i < lows.len() {
+		let (q, _) = highs[i].narrowing_div_rem(lows[i], by) ?? return null
+		out.push(q)
+		i += 1
+	}
+	return out
 }
 
 fn sv_rat_neg(a: ref SvRat) -> SvRat? {
