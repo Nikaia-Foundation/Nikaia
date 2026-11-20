@@ -3,23 +3,24 @@
 // on facts dropped, and the rules between list fields. Line 3's read is
 // proved by the `if`'s facts; line 5's stays checked, and its trace shows
 // that no fact bounds `xs.len()` from below.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let program = "fn pick(xs: Vec[i64], i: i64) -> i64 {\n    if i >= 0 && i < xs.len() {\n        return xs[i]\n    }\n    return xs[0]\n}\n\nfn main() throws {\n    println(pick([1, 2, 3], 1))\n}\n"
-    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, program)
-    let plain = process::run(nikaia, ["check", "--bounds", "main.nika"]; dir: tmp.clone()).stdout.clone()
+    fs::write("main.nika", tmp, program)
+    let plain = process::run(nikaia, ["check", "--bounds", "main.nika"]; dir: tmp.path().to_text()).stdout.clone()
     for asked in ["3", "main.nika:5", "other.nika:5"] {
-        let out = process::run(nikaia, ["check", "--bounds", "--bounds-trace", asked.clone(), "main.nika"]; dir: tmp.clone()).stdout.clone()
+        let out = process::run(nikaia, ["check", "--bounds", "--bounds-trace", asked.clone(), "main.nika"]; dir: tmp.path().to_text()).stdout.clone()
         if out == plain {
             println(f"{asked}: the report alone")
             continue
@@ -37,5 +38,4 @@ fn main() throws {
             }
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

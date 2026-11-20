@@ -3,24 +3,24 @@
 // `NK1127`, and the note names that directory. The project's own directory,
 // `target/nikaia/build-time`, is a plain file here, so nothing can be made
 // under it; the bundle in the user's cache is untouched.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/target/nikaia"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"divided\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn example(n: i64) -> i64 {\n    return n * 2\n}\n\ncomptime B = 4 / example(2)\n\nfn main() throws {\n    println(f\"{B}\")\n}\n")
-    fs::write(f"{tmp}/target/nikaia/build-time", fs::Root::Anywhere, "not a directory\n")
-    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/target/nikaia"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"divided\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn example(n: i64) -> i64 {\n    return n * 2\n}\n\ncomptime B = 4 / example(2)\n\nfn main() throws {\n    println(f\"{B}\")\n}\n")
+    fs::write("target/nikaia/build-time", tmp, "not a directory\n")
+    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
     println(f"exit {out.code}")
-    print(out.stderr.replace(tmp, "PROJECT"))
-    process::run("rm", ["-rf", tmp])
+    print(out.stderr.replace(tmp.path().to_text(), "PROJECT"))
 }

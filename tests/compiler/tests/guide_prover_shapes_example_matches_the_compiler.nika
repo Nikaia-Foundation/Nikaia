@@ -2,21 +2,18 @@
 // and what `nikaia check --asserts --bounds --unproved-claims=warn` says of it.
 // This test reads both from the guide, checks the program and compares: when
 // the prover learns the shape, the guide needs a new example, and this fails.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/guide/prover.md", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/guide/prover.md", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
@@ -42,9 +39,9 @@ fn main() throws {
         }
     }
     println(f"example found: {stage == 5}")
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{tmp}/shapes.nika", fs::Root::Anywhere, program.join("\n") + "\n")
-    let out = process::run(toolchain(), ["check", "--asserts", "--bounds", "--unproved-claims=warn", "shapes.nika"]; dir: tmp)
+    let tmp = fs::scratch()
+    fs::write("shapes.nika", tmp, program.join("\n") + "\n")
+    let out = process::run(toolchain(), ["check", "--asserts", "--bounds", "--unproved-claims=warn", "shapes.nika"]; dir: tmp.path().to_text())
     // The warning goes to stderr before `Checked` on stdout; the guide shows
     // its first line and leaves the notes out as `...`.
     let mut warned: Vec[String] = []
@@ -69,5 +66,4 @@ fn main() throws {
         println("the guide's output differs from the compiler's:")
         println(now)
     }
-    process::run("rm", ["-rf", tmp])
 }

@@ -1,29 +1,26 @@
 // scripts/drive.nika --wake DIR LINE...: the WAKE line of each kind names
 // what to read and what to do, so the session reads nothing else (#1821).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     // b1 ran: its report is the one to read; b0 has none yet.
-    fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "brief\n")
-    fs::write(f"{tmp}/b1.md.report.md", fs::Root::Anywhere, "Result: partial\n")
+    fs::write("b1.md", tmp, "brief\n")
+    fs::write("b1.md.report.md", tmp, "Result: partial\n")
     let lines = [
         "PUSHED 1234abcd, release BUMP 0.0.9: a title",
         "STOP drive: time limit after 106 min",
@@ -42,12 +39,11 @@ fn main() throws {
         "ESCALATE focus: every area empty (drive.nika SHA)",
         "ESCALATE drive: cycle.nika failed (drive.nika SHA)",
     ]
-    let mut argv: Vec[String] = ["run", "scripts/drive.nika", "--", "--wake", tmp.clone()]
+    let mut argv: Vec[String] = ["run", "scripts/drive.nika", "--", "--wake", tmp.path().to_text()]
     for l in lines { argv.push(l.clone()) }
     let out = process::run(nikaia, argv; dir: repo)
-    println(out.stdout.trim().replace(tmp.clone(), "T"))
+    println(out.stdout.trim().replace(tmp.path().to_text(), "T"))
     // Where the lane is not known (the time limit), nothing names a file.
     let none = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--wake", "", "ESCALATE CUT b1.md: Result: partial"]; dir: repo)
     println(none.stdout.trim())
-    process::run("rm", ["-rf", tmp])
 }

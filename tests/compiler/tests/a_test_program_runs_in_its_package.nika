@@ -5,11 +5,11 @@
 use std::fs
 
 fn main() throws {
-    let data = fs::read_to_string("tests/a_test_program_runs_in_its_package.txt", fs::Root::Anywhere)
+    let data = fs::read_to_string("tests/a_test_program_runs_in_its_package.txt", fs::Root::Dir("."))
     print(data)
-    println(fs::exists("nikaia.toml", fs::Root::Anywhere))
+    println(fs::exists("nikaia.toml", fs::Root::Dir(".")))
     let root = fs::scratch()
     fs::write("out.txt", root, "written under the scratch directory")
     println(fs::read_to_string("out.txt", root))
-    println(fs::exists("out.txt", fs::Root::Anywhere))
+    println(fs::exists("out.txt", fs::Root::Dir(".")))
 }

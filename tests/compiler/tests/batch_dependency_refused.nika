@@ -3,45 +3,45 @@
 // program of the batch that uses it: none of them is lowered into the batch,
 // while a program without the dependency is. One lowering thread, so the
 // first program checks the file and the others replay what it said.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let carrier = "[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n"
-    process::run("mkdir", ["-p", f"{tmp}/lent/src", f"{tmp}/project/src"])
-    fs::write(f"{tmp}/lent/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lent\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/lent/src/lib.nika", fs::Root::Anywhere, "pub fn twice(n: i64) -> i64 {\n    return n * 2\n}\n\npub fn bad() -> i64 {\n    let x: i64 = \"text\"\n    return x\n}\n")
-    fs::write(f"{tmp}/project/nikaia.toml", fs::Root::Anywhere, carrier)
-    fs::write(f"{tmp}/project/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"carrier\")\n}\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lent/src", f"{tmp.path().to_text()}/project/src"])
+    fs::write("lent/nikaia.toml", tmp, "[package]\nname = \"lent\"\nversion = \"0.1.0\"\n")
+    fs::write("lent/src/lib.nika", tmp, "pub fn twice(n: i64) -> i64 {\n    return n * 2\n}\n\npub fn bad() -> i64 {\n    let x: i64 = \"text\"\n    return x\n}\n")
+    fs::write("project/nikaia.toml", tmp, carrier)
+    fs::write("project/src/main.nika", tmp, "fn main() throws {\n    println(\"carrier\")\n}\n")
     let mut list = ""
     for name in ["p1", "p2", "ctl", "p3"] {
-        let at = f"{tmp}/programs/{name}"
+        let at = f"{tmp.path().to_text()}/programs/{name}"
         process::run("mkdir", ["-p", f"{at}/src"])
         if name == "ctl" {
-            fs::write(f"{at}/nikaia.toml", fs::Root::Anywhere, carrier)
-            fs::write(f"{at}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"ctl\")\n}\n")
+            fs::write(f"programs/{name}/nikaia.toml", tmp, carrier)
+            fs::write(f"programs/{name}/src/main.nika", tmp, "fn main() throws {\n    println(\"ctl\")\n}\n")
         } else {
-            fs::write(f"{at}/nikaia.toml", fs::Root::Anywhere, f"{carrier}\n[dependencies]\nlent = {{ path = \"{tmp}/lent\" }}\n")
-            fs::write(f"{at}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(f\"{lent::twice(2)}\")\n}\n")
+            fs::write(f"programs/{name}/nikaia.toml", tmp, f"{carrier}\n[dependencies]\nlent = {{ path = \"{tmp.path().to_text()}/lent\" }}\n")
+            fs::write(f"programs/{name}/src/main.nika", tmp, "fn main() throws {\n    println(f\"{lent::twice(2)}\")\n}\n")
         }
         list = f"{list}{name}\t{at}/src/main.nika\n"
     }
-    fs::write(f"{tmp}/batch.list", fs::Root::Anywhere, list)
-    let out = process::run("env", [f"NIKAIA_TEST_BATCH={tmp}/batch.list", "NIKAIA_LOWER_THREADS=1", "CARGO_TERM_QUIET=true", nikaia, "build", "--user-parallelism", "no", "--project", f"{tmp}/project"])
+    fs::write("batch.list", tmp, list)
+    let out = process::run("env", [f"NIKAIA_TEST_BATCH={tmp.path().to_text()}/batch.list", "NIKAIA_LOWER_THREADS=1", "CARGO_TERM_QUIET=true", nikaia, "build", "--user-parallelism", "no", "--project", f"{tmp.path().to_text()}/project"])
     println(f"build exit: {out.code}")
     let said = out.stderr.lines().filter(fn(line) { line.starts_with("error[NK1103]") }).count()
     println(f"refusals said: {said}")
-    let included = process::run("cat", [f"{tmp}/batch.included"]).stdout
+    let included = process::run("cat", [f"{tmp.path().to_text()}/batch.included"]).stdout
     for name in included.lines() {
         println(f"included: {name}")
     }
-    process::run("rm", ["-rf", tmp])
 }

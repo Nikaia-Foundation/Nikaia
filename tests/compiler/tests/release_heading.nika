@@ -1,22 +1,17 @@
 // release.nika (supervisor, 2026-11-06): the heading of a version raise is
 // the one report's title, or `Builders' changes (#a, #b)` for several, never
 // a chain of subjects; two equal `Changelog:` lines give one bullet.
+use std::env
 use std::fs
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
-    let release = f"{repo}/target/release/nikaia"
-    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
     return f"{repo}/target/fast/nikaia"
 }
 

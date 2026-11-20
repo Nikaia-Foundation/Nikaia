@@ -6,21 +6,18 @@
 // ledger and stays uncommitted, though BUILD (the driver's own build, the
 // stub too) puts a compiler of it in the checkout's `target/fast`; a
 // committed change refreshes the ledger and commits it.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn sh(dir: String, script: String) -> String throws {
@@ -37,13 +34,13 @@ fn stub_cargo() -> String {
     return "#!/bin/sh\nt=$CARGO_TARGET_DIR\n[ -n \"$t\" ] || t=target\nmkdir -p \"$t/fast\"\nb=$(cat crates/nikaia-std/src/compiler/bounds_a.nika)\nprintf '" + compiler + "' \"$b\" \"$b\" > \"$t/fast/nikaia\"\nchmod +x \"$t/fast/nikaia\"\n"
 }
 
-fn case(nikaia: String, repo: String, tmp: String, name: String, committed: bool) throws {
-    let work = f"{tmp}/{name.replace(" ", "-")}"
+fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, committed: bool) throws {
+    let work = f"{tmp.path().to_text()}/{name.replace(" ", "-")}"
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
     let src = "crates/nikaia-std/src/compiler/bounds_a.nika"
-    sh(tmp.clone(), f"git init -q -b develop {work}")
+    sh(tmp.path().to_text(), f"git init -q -b develop {work}")
     sh(work.clone(), f"{id}; mkdir -p crates/nikaia-std/src/compiler examples/a scripts bin; echo walk-1 > {src}; echo walk-1 > examples/a/nikaia.proofs; echo stub > scripts/ledgers.nika; printf 'target/\\nbin/\\n' > .git/info/exclude; git add -A; git commit -q -m base")
-    fs::write(f"{work}/bin/cargo", fs::Root::Anywhere, stub_cargo())
+    fs::write(f"{name.replace(" ", "-")}/bin/cargo", tmp, stub_cargo())
     sh(work.clone(), "chmod +x bin/cargo")
     if committed {
         sh(work.clone(), f"echo walk-2 > {src}; git commit -q -am 'the walk changes'")
@@ -59,13 +56,12 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, committed: bool
 }
 
 fn main() throws {
-    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
     // `nikaia run` builds drive.nika with the `cargo` on PATH, so a cold cache
     // (CI's) would build it with the stub below: one run with the real PATH first.
     process::run(nikaia.clone(), ["run", f"{repo}/scripts/drive.nika", "--", "--wip-after", "done", "none", "none"])
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "uncommitted compiler source", false)
-    case(nikaia, repo, tmp.clone(), "committed compiler source", true)
-    process::run("rm", ["-rf", tmp])
+    case(nikaia.clone(), repo.clone(), tmp, "uncommitted compiler source", false)
+    case(nikaia, repo, tmp, "committed compiler source", true)
 }

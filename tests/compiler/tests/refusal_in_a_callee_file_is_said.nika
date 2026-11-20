@@ -3,29 +3,29 @@
 // can pause, so a `sync` caller in another file is refused with NK2202; the
 // build used to say only that, and the callee's NK1171 it follows from was
 // never shown. Both are said now, and the tally counts both.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/app/src"])
-    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/app/src/inner.nika", fs::Root::Anywhere, "pub fn inner() -> i64 {\n\tlet mut a: Vec[String] = []\n\ta.frobnicate()\n\treturn a.len()\n}\n")
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "fn outer() -> i64 sync {\n\treturn inner()\n}\n\nfn main() throws {\n\tprintln(outer())\n}\n")
-    let out = process::run(toolchain(), ["build"]; dir: f"{tmp}/app")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/app/src"])
+    fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n")
+    fs::write("app/src/inner.nika", tmp, "pub fn inner() -> i64 {\n\tlet mut a: Vec[String] = []\n\ta.frobnicate()\n\treturn a.len()\n}\n")
+    fs::write("app/src/main.nika", tmp, "fn outer() -> i64 sync {\n\treturn inner()\n}\n\nfn main() throws {\n\tprintln(outer())\n}\n")
+    let out = process::run(toolchain(), ["build"]; dir: f"{tmp.path().to_text()}/app")
     let mut shown: Vec[String] = []
-    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+    for line in f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP").lines() {
         if !line.trim().starts_with("Compiling") {
             shown.push(line.clone())
         }
     }
     println(shown.join("\n"))
     println(f"exit {out.code}")
-    process::run("rm", ["-rf", tmp])
 }

@@ -6,27 +6,27 @@
 // 14 instructions a byte against 10 now and in Rust (opt-level 3, one codegen
 // unit, as `benches/game/game.nika` builds). The program also prints what the
 // pushes grew past every capacity, so the moved growth keeps what is pushed.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/p/src"])
-    fs::write(f"{tmp}/p/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"game\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n")
-    fs::write(f"{tmp}/p/src/main.nika", fs::Root::Anywhere, "fn fill(lines: Vec[String]) -> i64 {\n\tlet mut letters = []\n\tfor line in lines {\n\t\tfor b in line.bytes {\n\t\t\tletters.push(b)\n\t\t}\n\t}\n\tlet mut sum = 0\n\tfor b in letters {\n\t\tsum += b as i64\n\t}\n\treturn sum * 1000000 + letters.len() as i64\n}\n\nfn main() throws {\n\tlet mut lines = []\n\tlet mut i = 0\n\twhile i < 300 {\n\t\tlet mut s = String()\n\t\tlet mut j = 0\n\t\twhile j < 60 {\n\t\t\ts.push_str(\"ACGT\")\n\t\t\tj += 4\n\t\t}\n\t\tlines.push(s)\n\t\ti += 1\n\t}\n\tprintln(lines.len())\n\tprintln(fill(lines))\n}\n")
-    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp}/p")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/p/src"])
+    fs::write("p/nikaia.toml", tmp, "[package]\nname = \"game\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n")
+    fs::write("p/src/main.nika", tmp, "fn fill(lines: Vec[String]) -> i64 {\n\tlet mut letters = []\n\tfor line in lines {\n\t\tfor b in line.bytes {\n\t\t\tletters.push(b)\n\t\t}\n\t}\n\tlet mut sum = 0\n\tfor b in letters {\n\t\tsum += b as i64\n\t}\n\treturn sum * 1000000 + letters.len() as i64\n}\n\nfn main() throws {\n\tlet mut lines = []\n\tlet mut i = 0\n\twhile i < 300 {\n\t\tlet mut s = String()\n\t\tlet mut j = 0\n\t\twhile j < 60 {\n\t\t\ts.push_str(\"ACGT\")\n\t\t\tj += 4\n\t\t}\n\t\tlines.push(s)\n\t\ti += 1\n\t}\n\tprintln(lines.len())\n\tprintln(fill(lines))\n}\n")
+    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp.path().to_text()}/p")
     if built.code != 0 {
         println(built.stdout)
     }
-    let ran = process::run(f"{tmp}/p/target/nikaia/bin/game", [])
+    let ran = process::run(f"{tmp.path().to_text()}/p/target/nikaia/bin/game", [])
     print(ran.stdout)
-    let symbols = process::run("sh", ["-c", f"nm -C {tmp}/p/target/nikaia/bin/game | grep -c 'task_block::list::grow_one::<u8>$'"])
+    let symbols = process::run("sh", ["-c", f"nm -C {tmp.path().to_text()}/p/target/nikaia/bin/game | grep -c 'task_block::list::grow_one::<u8>$'"])
     println(f"out-of-line growth of a byte list: {symbols.stdout.trim()}")
-    process::run("rm", ["-rf", tmp])
 }

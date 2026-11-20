@@ -2,26 +2,26 @@
 // (Part I 2.6, #1870): the lowered `s.bytes[a..<b].text()` is `std`'s
 // `bytes::text_of_a_cut`, two boundary checks, never `from_utf8` over the
 // whole cut on the bare `&[u8]`. A base made by a call stays the long way.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let source = "fn make() -> String {\n    let mut s = String()\n    s.push_str(\"h\u{e9}llo\")\n    return s\n}\n\nfn piece(s: String, a: i64, b: i64) -> String {\n    return s.bytes[a..<b].text() catch { \"refused\" }\n}\n\nfn main() throws {\n    let s = make()\n    println(piece(s, 1, 3))\n    println(piece(s, 1, 2))\n    println(make().bytes[0..<1].text() catch { \"refused\" })\n}\n"
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
     if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    let rust = fs::read_to_string("p.rs", tmp)
     println(f"cuts read at their ends: {rust.split("bytes::text_of_a_cut(").count() - 1}")
     println(f"cuts read whole: {rust.split(").text()").count() - 1}")
-    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
     println(ran.stdout.trim())
     println(ran.stderr.trim())
-    process::run("rm", ["-rf", tmp])
 }

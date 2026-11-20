@@ -8,17 +8,12 @@
 // written before Cargo starts (#280), so with nothing touched a second run
 // compiles neither build, after a first build and after an edit that changes
 // the lowered code alike. Through a Cargo that counts.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -27,31 +22,30 @@ fn toolchain() -> String throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
 	let real = process::run("sh", ["-c", "echo ${CARGO:-$(command -v cargo)}"]).stdout.trim().clone()
 	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/p/src", f"{tmp}/p/tests", f"{tmp}/bin"])
-	let shim = f"{tmp}/bin/cargo"
-	fs::write(shim, fs::Root::Anywhere, SHIM)
-	process::run("chmod", ["+x", shim.clone()])
-	let p = f"{tmp}/p"
-	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"twice\"\nversion = \"0.1.0\"\n")
-	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM)
-	fs::write(f"{p}/tests/main.stdout", fs::Root::Anywhere, "6\n")
-	let log = f"{tmp}/cargo.log"
-	let env = [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never"), ("CARGO", shim.clone()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp}/bin:{path}")]
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/p/src", f"{tmp.path().to_text()}/p/tests", f"{tmp.path().to_text()}/bin"])
+	let shim = tmp.join("bin/cargo")
+	fs::write("bin/cargo", tmp, SHIM)
+	process::run("chmod", ["+x", shim.path().to_text()])
+	let p = tmp.join("p")
+	fs::write("nikaia.toml", p, "[package]\nname = \"twice\"\nversion = \"0.1.0\"\n")
+	fs::write("src/main.nika", p, PROGRAM)
+	fs::write("tests/main.stdout", p, "6\n")
+	let log = f"{tmp.path().to_text()}/cargo.log"
+	let env = [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never"), ("CARGO", shim.path().to_text()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp.path().to_text()}/bin:{path}")]
 	let steps = ["first run", "again", "edited", "again"]
 	for step in steps {
 		if step == "edited" {
-			fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM.replace("x * 2", "x + x"))
+			fs::write("src/main.nika", p, PROGRAM.replace("x * 2", "x + x"))
 		}
-		fs::write(log, fs::Root::Anywhere, "")
-		let ran = process::run(nikaia, ["test"]; dir: p.clone(), env: env.clone())
+		fs::write("cargo.log", tmp, "")
+		let ran = process::run(nikaia, ["test"]; dir: p.path().to_text(), env: env.clone())
 		let compiled = process::run("sh", ["-c", f"grep -c 'Compiling twice ' {log}"]).stdout.trim().clone()
 		println(f"{step}: {ran.code}, builds compiled: {compiled}")
 	}
-	process::run("rm", ["-rf", tmp])
 }
 
 comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with what it compiles counted: `--quiet` dropped, its `Compiling` lines kept.\nargs=()\nfor a in \"$@\"; do [ \"$a\" = --quiet ] || args+=(\"$a\"); done\n{ \"$REAL_CARGO\" \"${args[@]}\" 2>&1 1>&3 | tee -a \"$SHIM_LOG\" >&2; } 3>&1\nexit ${PIPESTATUS[0]}\n"

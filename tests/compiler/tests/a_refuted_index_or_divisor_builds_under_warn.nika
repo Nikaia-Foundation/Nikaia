@@ -3,24 +3,19 @@
 // checks: the program stops where it reaches them. So does a call whose
 // argument breaks a divisor over a parameter, `f(0)` over `10 / d`, and one
 // whose argument makes `a + 1000` go past an `i32`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, text: String) -> String {
+fn shown(tmp: ref fs::Root, text: String) -> String throws {
 	let mut lines: Vec[String] = []
-	for line in text.replace(tmp, "TMP").lines() {
+	for line in text.replace(tmp.path().to_text(), "TMP").lines() {
 		let t = line.trim()
 		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
 			continue
@@ -31,44 +26,43 @@ fn shown(tmp: String, text: String) -> String {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/index/src", f"{tmp}/divide/src", f"{tmp}/call/src", f"{tmp}/over/src"])
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/index/src", f"{tmp.path().to_text()}/divide/src", f"{tmp.path().to_text()}/call/src", f"{tmp.path().to_text()}/over/src"])
 	let toml = "[package]\nname = \"p\"\nversion = \"0.1.0\"\n"
-	fs::write(f"{tmp}/index/nikaia.toml", fs::Root::Anywhere, toml)
-	fs::write(f"{tmp}/divide/nikaia.toml", fs::Root::Anywhere, toml)
-	fs::write(f"{tmp}/call/nikaia.toml", fs::Root::Anywhere, toml)
-	fs::write(f"{tmp}/over/nikaia.toml", fs::Root::Anywhere, toml)
+	fs::write("index/nikaia.toml", tmp, toml)
+	fs::write("divide/nikaia.toml", tmp, toml)
+	fs::write("call/nikaia.toml", tmp, toml)
+	fs::write("over/nikaia.toml", tmp, toml)
 	fs::write(
-		f"{tmp}/index/src/main.nika",
-		fs::Root::Anywhere,
+		"index/src/main.nika",
+		tmp,
 		"fn main() throws {\n\tlet xs = [1, 2, 3]\n\tlet i = 5\n\tprintln(\"before\")\n\tprintln(f\"{xs[i]}\")\n}\n",
 	)
-	let out = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/index")
+	let out = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp.path().to_text()}/index")
 	println(shown(tmp, f"{out.stdout}{out.stderr}"))
 	println(f"exit {out.code}")
 	fs::write(
-		f"{tmp}/divide/src/main.nika",
-		fs::Root::Anywhere,
+		"divide/src/main.nika",
+		tmp,
 		"fn share(d: i64) -> i64 {\n\tif d == 0 {\n\t\treturn 10 / d\n\t}\n\treturn 1\n}\n\nfn main() throws {\n\tprintln(\"before\")\n\tprintln(f\"{share(0)}\")\n}\n",
 	)
-	let again = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/divide")
+	let again = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp.path().to_text()}/divide")
 	println(shown(tmp, f"{again.stdout}{again.stderr}"))
 	println(f"exit {again.code}")
 	fs::write(
-		f"{tmp}/call/src/main.nika",
-		fs::Root::Anywhere,
+		"call/src/main.nika",
+		tmp,
 		"fn f(d: i64) -> i64 {\n\treturn 10 / d\n}\n\nfn main() throws {\n\tprintln(\"before\")\n\tprintln(f\"{f(0)}\")\n}\n",
 	)
-	let call = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/call")
+	let call = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp.path().to_text()}/call")
 	println(shown(tmp, f"{call.stdout}{call.stderr}"))
 	println(f"exit {call.code}")
 	fs::write(
-		f"{tmp}/over/src/main.nika",
-		fs::Root::Anywhere,
+		"over/src/main.nika",
+		tmp,
 		"fn add(a: i32) -> i32 {\n\treturn a + 1000\n}\n\nfn main() throws {\n\tprintln(\"before\")\n\tprintln(f\"{add(2147483000)}\")\n}\n",
 	)
-	let over = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/over")
+	let over = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp.path().to_text()}/over")
 	println(shown(tmp, f"{over.stdout}{over.stderr}"))
 	println(f"exit {over.code}")
-	process::run("rm", ["-rf", tmp])
 }

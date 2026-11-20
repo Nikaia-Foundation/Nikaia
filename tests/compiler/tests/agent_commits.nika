@@ -3,40 +3,36 @@
 // (#1682: #1665 was briefed after a commit had fixed it). `#16650` names
 // another issue; an issue no commit names gives an empty line. Run in a git
 // repository of its own.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn commit(tmp: String, message: String) throws {
-    process::run("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", message]; dir: tmp)
+fn commit(tmp: ref fs::Root, message: String) throws {
+    process::run("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", message]; dir: tmp.path().to_text())
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("git", ["init", "-q"]; dir: tmp.clone())
-    commit(tmp.clone(), "drive: a first step\n\nPart of #1665")
-    commit(tmp.clone(), "drive: another issue\n\nFixes #16650")
-    commit(tmp.clone(), "drive: the rest\n\nFixes #1500, #1665")
+    let tmp = fs::scratch()
+    process::run("git", ["init", "-q"]; dir: tmp.path().to_text())
+    commit(tmp, "drive: a first step\n\nPart of #1665")
+    commit(tmp, "drive: another issue\n\nFixes #16650")
+    commit(tmp, "drive: the rest\n\nFixes #1500, #1665")
     for n in ["1665", "1500", "1400"] {
         let cmd = f"{nikaia} run {repo}/scripts/agent.nika -- --commits {n} 2>/dev/null | sed -E 's/[0-9a-f]{{7,}}/SHA/g'"
-        let out = process::run("sh", ["-c", cmd]; dir: tmp.clone())
+        let out = process::run("sh", ["-c", cmd]; dir: tmp.path().to_text())
         println(f"[{n}]")
         println(out.stdout.trim())
     }
-    process::run("rm", ["-rf", tmp])
 }

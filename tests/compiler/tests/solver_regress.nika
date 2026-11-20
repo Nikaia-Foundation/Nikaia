@@ -38,6 +38,7 @@
 // `compare` scored it unknown at 10 s until fe3e835a5 (#2090) ran ours there
 // under the time limit alone, and dfbb7772a (the simplex refreshes only the
 // rows a changed variable stands in) brought it to about 8 s.
+use std::env
 use std::fs
 use std::process
 
@@ -46,13 +47,7 @@ use std::process
 // always the parent (#1305). No path is guessed: without one the test stops
 // and says why.
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -61,14 +56,7 @@ fn toolchain() -> String throws {
 }
 
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {

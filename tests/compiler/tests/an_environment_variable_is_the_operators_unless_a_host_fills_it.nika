@@ -7,44 +7,45 @@
 // option of `env::var` is gone. A project whose `[build]` says
 // `environment = "untrusted"`, or a build given `--environment=untrusted`,
 // takes every variable as data from outside (D4).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+fn said(nikaia: String, tmp: ref fs::Root, label: String, source: String, verb: Vec[String]) throws {
+    fs::write("p.nika", tmp, source)
     let mut args = verb.clone()
     args.push("p.nika")
-    let out = process::run(nikaia, args; dir: tmp.clone())
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(f"-- {label}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         let kept = line.starts_with("error") || line.starts_with("Checked") || line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ") || line.starts_with("hash for")
         if kept {
-            println(line.replace(tmp, "TMP"))
+            println(line.replace(tmp.path().to_text(), "TMP"))
         }
     }
 }
 
-fn built(nikaia: String, tmp: String, label: String, manifest: String, source: String, verb: Vec[String]) throws {
-    process::run("mkdir", ["-p", f"{tmp}/app/src"])
-    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, manifest)
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, source)
-    let out = process::run(nikaia, verb; dir: f"{tmp}/app")
+fn built(nikaia: String, tmp: ref fs::Root, label: String, manifest: String, source: String, verb: Vec[String]) throws {
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/app/src"])
+    fs::write("app/nikaia.toml", tmp, manifest)
+    fs::write("app/src/main.nika", tmp, source)
+    let out = process::run(nikaia, verb; dir: f"{tmp.path().to_text()}/app")
     println(f"-- {label}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("error") || line.contains("environment") {
-            println(line.replace(tmp, "TMP"))
+            println(line.replace(tmp.path().to_text(), "TMP"))
         }
     }
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let head = "use std::env\nuse std::text\n\nfn main() throws {\n"
     let operator = "    let n: i64 = text::parse_i64(env::var(\"DEPTH\") ?? \"8\") ?? 8\n"
@@ -69,5 +70,4 @@ fn main() throws {
     built(nikaia, tmp, "[build] environment = \"untrusted\"", f"{package}\n[build]\nenvironment = \"untrusted\"\n", program, ["check", "src/main.nika"])
     built(nikaia, tmp, "--environment=untrusted", package, program, ["check", "--environment=untrusted", "src/main.nika"])
     built(nikaia, tmp, "another word", f"{package}\n[build]\nenvironment = \"stranger\"\n", program, ["check", "src/main.nika"])
-    process::run("rm", ["-rf", tmp])
 }

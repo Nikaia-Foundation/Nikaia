@@ -1,57 +1,51 @@
 // release.nika `--rows`: a driver under `--no-bump` commits the Runs rows the
 // agents added to docs/tokenspeed.md, alone (what else is staged stays
 // staged), and leaves the file alone when it changed otherwise.
+use std::env
 use std::fs
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
-    let release = f"{repo}/target/release/nikaia"
-    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
     return f"{repo}/target/fast/nikaia"
 }
 
-fn git(tmp: String, args: Vec[String]) -> String throws {
-    return process::run("git", args; dir: tmp).stdout
+fn git(tmp: ref fs::Root, args: Vec[String]) -> String throws {
+    return process::run("git", args; dir: tmp.path().to_text()).stdout
 }
 
-fn rows(nikaia: String, repo: String, tmp: String, label: String) throws {
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/release.nika", "--", "--rows"]; dir: tmp.clone()).stdout.trim().clone()
+fn rows(nikaia: String, repo: String, tmp: ref fs::Root, label: String) throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/release.nika", "--", "--rows"]; dir: tmp.path().to_text()).stdout.trim().clone()
     println(f"{label}: {out}")
-    println(f"  committed: {git(tmp.clone(), ["show", "--name-only", "--format=%s", "HEAD"]).trim().replace("\n", " ")}")
-    println(f"  still staged: {git(tmp.clone(), ["diff", "--cached", "--name-only"]).trim()}")
+    println(f"  committed: {git(tmp, ["show", "--name-only", "--format=%s", "HEAD"]).trim().replace("\n", " ")}")
+    println(f"  still staged: {git(tmp, ["diff", "--cached", "--name-only"]).trim()}")
     println(f"  uncommitted: {git(tmp, ["diff", "--name-only"]).trim()}")
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let doc = "docs/tokenspeed.md"
-    process::run("mkdir", ["-p", f"{tmp}/docs"])
-    git(tmp.clone(), ["init", "-q"])
-    git(tmp.clone(), ["config", "user.email", "t@t"])
-    git(tmp.clone(), ["config", "user.name", "t"])
-    fs::write(f"{tmp}/{doc}", fs::Root::Anywhere, "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n\n## After\n")
-    fs::write(f"{tmp}/other.txt", fs::Root::Anywhere, "1\n")
-    git(tmp.clone(), ["add", doc.clone(), "other.txt"])
-    git(tmp.clone(), ["commit", "-q", "-m", "base"])
-    rows(nikaia.clone(), repo.clone(), tmp.clone(), "nothing added")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/docs"])
+    git(tmp, ["init", "-q"])
+    git(tmp, ["config", "user.email", "t@t"])
+    git(tmp, ["config", "user.name", "t"])
+    fs::write(f"{doc}", tmp, "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n\n## After\n")
+    fs::write("other.txt", tmp, "1\n")
+    git(tmp, ["add", doc.clone(), "other.txt"])
+    git(tmp, ["commit", "-q", "-m", "base"])
+    rows(nikaia.clone(), repo.clone(), tmp, "nothing added")
     // A builder's staged file beside the agents' row.
-    fs::write(f"{tmp}/other.txt", fs::Root::Anywhere, "2\n")
-    git(tmp.clone(), ["add", "other.txt"])
-    fs::write(f"{tmp}/{doc}", fs::Root::Anywhere, "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n| 3 | 4 |\n\n## After\n")
-    rows(nikaia.clone(), repo.clone(), tmp.clone(), "a row added")
-    fs::write(f"{tmp}/{doc}", fs::Root::Anywhere, "# T\n\n## Runs\n\n| a | b |\n| 1 | 9 |\n| 3 | 4 |\n\n## After\n")
-    rows(nikaia, repo, tmp.clone(), "a row changed")
-    process::run("rm", ["-rf", tmp])
+    fs::write("other.txt", tmp, "2\n")
+    git(tmp, ["add", "other.txt"])
+    fs::write(f"{doc}", tmp, "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n| 3 | 4 |\n\n## After\n")
+    rows(nikaia.clone(), repo.clone(), tmp, "a row added")
+    fs::write(f"{doc}", tmp, "# T\n\n## Runs\n\n| a | b |\n| 1 | 9 |\n| 3 | 4 |\n\n## After\n")
+    rows(nikaia, repo, tmp, "a row changed")
 }

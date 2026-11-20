@@ -3,17 +3,18 @@
 // compiler writes (ADR-100 D3). Its contract is edited to `throws = []`: with
 // its own record it is believed (the caller checks), with another inference
 // or another format version it is derived again (NK2605).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn checked(tmp: String, label: String) throws {
-    let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: f"{tmp}/app")
+fn checked(tmp: ref fs::Root, label: String) throws {
+    let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: f"{tmp.path().to_text()}/app")
     let mut first = String()
     for line in f"{out.stdout}{out.stderr}".lines() {
         if first.len() == 0 && !line.trim().starts_with("Compiling") {
@@ -24,22 +25,21 @@ fn checked(tmp: String, label: String) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
-    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
-    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub fn hello() throws {\n\tprintln(\"hi\")\n}\n")
-    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\nfn main() {\n\tlib::hello()\n}\n")
-    let built = process::run(toolchain(), ["build"]; dir: f"{tmp}/lib")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/app/src"])
+    fs::write("lib/nikaia.toml", tmp, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+    fs::write("lib/src/main.nika", tmp, "pub fn hello() throws {\n\tprintln(\"hi\")\n}\n")
+    fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write("app/src/main.nika", tmp, "use lib\n\nfn main() {\n\tlib::hello()\n}\n")
+    let built = process::run(toolchain(), ["build"]; dir: f"{tmp.path().to_text()}/lib")
     println(f"lib built: exit {built.code}")
-    process::run("sed", ["-i", "s/^throws = .*/throws = []/", f"{tmp}/lib/nikaia.contracts"])
-    process::run("cp", [f"{tmp}/lib/nikaia.derived", f"{tmp}/own.derived"])
-    process::run("cp", [f"{tmp}/lib/nikaia.contracts", f"{tmp}/own.contracts"])
+    process::run("sed", ["-i", "s/^throws = .*/throws = []/", f"{tmp.path().to_text()}/lib/nikaia.contracts"])
+    process::run("cp", [f"{tmp.path().to_text()}/lib/nikaia.derived", f"{tmp.path().to_text()}/own.derived"])
+    process::run("cp", [f"{tmp.path().to_text()}/lib/nikaia.contracts", f"{tmp.path().to_text()}/own.contracts"])
     checked(tmp, "own record")
-    process::run("sed", ["-i", "s/^inference = .*/inference = \"stage0-signatures\"/", f"{tmp}/lib/nikaia.derived"])
+    process::run("sed", ["-i", "s/^inference = .*/inference = \"stage0-signatures\"/", f"{tmp.path().to_text()}/lib/nikaia.derived"])
     checked(tmp, "another inference")
-    process::run("cp", [f"{tmp}/own.derived", f"{tmp}/lib/nikaia.derived"])
-    process::run("sed", ["-i", "s/^version = .*/version = 3/", f"{tmp}/lib/nikaia.contracts"])
+    process::run("cp", [f"{tmp.path().to_text()}/own.derived", f"{tmp.path().to_text()}/lib/nikaia.derived"])
+    process::run("sed", ["-i", "s/^version = .*/version = 3/", f"{tmp.path().to_text()}/lib/nikaia.contracts"])
     checked(tmp, "another format version")
-    process::run("rm", ["-rf", tmp])
 }

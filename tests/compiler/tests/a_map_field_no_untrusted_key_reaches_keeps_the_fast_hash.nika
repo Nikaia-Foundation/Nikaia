@@ -3,17 +3,18 @@
 // fast hash under an untrusted `cli::args`, as a `let` of that class does; a
 // field the command line's words reach stays keyed. `--trust` names
 // `cli::args` as the source and not each method of the `Args` it returns.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let source = "use std::cli
 use std::collections
@@ -36,8 +37,8 @@ fn main() throws {
     println(f\"{t.counts.len()} {s.words.len()}\")
 }
 "
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-    let out = process::run(nikaia, ["lower", "--trust", "-o", "p.rs", "p.nika"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, source)
+    let out = process::run(nikaia, ["lower", "--trust", "-o", "p.rs", "p.nika"]; dir: tmp.path().to_text())
     println("-- --trust")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ") {
@@ -45,11 +46,11 @@ fn main() throws {
         }
     }
     println("-- the fields")
-    for line in fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string("p.rs", tmp).lines() {
         if line.contains("counts:") || line.contains("words:") {
             println(line.trim())
         }
     }
-    let ran = process::run(nikaia, ["run", "p.nika", "--", "w"]; dir: tmp.clone())
+    let ran = process::run(nikaia, ["run", "p.nika", "--", "w"]; dir: tmp.path().to_text())
     println(f"-- run\n{ran.stdout.trim()}")
 }

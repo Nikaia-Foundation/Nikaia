@@ -6,27 +6,27 @@
 // of the parameter (`first`, written by value so that only the inference
 // decides): the parameter is kept only where the name leaves (`handed`). A
 // `??` handed back keeps (`give`).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    fs::write(f"{tmp}/reads.nika", fs::Root::Anywhere, "struct Row {\n    id: i64,\n    name: String,\n}\n\nfn id_of(row: ref Row?) -> i64 {\n    return row?.id ?? 0\n}\n\nfn back(xs: ref Vec[i64]?) -> i64 {\n    return (xs ?? []).len() as i64\n}\n\nfn same(r: ref Row?) -> bool {\n    return (r ?? Row { id: 0, name: \"\" }).id == 1\n}\n\nfn first(r: Row?) -> i64 {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x.id\n}\n\nfn handed(r: Row?) -> Row {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x\n}\n\nfn give(r: Row?) -> Row {\n    return r ?? Row { id: 0, name: \"\" }\n}\n\nfn main() throws {\n    let r: Row? = Row { id: 1, name: \"x\" }\n    println(id_of(r))\n    println(id_of(r))\n    println(same(r))\n    println(same(r))\n    let xs: Vec[i64]? = [1, 2]\n    println(back(xs))\n    println(back(xs))\n    println(first(r))\n    println(first(r))\n    println(handed(null).id)\n    println(give(null).id)\n}\n")
-    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/reads.nika"])
-    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
-    print(fs::read_to_string(f"{tmp}/reads.nika", fs::Root::Anywhere))
-    let checked = process::run(nikaia, ["check", f"{tmp}/reads.nika"])
+    fs::write("reads.nika", tmp, "struct Row {\n    id: i64,\n    name: String,\n}\n\nfn id_of(row: ref Row?) -> i64 {\n    return row?.id ?? 0\n}\n\nfn back(xs: ref Vec[i64]?) -> i64 {\n    return (xs ?? []).len() as i64\n}\n\nfn same(r: ref Row?) -> bool {\n    return (r ?? Row { id: 0, name: \"\" }).id == 1\n}\n\nfn first(r: Row?) -> i64 {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x.id\n}\n\nfn handed(r: Row?) -> Row {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x\n}\n\nfn give(r: Row?) -> Row {\n    return r ?? Row { id: 0, name: \"\" }\n}\n\nfn main() throws {\n    let r: Row? = Row { id: 1, name: \"x\" }\n    println(id_of(r))\n    println(id_of(r))\n    println(same(r))\n    println(same(r))\n    let xs: Vec[i64]? = [1, 2]\n    println(back(xs))\n    println(back(xs))\n    println(first(r))\n    println(first(r))\n    println(handed(null).id)\n    println(give(null).id)\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp.path().to_text()}/reads.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("reads.nika", tmp))
+    let checked = process::run(nikaia, ["check", f"{tmp.path().to_text()}/reads.nika"])
     println(f"-- check: {checked.code}")
-    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
-    let ran = process::run(nikaia, ["run", f"{tmp}/reads.nika"])
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let ran = process::run(nikaia, ["run", f"{tmp.path().to_text()}/reads.nika"])
     println(f"-- run: {ran.code}")
     print(ran.stdout)
-    process::run("rm", ["-rf", tmp])
 }

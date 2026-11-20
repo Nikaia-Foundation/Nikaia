@@ -4,48 +4,44 @@
 // covers is `NK2504`, once per item; an entry saying `pub = true` is refused
 // (D26); and a Rust file that moved since the entries were reviewed is
 // `NK2505`. Each names `nikaia describe crate`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn checked(nikaia: String, tmp: String, case: String) throws {
-    let ran = process::run(nikaia, ["check", "src/demo.nika"]; dir: f"{tmp}/demo")
+fn checked(nikaia: String, tmp: ref fs::Root, case: String) throws {
+    let ran = process::run(nikaia, ["check", "src/demo.nika"]; dir: f"{tmp.path().to_text()}/demo")
     println(f"--- {case}: exit {ran.code}")
-    print(ran.stdout.replace(tmp, "TMP"))
-    print(ran.stderr.replace(tmp, "TMP"))
+    print(ran.stdout.replace(tmp.path().to_text(), "TMP"))
+    print(ran.stderr.replace(tmp.path().to_text(), "TMP"))
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/demo", tmp.clone()])
-    let demo = f"{tmp}/demo"
-    checked(nikaia.clone(), tmp.clone(), "described")
-    let source = fs::read_to_string(f"{demo}/src/demo.nika", fs::Root::Anywhere)
+    let tmp = fs::scratch()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/demo", tmp.path().to_text()])
+    let demo = tmp.join("demo")
+    checked(nikaia.clone(), tmp, "described")
+    let source = fs::read_to_string("src/demo.nika", demo)
     let nine: String = "\n/// Nine times: `words::thrice` has no entry.\npub fn nine(x: i64) -> i64 sync {\n    return words::thrice(words::thrice(x))\n}\n"
-    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, f"{source}{nine}")
-    checked(nikaia.clone(), tmp.clone(), "no entry")
-    fs::write(f"{demo}/src/demo.nika", fs::Root::Anywhere, source)
-    let entries = fs::read_to_string(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere)
-    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, entries.replace("pub = false", "pub = true"))
-    checked(nikaia.clone(), tmp.clone(), "pub = true")
-    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, entries)
-    let rust = fs::read_to_string(f"{demo}/rust/words.rs", fs::Root::Anywhere)
-    fs::write(f"{demo}/rust/words.rs", fs::Root::Anywhere, f"{rust}\n// Changed since the review.\n")
-    checked(nikaia, tmp.clone(), "moved")
-    process::run("rm", ["-rf", tmp])
+    fs::write("src/demo.nika", demo, f"{source}{nine}")
+    checked(nikaia.clone(), tmp, "no entry")
+    fs::write("src/demo.nika", demo, source)
+    let entries = fs::read_to_string("contracts/crate.contracts", demo)
+    fs::write("contracts/crate.contracts", demo, entries.replace("pub = false", "pub = true"))
+    checked(nikaia.clone(), tmp, "pub = true")
+    fs::write("contracts/crate.contracts", demo, entries)
+    let rust = fs::read_to_string("rust/words.rs", demo)
+    fs::write("rust/words.rs", demo, f"{rust}\n// Changed since the review.\n")
+    checked(nikaia, tmp, "moved")
 }

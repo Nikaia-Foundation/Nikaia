@@ -8,21 +8,18 @@
 // grammar's module (#1464), and its build fails with E0603. Then the grammar
 // as a root takes all its entries, and without `[features]` the crate holds
 // no reader.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // The tests' cache entry cargo builds in, `<kind>/<toolchain key>` under
@@ -34,18 +31,18 @@ fn cache_entry(repo: String, nikaia: String, kind: String) -> String throws {
     let key = process::run("sha256sum", [nikaia]).stdout.split(" ").collect()[0].clone()
     let entry = f"{repo}/target/nikaia-project-tests/{kind}/{key}"
     process::run("mkdir", ["-p", entry.clone()])
-    fs::write(f"{entry}/.nikaia-used", fs::Root::Anywhere, "")
+    fs::write(f"target/nikaia-project-tests/{kind}/{key}/.nikaia-used", fs::Root::Dir(repo.clone()), "")
     return entry
 }
 
-fn shown(made: String) throws {
-    let manifest = fs::read_to_string(f"{made}/Cargo.toml", fs::Root::Anywhere)
+fn shown(made: ref fs::Root) throws {
+    let manifest = fs::read_to_string("Cargo.toml", made)
     let mut inside = false
     for line in manifest.lines() {
         if line.starts_with("[") { inside = line == "[features]" }
         if inside && line.len() > 0 { println(f"  {line}") }
     }
-    let lib = fs::read_to_string(f"{made}/src/lib.rs", fs::Root::Anywhere)
+    let lib = fs::read_to_string("src/lib.rs", made)
     let mut readers = 0
     for line in lib.lines() {
         let text = line.trim()
@@ -58,40 +55,39 @@ fn shown(made: String) throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let from = f"{repo}/tests/compiler/rust_library_stream"
-    process::run("cp", ["-r", f"{from}/lines", f"{from}/user", f"{from}/private", tmp.clone()])
-    process::run("rm", ["-rf", f"{tmp}/lines/target"])
+    process::run("cp", ["-r", f"{from}/lines", f"{from}/user", f"{from}/private", tmp.path().to_text()])
+    process::run("rm", ["-rf", f"{tmp.path().to_text()}/lines/target"])
     let mut env: Vec[(String, String)] = []
     env.push(("CARGO_TARGET_DIR", cache_entry(repo.clone(), nikaia.clone(), "rust-library-user")))
     env.push(("CARGO_NET_OFFLINE", "true"))
     env.push(("CARGO_TERM_COLOR", "never"))
-    let made = f"{tmp}/lines/target/rust-library/nikaia_lines"
-    let toml = fs::read_to_string(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere)
+    let made = tmp.join("lines/target/rust-library/nikaia_lines")
+    let toml = fs::read_to_string("lines/nikaia.toml", tmp)
     let whole = (toml.split("[features]").next() ?? "").clone()
     for features in ["stream = [\"lines::Words::items\"]\n", "all = [\"lines::Words\"]\n", ""] {
         if features.len() > 0 {
-            fs::write(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere, f"{whole}[features]\n{features}")
+            fs::write("lines/nikaia.toml", tmp, f"{whole}[features]\n{features}")
             println(f"with `{features.trim()}`:")
         } else {
-            fs::write(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere, whole.clone())
+            fs::write("lines/nikaia.toml", tmp, whole.clone())
             println("without `[features]`:")
         }
-        let built = process::run(nikaia, ["build"]; dir: f"{tmp}/lines", env: env.clone())
-        if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
-        shown(made.clone())
+        let built = process::run(nikaia, ["build"]; dir: f"{tmp.path().to_text()}/lines", env: env.clone())
+        if built.code != 0 { println(built.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
+        shown(made)
         if features.starts_with("stream") {
-            let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: env.clone())
+            let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp.path().to_text()}/user", env: env.clone())
             println(ran.stdout.trim())
-            if ran.code != 0 { println(ran.stderr.trim().replace(tmp, "TMP")) }
-            let refused = process::run("cargo", ["build", "-q"]; dir: f"{tmp}/private", env: env.clone())
+            if ran.code != 0 { println(ran.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
+            let refused = process::run("cargo", ["build", "-q"]; dir: f"{tmp.path().to_text()}/private", env: env.clone())
             println(f"private builds: {refused.code == 0}")
             let mut said = 0
             for line in refused.stderr.lines() {
                 if line.starts_with("error[E0603]") { println(line); said += 1 }
             }
-            if said == 0 { println(refused.stderr.trim().replace(tmp, "TMP")) }
+            if said == 0 { println(refused.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

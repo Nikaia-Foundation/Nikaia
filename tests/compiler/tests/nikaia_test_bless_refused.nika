@@ -1,17 +1,18 @@
 // #1236, #1262: `nikaia test --bless` fails a program the checker refuses
 // where no `.stderr` expects the refusal, and writes nothing for it; a
 // `.stderr` that exists, or `--bless-stderr`, takes the refusal.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
-    let out = process::run(nikaia, args; dir: tmp.clone())
+fn run_test(nikaia: String, tmp: ref fs::Root, label: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(f"-- {label}: exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("program ") || line.starts_with("test result") {
@@ -20,29 +21,28 @@ fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throw
     }
 }
 
-fn made(tmp: String, name: String) throws {
-    println(f"{name} made: {fs::exists(f"{tmp}/tests/{name}", fs::Root::Anywhere)}")
+fn made(tmp: ref fs::Root, name: String) throws {
+    println(f"{name} made: {fs::exists(f"tests/{name}", tmp)}")
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"refusing\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-    fs::write(f"{tmp}/tests/typed.nika", fs::Root::Anywhere, "fn main() throws {\n    let x: i64 = \"text\"\n    print(x)\n}\n")
-    fs::write(f"{tmp}/tests/undeclared.nika", fs::Root::Anywhere, "fn f(v: Vec[String]) { let mut a: Vec[String] = []; for x in v { a.push(x) } }\nfn main() throws { f([\"x\"]); println(nope) }\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"refusing\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn main() {}\n")
+    fs::write("tests/typed.nika", tmp, "fn main() throws {\n    let x: i64 = \"text\"\n    print(x)\n}\n")
+    fs::write("tests/undeclared.nika", tmp, "fn f(v: Vec[String]) { let mut a: Vec[String] = []; for x in v { a.push(x) } }\nfn main() throws { f([\"x\"]); println(nope) }\n")
     run_test(nikaia, tmp, "refused, blessed", ["test", "--bless", "--both-settings"])
     made(tmp, "typed.stdout")
     made(tmp, "typed.stderr")
     made(tmp, "undeclared.stdout")
     made(tmp, "undeclared.stderr")
-    fs::write(f"{tmp}/tests/typed.stderr", fs::Root::Anywhere, "")
+    fs::write("tests/typed.stderr", tmp, "")
     run_test(nikaia, tmp, "a .stderr expects it", ["test", "--bless", "--filter", "typed"])
-    println(f"typed.stderr starts: {fs::read_to_string(f"{tmp}/tests/typed.stderr", fs::Root::Anywhere).starts_with("error[NK1103]")}")
+    println(f"typed.stderr starts: {fs::read_to_string("tests/typed.stderr", tmp).starts_with("error[NK1103]")}")
     run_test(nikaia, tmp, "bless-stderr", ["test", "--bless-stderr", "--filter", "undeclared"])
     made(tmp, "undeclared.stdout")
-    println(f"undeclared.stderr starts: {fs::read_to_string(f"{tmp}/tests/undeclared.stderr", fs::Root::Anywhere).starts_with("error[NK1117]")}")
+    println(f"undeclared.stderr starts: {fs::read_to_string("tests/undeclared.stderr", tmp).starts_with("error[NK1117]")}")
     run_test(nikaia, tmp, "both pass", ["test"])
-    process::run("rm", ["-rf", tmp])
 }

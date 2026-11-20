@@ -5,17 +5,18 @@
 // today (`contains(true)` on a list of numbers: std method arguments are
 // not checked against bound types, #1462 closed the number case only); when
 // that defect is fixed, put another one here.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn shown(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
-    let out = process::run(nikaia, args; dir: tmp.clone())
+fn shown(nikaia: String, tmp: ref fs::Root, label: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(f"-- {label}: exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("error[") || line.trim().starts_with("-->") || line.starts_with("program ") || line.starts_with("Checked") {
@@ -25,23 +26,23 @@ fn shown(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let refused = "fn main() throws {\n    let v = [1, 2, 3]\n    println(v.contains(true))\n}\n"
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-    let alone = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{alone}/refused.nika", fs::Root::Anywhere, refused)
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn main() {}\n")
+    let alone = fs::scratch()
+    fs::write("refused.nika", alone, refused)
     shown(nikaia, alone, "run", ["run", "refused.nika"])
     shown(nikaia, alone, "check", ["check", "refused.nika"])
     shown(nikaia, alone, "check --rustc", ["check", "--rustc", "refused.nika"])
-    fs::write(f"{tmp}/tests/refused.nika", fs::Root::Anywhere, refused)
-    fs::write(f"{tmp}/tests/refused.stdout", fs::Root::Anywhere, "3\n")
+    fs::write("tests/refused.nika", tmp, refused)
+    fs::write("tests/refused.stdout", tmp, "3\n")
     shown(nikaia, tmp, "test, expected stdout", ["test"])
-    process::run("rm", [f"{tmp}/tests/refused.stdout"])
-    fs::write(f"{tmp}/tests/refused.stderr", fs::Root::Anywhere, "")
+    process::run("rm", [f"{tmp.path().to_text()}/tests/refused.stdout"])
+    fs::write("tests/refused.stderr", tmp, "")
     shown(nikaia, tmp, "test --bless-stderr", ["test", "--bless-stderr"])
-    println(f"refused.stderr: [{fs::read_to_string(f"{tmp}/tests/refused.stderr", fs::Root::Anywhere).trim()}]")
-    process::run("rm", ["-rf", tmp, alone])
+    println(f"refused.stderr: [{fs::read_to_string("tests/refused.stderr", tmp).trim()}]")
+    process::run("rm", ["-rf", tmp.path().to_text(), alone.path().to_text()])
 }

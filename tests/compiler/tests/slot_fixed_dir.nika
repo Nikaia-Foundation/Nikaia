@@ -1,45 +1,41 @@
 // scripts/slot.nika gives a tool a fixed directory under a lock (ADR-021
 // D14, #2015): the slot is emptied before each run, the command's exit code
 // is the run's, and a run that finds slot 0 held takes slot 1.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/slot.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/slot.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
-    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = process::run("realpath", [toolchain()]).stdout.trim().clone()
     let helper = f"{root()}/scripts/slot.nika"
-    let base = f"{tmp}/base"
+    let base = tmp.join("base")
     // Twice: the file the first run leaves is gone in the second.
     for n in [1, 2] {
         let ran = process::run(
             nikaia.clone(),
-            ["run", helper.clone(), "--", base.clone(), "sh", "-c", "basename \"$1\"; ls \"$1\"; touch \"$1/left\"; exit 3", "sh", "{slot}"],
+            ["run", helper.clone(), "--", base.path().to_text(), "sh", "-c", "basename \"$1\"; ls \"$1\"; touch \"$1/left\"; exit 3", "sh", "{slot}"],
         )
         println(f"run {n}: {ran.stdout.trim()}, exit {ran.code}")
     }
     // Slot 0 held by a run that waits for `done`: the second run takes slot 1.
-    let script = f"N='{nikaia}'; S='{helper}'; B='{base}'; T='{tmp}'
+    let script = f"N='{nikaia}'; S='{helper}'; B='{base.path().to_text()}'; T='{tmp.path().to_text()}'
 \"$N\" run \"$S\" -- \"$B\" sh -c 'basename \"$1\"; touch \"$2/held\"; while [ ! -e \"$2/done\" ]; do sleep 0.1; done' sh {{slot}} \"$T\" > \"$T/first\" &
 while [ ! -e \"$T/held\" ]; do sleep 0.1; done
 echo \"second: $(\"$N\" run \"$S\" -- \"$B\" sh -c 'basename \"$1\"' sh {{slot}})\"
 touch \"$T/done\"; wait
 echo \"first: $(cat \"$T/first\")\""
     println(process::run("sh", ["-c", script]).stdout.trim())
-    let bare = process::run(nikaia, ["run", helper, "--", base])
+    let bare = process::run(nikaia, ["run", helper, "--", base.path().to_text()])
     println(f"without a command: exit {bare.code}")
-    process::run("rm", ["-rf", tmp])
 }
