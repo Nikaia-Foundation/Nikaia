@@ -1,0 +1,38 @@
+// `Yaml::events` over a stream of several documents and over one document
+// longer than a Rust reader's default frame (16 MiB): the walk hands over
+// what `events(documents(input))` gives, event for event and span for span
+// (ADR-grammar-typed-read-v1 D7, #2282). The input is all in memory, so the
+// walk reads it in one block and waits out a document as long as the input.
+use yaml
+
+// The lines of the tree's walk and of the stream's, compared; the stream's
+// are printed, or, for a long input, counted.
+fn compared(text: String, shown: bool) throws {
+	let input = Bytes(text.bytes().collect())
+	let mut tree: Vec[String] = []
+	for e in yaml::events(yaml::documents(input)) {
+		tree.push(f"{e.start}-{e.end} {yaml::event_line(e)}")
+	}
+	let mut n = 0
+	let mut same = true
+	for e in yaml::Yaml::events(Bytes(text.bytes().collect())) {
+		let line = f"{e.start}-{e.end} {yaml::event_line(e)}"
+		if n >= tree.len() || tree[n] != line {
+			same = false
+		}
+		if shown {
+			println(line)
+		}
+		n += 1
+	}
+	println(f"{n} events, as the tree's: {same && n == tree.len()}")
+}
+
+fn main() throws {
+	compared("a\n---\n- b\n- c\n...\n--- !!map\nk: v\n...\nd\n---\n", true)
+	let mut long = String()
+	for _ in 0..<(270 * 1024) {
+		long.push_str("- abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghij\n")
+	}
+	compared(long, false)
+}
