@@ -1,0 +1,17 @@
+// The entering variable of the simplex ranked by its column's size times
+// the rows it lies in, the size breaking ties (#2401): 40_40_11_5_unsat
+// takes 93218 cases with it (129697 by the rows first), 40_40_78_15_sat
+// 79331 (100283) and 50_50_45_6_sat 20989 (37851), and each is answered
+// within 10 s. This file, the family's smallest, takes 8039 (6615 by the
+// rows first); the count pins the rule, the first word that the answer
+// holds (`sv_new_line` prints `wrong` for a model the script refutes).
+use logic
+use std::fs
+
+fn main() throws {
+	let root = fs::Root::Dir("tests")
+	let source = fs::read_to_string("smtlib/30_30_18_15_sat.smt2", root)
+	let line = logic::sv_line_stats(source, "new:cases=16384", false)
+	let head = line.split("/").next() ?? ""
+	println(head)
+}

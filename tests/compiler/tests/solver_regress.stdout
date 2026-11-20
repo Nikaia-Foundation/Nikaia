@@ -3,9 +3,9 @@ regress/20220307-SMPT-Referendum-PT-0200-RF-00.smt2 proved 0/pre:l1204f804
 regress/20231117-c_inference-30_30_86_7_sat.smt2 unknown (cases) 1024/pre:l126f52
 regress/bofill-scheduling-SMT_real_LIA-ex2360_2400_100.smt2 proved 2113/pre:l1007f128
 regress/clock_synchro-clocksynchro_8clocks.main_invar.base.smt2 proved 79
-regress/rings_preprocessed-ring_2exp4_5vars_3ite_unsat.smt2 unknown (cases) 1026/pre:l36f0
+regress/rings_preprocessed-ring_2exp4_5vars_3ite_unsat.smt2 unknown (cases) 1086/pre:l36f0
 regress/sal-carpark-Carpark2-ausgabe-6.smt2 proved 209
 regress/spider_benchmarks-current_frame.base.smt2 proved 714
 regress: 8 files, solved 6 (proved 5, refuted 1), unknown 2 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 916.8, certificates checked 5, models evaluated 1
-regress/rings_preprocessed-ring_2exp4_5vars_3ite_unsat.smt2 proved 20284/pre:l36f0
-regress: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 20284.0, certificates checked 1, models evaluated 0
+regress/rings_preprocessed-ring_2exp4_5vars_3ite_unsat.smt2 proved 22421/pre:l36f0
+regress: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 22421.0, certificates checked 1, models evaluated 0

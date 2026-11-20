@@ -198,10 +198,14 @@ fn sv_row_reduced(r: SvRow) -> SvRow {
 	if g <= 1 {
 		return r
 	}
-	let mut out = SvRow { cols: r.cols.clone(), ks: Vec(capacity: r.ks.len()), constant: r.constant / g }
-	for k in r.ks {
-		out.ks.push(k / g)
+	// Divided in place: the row is the caller's to give.
+	let mut out = r
+	let mut i = 0
+	while i < out.ks.len() {
+		out.ks[i] = out.ks[i] / g
+		i += 1
 	}
+	out.constant = out.constant / g
 	return out
 }
 
@@ -230,6 +234,95 @@ fn sv_row_tightened(r: ref SvRow) -> SvRow {
 fn sv_row_eliminate(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow? {
 	let ab = sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) ?? return null
 	return sv_row_combine(ab[0], r, ab[1], s)
+}
+
+/// `sv_row_eliminate` formed in `room`, its entries left behind (#2401: a
+/// pivot changes most rows of a dense tableau, and a fresh row each time
+/// was a third of its cost). The columns `s` brings into `r` are added to
+/// `came`, those that cancel in it to `left`, as the merge meets them.
+fn sv_row_eliminate_into(
+	room: SvRow,
+	r: ref SvRow,
+	s: ref SvRow,
+	col: u32,
+	exact: bool,
+	mut came: Vec[u32],
+	mut left: Vec[u32],
+) -> SvRow? {
+	let came_at = came.len()
+	let left_at = left.len()
+	let ab = sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) ?? return null
+	let mut spare = room
+	let a = ab[0]
+	let b = ab[1]
+	spare.cols.clear()
+	spare.ks.clear()
+	spare.constant = sv_mul_add(a, r.constant, b, s.constant) ?? return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left)
+	let mut i = 0
+	let mut j = 0
+	while i < r.cols.len() || j < s.cols.len() {
+		let mut c: u32 = 0
+		let mut k: i64 = 0
+		if j >= s.cols.len() || (i < r.cols.len() && r.cols[i] < s.cols[j]) {
+			c = r.cols[i]
+			k = a.checked_mul(r.ks[i]) ?? return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left)
+			i += 1
+		} else if i >= r.cols.len() || s.cols[j] < r.cols[i] {
+			c = s.cols[j]
+			k = b.checked_mul(s.ks[j]) ?? return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left)
+			j += 1
+			came.push(c)
+		} else {
+			c = r.cols[i]
+			k = sv_mul_add(a, r.ks[i], b, s.ks[j]) ?? return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left)
+			i += 1
+			j += 1
+		}
+		if k != 0 {
+			spare.cols.push(c)
+			spare.ks.push(k)
+		} else {
+			left.push(c)
+		}
+	}
+	return sv_row_reduced(spare)
+}
+
+/// `a·r + b·s` in double width where `exact` (#2307), else `null`; `came`
+/// and `left` cut back to `came_at` and `left_at` and filled by a merge of
+/// `r` and the row made.
+fn sv_row_wide_moved(
+	exact: bool,
+	a: i64,
+	r: ref SvRow,
+	b: i64,
+	s: ref SvRow,
+	came_at: i64,
+	mut came: Vec[u32],
+	left_at: i64,
+	mut left: Vec[u32],
+) -> SvRow? {
+	if !exact {
+		return null
+	}
+	let out = sv_row_combine_wide(a, r, b, s) ?? return null
+	came.truncate(came_at)
+	left.truncate(left_at)
+	let mut i = 0
+	let mut j = 0
+	while i < r.cols.len() || j < out.cols.len() {
+		if j >= out.cols.len() || (i < r.cols.len() && r.cols[i] < out.cols[j]) {
+			left.push(r.cols[i])
+			i += 1
+		} else if i >= r.cols.len() || out.cols[j] < r.cols[i] {
+			came.push(out.cols[j])
+			j += 1
+		} else {
+			i += 1
+			j += 1
+		}
+	}
+	return out
 }
 
 /// `sv_row_eliminate`, the combination formed in double width where it

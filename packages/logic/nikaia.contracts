@@ -816,6 +816,12 @@ panics = false
 touches = []
 signature = "(ref mut self, col: u32) -> i64"
 
+[fn."SvSimplex::compact"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, c: i64)"
+
 [fn."SvSimplex::conflict"]
 sync = "inferred"
 panics = true
@@ -898,11 +904,23 @@ places = true
 touches = []
 signature = "(ref mut self, mut book: SvBook) -> SvClause?"
 
+[fn."SvSimplex::gcd_row"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, r: i64)"
+
 [fn."SvSimplex::gcd_unchanged"]
 sync = "inferred"
 panics = true
 touches = []
 signature = "(ref self, r: i64) -> bool"
+
+[fn."SvSimplex::gcd_var"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, v: i64)"
 
 [fn."SvSimplex::gomory_cg"]
 sync = "inferred"
@@ -932,7 +950,7 @@ signature = "(ref mut self, l: u32, by: i64)"
 
 [fn."SvSimplex::integer_values"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
@@ -959,6 +977,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> i64"
+
+[fn."SvSimplex::mark_dirty"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, r: i64)"
 
 [fn."SvSimplex::model"]
 sync = "inferred"
@@ -997,6 +1021,13 @@ panics = true
 places = true
 views = ["book: borrowed"]
 signature = "(ref mut self, book: ref SvBook) -> Vec[u32]"
+
+[fn."SvSimplex::propagate_atom"]
+sync = "inferred"
+panics = true
+places = true
+views = ["book: borrowed"]
+signature = "(ref mut self, a: u32, fresh: bool, book: ref SvBook, rows_before: i64, call: i64, mut out: Vec[u32])"
 
 [fn."SvSimplex::push_level"]
 sync = "inferred"
@@ -1066,6 +1097,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> Vec[u32]"
+
+[fn."SvSimplex::take_atoms"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, v: i64, call: i64, mut out: Vec[u32])"
 
 [fn."SvSimplex::tighten"]
 sync = "inferred"
@@ -4206,6 +4243,14 @@ touches = []
 views = ["r: borrowed", "s: borrowed"]
 signature = "(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow?"
 
+[fn."sv_row_eliminate_into"]
+sync = "inferred"
+keeps = ["room"]
+panics = true
+touches = []
+views = ["r: borrowed", "s: borrowed"]
+signature = "(room: SvRow, r: ref SvRow, s: ref SvRow, col: u32, exact: bool, mut came: Vec[u32], mut left: Vec[u32]) -> SvRow?"
+
 [fn."sv_row_eval"]
 sync = "inferred"
 panics = true
@@ -4308,6 +4353,13 @@ panics = true
 touches = []
 views = ["r: borrowed"]
 signature = "(r: ref SvRow) -> SvRow"
+
+[fn."sv_row_wide_moved"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed", "s: borrowed"]
+signature = "(exact: bool, a: i64, r: ref SvRow, b: i64, s: ref SvRow, came_at: i64, mut came: Vec[u32], left_at: i64, mut left: Vec[u32]) -> SvRow?"
 
 [fn."sv_row_word"]
 sync = "inferred"
@@ -5885,7 +5937,7 @@ copies = true
 
 [type."SvSimplex"]
 pub = true
-fields = ["names: Vec[String]", "col_var: collections::BTreeMap[u32, i64]", "var_col: Vec[i64]", "var_form: Vec[SvRow]", "slack_of: collections::BTreeMap[String, i64]", "rows: Vec[SvRow]", "basic: Vec[i64]", "row_of: Vec[i64]", "values: Vec[SvDelta]", "lower: Vec[SvSide]", "upper: Vec[SvSide]", "undo: Vec[SvUndo]", "trail: Vec[u32]", "levels: Vec[i64]", "marks: Vec[i64]", "implied: Vec[SvImplied]", "held: Vec[i64]", "views: Vec[SvLitView]", "touched: Vec[bool]", "row_dirty: Vec[bool]", "seen_atoms: u32", "stamp: i64", "bound_at: Vec[i64]", "row_at: Vec[i64]", "gcd_at: Vec[i64]", "col_count: Vec[i64]", "pub found: collections::BTreeMap[String, i64]", "pub found_real: collections::BTreeMap[String, SvRat]", "pub reals: Vec[u32]", "pub branching: bool", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub cut_depth: i64", "pub pivots: i64", "pub splits: i64", "pub overflows: i64", "pub cuts: i64", "pub gcd_conflicts: i64"]
+fields = ["names: Vec[String]", "col_var: collections::BTreeMap[u32, i64]", "var_col: Vec[i64]", "var_form: Vec[SvRow]", "slack_of: collections::BTreeMap[String, i64]", "rows: Vec[SvRow]", "basic: Vec[i64]", "row_of: Vec[i64]", "values: Vec[SvDelta]", "lower: Vec[SvSide]", "upper: Vec[SvSide]", "undo: Vec[SvUndo]", "trail: Vec[u32]", "levels: Vec[i64]", "marks: Vec[i64]", "implied: Vec[SvImplied]", "held: Vec[i64]", "views: Vec[SvLitView]", "touched: Vec[bool]", "row_dirty: Vec[bool]", "seen_atoms: u32", "touched_list: Vec[i64]", "dirty_list: Vec[i64]", "level_seen: Vec[u32]", "level_rows: Vec[i64]", "level_vars: Vec[i64]", "row_log: Vec[i64]", "var_log: Vec[i64]", "redo: Vec[u32]", "redo_in: Vec[bool]", "var_atoms: Vec[Vec[u32]]", "col_rows: Vec[Vec[i64]]", "mark_round: i64", "row_mark: Vec[i64]", "prop_call: i64", "exam_at: Vec[i64]", "rb_at: Vec[i64]", "rb_has: Vec[bool]", "rb_val: Vec[SvDelta]", "atom_at: Vec[i64]", "stamp: i64", "bound_at: Vec[i64]", "row_at: Vec[i64]", "gcd_at: Vec[i64]", "gcd_rows: Vec[i64]", "gcd_row_in: Vec[bool]", "gcd_vars: Vec[i64]", "spare: Vec[SvRow]", "gcd_var_in: Vec[bool]", "col_count: Vec[i64]", "pub found: collections::BTreeMap[String, i64]", "pub found_real: collections::BTreeMap[String, SvRat]", "pub reals: Vec[u32]", "pub branching: bool", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub cut_depth: i64", "pub pivots: i64", "pub splits: i64", "pub overflows: i64", "pub cuts: i64", "pub gcd_conflicts: i64"]
 compares = true
 equates = true
 hashes = true
