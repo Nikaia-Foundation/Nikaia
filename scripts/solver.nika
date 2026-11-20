@@ -353,7 +353,7 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 		return out
 	}
 	let mut rels: Vec[String] = []
-	for p in fs::walk(trimmed.clone(), fs::Root::Anywhere) {
+	for p in fs::walk(trimmed.clone(), fs::Root::Anywhere; trusted: true) {
 		let rel = p.to_text()
 		if rel.ends_with(".smt2") { rels.push(rel) }
 	}
@@ -1424,7 +1424,7 @@ fn solver_fetch_limit() -> i64 {
 
 // Runs `git ARGS` in `dir`, and stops the script where it fails.
 fn solver_git(dir: String, args: Vec[String]) -> String throws {
-	let out = process::run("git", args.clone(); dir: dir)
+	let out = process::run("git", args.clone(); dir: dir, trusted: true)
 	if !out.ok {
 		println(f"git {args.join(" ")} failed: {out.stderr.trim()}")
 		process::exit(1)
@@ -1925,7 +1925,7 @@ fn main() throws {
 	let mut command: String = ""
 	let mut rest: Vec[String] = []
 	let mut at = 0
-	for a in cli::args() {
+	for a in cli::args(trusted: true) {
 		if at == 1 { command = a } else if at > 1 { rest.push(a) }
 		at += 1
 	}
