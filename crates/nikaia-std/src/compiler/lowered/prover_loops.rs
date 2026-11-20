@@ -1090,7 +1090,7 @@ pub(crate) fn loop_said(arena: &mut logic::TermArena, record: &LoopRecord, found
         let mut text = arena.text(shown);
         if text.contains(" || ") { text = format!("({})", text); }
         let mut said = nikaia_std::list::contains(&parts, &text);
-        for other in parts.iter() { if text.starts_with(&*format!("({} || ", other)) { said = true; } }
+        for other in parts.iter() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(text)), AsRef::<str>::as_ref(&(other)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.strip_prefix("(").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).and_then(|__nikaia_r| __nikaia_r.strip_prefix(" || ")).is_some() }) { said = true; } }
         if said { continue; }
         parts.push(text);
         if !nikaia_std::list::contains(&origins, &origin) { origins.push(nikaia_std::block::Text::from(origin.to_string())); }

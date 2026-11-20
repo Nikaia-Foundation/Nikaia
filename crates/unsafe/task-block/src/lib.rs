@@ -1085,9 +1085,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Housed<T> {
     }
 }
 
+mod boxed;
 mod list;
 pub mod text;
 
+pub use boxed::Boxed;
 pub use list::List;
 pub use text::Text;
 

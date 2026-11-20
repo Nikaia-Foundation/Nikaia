@@ -1,0 +1,25 @@
+0-0 +STR
+0-1 +DOC
+0-1 =VAL :a
+1-1 -DOC
+6-13 +DOC ---
+6-13 +SEQ
+8-9 =VAL :b
+12-13 =VAL :c
+13-13 -SEQ
+13-13 -DOC ...
+22-32 +DOC ---
+22-32 +MAP <tag:yaml.org,2002:map>
+28-29 =VAL :k
+31-32 =VAL :v
+32-32 -MAP
+32-32 -DOC ...
+37-38 +DOC
+37-38 =VAL :d
+38-38 -DOC
+42-42 +DOC ---
+42-42 =VAL :
+42-42 -DOC
+42-42 -STR
+23 events, as the tree's: true
+276486 events, as the tree's: true

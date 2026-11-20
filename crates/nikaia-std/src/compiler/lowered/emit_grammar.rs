@@ -236,7 +236,7 @@ impl EmitState {
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
         let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
-        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {}{}); ", name, rule_name, handed, each));
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, {}, {}{}); ", name, rule_name, emit_walk_reading(), handed, each));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
@@ -587,6 +587,8 @@ pub(crate) fn emit_stream_each(item: &str, emitting: bool) -> String {
     format!("|__wg_one: &{}| {}", item, send)
 }
 
+pub(crate) fn emit_walk_reading() -> String { String::from("winnow_grammar::rt::Reading { block: __wg_source.len() + 1, max_frame: __wg_source.len() }") }
+
 pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
     let mut found: Vec<GrammarRule> = vec![];
     if !offered_to_rust || !def.public { return found; }
@@ -724,7 +726,7 @@ impl EmitState {
                         Some(ref d) => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, Some(None) => None, None => {} }}", i, d) } else { format!("match f{} {{ Some(Some(v)) => v, _ => {} }}", i, d) },
                         None => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, _ => None }}", i) } else { format!("match f{} {{ Some(Some(v)) => v, Some(None) => {}, None => {} }}", i, refused, missing) },
                     };
-                    if self.is_boxed_field(&owner, &field) { given = format!("std::boxed::Box::new({})", given); }
+                    if self.is_boxed_field(&owner, &field) { given = format!("nikaia_std::block::Boxed::new({})", given); }
                     built_fields.push(format!("{}: {}", escaped_name(&field), given));
                 }
                 out.push(&format!("{} {{ {} }} }}\n", escaped_name(&owner), nikaia_std::block::Text::from(built_fields.join(", "))));

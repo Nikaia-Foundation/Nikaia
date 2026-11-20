@@ -1508,9 +1508,9 @@ grammar! {
             b:bool_lit -> { b }
           | s:str_lit -> { s }
           | c:char_lit -> { c }
-          | "-" f:float_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: Box::new(f), id: NodeId::parsed() } }
+          | "-" f:float_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: nikaia_std::block::Boxed::new(f), id: NodeId::parsed() } }
           | f:float_lit -> { f }
-          | "-" i:int_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: Box::new(i), id: NodeId::parsed() } }
+          | "-" i:int_lit -> { Expr::Unary { op: UnaryOp::Neg, expr: nikaia_std::block::Boxed::new(i), id: NodeId::parsed() } }
           | i:int_lit -> { i }
 
         rule receiver -> Receiver =
@@ -1859,7 +1859,7 @@ grammar! {
                     is_view: view.is_some(),
                     is_tuple: false,
                     is_nullable: nullable.is_some(),
-                    code: Box::new(None),
+                    code: nikaia_std::block::Boxed::new(None),
                     count: None,
                     is_mut: mutable,
                     is_slice: false,
@@ -1885,7 +1885,7 @@ grammar! {
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
-                    code: Box::new(None),
+                    code: nikaia_std::block::Boxed::new(None),
                     count: i64::try_from(n.0).ok(),
                     is_mut: false,
                     is_slice: false,
@@ -1916,7 +1916,7 @@ grammar! {
                         is_view: false,
                         is_tuple: true,
                         is_nullable: nullable.is_some(),
-                        code: Box::new(None),
+                        code: nikaia_std::block::Boxed::new(None),
                         count: None,
                         is_mut: false,
                         is_slice: false,
@@ -1958,8 +1958,8 @@ grammar! {
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
-                    code: Box::new(Some(Code {
-                        result: Box::new(result),
+                    code: nikaia_std::block::Boxed::new(Some(Code {
+                        result: nikaia_std::block::Boxed::new(result),
                         is_sync: s.is_some(),
                         can_throw: t.is_some(),
                         param_names,
@@ -2411,7 +2411,7 @@ grammar! {
 
         rule g_bind -> Spanned<Pattern> @=
             name:NAME ":" p:g_postfix -> {
-                Spanned::new(Pattern::Bind { name, pat: Box::new(p) }, Span::from(_span))
+                Spanned::new(Pattern::Bind { name, pat: nikaia_std::block::Boxed::new(p) }, Span::from(_span))
             }
 
         rule g_postfix -> Spanned<Pattern> @=
@@ -2426,7 +2426,7 @@ grammar! {
             }
           | a:g_atom rep:g_repeat? -> {
                 match rep {
-                    Some(r) => Spanned::new(Pattern::Repeat { pat: Box::new(a), rep: r }, Span::from(_span)),
+                    Some(r) => Spanned::new(Pattern::Repeat { pat: nikaia_std::block::Boxed::new(a), rep: r }, Span::from(_span)),
                     None => a,
                 }
             }
@@ -2472,9 +2472,9 @@ grammar! {
                 Spanned::new(
                     Pattern::Members {
                         ty,
-                        key: Box::new(key),
+                        key: nikaia_std::block::Boxed::new(key),
                         value,
-                        sep: Box::new(sep),
+                        sep: nikaia_std::block::Boxed::new(sep),
                         on_null: null,
                         on_unknown: unknown,
                         fields: Vec::new(),
@@ -2498,7 +2498,7 @@ grammar! {
 
         rule g_group -> Spanned<Pattern> @=
             "(" p:g_choice ")" -> {
-                Spanned::new(Pattern::Group(Box::new(p)), Span::from(_span))
+                Spanned::new(Pattern::Group(nikaia_std::block::Boxed::new(p)), Span::from(_span))
             }
 
         // **`if(cond)`, `if(cond, "what was expected")`** (ADR-grammar-syntax-v1 D14).
@@ -2732,7 +2732,7 @@ grammar! {
         // its own (ADR-023 D2).
         rule throw_stmt -> Stmt @=
             KW_THROW value:expr cond:exit_guard? semi? -> {
-                let jump = Stmt::Expr(Expr::Throw(Box::new(value), NodeId::parsed()));
+                let jump = Stmt::Expr(Expr::Throw(nikaia_std::block::Boxed::new(value), NodeId::parsed()));
                 match cond {
                     Some(cond) => guarded(jump, cond, Span::from(_span)),
                     None => jump,
@@ -3021,7 +3021,7 @@ grammar! {
                 match e {
                     Expr::Break(_) => Stmt::Break,
                     Expr::Continue(_) => Stmt::Continue,
-                    Expr::Return(value, _) => Stmt::Return(*value),
+                    Expr::Return(value, _) => Stmt::Return(value.into_inner()),
                     e => Stmt::Expr(e),
                 }
             }
@@ -3042,7 +3042,7 @@ grammar! {
         rule catch_expr_bare -> Expr =
             value:coalesce_expr handler:catch_tail? -> {
                 match handler {
-                    Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: NodeId::parsed() },
+                    Some(handler) => Expr::TryCatch { expr: nikaia_std::block::Boxed::new(value), handler, id: NodeId::parsed() },
                     None => value,
                 }
             }
@@ -3058,8 +3058,8 @@ grammar! {
             value:range_expr fallback:coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(value),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(value),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => value,
                 }
@@ -3117,8 +3117,8 @@ grammar! {
             head:unary_expr tail:coalesce_tail? not(subtract_minus) -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(head),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(head),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => head,
                 }
@@ -3200,8 +3200,8 @@ grammar! {
             start:or_expr end:range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
-                        start: Box::new(start),
-                        end: Box::new(end),
+                        start: nikaia_std::block::Boxed::new(start),
+                        end: nikaia_std::block::Boxed::new(end),
                         inclusive, id: NodeId::parsed()
                     },
                     None => start,
@@ -3336,7 +3336,7 @@ grammar! {
         rule cast_expr_bare -> Expr =
             head:unary_expr casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
-                    expr: Box::new(expr),
+                    expr: nikaia_std::block::Boxed::new(expr),
                     ty,
                     id: NodeId::parsed(),
                 })
@@ -3366,7 +3366,7 @@ grammar! {
             // this was one number missing rather than a hole.
             n:negative_number_lit -> { crate::ast::numbered_int_literal(n.0, n.1, NodeId::parsed()) }
           | op:unary_op e:unary_expr -> {
-                Expr::Unary { op, expr: Box::new(e), id: NodeId::parsed() }
+                Expr::Unary { op, expr: nikaia_std::block::Boxed::new(e), id: NodeId::parsed() }
             }
           | e:postfix_expr -> { e }
 
@@ -3463,15 +3463,15 @@ grammar! {
           // fold writes as `a..<base.len()`, the one form a range has.
           | same_line "[" "..<" end:or_expr "]" -> {
                 Postfix::Index(Expr::Range {
-                    start: Box::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
-                    end: Box::new(end),
+                    start: nikaia_std::block::Boxed::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
+                    end: nikaia_std::block::Boxed::new(end),
                     inclusive: false, id: NodeId::parsed()
                 })
             }
           | same_line "[" ".." end:or_expr "]" -> {
                 Postfix::Index(Expr::Range {
-                    start: Box::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
-                    end: Box::new(end),
+                    start: nikaia_std::block::Boxed::new(Expr::LitInt { value: 0, negative: false, id: NodeId::parsed() }),
+                    end: nikaia_std::block::Boxed::new(end),
                     inclusive: true, id: NodeId::parsed()
                 })
             }
@@ -3694,8 +3694,8 @@ grammar! {
           | j:jump_expr -> { j }
 
         rule jump_expr -> Expr =
-            KW_THROW e:expr -> { Expr::Throw(Box::new(e), NodeId::parsed()) }
-          | KW_RETURN e:returned? -> { Expr::Return(Box::new(e), NodeId::parsed()) }
+            KW_THROW e:expr -> { Expr::Throw(nikaia_std::block::Boxed::new(e), NodeId::parsed()) }
+          | KW_RETURN e:returned? -> { Expr::Return(nikaia_std::block::Boxed::new(e), NodeId::parsed()) }
           | KW_BREAK -> { Expr::Break(NodeId::parsed()) }
           | KW_CONTINUE -> { Expr::Continue(NodeId::parsed()) }
 
@@ -3755,7 +3755,7 @@ grammar! {
         rule head_expr_bare -> Expr =
             value:head_coalesce handler:catch_tail? -> {
                 match handler {
-                    Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: NodeId::parsed() },
+                    Some(handler) => Expr::TryCatch { expr: nikaia_std::block::Boxed::new(value), handler, id: NodeId::parsed() },
                     None => value,
                 }
             }
@@ -3767,8 +3767,8 @@ grammar! {
             value:head_range fallback:head_coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(value),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(value),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => value,
                 }
@@ -3796,8 +3796,8 @@ grammar! {
             head:head_unary tail:head_coalesce_tail? -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
-                        value: Box::new(head),
-                        fallback: Box::new(fallback), id: NodeId::parsed()
+                        value: nikaia_std::block::Boxed::new(head),
+                        fallback: nikaia_std::block::Boxed::new(fallback), id: NodeId::parsed()
                     },
                     None => head,
                 }
@@ -3810,8 +3810,8 @@ grammar! {
             start:head_or end:head_range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
-                        start: Box::new(start),
-                        end: Box::new(end),
+                        start: nikaia_std::block::Boxed::new(start),
+                        end: nikaia_std::block::Boxed::new(end),
                         inclusive, id: NodeId::parsed()
                     },
                     None => start,
@@ -3923,7 +3923,7 @@ grammar! {
         rule head_cast_bare -> Expr =
             head:head_unary casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
-                    expr: Box::new(expr),
+                    expr: nikaia_std::block::Boxed::new(expr),
                     ty,
                     id: NodeId::parsed(),
                 })
@@ -3934,7 +3934,7 @@ grammar! {
 
         rule head_unary_bare -> Expr =
             op:unary_op e:head_unary -> {
-                Expr::Unary { op, expr: Box::new(e), id: NodeId::parsed() }
+                Expr::Unary { op, expr: nikaia_std::block::Boxed::new(e), id: NodeId::parsed() }
             }
           | e:head_postfix -> { e }
 
@@ -4034,7 +4034,7 @@ grammar! {
         rule list_lit -> Expr @=
             "[" head:expr rest:list_rest "]" -> {
                 match rest {
-                    Ok(count) => Expr::ListRepeat { value: Box::new(head), count: Box::new(count), id: NodeId::parsed() },
+                    Ok(count) => Expr::ListRepeat { value: nikaia_std::block::Boxed::new(head), count: nikaia_std::block::Boxed::new(count), id: NodeId::parsed() },
                     Err(tail) => {
                         let mut items = vec![head];
                         items.extend(tail);
@@ -4074,11 +4074,11 @@ grammar! {
         rule async_expr -> Expr =
             KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: Box::new(body), written_async: true, child: false, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" h:async_task_head* OPT_HANDLE t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
                 let mut options: [Option<Expr>; 3] = [None, None, None];
@@ -4086,16 +4086,16 @@ grammar! {
                     options[which] = Some(value);
                 }
                 let [within, limit, admission] = options;
-                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(within), Box::new(limit), Box::new(admission))
+                Expr::AsyncGroup(b, NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(limit), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" async_built_options l:async_one_task_limit -> { l }
           | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
                 let [within, admission] = async_task_options(vec![head], t);
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(within), Box::new(admission))
+                Expr::Async(nikaia_std::block::Boxed::new(e), NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" peek(KW_FN) l:trailing_lambda -> {
                 let [within, admission] = async_task_options(vec![head], t);
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(within), Box::new(admission))
+                Expr::Async(nikaia_std::block::Boxed::new(l), NodeId::parsed(), nikaia_std::block::Boxed::new(within), nikaia_std::block::Boxed::new(admission))
             }
           | KW_ASYNC "(" OPT_HANDLE ")" fail(
                 "`async(handle)` takes a lambda. Write `async(handle) fn { … }`."
@@ -4109,13 +4109,13 @@ grammar! {
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC peek("{") b:block not(KW_CATCH) -> {
-                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None), Box::new(None), Box::new(None))
+                Expr::AsyncGroup(b, NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None), Box::new(None))
+                Expr::Async(nikaia_std::block::Boxed::new(e), NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda -> {
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(None), Box::new(None))
+                Expr::Async(nikaia_std::block::Boxed::new(l), NodeId::parsed(), nikaia_std::block::Boxed::new(None), nikaia_std::block::Boxed::new(None))
             }
           | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
                 "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
@@ -4197,16 +4197,16 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
-                    body: Box::new(Expr::Closure {
+                    body: nikaia_std::block::Boxed::new(Expr::Closure {
                         params: Vec::new(),
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed()
+                    written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
                 }
             }
 
@@ -4261,7 +4261,7 @@ grammar! {
         // literal and take the arms for fields.
         rule match_expr -> Expr =
             KW_MATCH value:head_expr "{" arms:match_arm+ "}" -> {
-                Expr::Match { value: Box::new(value), arms, id: NodeId::parsed() }
+                Expr::Match { value: nikaia_std::block::Boxed::new(value), arms, id: NodeId::parsed() }
             }
 
         // **The guard is `if` and it stands on the arm**
@@ -4716,7 +4716,7 @@ grammar! {
             KW_IF cond:head_expr then_branch:block otherwise:else_branch?
             -> {
                 Expr::If {
-                    cond: Box::new(cond),
+                    cond: nikaia_std::block::Boxed::new(cond),
                     then_branch,
                     else_branch: otherwise, id: NodeId::parsed()
                 }
@@ -4862,19 +4862,19 @@ grammar! {
                     Expr::Path(segments, NodeId::parsed())
                 };
                 if let Some(index) = types {
-                    base = Expr::Index { base: Box::new(base), index: Box::new(index), id: NodeId::parsed() };
+                    base = Expr::Index { base: nikaia_std::block::Boxed::new(base), index: nikaia_std::block::Boxed::new(index), id: NodeId::parsed() };
                 }
                 match (args, lambda) {
                     (Some((mut args, config)), lambda) => {
                         args.extend(lambda);
                         Expr::Call {
-                            func: Box::new(base),
+                            func: nikaia_std::block::Boxed::new(base),
                             args,
                             config, id: NodeId::parsed()
                         }
                     }
                     (None, Some(lambda)) => Expr::Call {
-                        func: Box::new(base),
+                        func: nikaia_std::block::Boxed::new(base),
                         args: vec![lambda],
                         config: Vec::new(), id: NodeId::parsed()
                     },

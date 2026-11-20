@@ -3480,7 +3480,7 @@ pub mod emit_tables {
 }
 pub mod emit_text {
     #[allow(unused_imports)]
-    pub use super::{format_of, truncating, checked};
+    pub use super::{format_of, truncating, checked, format_compared_check};
 }
 pub mod emit_types {}
 pub mod emit_walk {
@@ -3759,7 +3759,7 @@ pub mod rustc_words {
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, box_sites_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
 }
 pub mod signature {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "68cfee9968ee2010fd2d80727fae227ba276a39892f023a15832bd0d7c0498b5";
+pub const LOWERED_DIGEST: &str = "15bfb8fde606470d259dbecb1c7acd702ddbae2eade23321292f3992d298824a";

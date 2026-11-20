@@ -1,0 +1,29 @@
+// **A tree built and walked in one function is built in the task's block**
+// (ADR-327 D16, #2406): `t` is bound by its own `let`, rebuilt in place
+// (`t = Tree::Node(t, …)`) and lent to `count`, so it cannot outlive the
+// task, and each of its boxes is `Boxed::placed`. The tree a function
+// returns is built outside (D17), and `--sharing` names both.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn walk(depth: i64) -> i64 {
+    let mut t = Tree::Node(Tree::Leaf, Tree::Leaf)
+    for _ in 0..<depth {
+        t = Tree::Node(t, Tree::Node(Tree::Leaf, Tree::Leaf))
+    }
+    return count(t)
+}
+
+fn main() throws {
+    let mut nodes = 0
+    for _ in 0..<1000 {
+        nodes += walk(16)
+    }
+    println(f"{nodes} nodes walked")
+}

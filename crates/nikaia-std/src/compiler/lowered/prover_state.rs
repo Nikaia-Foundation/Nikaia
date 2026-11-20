@@ -800,7 +800,7 @@ pub(crate) fn given_paths(arena: &mut logic::TermArena, words: &winnow_grammar::
     for v in read.iter() {
         if given_by.contains_key(v) { continue; }
         for k in 0..params.len() as i64 {
-            if ((k) as usize) < args.len() && v.starts_with(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })) {
+            if ((k) as usize) < args.len() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&params, (k) as usize) })), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) {
                 let written = nikaia_std::block::Text::from(nikaia_std::index::or(v.strip_prefix(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })), || "").to_string());
                 let rest = match property_given(&written, params, args, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let term = given_path(arena, words, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, &rest, scope, pinned);
@@ -811,7 +811,7 @@ pub(crate) fn given_paths(arena: &mut logic::TermArena, words: &winnow_grammar::
 }
 
 pub(crate) fn property_given(rest: &str, params: &[String], args: &[Expr], words: &winnow_grammar::InternerContext) -> Option<String> {
-    if !rest.starts_with(&*property_mark()) && !rest.contains(&*format!(".{}", property_mark())) { return Some(nikaia_std::block::Text::from(rest.to_string())); }
+    if !rest.starts_with(&*property_mark()) && !::core::convert::identity(match (AsRef::<str>::as_ref(&(rest)), AsRef::<str>::as_ref(&(property_mark())), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find(".") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + ".".len()..].strip_prefix(__nikaia_f1).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { return Some(nikaia_std::block::Text::from(rest.to_string())); }
     let open = match nikaia_std::search::find(&rest, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
     let inner = match property_inner(nikaia_std::index::get(&rest, nikaia_std::index::at(open..))) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
     if inner.is_empty() { return Some(nikaia_std::block::Text::from(rest.to_string())); }
@@ -819,7 +819,7 @@ pub(crate) fn property_given(rest: &str, params: &[String], args: &[Expr], words
     for part in inner.split(", ") {
         let mut given = nikaia_std::block::Text::from(part.to_string());
         for j in 0..params.len() as i64 {
-            if AsRef::<str>::as_ref(&(part)) == AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&params, (j) as usize) })) || part.starts_with(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (j) as usize) })) {
+            if AsRef::<str>::as_ref(&(part)) == AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&params, (j) as usize) })) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(part)), AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&params, (j) as usize) })), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) {
                 let arg = match args.get(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let on = match path_of(&arg, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 given = format!("{}{}", on, nikaia_std::index::or(part.strip_prefix(&**unsafe { nikaia_std::proven::read(&params, (j) as usize) }), || ""));

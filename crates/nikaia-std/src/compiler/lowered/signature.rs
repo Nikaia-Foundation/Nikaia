@@ -46,7 +46,7 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     let optional = generic_of(text, "Option");
     if optional.is_some() {
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);
-        return Translated { ty: Ty::Nullable(std::boxed::Box::new(inner.ty)), kept: inner.kept };
+        return Translated { ty: Ty::Nullable(nikaia_std::block::Boxed::new(inner.ty)), kept: inner.kept };
     }
     let listed = generic_of(text, "Vec");
     if listed.is_some() {

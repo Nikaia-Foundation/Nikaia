@@ -242,7 +242,7 @@ pub(crate) fn property_args(name: &str) -> Vec<String> {
 
 pub(crate) fn property_reads(name: &str, path: &str) -> bool {
     let all = property_args(name);
-    for (i, arg) in all.iter().enumerate().map(|(at, item)| (at as i64, item)) { if i > 0 && (AsRef::<str>::as_ref(&(arg)) == AsRef::<str>::as_ref(&(path)) || arg.starts_with(&*format!("{}.", path))) { return true; } }
+    for (i, arg) in all.iter().enumerate().map(|(at, item)| (at as i64, item)) { if i > 0 && (AsRef::<str>::as_ref(&(arg)) == AsRef::<str>::as_ref(&(path)) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(arg)), AsRef::<str>::as_ref(&(path)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() })) { return true; } }
     false
 }
 

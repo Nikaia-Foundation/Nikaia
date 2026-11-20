@@ -329,7 +329,13 @@ pub mod runtime {
 /// **And `blocks_in_conditions`**: `high.narrowing_div_rem(low, d) ?? return
 /// null` lowers the call as a block (it names the wide value once) inside the
 /// `match` of `??` (`sv_num.nika`, #2013).
+///
+/// **And `match_single_binding`**: a text formatted only to be compared
+/// (`p.starts_with(f"{a}[")`) is checked in place in a one-arm `match` that
+/// keeps a formatted hole's temporary alive, which a `let` would drop
+/// (`bounds_walk.nika`'s `bounding_in_elements`, #2405).
 #[allow(
+    clippy::match_single_binding,
     clippy::blocks_in_conditions,
     clippy::get_first,
     clippy::result_large_err,

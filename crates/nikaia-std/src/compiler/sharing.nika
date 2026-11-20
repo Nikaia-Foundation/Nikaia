@@ -209,6 +209,20 @@ pub fn sharing_report(sharing: ref Sharing) -> String {
     return out
 }
 
+/// **Where each box of a recursive type is built, and why** (ADR-327 D16,
+/// #2406): one line per box site the checker placed (`box_sites`), after the
+/// `Shared` values; nothing where the program boxes nothing.
+pub fn box_sites_report(sites: ref collections::BTreeMap[i64, String]) -> String {
+    if sites.len() == 0 {
+        return ""
+    }
+    let mut out: String = "\nBoxes of recursive types (ADR-327 D16):\n"
+    for (_, site) in sites {
+        out.push_str(ref f"    {site}\n")
+    }
+    return out
+}
+
 fn fallback_text(fallback: Fallback?) -> String {
     let row = fallback ?? return ""
     return row.as_str()

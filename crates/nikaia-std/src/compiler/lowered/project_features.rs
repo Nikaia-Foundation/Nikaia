@@ -360,7 +360,7 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
             let mut readers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 0..items.len() as i64 {
                 let path = match features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if path == rest || path.starts_with(&*format!("{}::", rest)) { readers.push(at); }
+                if path == rest || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(rest)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).is_some() }) { readers.push(at); }
             }
             if !readers.is_empty() {
                 roots.reserve(readers.iter().size_hint().0); for at in readers.iter() {
@@ -513,7 +513,7 @@ pub(crate) fn features_readers_sent(reach: &FeaturesReach, features: &[ManifestF
                 if one.name != feature { continue; }
                 for written in one.entries.iter() {
                     let full = format!("{}::{}", package, path);
-                    if entry.is_empty() && (*written == full || full.starts_with(&*format!("{}::", written))) { entry = nikaia_std::block::Text::from(written.to_string()); }
+                    if entry.is_empty() && (*written == full || ::core::convert::identity(match (AsRef::<str>::as_ref(&(full)), AsRef::<str>::as_ref(&(written)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).is_some() })) { entry = nikaia_std::block::Text::from(written.to_string()); }
                 }
             }
             let holds = if !field.is_empty() { format!("`{}.{}` holds", owner, field) } else { String::from("it is") };
@@ -691,7 +691,7 @@ pub(crate) fn features_blamed(said: &str, made: &FeaturesMade, fallback: &str) -
     let line = features_first_error(said);
     let mut at = 0;
     for piece in line.split('`') {
-        if at % 2 == 1 { for home in made.homes.iter() { if AsRef::<str>::as_ref(&(home.0)) == AsRef::<str>::as_ref(&(piece)) || piece.ends_with(&*format!("::{}", home.0)) { return nikaia_std::block::Text::from(home.1.to_string()); } } }
+        if at % 2 == 1 { for home in made.homes.iter() { if AsRef::<str>::as_ref(&(home.0)) == AsRef::<str>::as_ref(&(piece)) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(piece)), AsRef::<str>::as_ref(&(home.0)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.strip_suffix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_suffix("::")).is_some() }) { return nikaia_std::block::Text::from(home.1.to_string()); } } }
         at += 1;
     }
     nikaia_std::block::Text::from(fallback.to_string())

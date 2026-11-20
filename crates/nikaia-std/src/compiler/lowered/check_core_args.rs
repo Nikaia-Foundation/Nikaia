@@ -199,7 +199,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         let p = *p;
                         spelled.params.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string()));
                     }
-                    return Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(out), is_sync: !pauses, can_throw: fails, spelled };
+                    return Ty::Fn { params: given.copy_owned(), result: nikaia_std::block::Boxed::new(out), is_sync: !pauses, can_throw: fails, spelled };
                 },
                 _ => { },
             }

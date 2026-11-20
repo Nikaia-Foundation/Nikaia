@@ -1,0 +1,10 @@
+// A text compared with an `f"…"` whose text part is empty (#2405): the
+// comparison is the one the formatted text would give.
+
+fn main() throws {
+    let empty = ""
+    let x = "x"
+    println(f"{"abc".starts_with(f"{empty}")} {"abc".ends_with(f"{empty}")} {"abc".contains(f"{empty}")} {"" == f"{empty}"}")
+    println(f"{"".starts_with(f"{empty}{empty}")} {"".contains(f"{empty}{empty}")} {"x" == f"{empty}{x}{empty}"} {"" == f"{x}"}")
+    println(f"{"[]".contains(f"[{empty}]")} {"[a]".contains(f"[{empty}]")} {"a[]".ends_with(f"[{empty}]")}")
+}

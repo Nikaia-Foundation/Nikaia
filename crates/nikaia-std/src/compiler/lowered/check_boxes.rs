@@ -298,7 +298,7 @@ pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
 pub(crate) fn check_boxes_a_whole_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, name: &str) -> bool {
     match pattern {
         MatchPattern::Named { path, fields, .. } => {
-            if path.len() != 1 || format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) })) != name { return false; }
+            if path.len() != 1 || ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => !(__nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some()) }) { return false; }
             for field in fields.iter() { if !catches_everything(&field.pat) { return false; } }
             true
         },

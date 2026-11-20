@@ -67,7 +67,7 @@ impl EmitState {
     /// The type of a member, in a `Box` where it is boxed.
     fn boxed_ty(ref self, owner: ref String, member: ref String, lowered: String) -> String {
         if self.is_boxed(owner, member) {
-            return f"std::boxed::Box<{lowered}>"
+            return f"nikaia_std::block::Boxed<{lowered}>"
         }
         return lowered
     }

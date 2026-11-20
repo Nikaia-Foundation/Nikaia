@@ -37,6 +37,29 @@ impl<'a, T> Open for &'a mut Box<T> {
     }
 }
 
+/// **The box of a recursive type** (ADR-327 D16), placed in the task's
+/// block or outside it, opens as `Box` does.
+impl<T> Open for crate::block::Boxed<T> {
+    type Out = T;
+    fn open(self) -> T {
+        self.into_inner()
+    }
+}
+
+impl<'a, T> Open for &'a crate::block::Boxed<T> {
+    type Out = &'a T;
+    fn open(self) -> &'a T {
+        self
+    }
+}
+
+impl<'a, T> Open for &'a mut crate::block::Boxed<T> {
+    type Out = &'a mut T;
+    fn open(self) -> &'a mut T {
+        self
+    }
+}
+
 /// The emitted spelling: `let a = nikaia_std::boxed::open(a);`.
 #[inline]
 pub fn open<B: Open>(boxed: B) -> B::Out {
@@ -68,6 +91,27 @@ impl<T> Peek for &Box<T> {
 }
 
 impl<T> Peek for &mut Box<T> {
+    type Inside = T;
+    fn peek(&self) -> &T {
+        self
+    }
+}
+
+impl<T> Peek for crate::block::Boxed<T> {
+    type Inside = T;
+    fn peek(&self) -> &T {
+        self
+    }
+}
+
+impl<T> Peek for &crate::block::Boxed<T> {
+    type Inside = T;
+    fn peek(&self) -> &T {
+        self
+    }
+}
+
+impl<T> Peek for &mut crate::block::Boxed<T> {
     type Inside = T;
     fn peek(&self) -> &T {
         self

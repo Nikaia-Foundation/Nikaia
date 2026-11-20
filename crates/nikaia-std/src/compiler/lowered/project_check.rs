@@ -94,7 +94,7 @@ pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw
         }
         let help = nikaia_std::index::or(finding.help.as_deref(), || "");
         let mut key: String = String::from("");
-        for known in raw_sinks_allow_keys() { if help.contains(&*format!("`{} = ", known)) { key = nikaia_std::block::Text::from(known.to_string()); } }
+        for known in raw_sinks_allow_keys() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(help)), AsRef::<str>::as_ref(&(known)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix(" = ")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { key = nikaia_std::block::Text::from(known.to_string()); } }
         let mut source: String = String::from("");
         match help.split_once(&*format!("`{} = [\"", key)) {
             Some((_, rest)) => {
@@ -110,7 +110,7 @@ pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw
         let mut allowed = false;
         for one in keys.iter() {
             let word = if package.is_empty() { nikaia_std::block::Text::from(one.to_string()) } else { format!("{}:{}", package, one) };
-            if allow.iter().any(|given| { AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(word)) || !source.is_empty() && AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(format!("{}={}", word, source))) }) { allowed = true; }
+            if allow.iter().any(|given| { AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(word)) || !source.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(given)), AsRef::<str>::as_ref(&(word)), AsRef::<str>::as_ref(&(source)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + "=".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("=")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() }) }) { allowed = true; }
         }
         if allowed { continue; }
         let value = if source.is_empty() { String::from("true") } else { format!("[\"{}\"]", source) };

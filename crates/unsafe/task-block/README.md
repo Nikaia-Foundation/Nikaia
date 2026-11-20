@@ -74,6 +74,11 @@ push(&mut xs, 7);                   // a full block ends the task, here
 | `From<List<T>> for Vec<T>` | `Vec::from_raw_parts`, or a move out of the block | outside the running block (`is_outside`) the memory is the global allocator's, which `std`'s `Vec` frees; a block list's elements are moved with `copy_nonoverlapping` into a new `Vec` with room for them, and the block list is rebuilt with length 0, so it frees only its memory |
 | `Text::as_str`, `as_mut_str` | `str::from_utf8_unchecked` | every append is a whole `str` (or a `char` encoded as one), and `make_ascii_lowercase` changes only ASCII bytes; a `&mut str` can only be changed into UTF-8, and `insert_str`, `remove`, `truncate`, `pop` and `split_off` cut only at character boundaries |
 | `From<Text> for String` | `String::from_utf8_unchecked` | the bytes are the text's, UTF-8 |
+| `impl Send`, `Sync for Boxed<T>` | a box's raw pointer crosses threads | a `Boxed<T>` owns its `T` alone, as a `Box<T>` does; a placed box crosses to no other task (D9), an outside one is the global allocator's, which any thread frees; a shared box hands out only `&T` |
+| `Boxed::at` | `ptr.write(value)` | fresh memory with `T`'s layout from `Place::allocate`, written once |
+| `Boxed::into_inner`, `Drop for Boxed` | `ptr.read()` or `drop_in_place`, then `free` | the value was written at construction; it is read or dropped once (`into_inner` takes the box into `ManuallyDrop`), and the memory freed once after |
+| `free` (from `Boxed`) | `Place::Block.deallocate` | it frees by the address (D16): a cut of the running block goes back to it, any other pointer to the global allocator, which allocated it; a placed box is freed while its task is polled (D9) |
+| `Deref`, `DerefMut for Boxed` | `NonNull::as_ref`, `as_mut` | a live box holds a written value, and the borrow is the box's |
 
 ## How it is checked
 
@@ -92,4 +97,6 @@ kilobyte at a time under the 64 KiB block (D10), runs of pages given back, a
 full block that refuses and a freed one that takes again, growth in place and
 by a move, segments chained up to a budget and a run of all 16 pages in a
 fresh one (D15), a task polled inside another, a block reused by the next task, an
-alignment past a page, and text.
+alignment past a page, text, and a box (D16): one pointer wide, a placed
+tree in the block and given back, an outside box freed outside inside a task,
+a clone outside, a box taken apart, and a full block ending the task.

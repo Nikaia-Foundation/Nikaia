@@ -94,7 +94,7 @@ impl Host<'_> {
             _ => return not_run("It is not a call of a function by name."),
         };
         let value = Expr::Call {
-            func: Box::new(func),
+            func: nikaia_std::block::Boxed::new(func),
             args: args
                 .iter()
                 .map(|value| crate::ast::int_literal(value.unsigned_abs(), *value < 0))
