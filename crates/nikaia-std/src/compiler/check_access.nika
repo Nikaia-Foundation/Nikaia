@@ -47,7 +47,7 @@ impl CheckState {
         }
         let shown = ty.trim_start_matches('&')
         let at = shown.find("::") ?? return
-        let package = shown[0..<at].clone()
+        let package = shown.before(at.start).clone()
         if !self.modules.contains(package) {
             return
         }
@@ -82,8 +82,8 @@ impl CheckState {
     /// lets it through (`check_access_inside_std`).
     pub fn reachable(ref mut self, name: ref String, of_std: bool, contract: ref FnContract, span: ref Span) sync {
         let at = name.find("::") ?? return
-        let module = name[0..<at].clone()
-        let item = name[at + 2..<name.len()].clone()
+        let module = name.before(at.start).clone()
+        let item = name.after(at.end).clone()
         let helper = of_std && self.std_modules.contains(module) && !self.modules.contains(module)
         if !(self.modules.contains(module) || helper) || contract.public {
             return

@@ -63,13 +63,14 @@ test "a run is lent to a parameter" {
 }
 
 // **A cut with an open end** (Part I 2.6, #527): `[..<b]` and `[..b]` start
-// at `0`, `[a..]` runs to the end - on text after `find`, and on a list.
+// at `0`, `[a..]` runs to the end, on a list; a text is cut by name at a
+// match's ends (ADR-374 D3).
 fn slices_cuts() -> String {
     let line = "Hamburg;12.0"
     let sep = line.find(";") ?? return ""
-    let name = line[..<sep]
-    let rest = line[sep + 1..]
-    // A number the program made up cuts the bytes, not the text (ADR-320 D5).
+    let name = line.before(sep.start)
+    let rest = line.after(sep.end)
+    // A number the program made up cuts the bytes, not the text (ADR-374 D1).
     let head = line.bytes[..2].text() catch {
         return ""
     }

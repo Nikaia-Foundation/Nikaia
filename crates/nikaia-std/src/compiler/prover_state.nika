@@ -1389,7 +1389,7 @@ fn property_given(rest: ref String, params: ref Vec[String], args: ref Vec[Expr]
         return rest.clone()
     }
     let open = rest.find("(") ?? return rest.clone()
-    let inner = property_inner(rest[open..<rest.len()]) ?? return rest.clone()
+    let inner = property_inner(rest.after(open.start)) ?? return rest.clone()
     if inner.is_empty() {
         return rest.clone()
     }
@@ -1406,7 +1406,7 @@ fn property_given(rest: ref String, params: ref Vec[String], args: ref Vec[Expr]
         }
         parts.push(given)
     }
-    return f"{rest[0..<open]}({parts.join(", ")})"
+    return f"{rest.before(open.start)}({parts.join(", ")})"
 }
 
 /// The term for the path `rest` of fields from the argument `arg`.
@@ -1427,13 +1427,13 @@ fn given_path(mut arena: logic::TermArena, words: ref winnow_grammar::InternerCo
             // `items.prop@p()` of `Bag { items: c }` is `c.prop@p()`.
             let marked = rest.find(f".{property_mark()}")
             if marked != null {
-                let at = marked ?? 0
-                let wanted = rest[0..<at].clone()
+                let at = marked ?? return null
+                let wanted = rest.before(at.start).clone()
                 for field in fields {
                     if words.resolve(field.name) == wanted {
                         let value = field.value ?? return null
                         let on = path_of(value, words) ?? return null
-                        return arena.var(f"{on}{rest[at..<rest.len()]}")
+                        return arena.var(f"{on}{rest.after(at.start)}")
                     }
                 }
                 return null

@@ -1587,7 +1587,7 @@ fn a_lambdas_arm_beside_a_null_is_wrapped() {
 fn a_nullable_tuple_is_a_type() {
     let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
     let at = path.find(sep) ?? return null
-    return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
+    return (path.before(at.start).clone(), path.after(at.end).clone())
 }
 
 fn show(path: String) throws {
@@ -1626,7 +1626,7 @@ fn main() throws {
 fn a_nullable_tuples_parts_are_reached_with_safe_navigation() {
     let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
     let at = path.find(sep) ?? return null
-    return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
+    return (path.before(at.start).clone(), path.after(at.end).clone())
 }
 
 fn main() throws {
@@ -1672,7 +1672,7 @@ fn second() throws {
 fn a_plain_tail_is_returned_as_a_nullable() {
     let source = r#"fn first(s: ref String) -> String? {
     let at = s.find(":") ?? return null
-    s[0..<at].clone()
+    s.before(at.start).clone()
 }
 
 fn lit(b: bool) -> String? {
@@ -1687,7 +1687,7 @@ fn twice(n: i64) -> i64? {
 
 fn cut(s: ref String) -> (String, String)? {
     let at = s.find(":") ?? return null
-    (s[0..<at].clone(), s[at + 1..].clone())
+    (s.before(at.start).clone(), s.after(at.end).clone())
 }
 
 fn main() throws {

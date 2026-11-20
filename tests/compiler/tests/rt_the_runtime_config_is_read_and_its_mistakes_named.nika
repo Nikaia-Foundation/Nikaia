@@ -25,13 +25,13 @@ fn toolchain() -> String throws {
 }
 
 fn shown(err: String) -> String {
-	let nl = err.find("\n") ?? err.len()
-	let first = f"{err[0..<nl]}"
-	let rest = if nl < err.len() { f"{err[nl + "\n".len()..]}" } else { "" }
+	let nl = err.find("\n")
+	let first = f"{err.before(nl?.start ?? err.end())}"
+	let rest = f"{err.after(nl?.end ?? err.end())}"
 	let at = first.find(": line ") ?? return "no message"
-	let next = rest.find("\n") ?? rest.len()
-	let defaults = f"{rest[0..<next]}" == "nikaia: the runtime is starting on its default settings"
-	return f"{first[at + ": ".len()..]}; defaults next: {defaults}"
+	let next = rest.find("\n")?.start ?? rest.end()
+	let defaults = f"{rest.before(next)}" == "nikaia: the runtime is starting on its default settings"
+	return f"{first.after(at.start).strip_prefix(": ") ?? ""}; defaults next: {defaults}"
 }
 
 fn main() throws {

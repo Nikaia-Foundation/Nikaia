@@ -323,8 +323,8 @@ fn sv_lin_atom(mut arena: TermArena, rel: String, d: ref SvLin) -> i64? {
 /// atom; `n/0` is malformed (ADR-270 D28.6).
 fn sv_ratio(a: String) -> SvGot? {
 	let at = a.find("/") ?? return null
-	let num = a[0..<at]
-	let den = a[at + "/".len()..]
+	let num = a.before(at.start)
+	let den = a.after(at.end)
 	if !sv_is_numeral(num) || !sv_is_numeral(den) {
 		return null
 	}

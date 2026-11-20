@@ -1,0 +1,18 @@
+// `before`, `after` and `between` hand back a view of the text they cut, as
+// `trim` does (ADR-374 D3, ADR-282): a cut of a text parameter is handed back
+// where a `String` is asked for, as the cut by brackets was (#743).
+use std::text
+
+fn head(engine: String) -> String {
+    let at = engine.find(":") ?? return engine.clone()
+    return engine.before(at.start)
+}
+
+fn tail(engine: String) -> String {
+    let at = engine.find(":") ?? return ""
+    return engine.after(at.end)
+}
+
+fn main() throws {
+    println(f"[{head("z3:fast")}] [{tail("z3:fast")}] [{head("cvc5")}] [{tail("cvc5")}]")
+}

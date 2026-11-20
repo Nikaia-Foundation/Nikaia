@@ -311,7 +311,7 @@ pub(crate) fn given_cut_source(value: &Expr, words: &winnow_grammar::InternerCon
     }
 }
 
-pub(crate) fn a_trim(method: &str) -> bool { method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches" }
+pub(crate) fn a_trim(method: &str) -> bool { method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches" || method == "before" || method == "after" || method == "between" }
 
 pub(crate) fn check_function_ends_in(expr: &Expr, grows: bool) -> bool {
     match expr {

@@ -146,7 +146,8 @@ impl EmitOut {
 
     /// Insert text just inside the first `{`, moving the map entries after it.
     fn insert_after_first_brace(ref mut self, text: ref String) {
-        let at = (self.buf.find("{") ?? return) + 1
+        let brace = self.buf.find("{") ?? return
+        let at = self.buf.before(brace.end).bytes.len()
         self.buf.insert_str(at, text)
         self.shift_entries(at, text.len())
     }
@@ -159,7 +160,8 @@ impl EmitOut {
     }
 
     fn insert_before_last_brace(ref mut self, text: ref String) {
-        let at = self.buf.rfind("}") ?? return
+        let brace = self.buf.rfind("}") ?? return
+        let at = self.buf.before(brace.start).bytes.len()
         self.buf.insert_str(at, text)
         self.shift_entries(at, text.len())
     }

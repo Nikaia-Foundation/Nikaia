@@ -379,16 +379,12 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	}
 	rels.sort()
 	for rel in rels {
-		let at = rel.rfind("/")
-		// `rels` is read from the disk (ADR-396 D2, #2371).
-		let cut = at ?? 0
-		if cut < 0 || cut > rel.len() { continue }
 		// `f"{base}"`, not `base.to_string()`: the latter makes the
 		// returned tuples `EitherText` and a caller's `Vec[(String,
 		// String)]` fails in rustc (#1311).
-		let group = match at {
+		let group = match rel.rfind("/") {
 			null => f"{base}",
-			else => f"{base}/{rel[0..<cut]}",
+			at => f"{base}/{rel.before(at.start)}",
 		}
 		out.push((group, f"{trimmed}/{rel}"))
 	}
@@ -467,14 +463,14 @@ fn solver_answer_stats(
 	// of a view makes the tuple `EitherText` and the callers fail in rustc
 	// (#1311).
 	let all = out.stdout.trim()
-	let nl = all.find("\n") ?? all.len()
-	let line = f"{all[0..<nl]}"
-	let counted = if nl < all.len() { f"{all[nl + "\n".len()..]}" } else { "" }
+	let nl = all.find("\n")
+	let line = f"{all.before(nl?.start ?? all.end())}"
+	let counted = f"{all.after(nl?.end ?? all.end())}"
 	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1, "-1", "")
-	let shown = f"{line[at + 1..]}"
-	let slash = shown.find("/") ?? shown.len()
-	let work = text::parse_i64(shown[0..<slash]) ?? -1
-	return (f"{line[0..<at]}", work, shown, counted)
+	let shown = f"{line.after(at.end)}"
+	let slash = shown.find("/")?.start ?? shown.end()
+	let work = text::parse_i64(shown.before(slash)) ?? -1
+	return (f"{line.before(at.start)}", work, shown, counted)
 }
 
 fn solver_solved(answer: String) -> bool {
@@ -1518,13 +1514,13 @@ fn solver_logic_dir(source: String) -> String {
 fn solver_family(source: String, path: String) -> (String, String) {
 	let at = path.find("non-incremental/") ?? {
 		let slash = path.find("/") ?? return (f"{source}", f"{path}")
-		return (f"{source}", f"{path[slash + "/".len()..].replace("/", "-")}")
+		return (f"{source}", f"{path.after(slash.end).replace("/", "-")}")
 	}
-	let below = path[at + "non-incremental/".len()..]
+	let below = path.after(at.end)
 	let logic = below.find("/") ?? return (f"{source}", f"{below}")
-	let family = below[logic + "/".len()..]
+	let family = below.after(logic.end)
 	let end = family.find("/") ?? return (f"{source}", f"{family}")
-	return (f"{family[0..<end]}", f"{family[end + "/".len()..].replace("/", "-")}")
+	return (f"{family.before(end.start)}", f"{family.after(end.end).replace("/", "-")}")
 }
 
 fn solver_fetch(args: Vec[String]) throws {
@@ -1551,7 +1547,7 @@ fn solver_fetch(args: Vec[String]) throws {
 		entries.sort()
 		for line in entries {
 			let tab = line.find("\t") ?? continue
-			let path = f"{line[tab + "\t".len()..]}"
+			let path = f"{line.after(tab.end)}"
 			let blob = f"{line.split(" ").nth(1) ?? ""}"
 			// A name `git` printed comes from outside: read only below the
 			// clone (ADR-raw-sinks-1 D14).
@@ -1685,9 +1681,9 @@ fn solver_cli_error(stdout: String) -> String {
 		let line = raw.trim()
 		if !line.starts_with("(error") { continue }
 		let open = line.find("\"") ?? return f"{line}"
-		let rest = line[open + "\"".len()..]
+		let rest = line.after(open.end)
 		let close = rest.rfind("\"") ?? return f"{rest}"
-		return f"{rest[0..<close]}"
+		return f"{rest.before(close.start)}"
 	}
 	return ""
 }
@@ -1707,7 +1703,7 @@ fn solver_rod_answer(answer: String) -> String {
 fn solver_collected(stderr: String) -> i64 {
 	for line in stderr.lines() {
 		let at = line.find("Collected : ") ?? continue
-		return text::parse_i64(line[at + "Collected : ".len()..].trim()) ?? -1
+		return text::parse_i64(line.after(at.end).trim()) ?? -1
 	}
 	return -1
 }
@@ -1766,10 +1762,10 @@ fn solver_one(
 	if solver == "ours" {
 		if out.ok {
 			let line = out.stdout.trim().lines().nth(0) ?? ""
-			let at = line.rfind(" ") ?? line.len()
+			let at = line.rfind(" ")?.start ?? line.end()
 			// The rod's `unknown (overflow)`: the file leaves `i64` (ADR-270
 			// D11), counted apart from a miss (#2259).
-			let said = f"{line[0..<at]}"
+			let said = f"{line.before(at)}"
 			answer = if said == "unknown (overflow)" { "overflow" } else { solver_rod_answer(said) }
 		}
 	} else {

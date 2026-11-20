@@ -216,8 +216,8 @@ impl CheckState {
             if (called == "until" || called == "text") && !args.is_empty() { return pattern_text(); }
             if called == "ident" && args.is_empty() || called == "intern" && args.len() == 1 { return pattern_named("winnow_grammar::Symbol", false); }
             if called == "bytes" && !args.is_empty() { return pattern_named("Bytes", true); }
-            if called == "span" && args.len() == 1 { return pattern_named("text::Span", false); }
-            if called == "here" && args.is_empty() { return pattern_named("u32", false); }
+            if called == "span" && args.len() == 1 { return pattern_named(if self.a_grammar_over_text() { "text::Match" } else { "text::Span" }, false); }
+            if called == "here" && args.is_empty() { return pattern_named(if self.a_grammar_over_text() { "text::Pos" } else { "u32" }, false); }
             if called == "same_line" && args.is_empty() { return Ty::Tuple(vec![]); }
             if called == "count" && args.len() == 1 { return pattern_named("i64", false); }
             if called == "peek" && args.len() == 1 { return self.pattern_type(world, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, rules); }
@@ -318,14 +318,25 @@ pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     String::from("")
 }
 
-pub(crate) fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn grammar_positions_over_both(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
     let written = grammar_position_of(world, named);
     if written == "" { return None; }
-    let notes: Vec<String> = vec![format!("Over a `Bytes` `{}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743).", written)];
-    Some(check_refusal("NK1187", span, format!("`{}` is handed text, and its grammar uses `{}`, which this engine has over a `Bytes` only.", key, written), notes, Some(format!("Hand `{}` the input as a `Bytes`.", key))))
+    let notes: Vec<String> = vec![format!("Over text `{}` is a `text::Pos` or a `text::Match` of the input, over a `Bytes` a `u32` or a `text::Span` (ADR-374 D7); an action of the grammar is checked for one of them.", written)];
+    Some(check_refusal("NK1187", span, format!("`{}` is handed text and a `Bytes`, and its grammar uses `{}`, whose type depends on which.", key, written), notes, Some(format!("Hand the entries of `{}` one kind of input.", named))))
 }
 
 impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_grammar_over_text(&self) -> bool {
+        let key: String = nikaia_std::index::or(match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        let cut = nikaia_std::index::or(nikaia_std::text::find_first(&key, &"::").as_ref().map(|__nikaia_it| __nikaia_it.start), || key.start().into());
+        let named = key.before(cut);
+        !self.facts.bytes_grammars.contains(named) || self.facts.text_grammars.contains(named)
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {

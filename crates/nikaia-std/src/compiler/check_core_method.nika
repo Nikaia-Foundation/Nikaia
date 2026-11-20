@@ -1214,11 +1214,12 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         // **The dot is gone** (ADR-140 D3).
         let mut owner: String = entry.clone()
         let mut rule: String = ""
-        let cut = entry.find("::")
-        if cut != null {
-            let split = cut ?? 0
-            owner = entry[0..<split].clone()
-            rule = entry[split + "::".len()..].clone()
+        match entry.find("::") {
+            null => {},
+            split => {
+                owner = entry.before(split.start).clone()
+                rule = entry.after(split.end).clone()
+            },
         }
         state.a_grammar_reached_through_a_dot(owner, rule, span)
         return check_core_grammar_call(state, world, host, entry, args, config, span)

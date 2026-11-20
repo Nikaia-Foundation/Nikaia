@@ -244,7 +244,7 @@ fn rename_one(
 	if tail != null {
 		let t = (tail ?? return "!").text()
 		let at = t.find("D") ?? return "!"
-		gap = t[0..<at].clone()
+		gap = t.before(at.start).clone()
 		for one in item.find_all((tail ?? return "!").text()) {
 			let parts = item.captures(one.text()) ?? return "!"
 			let first = text::parse_i64((parts.group(1) ?? return "!").text()) ?? 0

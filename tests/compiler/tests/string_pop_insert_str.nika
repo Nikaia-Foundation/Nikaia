@@ -1,14 +1,14 @@
 // `String::pop` and `String::insert_str` (#1180): the last scalar taken off,
-// `null` on an empty text; text put in at a byte position `find` gave.
+// `null` on an empty text; text put in at the byte position of a match.
 
 fn main() throws {
 	let mut s: String = "fn f() {}&"
 	let last = s.pop() ?? 'x'
 	println(f"{last} {s}")
-	let at = (s.find("{") ?? 0) + 1
+	let at = s.before((s.find("{") ?? return).end).bytes.len()
 	s.insert_str(at, " body ")
 	println(s)
-	let end = s.rfind("}") ?? 0
+	let end = s.before((s.rfind("}") ?? return).start).bytes.len()
 	s.insert_str(end, "; ")
 	println(s)
 	s.insert_str(0, "pub ")

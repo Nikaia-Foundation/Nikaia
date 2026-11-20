@@ -4,9 +4,9 @@
 // text anyway and rustc refused the move (NK1343).
 
 fn moved(keep line: String) -> String {
-    let m = line.find(";") ?? 0
-    let head = line[..m]
-    let mut rest = line[m..]
+    let m = line.find(";") ?? return line
+    let head = line.before(m.end)
+    let mut rest = line.after(m.start)
     rest += "!"
     return f"{head}|{rest}"
 }

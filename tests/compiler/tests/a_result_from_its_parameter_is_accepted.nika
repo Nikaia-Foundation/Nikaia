@@ -2,7 +2,7 @@
 // of is accepted (ADR-views-v4 D8).
 fn first_word(s: String) -> String from s {
     let i = s.find(" ") ?? return s.trim()
-    return s[0..<i]
+    return s.before(i.start)
 }
 
 fn main() throws {

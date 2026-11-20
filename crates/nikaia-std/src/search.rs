@@ -28,17 +28,21 @@ impl TextNeedle for str {
     fn byte_len(&self) -> usize {
         self.len()
     }
+    // **A one-byte needle is `memchr`'s search**, as `Bytes::find` is
+    // (ADR-320 D6, #743): an ASCII byte of valid UTF-8 is a whole scalar, so
+    // where it stands is a boundary; the crate's search costs a third of
+    // `str::find(char)`'s on a short row.
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         match one_byte(self) {
-            Some(byte) => text.find(byte),
+            Some(byte) => memchr::memchr(byte as u8, text.as_bytes()),
             None => text.find(self),
         }
     }
     #[inline]
     fn last_in(&self, text: &str) -> Option<usize> {
         match one_byte(self) {
-            Some(byte) => text.rfind(byte),
+            Some(byte) => memchr::memrchr(byte as u8, text.as_bytes()),
             None => text.rfind(self),
         }
     }
@@ -112,10 +116,16 @@ impl TextNeedle for char {
     }
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
+        if self.is_ascii() {
+            return memchr::memchr(*self as u8, text.as_bytes());
+        }
         text.find(*self)
     }
     #[inline]
     fn last_in(&self, text: &str) -> Option<usize> {
+        if self.is_ascii() {
+            return memchr::memrchr(*self as u8, text.as_bytes());
+        }
         text.rfind(*self)
     }
     #[inline]

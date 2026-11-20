@@ -193,15 +193,15 @@ fn an_action_that_fills_a_view_names_the_vec() {
 }
 
 /// **A cut with an open end** (Part I 2.6, #527): `[..<b]` and `[..b]` start
-/// at `0`, `[a..]` runs to the end - on text after `find`, and on a list.
+/// at `0`, `[a..]` runs to the end - on a text's bytes, and on a list.
 #[test]
 fn a_cut_with_an_open_end() {
     let source = "fn main() throws {\n\
          \x20   let line = \"Hamburg;12.0\"\n\
-         \x20   let sep = line.find(\";\") ?? return\n\
-         \x20   let name = line[..<sep]\n\
-         \x20   let rest = line[sep + 1..]\n\
-         \x20   let head = line[..sep]\n\
+         \x20   let sep = line.before((line.find(\";\") ?? return).start).bytes.len()\n\
+         \x20   let name = line.bytes[..<sep].len()\n\
+         \x20   let rest = line.bytes[sep + 1..].len()\n\
+         \x20   let head = line.bytes[..sep].len()\n\
          \x20   let xs = [1, 2, 3, 4]\n\
          \x20   let tail = xs[1..]\n\
          \x20   println(f\"{name} {rest} {head} {tail.len()}\")\n\

@@ -1,0 +1,20 @@
+warning[NK1308]: `dir` reaches the root `fs::Root::Dir(dir)` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_root_bound_to_a_name_is_judged_where_it_is_used.nika:12:5
+    |
+ 12 |     println(fs::exists("notes.txt", at))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `p` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_root_bound_to_a_name_is_judged_where_it_is_used.nika:15:5
+    |
+ 15 |     println(fs::exists(p, anywhere))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `p` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(p) if !path::is_component(p)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.

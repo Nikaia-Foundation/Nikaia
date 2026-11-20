@@ -378,22 +378,22 @@ fn lg_certificate_from(text: ref String) -> LgParsed? {
         let rest = (text.strip_prefix("R(") ?? "").clone()
         let end = rest.find(")") ?? return null
         let mut steps: Vec[LgStep] = []
-        let inside = rest[0..<end].clone()
+        let inside = rest.before(end.start).clone()
         for word in inside.split(",") {
             if word.len() == 0 {
                 continue
             }
             steps.push(lg_step_of(word) ?? return null)
         }
-        return LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps: steps }), rest: rest[end + ")".len()..].clone() }
+        return LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps: steps }), rest: rest.after(end.end).clone() }
     }
     if !text.starts_with("S") {
         return null
     }
     let rest = (text.strip_prefix("S") ?? "").clone()
     let open = rest.find("[") ?? return null
-    let disjunction = lg_number(rest[0..<open].clone()) ?? return null
-    let mut after = rest[open + 1..<rest.len()].clone()
+    let disjunction = lg_number(rest.before(open.start).clone()) ?? return null
+    let mut after = rest.after(open.end).clone()
     let mut cases: Vec[LgCertificate] = []
     while true {
         let case = lg_certificate_from(after) ?? return null
@@ -458,7 +458,7 @@ pub fn lg_model_of(text: ref String) -> LgModel? sync {
     if text != "-" {
         for pair in text.split(",") {
             let at = pair.find("=") ?? return null
-            let name = pair[0..<at].clone()
+            let name = pair.before(at.start).clone()
             if name.len() == 0 {
                 return null
             }
@@ -467,7 +467,7 @@ pub fn lg_model_of(text: ref String) -> LgModel? sync {
                     return null
                 }
             }
-            let value = text::parse_i64(pair[at + 1..<pair.len()].clone()) ?? return null
+            let value = text::parse_i64(pair.after(at.end).clone()) ?? return null
             values.insert(name, value)
         }
     }

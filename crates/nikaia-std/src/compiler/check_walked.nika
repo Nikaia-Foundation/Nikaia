@@ -253,7 +253,7 @@ fn check_walked_seed(mut state: CheckState, world: ref CheckWorld) sync {
 /// The part of a key before its first `::`, where it has one.
 fn check_walked_prefix_into(key: ref String, mut prefixes: collections::BTreeSet[String]) {
     let cut = key.find("::") ?? return
-    prefixes.insert(key[0..<cut].clone())
+    prefixes.insert(key.before(cut.start).clone())
 }
 
 /// **What one variant declares it carries**, by position, in whichever file
@@ -281,8 +281,8 @@ fn check_walked_place_of(world: ref CheckWorld, place: ref String, here: i64) ->
     let none = CheckPlace { at: -1, function: null }
     let rest = (place.strip_prefix("@") ?? return none).clone()
     let colon = rest.find(":") ?? return none
-    let unit = text::parse_i64(rest[0..<colon]) ?? return none
-    let byte = text::parse_i64(rest[colon + 1..]) ?? return none
+    let unit = text::parse_i64(rest.before(colon.start)) ?? return none
+    let byte = text::parse_i64(rest.after(colon.end)) ?? return none
     if unit < 0 || byte < 0 || byte > 4294967295 {
         return none
     }

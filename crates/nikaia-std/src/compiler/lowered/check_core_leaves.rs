@@ -78,16 +78,16 @@ impl CheckState {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_leaves_list_of_a_read(read: &str) -> Option<String> {
-    let bracket = nikaia_std::search::find(&read, &"[", 0);
+    let bracket = nikaia_std::text::find_first(&read, &"[");
     if bracket.is_some() {
         let at = match bracket { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(nikaia_std::block::Text::from(nikaia_std::index::get(&read, nikaia_std::index::at(0..at)).to_string()));
+        return Some(nikaia_std::block::Text::from(read.before(at.start).to_string()));
     }
     if !read.ends_with(')') { return None; }
-    let open = match nikaia_std::search::find(&read, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let before = nikaia_std::block::Text::from(nikaia_std::index::get(&read, nikaia_std::index::at(0..open)).to_string());
-    let dot = match nikaia_std::search::rfind(&before, &".") { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(nikaia_std::block::Text::from(nikaia_std::index::get(&before, nikaia_std::index::at(0..dot)).to_string()))
+    let open = match nikaia_std::text::find_first(&read, &"(") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let before = nikaia_std::block::Text::from(read.before(open.start).to_string());
+    let dot = match nikaia_std::text::rfind(&before, &".") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(nikaia_std::block::Text::from(before.before(dot.start).to_string()))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -138,8 +138,8 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let whole: Option<String> = state.place_path(world, value);
             if whole.is_some() {
                 path = nikaia_std::block::Text::from(match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
-                let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-                root = nikaia_std::block::Text::from(nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_string());
+                let at = match nikaia_std::text::find_first(&path, &".") { Some(__nikaia_value) => __nikaia_value, None => return };
+                root = nikaia_std::block::Text::from(path.before(at.start).to_string());
                 if keeps {
                     let local = state.binding(&root);
                     if local.is_some() {

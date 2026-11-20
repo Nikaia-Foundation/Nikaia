@@ -1,0 +1,12 @@
+// `here` over text is a `text::Pos`, over a `Bytes` a `u32` (ADR-374 D7): an
+// action is checked for one of them, so a grammar that writes `here` and is
+// handed both kinds is refused with `NK1187` where the second kind comes.
+grammar G {
+    entry rule top -> u32 = alpha1 at:here -> { 0 }
+}
+
+fn main() throws {
+    let a = G::top("abc") catch { 0 }
+    let b = G::top(Bytes([97, 98])) catch { 0 }
+    println(f"{a} {b}")
+}
