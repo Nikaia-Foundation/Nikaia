@@ -29,7 +29,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
             ks.push(t.k);
         }
     }
-    let mut row = SvRow { cols: vec![], ks: vec![], constant };
+    let mut row = SvRow { cols: Vec::with_capacity(nikaia_std::count::of(cols.len() as i64)), ks: Vec::with_capacity(nikaia_std::count::of(cols.len() as i64)), constant };
     let mut i: i64 = 0;
     while ((i) as usize) < cols.len() {
         if *unsafe { nikaia_std::proven::read(&ks, (i) as usize) } != 0 {
@@ -53,7 +53,8 @@ pub(crate) fn sv_row_coef(r: &SvRow, col: u32) -> i64 {
 }
 
 pub(crate) fn sv_row_sum(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> {
-    let mut out = SvRow { cols: vec![], ks: vec![], constant: match sv_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None } };
+    let room = unsafe { nikaia_std::proven::add::<i64>(r.cols.len() as i64, s.cols.len() as i64) };
+    let mut out = SvRow { cols: Vec::with_capacity(nikaia_std::count::of(room)), ks: Vec::with_capacity(nikaia_std::count::of(room)), constant: match sv_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None } };
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
@@ -94,7 +95,7 @@ pub(crate) fn sv_row_reduced(r: SvRow) -> SvRow {
     let ks_gcd = match sv_content(&r.ks) { Some(__nikaia_value) => __nikaia_value, None => return r };
     let g = match sv_gcd(ks_gcd, r.constant) { Some(__nikaia_value) => __nikaia_value, None => return r };
     if g <= 1 { return r; }
-    let mut out = SvRow { cols: r.cols.copy_owned(), ks: vec![], constant: r.constant / g };
+    let mut out = SvRow { cols: r.cols.copy_owned(), ks: Vec::with_capacity(nikaia_std::count::of(r.ks.len() as i64)), constant: r.constant / g };
     for k in r.ks.iter() {
         let k = nikaia_std::num::value(k);
         out.ks.push(k / g);
@@ -105,7 +106,7 @@ pub(crate) fn sv_row_reduced(r: SvRow) -> SvRow {
 pub(crate) fn sv_row_tightened(r: &SvRow) -> SvRow {
     let g = match sv_row_content(r) { Some(__nikaia_value) => __nikaia_value, None => return r.clone() };
     if g <= 1 { return r.clone(); }
-    let mut out = SvRow { cols: r.cols.copy_owned(), ks: vec![], constant: nikaia_std::index::or(sv_ceil_div(r.constant, g), || r.constant.into()) };
+    let mut out = SvRow { cols: r.cols.copy_owned(), ks: Vec::with_capacity(nikaia_std::count::of(r.ks.len() as i64)), constant: nikaia_std::index::or(sv_ceil_div(r.constant, g), || r.constant.into()) };
     for k in r.ks.iter() {
         let k = nikaia_std::num::value(k);
         out.ks.push(k / g);

@@ -2619,7 +2619,9 @@ signature = "(self, u64) -> u64?"
 # type of the same width and the high one in the type itself, so that
 # `high * 2^w + low` is the product. The bounds walk reads both: where the flag
 # is down, or the high half is zero and the low one in range, the result is
-# the exact value.
+# the exact value. `narrowing_div_rem` is the way back (#2013): such a
+# double-width value divided by one of the type, the quotient and rest only
+# where the quotient fits.
 #
 # `touches = []` and `sync = true` for the reason the arithmetic entries give.
 
@@ -2655,6 +2657,16 @@ sync = true
 touches = []
 signature = "(self, i32) -> (u32, i32)"
 
+# The double-width value `self * 2^w + low` divided by an `i32`: quotient and rest
+# as `/` and `%` round, or `null` where the divisor is 0 or the quotient
+# does not fit an `i32` (#2013).
+[fn."i32::narrowing_div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, u32, i32) -> (i32, i32)?"
+
 # Addition of an `i64`, wrapped, and whether it wrapped.
 [fn."i64::overflowing_add"]
 pub = true
@@ -2686,6 +2698,16 @@ panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> (u64, i64)"
+
+# The double-width value `self * 2^w + low` divided by an `i64`: quotient and rest
+# as `/` and `%` round, or `null` where the divisor is 0 or the quotient
+# does not fit an `i64` (#2013).
+[fn."i64::narrowing_div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, u64, i64) -> (i64, i64)?"
 
 # Addition of a `u32`, wrapped, and whether it wrapped.
 [fn."u32::overflowing_add"]
@@ -2719,6 +2741,16 @@ sync = true
 touches = []
 signature = "(self, u32) -> (u32, u32)"
 
+# The double-width value `self * 2^w + low` divided by a `u32`: quotient and rest
+# as `/` and `%` round, or `null` where the divisor is 0 or the quotient
+# does not fit a `u32` (#2013).
+[fn."u32::narrowing_div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, u32, u32) -> (u32, u32)?"
+
 # Addition of a `u8`, wrapped, and whether it wrapped.
 [fn."u8::overflowing_add"]
 pub = true
@@ -2751,6 +2783,16 @@ sync = true
 touches = []
 signature = "(self, u8) -> (u8, u8)"
 
+# The double-width value `self * 2^w + low` divided by a `u8`: quotient and rest
+# as `/` and `%` round, or `null` where the divisor is 0 or the quotient
+# does not fit a `u8` (#2013).
+[fn."u8::narrowing_div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, u8, u8) -> (u8, u8)?"
+
 # Addition of a `u64`, wrapped, and whether it wrapped.
 [fn."u64::overflowing_add"]
 pub = true
@@ -2782,6 +2824,16 @@ panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> (u64, u64)"
+
+# The double-width value `self * 2^w + low` divided by a `u64`: quotient and rest
+# as `/` and `%` round, or `null` where the divisor is 0 or the quotient
+# does not fit a `u64` (#2013).
+[fn."u64::narrowing_div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self, u64, u64) -> (u64, u64)?"
 
 # **A conversion that asks whether it fits** (ADR-315): the number in the
 # destination type, or `null` where that type does not hold it. One entry per
@@ -2993,13 +3045,16 @@ sync = true
 touches = []
 signature = "(self: ref collections::HashMap[?, ?]) -> bool"
 
-# A map with nothing in it. It is written `HashMap()`.
+# A map with nothing in it. It is written `HashMap()`, and `HashMap(capacity:
+# n)` holds room for `n` entries ahead, so the first `n` inserts ask for memory
+# once (#2114). The room is a count: a negative one stops the program, as every
+# count `std` takes (ADR-285 D15).
 [fn."collections::HashMap::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> collections::HashMap[?, ?]"
+signature = "(; capacity: i64 = 0) -> collections::HashMap[?, ?]"
 
 # **Whether a key is there**, without the value. Observed being asked for: a
 # checker's scope is a map of names, and *is this name declared* is the question
@@ -3526,13 +3581,15 @@ signature = "[T](self: ref Shared[T]) -> ref(self) T"
 # for the entry. **The key stays `String::new`** and the spelling is `String()`
 # (ADR-140 D2): the key is what the lowering writes, and the lowering is name
 # for name (ADR-grammar-lowering-v1 D2).
-# Text with nothing in it. It is written `String()`.
+# Text with nothing in it. It is written `String()`, and `String(capacity: n)`
+# holds room for `n` bytes ahead (#2114). The room is a count: a negative one
+# stops the program, as every count `std` takes (ADR-285 D15).
 [fn."String::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> String"
+signature = "(; capacity: i64 = 0) -> String"
 
 # The text's UTF-8, one byte at a time ([ADR-285](../../docs/specification/adr/adr-285.md) D4).
 #
@@ -3849,13 +3906,16 @@ touches = []
 keeps = ["value"]
 signature = "[T: Clone](mut self: ref Array[T, ?], value: T)"
 
-# A list with nothing in it. It is written `Vec()`.
+# A list with nothing in it. It is written `Vec()`, and `Vec(capacity: n)`
+# holds room for `n` elements ahead, so the first `n` pushes ask for memory
+# once (#2114). The room is a count: a negative one stops the program, as every
+# count `std` takes (ADR-285 D15).
 [fn."Vec::new"]
 pub = true
 panics = false
 sync = true
 touches = []
-signature = "() -> Vec[?]"
+signature = "(; capacity: i64 = 0) -> Vec[?]"
 
 # **`drain` takes the elements away** (ADR-094 D4). A `for` lends, so the body
 # that hands an element to something which keeps it says so here - and below it

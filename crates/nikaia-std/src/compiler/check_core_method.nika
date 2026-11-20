@@ -665,8 +665,10 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // each element of the sequence it hands back.
     let std_type = check_core_method_ledger_type(on, bytes)
     // **A `widening_mul` on an open number waits for its type** (#1555):
-    // the uses decide it, and the emitter writes the halves by its width.
-    if std_type == "" && name == "widening_mul" && args.len() == 1 {
+    // the uses decide it, and the emitter writes the halves by its width;
+    // so does a `narrowing_div_rem` (#2013), whose wide value is cut by it.
+    let wide = (name == "widening_mul" && args.len() == 1) || (name == "narrowing_div_rem" && args.len() == 2)
+    if std_type == "" && wide {
         let numbers = state.open_numbers_in(world, receiver)
         if numbers.len() > 0 {
             state.flow.open_wides.insert(id_of(expr) as i64, numbers[0])

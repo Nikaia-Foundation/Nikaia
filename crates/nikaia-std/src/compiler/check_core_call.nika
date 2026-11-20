@@ -857,6 +857,14 @@ fn check_core_call_names(mut state: CheckState, world: ref CheckWorld, func: ref
     state.a_constructor_nothing_describes(world, name, args, span)
 }
 
+/// Whether `name`'s constructor in `std`'s ledger takes options, as
+/// `collections::HashMap::new` takes `capacity` (#2114).
+fn check_core_a_constructor_with_options(world: ref CheckWorld, name: ref String) -> bool sync {
+    let contract = world.library.functions.get(f"{name}::new") ?? return false
+    let signature = contract.signature ?? return false
+    return signature.config.len() > 0
+}
+
 /// The call once its name is in hand and it is neither a kept value nor a
 /// variant's constructor.
 /// `filled` where the call wrote the type parameters in brackets, which
@@ -882,8 +890,10 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if !filled {
         check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span)
     }
-    // **A struct literal written like a call** (ADR-140 D1).
-    if config.len() > 0 && args.len() == 0 && state.declares_a_type(world, name) {
+    // **A struct literal written like a call** (ADR-140 D1), unless the
+    // type's constructor takes options: `collections::HashMap(capacity: 8)`
+    // is its constructor called with one (#2114).
+    if config.len() > 0 && args.len() == 0 && state.declares_a_type(world, name) && !check_core_a_constructor_with_options(world, name) {
         state.a_literal_written_like_a_call(world, name, config, span)
         for option in config {
             check_core_expr(state, world, host, option.value, span)

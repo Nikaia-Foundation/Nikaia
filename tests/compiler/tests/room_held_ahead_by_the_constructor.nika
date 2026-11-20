@@ -1,0 +1,42 @@
+// #2114: `Vec(capacity: n)`, `String(capacity: n)` and `HashMap(capacity: n)`
+// hold room ahead, as an option of the anonymous constructor (ADR-140 D2,
+// Part I 5.1). What is pushed is held as without the option, and 64 pushes into
+// `Vec(capacity: 64)` request memory once. The counts are read before and
+// after and printed only after both, since printing may allocate (ADR-400 D1).
+use std::collections
+use std::mem
+
+fn room() -> i64 sync {
+    return 64
+}
+
+fn main() throws {
+    let n = room()
+    let before = mem::allocations()
+    let mut list: Vec[i64] = Vec(capacity: n)
+    for i in 0..<64 {
+        list.push(i)
+    }
+    let after = mem::allocations()
+    println(f"{list.len()} elements, the last {list[63]}, one request: {after - before == 1}")
+
+    let mut text = String(capacity: 16)
+    text.push_str("held ahead")
+    println(text)
+
+    let mut map: collections::HashMap[String, i64] = collections::HashMap(capacity: 8)
+    map.insert(text, 3)
+    map.insert("more", 4)
+    println(f"{map.len()} keys, more is {map.get("more") ?? 0}")
+
+    // A text that stays in its function grows in the task's block (ADR-327
+    // D9), with the room it asked for.
+    let mut line = String(capacity: 8)
+    line.push_str("in the block")
+    println(f"{line}")
+
+    // The call without the option is the same call with its default.
+    let plain: Vec[i64] = Vec()
+    let none: Vec[i64] = Vec(capacity: 0)
+    println(f"{plain.len()} {none.len()}")
+}

@@ -227,13 +227,60 @@ fn sv_int(n: i64) -> SvRat {
 	return SvRat { num: n, den: 1 }
 }
 
+/// A sum of two integers, the usual case of a tableau's values, skips the
+/// gcds (#1960: the rationals' gcds were a third of the simplex's work).
 fn sv_rat_add(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	if a.den == 1 && b.den == 1 {
+		return SvRat { num: a.num.checked_add(b.num) ?? return null, den: 1 }
+	}
+	if a.num == 0 {
+		return b.clone()
+	}
+	if b.num == 0 {
+		return a.clone()
+	}
 	let g = sv_gcd(a.den, b.den) ?? return null
 	let da = a.den / g
 	let db = b.den / g
-	let num = sv_mul_add(a.num, db, b.num, da) ?? return null
-	let den = a.den.checked_mul(db) ?? return null
-	return sv_rat(num, den)
+	let num = sv_mul_add(a.num, db, b.num, da)
+	let den = a.den.checked_mul(db)
+	if num != null && den != null {
+		return sv_rat(num ?? 0, den ?? 1)
+	}
+	return sv_rat_add_wide(a, b, g, da, db)
+}
+
+/// **The sum whose unreduced numerator or denominator leaves `i64`**
+/// (#2013), by Knuth's rule (TAOCP vol. 2, 4.5.1): `t = a.num·db + b.num·da`
+/// in two halves, `g2 = gcd(t, g)`, the numerator `t / g2` and the
+/// denominator `da·(b.den / g2)`. The result is reduced by construction, so
+/// `null` only where it does not fit `i64` itself.
+fn sv_rat_add_wide(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRat? {
+	let (l1, h1) = a.num.widening_mul(db)
+	let (l2, h2) = b.num.widening_mul(da)
+	let (low, carry) = l1.overflowing_add(l2)
+	// Each high half lies within `±2^62`, so their sum and the carry fit.
+	let (top, over) = h1.overflowing_add(h2)
+	let (high, past) = top.overflowing_add(if carry { 1 } else { 0 })
+	if over || past {
+		return null
+	}
+	// `t mod g` through `|t|`, unsigned: its high half reduced first, so
+	// the quotient of the 128-by-64 division fits and the rest is there.
+	let zero: u64 = 0
+	let mut size_low = low
+	let mut size_high = high
+	if high < 0 {
+		size_low = zero.wrapping_sub(low)
+		size_high = if low == 0 { 0 - high } else { 0 - high - 1 }
+	}
+	let by = g.checked_u64() ?? return null
+	let up = size_high.checked_u64() ?? return null
+	let (_, rest) = (up % by).narrowing_div_rem(size_low, by) ?? return null
+	let g2 = sv_gcd(rest.checked_i64() ?? return null, g) ?? return null
+	let (num, _) = high.narrowing_div_rem(low, g2) ?? return null
+	let den = da.checked_mul(b.den / g2) ?? return null
+	return SvRat { num: num, den: den }
 }
 
 fn sv_rat_neg(a: ref SvRat) -> SvRat? {
@@ -247,7 +294,15 @@ fn sv_rat_sub(a: ref SvRat, b: ref SvRat) -> SvRat? {
 
 /// The product, each numerator reduced against the other's denominator
 /// first so that nothing larger than the result is formed.
+/// A product with an integer or zero factor skips the gcds it does not
+/// need (#1960).
 fn sv_rat_mul(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	if a.num == 0 || b.num == 0 {
+		return sv_int(0)
+	}
+	if a.den == 1 && b.den == 1 {
+		return SvRat { num: a.num.checked_mul(b.num) ?? return null, den: 1 }
+	}
 	let g1 = sv_gcd(a.num, b.den) ?? return null
 	let g2 = sv_gcd(b.num, a.den) ?? return null
 	let num = (a.num / g1).checked_mul(b.num / g2) ?? return null
@@ -265,6 +320,9 @@ fn sv_rat_div(a: ref SvRat, b: ref SvRat) -> SvRat? {
 /// Never overflows: integer parts first, then the fractional parts through
 /// their reciprocals, a continued fraction.
 fn sv_rat_cmp(a: ref SvRat, b: ref SvRat) -> i64 {
+	if a.den == 1 && b.den == 1 {
+		return if a.num < b.num { -1 } else if a.num > b.num { 1 } else { 0 }
+	}
 	let mut an = a.num
 	let mut ad = a.den
 	let mut bn = b.num
@@ -404,7 +462,8 @@ fn sv_num_test_chain(reduce: bool, steps: i64) -> String {
 			return f"step {n}: no column"
 		}
 		let next = if reduce { sv_dense_eliminate(c, f, j) } else { sv_num_test_naive(c, f, j) }
-		let made = next ?? return f"step {n + 1}: refused, would leave i64 (left 32 bits at step {left32}, largest so far {largest})"
+		let made = next
+			?? return f"step {n + 1}: refused, would leave i64 (left 32 bits at step {left32}, largest so far {largest})"
 		c = made
 		largest = sv_max_abs(c) ?? -1
 		if left32 < 0 && !sv_fits32(largest) {
@@ -450,15 +509,18 @@ test "i64 coefficients are kept small and never wrapped" {
 	let square = sv_dense_combine(3037000500, wide, 0, wide)
 	out = out + f"3037000500 * 3037000500: {if square == null { "refused" } else { "wrapped" }}\n"
 	let least: i64 = -9223372036854775807 - 1
-	out = out + f"gcd(-12, 18) = {sv_gcd(-12, 18) ?? -1}, gcd(i64 least, 0): {if sv_gcd(least, 0) == null { "refused" } else { "wrapped" }}\n"
+	out = out
+		+ f"gcd(-12, 18) = {sv_gcd(-12, 18) ?? -1}, gcd(i64 least, 0): {if sv_gcd(least, 0) == null { "refused" } else { "wrapped" }}\n"
 	let row: Vec[i64] = [6, -9, 12, 3]
 	let shown = sv_reduced(row).iter().join(", ")
 	out = out + f"reduced [6, -9, 12, 3]: [{shown}]\n"
-	out = out + f"column cost unit {sv_column_cost(1, -7) ?? -1}, 4 vs -6: {sv_column_cost(4, -6) ?? -1}\n"
+	out = out
+		+ f"column cost unit {sv_column_cost(1, -7) ?? -1}, 4 vs -6: {sv_column_cost(4, -6) ?? -1}\n"
 	let x: Vec[i64] = [4, 1, -6]
 	let y: Vec[i64] = [-6, -1, 9]
 	out = out + f"picked column of [4, 1, -6] and [-6, -1, 9]: {sv_pick_column(x, y, 3, true)}\n"
-	out = out + f"floor(-7/2) = {sv_floor_div(-7, 2) ?? 0}, ceil(-7/2) = {sv_ceil_div(-7, 2) ?? 0}, floor by 0: {if sv_floor_div(1, 0) == null { "refused" } else { "?" }}\n"
+	out = out
+		+ f"floor(-7/2) = {sv_floor_div(-7, 2) ?? 0}, ceil(-7/2) = {sv_ceil_div(-7, 2) ?? 0}, floor by 0: {if sv_floor_div(1, 0) == null { "refused" } else { "?" }}\n"
 
 	let expected = [
 		"== item 1: i64 kept small",
@@ -479,13 +541,16 @@ test "i64 coefficients are kept small and never wrapped" {
 test "rationals and delta are normalised, ordered and refuse overflow" {
 	let mut out: String = ""
 	out = out + "== item 2: rationals and delta\n"
-	out = out + f"6/-4 = {sv_num_test_show(sv_rat(6, -4))}, 0/-5 = {sv_num_test_show(sv_rat(0, -5))}, 1/0: {sv_num_test_show(sv_rat(1, 0))}\n"
+	out = out
+		+ f"6/-4 = {sv_num_test_show(sv_rat(6, -4))}, 0/-5 = {sv_num_test_show(sv_rat(0, -5))}, 1/0: {sv_num_test_show(sv_rat(1, 0))}\n"
 	let sixth = sv_rat(1, 6) ?? sv_int(0)
 	let tenth = sv_rat(1, 10) ?? sv_int(0)
-	out = out + f"1/6 + 1/10 = {sv_num_test_show(sv_rat_add(sixth, tenth))}, 1/6 - 1/10 = {sv_num_test_show(sv_rat_sub(sixth, tenth))}\n"
+	out = out
+		+ f"1/6 + 1/10 = {sv_num_test_show(sv_rat_add(sixth, tenth))}, 1/6 - 1/10 = {sv_num_test_show(sv_rat_sub(sixth, tenth))}\n"
 	let p = sv_rat(3037000499, 2) ?? sv_int(0)
 	let q = sv_rat(2, 3037000499) ?? sv_int(0)
-	out = out + f"3037000499/2 * 2/3037000499 = {sv_num_test_show(sv_rat_mul(p, q))}, divided = {sv_num_test_show(sv_rat_div(p, q))}\n"
+	out = out
+		+ f"3037000499/2 * 2/3037000499 = {sv_num_test_show(sv_rat_mul(p, q))}, divided = {sv_num_test_show(sv_rat_div(p, q))}\n"
 	let huge = sv_int(9223372036854775807)
 	out = out + f"i64 max + 1/2: {sv_num_test_show(sv_rat_add(huge, sv_rat(1, 2) ?? sv_int(0)))}\n"
 	out = out + f"divided by 0: {sv_num_test_show(sv_rat_div(sixth, sv_int(0)))}\n"
@@ -499,7 +564,8 @@ test "rationals and delta are normalised, ordered and refuse overflow" {
 	out = out + sv_num_test_order(a, b) + "\n"
 	out = out + sv_num_test_order(sv_rat(-7, 2) ?? half, sv_rat(-14, 4) ?? half) + "\n"
 	let r = sv_rat(-7, 2) ?? half
-	out = out + f"floor(-7/2) = {sv_rat_floor(r)}, ceil = {sv_rat_ceil(r)}, integer: {sv_rat_is_int(r)}\n"
+	out = out
+		+ f"floor(-7/2) = {sv_rat_floor(r)}, ceil = {sv_rat_ceil(r)}, integer: {sv_rat_is_int(r)}\n"
 	let five = sv_delta(sv_int(5), sv_int(0))
 	let below = sv_delta(sv_int(5), sv_int(-1))
 	let above = sv_delta(sv_int(5), sv_int(1))
@@ -507,7 +573,9 @@ test "rationals and delta are normalised, ordered and refuse overflow" {
 	out = out + sv_num_test_dorder(below, five) + "\n"
 	out = out + sv_num_test_dorder(five, above) + "\n"
 	out = out + sv_num_test_dorder(below, four) + "\n"
-	out = out + sv_num_test_dorder(sv_delta_sub(above, five) ?? five, sv_delta(sv_int(0), sv_int(1))) + "\n"
+	out = out
+		+ sv_num_test_dorder(sv_delta_sub(above, five) ?? five, sv_delta(sv_int(0), sv_int(1)))
+		+ "\n"
 	out = out + f"(5 - δ) * -2 = {sv_delta_text(sv_delta_scale(below, sv_int(-2)) ?? five)}\n"
 	out = out + f"(5 - δ) + (4 + 1000δ) = {sv_delta_text(sv_delta_add(below, four) ?? five)}\n"
 
