@@ -264,7 +264,7 @@ pub fn package_names(packages: &[Option<String>]) -> collections::BTreeSet<Strin
 
 pub fn is_single_file(units: i64) -> bool { units == 1 }
 
-pub(crate) fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
+pub fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
 
 pub fn test_dispatcher(cli: &str, with_use: bool, count: i64, dispatch: &str) -> String {
     let mut text: String = String::from("");
@@ -332,7 +332,8 @@ pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, 
     tests
 }
 
-pub fn modules_test_wrappers(titles: &[String], stem: &str) -> String {
+pub fn modules_test_wrappers(titles: &[String], stem: &str, pausing: &[bool]) -> String {
+    let mut shims: String = String::from("");
     let mut text: String = format!("\n/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.\npub(crate) fn {}_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {{\n    vec![\n", stem);
     let mut k: i64 = 0;
     for title in titles.iter() {
@@ -350,10 +351,16 @@ pub fn modules_test_wrappers(titles: &[String], stem: &str) -> String {
                 slug.push_str(&format!("{}", (u8::try_from(unsafe { nikaia_std::proven::add::<i64>(c, 32) }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
             } else { gap = true; }
         }
-        text.push_str(&format!("        (\"{}::{}\", {}),\n", stem, slug, test_function(k)));
+        let mut run = test_function(k);
+        if k < pausing.len() as i64 && *unsafe { nikaia_std::proven::read(&pausing, (k) as usize) } {
+            shims.push_str(&format!("\nfn {}_to_its_end() -> Result<(), std::boxed::Box<dyn std::error::Error>> {{\n    nikaia_std::rt::exec::block_on({}())?;\n    Ok(())\n}}\n", run, run));
+            run = format!("{}_to_its_end", run);
+        }
+        text.push_str(&format!("        (\"{}::{}\", {}),\n", stem, slug, run));
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     text.push_str("    ]\n}\n");
+    text.push_str(&shims);
     text
 }
 

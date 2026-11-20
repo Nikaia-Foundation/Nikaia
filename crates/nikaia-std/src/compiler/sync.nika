@@ -483,6 +483,33 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
     return found
 }
 
+/// **Which of the free functions `wanted` pause** (#2316), each by the calls
+/// a `sync` promise would refuse in its body: `lower-std` asks it of a file's
+/// `test` blocks, which become functions after the package's ledger was drawn,
+/// so the emitter can make a pausing one an `async fn`.
+pub fn unit_pausing(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, wanted: ref Vec[String]) -> Vec[bool] {
+    let mut answers: Vec[bool] = []
+    for one in wanted {
+        let mut pauses = false
+        for item in program.items {
+            match item.node {
+                Item::Fn { name, args, body, .. } => {
+                    let key = key_of_function(name, "", names)
+                    if key == one {
+                        let promise = promise_of(key, args, body, true, [], names) ?? continue
+                        let mut found: Vec[Violation] = []
+                        violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
+                        pauses = found.len() > 0
+                    }
+                }
+                else => {}
+            }
+        }
+        answers.push(pauses)
+    }
+    return answers
+}
+
 fn promise_of(caller: ref String, args: ref Vec[FnArg], body: ref Block, is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], names: ref winnow_grammar::InternerContext) -> Promise? {
     if !is_sync && sync_by.len() == 0 {
         return null
