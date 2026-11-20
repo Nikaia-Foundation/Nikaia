@@ -449,7 +449,7 @@ fn resolve(w: ref W, key: String) -> R? sync {
         return R { key: key.clone(), c: c }
     }
     let at = key.find("::") ?? return null
-    let rest = key[at + 2..<key.len()].clone()
+    let rest = key.after(at.end).clone()
     let c = found(w.fns, rest) ?? return null
     return R { key: rest.clone(), c: c }
 }
