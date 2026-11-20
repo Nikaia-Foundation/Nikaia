@@ -236,7 +236,7 @@ impl EmitState {
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
         let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
-        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {}{}); ", name, rule_name, handed, each));
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, {}, {}{}); ", name, rule_name, emit_walk_reading(), handed, each));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
@@ -586,6 +586,8 @@ pub(crate) fn emit_stream_each(item: &str, emitting: bool) -> String {
     if emitting { return format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", item, send); }
     format!("|__wg_one: &{}| {}", item, send)
 }
+
+pub(crate) fn emit_walk_reading() -> String { String::from("winnow_grammar::rt::Reading { block: __wg_source.len() + 1, max_frame: __wg_source.len() }") }
 
 pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
     let mut found: Vec<GrammarRule> = vec![];

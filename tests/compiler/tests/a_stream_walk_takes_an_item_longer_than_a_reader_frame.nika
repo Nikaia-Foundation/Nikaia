@@ -1,0 +1,40 @@
+// A walk of a `@stream` entry over a `String` or `Bytes` (ADR-grammar-typed-read-v1
+// D7) parses what the forms over the whole input parse: the input is all in
+// memory, so an item or a prefix longer than the bound a Rust reader gets by
+// default (16 MiB) is handed over where the input ends, not refused with
+// "raise `Reading::max_frame`" (#2282).
+
+struct Item {
+	len: i64,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	@stream entry rule headed -> Item = head item*
+	rule head = until(";") ";" -> { }
+	rule item -> Item = w:until(";") ";" -> { Item { len: w.len() } }
+}
+
+// A word of 17 MiB and a bit, then `tail`.
+fn long_word(tail: String) -> String {
+	let mut text = String()
+	for _ in 0..<(1100 * 1024) {
+		text.push_str("abcdefghijklmnop")
+	}
+	text.push_str(tail)
+	return text
+}
+
+fn main() throws {
+	for it in Words::items(long_word(";")) {
+		println(f"item of {it.len} bytes")
+	}
+	let mut n = 0
+	for _ in Words::headed(long_word(";")) {
+		n += 1
+	}
+	println(f"{n} items after the head")
+	for it in Words::headed(long_word(";x;")) {
+		println(f"after the head: {it.len} byte")
+	}
+}
