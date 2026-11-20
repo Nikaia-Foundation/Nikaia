@@ -65,6 +65,7 @@ fn main() throws {
     put(tree.clone(), "crates/a/src/lib.rs", "// ADR~alpha~v1 D7, ADR~alpha~v1 §9 and ADR~old~v1 D1\n// ADR~alpha~v9 is no record; ADR~alpha~v1x is no name.\n")
     put(tree.clone(), "packages/p/src/main.nika", "// ADR~alpha~v1 D8 in a package\n")
     put(tree.clone(), "docs/briefs/a.md.report.md", "Friction: a name such as ADR~topic~1 stands for any record\n")
+    put(tree.clone(), "packages/p/src/lib.nika", "// as ADR~old~v1 D1 said\n")
     println("--- one case per check")
     run(repo, nikaia, tree)
     process::run("rm", ["-rf", dir])

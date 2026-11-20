@@ -21,8 +21,9 @@ exit 0
   A name is taken when it is claimed in the index's reserved table,
   and a record is written once. Two rows or a mismatched title means
   two records are wearing one name - move the later one.
-1 citation(s) of an archived ADR outside the history:
+2 citation(s) of an archived ADR outside the history:
   crates/a/src/lib.rs:1: ADR~old-v1
+  packages/p/src/lib.nika:1: ADR~old-v1
   Cite the record that replaced it (docs/history/adr/README.md maps
   every archived decision to its live one).
 2 ADR name(s) that no record carries:
