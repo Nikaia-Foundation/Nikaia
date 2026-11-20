@@ -466,8 +466,9 @@ builds running beside it part of the time: a file near the limit can fall on
 either side of it, which is why time is ranked here and not quoted.
 
 `compare` counts ours' unsolved files by reason itself (#2259): **overflow**,
-a file that leaves `i64` (ADR-270 D11: answered `unknown` on purpose until
-the 128÷64 division lands), also where the walk after the overflowed search
+a file that leaves `i64` (ADR-270 D11: answered `unknown` on purpose where a
+simplex row does not fit `i64` even combined in double width and reduced by
+its gcd, #2307), also where the walk after the overflowed search
 ran on to the limit (the rod at the build-time case budget then answers
 `unknown (overflow)`); **timeout**, past the limit otherwise; **unknown**,
 any other reason. Ours ran under a case budget no limit reaches (#2090), so
