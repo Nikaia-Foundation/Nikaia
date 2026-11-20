@@ -85,6 +85,8 @@ jobs:
       # `dev`, as `cargo test` builds them on a laptop, beside it at a lower
       # priority. At release, `std`'s test harness was a second full
       # optimised compile of the largest crate on the build's four cores.
+      # `std` has no unit tests (`test = false`, #2082), but `--lib` builds a
+      # library's harness even then, so it is left out by name.
       - name: Build the tests
         env:
           CARGO_INCREMENTAL: 1
@@ -95,7 +97,7 @@ jobs:
             jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
                    | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"'
           }
-          nice -n 10 cargo test --workspace --no-run --lib --bins --message-format=json | list >"$RUNNER_TEMP/unit.tsv" &
+          nice -n 10 cargo test --workspace --exclude nikaia-std --no-run --lib --bins --message-format=json | list >"$RUNNER_TEMP/unit.tsv" &
           unit=$!
           cargo test --workspace --release --no-run --test '*' --message-format=json | list >"$RUNNER_TEMP/integration.tsv"
           wait $unit
