@@ -477,7 +477,7 @@ Paths: `scripts/`, `drive.nika`, `agent.nika`, `badges`, `pre-push`
 
 ### Prover
 
-Paths: `sv_`, `logic_`, `prover`, `prove.rs`, `bounds_`, `--bounds`, `solver`
+Paths: `sv_`, `logic_`, `prover`, `prove.rs`, `bounds_`, `--bounds`, `--asserts`, `solver`
 
 * **An index read out of an inner list of a field** (`a = self.col[c][i]`, then `self.atoms[a]`) stays checked whatever length relation the lists have, until ADR-306 D28 is built; a local list of lists is proved already (D7). Sort such a site under D28, not under #385 (that is values computed from the same table). (issue-1470)
 * **A field rule holds only if every `ref mut self` method of the type keeps it** (checked at each `return`; `most_facts()` is 48, `rules_rounds()` is 8). One method that loses it (as `score` did for `sv_walk`) drops it for the whole type. So a probe for a field rule is reduced from the real type: the target function plus every `ref mut self` method, with stub types. A synthetic probe can pass while the real code stays checked. (issue-1470)
@@ -506,6 +506,13 @@ Paths: `sv_`, `logic_`, `prover`, `prove.rs`, `bounds_`, `--bounds`, `solver`
 * **`--asserts` lists `assert` claims only (ADR-361 D7)**; an index or
   counter the walk leaves checked, with the loop its reason names, shows in
   `--bounds`. An issue that asks for it under `--asserts` means `--bounds`. (issue-1634)
+* **One `nikaia check --asserts` (or `--bounds`) measures a whole package**:
+  it reads every file of the package of the FILE it is given, and its report
+  covers each of them under a `--- src/F.nika` line (`project_check_explain`).
+  So "how many asserts does this change newly refuse in `packages/P`" is one
+  call per binary, `check --asserts packages/P/src/main.nika > R`, diffed
+  between the old and new binary; never a loop over the files, which checks
+  the whole package once per file (#2232: 35 files, about 20 minutes).
 * **A `--bounds` reason's wording is quoted verbatim by the `.bounds` files**
   (23 for the loop reasons): before changing one, `grep -l 'PHRASE'
   tests/compiler/tests/*.bounds` and bless them all in one `nikaia test` run
