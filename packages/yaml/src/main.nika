@@ -1089,7 +1089,7 @@ pub grammar Yaml {
 	// reads the text between the quotes as that kind, its shape checked by
 	// `mistagged` once the document is read.
 	rule Double(n: i64, k: TagKind) -> Node =
-		a:here "\"" s:text(DoublePlain*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
+		a:here "\"" s:text((not("\"") not("\\") not("\n") any)*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1145,14 +1145,14 @@ pub grammar Yaml {
 				value: v,
 			}
 		}
-	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
-	// characters, spaces inside a line, a folded line break (6.5), an escaped
-	// line break, an escape. A further line is indented past the parent at
-	// `n` (`s-flow-line-prefix(n)`) and is no document marker.
+	// characters, a folded line break (6.5), an escaped line break, an
+	// escape. A further line is indented past the parent at `n`
+	// (`s-flow-line-prefix(n)`) and is no document marker. Each run up to a
+	// quote, a backslash or a line break is one search for those three bytes
+	// (#2418); a run a line break ends leaves its spaces and tabs out.
 	rule DoublePart(n: i64) -> String =
-		t:text(DoubleWord+) -> { t.clone() }
-		| w:text((" " | "\t")+) not("\n") -> { w.clone() }
+		t:text((not("\"") not("\\") not("\n") any)+) e:AtBreak -> { line_part(t, e).clone() }
 		| (" " | "\t")* "\n" e:count(Empty) Indent(n) (" " | "\t")* -> {
 			if e == 0 {
 				" "
@@ -1169,7 +1169,7 @@ pub grammar Yaml {
 			one(scalar::from(v))
 		}
 		| "\\" x:any if(is_escape(x), "an escape") -> { escaped(x) }
-	rule DoubleWord = x:any if(x != '"' && x != '\\' && x != '\n' && x != ' ' && x != '\t') -> { }
+	rule AtBreak -> bool = peek("\n") -> { true } | "" -> { false }
 	rule Hex -> i64 = h:hex_digit -> { hex_value(h) }
 	rule Hex2 -> i64 = a:Hex b:Hex -> { a * 16 + b }
 	rule Hex4 -> i64 = a:Hex2 b:Hex2 -> { a * 256 + b }
@@ -1279,7 +1279,7 @@ pub grammar Yaml {
 	rule SingleChar(n: i64) =
 		"''" -> { }
 		| "\n" Empty* Indent(n) -> { }
-		| x:any if(x != '\'' && x != '\n') -> { }
+		| (not("'") not("\n") any)+ -> { }
 
 	// A plain scalar, resolved by the core schema. In flow the flow
 	// indicators end it; `multi` lets it go on over lines indented past `n`.
@@ -1329,6 +1329,16 @@ pub grammar Yaml {
 		| (" " | "\t")+ PlainChar(flow; after_space: true) -> { }
 		| if(multi) (" " | "\t")* "\n" Empty* not(Marker) m:count(" ") if(m > n) (" " | "\t")* PlainChar(flow; after_space: true) -> { }
 	rule Empty = (" " | "\t")* "\n" -> { }
+}
+
+// A run of a double-quoted scalar: as written, or without the spaces and
+// tabs that end it when a line break follows (`s-flow-folded`, 6.5).
+fn line_part(t: String, at_break: bool) -> String sync {
+	let mut r = t
+	while at_break && (r.ends_with(" ") || r.ends_with("\t")) {
+		r = r.trim_end_matches(' ').trim_end_matches('\t')
+	}
+	return r
 }
 
 // Whether an implicit key's bytes stay on their line, read unchecked (#2409).

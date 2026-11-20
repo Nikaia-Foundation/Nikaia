@@ -56,6 +56,10 @@ fn main() throws {
 	line("'a\n  b'")
 	line("\"a  \n\n  b\"")
 	line("' one\n  two \n\n\n  three '")
+	// a run read in one search keeps its tabs inside a line and drops the
+	// spaces and tabs before a break, also after an escape (#2418)
+	line("\"a\tb \t\n  c\"")
+	line("\"a\\t \t \n  b\"")
 	// an escaped line break joins the lines (suite NP9H)
 	line("\"a \\\n   b\"")
 	// keys and values
