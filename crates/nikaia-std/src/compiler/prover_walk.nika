@@ -795,8 +795,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, scope, words, library, holes_of, ask)
     // D11: a root bound to a name is judged where a call opens a path under
     // the name, as written there (#2440).
-    let root = raw_sink_root(value, scope, words)
-    let rooted = !mutable && names.len() == 1 && (raw_sink_anywhere(root, words, written_of) || raw_sink_dir(root, words) != null)
+    // A root joined under it carries its parts too (#2441).
+    let mut joins: Vec[Expr] = []
+    let root = raw_sink_root(value, scope, words, written_of, joins)
+    let rooted = !mutable && names.len() == 1 && raw_sink_is_root(root, words, written_of)
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
@@ -814,6 +816,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         }
         if rooted {
             scope.roots.insert(n.clone(), root.clone())
+            scope.root_joins.insert(n.clone(), joins.clone())
         }
     }
     // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
@@ -2782,13 +2785,18 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
         }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate() {
-            let arg = raw_sink_root(written, scope, words)
+            let mut joins: Vec[Expr] = []
+            let arg = raw_sink_root(written, scope, words, written_of, joins)
             let anywhere = raw_sink_anywhere(arg, words, written_of)
             let mut root_parts: Vec[Expr] = []
             if !anywhere {
                 match raw_sink_dir(arg, words) {
                     dir => raw_sink_parts(dir, holes_of, root_parts),
-                    null => continue,
+                    null => {
+                        if !raw_sink_scratch(arg, words) {
+                            continue
+                        }
+                    },
                 }
             }
             let mut root_outside = false
@@ -2797,7 +2805,10 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                     root_outside = true
                 }
             }
-            let root = written_of(arg)
+            let mut root = written_of(arg)
+            if !joins.is_empty() {
+                root = written_of(written)
+            }
             // D11: the root's own parts, under the call's one operation, or
             // under all three where it has two (`copy`, `rename`).
             let mut whole = raw_sink_operation(callee, 0, config, words, written_of)
@@ -2807,6 +2818,27 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
             for part in root_parts {
                 raw_sink_part(walk, root_sink, root_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+            }
+            // D11, D14 (#2441): a part `Root::join` adds under a `Dir` is a
+            // part of the root; a guarded one, joined after a base that is
+            // not outside, passes. `Anywhere` stays `Anywhere`, so its joins
+            // name nothing.
+            if !anywhere {
+                let mut guard = String()
+                if !root_outside {
+                    guard.push_str("path")
+                }
+                let join_sink = ParamSink { index: -1, kind: "path", sink: root_sink.sink.clone(), operation: root_sink.operation.clone(), root_part: false, guard: guard }
+                for join in joins {
+                    let mut parts: Vec[Expr] = []
+                    raw_sink_parts(join, holes_of, parts)
+                    for part in parts {
+                        if raw_sink_outside(part, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, join_sink.guard, part, scope, words, ask) {
+                            root_outside = true
+                        }
+                        raw_sink_part(walk, join_sink, join_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+                    }
+                }
             }
             if !anywhere && !root_outside {
                 continue
@@ -3070,10 +3102,50 @@ fn raw_sink_operation(callee: ref String, j: i64, config: ref Vec[ConfigArg], wo
 }
 
 /// **The root an argument names** (ADR-raw-sinks-1 D11, #2440): the value
-/// of a name bound to a root (`ProverScope::roots`), else the argument.
-fn raw_sink_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> Expr {
+/// of a name bound to a root (`ProverScope::roots`), else the argument. A
+/// `root.join(part)` names the base `root` names, and each `part` it joins
+/// under the base goes into `joins`, in order (D13, #2441).
+fn raw_sink_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync, mut joins: Vec[Expr]) -> Expr {
+    match arg {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "join" && args.len() == 1 {
+                let mut under: Vec[Expr] = []
+                let base = raw_sink_root(receiver, scope, words, written_of, under)
+                if raw_sink_is_root(base, words, written_of) {
+                    joins.extend(under)
+                    joins.push(args[0].clone())
+                    return base
+                }
+            }
+            return arg.clone()
+        },
+        else => {},
+    }
     let name = raw_sink_name(arg, words) ?? return arg.clone()
-    return scope.roots[name]?.clone() ?? arg.clone()
+    let base = scope.roots[name]?.clone() ?? return arg.clone()
+    joins.extend(scope.root_joins[name]?.clone() ?? [])
+    return base
+}
+
+/// Whether an expression is a root of a file operation: `fs::Root::Dir(..)`,
+/// `fs::Root::Anywhere` or `fs::scratch()` (ADR-raw-sinks-1 D2, D11, D12).
+fn raw_sink_is_root(arg: ref Expr, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> bool {
+    return raw_sink_anywhere(arg, words, written_of) || raw_sink_dir(arg, words) != null || raw_sink_scratch(arg, words)
+}
+
+/// Whether an argument is `fs::scratch()`, a root nobody but the program
+/// chose (ADR-raw-sinks-1 D12): clean itself, its joins are judged (#2441).
+fn raw_sink_scratch(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match arg {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                else => "",
+            }
+            named.ends_with("fs::scratch") && args.is_empty()
+        },
+        else => false,
+    }
 }
 
 /// The directory of `fs::Root::Dir(dir)`, or nothing for any other root

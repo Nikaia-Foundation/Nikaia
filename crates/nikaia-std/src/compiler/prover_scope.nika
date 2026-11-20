@@ -34,6 +34,10 @@ pub struct ProverScope {
     /// D11, #2440): `let at = fs::Root::Dir(dir)`, with the root's value, so
     /// that a call opening a path under `at` judges `dir` as at the root.
     pub roots: collections::BTreeMap[String, Expr],
+    /// **The parts a bound root joins under its base** (ADR-raw-sinks-1
+    /// D11, D14, #2441): `key` of `let at = fs::Root::Dir(cache).join(key)`,
+    /// each a part of the root where a call opens a path under `at`.
+    pub root_joins: collections::BTreeMap[String, Vec[Expr]],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -131,6 +135,7 @@ impl ProverScope {
             carried_from: collections::BTreeMap(),
             joined: collections::BTreeSet(),
             roots: collections::BTreeMap(),
+            root_joins: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -198,6 +203,7 @@ impl ProverScope {
         self.carried_from.remove(name)
         self.joined.remove(name)
         self.roots.remove(name)
+        self.root_joins.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
         self.locals.insert(name.clone())
@@ -555,6 +561,7 @@ impl ProverScope {
         scope.carried_from = self.carried_from.clone()
         scope.joined = self.joined.clone()
         scope.roots = self.roots.clone()
+        scope.root_joins = self.root_joins.clone()
         scope.locals = self.locals.clone()
         scope.maps = self.maps.clone()
         return scope
