@@ -133,9 +133,9 @@ fn solver_toolchain(repo: String) -> String throws {
 }
 
 fn solver_root() -> String throws {
-	let here = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+	let here = process::run("git", ["rev-parse", "--show-toplevel"]; trusted: true).stdout.trim().clone()
 	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	return process::run("pwd", []).stdout.trim().clone()
+	return process::run("pwd", []; trusted: true).stdout.trim().clone()
 }
 
 // --- Assembling and building the program ---
@@ -208,7 +208,7 @@ fn solver_key(repo: String, nikaia: String) -> String throws {
 	let files = solver_program_files(repo)
 	if files.len() == 0 { return "" }
 	for f in files { args.push(f.clone()) }
-	let out = process::run("sh", args)
+	let out = process::run("sh", args; trusted: true)
 	if !out.ok { return "" }
 	return out.stdout.trim().clone()
 }
@@ -615,8 +615,12 @@ fn solver_z3_exe() -> String throws {
 // where it wrote an `(error ...)` before any (its answer is then to another
 // query than the file's). The wall clock `-T:30` stays an outer guard.
 fn solver_z3(exe: String, path: String, rlimit: i64) -> String throws {
-	let out = process::run(exe, solver_z3_args(path, rlimit))
-	return solver_cli_answer(out.stdout)
+	return solver_cli_answer(solver_z3_stdout(exe, path, rlimit))
+}
+
+// What z3 prints for the file `path` under `rlimit`.
+fn solver_z3_stdout(exe: String, path: String, rlimit: i64) -> String throws {
+	return process::run(exe, solver_z3_args(path, rlimit)).stdout
 }
 
 // The arguments of `solver_z3`'s z3 run.
@@ -742,8 +746,8 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 		// A file that must be refused (`; EXPECT: error`) is `run`'s, not z3's.
 		if said == "error" { continue }
 		if said == "" && !write { continue }
-		let out = process::run(z3_exe.clone(), solver_z3_args(p.clone(), rlimit))
-		let z3 = solver_cli_answer(out.stdout.clone())
+		let z3_out = solver_z3_stdout(z3_exe.clone(), p.clone(), rlimit)
+		let z3 = solver_cli_answer(z3_out.clone())
 		if said == "" {
 			if z3 == "sat" || z3 == "unsat" {
 				fs::write(p.clone(), fs::Root::Anywhere, solver_with_status(source, z3.clone()))
@@ -768,7 +772,7 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 			} else {
 				ours_otherwise += 1
 			}
-			println(f"{p} z3 refuses: {solver_cli_error(out.stdout)}; ours: {ours}")
+			println(f"{p} z3 refuses: {solver_cli_error(z3_out)}; ours: {ours}")
 		} else if said != z3 {
 			disagree += 1
 			println(f"{p} status {said}, z3 {z3}")
@@ -1135,7 +1139,7 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	let bugs: String = if self_test { process::run("mktemp", ["-d"]).stdout.trim().clone() } else {
 		f"{repo}/tests/solver/bugs"
 	}
-	let work: String = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let work: String = process::run("mktemp", ["-d"]; trusted: true).stdout.trim().clone()
 	process::run("mkdir", ["-p", bugs.clone()])
 	let bin = solver_build(repo, nikaia)
 	if bin == "" { process::exit(1) }
@@ -1699,7 +1703,7 @@ fn solver_one(
 // `""` where neither runs.
 fn solver_exe(var: String, name: String) -> String throws {
 	let exe = env::var(var) ?? name
-	return if process::run("sh", ["-c", f"command -v '{exe}'"]).ok { exe } else { "" }
+	return if process::run("sh", ["-c", f"command -v '{exe}'"]; trusted: true).ok { exe } else { "" }
 }
 
 // The middle of `xs` (the lower one of two), 0 for none.

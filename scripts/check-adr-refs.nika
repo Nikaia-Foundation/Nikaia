@@ -32,6 +32,7 @@
 use std::cli
 use std::collections
 use std::fs
+use std::path
 use std::process
 use std::regex
 
@@ -117,6 +118,7 @@ fn refs_walk(root: String, dir: String, mut out: Vec[String]) throws {
         if name.starts_with(".") || name == "target" || name == "__pycache__" { continue }
         let mut rel = name.clone()
         if dir.len() > 0 { rel = f"{dir}/{name}" }
+        if !path::is_below(rel) { continue }
         if fs::metadata(f"{root}/{rel}", fs::Root::Anywhere).is_dir() {
             refs_walk(root, rel, out)
         } else if refs_searched(rel) {
