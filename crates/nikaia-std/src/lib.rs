@@ -325,7 +325,12 @@ pub mod runtime {
 /// **And `result_large_err`**: an error enum a `.nika` throws holds its values
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
+///
+/// **And `blocks_in_conditions`**: `high.narrowing_div_rem(low, d) ?? return
+/// null` lowers the call as a block (it names the wide value once) inside the
+/// `match` of `??` (`sv_num.nika`, #2013).
 #[allow(
+    clippy::blocks_in_conditions,
     clippy::get_first,
     clippy::result_large_err,
     clippy::no_effect,

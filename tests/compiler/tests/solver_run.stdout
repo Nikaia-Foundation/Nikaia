@@ -23,3 +23,6 @@ pre: 5 files, solved 5 (proved 4, refuted 1), unknown 0 (overflow 0, unreadable 
 malformed/pysmt-issue_159.smt2 refused (a is unbound: a parallel let binds its names only in its body, in assertion 1) 0
 malformed/regress0-parser-issue10813-1.smt2 refused (the literal 5/0 has a zero denominator, in assertion 3) 0
 malformed: 2 files, solved 2 (proved 0, refuted 0, refused 2), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 0.0, certificates checked 0, models evaluated 0
+exact/sat-sum-of-fractions.smt2 refuted 2
+exact/unsat-sum-of-fractions.smt2 proved 0
+exact: 2 files, solved 2 (proved 1, refuted 1), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 1.0, certificates checked 1, models evaluated 1

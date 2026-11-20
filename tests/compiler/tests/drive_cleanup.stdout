@@ -9,9 +9,19 @@ CLEANUP freed 0 MB, 9000 MB free: target/debug kept (a cargo builds into it), ta
 target/debug with a cargo running: true
 == 5000 MB free (exit 0)
 DISK 5000 MB free, under 6 GB: cleanup
-would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
 DRY-RUN NEXT b1
 == 2000 MB free (exit 2)
 DISK 2000 MB free, under 6 GB: cleanup
-would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
 ESCALATE drive: less than 3 GB free after the cleanup (2000 MB) (drive.nika SHA)
+4 old deps variants
+nikaia-0000000000000001: false
+nikaia-0000000000000001.d: false
+nikaia-0000000000000002: false
+nikaia-00000000000000a3: true
+libfoo-00000000000000b1.rlib: false
+libfoo-00000000000000b2.rlib: true
+libfoo-00000000000000b2.rmeta: true
+libbar-00000000000000c1.rlib: true
+plain: true

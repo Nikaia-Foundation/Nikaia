@@ -63,7 +63,7 @@ pub(crate) fn comptime_turn_of(value: &Expr) -> Option<ComptimeTurn> {
     };
     match func {
         Expr::LitStr { text, .. } if text == TURN_MARK && args.len() == 4 => {
-            let mut texts: Vec<String> = vec![];
+            let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for arg in args.iter().take(3) {
                 match arg {
                     Expr::LitStr { text: one, .. } => { texts.push(nikaia_std::block::Text::from(one.to_string())); },

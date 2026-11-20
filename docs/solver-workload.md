@@ -469,7 +469,7 @@ No wrong answer and no disagreement, from any of the three, on 1097 files.
 | :--- | ---: | ---: | ---: | ---: | :--- | :--- |
 | QF_LIA 20180326-Bromberger | 1 | 1 | 1 | 1 | level | |
 | QF_LIA 20220307-SMPT | 371 | 339 (2.1 s) | 367 (0.2 s) | 368 (0.2 s) | behind | 32 timeouts |
-| QF_LIA 20231117-c_inference | 31 | 0 | 30 (1.9 s) | 14 (13.3 s) | behind | 31 case budget |
+| QF_LIA 20231117-c_inference | 31 | 26 (2026-11-19, 0.0.1463, `run --timeout 10`, #1960) | 30 (1.9 s) | 14 (13.3 s) | behind z3, ahead of cvc5 | 5 timeouts |
 | QF_LIA CAV_2009_benchmarks | 1 | 1 | 1 | 1 | level | |
 | QF_LIA bofill-scheduling | 2 | 2 (0.4 s) | 2 (0.0 s) | 2 (0.1 s) | behind on time | |
 | QF_LIA cut_lemmas | 1 | 0 | 1 | 0 | behind | overflow |

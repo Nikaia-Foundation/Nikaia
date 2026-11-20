@@ -1,0 +1,8 @@
+// #2114: the room `Vec(capacity: n)` holds ahead is a count `std` takes, so a
+// negative one stops the program as every count does (ADR-285 D15).
+fn main() throws {
+	let room: i64 = 0 - 1
+	let mut list: Vec[i64] = Vec(capacity: room)
+	list.push(1)
+	println(list.len())
+}

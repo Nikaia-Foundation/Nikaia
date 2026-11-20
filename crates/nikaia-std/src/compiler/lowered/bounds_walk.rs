@@ -1759,11 +1759,12 @@ pub(crate) fn bounding_after_change(walk: &mut BoundsWalk, facts: &mut BoundsFac
 }
 
 pub(crate) fn bounding_halves(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], value: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
-    match value {
+    match bounding_unwrapped(value) {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if args.len() != 1 { return None; }
             let picked = words.resolve(method);
+            if picked == "narrowing_div_rem" && args.len() == 2 { return bounding_division_halves(walk, names, bounding_unwrapped(value), receiver, args, facts, context, program, words); }
+            if args.len() != 1 { return None; }
             let ty = match *nikaia_std::index::get(&context.std_receivers, &(node_key(value))) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if !is_whole_number(ty) { return None; }
             let a = match bounding_lin(walk, receiver, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -1798,6 +1799,48 @@ pub(crate) fn bounding_halves(walk: &mut BoundsWalk, names: &[winnow_grammar::Sy
         _ => { },
     }
     None
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_division_halves(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], call: &Expr, receiver: &Expr, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    let ty = nikaia_std::index::or(*nikaia_std::index::get(&context.std_receivers, &(node_key(call))), || "");
+    if !is_whole_number(ty) { return None; }
+    let high = match bounding_lin(walk, receiver, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let low = match bounding_lin(walk, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let by = match bounding_lin(walk, nikaia_std::index::get(&args, 1), facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let first = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+    let second = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 1)).to_string());
+    for side in [high, low, by] { if walk.arena.mentions(side, &first) || walk.arena.mentions(side, &second) { return None; } }
+    let quotient = walk.arena.var(&first);
+    let rest = walk.arena.var(&second);
+    let zero = walk.arena.int(0);
+    let below = walk.arena.neg(by);
+    let not_up = walk.arena.le(by, zero);
+    let over = walk.arena.lt(below, rest);
+    let under = walk.arena.lt(rest, by);
+    let inside = walk.arena.and(vec![over, under]);
+    let up_side = walk.arena.or(vec![not_up, inside]);
+    let not_down = walk.arena.ge(by, zero);
+    let over_down = walk.arena.lt(by, rest);
+    let under_down = walk.arena.lt(rest, below);
+    let inside_down = walk.arena.and(vec![over_down, under_down]);
+    let down_side = walk.arena.or(vec![not_down, inside_down]);
+    let mut parts = vec![up_side, down_side];
+    let bits = match ty {
+        "u8" => 8,
+        "u32" => 32,
+        "i32" => 32,
+        _ => 0,
+    };
+    if bits != 0 && walk.arena.constant(by).is_some() {
+        let shift = walk.arena.int(1 << bits);
+        let top = walk.arena.mul(high, shift);
+        let whole = walk.arena.add(top, low);
+        let times = walk.arena.mul(by, quotient);
+        let back = walk.arena.add(times, rest);
+        parts.push(walk.arena.equal(back, whole));
+    }
+    Some(walk.arena.and(parts))
 }
 
 pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -4390,10 +4433,11 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
     }
     if halves.is_some() {
         facts.ints.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()));
-        match value {
+        match bounding_unwrapped(value) {
             Expr::MethodCall { method, .. } => {
                 let method = *method;
-                if words.resolve(method) == "widening_mul" { facts.ints.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 1)).to_string())); }
+                let named = words.resolve(method);
+                if named == "widening_mul" || named == "narrowing_div_rem" { facts.ints.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 1)).to_string())); }
             },
             _ => { },
         }

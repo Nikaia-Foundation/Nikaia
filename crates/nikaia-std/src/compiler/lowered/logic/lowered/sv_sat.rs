@@ -376,7 +376,7 @@ impl SvSat {
             r -= 1;
         }
         let mut back: i64 = 0;
-        let mut levels: Vec<i64> = vec![current];
+        let mut levels: Vec<i64> = nikaia_std::block::List::from_array_in([current], nikaia_std::block::Place::Block);
         let mut i: i64 = 1;
         while ((i) as usize) < lits.len() {
             let v = sv_sat_var(*nikaia_std::index::get(&lits, (i) as usize));

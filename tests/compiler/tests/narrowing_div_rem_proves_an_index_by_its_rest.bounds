@@ -1,0 +1,6 @@
+bounds in tests/narrowing_div_rem_proves_an_index_by_its_rest.nika: 3 indexes, 3 proved; 2 operations, 0 proved
+    12  xs[r] + q      checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    12  xs[r]          proved
+    24  xs[q] + xs[r]  checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    24  xs[q]          proved
+    24  xs[r]          proved

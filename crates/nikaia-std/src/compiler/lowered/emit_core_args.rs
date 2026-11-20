@@ -1451,18 +1451,19 @@ impl EmitState {
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
         if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            if self.emit_call_room(world, walk, out, host, "nikaia_std::block::Text::new_in", config, depth, flow, scope)? { return Ok(true); }
             out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
             return Ok(true);
         }
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
-                if self.emit_call_by_name(world, walk, out, host, &emit_text(world, name), args, depth, flow, scope)? { return Ok(true); }
+                if self.emit_call_by_name(world, walk, out, host, &emit_text(world, name), args, config, depth, flow, scope)? { return Ok(true); }
             },
             _ => { },
         }
         Ok(match func {
-            Expr::Path(segments, _) => { return Ok(self.emit_call_by_path(world, walk, out, host, segments, args, depth, flow, scope)?); },
+            Expr::Path(segments, _) => { return Ok(self.emit_call_by_path(world, walk, out, host, segments, args, config, depth, flow, scope)?); },
             _ => return Ok(false),
         })
     }
@@ -1661,7 +1662,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if (text == "access_all" || text == "update_all") && !args.is_empty() {
             let copied = if text == "update_all" && self.facts.copied_doors.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) { "_copied" } else { "" };
             out.push(&format!("nikaia_std::lock::{}{}(", text, copied));
@@ -1706,7 +1707,9 @@ impl EmitState {
             return Ok(true);
         }
         if world.library.functions.contains_key(&format!("{}::new", text)) {
-            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![nikaia_std::block::Text::from(text.to_string()), String::from("new")]));
+            let made = self.path(world, walk.trusting, walk.unpinned, &vec![nikaia_std::block::Text::from(text.to_string()), String::from("new")]);
+            if self.emit_call_room(world, walk, out, host, &made, config, depth, flow, scope)? { return Ok(true); }
+            out.push(&made);
             out.push("(");
             let takes = self.takes_a_handle(world, &format!("{}::new", text));
             self.emit_core_args(world, walk, out, host, text, args, &takes, depth, flow, scope)?;
@@ -1769,13 +1772,38 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_call_by_path<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, segments: &[winnow_grammar::Symbol], args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_call_room<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, made: &str, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        if config.len() != 1 || emit_text(world, unsafe { nikaia_std::proven::read(&config, (0) as usize) }.name) != "capacity" { return Ok(false); }
+        let placed = made.strip_suffix("::new_in");
+        let plain = made.strip_suffix("::new");
+        let hashed = made.strip_suffix("::default");
+        let mut after: &'static str = ")";
+        if placed.is_some() {
+            out.push(&format!("{}::with_capacity_in(nikaia_std::count::of(", nikaia_std::index::or(placed, || "")));
+            after = "), nikaia_std::block::Place::Block)";
+        } else if plain.is_some() {
+            out.push(&format!("{}::with_capacity(nikaia_std::count::of(", nikaia_std::index::or(plain, || "")));
+            after = "))";
+        } else if hashed.is_some() {
+            out.push(&format!("{}::with_capacity_and_hasher(nikaia_std::count::of(", nikaia_std::index::or(hashed, || "")));
+            after = "), ::std::default::Default::default())";
+        } else { return Ok(false); }
+        self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&config, (0) as usize) }.value, depth, flow, scope)?;
+        out.push(after);
+        Ok(true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_call_by_path<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, segments: &[winnow_grammar::Symbol], args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if segments.len() == 2 {
             let module = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
             let name = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
             let key = format!("{}::{}::new", module, name);
             if world.library.functions.contains_key(&key) {
-                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![nikaia_std::block::Text::from(name.to_string()), String::from("new")])));
+                let made = format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![nikaia_std::block::Text::from(name.to_string()), String::from("new")]));
+                if self.emit_call_room(world, walk, out, host, &made, config, depth, flow, scope)? { return Ok(true); }
+                out.push(&made);
                 out.push("(");
                 let takes = self.takes_a_handle(world, &key);
                 self.emit_core_args(world, walk, out, host, &key, args, &takes, depth, flow, scope)?;
