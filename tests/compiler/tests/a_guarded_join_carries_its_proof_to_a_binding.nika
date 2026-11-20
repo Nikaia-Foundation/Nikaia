@@ -1,0 +1,33 @@
+// A name from outside that passed `path::is_component` and is joined after a
+// clean part is admitted at a path or program sink (ADR-raw-sinks-1 D14),
+// and a binding made from that text carries the proof to the sink: `kept`,
+// `kept.clone()`, `f"{kept}/y"`, a binding of `kept` and `"/r/" + k` pass
+// under `fs::Root::Anywhere` and as the program of `process::run` (#2370).
+// The join with no clean part before the name (`f"{k}/x"`, relative to where
+// the program runs) and the join of an unguarded name stay `NK1308`, here
+// warnings under `raw-sinks = "warn"`, the default. The program runs in a
+// branch not taken.
+use std::cli
+use std::fs
+use std::path
+use std::process
+
+fn main() throws {
+    let raw = cli::args().nth(1) ?? "abc"
+    let loose = f"/nikaia-none/{raw}/x"
+    println(fs::exists(loose, fs::Root::Anywhere))
+    let k = raw.clone()
+    return if !path::is_component(k)
+    let kept = f"/nikaia-none/{k}/x"
+    println(fs::exists(kept.clone(), fs::Root::Anywhere))
+    println(fs::exists(f"{kept}/y", fs::Root::Anywhere))
+    let again = kept.clone()
+    println(fs::exists(again, fs::Root::Anywhere))
+    let added = "/nikaia-none/" + k
+    println(fs::exists(added, fs::Root::Anywhere))
+    let here = f"{k}/x"
+    println(fs::exists(here, fs::Root::Anywhere))
+    if cli::args().nth(5) != null {
+        process::run(kept, [])
+    }
+}

@@ -571,6 +571,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     let mut source: String = String::from("");
     if tainted { source = nikaia_std::index::or(outside_source(value, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of), || "".into()); }
     let carried = carried_param(value, &scope, words, library, &walk.state, &mut &mut *holes_of);
+    let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, &scope, words, library, &mut &mut *holes_of, &mut &mut *ask);
     for name in names.iter() {
         let name = *name;
         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -582,6 +583,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             scope.loose.insert(nikaia_std::block::Text::from(n.to_string()));
             if source != "" { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
         }
+        if proved { scope.joined.insert(nikaia_std::block::Text::from(n.to_string())); }
     }
     if names.len() == 1 && prover_let_typed(&walk, ty, &span, words, 3) { scope.maps.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
     if names.len() == 1 && value_lin.is_none() && !tainted {
@@ -2024,7 +2026,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
             for j in 0..i {
                 let mut parts: Vec<Expr> = vec![];
                 raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
-                let joined = raw_sink_joined(unsafe { nikaia_std::proven::read(&args, (j) as usize) });
+                let joined = raw_sink_joined(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, scope, words);
                 let mut guard = String::new();
                 if joined && !root_outside { guard.push_str("path"); }
                 let operation = raw_sink_operation(callee, j, config, words, &mut *written_of);
@@ -2090,7 +2092,10 @@ pub(crate) fn carried_param(expr: &Expr, scope: &ProverScope, words: &winnow_gra
 
 pub(crate) fn raw_sink_passes(walk: &mut ProverWalk, guard: &str, part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
     if guard == "" { return false; }
-    if guard == "path" { return raw_sink_guarded(walk, part, "path::is_component", scope, words, &mut *ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, &mut *ask); }
+    if guard == "path" {
+        if raw_sink_joined_name(part, scope, words) { return true; }
+        return raw_sink_guarded(walk, part, "path::is_component", scope, words, &mut *ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, &mut *ask);
+    }
     raw_sink_guarded(walk, part, guard, scope, words, &mut *ask)
 }
 
@@ -2123,7 +2128,7 @@ pub(crate) fn raw_sink_outside(part: &Expr, scope: &ProverScope, words: &winnow_
 }
 
 pub(crate) fn raw_sink_guarded(walk: &mut ProverWalk, part: &Expr, predicate: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
-    let on = match path_of(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let on = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let name = format!("{}.{}{}()", on, property_mark(), predicate);
     if !scope.ints.contains(&name) { return false; }
     let named = walk.arena.var(&name);
@@ -2198,12 +2203,36 @@ pub(crate) fn raw_sink_dir(arg: &Expr, words: &winnow_grammar::InternerContext) 
     }
 }
 
-pub(crate) fn raw_sink_joined(arg: &Expr) -> bool {
+pub(crate) fn raw_sink_joined(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
     match arg {
         Expr::LitInterpolated { .. } => true,
         Expr::Binary { op, .. } => *op == BinaryOp::Add,
-        _ => false,
+        _ => raw_sink_joined_name(arg, scope, words),
     }
+}
+
+pub(crate) fn raw_sink_name(part: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match part {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { None }
+        },
+        _ => path_of(part, words),
+    }
+}
+
+pub(crate) fn raw_sink_joined_name(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
+    let name = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    scope.joined.contains(&name)
+}
+
+pub(crate) fn raw_sink_proved_join(walk: &mut ProverWalk, value: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> bool {
+    if !raw_sink_joined(value, scope, words) { return false; }
+    if !raw_sink_joined_name(value, scope, words) && !raw_sink_clean_lead(value, scope, words, library, &walk.state, &mut *holes_of) { return false; }
+    let mut parts: Vec<Expr> = vec![];
+    raw_sink_parts(value, &mut *holes_of, &mut parts);
+    for part in parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) && !raw_sink_passes(walk, "path", part, scope, words, &mut *ask) { return false; } }
+    true
 }
 
 pub(crate) fn raw_sink_clean_lead(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
@@ -2212,13 +2241,13 @@ pub(crate) fn raw_sink_clean_lead(arg: &Expr, scope: &ProverScope, words: &winno
             for part in parts.iter() {
                 match part {
                     FPart::Text(text) => { if !text.is_empty() { return true; } },
-                    FPart::Hole { expr, .. } => { return raw_sink_clean_lead(expr, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(expr) && !raw_sink_outside(expr, scope, words, library, state, &mut &mut *holes_of); },
+                    FPart::Hole { expr, .. } => { return raw_sink_clean_lead(expr, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(expr, scope, words) && !raw_sink_outside(expr, scope, words, library, state, &mut &mut *holes_of); },
                 }
             }
             false
         },
-        Expr::Binary { op, lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); *op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(lhs) && !raw_sink_outside(lhs, scope, words, library, state, &mut &mut *holes_of)) },
-        _ => false,
+        Expr::Binary { op, lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); *op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(lhs, scope, words) && !raw_sink_outside(lhs, scope, words, library, state, &mut &mut *holes_of)) },
+        _ => raw_sink_joined_name(arg, scope, words),
     }
 }
 

@@ -766,6 +766,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state, holes_of) ?? ""
     }
     let carried = carried_param(value, scope, words, library, walk.state, holes_of)
+    // D14: a guarded name joined after a clean part carries its proof to
+    // the binding, asked before the binding drops what the name knew.
+    let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, scope, words, library, holes_of, ask)
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
@@ -777,6 +780,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             if source != "" {
                 scope.sources.insert(n.clone(), source.clone())
             }
+        }
+        if proved {
+            scope.joined.insert(n.clone())
         }
     }
     // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
@@ -2746,7 +2752,7 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 // not outside, under a root that is not; alone under
                 // `Anywhere` it is relative to the working directory, which
                 // no guard proves.
-                let joined = raw_sink_joined(args[j])
+                let joined = raw_sink_joined(args[j], scope, words)
                 let mut guard = String()
                 if joined && !root_outside {
                     guard.push_str("path")
@@ -2855,6 +2861,9 @@ fn raw_sink_passes(mut walk: ProverWalk, guard: ref String, part: ref Expr, scop
         return false
     }
     if guard == "path" {
+        if raw_sink_joined_name(part, scope, words) {
+            return true
+        }
         return raw_sink_guarded(walk, part, "path::is_component", scope, words, ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, ask)
     }
     return raw_sink_guarded(walk, part, guard, scope, words, ask)
@@ -2897,7 +2906,7 @@ fn raw_sink_outside(part: ref Expr, scope: ref ProverScope, words: ref winnow_gr
 /// `predicate` of it here (`html::is_plain`, `path::is_component`): a named
 /// property after its guard is a fact (ADR-381 D5, ADR-raw-sinks-1 D14).
 fn raw_sink_guarded(mut walk: ProverWalk, part: ref Expr, predicate: ref String, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> bool {
-    let on = path_of(part, words) ?? return false
+    let on = raw_sink_name(part, words) ?? return false
     let name = f"{on}.{property_mark()}{predicate}()"
     if !scope.ints.contains(name) {
         return false
@@ -3009,14 +3018,53 @@ fn raw_sink_dir(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> Ex
     }
 }
 
-/// Whether a path is written joined of parts, an f-string or a `+`
-/// (ADR-raw-sinks-1 D14).
-fn raw_sink_joined(arg: ref Expr) -> bool {
+/// Whether a path is written joined of parts, an f-string or a `+`, or is
+/// a name bound to such a text whose proof it carries (ADR-raw-sinks-1 D14).
+fn raw_sink_joined(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
     return match arg {
         Expr::LitInterpolated { .. } => true,
         Expr::Binary { op, .. } => op == BinaryOp::Add,
-        else => false,
+        else => raw_sink_joined_name(arg, scope, words),
     }
+}
+
+/// The name or field path a sink part reads, through a `.clone()`
+/// (ADR-raw-sinks-1 D14): `key` of `key` and of `key.clone()`.
+fn raw_sink_name(part: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match part {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { null }
+        },
+        else => path_of(part, words),
+    }
+}
+
+/// Whether a sink part reads a name bound to a guarded name joined after a
+/// clean part (`ProverScope::joined`, ADR-raw-sinks-1 D14).
+fn raw_sink_joined_name(part: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    let name = raw_sink_name(part, words) ?? return false
+    return scope.joined.contains(name)
+}
+
+/// Whether `value` is a guarded name joined after a clean part, whose proof a
+/// binding of it carries (ADR-raw-sinks-1 D14): a joined text that starts
+/// with a part that is not outside, each of whose parts from outside passes
+/// `path::is_component` or `path::is_below` here.
+fn raw_sink_proved_join(mut walk: ProverWalk, value: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> bool {
+    if !raw_sink_joined(value, scope, words) {
+        return false
+    }
+    if !raw_sink_joined_name(value, scope, words) && !raw_sink_clean_lead(value, scope, words, library, walk.state, holes_of) {
+        return false
+    }
+    let mut parts: Vec[Expr] = []
+    raw_sink_parts(value, holes_of, parts)
+    for part in parts {
+        if raw_sink_outside(part, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, "path", part, scope, words, ask) {
+            return false
+        }
+    }
+    return true
 }
 
 /// Whether a joined text starts with a part that is not outside, a literal
@@ -3033,14 +3081,14 @@ fn raw_sink_clean_lead(arg: ref Expr, scope: ref ProverScope, words: ref winnow_
                         }
                     },
                     FPart::Hole { expr, .. } => {
-                        return raw_sink_clean_lead(expr, scope, words, library, state, holes_of) || (!raw_sink_joined(expr) && !raw_sink_outside(expr, scope, words, library, state, holes_of))
+                        return raw_sink_clean_lead(expr, scope, words, library, state, holes_of) || (!raw_sink_joined(expr, scope, words) && !raw_sink_outside(expr, scope, words, library, state, holes_of))
                     },
                 }
             }
             false
         },
-        Expr::Binary { op, lhs, .. } => op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, holes_of) || (!raw_sink_joined(lhs) && !raw_sink_outside(lhs, scope, words, library, state, holes_of))),
-        else => false,
+        Expr::Binary { op, lhs, .. } => op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, holes_of) || (!raw_sink_joined(lhs, scope, words) && !raw_sink_outside(lhs, scope, words, library, state, holes_of))),
+        else => raw_sink_joined_name(arg, scope, words),
     }
 }
 
