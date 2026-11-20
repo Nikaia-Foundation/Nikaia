@@ -6863,7 +6863,7 @@ fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Ex
             flow_value(going_into(place.owner, ty.generics[0], [0], true), args[0], given[0], ask, walk)
             flow_value(going_into(place.owner, ty.generics[1], [1], true), args[1], given[1], ask, walk)
         }
-        // **`m.extend(pairs)`** (ADR-collections-1 D6): the pairs' keys go
+        // **`m.extend(pairs)`** (ADR-collections-v3 D6): the pairs' keys go
         // into the keys and their values into the values, as `extend` of a
         // set puts its items into the elements.
         if method == "extend" && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
@@ -6905,7 +6905,7 @@ fn extends_linked(place: ref Declaring, items: ref Expr, ask: ref TierAsk, mut w
 }
 
 /// **A container extended from another declared one is of its tier**
-/// (ADR-collections-1 D3, D6): `extend` moves the elements over as they are,
+/// (ADR-collections-v3 D3, D6): `extend` moves the elements over as they are,
 /// so the two element positions are linked, as a list handed whole is
 /// (ADR-282 D16); `a.extend(b)` with literals in `b` and text of its own in
 /// `a` is one type below, not a `&str` going into an `EitherText`.

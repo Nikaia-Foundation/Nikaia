@@ -7,10 +7,10 @@
 **Answers:** whether `BTreeMap` and `BTreeSet` get `entry` and `extend`, which
 `HashMap` and `Vec` have and which were `NK1171` on them (#950)
 **Supersedes / Related:**
-[ADR-288](adr-288.md) D11 (what `std` offers is decided by the coherence of its types; stands, applied here);
-[ADR-253](adr-253.md) D2 (`a.extend(b)` joins a list to another; widened by D3 to the argument every `extend` takes);
-[ADR-293](adr-293.md) section 6 (an `entry` door of the language's own stays open);
-[ADR-282](adr-282.md) D7, D9 (a copy is the one the program writes; the compiler writes the one below)
+[ADR-288](../../specification/adr/adr-288.md) D11 (what `std` offers is decided by the coherence of its types; stands, applied here);
+[ADR-253](../../specification/adr/adr-253.md) D2 (`a.extend(b)` joins a list to another; widened by D3 to the argument every `extend` takes);
+[ADR-293](../../specification/adr/adr-293.md) section 6 (an `entry` door of the language's own stays open);
+[ADR-282](../../specification/adr/adr-282.md) D7, D9 (a copy is the one the program writes; the compiler writes the one below)
 
 ## 1. Question
 

@@ -902,7 +902,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
     }
 }
 
-/// **`extend` takes elements of the receiver's type** (ADR-collections-1 D3,
+/// **`extend` takes elements of the receiver's type** (ADR-collections-v3 D3,
 /// #963): the ledger cannot say "a list, a set or a sequence of `T`" in one
 /// parameter type, so `items` is `?` there and the element is compared here.
 /// Two numbers are left to the literal rules (an `[1, 2]` is not yet `u8`).
@@ -1076,7 +1076,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
 }
 
 /// **A list literal handed to `extend` is a list of the receiver's elements**
-/// (ADR-collections-1 D3): `items` is `?` in the ledger, since a list, a set
+/// (ADR-collections-v3 D3): `items` is `?` in the ledger, since a list, a set
 /// and a sequence all fit, but a literal is a list, and it is walked against
 /// `Vec[T]` as it was before the parameter widened, so `w.extend(["y"])` into
 /// a `Vec[String]` builds owned text.
