@@ -1,31 +1,31 @@
 // #2007, ADR-010 D12: an `impl Hash` in a `tools/*.nika` file writes
 // `mut into: Hasher`, and the lowered package's index brings `Hasher` into
 // scope as the prelude has it; without it rustc found no `Hasher` there.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let source = "pub struct Name {\n    pub text: String,\n}\n\nimpl Eq for Name {\n    fn eq(ref self, other: ref Self) -> bool sync {\n        return self.text == other.text\n    }\n}\n\nimpl Hash for Name {\n    fn hash(ref self, mut into: Hasher) sync {\n        into.add(self.text)\n    }\n}\n"
-    process::run("mkdir", ["-p", f"{tmp}/root/nikaia-std/src/compiler"])
-    fs::write(f"{tmp}/root/nikaia-std/src/compiler/probe.nika", fs::Root::Anywhere, source)
-    fs::write(f"{tmp}/root/nikaia-std/src/compiler/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"compiler\"\nwithin = \"std\"\n")
-    let out = process::run(nikaia, ["lower-std", "--sysroot", f"{tmp}/root"]; dir: tmp.clone())
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/root/nikaia-std/src/compiler"])
+    fs::write("root/nikaia-std/src/compiler/probe.nika", tmp, source)
+    fs::write("root/nikaia-std/src/compiler/nikaia.toml", tmp, "[package]\nname = \"compiler\"\nwithin = \"std\"\n")
+    let out = process::run(nikaia, ["lower-std", "--sysroot", f"{tmp.path().to_text()}/root"]; dir: tmp.path().to_text())
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.trim_start_matches("Error: ").starts_with("error") {
-            println(line.replace(tmp, "TMP"))
+            println(line.replace(tmp.path().to_text(), "TMP"))
         }
     }
-    let index = process::run("cat", [f"{tmp}/root/nikaia-std/src/compiler/lowered.rs"]).stdout
-    let lowered = process::run("cat", [f"{tmp}/root/nikaia-std/src/compiler/lowered/probe.rs"]).stdout
+    let index = process::run("cat", [f"{tmp.path().to_text()}/root/nikaia-std/src/compiler/lowered.rs"]).stdout
+    let lowered = process::run("cat", [f"{tmp.path().to_text()}/root/nikaia-std/src/compiler/lowered/probe.rs"]).stdout
     println(f"hash takes a Hasher: {lowered.contains("&mut Hasher")}")
     println(f"the index brings it: {index.contains("use nikaia_std::prelude::Hasher;")}")
-    process::run("rm", ["-rf", tmp])
 }

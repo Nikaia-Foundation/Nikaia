@@ -3,40 +3,35 @@
 // with no program beside it is an error, and so is a `.loops.bounds`, beside
 // a program or not: every build asks through a loop, so a test has one
 // report (ADR-361 D14, #1473).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
 	fs::write(
-		f"{tmp}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		tmp,
 		"[package]\nname = \"boundslib\"\nversion = \"0.1.0\"\n",
 	)
-	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n\treturn 1\n}\n")
+	fs::write("src/main.nika", tmp, "pub fn one() -> i64 {\n\treturn 1\n}\n")
 	fs::write(
-		f"{tmp}/tests/counter.nika",
-		fs::Root::Anywhere,
+		"tests/counter.nika",
+		tmp,
 		"fn k() -> i64 sync {\n\tlet mut i = 0\n\tlet mut s = 0\n\twhile i < 10 {\n\t\ts += 1\n\t\ti += 1\n\t}\n\treturn s\n}\n\nfn main() throws {\n\tprintln(f\"{k()}\")\n}\n",
 	)
-	fs::write(f"{tmp}/tests/counter.stdout", fs::Root::Anywhere, "10\n")
+	fs::write("tests/counter.stdout", tmp, "10\n")
 	let report = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"
-	fs::write(f"{tmp}/tests/counter.bounds", fs::Root::Anywhere, report)
-	let agree = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	fs::write("tests/counter.bounds", tmp, report)
+	let agree = process::run(nikaia, ["test", "--project", "."]; dir: tmp.path().to_text())
 	if agree.stdout.contains("1 passed; 0 failed") {
 		println("agreeing files: passes")
 	} else {
@@ -44,25 +39,24 @@ fn main() throws {
 		println(agree.stderr)
 	}
 	fs::write(
-		f"{tmp}/tests/counter.bounds",
-		fs::Root::Anywhere,
+		"tests/counter.bounds",
+		tmp,
 		report.replace("  proved\n", "  checked\n"),
 	)
-	let changed = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	let changed = process::run(nikaia, ["test", "--project", "."]; dir: tmp.path().to_text())
 	println(f"a changed line: fails {changed.stdout.contains("0 passed; 1 failed")}, names it {changed.stdout.contains("tests/counter.bounds (- expected, + reported):")}")
-	fs::write(f"{tmp}/tests/counter.bounds", fs::Root::Anywhere, report)
-	fs::write(f"{tmp}/tests/x.bounds", fs::Root::Anywhere, "")
-	let stray = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	fs::write("tests/counter.bounds", tmp, report)
+	fs::write("tests/x.bounds", tmp, "")
+	let stray = process::run(nikaia, ["test", "--project", "."]; dir: tmp.path().to_text())
 	println(f"a stray file: refused {stray.stderr.contains("tests/x.bounds: there is no test program beside it")}")
-	process::run("rm", [f"{tmp}/tests/x.bounds"])
-	fs::write(f"{tmp}/tests/counter.loops.bounds", fs::Root::Anywhere, report)
-	let beside = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	process::run("rm", [f"{tmp.path().to_text()}/tests/x.bounds"])
+	fs::write("tests/counter.loops.bounds", tmp, report)
+	let beside = process::run(nikaia, ["test", "--project", "."]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
 	println(f"a .loops.bounds beside its program: exit {beside.code}")
 	println(beside.stderr.trim())
-	process::run("rm", [f"{tmp}/tests/counter.loops.bounds"])
-	fs::write(f"{tmp}/tests/y.loops.bounds", fs::Root::Anywhere, "")
-	let alone = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	process::run("rm", [f"{tmp.path().to_text()}/tests/counter.loops.bounds"])
+	fs::write("tests/y.loops.bounds", tmp, "")
+	let alone = process::run(nikaia, ["test", "--project", "."]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
 	println(f"a .loops.bounds alone: exit {alone.code}")
 	println(alone.stderr.trim())
-	process::run("rm", ["-rf", tmp])
 }

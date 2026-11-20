@@ -4,28 +4,23 @@
 // caller lends no keep for it; a local still read after the push keeps the cut
 // a view, tethered to the caller's keep (`put_viewed`). Before, every such cut
 // was a view, and the caller's keep held each whole line.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let source = "fn tails(mut all: Vec[String], lines: Vec[String]) {\n    for each in lines {\n        let line = each + \"!\"\n        let m = line.find(\";\") ?? continue\n        all.push(line[m + 1..])\n    }\n}\n\nfn echoed(mut all: Vec[String], lines: Vec[String]) throws {\n    for each in lines {\n        let line = each + \"?\"\n        let m = line.find(\";\") ?? continue\n        all.push(line[m + 1..])\n        println(line)\n    }\n}\n\nfn main() throws {\n    let mut all: Vec[String] = []\n    tails(all, [\"Hamburg;12\", \"none\", \"Kiel;7\"])\n    let mut kept: Vec[String] = []\n    echoed(kept, [\"Bonn;3\"])\n    println(all.join(\",\"))\n    println(kept.join(\",\"))\n}\n"
-	fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-	let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+	fs::write("p.nika", tmp, source)
+	let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
 	if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-	let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+	let rust = fs::read_to_string("p.rs", tmp)
 	for line in rust.lines() {
 		if line.contains("fn tails")
 			|| line.contains("fn echoed")
@@ -34,7 +29,6 @@ fn main() throws {
 				println(line.trim())
 			}
 	}
-	let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+	let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
 	println(ran.stdout.trim())
-	process::run("rm", ["-rf", tmp])
 }

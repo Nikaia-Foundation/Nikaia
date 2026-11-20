@@ -49,6 +49,6 @@ name xs@0 | \nother [@24 | digits 0@25 | other ]@26
 == A1.nika
 2 words, 5 names, 0 docs, 0 literals, 4 other, 3 after a line break
 == drive_docs.nika
-25 words, 136 names, 0 docs, 36 literals, 273 other, 32 after a line break
+21 words, 98 names, 0 docs, 23 literals, 191 other, 28 after a line break
 == grammar_same_line.nika
 21 words, 76 names, 0 docs, 30 literals, 139 other, 25 after a line break

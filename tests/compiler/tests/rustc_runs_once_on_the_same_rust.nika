@@ -6,17 +6,12 @@
 // crate is lowered again, to the same Rust. A changed byte of the Rust, a
 // changed argument and a changed `--extern` file are each a miss, and a
 // store that cannot be read or written is a build like any other (D12).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -26,38 +21,38 @@ fn toolchain() -> String throws {
 
 // What the store said for each crate since the last call, the crate's tag
 // (`_` and the project's digest, #495) left out, and the trace emptied.
-fn verdicts(trace: String) -> String throws {
+fn verdicts(trace: ref fs::Root) -> String throws {
 	let said = process::run(
 		"sh",
-		["-c", f"grep ' rustc ' {trace} | sed -E 's/_[0-9a-f]{{16,}} / /'; rm -f {trace}"],
+		["-c", f"grep ' rustc ' {trace.path().to_text()} | sed -E 's/_[0-9a-f]{{16,}} / /'; rm -f {trace.path().to_text()}"],
 	).stdout.trim().clone()
 	return said.replace("\n", ", ")
 }
 
 // Another compiler, as far as the build can tell.
-fn another_compiler(p: String) throws {
+fn another_compiler(p: ref fs::Root) throws {
 	process::run(
 		"sh",
 		[
 			"-c",
 			"sed -i '$ s/.*/another-compiler/' target/nikaia/gen/switches; find target -name cargo-fresh -delete",
-		]; dir: p.clone(),
+		]; dir: p.path().to_text(),
 	)
 }
 
 // The Rust emitted for the package `name`, all of it.
-fn rust_of(p: String, name: String) -> String throws {
-	return process::run("sh", ["-c", f"cat target/nikaia/gen/{name}/*.rs"]; dir: p.clone()).stdout
+fn rust_of(p: ref fs::Root, name: String) -> String throws {
+	return process::run("sh", ["-c", f"cat target/nikaia/gen/{name}/*.rs"]; dir: p.path().to_text()).stdout
 }
 
-fn build(nikaia: String, p: String, cache: String, trace: String) -> String throws {
+fn build(nikaia: String, p: ref fs::Root, cache: ref fs::Root, trace: ref fs::Root) -> String throws {
 	let built = process::run(
 		nikaia,
-		["build"]; dir: p.clone(),
+		["build"]; dir: p.path().to_text(),
 		env: [
 			("RUST_BACKTRACE", "0"),
-			("NIKAIA_CACHE_DIR", cache.clone()),
-			("NIKAIA_WRAPPER_TRACE", trace.clone()),
+			("NIKAIA_CACHE_DIR", cache.path().to_text()),
+			("NIKAIA_WRAPPER_TRACE", trace.path().to_text()),
 		],
 	)
 	if built.code != 0 {
@@ -66,25 +61,25 @@ fn build(nikaia: String, p: String, cache: String, trace: String) -> String thro
 	return f"built {built.code}"
 }
 
-fn ran(p: String, name: String) -> String throws {
-	return process::run(f"{p}/target/nikaia/bin/{name}", []).stdout.trim().clone()
+fn ran(p: ref fs::Root, name: String) -> String throws {
+	return process::run(f"{p.path().to_text()}/target/nikaia/bin/{name}", []).stdout.trim().clone()
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	let cache = f"{tmp}/cache"
-	let trace = f"{tmp}/trace"
-	let p = f"{tmp}/reuse"
-	process::run("mkdir", ["-p", f"{p}/src"])
+	let cache = tmp.join("cache")
+	let trace = tmp.join("trace")
+	let p = tmp.join("reuse")
+	process::run("mkdir", ["-p", f"{p.path().to_text()}/src"])
 	fs::write(
-		f"{p}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		p,
 		"[package]\nname = \"reuse\"\nversion = \"0.1.0\"\n",
 	)
 	fs::write(
-		f"{p}/src/main.nika",
-		fs::Root::Anywhere,
+		"src/main.nika",
+		p,
 		"fn main() throws {\n\tprintln(\"hi\")\n}\n",
 	)
 	println(f"first: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p, "reuse")}")
@@ -92,8 +87,8 @@ fn main() throws {
 	println(f"same Rust, another compiler: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p, "reuse")}")
 	// A changed byte of the Rust.
 	fs::write(
-		f"{p}/src/main.nika",
-		fs::Root::Anywhere,
+		"src/main.nika",
+		p,
 		"fn main() throws {\n\tprintln(\"ho\")\n}\n",
 	)
 	println(f"changed Rust: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p, "reuse")}")
@@ -101,8 +96,8 @@ fn main() throws {
 	// extra-filename`, and not in the Rust.
 	let before = rust_of(p, "reuse")
 	fs::write(
-		f"{p}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		p,
 		"[package]\nname = \"reuse\"\nversion = \"0.2.0\"\n",
 	)
 	another_compiler(p)
@@ -110,47 +105,46 @@ fn main() throws {
 	println(f"changed argument: {built}; same Rust {rust_of(p, "reuse") == before}; {verdicts(trace)}; says {ran(p, "reuse")}")
 	// A changed `--extern` file: the library's body changed, the program's
 	// Rust did not.
-	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/app/src"])
 	fs::write(
-		f"{tmp}/lib/nikaia.toml",
-		fs::Root::Anywhere,
+		"lib/nikaia.toml",
+		tmp,
 		"[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
 	)
 	fs::write(
-		f"{tmp}/lib/src/main.nika",
-		fs::Root::Anywhere,
+		"lib/src/main.nika",
+		tmp,
 		"pub fn word() -> i64 {\n\treturn 1\n}\n",
 	)
 	fs::write(
-		f"{tmp}/app/nikaia.toml",
-		fs::Root::Anywhere,
+		"app/nikaia.toml",
+		tmp,
 		"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
 	)
 	fs::write(
-		f"{tmp}/app/src/main.nika",
-		fs::Root::Anywhere,
+		"app/src/main.nika",
+		tmp,
 		"use lib\n\nfn main() throws {\n\tprintln(lib::word())\n}\n",
 	)
-	let app = f"{tmp}/app"
+	let app = tmp.join("app")
 	println(f"with a library: {build(nikaia, app, cache, trace)}; {verdicts(trace)}; says {ran(app, "app")}")
 	let program = rust_of(app, "app")
 	fs::write(
-		f"{tmp}/lib/src/main.nika",
-		fs::Root::Anywhere,
+		"lib/src/main.nika",
+		tmp,
 		"pub fn word() -> i64 {\n\treturn 2\n}\n",
 	)
 	let rebuilt = build(nikaia, app, cache, trace)
 	println(f"changed library: {rebuilt}; same program Rust {rust_of(app, "app") == program}; {verdicts(trace)}; says {ran(app, "app")}")
 	// A store that cannot be read or written: a file where its directory goes.
-	process::run("rm", ["-rf", f"{cache}/rustc"])
-	fs::write(f"{cache}/rustc", fs::Root::Anywhere, "not a directory\n")
+	process::run("rm", ["-rf", f"{cache.path().to_text()}/rustc"])
+	fs::write("rustc", cache, "not a directory\n")
 	fs::write(
-		f"{p}/src/main.nika",
-		fs::Root::Anywhere,
+		"src/main.nika",
+		p,
 		"fn main() throws {\n\tprintln(\"without a store\")\n}\n",
 	)
 	println(f"unusable store: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p, "reuse")}")
 	another_compiler(p)
 	println(f"unusable store, another compiler: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p, "reuse")}")
-	process::run("rm", ["-rf", tmp])
 }

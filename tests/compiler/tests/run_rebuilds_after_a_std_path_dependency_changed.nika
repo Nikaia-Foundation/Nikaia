@@ -4,42 +4,38 @@
 // run bundle; an edit to task-block (a path dependency of std) must make the
 // second run build the bundle again, and so fail on the error put there,
 // instead of running the old one.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "nikaia"
 }
 
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
 	let nikaia = toolchain()
 	let repo = root()
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/sr", f"{tmp}/p"])
-	let copied = process::run("sh", ["-c", f"git -C '{repo}' archive HEAD Cargo.toml Cargo.lock rust-toolchain.toml crates benches packages | tar -x -C '{tmp}/sr'"])
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/sr", f"{tmp.path().to_text()}/p"])
+	let copied = process::run("sh", ["-c", f"git -C '{repo}' archive HEAD Cargo.toml Cargo.lock rust-toolchain.toml crates benches packages | tar -x -C '{tmp.path().to_text()}/sr'"])
 	if !copied.ok {
 		println(copied.stderr.trim())
 		process::exit(1)
 	}
-	fs::write(f"{tmp}/p/t.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"ran\")\n}\n")
-	let env: Vec[(String, String)] = [("NIKAIA_SYSROOT", f"{tmp}/sr/crates"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache")]
-	let first = process::run(nikaia.clone(), ["run", "t.nika"]; dir: f"{tmp}/p", env: env.clone())
+	fs::write("p/t.nika", tmp, "fn main() throws {\n    println(\"ran\")\n}\n")
+	let env: Vec[(String, String)] = [("NIKAIA_SYSROOT", f"{tmp.path().to_text()}/sr/crates"), ("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache")]
+	let first = process::run(nikaia.clone(), ["run", "t.nika"]; dir: f"{tmp.path().to_text()}/p", env: env.clone())
 	println(f"first: {first.stdout.trim()} (exit {first.code})")
-	let lib = f"{tmp}/sr/crates/unsafe/task-block/src/lib.rs"
+	let lib = f"{tmp.path().to_text()}/sr/crates/unsafe/task-block/src/lib.rs"
 	process::run("sh", ["-c", f"echo 'compile_error!(\"task-block edited\");' >> '{lib}'"])
-	let second = process::run(nikaia, ["run", "t.nika"]; dir: f"{tmp}/p", env: env)
+	let second = process::run(nikaia, ["run", "t.nika"]; dir: f"{tmp.path().to_text()}/p", env: env)
 	println(f"second ran the old runtime: {second.stdout.contains("ran")}")
 	println(f"second failed: {!second.ok}")
 	println(f"second names the edit: {second.stderr.contains("task-block edited")}")
-	process::run("rm", ["-rf", tmp])
 }

@@ -5,27 +5,27 @@
 // `push`, which kept six callee-saved registers and was called out of line,
 // 28.5 instructions a letter. The program also prints what both slow paths
 // pushed, so moving them keeps what a push appends.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/p/src"])
-    fs::write(f"{tmp}/p/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"game\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n")
-    fs::write(f"{tmp}/p/src/main.nika", fs::Root::Anywhere, "struct Acid {\n\tletter: scalar,\n\tp: f64,\n}\n\nfn random_lines(table: Vec[Acid], n: i64) -> i64 throws {\n\tlet mut last = 42\n\tlet mut total = 0\n\tlet mut done = 0\n\twhile done < n {\n\t\tlet mut line = String()\n\t\tlet mut j = 0\n\t\twhile j < 60 && done < n {\n\t\t\tlast = (last * 3877 + 29573) % 139968\n\t\t\tlet r = last as f64 / 139968.0\n\t\t\tlet mut i = 0\n\t\t\twhile i < table.len() - 1 && r >= table[i].p {\n\t\t\t\ti += 1\n\t\t\t}\n\t\t\tline.push(table[i].letter)\n\t\t\tj += 1\n\t\t\tdone += 1\n\t\t}\n\t\ttotal += line.len() as i64\n\t\tprintln(line)\n\t}\n\treturn total\n}\n\nfn main() throws {\n\tlet table = [\n\t\tAcid { letter: 'a', p: 0.27 },\n\t\tAcid { letter: 'c', p: 0.39 },\n\t\tAcid { letter: 'g', p: 0.51 },\n\t\tAcid { letter: 't', p: 1.0 },\n\t]\n\tprintln(random_lines(table, 150))\n\tlet mut wide = String()\n\tfor c in \"aé€😀z\".scalars {\n\t\twide.push(c)\n\t\twide.push(c)\n\t}\n\tprintln(wide)\n\tprintln(wide.len())\n}\n")
-    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp}/p")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/p/src"])
+    fs::write("p/nikaia.toml", tmp, "[package]\nname = \"game\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n")
+    fs::write("p/src/main.nika", tmp, "struct Acid {\n\tletter: scalar,\n\tp: f64,\n}\n\nfn random_lines(table: Vec[Acid], n: i64) -> i64 throws {\n\tlet mut last = 42\n\tlet mut total = 0\n\tlet mut done = 0\n\twhile done < n {\n\t\tlet mut line = String()\n\t\tlet mut j = 0\n\t\twhile j < 60 && done < n {\n\t\t\tlast = (last * 3877 + 29573) % 139968\n\t\t\tlet r = last as f64 / 139968.0\n\t\t\tlet mut i = 0\n\t\t\twhile i < table.len() - 1 && r >= table[i].p {\n\t\t\t\ti += 1\n\t\t\t}\n\t\t\tline.push(table[i].letter)\n\t\t\tj += 1\n\t\t\tdone += 1\n\t\t}\n\t\ttotal += line.len() as i64\n\t\tprintln(line)\n\t}\n\treturn total\n}\n\nfn main() throws {\n\tlet table = [\n\t\tAcid { letter: 'a', p: 0.27 },\n\t\tAcid { letter: 'c', p: 0.39 },\n\t\tAcid { letter: 'g', p: 0.51 },\n\t\tAcid { letter: 't', p: 1.0 },\n\t]\n\tprintln(random_lines(table, 150))\n\tlet mut wide = String()\n\tfor c in \"aé€😀z\".scalars {\n\t\twide.push(c)\n\t\twide.push(c)\n\t}\n\tprintln(wide)\n\tprintln(wide.len())\n}\n")
+    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp.path().to_text()}/p")
     if built.code != 0 {
         println(built.stdout)
     }
-    let ran = process::run(f"{tmp}/p/target/nikaia/bin/game", [])
+    let ran = process::run(f"{tmp.path().to_text()}/p/target/nikaia/bin/game", [])
     print(ran.stdout)
-    let symbols = process::run("sh", ["-c", f"nm -C {tmp}/p/target/nikaia/bin/game | grep -c 'task_block::text::Text>::push$'"])
+    let symbols = process::run("sh", ["-c", f"nm -C {tmp.path().to_text()}/p/target/nikaia/bin/game | grep -c 'task_block::text::Text>::push$'"])
     println(f"out-of-line Text::push: {symbols.stdout.trim()}")
-    process::run("rm", ["-rf", tmp])
 }

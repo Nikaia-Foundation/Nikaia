@@ -9,21 +9,18 @@
 // `(#M)` cites a source and names no dependency. Last, `--improve-plan`: an
 // `Issue:` kind that contains `wrong` (`partly wrong I7`, #1991) is about the
 // run's issue, a comment there, not an improvement issue.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn run(repo: String, nikaia: String, script: String, args: Vec[String]) throws {
@@ -37,21 +34,20 @@ fn run(repo: String, nikaia: String, script: String, args: Vec[String]) throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let good = f"{dir}/good.md"
-    fs::write(good.clone(), fs::Root::Anywhere, "## Problem\n\nIt breaks.\n\nNeeds #900\nPart of #901\n\n## To build\n\n1. Build on #900, inside #901 (as #902 asked).\n2. A `SKIPPED #903` line is quoted.\n\n## Done when\n\nThe test passes.\n")
+    let dir = fs::scratch()
+    let good = f"{dir.path().to_text()}/good.md"
+    fs::write("good.md", dir, "## Problem\n\nIt breaks.\n\nNeeds #900\nPart of #901\n\n## To build\n\n1. Build on #900, inside #901 (as #902 asked).\n2. A `SKIPPED #903` line is quoted.\n\n## Done when\n\nThe test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", good, "--open", "900", "901", "902", "903"])
-    let bad = f"{dir}/bad.md"
-    fs::write(bad.clone(), fs::Root::Anywhere, "## Problem\n\nIt breaks.\n\n**To build**\n\n1. Use the key decided in #904.\n2. Then #905, which is closed.\n\n**Done when:** the test passes.\n")
+    let bad = f"{dir.path().to_text()}/bad.md"
+    fs::write("bad.md", dir, "## Problem\n\nIt breaks.\n\n**To build**\n\n1. Use the key decided in #904.\n2. Then #905, which is closed.\n\n**Done when:** the test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", bad, "--open", "904"])
-    let none = f"{dir}/none.md"
-    fs::write(none.clone(), fs::Root::Anywhere, "It breaks, see #904.\n")
+    let none = f"{dir.path().to_text()}/none.md"
+    fs::write("none.md", dir, "It breaks, see #904.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", none, "--open", "904"])
-    let list = f"{dir}/issues.txt"
-    fs::write(list.clone(), fs::Root::Anywhere, "=== #30 ===\n## To build\n\n1. Do it.\n\n## Done when\n\nDone.\n=== #31 ===\n## To build\n\n1. Use the key decided in #904.\n\n## Done when\n\nDone.\n=== #32 ===\nNeeds #904\n\n## To build\n\n1. Use #904.\n\n## Done when\n\nDone.\n=== #33 ===\nFound while #904\n\n## To build\n\n1. Fix it beside #904.\n\n## Done when\n\nDone.\n=== #34 ===\nNo form at all.\n")
+    let list = f"{dir.path().to_text()}/issues.txt"
+    fs::write("issues.txt", dir, "=== #30 ===\n## To build\n\n1. Do it.\n\n## Done when\n\nDone.\n=== #31 ===\n## To build\n\n1. Use the key decided in #904.\n\n## Done when\n\nDone.\n=== #32 ===\nNeeds #904\n\n## To build\n\n1. Use #904.\n\n## Done when\n\nDone.\n=== #33 ===\nFound while #904\n\n## To build\n\n1. Fix it beside #904.\n\n## Done when\n\nDone.\n=== #34 ===\nNo form at all.\n")
     run(repo.clone(), nikaia.clone(), "scripts/drive.nika", ["--queue-check", list, "904"])
-    let report = f"{dir}/report.md"
-    fs::write(report.clone(), fs::Root::Anywhere, "Result: done\nIssue: partly wrong I7: the cause was half right\nNeeds: none\nFriction: none\n")
-    run(repo, nikaia, "scripts/drive.nika", ["--improve-plan", "issue-1991", "1991", report, f"{dir}/none.md"])
-    process::run("rm", ["-rf", dir])
+    let report = f"{dir.path().to_text()}/report.md"
+    fs::write("report.md", dir, "Result: done\nIssue: partly wrong I7: the cause was half right\nNeeds: none\nFriction: none\n")
+    run(repo, nikaia, "scripts/drive.nika", ["--improve-plan", "issue-1991", "1991", report, f"{dir.path().to_text()}/none.md"])
 }

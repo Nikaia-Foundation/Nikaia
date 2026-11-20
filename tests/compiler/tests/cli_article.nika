@@ -3,32 +3,32 @@
 // word as a word (`a \`bool\``). The article is chosen in
 // `runtime/cli.nika`; this runs a program with a parameter of each type and
 // a word that is none of them, and once with the subject missing.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let source = "fn main(a: i64; small: u8 = 1, big: u64 = 1, wide: i32 = 1, rate: f64 = 1.0, loud: bool = false, name: String = \"\") throws {\n    println(a)\n}\n"
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    fs::write("p.nika", tmp, source)
     let words = [["x"], ["--small=x", "5"], ["--big=x", "5"], ["--wide=x", "5"], ["--rate=x", "5"], ["--loud=x", "5"], ["--name"], []]
     for w in words {
         let mut args = ["run", "p.nika", "--"]
         for word in w {
             args.push(word.clone())
         }
-        let ran = process::run(nikaia, args; dir: tmp.clone())
+        let ran = process::run(nikaia, args; dir: tmp.path().to_text())
         for line in ran.stderr.lines() {
             if line.starts_with("error: `") {
                 println(f"{ran.code}: {line}")
             }
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

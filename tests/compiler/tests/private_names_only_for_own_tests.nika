@@ -2,11 +2,12 @@
 // package's non-`pub` names; every other program is still refused (`NK1110`).
 // `pk` has a private `secret`; `user` depends on `pk`, and neither its own
 // `tests/` program nor its `src/main.nika` is one of `pk`'s tests.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -19,19 +20,18 @@ fn checked(nikaia: String, dir: String, command: String, file: String) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/pk/src", f"{tmp}/pk/tests", f"{tmp}/user/src", f"{tmp}/user/tests"])
-    fs::write(f"{tmp}/pk/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/pk/src/lib.nika", fs::Root::Anywhere, "pub fn shown() -> i64 {\n    return secret() + 1\n}\n\nfn secret() -> i64 {\n    return 2\n}\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/pk/src", f"{tmp.path().to_text()}/pk/tests", f"{tmp.path().to_text()}/user/src", f"{tmp.path().to_text()}/user/tests"])
+    fs::write("pk/nikaia.toml", tmp, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    fs::write("pk/src/lib.nika", tmp, "pub fn shown() -> i64 {\n    return secret() + 1\n}\n\nfn secret() -> i64 {\n    return 2\n}\n")
     let calls = "use pk\n\nfn main() throws {\n    println(f\"{pk::secret()}\")\n}\n"
-    fs::write(f"{tmp}/pk/tests/own.nika", fs::Root::Anywhere, calls)
-    fs::write(f"{tmp}/user/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"user\"\nversion = \"0.1.0\"\n\n[dependencies]\npk = {{ path = \"{tmp}/pk\" }}\n")
-    fs::write(f"{tmp}/user/src/main.nika", fs::Root::Anywhere, calls)
-    fs::write(f"{tmp}/user/tests/other.nika", fs::Root::Anywhere, calls)
+    fs::write("pk/tests/own.nika", tmp, calls)
+    fs::write("user/nikaia.toml", tmp, f"[package]\nname = \"user\"\nversion = \"0.1.0\"\n\n[dependencies]\npk = {{ path = \"{tmp.path().to_text()}/pk\" }}\n")
+    fs::write("user/src/main.nika", tmp, calls)
+    fs::write("user/tests/other.nika", tmp, calls)
     // A test program is built by `nikaia test`, as its package's test.
-    checked(nikaia, f"{tmp}/pk", "test", "own")
-    checked(nikaia, f"{tmp}/user", "test", "other")
-    checked(nikaia, f"{tmp}/user", "check", "src/main.nika")
-    process::run("rm", ["-rf", tmp])
+    checked(nikaia, f"{tmp.path().to_text()}/pk", "test", "own")
+    checked(nikaia, f"{tmp.path().to_text()}/user", "test", "other")
+    checked(nikaia, f"{tmp.path().to_text()}/user", "check", "src/main.nika")
 }

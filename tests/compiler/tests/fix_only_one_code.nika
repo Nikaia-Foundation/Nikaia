@@ -3,27 +3,27 @@
 // (`NK1354`): `--only NK1354` writes the `.count()` and keeps the clone, a
 // second run with `--only nk1350` (any case) deletes the clone, and a code no
 // finding has changes nothing.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    let file = f"{tmp}/main.nika"
-    fs::write(file, fs::Root::Anywhere, "struct P { x: i64, y: i64 }\n\nfn main() throws {\n    let p = P { x: 1, y: 2 }\n    let q = p.clone()\n    println(q.x + p.y)\n    let xs = [1, 2, 3]\n    println(xs.iter().collect().len())\n}\n")
-    let none = process::run(nikaia, ["fix", "--only", "NK1999", f"{tmp}/main.nika"])
-    println(f"--only NK1999: {none.stdout}{none.stderr}".replace(tmp, "TMP"))
-    let counted = process::run(nikaia, ["fix", "--only", "NK1354", f"{tmp}/main.nika"])
-    print(f"--only NK1354: {counted.stdout}{counted.stderr}".replace(tmp, "TMP"))
-    print(fs::read_to_string(file, fs::Root::Anywhere))
-    let cloned = process::run(nikaia, ["fix", "--only", "nk1350", f"{tmp}/main.nika"])
-    print(f"--only nk1350: {cloned.stdout}{cloned.stderr}".replace(tmp, "TMP"))
-    print(fs::read_to_string(file, fs::Root::Anywhere))
-    process::run("rm", ["-rf", tmp])
+    let file = f"{tmp.path().to_text()}/main.nika"
+    fs::write("main.nika", tmp, "struct P { x: i64, y: i64 }\n\nfn main() throws {\n    let p = P { x: 1, y: 2 }\n    let q = p.clone()\n    println(q.x + p.y)\n    let xs = [1, 2, 3]\n    println(xs.iter().collect().len())\n}\n")
+    let none = process::run(nikaia, ["fix", "--only", "NK1999", f"{tmp.path().to_text()}/main.nika"])
+    println(f"--only NK1999: {none.stdout}{none.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let counted = process::run(nikaia, ["fix", "--only", "NK1354", f"{tmp.path().to_text()}/main.nika"])
+    print(f"--only NK1354: {counted.stdout}{counted.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+    let cloned = process::run(nikaia, ["fix", "--only", "nk1350", f"{tmp.path().to_text()}/main.nika"])
+    print(f"--only nk1350: {cloned.stdout}{cloned.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
 }

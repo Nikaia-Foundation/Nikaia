@@ -2,45 +2,45 @@
 // through Cargo (here a `[patch.crates-io]`, offline) and read where it landed;
 // its own `base = "0.2"`, named in its published `Cargo.toml`, comes in the
 // same resolution, and so does the `base` of a package by path.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 // A published package: its stub `Cargo.toml`, `nikaia.toml`, one source and
 // a ledger.
-fn published(dir: String, name: String, version: String, depends: String, source: String) throws {
-    process::run("mkdir", ["-p", f"{dir}/src"])
-    fs::write(f"{dir}/Cargo.toml", fs::Root::Anywhere, f"[package]\nname = \"nikaia_{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n{depends}")
-    fs::write(f"{dir}/lib.rs", fs::Root::Anywhere, "")
-    fs::write(f"{dir}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"{name}\"\nversion = \"{version}\"\n\n[dependencies]\n{depends.replace(f"package = \"nikaia_base\", ", "")}")
-    fs::write(f"{dir}/src/lib.nika", fs::Root::Anywhere, source)
-    fs::write(f"{dir}/nikaia.contracts", fs::Root::Anywhere, "")
+fn published(dir: ref fs::Root, name: String, version: String, depends: String, source: String) throws {
+    process::run("mkdir", ["-p", f"{dir.path().to_text()}/src"])
+    fs::write("Cargo.toml", dir, f"[package]\nname = \"nikaia_{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n{depends}")
+    fs::write("lib.rs", dir, "")
+    fs::write("nikaia.toml", dir, f"[package]\nname = \"{name}\"\nversion = \"{version}\"\n\n[dependencies]\n{depends.replace(f"package = \"nikaia_base\", ", "")}")
+    fs::write("src/lib.nika", dir, source)
+    fs::write("nikaia.contracts", dir, "")
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    published(f"{tmp}/base", "base", "0.2.4", "", "pub fn one() -> i64 {\n    return 1\n}\n")
-    published(f"{tmp}/demo", "demo", "0.1.3", "base = { package = \"nikaia_base\", version = \"0.2\" }\n", "use base\n\npub fn twice(x: i64) -> i64 {\n    return x * 2 + base::one() - 1\n}\n")
-    process::run("mkdir", ["-p", f"{tmp}/mid/src", f"{tmp}/app/src", f"{tmp}/app/.cargo"])
-    fs::write(f"{tmp}/mid/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"mid\"\nversion = \"0.1.0\"\n\n[dependencies]\nbase = \"0.2\"\n")
-    fs::write(f"{tmp}/mid/src/lib.nika", fs::Root::Anywhere, "use base\n\npub fn more(x: i64) -> i64 {\n    return x + base::one()\n}\n")
-    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ndemo = \"0.1\"\nmid = { path = \"../mid\" }\n")
-    fs::write(f"{tmp}/app/.cargo/config.toml", fs::Root::Anywhere, f"[patch.crates-io]\nnikaia_demo = {{ path = \"{tmp}/demo\" }}\nnikaia_base = {{ path = \"{tmp}/base\" }}\n")
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use demo\nuse mid\n\nfn main() throws {\n    println(mid::more(demo::twice(20)))\n}\n")
-    let out = process::run(nikaia, ["run"]; dir: f"{tmp}/app", env: [("CARGO_NET_OFFLINE", "true")])
+    published(tmp.join("base"), "base", "0.2.4", "", "pub fn one() -> i64 {\n    return 1\n}\n")
+    published(tmp.join("demo"), "demo", "0.1.3", "base = { package = \"nikaia_base\", version = \"0.2\" }\n", "use base\n\npub fn twice(x: i64) -> i64 {\n    return x * 2 + base::one() - 1\n}\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/mid/src", f"{tmp.path().to_text()}/app/src", f"{tmp.path().to_text()}/app/.cargo"])
+    fs::write("mid/nikaia.toml", tmp, "[package]\nname = \"mid\"\nversion = \"0.1.0\"\n\n[dependencies]\nbase = \"0.2\"\n")
+    fs::write("mid/src/lib.nika", tmp, "use base\n\npub fn more(x: i64) -> i64 {\n    return x + base::one()\n}\n")
+    fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ndemo = \"0.1\"\nmid = { path = \"../mid\" }\n")
+    fs::write("app/.cargo/config.toml", tmp, f"[patch.crates-io]\nnikaia_demo = {{ path = \"{tmp.path().to_text()}/demo\" }}\nnikaia_base = {{ path = \"{tmp.path().to_text()}/base\" }}\n")
+    fs::write("app/src/main.nika", tmp, "use demo\nuse mid\n\nfn main() throws {\n    println(mid::more(demo::twice(20)))\n}\n")
+    let out = process::run(nikaia, ["run"]; dir: f"{tmp.path().to_text()}/app", env: [("CARGO_NET_OFFLINE", "true")])
     println(out.stdout.trim())
     if !out.ok {
         println(out.stderr)
     }
-    let resolver = fs::read_to_string(f"{tmp}/app/target/nikaia/resolve/Cargo.toml", fs::Root::Anywhere)
+    let resolver = fs::read_to_string("app/target/nikaia/resolve/Cargo.toml", tmp)
     println(f"renamed: {resolver.contains("{ package = \"nikaia_demo\", version = \"0.1\" }")}, {resolver.contains("{ package = \"nikaia_base\", version = \"0.2\" }")}")
     // The fetched package's directory is Cargo's: its ledger is read, not written.
-    println(f"ledger untouched: {fs::read_to_string(f"{tmp}/demo/nikaia.contracts", fs::Root::Anywhere).len() == 0}")
-    process::run("rm", ["-rf", tmp])
+    println(f"ledger untouched: {fs::read_to_string("demo/nikaia.contracts", tmp).len() == 0}")
 }

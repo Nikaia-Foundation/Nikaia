@@ -5,24 +5,25 @@
 // test's verdict). Before the fix the runner handed the test build the
 // filtered list's places, and `--filter "b false"` ran "a in main" and said
 // ok (`project_tests_run`, found by the run of #2090).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"filtered\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "test \"a in main\" {\n    assert(1 == 1)\n}\n\nfn main() throws {\n    println(b_value())\n}\n")
-    fs::write(f"{tmp}/src/b.nika", fs::Root::Anywhere, "pub fn b_value() -> i64 {\n    return 3\n}\n\ntest \"b one\" {\n    assert(1 == 1)\n}\n\ntest \"b false\" {\n    let n = b_value()\n    assert(n == 4)\n}\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"filtered\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "test \"a in main\" {\n    assert(1 == 1)\n}\n\nfn main() throws {\n    println(b_value())\n}\n")
+    fs::write("src/b.nika", tmp, "pub fn b_value() -> i64 {\n    return 3\n}\n\ntest \"b one\" {\n    assert(1 == 1)\n}\n\ntest \"b false\" {\n    let n = b_value()\n    assert(n == 4)\n}\n")
     for filter in ["b false", "b one"] {
-        let out = process::run(nikaia, ["test", "--filter", f"{filter}"]; dir: tmp.clone())
+        let out = process::run(nikaia, ["test", "--filter", f"{filter}"]; dir: tmp.path().to_text())
         println(f"--filter \"{filter}\": exit {out.code}")
         for line in f"{out.stdout}{out.stderr}".lines() {
             if line.starts_with("test ") || line.starts_with("    n is") {
@@ -30,5 +31,4 @@ fn main() throws {
             }
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

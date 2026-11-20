@@ -3,21 +3,22 @@
 // answers its lookups as the keyed map does: the same five names, written
 // into the program in one child and read from the command line in the other,
 // give the same length, the same value and the same miss.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 /// The map's lines of the Rust `--trust` writes for `name`, and what its run
 /// prints with `args`.
-fn shown(nikaia: String, tmp: String, name: String, args: Vec[String]) throws {
-    let out = process::run(nikaia, ["lower", "--trust", "-o", f"{name}.rs", f"{name}.nika"]; dir: tmp.clone())
+fn shown(nikaia: String, tmp: ref fs::Root, name: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, ["lower", "--trust", "-o", f"{name}.rs", f"{name}.nika"]; dir: tmp.path().to_text())
     println(f"-- {name}: --trust")
-    for line in fs::read_to_string(f"{tmp}/{name}.rs", fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string(f"{name}.rs", tmp).lines() {
         if line.contains("let mut names") {
             println(line.trim())
         }
@@ -29,12 +30,12 @@ fn shown(nikaia: String, tmp: String, name: String, args: Vec[String]) throws {
     for a in args {
         run_args.push(a.clone())
     }
-    let ran = process::run(nikaia, run_args; dir: tmp.clone())
+    let ran = process::run(nikaia, run_args; dir: tmp.path().to_text())
     println(f"-- {name}: run\n{ran.stdout.trim()}{ran.stderr.trim()}")
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let lookups = "    println(f\"{names.len()}\")
     println(f\"東京: {names[\"東京\"] ?? -1}\")
@@ -62,8 +63,8 @@ fn main() throws {
         names.insert(cli::args().nth(i) ?? \"\", i - 1)
     }
 " + lookups
-    fs::write(f"{tmp}/trusted.nika", fs::Root::Anywhere, trusted)
-    fs::write(f"{tmp}/keyed.nika", fs::Root::Anywhere, keyed)
+    fs::write("trusted.nika", tmp, trusted)
+    fs::write("keyed.nika", tmp, keyed)
     shown(nikaia, tmp, "trusted", [])
     shown(nikaia, tmp, "keyed", ["Hamburg", "Bulawayo", "Palembang", "St. John's", "東京"])
 }
