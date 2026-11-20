@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1496] — 2026-11-20
+
+**mem::allocations is shown on a joined String with room ahead, in its test and in Part I 6.9 (#2112)**
+- Part I 6.9 shows mem::allocations() on `+` over a String with room ahead (String(capacity: n)), which requests nothing
+
 ## [0.0.1495] — 2026-11-20
 
 **Builders' changes (#2367)**

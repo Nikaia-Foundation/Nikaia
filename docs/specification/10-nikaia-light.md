@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1495 (Draft)
+**Version:** 0.0.1496 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -3319,6 +3319,14 @@ fn main() throws {
     println(grown > before)   // true: the list asked for memory as it grew
     println(read == grown)    // true: reading its length asked for none
     println(count)
+
+    let mut left = String(capacity: 64)
+    left.push_str("left-")
+    let start = mem::allocations()
+    let joined = left + "right"
+    let after = mem::allocations()
+    println(after == start)   // true: `+` kept left's buffer, it had room
+    println(joined)
 }
 ```
 
