@@ -1,0 +1,13 @@
+// The probe of #2410: a text built at run time is cut at the ends of a
+// `find` match, before its start and after its end, and between two
+// positions, its own `start()` and `end()` among them (ADR-374 D1-D3).
+// Built under #743 (commits "A text position is a text::Pos ..." and
+// "A text search gives a text::Match ...").
+fn main() throws {
+    let mut s = String()
+    s.push_str("ab\ncd")
+    let m = s.find("\n") ?? return
+    println(s.before(m.start))
+    println(s.after(m.end))
+    println(f"[{s.between(s.start(), m.start)}] [{s.between(m.end, s.end())}] [{s.between(m.start, m.end).len()}]")
+}
