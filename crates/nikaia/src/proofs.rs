@@ -168,33 +168,54 @@ pub fn with_book<R>(book: Book, run: impl FnOnce() -> R) -> (R, Book) {
 /// **[`crate::sysroot::in_parallel`] with the book open on every worker**
 /// (ADR-270 D4): each item asks from a copy of this thread's book, in the
 /// units [`with_units`] named here, and what the copies found and asked is
-/// added to the book after. Without a book it is `in_parallel` itself.
+/// added to the book after.
+///
+/// **The rest of what the build set on this thread goes along** (#1949):
+/// the build-time directory and recorded defaults
+/// ([`crate::comptime_run::Carried`]), so a project's build proves on every
+/// core as `lower-std` does; and what a worker counted
+/// ([`crate::prove::claim_runs`]) is added to this thread's counts after.
 pub fn in_parallel<T: Send>(
     order: &[usize],
     threads: Option<usize>,
     work: impl Fn(usize) -> T + Sync,
 ) -> Vec<T> {
-    let Some(shared) = THREAD.with(|t| {
+    let shared = THREAD.with(|t| {
         t.borrow()
             .book
             .as_ref()
             .map(answers::proofs_book_for_worker)
-    }) else {
-        return crate::sysroot::in_parallel(order, threads, work);
-    };
+    });
     let units = UNITS.with(|held| held.borrow().clone());
+    let carried = crate::comptime_run::carried();
+    // At one thread the work runs here, and counts here already.
+    let here = std::thread::current().id();
     let done = crate::sysroot::in_parallel(order, threads, |at| {
-        with_units(units.clone(), || {
-            with_book(Book(shared.clone()), || work(at))
-        })
+        let before = crate::prove::thread_counts();
+        let (result, part) = carried.within(|| {
+            with_units(units.clone(), || match &shared {
+                Some(shared) => {
+                    let (result, part) = with_book(Book(shared.clone()), || work(at));
+                    (result, Some(part))
+                }
+                None => (work(at), None),
+            })
+        });
+        let after = crate::prove::thread_counts();
+        let counted = match std::thread::current().id() == here {
+            true => (0, 0),
+            false => (after.0 - before.0, after.1 - before.1),
+        };
+        (result, part, counted)
     });
     let mut out = Vec::with_capacity(done.len());
     THREAD.with(|t| {
         let mut t = t.borrow_mut();
-        for (result, part) in done {
-            if let Some(book) = t.book.as_mut() {
+        for (result, part, counted) in done {
+            if let (Some(book), Some(part)) = (t.book.as_mut(), part) {
                 answers::proofs_book_merge(book, &part.0);
             }
+            crate::prove::add_thread_counts(counted);
             out.push(result);
         }
     });

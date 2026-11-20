@@ -182,6 +182,19 @@ pub fn second_queries() -> usize {
     SECOND_QUERIES.with(|n| n.get())
 }
 
+/// This thread's two counts, runs and second queries, to hand back from a
+/// worker ([`crate::proofs::in_parallel`], #1949).
+pub(crate) fn thread_counts() -> (usize, usize) {
+    (claim_runs(), second_queries())
+}
+
+/// Add what a worker counted to this thread's counts, so a pass on every
+/// core counts as it would on one.
+pub(crate) fn add_thread_counts(counted: (usize, usize)) {
+    CLAIM_RUNS.with(|runs| runs.set(runs.get() + counted.0));
+    SECOND_QUERIES.with(|n| n.set(n.get() + counted.1));
+}
+
 /// The runner `prove_rounds` is lent, counting each run (#1117).
 type CountedRun<'a> = std::sync::Arc<dyn Fn(&Expr, &str, &[i64]) -> ClaimRun + 'a>;
 
