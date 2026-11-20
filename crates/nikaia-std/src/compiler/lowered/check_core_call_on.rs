@@ -1237,7 +1237,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_safe_call_of_type(inner: &Ty, key: &str) -> bool {
     match inner {
-        Ty::Named { name, .. } => key.starts_with(&*format!("{}::", name)),
+        Ty::Named { name, .. } => ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).is_some() }),
         _ => false,
     }
 }

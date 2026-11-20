@@ -3480,7 +3480,7 @@ pub mod emit_tables {
 }
 pub mod emit_text {
     #[allow(unused_imports)]
-    pub use super::{format_of, truncating, checked};
+    pub use super::{format_of, truncating, checked, format_compared_check};
 }
 pub mod emit_types {}
 pub mod emit_walk {
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "1d1110100e22619185d145c06a907075eff8e0cbee51d0f553a866fdc75c6a71";
+pub const LOWERED_DIGEST: &str = "14c04a763dea1745036cc6dfafcca323b4ad437994a323af84ba9464cfd8fa89";

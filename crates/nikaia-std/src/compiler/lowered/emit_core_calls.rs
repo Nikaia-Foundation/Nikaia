@@ -751,6 +751,14 @@ impl EmitState {
     pub(crate) fn emit_core_method_call_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
         if self.emit_call_scalars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
+        if receiver.is_some() && args.len() == 1 && walk.hoisted_args.is_none() && (name == "starts_with" || name == "ends_with" || name == "contains") {
+            let callee = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if (::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "str::".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("str::").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "String::".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("String::").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some() })) && self.emit_format_compared(world, walk, out, host, &name, text, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, true, true, depth, flow, scope)? { return Ok(()); }
+        }
         if receiver.is_some() && args.len() == 1 {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             match on {
@@ -1496,8 +1504,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111161| {
-        let (i, word) = __nikaia_tuple111161;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111788| {
+        let (i, word) = __nikaia_tuple111788;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

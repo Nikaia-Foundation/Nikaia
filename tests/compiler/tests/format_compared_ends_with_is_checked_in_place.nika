@@ -1,0 +1,21 @@
+// `t.ends_with(f"…{a}")` with only text parts is checked in place (#2405),
+// from the end: a literal after the hole, before it, two holes, a field.
+
+struct Named {
+    name: String,
+}
+
+fn closes(path: ref String, name: ref String) -> bool {
+    return path.ends_with(f".{name}")
+}
+
+fn main() throws {
+    let path = "xs[i].len"
+    println(f"{closes(path, "len")} {closes(path, "en")} {closes(path, "i].len")} {closes("len", "len")}")
+    let n = Named { name: "len" }
+    println(f"{path.ends_with(f"].{n.name}")} {path.ends_with(f"[{n.name}")}")
+    let a = "x"
+    let b = "y"
+    println(f"{"<xy>".ends_with(f"{a}{b}>")} {"<xy>".ends_with(f"{b}{a}>")}")
+    println(f"{"aé".ends_with(f"{a}é")} {"xé".ends_with(f"{a}é")}")
+}

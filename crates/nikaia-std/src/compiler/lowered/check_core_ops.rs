@@ -266,6 +266,8 @@ pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: 
     let lent_item = check_core_ops_lent_text_item(&state, world, lhs) || check_core_ops_lent_text_item(&state, world, rhs);
     if lent_item && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
     if names_a_path(left, right) { state.facts.path_comparisons.insert(at.start as i64); }
+    let formatted = state.facts.text_formats.contains(&(id_of(lhs) as i64)) || state.facts.text_formats.contains(&(id_of(rhs) as i64));
+    if formatted && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { state.facts.compared_formats.insert(at.start as i64); }
     check_core_ops_named("bool")
 }
 

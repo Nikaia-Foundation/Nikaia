@@ -1,0 +1,10 @@
+// A text compared with an `f"…"` that has a number part is formatted as it
+// was (#2405): only text parts are checked in place.
+
+fn main() throws {
+    let n = 3
+    let name = "xs"
+    let path = "xs[3].len"
+    println(f"{path.starts_with(f"{name}[{n}]")} {path.contains(f"[{n}]")} {path.ends_with(f"{n}].len")}")
+    println(f"{path == f"{name}[{n}].len"} {path.starts_with(f"{name}[{n + 1}]")}")
+}

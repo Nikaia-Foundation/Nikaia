@@ -1090,6 +1090,15 @@ impl EmitState {
         if self.emit_call_scalars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
             return
         }
+        // **A text compared with an `f"…"` of text parts** (#2405): checked
+        // in place, the formatted text never built.
+        if receiver != null && args.len() == 1 && walk.hoisted_args == null && (name == "starts_with" || name == "ends_with" || name == "contains") {
+            let callee = self.facts.method_callees[on_node]?.clone() ?? ""
+            let text = receiver ?? return
+            if (callee == f"str::{name}" || callee == f"String::{name}") && self.emit_format_compared(world, walk, out, host, name, text, args[0], true, true, depth, flow, scope) {
+                return
+            }
+        }
         // **A grammar is entered by an ordinary call** (ADR-grammar-syntax-v1 D5); the dot is
         // gone (ADR-140 D3). `NK1147` is what a program meets; this is here so
         // that a caller who lowers without checking gets the same sentence.

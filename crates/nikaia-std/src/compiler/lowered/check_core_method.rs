@@ -342,13 +342,13 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
         state.facts.owned_copies.insert(id_of(receiver) as i64);
         if key == "String::clone" || key == "str::clone" { state.facts.text_copies.insert(id_of(receiver) as i64); }
     }
-    if key == format!("{}::fold", SEQ) && args.len() == 2 {
+    if ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(SEQ)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::fold".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::fold")).is_some() }) && args.len() == 2 {
         match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::LitStr { .. } => { state.facts.owned_texts.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); },
             _ => { },
         }
     }
-    let counts = key == format!("{}::count", SEQ) || key == format!("{}::position", SEQ) || key == format!("{}::enumerate", SEQ) || key == format!("{}::count", PAR) || key == format!("{}::position", PAR);
+    let counts = ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(SEQ)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::count".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::count")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(SEQ)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::position".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::position")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(SEQ)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::enumerate".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::enumerate")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(PAR)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::count".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::count")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(PAR)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.len() == __nikaia_f0.len() + "::position".len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::position")).is_some() });
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
 }
 

@@ -429,7 +429,7 @@ pub fn spoken_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
 pub(crate) fn said_for(part: &str, first: &Ty, first_text: &str, second: Option<&Ty>, second_text: &str) -> Option<String> {
     let mut said: String = String::from("");
     if part == first_text { said = spoken(first, second); } else if second.is_some() && part == second_text { said = spoken(nikaia_std::index::or(second, || &Ty::Unknown), Some(first)); } else { return None; }
-    if said == format!("`{}`", part) { return None; }
+    if ::core::convert::identity(match (AsRef::<str>::as_ref(&(said)), AsRef::<str>::as_ref(&(part)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "`".len() + __nikaia_f1.len() + "`".len() && __nikaia_t.strip_prefix("`").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).and_then(|__nikaia_r| __nikaia_r.strip_prefix("`")).is_some() }) { return None; }
     Some(said)
 }
 

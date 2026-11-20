@@ -558,6 +558,13 @@ pub struct CheckFacts {
     pub path_comparisons: collections::BTreeSet[i64],
     pub mixed_comparisons: collections::BTreeMap[i64, bool],
     pub path_holes: collections::BTreeMap[i64, Vec[bool]],
+    /// **An `f"…"` whose holes are all text** (#2405), by the literal: no
+    /// spec, no bound names, every hole a `String` or a `str`. Compared with a
+    /// text, it is checked in place and never built.
+    pub text_formats: collections::BTreeSet[i64],
+    /// **`==` and `!=` of a text and a `text_formats` literal** (#2405), by
+    /// the operator's site: the lengths, then the parts, in place.
+    pub compared_formats: collections::BTreeSet[i64],
     /// A print call's argument that is `Bytes`, written as it is (ADR-019 D7).
     pub printed_bytes: collections::BTreeSet[i64],
     pub flattened_reaches: collections::BTreeSet[i64],
@@ -999,6 +1006,8 @@ impl CheckFacts {
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
             path_holes: collections::BTreeMap(),
+            text_formats: collections::BTreeSet(),
+            compared_formats: collections::BTreeSet(),
             printed_bytes: collections::BTreeSet(),
             flattened_reaches: collections::BTreeSet(),
             copied_reaches: collections::BTreeSet(),

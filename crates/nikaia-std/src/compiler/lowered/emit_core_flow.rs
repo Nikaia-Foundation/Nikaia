@@ -352,6 +352,11 @@ impl EmitState {
             out.push("))");
             return Ok(());
         }
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.compared_formats.contains(&site) {
+            let kind: String = if op == BinaryOp::Eq { String::from("==") } else { String::from("!=") };
+            if self.emit_format_compared(world, walk, out, host, &kind, lhs, rhs, true, false, depth, wide, scope)? { return Ok(()); }
+            if self.emit_format_compared(world, walk, out, host, &kind, rhs, lhs, false, false, depth, wide, scope)? { return Ok(()); }
+        }
         if self.facts.mixed_comparisons.contains_key(&site) {
             let unsigned_left = nikaia_std::index::or(self.facts.mixed_comparisons.get(&site), || false);
             if unsigned_left { out.push("nikaia_std::num::unsigned_with_signed("); } else { out.push("nikaia_std::num::signed_with_unsigned("); }

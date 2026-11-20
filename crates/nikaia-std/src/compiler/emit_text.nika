@@ -223,3 +223,52 @@ fn plain_named(written: ref String, args: ref Vec[Ty], view: bool) -> String {
     }
     return f"{name}{inner}"
 }
+
+/// The check `emit_format_compared` writes on the lent text `__nikaia_t` and
+/// the parts `pieces`, each a `str` literal or a lent hole (#2405).
+pub fn format_compared_check(kind: ref String, pieces: ref Vec[String]) -> String {
+    if kind == "!=" {
+        return f"!({format_compared_check("==", pieces)})"
+    }
+    if pieces.is_empty() {
+        return if kind == "==" { "__nikaia_t.is_empty()" } else { "true" }
+    }
+    if pieces.len() == 1 && kind != "==" {
+        return f"__nikaia_t.{kind}({pieces.join("")})"
+    }
+    if kind == "ends_with" {
+        let mut reversed = pieces.clone()
+        reversed.reverse()
+        return f"{format_stripped("__nikaia_t", reversed, 0, "strip_suffix")}.is_some()"
+    }
+    if kind == "==" {
+        let mut lengths: Vec[String] = []
+        for piece in pieces {
+            lengths.push(f"{piece}.len()")
+        }
+        return f"__nikaia_t.len() == {lengths.join(" + ")} && {format_stripped("__nikaia_t", pieces, 0, "strip_prefix")}.is_some()"
+    }
+    if kind == "contains" {
+        let first = pieces.first() ?? ""
+        let after = format_stripped(f"__nikaia_rest[__nikaia_i + {first}.len()..]", pieces, 1, "strip_prefix")
+        return f"{{ let mut __nikaia_rest: &str = __nikaia_t; loop {{ match __nikaia_rest.find({first}) {{ Some(__nikaia_i) => {{ if {after}.is_some() {{ break true; }} match __nikaia_rest[__nikaia_i..].chars().next() {{ Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, }} }}, None => break false, }} }} }}"
+    }
+    return f"{format_stripped("__nikaia_t", pieces, 0, "strip_prefix")}.is_some()"
+}
+
+/// `base` with the parts of `pieces` from `from` on stripped in turn by
+/// `method`, `strip_prefix` or `strip_suffix`: the rest, or `None` where a
+/// part is not there (#2405).
+fn format_stripped(base: ref String, pieces: ref Vec[String], from: i64, method: ref String) -> String {
+    let mut chain: String = ""
+    let mut i = 0
+    for piece in pieces {
+        if i == from {
+            chain = f"{base}.{method}({piece})"
+        } else if i > from {
+            chain.push_str(f".and_then(|__nikaia_r| __nikaia_r.{method}({piece}))")
+        }
+        i += 1
+    }
+    return chain
+}

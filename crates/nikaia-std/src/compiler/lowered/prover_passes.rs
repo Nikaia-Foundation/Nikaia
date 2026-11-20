@@ -192,7 +192,7 @@ pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carr
         let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&next) { continue; }
         let mut calls = nikaia_std::index::or(*nikaia_std::index::get(&checked, &next), || 0);
-        if next != function { for found in findings.iter() { if found.code == "NK1207" && found.message.contains(&*format!("`{}`'s precondition", next)) { calls -= 1; } } }
+        if next != function { for found in findings.iter() { if found.code == "NK1207" && ::core::convert::identity(match (AsRef::<str>::as_ref(&(found.message)), AsRef::<str>::as_ref(&(next)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix("`'s precondition")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { calls -= 1; } } }
         if calls > 0 { total += calls; }
         let callers = match *nikaia_std::index::get(&carried, &next) { Some(__nikaia_value) => __nikaia_value, None => {
             seen.insert(next);

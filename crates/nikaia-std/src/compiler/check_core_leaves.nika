@@ -518,7 +518,18 @@ fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let mut names: Vec[bool] = []
     let mut seen: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     let mut index = 0
+    // **Every hole text, with no spec and no bound name** (#2405): the
+    // literal compared with a text is checked in place.
+    let mut all_text = interpolated
+    for spec in specs {
+        if spec != null {
+            all_text = false
+        }
+    }
     for (hole, bound) in walked {
+        if !bound.is_empty() {
+            all_text = false
+        }
         let mut frame: Vec[CheckLocal] = []
         for (name, collection) in bound {
             let trimmed = collection.trim()
@@ -547,7 +558,13 @@ fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
             state.a_collection_in_a_hole(world, hole, held, specs[index], span)
         }
         names.push(check_core_is_a_path(held))
+        if !is_text_type(held.unseen()) {
+            all_text = false
+        }
         index += 1
+    }
+    if all_text {
+        state.facts.text_formats.insert(id_of(literal) as i64)
     }
     // An `f"…"` with a file's name in it is joined in the platform's encoding
     // (ADR-319 D4).

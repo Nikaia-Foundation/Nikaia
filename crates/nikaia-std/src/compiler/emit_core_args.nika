@@ -490,6 +490,80 @@ impl EmitState {
         }
     }
 
+    /// **A text compared with an `f"…"` of text parts is checked in place**
+    /// (#2405): `t.starts_with(f"{a}[")`, `ends_with`, `contains`, `==` and
+    /// `!=` build no text. The text and the holes are lent first, in the order
+    /// written, each once, as `format!` reads them; then the parts are
+    /// stripped in turn (`strip_prefix`, `strip_suffix` from the end), `==`
+    /// compares the lengths first, and `contains` finds the first part and
+    /// checks the rest after each place it is found. `kind` is the method or
+    /// the operator, `text_first` whether the text is written before the
+    /// literal, `as_receiver` whether it is a method's receiver. False, and
+    /// nothing written, where the literal is not one of `text_formats` or a
+    /// hole is formatted otherwise: a file's name, an escaped, wrapped or
+    /// changing hole.
+    fn emit_format_compared[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, kind: ref String, text: ref Expr, literal: ref Expr, text_first: bool, as_receiver: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let key = node_key(literal)
+        if !self.facts.text_formats.contains(key) || self.facts.path_holes.contains_key(key) {
+            return false
+        }
+        let parts = match literal {
+            Expr::LitInterpolated { parts, .. } => parts,
+            else => return false,
+        }
+        let mut pieces: Vec[String] = []
+        let mut names: String = ""
+        for part in parts {
+            match part {
+                FPart::Text(written) => {
+                    let piece = written.replace("{{", "{").replace("}}", "}")
+                    if piece != "" {
+                        pieces.push(f"\"{piece}\"")
+                    }
+                },
+                FPart::Hole { expr, at, .. } => {
+                    if self.escaped_holes.contains(node_key(expr)) || self.hole_wraps.contains_key(at as i64) || self.emit_leaf_calls_a_changing_method(world, expr) {
+                        return false
+                    }
+                    let name = f"__nikaia_f{pieces.len()}"
+                    names.push_str(f"{name}, ")
+                    pieces.push(name)
+                },
+            }
+        }
+        out.push("::core::convert::identity(match (")
+        if text_first {
+            self.emit_format_compared_text(world, walk, out, host, text, as_receiver, depth, flow, scope)
+        }
+        for part in parts {
+            match part {
+                FPart::Hole { expr, at, .. } => {
+                    out.push("AsRef::<str>::as_ref(&(")
+                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                    out.push(")), ")
+                },
+                else => {},
+            }
+        }
+        if !text_first {
+            self.emit_format_compared_text(world, walk, out, host, text, as_receiver, depth, flow, scope)
+        }
+        let bound = if text_first { f"__nikaia_t, {names}" } else { f"{names}__nikaia_t, " }
+        out.push(f") {{ ({bound}) => {format_compared_check(kind, pieces)} }})")
+        return true
+    }
+
+    /// The text `emit_format_compared` lends, as the `str` it holds.
+    fn emit_format_compared_text[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, text: ref Expr, as_receiver: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("AsRef::<str>::as_ref(&(")
+        if as_receiver {
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+        } else {
+            self.emit_expr(world, walk, out, host, text, depth, flow, scope)
+        }
+        out.push(")), ")
+    }
+
     /// Whether argument `i` of a call goes to a parameter the library's or a
     /// described crate's entry names in `os_text` (Part III 13.5, #2351): one
     /// its Rust function takes as `&OsStr`. This unit's own functions take

@@ -417,6 +417,12 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if names_a_path(left, right) {
         state.facts.path_comparisons.insert(at.start as i64)
     }
+    // **A text compared with an `f"…"` of text parts** (#2405): checked in
+    // place, the formatted text never built.
+    let formatted = state.facts.text_formats.contains(id_of(lhs) as i64) || state.facts.text_formats.contains(id_of(rhs) as i64)
+    if formatted && is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+        state.facts.compared_formats.insert(at.start as i64)
+    }
     return check_core_ops_named("bool")
 }
 

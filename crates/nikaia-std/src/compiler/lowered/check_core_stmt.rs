@@ -1617,7 +1617,7 @@ pub(crate) fn check_core_stmt_unwritable_element(state: &CheckState, world: &Che
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_from_iter(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr) -> bool {
     match iter {
-        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; format!("{}", world.words.resolve(method)) == "iter" || check_core_stmt_from_iter(world, receiver) },
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(method))), AsRef::<str>::as_ref(&("iter")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) || check_core_stmt_from_iter(world, receiver) },
         _ => false,
     }
 }
@@ -2400,7 +2400,7 @@ pub(crate) fn check_core_stays_in(state: &CheckState, world: &CheckWorld<'_, '_,
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stays_in_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, field: &FieldInit, name: &str) -> bool {
     match &field.value {
-        None => format!("{}", world.words.resolve(field.name)) != name,
+        None => ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(field.name))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => !(__nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some()) }),
         Some(value) => check_core_stays_in(state, world, value, name),
     }
 }

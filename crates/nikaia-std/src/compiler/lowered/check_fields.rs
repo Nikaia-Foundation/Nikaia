@@ -273,7 +273,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
-        if found.is_a_view() || !want.is_a_view() || want.text() != format!("ref {}", found.text()) { return false; }
+        if found.is_a_view() || !want.is_a_view() || ::core::convert::identity(match (AsRef::<str>::as_ref(&(want.text())), AsRef::<str>::as_ref(&(found.text())), ) { (__nikaia_t, __nikaia_f1, ) => !(__nikaia_t.len() == "ref ".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("ref ").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some()) }) { return false; }
         let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
         lent || check_fields_holds_text(world, found, &vec![])
     }

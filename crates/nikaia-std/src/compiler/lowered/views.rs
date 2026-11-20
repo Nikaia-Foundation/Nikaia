@@ -1466,7 +1466,7 @@ pub(crate) fn rsrc_out_of(name: &str, entries: &collections::BTreeSet<String>) -
     let mut out = rsrc_none();
     for entry in entries.iter() {
         let path = rsrc_path_of(entry);
-        if path.is_empty() { out.insert(nikaia_std::block::Text::from(entry.to_string())); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !path.starts_with(&*format!("{}.", name)) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if path.starts_with(&*format!("{}.", name)) {
+        if path.is_empty() { out.insert(nikaia_std::block::Text::from(entry.to_string())); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) {
             let rest = nikaia_std::block::Text::from(nikaia_std::index::or(path.strip_prefix(&*format!("{}.", name)), || "").to_string());
             out.insert(format!("{}:{}", rest, rsrc_param_of(entry)));
         }
