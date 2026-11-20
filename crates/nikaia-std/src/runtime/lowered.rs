@@ -37,6 +37,8 @@ use nikaia_std::fs;
 #[allow(unused_imports)]
 use nikaia_std::html;
 #[allow(unused_imports)]
+use nikaia_std::mem;
+#[allow(unused_imports)]
 use nikaia_std::process;
 #[allow(unused_imports)]
 use nikaia_std::rt;
@@ -359,4 +361,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "395eb45d80e02db8b818ab00e9b6659ba6f6b8970c81d8e1e728b4a75b977be6";
+pub const LOWERED_DIGEST: &str = "6901c97a42dce07ca7cfaca12f9fad00fd5b45a7284612ce01d7918b1c25315a";

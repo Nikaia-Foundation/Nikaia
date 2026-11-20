@@ -174,6 +174,20 @@ pub(crate) async fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::err
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let first = rt::handle();
+    let before = mem::allocations();
+    let second = rt::handle();
+    let after = mem::allocations();
+    if !(after == before) { nikaia_std::abort::assertion_failed("assert(after == before)", None, &[("after", (&&nikaia_std::abort::Operand(&(after))).shown()), ("before", (&&nikaia_std::abort::Operand(&(before))).shown()), ]) };
+    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default());
+    let built = mem::allocations();
+    if !(built > after) { nikaia_std::abort::assertion_failed("assert(built > after)", None, &[("built", (&&nikaia_std::abort::Operand(&(built))).shown()), ("after", (&&nikaia_std::abort::Operand(&(after))).shown()), ]) };
+    if !(first.describe() == second.describe()) { nikaia_std::abort::assertion_failed("assert(first.describe() == second.describe())", None, &[("first.describe()", (&&nikaia_std::abort::Operand(&(first.describe()))).shown()), ("second.describe()", (&&nikaia_std::abort::Operand(&(second.describe()))).shown()), ]) };
+    if !(other.describe().contains("io-method")) { nikaia_std::abort::assertion_failed("assert(other.describe().contains(\"io-method\"))", None, &[]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
@@ -184,6 +198,7 @@ pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(),
         ("run_config::the_description_names_the_mechanism_that_was_chosen", __nikaia_test_3),
         ("run_config::an_idle_pool_does_not_wake_itself", __nikaia_test_4_to_its_end),
         ("run_config::the_calling_thread_is_never_an_io_worker", __nikaia_test_5_to_its_end),
+        ("run_config::there_is_one_runtime_and_it_is_already_running", __nikaia_test_6),
     ]
 }
 

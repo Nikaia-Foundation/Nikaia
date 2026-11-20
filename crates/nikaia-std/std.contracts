@@ -682,6 +682,15 @@ sync = true
 touches = []
 signature = "(user_code: rt::UserCode, config: ?) -> rt::Runtime"
 
+# The runtime every `std` call finds (ADR-037 D4), `std`'s own: a test block
+# counts that asking for it again builds none (#2338).
+[fn."rt::handle"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "() -> ref rt::Runtime"
+
 # One line naming what started and how, for `--runtime`. `std`'s own (#2304).
 [fn."rt::Runtime::describe"]
 pub = false

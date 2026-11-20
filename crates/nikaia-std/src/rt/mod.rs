@@ -1474,23 +1474,3 @@ pub mod io {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Kept as Rust (#2304, #2316): the runtime's pointer identity has no
-    // Nikaia surface, and goes with #2319. What the other tests checked is
-    // observed by programs now: `tests/compiler/tests/rt_*.nika` (#2210,
-    // #2316) and the test blocks of `runtime/run_config.nika`.
-
-    /// D4, from the only angle a test can see it: the runtime a `std` call
-    /// finds is already there, and it is the same one every call finds.
-    #[test]
-    fn there_is_one_runtime_and_it_is_already_running() {
-        let first = handle();
-        let second = handle();
-        assert!(std::ptr::eq(first, second), "two runtimes started");
-        assert!(first.config().io_workers >= 1, "D4: one I/O thread always");
-    }
-}

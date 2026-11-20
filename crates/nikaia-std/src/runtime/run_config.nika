@@ -17,6 +17,7 @@ use std::fs
 use std::text
 use std::time
 use std::rt
+use std::mem
 
 /// Which mechanism serves a file operation (ADR-303 D3).
 pub enum Method {
@@ -239,4 +240,20 @@ test "the calling thread is never an io worker" {
     assert(bytes.len() == 4)
     let after = rt::worker::on_io_worker()
     assert(!after)
+}
+
+/// **There is one runtime, and it is already running** (ADR-037 D4; moved from
+/// `src/rt/mod.rs`, #2338): asking for the runtime a `std` call finds requests
+/// no memory, so it builds none; building one, the control, does (ADR-400 D1).
+test "there is one runtime and it is already running" {
+    let first = rt::handle()
+    let before = mem::allocations()
+    let second = rt::handle()
+    let after = mem::allocations()
+    assert(after == before)
+    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default())
+    let built = mem::allocations()
+    assert(built > after)
+    assert(first.describe() == second.describe())
+    assert(other.describe().contains("io-method"))
 }
