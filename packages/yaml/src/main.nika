@@ -480,9 +480,14 @@ pub grammar Yaml {
 	rule Eol = s:count(" " | "\t") (if(s > 0) Comment)? ("\n" | eof) -> { }
 	rule Comment = "#" until("\n" | eof) -> { }
 	// Lines holding nothing but spaces and a comment.
-	rule Blanks = Blank* LastBlank? -> { }
+	// A line is scanned for its spaces once: on a line with content, which
+	// every node's `Blanks` ends at, the alternatives after the spaces fail
+	// at its first character.
+	rule Blanks = BlankOrLast* -> { }
+	// One such line: with its line break, or the last one, at the end of the
+	// input, holding a comment or at least one space.
+	rule BlankOrLast = s:count(" " | "\t") (Comment? "\n" | Comment eof | if(s > 0) eof) -> { }
 	rule Blank = (" " | "\t")* Comment? "\n" -> { }
-	rule LastBlank = (" " | "\t")* Comment eof -> { } | s:count(" " | "\t") if(s > 0) eof -> { }
 
 	// A block node on the lines below its parent at indentation `n`, at the
 	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
@@ -2837,6 +2842,10 @@ fn fold(raw: String, single: bool) -> String sync {
 			j += 1
 		}
 		if j >= n {
+			if start == 0 {
+				// Nothing to fold: the raw text, valid already.
+				return raw.clone()
+			}
 			out.push_str(bs[start..<j].text() catch { "" })
 			break
 		}

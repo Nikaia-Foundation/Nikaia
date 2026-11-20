@@ -9,8 +9,8 @@ use std::collections
 use std::fs
 use yaml
 
-fn escaped(t: String) -> String {
-	let mut out = String()
+// `t` escaped onto `out`, as the Rust programs append it.
+fn escaped(mut out: String, t: String) {
 	for c in t.scalars {
 		if c == '\\' {
 			out.push_str("\\\\")
@@ -24,7 +24,28 @@ fn escaped(t: String) -> String {
 			out.push(c)
 		}
 	}
-	return out
+}
+
+// An event's anchor, numbered in the order it is defined, and its tag onto
+// `out`.
+fn props(mut out: String, e: ref yaml::Event, mut ids: collections::HashMap[String, i64], mut next: i64) -> i64 {
+	match e.anchor {
+		null => {}
+		a => {
+			ids.insert(a.clone(), next)
+			out.push_str(f" &{next}")
+			next += 1
+		}
+	}
+	match e.tag {
+		null => {}
+		t => {
+			out.push_str(" <")
+			out.push_str(t)
+			out.push_str(">")
+		}
+	}
+	return next
 }
 
 fn main() throws {
@@ -40,41 +61,35 @@ fn main() throws {
 		let mut ids: collections::HashMap[String, i64] = collections::HashMap()
 		let mut next = 1
 		for e in yaml::events(docs) {
-			let mut props = String()
-			match e.anchor {
-				null => {}
-				a => {
-					ids.insert(a.clone(), next)
-					props.push_str(f" &{next}")
-					next += 1
+			match e.kind {
+				yaml::EventKind::StreamStart => out.push_str("+STR")
+				yaml::EventKind::StreamEnd => out.push_str("-STR")
+				yaml::EventKind::DocumentStart => out.push_str(if e.explicit { "+DOC ---" } else { "+DOC" })
+				yaml::EventKind::DocumentEnd => out.push_str("-DOC")
+				yaml::EventKind::SequenceStart => {
+					out.push_str("+SEQ")
+					next = props(out, e, ids, next)
 				}
-			}
-			match e.tag {
-				null => {}
-				t => props.push_str(f" <{t}>")
-			}
-			let line = match e.kind {
-				yaml::EventKind::StreamStart => "+STR"
-				yaml::EventKind::StreamEnd => "-STR"
-				yaml::EventKind::DocumentStart => if e.explicit { "+DOC ---" } else { "+DOC" }
-				yaml::EventKind::DocumentEnd => "-DOC"
-				yaml::EventKind::SequenceStart => f"+SEQ{props}"
-				yaml::EventKind::SequenceEnd => "-SEQ"
-				yaml::EventKind::MappingStart => f"+MAP{props}"
-				yaml::EventKind::MappingEnd => "-MAP"
-				yaml::EventKind::Alias => f"=ALI *{ids.get(e.value) ?? 0}"
+				yaml::EventKind::SequenceEnd => out.push_str("-SEQ")
+				yaml::EventKind::MappingStart => {
+					out.push_str("+MAP")
+					next = props(out, e, ids, next)
+				}
+				yaml::EventKind::MappingEnd => out.push_str("-MAP")
+				yaml::EventKind::Alias => out.push_str(f"=ALI *{ids.get(e.value) ?? 0}")
 				yaml::EventKind::Scalar => {
-					let style = match e.style {
-						yaml::Style::Plain => ":"
-						yaml::Style::Single => "'"
-						yaml::Style::Double => "\""
-						yaml::Style::Literal => "|"
-						yaml::Style::Folded => ">"
-					}
-					f"=VAL{props} {style}{escaped(e.text ?? e.value)}"
+					out.push_str("=VAL")
+					next = props(out, e, ids, next)
+					out.push_str(match e.style {
+						yaml::Style::Plain => " :"
+						yaml::Style::Single => " '"
+						yaml::Style::Double => " \""
+						yaml::Style::Literal => " |"
+						yaml::Style::Folded => " >"
+					})
+					escaped(out, e.text ?? e.value)
 				}
 			}
-			out.push_str(line)
 			out.push_str("\n")
 		}
 	}
