@@ -2,41 +2,29 @@
 // or a script and the report's Issue: holds an answer not marked `(built)`
 // (#1773, #1802), and is silent when every such answer is marked or neither
 // a rules file nor a script changes.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run(
-        "sh",
-        ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-    ).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    process::run("git", ["init", "-q", tmp.clone()])
-    process::run("mkdir", ["-p", f"{tmp}/docs", f"{tmp}/scripts"])
-    fs::write(f"{tmp}/docs/issues.md", fs::Root::Anywhere, "x\n")
-    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
-    fs::write(f"{tmp}/scripts/drive.nika", fs::Root::Anywhere, "x\n")
+    process::run("git", ["init", "-q", tmp.path().to_text()])
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/docs", f"{tmp.path().to_text()}/scripts"])
+    fs::write("docs/issues.md", tmp, "x\n")
+    fs::write("a.txt", tmp, "x\n")
+    fs::write("scripts/drive.nika", tmp, "x\n")
     let head = "Result: done\nCommit: a subject\nChangelog: none\n"
     let cases = [
         "Files: docs/issues.md\nIssue: rules-gap: x; wrong I3: y; rules-gap (built): z\n",
@@ -46,7 +34,7 @@ fn main() throws {
         "Files: docs/issues.md\nIssue: complete\n",
     ]
     for c in cases {
-        fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, f"{head}{c}Attribution:\n")
+        fs::write("X.md.report.md", tmp, f"{head}{c}Attribution:\n")
         let out = process::run(
             nikaia.clone(),
             [
@@ -54,11 +42,10 @@ fn main() throws {
                 f"{repo}/scripts/commit.nika",
                 "--",
                 "--dry-run",
-                f"{tmp}/X.md.report.md",
-            ]; dir: tmp.clone(),
+                f"{tmp.path().to_text()}/X.md.report.md",
+            ]; dir: tmp.path().to_text(),
         )
         let note = out.stdout.split("\n").filter(fn(l) { l.starts_with("NOTE:") }).collect()
         println(f"{c.split("\n").collect().join(" | ")}-> {if note.len() > 0 { note[0].clone() } else { "silent" }}")
     }
-    process::run("rm", ["-rf", tmp])
 }

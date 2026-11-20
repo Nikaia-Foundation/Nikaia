@@ -6,21 +6,18 @@
 // improvement issue already has (its title or a `## Reported` line) is a
 // comment there; only a new point is filed. A report like issue-1760's, whose
 // points were closed with nothing to build, files nothing.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn drive(repo: String, nikaia: String, args: Vec[String]) throws {
@@ -32,9 +29,9 @@ fn drive(repo: String, nikaia: String, args: Vec[String]) throws {
 }
 
 fn report(text: String) -> String throws {
-    let file = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(file.clone(), fs::Root::Anywhere, text)
-    return file
+    let dir = fs::scratch()
+    fs::write("report.md", dir, text)
+    return f"{dir.path().to_text()}/report.md"
 }
 
 fn main() throws {
@@ -64,5 +61,4 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1971", "1971", known.clone(), existing.clone()])
     let prose = report("Result: partial\nNeeds: the store needs #1909's key\nFriction: none\n")
     drive(repo, nikaia, ["--improve-plan", "issue-1955", "1955", prose.clone(), existing.clone()])
-    process::run("rm", ["-f", existing, each, seen, settled, cut, wait, known, prose])
 }

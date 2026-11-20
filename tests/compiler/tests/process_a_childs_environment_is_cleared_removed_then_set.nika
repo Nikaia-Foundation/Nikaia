@@ -6,18 +6,13 @@
 // (D6). Moved from the `nikaia-std` unit tests `process::tests::*` but the
 // Windows half of `names_compare_by_case_on_unix_and_without_on_windows`
 // (#2082).
+use std::env
 use std::fs
 use std::io
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -55,18 +50,18 @@ fn main() throws {
 
     // What the caller inherited (`A`, `B`, `Path`, `path`) comes from a run
     // of a program beside this one.
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/inner.nika",
-        fs::Root::Anywhere,
+        "inner.nika",
+        tmp,
         "use std::process\n\nfn main() throws {\n    let out = process::run(\"env\", []; env_remove: [\"A\", \"B\"], env: [(\"A\", \"1\"), (\"C\", \"x\"), (\"C\", \"y\"), (\"PATH\", \"/p\")])\n    for line in out.stdout.lines() {\n        for n in [\"A\", \"B\", \"C\", \"PATH\", \"Path\", \"path\"] {\n            if line.starts_with(f\"{n}=\") { println(line) }\n        }\n    }\n    println(process::run(\"./x\", []).stdout.trim())\n}\n",
     )
-    fs::write(f"{tmp}/x", fs::Root::Anywhere, "#!/bin/sh\necho ./x ran\n")
-    process::run("chmod", ["+x", f"{tmp}/x"])
+    fs::write("x", tmp, "#!/bin/sh\necho ./x ran\n")
+    process::run("chmod", ["+x", f"{tmp.path().to_text()}/x"])
     let out = process::run(
         "sh",
         ["-c", "\"$0\" run --unproved-claims=warn inner.nika", toolchain()];
-        dir: tmp.clone(),
+        dir: tmp.path().to_text(),
         env: [("A", "old"), ("B", "b"), ("Path", "w"), ("path", "u")],
     )
     let lines: Vec[String] = out.stdout.lines().map(fn(l) { l.clone() }).collect()
@@ -77,5 +72,4 @@ fn main() throws {
     env_lines.sort()
     println(f"removed, then set: {env_lines.join(" ")}")
     if out.code != 0 { println(out.stderr) }
-    process::run("rm", ["-rf", tmp])
 }

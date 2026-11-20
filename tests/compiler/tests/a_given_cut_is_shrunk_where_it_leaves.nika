@@ -3,28 +3,28 @@
 // or stored in a place, the emitter shrinks its buffer (`index::shrunk`), so a
 // short tail does not hold the long line it was cut from; a cut that stays a
 // local is not shrunk, since it may grow again. Before, no site was shrunk.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let source = "struct Row {\n    name: String,\n}\n\nfn returned(keep line: String) -> String {\n    let m = line.find(\";\") ?? return line\n    let mut rest = line[m + 1..]\n    rest += \"!\"\n    return rest\n}\n\nfn last(keep line: String) -> String {\n    let mut rest = line.trim()\n    rest += \"?\"\n    rest\n}\n\nfn pushed(mut all: Vec[String], keep line: String) {\n    let m = line.find(\"x\") ?? return\n    let mut rest = line[m + \"x\".len()..]\n    rest += \"+\"\n    all.push(rest)\n}\n\nfn stored(mut row: Row, keep line: String) {\n    let m = line.find(\"y\") ?? return\n    let mut rest = line[m + \"y\".len()..]\n    rest += \"=\"\n    row.name = rest\n}\n\nfn local(keep line: String) throws {\n    let m = line.find(\"z\") ?? return\n    let mut rest = line[m + \"z\".len()..]\n    rest += \"-\"\n    println(rest)\n}\n\nfn main() throws {\n    println(returned(\"Hamburg;\" + \"12\"))\n    println(last(\"  \" + \"12  \"))\n    let mut all: Vec[String] = []\n    pushed(all, \"x\" + \"12\")\n    println(all[0])\n    let mut row = Row { name: \"\" }\n    stored(row, \"xy\" + \"12\")\n    println(row.name)\n    local(\"xyz\" + \"12\")\n}\n"
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
     if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    let rust = fs::read_to_string("p.rs", tmp)
     for line in rust.lines() {
         if line.contains("shrunk(") {
             println(line.trim())
         }
     }
-    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
     println(ran.stdout.trim())
-    process::run("rm", ["-rf", tmp])
 }

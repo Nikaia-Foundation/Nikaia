@@ -1,33 +1,34 @@
 // #99, ADR-286 D24, D26: a crate `nikaia_fake` with no `.nika` sources and no
 // ledger is refused by name, not trusted for its prefix; a key by version is a
 // `use` name, so an identifier; a table by version says `version` or `git`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn refusal(nikaia: String, app: String, dependencies: String) -> String throws {
-    fs::write(f"{app}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\n{dependencies}")
-    let out = process::run(nikaia, ["build"]; dir: app.clone(), env: [("CARGO_NET_OFFLINE", "true")])
-    let said: Vec[String] = out.stderr.lines().filter(fn(line) { line.contains("nikaia_fake") || line.contains("Dependency `") }).map(fn(line) { line.replace(app, "APP") }).collect()
+fn refusal(nikaia: String, app: ref fs::Root, dependencies: String) -> String throws {
+    let at = app.path().to_text()
+    fs::write("nikaia.toml", app, f"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\n{dependencies}")
+    let out = process::run(nikaia, ["build"]; dir: at.clone(), env: [("CARGO_NET_OFFLINE", "true")])
+    let said: Vec[String] = out.stderr.lines().filter(fn(line) { line.contains("nikaia_fake") || line.contains("Dependency `") }).map(fn(line) { line.replace(at, "APP") }).collect()
     return f"ok: {out.ok}\n{said.join("\n")}"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/fake", f"{tmp}/app/src", f"{tmp}/app/.cargo"])
-    fs::write(f"{tmp}/fake/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"nikaia_fake\"\nversion = \"1.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n")
-    fs::write(f"{tmp}/fake/lib.rs", fs::Root::Anywhere, "")
-    fs::write(f"{tmp}/app/.cargo/config.toml", fs::Root::Anywhere, f"[patch.crates-io]\nnikaia_fake = {{ path = \"{tmp}/fake\" }}\n")
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(1)\n}\n")
-    println(refusal(nikaia, f"{tmp}/app", "fake = \"1\"\n").replace(tmp, "TMP"))
-    println(refusal(nikaia, f"{tmp}/app", "http-server = \"1.2\"\n"))
-    println(refusal(nikaia, f"{tmp}/app", "fake = { features = [\"x\"] }\n"))
-    println(refusal(nikaia, f"{tmp}/app", "fake = { tag = \"v1\" }\n"))
-    process::run("rm", ["-rf", tmp])
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/fake", f"{tmp.path().to_text()}/app/src", f"{tmp.path().to_text()}/app/.cargo"])
+    fs::write("fake/Cargo.toml", tmp, "[package]\nname = \"nikaia_fake\"\nversion = \"1.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n")
+    fs::write("fake/lib.rs", tmp, "")
+    fs::write("app/.cargo/config.toml", tmp, f"[patch.crates-io]\nnikaia_fake = {{ path = \"{tmp.path().to_text()}/fake\" }}\n")
+    fs::write("app/src/main.nika", tmp, "fn main() throws {\n    println(1)\n}\n")
+    println(refusal(nikaia, tmp.join("app"), "fake = \"1\"\n").replace(tmp.path().to_text(), "TMP"))
+    println(refusal(nikaia, tmp.join("app"), "http-server = \"1.2\"\n"))
+    println(refusal(nikaia, tmp.join("app"), "fake = { features = [\"x\"] }\n"))
+    println(refusal(nikaia, tmp.join("app"), "fake = { tag = \"v1\" }\n"))
 }

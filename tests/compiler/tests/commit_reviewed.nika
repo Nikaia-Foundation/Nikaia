@@ -1,21 +1,18 @@
 // scripts/commit.nika (#1918): --dry-run lists the listed sources' hunks and writes
 // Reviewed:; a listed file changed after it (another agent's edit) is refused,
 // and a second --dry-run lets the commit through.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn git(dir: String, args: Vec[String]) -> String throws {
@@ -24,37 +21,36 @@ fn git(dir: String, args: Vec[String]) -> String throws {
     return process::run("git", all; dir: dir).stdout.trim().clone()
 }
 
-fn commit(nikaia: String, repo: String, tmp: String, dry: bool) -> String throws {
+fn commit(nikaia: String, repo: String, tmp: ref fs::Root, dry: bool) -> String throws {
     let mut args: Vec[String] = ["run", f"{repo}/scripts/commit.nika", "--"]
     if dry { args.push("--dry-run") }
-    args.push(f"{tmp}/X.md.report.md")
-    let out = process::run(nikaia, args; dir: tmp.clone(), env: [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")])
+    args.push(f"{tmp.path().to_text()}/X.md.report.md")
+    let out = process::run(nikaia, args; dir: tmp.path().to_text(), env: [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")])
     return out.stdout.trim().clone()
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    git(tmp.clone(), ["init", "-q", "-b", "develop"])
-    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "one\ntwo\nthree\nfour\nfive\nsix\n")
-    git(tmp.clone(), ["add", "a.txt"])
-    git(tmp.clone(), ["commit", "-q", "-m", "base"])
-    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "ONE\ntwo\nthree\nfour\nfive\nsix\n")
-    fs::write(f"{tmp}/b.txt", fs::Root::Anywhere, "new\n")
-    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt b.txt\nCommit: a subject\nChangelog: none\nPushed: none\n")
+    git(tmp.path().to_text(), ["init", "-q", "-b", "develop"])
+    fs::write("a.txt", tmp, "one\ntwo\nthree\nfour\nfive\nsix\n")
+    git(tmp.path().to_text(), ["add", "a.txt"])
+    git(tmp.path().to_text(), ["commit", "-q", "-m", "base"])
+    fs::write("a.txt", tmp, "ONE\ntwo\nthree\nfour\nfive\nsix\n")
+    fs::write("b.txt", tmp, "new\n")
+    fs::write("X.md.report.md", tmp, "Result: done\nFiles: a.txt b.txt\nCommit: a subject\nChangelog: none\nPushed: none\n")
     println("-- dry run")
-    println(commit(nikaia.clone(), repo.clone(), tmp.clone(), true))
-    let report = fs::read_to_string(f"{tmp}/X.md.report.md", fs::Root::Anywhere)
+    println(commit(nikaia.clone(), repo.clone(), tmp, true))
+    let report = fs::read_to_string("X.md.report.md", tmp)
     println(f"report has Reviewed: {report.contains("\nReviewed: ")}")
     println("-- another agent edits a.txt")
-    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "ONE\ntwo\nthree\nfour\nfive\nSIX\n")
-    println(commit(nikaia.clone(), repo.clone(), tmp.clone(), false))
-    println(git(tmp.clone(), ["log", "--format=%s"]))
+    fs::write("a.txt", tmp, "ONE\ntwo\nthree\nfour\nfive\nSIX\n")
+    println(commit(nikaia.clone(), repo.clone(), tmp, false))
+    println(git(tmp.path().to_text(), ["log", "--format=%s"]))
     println("-- dry run again")
-    println(commit(nikaia.clone(), repo.clone(), tmp.clone(), true))
-    let short = commit(nikaia.clone(), repo.clone(), tmp.clone(), false)
-    println(short.replace(git(tmp.clone(), ["rev-parse", "--short=8", "HEAD"]), "SHA8"))
-    println(git(tmp.clone(), ["log", "--format=%s"]))
-    process::run("rm", ["-rf", tmp])
+    println(commit(nikaia.clone(), repo.clone(), tmp, true))
+    let short = commit(nikaia.clone(), repo.clone(), tmp, false)
+    println(short.replace(git(tmp.path().to_text(), ["rev-parse", "--short=8", "HEAD"]), "SHA8"))
+    println(git(tmp.path().to_text(), ["log", "--format=%s"]))
 }

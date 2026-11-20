@@ -1,14 +1,11 @@
 // scripts/drive.nika: which cycle line leads to which action; a run commits
 // nothing under docs/briefs/ (#1252). Each case is one `--dry-run` step on a scratch directory.
+use std::env
 use std::fs
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // An ESCALATE line ends with the commit of the drive.nika that ran (#1801),
@@ -25,16 +22,16 @@ fn unsha(text: String) -> String throws {
     return lines.join("\n")
 }
 
-fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) throws {
+fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, cycle: String) throws {
     case_with(nikaia, repo, tmp, name, cycle, "--dry-run")
 }
 
 // `flag`: one more argument to the driver (`--dry-run` when none is meant).
-fn case_with(nikaia: String, repo: String, tmp: String, name: String, cycle: String, flag: String) throws {
-    fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", flag]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
+fn case_with(nikaia: String, repo: String, tmp: ref fs::Root, name: String, cycle: String, flag: String) throws {
+    fs::write("lines", tmp, cycle.replace("%T", tmp.path().to_text()) + "\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.path().to_text(), "--lines", f"{tmp.path().to_text()}/lines", flag]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
     println(f"== {name} (exit {out.code})")
-    println(unblock(unsha(out.stdout.trim().clone())).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
+    println(unblock(unsha(out.stdout.trim().clone())).replace(tmp.path().to_text(), "T").replace("target/release/nikaia", "target/fast/nikaia"))
 }
 
 // The block size comes from the local, untracked docs/briefs/focus.txt
@@ -51,29 +48,26 @@ fn unblock(text: String) -> String throws {
 // The toolchain that runs this test (CI builds target/release only); if the
 // test was started otherwise, the first built one in the checkout.
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
-    let release = f"{repo}/target/release/nikaia"
-    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "x\n")
-    fs::write(f"{tmp}/b1.md.report.md", fs::Root::Anywhere, "Result: done\n")
-    fs::write(f"{tmp}/b1.md.run.json", fs::Root::Anywhere, "{}\n")
-    fs::write(f"{tmp}/cost.txt", fs::Root::Anywhere, "2026-10-26 1.0\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "next", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nBUMP pending 2 changelog lines")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "batch done", "CI aaaa1111 green\nBATCH DONE")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "cut", "CI aaaa1111 running\nCUT b1: too big -> SUPERVISOR")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "red", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nNEXT %T/b1.md builder sonnet 80 12")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "red, nothing queued", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nBATCH DONE")
-    case_with(nikaia.clone(), repo.clone(), tmp.clone(), "red ignored", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nNEXT %T/b1.md builder sonnet 80 12", "--ignore-ci-red")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "bump green", "CI aaaa1111 green\nBATCH DONE\nBUMP pending 3 changelog lines")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "owner", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nOWNER b0: which model?")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "unknown", "CI aaaa1111 green\nBATCH none (no batch.txt)")
-    process::run("rm", ["-rf", tmp])
+    fs::write("b1.md", tmp, "x\n")
+    fs::write("b1.md.report.md", tmp, "Result: done\n")
+    fs::write("b1.md.run.json", tmp, "{}\n")
+    fs::write("cost.txt", tmp, "2026-10-26 1.0\n")
+    case(nikaia.clone(), repo.clone(), tmp, "next", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nBUMP pending 2 changelog lines")
+    case(nikaia.clone(), repo.clone(), tmp, "batch done", "CI aaaa1111 green\nBATCH DONE")
+    case(nikaia.clone(), repo.clone(), tmp, "cut", "CI aaaa1111 running\nCUT b1: too big -> SUPERVISOR")
+    case(nikaia.clone(), repo.clone(), tmp, "red", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nNEXT %T/b1.md builder sonnet 80 12")
+    case(nikaia.clone(), repo.clone(), tmp, "red, nothing queued", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nBATCH DONE")
+    case_with(nikaia.clone(), repo.clone(), tmp, "red ignored", "CI aaaa1111 red\nRED aaaa1111 test -> SUPERVISOR\nNEXT %T/b1.md builder sonnet 80 12", "--ignore-ci-red")
+    case(nikaia.clone(), repo.clone(), tmp, "bump green", "CI aaaa1111 green\nBATCH DONE\nBUMP pending 3 changelog lines")
+    case(nikaia.clone(), repo.clone(), tmp, "owner", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nOWNER b0: which model?")
+    case(nikaia.clone(), repo.clone(), tmp, "unknown", "CI aaaa1111 green\nBATCH none (no batch.txt)")
 }

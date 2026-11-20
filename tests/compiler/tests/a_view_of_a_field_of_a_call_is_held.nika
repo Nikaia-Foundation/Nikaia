@@ -30,7 +30,7 @@ fn main() throws {
     let lines = process::run("echo", ["1\n2"]).stdout.trim().split("\n").collect()
     println(lines.len())
     let mut parts = 0
-    for entry in fs::read_dir(".", fs::Root::Anywhere) {
+    for entry in fs::read_dir(".", fs::Root::Dir(".")) {
         let named: Vec[String] = entry.to_text().split("/").collect()
         let shown = entry.display().split("/").collect()
         if named.len() > 0 && shown.len() > 0 {

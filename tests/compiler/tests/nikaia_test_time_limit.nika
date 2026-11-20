@@ -4,31 +4,31 @@
 // `waits_on_a_child` starts a `sleep` that shares its output streams: killed
 // alone, the program would leave the `sleep` holding the runner's pipes.
 // The build gets no limit (0, #1775): ten times 2 s could end a cold build.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"hanging\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-    fs::write(f"{tmp}/tests/fine.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"fine\")\n}\n")
-    fs::write(f"{tmp}/tests/fine.stdout", fs::Root::Anywhere, "fine\n")
-    fs::write(f"{tmp}/tests/spins.nika", fs::Root::Anywhere, "fn main() {\n    while true {}\n}\n")
-    fs::write(f"{tmp}/tests/waits_on_a_child.nika", fs::Root::Anywhere, "use std::process\n\nfn main() throws {\n    process::run(\"sleep\", [\"600\"]; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)\n}\n")
-    let out = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_TIME_LIMIT", "2"), ("NIKAIA_TEST_BUILD_TIME_LIMIT", "0")])
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"hanging\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn main() {}\n")
+    fs::write("tests/fine.nika", tmp, "fn main() throws {\n    println(\"fine\")\n}\n")
+    fs::write("tests/fine.stdout", tmp, "fine\n")
+    fs::write("tests/spins.nika", tmp, "fn main() {\n    while true {}\n}\n")
+    fs::write("tests/waits_on_a_child.nika", tmp, "use std::process\n\nfn main() throws {\n    process::run(\"sleep\", [\"600\"]; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)\n}\n")
+    let out = process::run(nikaia, ["test"]; dir: tmp.path().to_text(), env: [("NIKAIA_TEST_TIME_LIMIT", "2"), ("NIKAIA_TEST_BUILD_TIME_LIMIT", "0")])
     println(f"exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("program ") || line.starts_with("--- ") || line.starts_with("timed out") || line.starts_with("test result") {
             println(line)
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

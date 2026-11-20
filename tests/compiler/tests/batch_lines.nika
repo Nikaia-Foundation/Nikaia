@@ -1,47 +1,41 @@
 // #862: batch.nika names what is missing and reads `Result: done. text`,
 // `Gate:`, `noop` and `Owner: none ...`.
+use std::env
 use std::fs
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn first(nikaia: String, repo: String, tmp: String) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo)
-    return out.stdout.trim().split("\n").collect()[0].replace(tmp, "T")
+fn first(nikaia: String, repo: String, tmp: ref fs::Root) -> String throws {
+    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.path().to_text()]; dir: repo)
+    return out.stdout.trim().split("\n").collect()[0].replace(tmp.path().to_text(), "T")
 }
 
 // The toolchain that runs this test (CI builds target/release only); if the
 // test was started otherwise, the first built one in the checkout.
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
-    let release = f"{repo}/target/release/nikaia"
-    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    println(f"no batch.txt: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\n")
-    println(f"missing brief: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "body\n")
+    println(f"no batch.txt: {first(nikaia.clone(), repo.clone(), tmp)}")
+    fs::write("batch.txt", tmp, "a.md\n")
+    println(f"missing brief: {first(nikaia.clone(), repo.clone(), tmp)}")
+    fs::write("a.md", tmp, "body\n")
     let tail = "Pushed: abc\nFound: none\nDeviation: none\nChangelog: none\n"
-    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done. text here\n" + tail)
-    println(f"done with text: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nGate: red x\n" + tail)
-    println(f"gate red: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nGate: green\nOwner: none, thanks\n" + tail)
-    println(f"gate green: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: noop\nPushed: none\nFound: none\nDeviation: none\nChangelog: none\n")
-    println(f"noop: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
-    process::run("rm", ["-rf", tmp])
+    fs::write("a.report.md", tmp, "Result: done. text here\n" + tail)
+    println(f"done with text: {first(nikaia.clone(), repo.clone(), tmp)}")
+    fs::write("a.report.md", tmp, "Result: done\nGate: red x\n" + tail)
+    println(f"gate red: {first(nikaia.clone(), repo.clone(), tmp)}")
+    fs::write("a.report.md", tmp, "Result: done\nGate: green\nOwner: none, thanks\n" + tail)
+    println(f"gate green: {first(nikaia.clone(), repo.clone(), tmp)}")
+    fs::write("a.report.md", tmp, "Result: noop\nPushed: none\nFound: none\nDeviation: none\nChangelog: none\n")
+    println(f"noop: {first(nikaia.clone(), repo.clone(), tmp)}")
 }

@@ -2,25 +2,25 @@
 // element as its `get` does (ADR-282 D13, ADR-279 D12; #1731): a view of what
 // the list keeps or of static text, never a copy made behind your back, so
 // the lowered program converts no found element to text of its own.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let source = "fn make(t: String) -> String {\n    let mut g = String()\n    g.push_str(t)\n    return g\n}\n\nfn head(xs: Vec[String]) -> String {\n    return xs.first() ?? \"empty\"\n}\n\nfn tail(xs: Vec[String]) -> String {\n    xs.last() ?? \"empty\"\n}\n\nfn lent_head(xs: ref Vec[String]) -> String {\n    return xs.first() ?? \"lent\"\n}\n\nfn main() throws {\n    let mut xs: Vec[String] = []\n    xs.push(make(\"x\"))\n    xs.push(make(\"y\"))\n    let empty: Vec[String] = []\n    let h = xs.first() ?? \"none\"\n    let t = empty.last() ?? \"none\"\n    println(f\"{head(xs)} {head(empty)} {tail(xs)} {tail(empty)}\")\n    println(f\"{lent_head(xs)} {lent_head(empty)} {h} {t}\")\n    println(xs.len())\n}\n"
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
     if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    let rust = fs::read_to_string("p.rs", tmp)
     println(f"a found element copied: {rust.contains("__nikaia_found.to_string()")}")
-    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
     println(ran.stdout.trim())
     println(ran.stderr.trim())
-    process::run("rm", ["-rf", tmp])
 }

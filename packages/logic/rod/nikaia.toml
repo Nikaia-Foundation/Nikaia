@@ -6,3 +6,8 @@ version = "0.1.0"
 
 [dependencies]
 logic = { path = ".." }
+
+# The SMT-LIB files it reads are the ones named on its command line:
+# opening them is the rod's job (ADR-raw-sinks-1 D15).
+[allow]
+untrusted-paths-read = ["args"]

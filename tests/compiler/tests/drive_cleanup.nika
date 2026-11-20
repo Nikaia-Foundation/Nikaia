@@ -5,21 +5,18 @@
 // keeps one of a live process (pid 1) and what is not a sandbox. The free
 // figure is faked, so the CLEANUP line reads the same on every machine; with
 // it faked low, a dry run shows the cleanup and the stop before an agent.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // An ESCALATE line ends with the commit of the drive.nika that ran (#1801),
@@ -39,45 +36,45 @@ fn unsha(text: String) -> String throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let paths = ["target/debug", "target/nikaia-example-tests", "tmp/nikaia-test-999999999-0", "tmp/nikaia-test-1-0", "tmp/other"]
-    for path in paths { process::run("mkdir", ["-p", f"{tmp}/{path}/inner"]) }
-    let env: Vec[(String, String)] = [("TMPDIR", f"{tmp}/tmp"), ("HOME", tmp.clone()), ("NIKAIA_DRIVE_FREE_MB", "9000")]
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup"]; dir: tmp.clone(), env: env.clone())
+    for path in paths { process::run("mkdir", ["-p", f"{tmp.path().to_text()}/{path}/inner"]) }
+    let env: Vec[(String, String)] = [("TMPDIR", f"{tmp.path().to_text()}/tmp"), ("HOME", tmp.path().to_text()), ("NIKAIA_DRIVE_FREE_MB", "9000")]
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup"]; dir: tmp.path().to_text(), env: env.clone())
     println(f"exit {out.code}")
     println(out.stdout.trim())
     for path in paths {
-        let there = fs::exists(f"{tmp}/{path}", fs::Root::Anywhere)
+        let there = fs::exists(f"{path}", tmp)
         println(f"{path}: {there}")
     }
     // A cargo started in the directory without another profile (a builder's
     // clippy) builds into target/debug: the cleanup keeps it (#1800).
-    process::run("mkdir", ["-p", f"{tmp}/target/debug/inner", f"{tmp}/bin"])
-    fs::write(f"{tmp}/bin/cargo", fs::Root::Anywhere, "#!/bin/sh\nsleep 60\n")
-    process::run("chmod", ["+x", f"{tmp}/bin/cargo"])
-    let pid = process::run("sh", ["-c", "./bin/cargo clippy --all-targets >/dev/null 2>&1 & echo $!"]; dir: tmp.clone()).stdout.trim().clone()
-    let busy = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup"]; dir: tmp.clone(), env: env)
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/target/debug/inner", f"{tmp.path().to_text()}/bin"])
+    fs::write("bin/cargo", tmp, "#!/bin/sh\nsleep 60\n")
+    process::run("chmod", ["+x", f"{tmp.path().to_text()}/bin/cargo"])
+    let pid = process::run("sh", ["-c", "./bin/cargo clippy --all-targets >/dev/null 2>&1 & echo $!"]; dir: tmp.path().to_text()).stdout.trim().clone()
+    let busy = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup"]; dir: tmp.path().to_text(), env: env)
     process::run("kill", [pid])
     println(busy.stdout.trim())
-    let kept = fs::exists(f"{tmp}/target/debug", fs::Root::Anywhere)
+    let kept = fs::exists("target/debug", tmp)
     println(f"target/debug with a cargo running: {kept}")
     // Before an agent (a dry run of a NEXT line): under 6 GB free the cleanup
     // runs at once; still under 3 GB after it, the driver escalates.
-    fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "x\n")
-    fs::write(f"{tmp}/lines", fs::Root::Anywhere, f"CI aaaa1111 green\nNEXT {tmp}/b1.md builder sonnet 80 12\n")
+    fs::write("b1.md", tmp, "x\n")
+    fs::write("lines", tmp, f"CI aaaa1111 green\nNEXT {tmp.path().to_text()}/b1.md builder sonnet 80 12\n")
     for free in ["5000", "2000"] {
-        let faked: Vec[(String, String)] = [("HOME", tmp.clone()), ("NIKAIA_DRIVE_FREE_MB", free.clone())]
-        let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
+        let faked: Vec[(String, String)] = [("HOME", tmp.path().to_text()), ("NIKAIA_DRIVE_FREE_MB", free.clone())]
+        let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.path().to_text(), "--lines", f"{tmp.path().to_text()}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
         println(f"== {free} MB free (exit {dry.code})")
         for line in dry.stdout.trim().split("\n") {
-            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia")) }
+            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(tmp.path().to_text(), "T").replace("target/release/nikaia", "target/fast/nikaia")) }
         }
     }
     // The old variants in a deps directory (#2318): a name's files of an
     // older hash go when over 3 h old; the newest hash stays at any age, a
     // recent older hash stays, and a file without a hash stays.
-    let deps = f"{tmp}/deps"
-    process::run("mkdir", ["-p", deps.clone()])
+    let deps = tmp.join("deps")
+    process::run("mkdir", ["-p", deps.path().to_text()])
     let files = [
         ("nikaia-0000000000000001", "-5 hours"), ("nikaia-0000000000000001.d", "-5 hours"),
         ("nikaia-0000000000000002", "-4 hours"), ("nikaia-00000000000000a3", "-1 hours"),
@@ -85,9 +82,8 @@ fn main() throws {
         ("libfoo-00000000000000b2.rmeta", "-8 hours"), ("libbar-00000000000000c1.rlib", "-9 hours"),
         ("plain", "-9 hours"),
     ]
-    for (name, age) in files { process::run("touch", ["-d", f"{age}", f"{deps}/{name}"]) }
-    let old = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--old-deps", deps.clone(), f"{tmp}/missing"]; dir: tmp.clone())
+    for (name, age) in files { process::run("touch", ["-d", f"{age}", f"{deps.path().to_text()}/{name}"]) }
+    let old = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--old-deps", deps.path().to_text(), f"{tmp.path().to_text()}/missing"]; dir: tmp.path().to_text())
     println(old.stdout.trim())
-    for (name, _age) in files { println(f"{name}: {fs::exists(f"{deps}/{name}", fs::Root::Anywhere)}") }
-    process::run("rm", ["-rf", tmp])
+    for (name, _age) in files { println(f"{name}: {fs::exists(f"{name}", deps)}") }
 }

@@ -7,11 +7,12 @@
 // failure names the switch and the likely cause, a Cargo lock, and with no
 // `NIKAIA_TEST_BUILD_TIME_LIMIT` (empty is none) the limit is ten times
 // `NIKAIA_TEST_TIME_LIMIT`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -26,15 +27,14 @@ fn shown(code: i64, said: String) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"building\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-    fs::write(f"{tmp}/tests/builds_long.nika", fs::Root::Anywhere, "fn spin() -> i64 {\n    let mut n: i64 = 0\n    while true {\n        n = n + 1\n    }\n    return n\n}\n\ncomptime X: i64 = spin()\n\nfn main() throws {\n    println(f\"{X}\")\n}\n")
-    let given = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_BUILD_TIME_LIMIT", "2")])
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"building\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn main() {}\n")
+    fs::write("tests/builds_long.nika", tmp, "fn spin() -> i64 {\n    let mut n: i64 = 0\n    while true {\n        n = n + 1\n    }\n    return n\n}\n\ncomptime X: i64 = spin()\n\nfn main() throws {\n    println(f\"{X}\")\n}\n")
+    let given = process::run(nikaia, ["test"]; dir: tmp.path().to_text(), env: [("NIKAIA_TEST_BUILD_TIME_LIMIT", "2")])
     shown(given.code, f"{given.stdout}{given.stderr}")
-    let derived = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_BUILD_TIME_LIMIT", ""), ("NIKAIA_TEST_TIME_LIMIT", "1")])
+    let derived = process::run(nikaia, ["test"]; dir: tmp.path().to_text(), env: [("NIKAIA_TEST_BUILD_TIME_LIMIT", ""), ("NIKAIA_TEST_TIME_LIMIT", "1")])
     shown(derived.code, f"{derived.stdout}{derived.stderr}")
-    process::run("rm", ["-rf", tmp])
 }

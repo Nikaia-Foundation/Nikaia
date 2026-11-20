@@ -5,11 +5,12 @@
 // task held one twenty times its budget and still took a value, and every
 // set it sent left a debt in its count. A task that holds more than its
 // budget panics where it takes a value (D9), whichever collection holds it.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
@@ -28,15 +29,14 @@ fn program(kind: String, made: String, insert: String) -> String {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let kinds: Vec[(String, String, String)] = [("HashSet[i64]", "HashSet", "insert(i)"), ("BTreeSet[i64]", "BTreeSet", "insert(i)"), ("HashMap[i64, i64]", "HashMap", "insert(i, i)"), ("BTreeMap[i64, i64]", "BTreeMap", "insert(i, i)")]
 	for (kind, made, insert) in kinds {
-		fs::write(f"{tmp}/hold.nika", fs::Root::Anywhere, program(kind, made, insert))
-		let out = process::run(toolchain(), ["run", "hold.nika"]; dir: tmp)
+		fs::write("hold.nika", tmp, program(kind, made, insert))
+		let out = process::run(toolchain(), ["run", "hold.nika"]; dir: tmp.path().to_text())
 		println(f"{kind}: {out.stdout.trim()}")
 		if !out.ok {
 			println(out.stderr)
 		}
 	}
-	process::run("rm", ["-rf", tmp])
 }

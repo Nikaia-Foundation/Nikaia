@@ -12,21 +12,18 @@
 // change the merge also changed conflicts when git puts it back after the
 // merge (#1862): in a lowered file, that file takes HEAD's copy and nothing
 // is left staged; in a source, the driver escalates, naming it and the stash.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn sh(dir: String, script: String) -> String throws {
@@ -38,10 +35,10 @@ fn sh(dir: String, script: String) -> String throws {
 // A repository `work` and a clone `other`, both from the bare `origin`;
 // `other` pushes THEIRS (shell, may be empty), `work` runs OURS, keeps an
 // uncommitted change and runs LOOSE (shell, may be empty: untracked files).
-fn setup(tmp: String, name: String, theirs: String, ours: String, loose: String) -> String throws {
-    let base = f"{tmp}/{name}"
+fn setup(tmp: ref fs::Root, name: String, theirs: String, ours: String, loose: String) -> String throws {
+    let base = f"{tmp.path().to_text()}/{name}"
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
-    sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
+    sh(tmp.path().to_text(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
     let work = f"{base}/work"
     sh(work.clone(), f"{id}; mkdir -p scripts; echo base > scripts/batch.nika; echo notes > notes.txt; echo base > shared.txt; mkdir -p crates/nikaia-std/src/compiler; echo base > crates/nikaia-std/src/compiler/lowered.rs; git add -A; git commit -q -m base; git remote add origin ../origin.git; git push -q origin develop")
     sh(base.clone(), "git clone -q -b develop origin.git other")
@@ -54,7 +51,7 @@ fn setup(tmp: String, name: String, theirs: String, ours: String, loose: String)
     return work
 }
 
-fn case(nikaia: String, repo: String, tmp: String, name: String, theirs: String, ours: String, loose: String) throws {
+fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, theirs: String, ours: String, loose: String) throws {
     let work = setup(tmp, name.replace(" ", "-").replace(",", ""), theirs, ours, loose)
     let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--pull", "false", "true", "true"]; dir: work.clone())
     let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
@@ -70,19 +67,18 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, theirs: String,
 }
 
 fn main() throws {
-    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "nothing new", "", "", "")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "no local commits, a script", "echo theirs > scripts/batch.nika", "", "")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "local commits, a script and a note", "echo theirs > scripts/batch.nika; mkdir -p docs; echo theirs > docs/x.md", "echo ours > ours.txt", "")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "conflict", "echo theirs > shared.txt", "echo ours > shared.txt", "")
+    case(nikaia.clone(), repo.clone(), tmp, "nothing new", "", "", "")
+    case(nikaia.clone(), repo.clone(), tmp, "no local commits, a script", "echo theirs > scripts/batch.nika", "", "")
+    case(nikaia.clone(), repo.clone(), tmp, "local commits, a script and a note", "echo theirs > scripts/batch.nika; mkdir -p docs; echo theirs > docs/x.md", "echo ours > ours.txt", "")
+    case(nikaia.clone(), repo.clone(), tmp, "conflict", "echo theirs > shared.txt", "echo ours > shared.txt", "")
     let lowered = "mkdir -p crates/nikaia-std/src/compiler/lowered; echo {} > crates/nikaia-std/src/compiler/lowered/a.rs; echo {} > shared.txt"
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "conflict in a source and a lowered file", lowered.replace("{}", "theirs"), lowered.replace("{}", "ours"), "")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "an untracked source in the way", "mkdir -p docs; echo theirs > docs/y.md", "echo ours > ours.txt", "mkdir -p docs; echo loose > docs/y.md")
+    case(nikaia.clone(), repo.clone(), tmp, "conflict in a source and a lowered file", lowered.replace("{}", "theirs"), lowered.replace("{}", "ours"), "")
+    case(nikaia.clone(), repo.clone(), tmp, "an untracked source in the way", "mkdir -p docs; echo theirs > docs/y.md", "echo ours > ours.txt", "mkdir -p docs; echo loose > docs/y.md")
     let index = "echo {} > crates/nikaia-std/src/compiler/lowered.rs"
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "an uncommitted lowered change the merge changed too", index.replace("{}", "theirs"), "", index.replace("{}", "loose"))
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "an uncommitted source the merge changed too", "echo theirs > shared.txt", "", "echo loose > shared.txt")
-    case(nikaia, repo, tmp.clone(), "an untracked badge in the way", "mkdir -p assets/badges; echo theirs > assets/badges/b.svg", "echo ours > ours.txt", "mkdir -p assets/badges; echo loose > assets/badges/b.svg")
-    process::run("rm", ["-rf", tmp])
+    case(nikaia.clone(), repo.clone(), tmp, "an uncommitted lowered change the merge changed too", index.replace("{}", "theirs"), "", index.replace("{}", "loose"))
+    case(nikaia.clone(), repo.clone(), tmp, "an uncommitted source the merge changed too", "echo theirs > shared.txt", "", "echo loose > shared.txt")
+    case(nikaia, repo, tmp, "an untracked badge in the way", "mkdir -p assets/badges; echo theirs > assets/badges/b.svg", "echo ours > ours.txt", "mkdir -p assets/badges; echo loose > assets/badges/b.svg")
 }

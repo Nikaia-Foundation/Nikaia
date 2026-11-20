@@ -4,17 +4,12 @@
 // generated Rust, so it is left out of the message rather than refused
 // (ADR-269 D2). Moved from the `nikaia-std` unit test
 // `abort::tests::an_operand_prints_where_it_can` (#2167).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -34,18 +29,17 @@ fn stops(text: String) -> String {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/same.nika",
-        fs::Root::Anywhere,
+        "same.nika",
+        tmp,
         "fn same[T: Eq](a: T, b: T) {\n    assert(a == b)\n}\n\nfn main() {\n    same(1, 2)\n}\n",
     )
     let out = process::run(
         "sh",
-        ["-c", "\"$0\" run --unproved-claims=warn same.nika", toolchain()]; dir: tmp.clone(),
+        ["-c", "\"$0\" run --unproved-claims=warn same.nika", toolchain()]; dir: tmp.path().to_text(),
     )
     println(f"exit {out.code}")
     print(out.stdout)
     println(stops(out.stderr))
-    process::run("rm", ["-rf", tmp])
 }

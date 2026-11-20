@@ -6,38 +6,32 @@
 // `auto`. Moved from the `nikaia-std` unit tests
 // `a_pair_is_answered_in_order_on_either_mechanism` and
 // `the_compilers_pair_answers_the_same_either_way` (#2316).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	fs::write(f"{tmp}/eins", fs::Root::Anywhere, "eins")
-	fs::write(f"{tmp}/zwei", fs::Root::Anywhere, "zwei zwei")
+	let tmp = fs::scratch()
+	fs::write("eins", tmp, "eins")
+	fs::write("zwei", tmp, "zwei zwei")
 	fs::write(
-		f"{tmp}/child.nika",
-		fs::Root::Anywhere,
+		"child.nika",
+		tmp,
 		"use std::fs\n\nfn main() throws {\n\tlet first = fs::read(\"eins\", fs::Root::Anywhere)\n\tlet second = fs::read(\"zwei\", fs::Root::Anywhere)\n\tprintln(f\"first: {first.text()}\")\n\tprintln(f\"second: {second.text()}\")\n\tfs::read(\"nicht-da\", fs::Root::Anywhere) catch {\n\t\tprintln(\"missing: an error\")\n\t\treturn\n\t}\n\tprintln(\"missing: read\")\n}\n",
 	)
 	for method in ["blocking", "auto"] {
-		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, f"io-method = \"{method}\"\n")
+		fs::write("runtime.toml", tmp, f"io-method = \"{method}\"\n")
 		let out = process::run(
 			toolchain(),
-			["run", "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+			["run", "child.nika"]; dir: tmp.path().to_text(), env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp.path().to_text()}/runtime.toml")],
 		)
 		println(f"{method}:")
 		print(out.stdout)
 	}
-	process::run("rm", ["-rf", tmp])
 }

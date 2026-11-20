@@ -6,11 +6,12 @@
 // not pause ran at `no`, and at `yes` it is not started after the crash is
 // seen (D10). A scope inside a task that crosses threads runs both kinds of
 // task. These replace the Rust tests of `task.rs` (#2206).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -105,8 +106,8 @@ fn crossing() -> String {
 // Runs `file` at `setting` and prints what it wrote, the cleanups sorted
 // (the tasks are dropped in no fixed order) and the lines that start with
 // `hidden` left out.
-fn child(tmp: String, file: String, setting: String, hidden: String) throws {
-    let out = process::run(toolchain(), ["run", "--user-parallelism", setting.clone(), file.clone()]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+fn child(tmp: ref fs::Root, file: String, setting: String, hidden: String) throws {
+    let out = process::run(toolchain(), ["run", "--user-parallelism", setting.clone(), file.clone()]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
     println(f"== {file} at {setting}: exit {out.code}")
     let mut cleaned: Vec[String] = []
     let mut rest: Vec[String] = []
@@ -123,15 +124,14 @@ fn child(tmp: String, file: String, setting: String, hidden: String) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{tmp}/crash.nika", fs::Root::Anywhere, crash())
-    fs::write(f"{tmp}/cleanup.nika", fs::Root::Anywhere, cleanup())
-    fs::write(f"{tmp}/crossing.nika", fs::Root::Anywhere, crossing())
+    let tmp = fs::scratch()
+    fs::write("crash.nika", tmp, crash())
+    fs::write("cleanup.nika", tmp, cleanup())
+    fs::write("crossing.nika", tmp, crossing())
     child(tmp, "crash.nika", "no", "")
     child(tmp, "crash.nika", "yes", "ran:")
     child(tmp, "cleanup.nika", "no", "")
     child(tmp, "cleanup.nika", "yes", "")
     child(tmp, "crossing.nika", "no", "")
     child(tmp, "crossing.nika", "yes", "")
-    process::run("rm", ["-rf", tmp])
 }

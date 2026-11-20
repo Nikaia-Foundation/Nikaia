@@ -12,6 +12,7 @@
 use std::env
 use std::fs
 use std::hash
+use std::path
 use std::process
 
 /// **What one member's lowering hands back** (`project.rs`'s `Lowered`): the
@@ -615,10 +616,13 @@ fn project_drive_cargo_key(record: ref fs::Path, handed: ref String) -> String {
     let dir = record.parent() ?? return handed.clone()
     text.push_str(fs::read_to_string(dir.join("Cargo.toml"), fs::Root::Anywhere) catch { "" })
     text.push_str(fs::read_to_string(dir.join("Cargo.lock"), fs::Root::Anywhere) catch { "" })
-    let mut names: Vec[String] = (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).iter().map(fn(name) { name.display() }).collect()
+    // Each name is opened under the directory it was read from
+    // (ADR-raw-sinks-1 D13).
+    let members = fs::Root::Dir(dir.clone())
+    let mut names: Vec[String] = (fs::read_dir(".", members) catch { [] }).iter().map(fn(name) { name.display() }).collect()
     names.sort()
     for name in names {
-        let member = fs::read_to_string(dir.join(name).join("Cargo.toml"), fs::Root::Anywhere) catch { continue }
+        let member = fs::read_to_string(f"{name}/Cargo.toml", members) catch { continue }
         text.push_str(f"member {name}\n{member}")
     }
     return hash::sha256_hex(text.bytes().collect())
@@ -831,30 +835,28 @@ pub fn project_drive_publishable(root: ref fs::Path, file: ref ManifestFile) thr
         let text = fs::read_to_string(root.join(name), fs::Root::Anywhere) catch { continue }
         wanted.push((name.clone(), text))
     }
-    let sources = fs::walk(src, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {src.display()}: {error}") }
+    // Each name is opened under the directory it was walked from, and
+    // written under the copy's (ADR-raw-sinks-1 D13).
+    let sources_at = fs::Root::Dir(src.clone())
+    let sources = fs::walk(".", sources_at) catch { throw ProjectDriveRefusal::Failed(f"reading {src.display()}: {error}") }
     for name in sources.iter() {
         if (name.extension()?.text_of() ?? "") != "nika" {
             continue
         }
-        let text = fs::read_to_string(src.join(name), fs::Root::Anywhere) catch { continue }
+        let text = fs::read_to_string(name, sources_at) catch { continue }
         wanted.push((f"src/{name.to_text()}", text))
     }
-    let old_src = dir.join("src")
-    let old = fs::walk(old_src, fs::Root::Anywhere) catch { [] }
+    project_drive_make_dir(dir)
+    let out = fs::Root::Dir(dir.clone())
+    let old = fs::walk("src", out) catch { [] }
     for name in old.iter() {
         let at = f"src/{name.to_text()}"
         if !wanted.iter().any(fn(pair) { pair.0 == at }) {
-            fs::remove(old_src.join(name), fs::Root::Anywhere) catch {}
+            fs::remove(at, out) catch {}
         }
     }
     for (name, text) in wanted.iter() {
-        let path = dir.join(name)
-        let parent = path.parent() ?? continue
-        fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {parent.display()}: {error}") }
-        let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
-        if was != text {
-            fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
-        }
+        project_drive_written_under(out, name, text)
     }
 }
 
@@ -1101,15 +1103,20 @@ pub fn project_drive_spliced(root: ref fs::Path, file: ref ManifestFile, src: re
     let table = file.rust_library ?? throw ProjectDriveRefusal::Failed("the manifest has no `[rust-library]`")
     let hand_path = root.join(table.root ?? "")
     let from = hand_path.parent() ?? root.clone()
-    let files = fs::walk(from, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {from.display()}: {error}") }
+    // Each name is read under the directory it was walked from and written
+    // under `src` (ADR-raw-sinks-1 D13).
+    let from_at = fs::Root::Dir(from.clone())
+    project_drive_make_dir(src)
+    let to_at = fs::Root::Dir(src.clone())
+    let files = fs::walk(".", from_at) catch { throw ProjectDriveRefusal::Failed(f"reading {from.display()}: {error}") }
     for name in files.iter() {
-        let to = src.join(name)
-        let text = fs::read_to_string(from.join(name), fs::Root::Anywhere) catch {
-            project_drive_make_dir(to.parent() ?? src.clone())
-            fs::copy(from.join(name), to, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {from.join(name).display()}: {error}") }
+        let text = fs::read_to_string(name, from_at) catch {
+            let bytes = fs::read(name, from_at) catch { throw ProjectDriveRefusal::Failed(f"copying {from.join(name).display()}: {error}") }
+            fs::create_dir(name.parent() ?? ".", to_at; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {src.join(name).display()}: {error}") }
+            fs::write(name, to_at, bytes) catch { throw ProjectDriveRefusal::Failed(f"copying {from.join(name).display()}: {error}") }
             continue
         }
-        project_drive_written(to, text)
+        project_drive_written_under(to_at, name, text)
     }
     let hand = fs::read_to_string(hand_path, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {hand_path.display()}: {error}") }
     // **An own path is the crate's** (D24): `words::twice` in the package
@@ -1145,6 +1152,17 @@ pub fn project_drive_hand_modules(root: ref fs::Path, file: ref ManifestFile) ->
 
 /// `text` written to `path`, its directory made, where the file holds
 /// something else.
+/// `project_drive_written` for a `name` under `at`, which exists: the
+/// name stays below the directory it was walked from (ADR-raw-sinks-1 D13).
+fn project_drive_written_under(at: ref fs::Root, name: ref fs::Path, text: ref String) throws {
+    let parent = name.parent() ?? "."
+    fs::create_dir(parent, at; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {at.path().join(parent).display()}: {error}") }
+    let was = fs::read_to_string(name, at) catch { "\u{0}" }
+    if was != text {
+        fs::write(name, at, text) catch { throw ProjectDriveRefusal::Failed(f"writing {at.path().join(name).display()}: {error}") }
+    }
+}
+
 fn project_drive_written(path: ref fs::Path, text: ref String) throws {
     project_drive_make_dir(path.parent() ?? throw ProjectDriveRefusal::Failed(f"{path.display()} has no directory"))
     let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
@@ -1457,6 +1475,7 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
 /// names of what it writes there.
 struct ProjectDriveRustcStore {
     entry: fs::Path,
+    at: fs::Root,
     out_dir: fs::Path,
     outputs: Vec[String],
     generated: fs::Path,
@@ -1471,8 +1490,13 @@ fn project_drive_rustc_store[H: ProjectDriveWrapperHost](host: ref H, rust: ref 
     let args = host.args()
     let (out_dir, outputs) = project_drive_rustc_outputs(args) ?? return null
     let key = project_drive_rustc_key(host.rustc(), args, rust) ?? return null
+    // A digest is one name, so the entry stays in the store
+    // (ADR-raw-sinks-1 D14); what is in it is opened under it (D13).
+    if !path::is_component(key) {
+        return null
+    }
     let entry = host.user_cache_dir().join("rustc").join(key)
-    return ProjectDriveRustcStore { entry: entry, out_dir: out_dir, outputs: outputs, generated: generated.clone() }
+    return ProjectDriveRustcStore { entry: entry.clone(), at: fs::Root::Dir(entry), out_dir: out_dir, outputs: outputs, generated: generated.clone() }
 }
 
 /// **What `rustc` writes for `args`**: the `--out-dir` and the names of
@@ -1590,14 +1614,14 @@ fn project_drive_rustc_through[H: ProjectDriveWrapperHost](host: ref H, store: r
     host.trace("rustc ran")
     // Written aside and renamed into place, so an entry is whole or absent.
     let side = hash::sha256_hex(f"{store.out_dir.display()}\n{store.generated.display()}".bytes().collect())
-    let staging = store.entry.join(f"new-{side}")
-    fs::remove(staging, fs::Root::Anywhere; recursive: true) catch {}
-    fs::create_dir(staging.join("out"), fs::Root::Anywhere; recursive: true) catch { return host.run() }
-    let code = host.run_saying(staging.join("said"))
+    let staging: fs::Path = f"new-{side}"
+    fs::remove(staging, store.at; recursive: true) catch {}
+    fs::create_dir(staging.join("out"), store.at; recursive: true) catch { return host.run() }
+    let code = host.run_saying(store.entry.join(staging).join("said"))
     if code == 0 {
         project_drive_rustc_record(store, staging)
     }
-    fs::remove(staging, fs::Root::Anywhere; recursive: true) catch {}
+    fs::remove(staging, store.at; recursive: true) catch {}
     return code
 }
 
@@ -1607,9 +1631,9 @@ fn project_drive_rustc_through[H: ProjectDriveWrapperHost](host: ref H, store: r
 /// `--out-dir`. False at the first thing that fails: `rustc` then runs and
 /// writes every output again.
 fn project_drive_rustc_reused[H: ProjectDriveWrapperHost](host: ref H, store: ref ProjectDriveRustcStore) -> bool {
-    let kept = store.entry.join("kept")
-    let inputs = fs::read_to_string(kept.join("inputs"), fs::Root::Anywhere) catch { return false }
-    let was = fs::read_to_string(kept.join("where"), fs::Root::Anywhere) catch { return false }
+    let kept: fs::Path = "kept"
+    let inputs = fs::read_to_string(kept.join("inputs"), store.at) catch { return false }
+    let was = fs::read_to_string(kept.join("where"), store.at) catch { return false }
     for line in inputs.lines() {
         let parts: Vec[String] = line.splitn(3, "\t").map(fn(part) { part.clone() }).collect()
         if parts.len() != 3 {
@@ -1634,13 +1658,13 @@ fn project_drive_rustc_reused[H: ProjectDriveWrapperHost](host: ref H, store: re
         let from = kept.join("out").join(name)
         let to = store.out_dir.join(name)
         if name.ends_with(".d") {
-            let text = fs::read_to_string(from, fs::Root::Anywhere) catch { return false }
+            let text = fs::read_to_string(from, store.at) catch { return false }
             fs::write(to, fs::Root::Anywhere, text.replace(was, now)) catch { return false }
         } else {
-            fs::copy(from, to, fs::Root::Anywhere) catch { return false }
+            fs::copy(store.entry.join(from), to, fs::Root::Anywhere) catch { return false }
         }
     }
-    let said = fs::read_to_string(kept.join("said"), fs::Root::Anywhere) catch { "" }
+    let said = fs::read_to_string(kept.join("said"), store.at) catch { "" }
     if said.len() > 0 {
         host.eprint(said.replace(was, now))
     }
@@ -1655,17 +1679,16 @@ fn project_drive_rustc_reused[H: ProjectDriveWrapperHost](host: ref H, store: re
 fn project_drive_rustc_record(store: ref ProjectDriveRustcStore, staging: ref fs::Path) {
     let mut inputs: String = ""
     for name in store.outputs {
-        fs::copy(store.out_dir.join(name), staging.join("out").join(name), fs::Root::Anywhere) catch { return }
+        fs::copy(store.out_dir.join(name), store.entry.join(staging).join("out").join(name), fs::Root::Anywhere) catch { return }
         if name.ends_with(".d") {
             let depends = fs::read_to_string(store.out_dir.join(name), fs::Root::Anywhere) catch { return }
             inputs = project_drive_rustc_inputs(depends, store.generated) ?? return
         }
     }
-    fs::write(staging.join("inputs"), fs::Root::Anywhere, inputs) catch { return }
-    fs::write(staging.join("where"), fs::Root::Anywhere, store.out_dir.display()) catch { return }
-    let kept = store.entry.join("kept")
-    fs::remove(kept, fs::Root::Anywhere; recursive: true) catch {}
-    fs::rename(staging, kept, fs::Root::Anywhere) catch {}
+    fs::write(staging.join("inputs"), store.at, inputs) catch { return }
+    fs::write(staging.join("where"), store.at, store.out_dir.display()) catch { return }
+    fs::remove("kept", store.at; recursive: true) catch {}
+    fs::rename(staging, "kept", store.at) catch {}
 }
 
 /// **The inputs a dependency file names beside `generated`**, one line

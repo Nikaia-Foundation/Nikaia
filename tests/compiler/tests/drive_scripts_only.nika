@@ -1,42 +1,38 @@
 // scripts/drive.nika --scripts-only FILE: the batches of helper scripts (and
 // documentation) the driver pushes after their named tests, without the suite (#2347).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn case(nikaia: String, repo: String, tmp: String, name: String, paths: String) throws {
-    fs::write(f"{tmp}/{name}", fs::Root::Anywhere, paths)
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--scripts-only", f"{tmp}/{name}"]; dir: repo)
+fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, paths: String) throws {
+    fs::write(f"{name}", tmp, paths)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--scripts-only", f"{tmp.path().to_text()}/{name}"]; dir: repo)
     println(f"== {name}")
     println(out.stdout.trim())
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "drive", "scripts/drive.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "drive-doc", "scripts/drive.nika\ndocs/supervisor.md\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "workflow-run", "scripts/drive.nika\nscripts/solver.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "workflows", "scripts/check-adr-refs.nika\nscripts/java_binding.nika\nscripts/ledgers.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "tools", "tools/x.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "untested", "scripts/drive.nika\nscripts/zz-nothing.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "ci-changes", "scripts/drive.nika\nscripts/ci-changes.sh\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "pre-push", "scripts/pre-push.nika\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "docs", "docs/a.md\n")
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "test", "scripts/drive.nika\ntests/compiler/tests/drive_docs.nika\n")
-    process::run("rm", ["-rf", tmp])
+    case(nikaia.clone(), repo.clone(), tmp, "drive", "scripts/drive.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "drive-doc", "scripts/drive.nika\ndocs/supervisor.md\n")
+    case(nikaia.clone(), repo.clone(), tmp, "workflow-run", "scripts/drive.nika\nscripts/solver.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "workflows", "scripts/check-adr-refs.nika\nscripts/java_binding.nika\nscripts/ledgers.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "tools", "tools/x.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "untested", "scripts/drive.nika\nscripts/zz-nothing.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "ci-changes", "scripts/drive.nika\nscripts/ci-changes.sh\n")
+    case(nikaia.clone(), repo.clone(), tmp, "pre-push", "scripts/pre-push.nika\n")
+    case(nikaia.clone(), repo.clone(), tmp, "docs", "docs/a.md\n")
+    case(nikaia.clone(), repo.clone(), tmp, "test", "scripts/drive.nika\ntests/compiler/tests/drive_docs.nika\n")
 }
