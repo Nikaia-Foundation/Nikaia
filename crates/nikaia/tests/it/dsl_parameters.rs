@@ -1,4 +1,4 @@
-//! A DSL with deferred parameters generates a shadow type (ADR-296 D5).
+//! A DSL with deferred parameters generates a shadow type (ADR-grammar-build-time-v1 D12).
 //!
 //! Three claims, and each has a test that would fail if it were quietly
 //! relaxed: the type is generated from the body's `:name` holes and from

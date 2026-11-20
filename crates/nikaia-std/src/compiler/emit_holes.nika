@@ -47,7 +47,7 @@ pub trait EmitHolesHost {
 /// does not become invisible by being repeated (ADR-017 D3). None for anything
 /// that is not a template, for one that does not split, and for a
 /// deferred-parameter statement, whose braces are the foreign syntax's
-/// (ADR-296 D5).
+/// (ADR-grammar-build-time-v1 D12).
 fn emit_holes_template_texts(words: ref winnow_grammar::InternerContext, literal: ref Expr) -> Vec[(String, Vec[(String, String)])] sync {
     match literal {
         Expr::Dsl { target, package, content, .. } => {

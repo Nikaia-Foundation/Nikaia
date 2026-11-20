@@ -179,7 +179,7 @@ impl Splitter {
         if words.len() != 3 || *unsafe { nikaia_std::proven::read(&words, (1) as usize) } != "in" { return Err(nikaia_std::error::throwing(Refused::Because(format!("a template loop is written `<for name in :collection>`, not `<for{}>`", header)), &"loop_header")); }
         let binding = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (0) as usize) }).to_string());
         let written = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (2) as usize) }).to_string());
-        if !written.starts_with(':') { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is captured from the enclosing scope, so it is written `:{}` - the colon is where the template's names end and the program's begin (ADR-296 D4)", written, written)), &"loop_header")); }
+        if !written.starts_with(':') { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is captured from the enclosing scope, so it is written `:{}` - the colon is where the template's names end and the program's begin (ADR-grammar-build-time-v1 D11)", written, written)), &"loop_header")); }
         let mut collection: String = String::from("");
         let mut first = true;
         for ch in written.chars() {

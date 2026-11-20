@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1479] — 2026-11-20
+
+**The decisions on a grammar run at build time and what it hands back live in one record, ADR-grammar-build-time-v1 (#2269)**
+- The decisions on a grammar run while the program is built and what it hands back (the generated parser compiled and run, cached, its result crossing or refused by name; meta::Type, meta::Statement, the type the compiler writes; how a hole binds and the shadow type) live in one record, ADR-grammar-build-time-v1; ADR-177 and ADR-323 archived, three decisions of ADR-296 moved.
+
 ## [0.0.1478] — 2026-11-19
 
 **The decisions on how a grammar is lowered live in one record, ADR-grammar-lowering-v1 (#2268)**

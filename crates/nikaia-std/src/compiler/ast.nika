@@ -112,7 +112,7 @@ pub enum Item {
         /// Kap 5.1: what stands after the `;` - options, named at the call and
         /// never positional. Empty for a function that has no `;`.
         config: Vec[ConfigParam],
-        /// ADR-296 D5: `...args: Self::dsl` - the typed spread a driver accepts
+        /// ADR-grammar-build-time-v1 D12: `...args: Self::dsl` - the typed spread a driver accepts
         /// a DSL's deferred parameters with. It stands where the options stand,
         /// because a DSL parameter *is* configuration, and it is exclusive with
         /// them: a function takes options or a spread, never both.
@@ -635,7 +635,7 @@ pub enum Expr {
         method: winnow_grammar::Symbol,
         args: Vec[Expr],
         /// Kap 5.1 at a method call: what stands after the `;`. A DSL's
-        /// deferred parameters arrive here (ADR-296 D5), which is why a method
+        /// deferred parameters arrive here (ADR-grammar-build-time-v1 D12), which is why a method
         /// call carries them at all - before that they were parsed and dropped.
         config: Vec[ConfigArg],
         id: node_id::NodeId,
@@ -1586,7 +1586,7 @@ pub struct FnParams {
     pub receiver: Receiver?,
     pub args: Vec[FnArg],
     pub config: Vec[ConfigParam],
-    /// ADR-296 D5: `...args: Self::dsl`, where a config zone holds one instead
+    /// ADR-grammar-build-time-v1 D12: `...args: Self::dsl`, where a config zone holds one instead
     /// of options.
     pub spread: winnow_grammar::Symbol?,
 }

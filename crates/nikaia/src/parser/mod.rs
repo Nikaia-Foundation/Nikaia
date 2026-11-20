@@ -1429,7 +1429,7 @@ grammar! {
         // never positional - which is what the separator buys, and why it is a
         // separator rather than a convention about where the flags go.
         //
-        // ADR-296 D5 puts one more thing there: `...args: Self::dsl`, the typed
+        // ADR-grammar-build-time-v1 D12 puts one more thing there: `...args: Self::dsl`, the typed
         // spread a DSL driver accepts deferred parameters with. It is tried
         // first because `...` cannot begin an option's name, so a `;` followed
         // by one is unambiguous.
@@ -1575,7 +1575,7 @@ grammar! {
         // follows a `::` and no construct begins in that position, so the word
         // is a name whatever else it is elsewhere. `Self::dsl` is the case that
         // requires it - the shadow type of a deferred-parameter DSL is spelled
-        // with the keyword (ADR-296 D5, Part II 10.5) - and the general rule is
+        // with the keyword (ADR-grammar-build-time-v1 D12, Part II 10.5) - and the general rule is
         // the reason to allow it rather than that one type.
         rule path_segment -> Symbol = "::" n:SEGMENT -> { n }
 
@@ -1584,7 +1584,7 @@ grammar! {
         // already decided that what follows is a member: after `::` and after
         // `.`. No construct begins in either position, so a reserved word there
         // is a name whatever it is elsewhere - which is what lets `Self::dsl`
-        // (ADR-296 D5) and `scope.spawn fn { … }` (Part II 12.5) keep their
+        // (ADR-grammar-build-time-v1 D12) and `scope.spawn fn { … }` (Part II 12.5) keep their
         // spellings.
         //
         // Everywhere a name is *declared* or stands on its own, `NAME` is what
@@ -3398,7 +3398,7 @@ grammar! {
           | "." name:SEGMENT args:called? -> {
                 match args {
                     // Kap 5.1's `;` reaches a method call too, and what stands
-                    // after it is kept: ADR-296 D5's deferred parameters arrive
+                    // after it is kept: ADR-grammar-build-time-v1 D12's deferred parameters arrive
                     // exactly here, and dropping them was why a `dsl` statement
                     // could not be given any.
                     Some((args, config)) => Postfix::Method(name, args, config),
