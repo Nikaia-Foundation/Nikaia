@@ -135,6 +135,7 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
             let func = nikaia_std::boxed::open(func);
             let source = outside_source_named(func, words);
             if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) && !operator_read(library, nikaia_std::index::or(source.as_deref(), || ""), args) { return true; }
+            if source.is_some() && state.outside.literal_result(nikaia_std::index::or(source.as_deref(), || "")) { return false; }
             if source.is_some() && state.outside.results.contains_key(&nikaia_std::index::or(source, || "".into())) { return true; }
         },
         Expr::MethodCall { receiver, method, config, .. } => {
@@ -382,14 +383,17 @@ pub(crate) fn untrusted(library: &Ledger, name: &str) -> bool {
 pub struct ProverOutside {
     pub results: collections::BTreeMap<String, String>,
     pub fields: collections::BTreeMap<String, String>,
+    pub returning: collections::BTreeSet<String>,
+    pub valued: collections::BTreeSet<String>,
 }
 
 impl ProverOutside {
-    pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new() } }
+    pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new() } }
+    pub fn literal_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
 }
 
 pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> ProverOutside {
-    let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned() };
+    let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { prover_outside_function(&mut found, item, None, words, library, state, &mut *holes_of); },
@@ -412,6 +416,7 @@ pub(crate) fn prover_outside_function(found: &mut ProverOutside, item: &Spanned<
             let key = if owner.is_some() { format!("{}::{}", nikaia_std::index::or(owner, || ""), plain) } else { nikaia_std::block::Text::from(plain.to_string()) };
             let mut tainted: collections::BTreeSet<String> = collections::BTreeSet::new();
             let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+            if ret_type.is_some() { found.returning.insert(nikaia_std::block::Text::from(key.to_string())); }
             for _ in 0..2 { prover_outside_block(found, body, &key, ret_type.is_some(), &mut tainted, &mut sources, words, library, state, &mut *holes_of); }
         },
         _ => { },
@@ -487,9 +492,35 @@ pub(crate) fn prover_outside_tail(found: &mut ProverOutside, expr: &Expr, key: &
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_outside_result(found: &mut ProverOutside, value: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
+    if !literal_only(value) { found.valued.insert(nikaia_std::block::Text::from(key.to_string())); }
     if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, &mut *holes_of) { return; }
     let source = nikaia_std::index::or(outside_source(value, tainted, sources, words, library, state, &mut *holes_of), || nikaia_std::block::Text::from(key.to_string()).into());
     found.results.insert(nikaia_std::block::Text::from(key.to_string()), source);
+}
+
+pub(crate) fn literal_only(value: &Expr) -> bool {
+    match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitInt { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            literal_tail(then_branch) && literal_tail(other)
+        },
+        Expr::Block(block, _) => literal_tail(block),
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if !literal_only(&arm.body) { return false; } }
+            true
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn literal_tail(block: &Block) -> bool {
+    let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    literal_only(tail)
 }
 
 #[allow(clippy::too_many_arguments)]

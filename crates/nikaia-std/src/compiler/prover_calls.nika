@@ -191,6 +191,11 @@ fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], word
             if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) && !operator_read(library, source ?? "", args) {
                 return true
             }
+            // **A function that hands back literals only** (ADR-raw-sinks-1
+            // D10): its value is one of them, whatever it was given.
+            if source != null && state.outside.literal_result(source ?? "") {
+                return false
+            }
             // **A function of the package whose result comes from outside**
             // (#1573): its value is as untrusted as its source.
             if source != null && state.outside.results.contains_key(source ?? "") {
@@ -495,15 +500,26 @@ fn untrusted(library: ref Ledger, name: ref String) -> bool {
 /// source each one reads: the functions whose result comes from outside,
 /// by the ledger's key, and the fields a struct literal fills with it, as
 /// `Type.field`. The walk follows a value through a call and a field of the
-/// package as it follows it through a binding.
+/// package as it follows it through a binding. `returning` holds the
+/// functions with a result and `valued` those of them that hand back a
+/// value that is not a literal: one in `returning` but not in `valued` hands
+/// back literals only, so its result is not outside whatever its arguments
+/// are (ADR-raw-sinks-1 D10, as a `match` whose arms are literals).
 pub struct ProverOutside {
     pub results: collections::BTreeMap[String, String],
     pub fields: collections::BTreeMap[String, String],
+    pub returning: collections::BTreeSet[String],
+    pub valued: collections::BTreeSet[String],
 }
 
 impl ProverOutside {
     pub fn nothing() -> ProverOutside {
-        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap() }
+        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap(), returning: collections::BTreeSet(), valued: collections::BTreeSet() }
+    }
+
+    /// Whether the function `key` hands back literals only.
+    pub fn literal_result(ref self, key: ref String) -> bool {
+        return self.returning.contains(key) && !self.valued.contains(key)
     }
 }
 
@@ -513,7 +529,7 @@ impl ProverOutside {
 /// they are written, without branches told apart: a value that may come
 /// from outside is taken as coming from outside.
 fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
-    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone() }
+    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone(), returning: collections::BTreeSet(), valued: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => prover_outside_function(found, item, null, words, library, state, holes_of),
@@ -539,6 +555,9 @@ fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], ow
             let key = if owner != null { f"{owner ?? ""}::{plain}" } else { plain.clone() }
             let mut tainted: collections::BTreeSet[String] = collections::BTreeSet()
             let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+            if ret_type != null {
+                found.returning.insert(key.clone())
+            }
             for _ in 0..<2 {
                 prover_outside_block(found, body, key, ret_type != null, tainted, sources, words, library, state, holes_of)
             }
@@ -635,11 +654,46 @@ fn prover_outside_tail(mut found: ProverOutside, expr: ref Expr, key: ref String
 /// `value` handed back by the function `key`: when it comes from outside,
 /// so does the function's result.
 fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    if !literal_only(value) {
+        found.valued.insert(key.clone())
+    }
     if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, holes_of) {
         return
     }
     let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? key.clone()
     found.results.insert(key.clone(), source)
+}
+
+/// Whether `value` is a literal without holes, or an `if`, a `match` or a
+/// block every value of which is one.
+fn literal_only(value: ref Expr) -> bool {
+    return match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitInt { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return false
+            literal_tail(then_branch) && literal_tail(other)
+        },
+        Expr::Block(block, _) => literal_tail(block),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if !literal_only(arm.body) {
+                    return false
+                }
+            }
+            true
+        },
+        else => false,
+    }
+}
+
+/// Whether the value `block` ends in is a literal (`literal_only`).
+fn literal_tail(block: ref Block) -> bool {
+    let tail = tail_value_of(block) ?? return false
+    return literal_only(tail)
 }
 
 /// One expression outside the blocks it holds: a `return` inside it hands
