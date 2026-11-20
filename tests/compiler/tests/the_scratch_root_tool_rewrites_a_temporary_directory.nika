@@ -1,0 +1,48 @@
+// scripts/scratch-root.nika moves a test program from `mktemp` and
+// `fs::Root::Anywhere` to a root it owns (ADR-raw-sinks-1 D12, D13; #2301).
+// Shown on a program of the old shape: the `mktemp -d` becomes
+// `fs::scratch()`, a path under it opened under `Anywhere` is opened under
+// the root, a path joined to it is `join`, the directory as text is
+// `path().to_text()` (#2328), its `rm -rf` goes, and a site it does not know
+// (a `mktemp` of a file) is printed as `FILE:LINE: left`.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+// The repository: a test program runs in its package's directory,
+// `tests/compiler`, two below the root; `.` where it is run from the root.
+fn root() -> String throws {
+	return if fs::exists("scripts/drive.nika", fs::Root::Dir(".")) { "." } else { "../.." }
+}
+
+fn main() throws {
+	let dir = fs::scratch()
+	fs::write("scratch-root.nika", dir, fs::read_to_string("scripts/scratch-root.nika", fs::Root::Dir(root())))
+	let old: Vec[String] = [
+		"use std::fs",
+		"use std::process",
+		"",
+		"fn main() throws {",
+		"    let tmp = process::run(\"mktemp\", [\"-d\"]).stdout.trim().clone()",
+		"    let sub = f\"{tmp}/sub\"",
+		"    fs::write(f\"{tmp}/a.txt\", fs::Root::Anywhere, \"hi\")",
+		"    let out = process::run(\"cat\", [\"a.txt\"]; dir: tmp)",
+		"    println(fs::read_to_string(f\"{tmp}/a.txt\", fs::Root::Anywhere))",
+		"    let one = process::run(\"mktemp\", []).stdout.trim().clone()",
+		"    process::run(\"rm\", [\"-rf\", tmp])",
+		"}",
+	]
+	fs::write("old.nika", dir, old.join("\n") + "\n")
+	let out = process::run(toolchain(), ["run", "scratch-root.nika", "--", "old.nika"]; dir: dir.path().to_text())
+	println(out.stdout.trim())
+	if out.stderr.trim().len() > 0 {
+		println(out.stderr.trim())
+	}
+	println(f"exit {out.code}")
+	print(fs::read_to_string("old.nika", dir))
+}

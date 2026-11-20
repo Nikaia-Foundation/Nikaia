@@ -1,0 +1,13 @@
+old.nika:10: left
+exit 0
+use std::fs
+use std::process
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let sub = tmp.join("sub")
+    fs::write("a.txt", tmp, "hi")
+    let out = process::run("cat", ["a.txt"]; dir: tmp.path().to_text())
+    println(fs::read_to_string("a.txt", tmp))
+    let one = process::run("mktemp", []).stdout.trim().clone()
+}
