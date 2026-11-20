@@ -1,0 +1,26 @@
+// A grammar over text hands out positions of its input (ADR-374 D7, #743):
+// `here` is a `text::Pos` and `span(p)` a `text::Match`, so the caller cuts
+// the text it handed over by name, and an action reads the match's text.
+grammar G {
+    entry rule key -> text::Pos = "ä" alpha1 at:here ":" alpha1 -> { at }
+    entry rule word -> text::Match = m:span(alpha1) alpha1 -> { m }
+    entry rule pair -> String = a:span(alpha1) "=" b:span(digit+) -> { f"{a.text()}={b.text()} {a.start < b.start}" }
+    entry rule kv -> String = "(" s:span(k:alpha1 "=" v:alpha1) ")" -> { f"{k} {v} [{s.text()}]" }
+}
+
+fn main() throws {
+    let s = "äb:cd"
+    let at = G::key(s) catch {
+        println("key refused")
+        return
+    }
+    println(f"[{s.before(at)}] [{s.after(at)}]")
+    let t = "  word rest"
+    let m = G::word(t) catch {
+        println("word refused")
+        return
+    }
+    println(f"[{m.text()}] [{t.before(m.start)}] [{t.after(m.end)}]")
+    println(G::pair("x=42") catch { "refused" })
+    println(G::kv("(ab = cd)") catch { "refused" })
+}

@@ -111,15 +111,28 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
             state.findings.push(check_core_grammar_input_refused(key, given, span))
         }
         let cut = key.find("::")?.start ?? key.start()
+        // **A grammar's `here` and `span(p)` take the input's kind** (ADR-374
+        // D7): one entered with both is refused where the second kind comes.
         if over_bytes && cut > key.start() {
             state.facts.bytes_entries.insert(id_of(arg) as i64)
-            state.facts.bytes_grammars.insert(key.before(cut).clone())
+            let named = key.before(cut).clone()
+            if state.facts.text_grammars.contains(named) {
+                match grammar_positions_over_both(world, key, named, span) {
+                    refused => state.findings.push(refused),
+                    null => {},
+                }
+            }
+            state.facts.bytes_grammars.insert(named)
         }
         if over_text && cut > key.start() {
-            match grammar_positions_over_text(world, key, key.before(cut).clone(), span) {
-                refused => state.findings.push(refused),
-                null => {},
+            let named = key.before(cut).clone()
+            if state.facts.bytes_grammars.contains(named) {
+                match grammar_positions_over_both(world, key, named, span) {
+                    refused => state.findings.push(refused),
+                    null => {},
+                }
             }
+            state.facts.text_grammars.insert(named)
         }
     }
     let contract = world.own.functions[key]?.clone() ?? return Ty::Unknown

@@ -75,13 +75,24 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
         let cut = nikaia_std::index::or(nikaia_std::text::find_first(&key, &"::").as_ref().map(|__nikaia_it| __nikaia_it.start), || key.start().into());
         if over_bytes && cut > key.start() {
             state.facts.bytes_entries.insert(id_of(arg) as i64);
-            state.facts.bytes_grammars.insert(nikaia_std::block::Text::from(key.before(cut).to_string()));
+            let named = nikaia_std::block::Text::from(key.before(cut).to_string());
+            if state.facts.text_grammars.contains(&named) {
+                match grammar_positions_over_both(world, key, &named, span) {
+                    Some(refused) => { state.findings.push(refused); },
+                    None => { },
+                }
+            }
+            state.facts.bytes_grammars.insert(named);
         }
         if over_text && cut > key.start() {
-            match grammar_positions_over_text(world, key, &nikaia_std::block::Text::from(key.before(cut).to_string()), span) {
-                Some(refused) => { state.findings.push(refused); },
-                None => { },
+            let named = nikaia_std::block::Text::from(key.before(cut).to_string());
+            if state.facts.bytes_grammars.contains(&named) {
+                match grammar_positions_over_both(world, key, &named, span) {
+                    Some(refused) => { state.findings.push(refused); },
+                    None => { },
+                }
             }
+            state.facts.text_grammars.insert(named);
         }
     }
     let contract = match match *nikaia_std::index::get(&world.own.functions, key) {

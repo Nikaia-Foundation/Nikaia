@@ -602,6 +602,10 @@ pub struct CheckFacts {
     /// **A grammar of this file entered with a `Bytes`**, by its name: it is
     /// lowered a second time, with `input bytes;`.
     pub bytes_grammars: collections::BTreeSet[String],
+    /// **A grammar of this file entered with text**, by its name: its `here`
+    /// is a `text::Pos` and its `span(p)` a `text::Match` of the input
+    /// (ADR-374 D7).
+    pub text_grammars: collections::BTreeSet[String],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
     /// **A rule's value it is lent** (ADR-grammar-actions-v1 D7), by
@@ -1037,6 +1041,7 @@ impl CheckFacts {
             task_handles: collections::BTreeSet(),
             bytes_entries: collections::BTreeSet(),
             bytes_grammars: collections::BTreeSet(),
+            text_grammars: collections::BTreeSet(),
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
             lent_rule_values: collections::BTreeSet(),
