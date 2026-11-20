@@ -318,6 +318,15 @@ fn is_a_bool_type(ty: ref Ty) -> bool {
     }
 }
 
+/// Whether `ty` is a position in a text, `text::Pos` (ADR-374 D1), which
+/// takes no arithmetic.
+fn is_a_text_position(ty: ref Ty) -> bool {
+    return match ty.unseen() {
+        Ty::Named { name, args, .. } => args.len() == 0 && name == "text::Pos",
+        else => false,
+    }
+}
+
 /// **Text or a `bool` in arithmetic** (`NK1191`): `+` joins two texts and
 /// nothing else; a text beside a number or a `bool` is no join.
 fn text_or_bool_in_arithmetic(op: BinaryOp, left: ref Ty, right: ref Ty) -> bool {
@@ -351,6 +360,10 @@ impl CheckState {
                 self.arithmetic_on_a_declared_type(world, symbol, left_expr, left, right_expr, right, 0, compound, span)
             } else if declared_with_no_arithmetic(world.here, right) != null {
                 self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
+            } else if is_a_text_position(left) || is_a_text_position(right) {
+                let note: String = "A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic (ADR-374 D1)."
+                let help: String = "Cut the text there with `before`, `after` or `between`; the bytes before it are `t.before(p).bytes.len()`."
+                self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on a `text::Pos`.", [note], help))
             } else if text_or_bool_in_arithmetic(op, left, right) {
                 let mut culprit = left.shown()
                 if is_text_type(left.unseen()) {
