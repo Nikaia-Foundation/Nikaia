@@ -107,7 +107,7 @@ impl EmitState {
                         Some(method) => {
                             if method.mutates_in_place() && method.args.len() == 1 {
                                 let by_view = if unsafe { nikaia_std::proven::read(&method.args, (0) as usize) }.ty.is_view { "&" } else { "" };
-                                let owner_type = host.ty_named(walk, &Type { name: owner, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })?;
+                                let owner_type = host.ty_named(walk, &Type { name: owner, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: nikaia_std::block::Boxed::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })?;
                                 out.push(&format!("|mut a: {}, b| {{ a.{}({}b); a }}", owner_type, emit_text(world, name), by_view));
                                 return Ok(());
                             }

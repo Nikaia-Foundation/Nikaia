@@ -1101,7 +1101,7 @@ impl EmitState {
                         null => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, _ => None }}" } else { f"match f{i} {{ Some(Some(v)) => v, Some(None) => {refused}, None => {missing} }}" },
                     }
                     if self.is_boxed_field(owner, field) {
-                        given = f"std::boxed::Box::new({given})"
+                        given = f"nikaia_std::block::Boxed::new({given})"
                     }
                     built_fields.push(f"{escaped_name(field)}: {given}")
                 }

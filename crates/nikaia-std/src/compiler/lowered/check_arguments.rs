@@ -620,7 +620,7 @@ impl CheckState {
                 any = true;
             } else { eased.push((*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone()); }
         }
-        any && Ty::Fn { params: eased, result: std::boxed::Box::new(result), is_sync, can_throw, spelled }.fits(want)
+        any && Ty::Fn { params: eased, result: nikaia_std::block::Boxed::new(result), is_sync, can_throw, spelled }.fits(want)
     }
 }
 

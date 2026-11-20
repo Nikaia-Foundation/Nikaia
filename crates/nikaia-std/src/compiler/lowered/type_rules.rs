@@ -84,7 +84,7 @@ pub fn tr_a_rule(words: &winnow_grammar::InternerContext, rule: &Expr, span: Spa
 pub(crate) fn tr_renumbered(base: &Expr, renew: &mut dyn FnMut(&Expr) -> Expr) -> Expr {
     match base {
         Expr::Variable(name, _) => { let name = *name; Expr::Variable(name, node_id::NodeId::fresh()) },
-        Expr::Field { base: inner, name, .. } => { let inner = nikaia_std::boxed::open(inner); let name = *name; Expr::Field { base: std::boxed::Box::new(tr_renumbered(inner, &mut &mut *renew)), name, id: node_id::NodeId::fresh() } },
+        Expr::Field { base: inner, name, .. } => { let inner = nikaia_std::boxed::open(inner); let name = *name; Expr::Field { base: nikaia_std::block::Boxed::new(tr_renumbered(inner, &mut &mut *renew)), name, id: node_id::NodeId::fresh() } },
         _ => renew(base),
     }
 }
@@ -102,7 +102,7 @@ pub(crate) fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base:
     match claim {
         Expr::Variable(name, _) => {
             let name = *name;
-            if fields.contains(words.resolve(name)) { return Some(Expr::Field { base: std::boxed::Box::new(tr_renumbered(base, &mut &mut *renew)), name, id: node_id::NodeId::fresh() }); }
+            if fields.contains(words.resolve(name)) { return Some(Expr::Field { base: nikaia_std::block::Boxed::new(tr_renumbered(base, &mut &mut *renew)), name, id: node_id::NodeId::fresh() }); }
             return Some(Expr::Variable(name, node_id::NodeId::fresh()));
         },
         Expr::Path(segments, _) => Some(Expr::Path(segments.copy_owned(), node_id::NodeId::fresh())),
@@ -115,29 +115,29 @@ pub(crate) fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base:
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped;
             let l = match tr_on(words, lhs, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let r = match tr_on(words, rhs, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::Binary { op: op.clone(), lhs: std::boxed::Box::new(l), rhs: std::boxed::Box::new(r), span: tr_span(span), grouped, id: node_id::NodeId::fresh() });
+            return Some(Expr::Binary { op: op.clone(), lhs: nikaia_std::block::Boxed::new(l), rhs: nikaia_std::block::Boxed::new(r), span: tr_span(span), grouped, id: node_id::NodeId::fresh() });
         },
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             let inner = match tr_on(words, expr, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::Unary { op: op.clone(), expr: std::boxed::Box::new(inner), id: node_id::NodeId::fresh() });
+            return Some(Expr::Unary { op: op.clone(), expr: nikaia_std::block::Boxed::new(inner), id: node_id::NodeId::fresh() });
         },
         Expr::Field { base: inner, name, .. } => {
             let inner = nikaia_std::boxed::open(inner); let name = *name;
             let over = match tr_on(words, inner, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::Field { base: std::boxed::Box::new(over), name, id: node_id::NodeId::fresh() });
+            return Some(Expr::Field { base: nikaia_std::block::Boxed::new(over), name, id: node_id::NodeId::fresh() });
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !config.is_empty() { return None; }
             let over = match tr_on(words, receiver, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let all = match tr_all_on(args, words, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::MethodCall { receiver: std::boxed::Box::new(over), method, args: all, config: vec![], id: node_id::NodeId::fresh() });
+            return Some(Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(over), method, args: all, config: vec![], id: node_id::NodeId::fresh() });
         },
         Expr::Cast { expr, ty, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             let inner = match tr_on(words, expr, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::Cast { expr: std::boxed::Box::new(inner), ty: ty.clone(), id: node_id::NodeId::fresh() });
+            return Some(Expr::Cast { expr: nikaia_std::block::Boxed::new(inner), ty: ty.clone(), id: node_id::NodeId::fresh() });
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -148,7 +148,7 @@ pub(crate) fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base:
             };
             if fields.contains(words.resolve(callee)) { return None; }
             let all = match tr_all_on(args, words, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(Expr::Call { func: std::boxed::Box::new(Expr::Variable(callee, node_id::NodeId::fresh())), args: all, config: vec![], id: node_id::NodeId::fresh() });
+            return Some(Expr::Call { func: nikaia_std::block::Boxed::new(Expr::Variable(callee, node_id::NodeId::fresh())), args: all, config: vec![], id: node_id::NodeId::fresh() });
         },
         _ => None,
     }
@@ -174,7 +174,7 @@ pub(crate) fn tr_asserts_as(words: &winnow_grammar::InternerContext, intern: &mu
             }
             config.push(ConfigArg { name: intern("message"), value: shown });
         }
-        let call = Expr::Call { func: std::boxed::Box::new(Expr::Variable(intern("assert"), node_id::NodeId::fresh())), args: vec![condition], config, id: node_id::NodeId::fresh() };
+        let call = Expr::Call { func: nikaia_std::block::Boxed::new(Expr::Variable(intern("assert"), node_id::NodeId::fresh())), args: vec![condition], config, id: node_id::NodeId::fresh() };
         out.push(Spanned::new(Stmt::Expr(call), tr_span(span)));
     }
     out
@@ -1254,22 +1254,22 @@ pub(crate) fn tr_leaving(expr: &mut Expr, words: &winnow_grammar::InternerContex
     match expr {
         Expr::MethodCall { .. } => {
             let Expr::MethodCall { receiver, method, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let receiver = nikaia_std::boxed::open(receiver);
-            stmts.push(Spanned::new(Stmt::Expr(Expr::MethodCall { receiver: std::boxed::Box::new(receiver), method, args, config, id }), at));
+            stmts.push(Spanned::new(Stmt::Expr(Expr::MethodCall { receiver: nikaia_std::block::Boxed::new(receiver), method, args, config, id }), at));
             *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
         },
         Expr::Call { .. } => {
             let Expr::Call { func, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let func = nikaia_std::boxed::open(func);
-            stmts.push(Spanned::new(Stmt::Expr(Expr::Call { func: std::boxed::Box::new(func), args, config, id }), at));
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Call { func: nikaia_std::block::Boxed::new(func), args, config, id }), at));
             *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
         },
         Expr::Return(_, _) => {
             let Expr::Return(value, id) = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let value = nikaia_std::boxed::open(value);
-            stmts.push(Spanned::new(Stmt::Expr(Expr::Return(std::boxed::Box::new(value), id)), at));
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Return(nikaia_std::block::Boxed::new(value), id)), at));
             *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
         },
         Expr::Throw(_, _) => {
             let Expr::Throw(value, id) = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let value = nikaia_std::boxed::open(value);
-            stmts.push(Spanned::new(Stmt::Expr(Expr::Throw(std::boxed::Box::new(value), id)), at));
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Throw(nikaia_std::block::Boxed::new(value), id)), at));
             *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
         },
         _ => { },

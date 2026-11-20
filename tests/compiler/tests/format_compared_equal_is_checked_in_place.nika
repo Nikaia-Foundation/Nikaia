@@ -1,0 +1,17 @@
+// `t == f"{a}[{b}]"` with only text parts is checked in place (#2405): the
+// lengths first, then the parts; `!=`, the literal on the left, a field.
+
+struct Named {
+    name: String,
+}
+
+fn same(v: ref String, list: ref String, at: ref String) -> bool {
+    return v == f"{list}[{at}]"
+}
+
+fn main() throws {
+    println(f"{same("xs[i]", "xs", "i")} {same("xs[i]", "x", "s[i")} {same("xs[i]", "xs", "j")} {same("xs[i].", "xs", "i")}")
+    let n = Named { name: "xs" }
+    let v = "xs!"
+    println(f"{v == f"{n.name}!"} {v != f"{n.name}!"} {f"{n.name}?" == v} {f"{n.name}?" != v}")
+}

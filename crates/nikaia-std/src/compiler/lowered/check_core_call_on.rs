@@ -367,7 +367,7 @@ pub(crate) fn check_core_call_on_self_as(ty: &Ty, parameter: &str) -> Ty {
             Ty::Named { name: renamed, args: args.iter().map(|a| { check_core_call_on_self_as(a, parameter) }).collect::<Vec<_>>(), view }
         },
         Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_core_call_on_self_as(a, parameter) }).collect::<Vec<_>>()),
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(std::boxed::Box::new(check_core_call_on_self_as(inner, parameter))) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(check_core_call_on_self_as(inner, parameter))) },
         _ => ty.clone(),
     }
 }
@@ -481,7 +481,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     if parts.len() != 2 { return expected; }
     if entry == "or_insert_with" {
         let wrapped: Ty = match *unsafe { nikaia_std::proven::read(&expected, (0) as usize) } {
-            Ty::Fn { ref params, ref result, is_sync, can_throw, ref spelled } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw, spelled: spelled.clone() } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
+            Ty::Fn { ref params, ref result, is_sync, can_throw, ref spelled } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: nikaia_std::block::Boxed::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw, spelled: spelled.clone() } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
             _ => (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone(),
         };
         return vec![wrapped];
@@ -742,7 +742,7 @@ pub(crate) fn check_core_call_on_written(ty: &Ty) -> Ty {
     match ty {
         Ty::Named { name, args, .. } => if name == "str" && args.is_empty() { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.iter().map(|a| { check_core_call_on_written(a) }).collect::<Vec<_>>(), view: false } },
         Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_core_call_on_written(a) }).collect::<Vec<_>>()),
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(std::boxed::Box::new(check_core_call_on_written(inner))) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(check_core_call_on_written(inner))) },
         _ => ty.clone(),
     }
 }
@@ -1237,7 +1237,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_safe_call_of_type(inner: &Ty, key: &str) -> bool {
     match inner {
-        Ty::Named { name, .. } => key.starts_with(&*format!("{}::", name)),
+        Ty::Named { name, .. } => ::core::convert::identity(match (AsRef::<str>::as_ref(&(key)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).is_some() }),
         _ => false,
     }
 }
@@ -1320,7 +1320,7 @@ pub(crate) fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world
         return reached;
     }
     if unknown { return Ty::Unknown; }
-    Ty::Nullable(std::boxed::Box::new(reached))
+    Ty::Nullable(nikaia_std::block::Boxed::new(reached))
 }
 
 pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<Ty> {
@@ -1333,7 +1333,7 @@ pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<T
         Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             if params.len() == 1 && (*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).is_a_view() && copies_plainly(&unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })) {
-                Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })], result: std::boxed::Box::new(match result {
+                Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })], result: nikaia_std::block::Boxed::new(match result {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }), is_sync, can_throw, spelled: spelled.clone() })
@@ -1402,7 +1402,7 @@ pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut plain: Vec<Ty> = vec![];
             plain.reserve(params.iter().size_hint().0); for p in params.iter() { plain.push(unviewed_type(p)); }
-            Ty::Fn { params: plain, result: std::boxed::Box::new(match result {
+            Ty::Fn { params: plain, result: nikaia_std::block::Boxed::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }), is_sync, can_throw, spelled: spelled.clone() }
@@ -1421,7 +1421,7 @@ pub(crate) fn check_core_call_on_map_retain_fn(want: &Ty, taken: &[bool]) -> Ty 
                 if at < taken.len() as i64 && *unsafe { nikaia_std::proven::read(&taken, (at) as usize) } { plain.push(unviewed_type(p)); } else { plain.push(p.clone()); }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            Ty::Fn { params: plain, result: std::boxed::Box::new(match result {
+            Ty::Fn { params: plain, result: nikaia_std::block::Boxed::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }), is_sync, can_throw, spelled: spelled.clone() }

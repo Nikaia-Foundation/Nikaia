@@ -1,0 +1,19 @@
+main:
+    plain   `shared` (SharedMut)
+             nothing crosses a thread with it, so the count is lowered
+             one handle, so the count is never stepped
+
+1 `Shared` value(s): 1 plain, 0 atomic, of which 0 because this analysis could not decide.
+An atomic count is the safe default. A plain count is an optimisation, and where it isn't taken the reason is one of these:
+    a public signature - nothing here - whether it crosses is decided by callers this build does not read, so an answer would be a promise about somebody else's code
+    a public field - keep the field out of the published surface, or accept the atomic - code this build does not read can take the value out of it
+    a call nothing describes - describe the callee in a ledger, so the compiler can see what it does
+    a method nothing describes - describe the callee in a ledger, so the compiler can see what it does
+    an argument position no contract covers - describe the callee in a ledger, so the compiler can see what it does
+    an origin this analysis cannot see - write down the call the value came out of, so this analysis can follow it to the allocation
+    a slot another file owns - nothing here - the file that declares the field or the function decides its count, and this run reads only one of the two
+The ones that need a contract get sharper as `std`'s contracts grow.
+
+Boxes of recursive types (ADR-327 D16):
+    main: `Tree::Node` outside: `t` is handed to a call by value
+    main: `Tree::Node` outside: `t` is handed to a call by value

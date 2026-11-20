@@ -104,7 +104,7 @@ fn a_generic_struct_is_seen_through_for_rings_and_comparison() {
          fn main() { print(\"x\") }\n",
     );
     assert!(
-        rust.contains("Group(std::boxed::Box<Spanned<Pattern>>)"),
+        rust.contains("Group(nikaia_std::block::Boxed<Spanned<Pattern>>)"),
         "{rust}"
     );
     assert!(rust.contains("Seq(Vec<Spanned<Pattern>>)"), "{rust}");

@@ -1,0 +1,30 @@
+// `t.starts_with(f"{a}[")` with only text parts is checked in place (#2405):
+// on a lent text, an owned local, a field, a call in the hole, two holes in a
+// row, a literal before the hole, braces and a scalar past one byte.
+
+struct Named {
+    name: String,
+}
+
+fn opens(path: ref String, name: ref String) -> bool {
+    return path.starts_with(f"{name}[")
+}
+
+fn shout(word: ref String) -> String {
+    return word.to_uppercase()
+}
+
+fn main() throws {
+    let path = "xs[i].len"
+    println(f"{opens(path, "xs")} {opens(path, "x")} {opens(path, "xs[")} {opens("xs", "xs")}")
+    let owned: String = f"{path}!"
+    let n = Named { name: "xs" }
+    println(f"{owned.starts_with(f"{n.name}[i]")} {owned.starts_with(f"{n.name}[j]")}")
+    let word = "ab"
+    println(f"{"ABcd".starts_with(f"{shout(word)}c")} {"ABcd".starts_with(f"{shout(word)}d")}")
+    let a = "x"
+    let b = "y"
+    println(f"{"<xy>".starts_with(f"<{a}{b}")} {"<xy>".starts_with(f"<{b}{a}")}")
+    println(f"{"{x}é".starts_with(f"{{{a}}}é")} {"{x}e".starts_with(f"{{{a}}}é")}")
+    println(f"{!path.starts_with(f"{a}s")}")
+}

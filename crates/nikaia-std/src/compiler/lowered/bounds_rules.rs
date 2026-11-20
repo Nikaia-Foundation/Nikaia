@@ -1671,7 +1671,7 @@ pub(crate) fn rules_ascending_facts(walk: &mut BoundsWalk, facts: &mut BoundsFac
 }
 
 pub(crate) fn rules_ordered(walk: &BoundsWalk, path: &str) -> bool {
-    for (root, owner) in walk.rule_roots.iter() { for (at, rule) in walk.rules.iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "ascending" && rule.owner == *owner && path == format!("{}.{}", root, rule.a) && !(walk.checking && walk.rule_failed.contains(&at)) { return true; } } }
+    for (root, owner) in walk.rule_roots.iter() { for (at, rule) in walk.rules.iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "ascending" && rule.owner == *owner && ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(root)), AsRef::<str>::as_ref(&(rule.a)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + ".".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() }) && !(walk.checking && walk.rule_failed.contains(&at)) { return true; } } }
     false
 }
 
@@ -1754,7 +1754,7 @@ pub(crate) fn rules_read_inside(walk: &mut BoundsWalk, base: &Expr, index: &Expr
         },
         _ => { },
     }
-    for (root, owner) in walk.rule_roots.copy_owned() { for rule in walk.rules.iter() { if rule.owner == owner && (list == format!("{}.{}", root, rule.b) || rule.kind != "result" && list == format!("{}.{}", root, rule.a)) { known = true; } } }
+    for (root, owner) in walk.rule_roots.copy_owned() { for rule in walk.rules.iter() { if rule.owner == owner && (::core::convert::identity(match (AsRef::<str>::as_ref(&(list)), AsRef::<str>::as_ref(&(root)), AsRef::<str>::as_ref(&(rule.b)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + ".".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() }) || rule.kind != "result" && ::core::convert::identity(match (AsRef::<str>::as_ref(&(list)), AsRef::<str>::as_ref(&(root)), AsRef::<str>::as_ref(&(rule.a)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + ".".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() })) { known = true; } } }
     if !known || walk.collecting || walk.pinned.contains(&path_root(&list)) { return; }
     let at = match bounding_lin(walk, index, &facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return };
     let len = bounding_list_length(walk, &list, node_key(base), context);

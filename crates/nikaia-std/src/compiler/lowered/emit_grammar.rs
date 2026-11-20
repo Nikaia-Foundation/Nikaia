@@ -726,7 +726,7 @@ impl EmitState {
                         Some(ref d) => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, Some(None) => None, None => {} }}", i, d) } else { format!("match f{} {{ Some(Some(v)) => v, _ => {} }}", i, d) },
                         None => if unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, _ => None }}", i) } else { format!("match f{} {{ Some(Some(v)) => v, Some(None) => {}, None => {} }}", i, refused, missing) },
                     };
-                    if self.is_boxed_field(&owner, &field) { given = format!("std::boxed::Box::new({})", given); }
+                    if self.is_boxed_field(&owner, &field) { given = format!("nikaia_std::block::Boxed::new({})", given); }
                     built_fields.push(format!("{}: {}", escaped_name(&field), given));
                 }
                 out.push(&format!("{} {{ {} }} }}\n", escaped_name(&owner), nikaia_std::block::Text::from(built_fields.join(", "))));

@@ -1,0 +1,23 @@
+// **A tree moved into another task is built outside, and its boxes are
+// freed there by their address** (ADR-327 D9, D16, #2406): the task that
+// drops `t` is not the one whose function built it, so each box is
+// `Boxed::new`, and the drop asks the address, which no block holds.
+use std::channel
+
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[i64](1)
+    let t = Tree::Node(Tree::Node(Tree::Leaf, Tree::Leaf), Tree::Node(Tree::Leaf, Tree::Leaf))
+    spawn fn {
+        tx.send(count(t))
+    }
+    println(f"{rx.recv() ?? -1} nodes counted in another task")
+}

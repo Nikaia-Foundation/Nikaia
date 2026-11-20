@@ -182,9 +182,9 @@ pub(crate) fn vc_watches(view: &VcView, root: &str, path: &str) -> bool {
     if view.used.is_none() || !view.roots.contains(root) { return false; }
     let mut read = false;
     for part in view.parts.iter() {
-        if part != root && !part.starts_with(&*format!("{}.", root)) { continue; }
+        if part != root && !::core::convert::identity(match (AsRef::<str>::as_ref(&(part)), AsRef::<str>::as_ref(&(root)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { continue; }
         read = true;
-        if part == path || part.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", part)) { return true; }
+        if part == path || ::core::convert::identity(match (AsRef::<str>::as_ref(&(part)), AsRef::<str>::as_ref(&(path)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(part)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return true; }
     }
     !read
 }
@@ -375,7 +375,7 @@ pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_,
     let place = matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. });
     let read = vc_path_of(expr, ask);
     if place && read != "" && !read.starts_with('.') {
-        if read == path || read.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", read)) { return true; }
+        if read == path || ::core::convert::identity(match (AsRef::<str>::as_ref(&(read)), AsRef::<str>::as_ref(&(path)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(read)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return true; }
         match expr {
             Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); return vc_reads_path(index, path, ask, &mut &mut *holes_of); },
             _ => { return false; },

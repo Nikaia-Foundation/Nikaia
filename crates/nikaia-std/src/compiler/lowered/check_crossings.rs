@@ -47,9 +47,9 @@ pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_
     match expr {
         Expr::MethodCall { receiver, method, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if format!("{}", world.words.resolve(method)) != "join" { return false; }
+            if ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(method))), AsRef::<str>::as_ref(&("join")), ) { (__nikaia_f0, __nikaia_t, ) => !(__nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some()) }) { return false; }
             let on: bool = match receiver {
-                Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) == name },
+                Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
                 _ => false,
             };
             if !on { return false; }
@@ -71,7 +71,7 @@ pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_
         Expr::Path(parts, _) => {
             let count = parts.len() as i64;
             if count < 2 { return false; }
-            return format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) })) == "Cancel" && format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 2)) as usize) })) == "OnTimeout";
+            return ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }))), AsRef::<str>::as_ref(&("Cancel")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) && ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 2)) as usize) }))), AsRef::<str>::as_ref(&("OnTimeout")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() });
         },
         _ => return false,
     }
@@ -130,7 +130,7 @@ pub(crate) fn check_crossings_error_arms(world: &CheckWorld<'_, '_, '_, '_, '_, 
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             let on_error: bool = match value {
-                Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) == "error" },
+                Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&("error")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
                 _ => false,
             };
             if !on_error { return None; }
@@ -154,7 +154,7 @@ pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '
         MatchPattern::Path(parts) => {
             let count = parts.len() as i64;
             if count == 1 { return true; }
-            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })))) == "TimedOut";
+            return ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) }))))), AsRef::<str>::as_ref(&("TimedOut")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() });
         },
         MatchPattern::Or(choices) => {
             for choice in choices.iter() { if check_crossings_reaches_timed_out(world, choice) { return true; } }

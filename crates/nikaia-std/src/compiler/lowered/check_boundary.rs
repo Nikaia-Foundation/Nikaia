@@ -353,7 +353,7 @@ pub(crate) fn written_from_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     let own = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
     let held = match owner { Some(__nikaia_value) => __nikaia_value, None => return own == key };
-    format!("{}::{}", held, own) == key
+    ::core::convert::identity(match (AsRef::<str>::as_ref(&(held)), AsRef::<str>::as_ref(&(own)), AsRef::<str>::as_ref(&(key)), ) { (__nikaia_f0, __nikaia_f2, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() + "::".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

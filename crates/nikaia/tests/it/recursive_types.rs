@@ -80,14 +80,17 @@ fn an_expression_tree_is_built_matched_and_taken_apart() {
     // is built, and nowhere the program wrote a word about it.
     let rust = lowered(source, Build::default());
     assert!(
-        rust.contains("Add(std::boxed::Box<Expr>, std::boxed::Box<Expr>)"),
+        rust.contains("Add(nikaia_std::block::Boxed<Expr>, nikaia_std::block::Boxed<Expr>)"),
         "{rust}"
     );
     assert!(
-        rust.contains("Neg { inner: std::boxed::Box<Expr> }"),
+        rust.contains("Neg { inner: nikaia_std::block::Boxed<Expr> }"),
         "{rust}"
     );
-    assert!(rust.contains("Box::new(Expr::Num(2))"), "{rust}");
+    assert!(
+        rust.contains("nikaia_std::block::Boxed::new(Expr::Num(2))"),
+        "{rust}"
+    );
     assert!(!rust.contains("Num(Box"), "{rust}");
 }
 
@@ -135,8 +138,14 @@ fn a_ring_through_another_type_is_boxed_on_both_edges() {
                   \x20   println(f\"{depth(e)} {count(outer)}\")\n\
                   }\n";
     let rust = lowered(source, Build::default());
-    assert!(rust.contains("Apply(std::boxed::Box<Call>)"), "{rust}");
-    assert!(rust.contains("arg: std::boxed::Box<Expr>"), "{rust}");
+    assert!(
+        rust.contains("Apply(nikaia_std::block::Boxed<Call>)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("arg: nikaia_std::block::Boxed<Expr>"),
+        "{rust}"
+    );
     assert!(rust.contains("stmts: Vec<Stmt>"), "{rust}");
     assert!(rust.contains("Nested(Block)"), "{rust}");
 }

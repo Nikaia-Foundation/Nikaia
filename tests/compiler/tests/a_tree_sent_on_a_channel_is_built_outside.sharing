@@ -1,0 +1,5 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    main: `Tree::Node` outside: `t` is handed to a call by value
+    main: `Tree::Node` outside: `t` is handed to a call by value

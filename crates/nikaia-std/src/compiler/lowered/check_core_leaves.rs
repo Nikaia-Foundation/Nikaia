@@ -392,7 +392,10 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
     let mut names: Vec<bool> = vec![];
     let mut seen: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut index: i64 = 0;
+    let mut all_text = interpolated;
+    for spec in specs.iter() { if spec.is_some() { all_text = false; } }
     names.reserve(walked.iter().size_hint().0); for (hole, bound) in walked.iter() {
+        if !bound.is_empty() { all_text = false; }
         let mut frame: Vec<CheckLocal> = vec![];
         frame.reserve(bound.iter().size_hint().0); for (name, collection) in bound.iter() {
             let trimmed = collection.trim();
@@ -421,8 +424,10 @@ pub(crate) fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &Che
         state.scope.pop();
         if ((index) as usize) < specs.len() { state.a_collection_in_a_hole(world, hole, &held, (*unsafe { nikaia_std::proven::read(&specs, (index) as usize) }).as_deref(), span); }
         names.push(check_core_is_a_path(&held));
+        if !is_text_type(&held.unseen()) { all_text = false; }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
+    if all_text { state.facts.text_formats.insert(id_of(literal) as i64); }
     if interpolated && names.contains(&true) { state.facts.path_holes.insert(id_of(literal) as i64, names); }
 }
 
@@ -550,7 +555,7 @@ pub(crate) fn check_core_lambda_some_at_plain_ends(state: &mut CheckState, retur
     if !nullable { return result; }
     if tail_plain { for value in block_tail(body) { state.some_at_the_tails(value); } }
     for one in returns.iter() { if !check_function_is_nullable(&one.ty) && check_core_lambda_plain(&one.ty) { for value in one.value.iter() { state.some_at_the_tails(value); } } }
-    Ty::Nullable(std::boxed::Box::new(held))
+    Ty::Nullable(nikaia_std::block::Boxed::new(held))
 }
 
 pub(crate) fn check_core_lambda_plain(ty: &Ty) -> bool { wholly_known(ty) && !check_core_lambda_a_unit(ty) && !check_function_is_nullable(ty) }

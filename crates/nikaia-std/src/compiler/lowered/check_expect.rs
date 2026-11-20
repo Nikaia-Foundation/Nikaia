@@ -106,7 +106,7 @@ impl CheckState {
         let want_text = want.text();
         let mut said: String = message(&found_text, &want_text);
         let mut help: String = way_out_of_a_mismatch(found, want);
-        if what == "catch" && help.ends_with(&*format!(", or change the declaration to `{}`.", found_text)) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
+        if what == "catch" && ::core::convert::identity(match (AsRef::<str>::as_ref(&(help)), AsRef::<str>::as_ref(&(found_text)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.strip_suffix("`.").and_then(|__nikaia_r| __nikaia_r.strip_suffix(__nikaia_f1)).and_then(|__nikaia_r| __nikaia_r.strip_suffix(", or change the declaration to `")).is_some() }) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
         if !members.is_empty() {
             nikaia_std::search::replace_in(&mut said, &format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");

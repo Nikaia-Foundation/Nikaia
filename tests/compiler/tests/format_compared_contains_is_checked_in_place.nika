@@ -1,0 +1,18 @@
+// `t.contains(f"[{a}]")` with only text parts is checked in place (#2405):
+// a match of the first part, then the rest; matches that overlap, a first
+// part that is a hole, scalars past one byte, and a miss.
+
+fn indexed(path: ref String, name: ref String) -> bool {
+    return path.contains(f"[{name}]")
+}
+
+fn main() throws {
+    let path = "xs[i][jj].len"
+    println(f"{indexed(path, "i")} {indexed(path, "jj")} {indexed(path, "j")} {indexed(path, "i][jj")}")
+    let a = "aa"
+    println(f"{"aaab".contains(f"{a}b")} {"aaac".contains(f"{a}b")}")
+    let b = "a"
+    println(f"{"aaab".contains(f"a{b}b")} {"abab".contains(f"a{b}b")}")
+    println(f"{"éée!".contains(f"é{b}")} {"ééa!".contains(f"é{b}!")}")
+    println(f"{"".contains(f"{b}")} {"x".contains(f"[{b}]")}")
+}
