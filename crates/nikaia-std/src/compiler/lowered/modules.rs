@@ -111,30 +111,45 @@ pub(crate) fn pause_path(chain: &[String]) -> String {
     nikaia_std::block::Text::from(steps.join(", which "))
 }
 
-pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String {
-    let mut out: String = String::from("");
+pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String { lost_sync_against(&lost_sync_all(contracts, theirs, pauses, &mut *render), committed) }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SyncLost {
+    pub key: String,
+    pub said: String,
+}
+
+pub fn lost_sync_all(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> Vec<SyncLost> {
+    let mut out: Vec<SyncLost> = vec![];
     for (key, now) in contracts.functions.iter() {
         if of_a_dependency(key, theirs) || !now.public || now.sync_claim.is_sync() { continue; }
-        let before = match *nikaia_std::index::get(&committed.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !inferred_sync(&before.sync_claim) { continue; }
         let message = format!("`{}` could not pause before, and now it can.", key);
         let help = format!("If `{}` should not pause, move this out of it; if it may, commit `nikaia.contracts`, and this is not said again.", key);
         let pause = match *nikaia_std::index::get(&pauses, key) { Some(__nikaia_value) => __nikaia_value, None => {
-            out.push_str(&lost_sync_unplaced(&message, &help));
+            out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: lost_sync_unplaced(&message, &help) });
             continue;
         } };
         let site = match match pause.site.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => {
-            out.push_str(&lost_sync_unplaced(&message, &help));
+            out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: lost_sync_unplaced(&message, &help) });
             continue;
         } };
         let mut notes: Vec<String> = vec![];
         if pause.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&pause.chain))); }
         notes.push(format!("{} can pause.", site.what));
         let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![], edit: None };
-        out.push_str(&render(&finding, pause.unit));
+        out.push(SyncLost { key: nikaia_std::block::Text::from(key.to_string()), said: render(&finding, pause.unit) });
+    }
+    out
+}
+
+pub fn lost_sync_against(all: &[SyncLost], committed: &Ledger) -> String {
+    let mut out: String = String::from("");
+    for lost in all.iter() {
+        let before = match *nikaia_std::index::get(&committed.functions, &lost.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if inferred_sync(&before.sync_claim) { out.push_str(&lost.said); }
     }
     out
 }

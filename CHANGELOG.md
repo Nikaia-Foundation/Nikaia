@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1500] — 2026-11-20
+
+**Builders' changes (#2260, #2307, #2377, #2395)**
+- The prover research page shows the solver against z3 and cvc5 as bars: 13 SMT-LIB families and the two set-wide goals (no wrong answer on 1,097 files, fewer instructions than z3 on the CI sample) reached, 7 families behind, each with its reason and issue.
+- The solver combines a simplex row whose products leave i64 in double width and reduces it by its gcd, so 12 of the 48 QF_LIA seeds overflows go (9 solved, models and certificates checked); 22 of the 36 left are rows that do not fit i64 even reduced (#2307).
+- The solver's Fourier-Motzkin theory no longer keeps the bounds a check derived when it refuted nothing: on SMPT Referendum-PT-0500-RF-00 the rod's peak memory stays at 950 MiB instead of growing 615 MiB a check until it runs out at 8 GiB (#2377).
+- A cold build infers each package's ledger once: the rustc wrapper's cache hit reads the notes, lost-sync warnings, contract-change inputs and exports stored with the entry instead of inferring the program again (about 35 s of a cold scripts/solver.nika).
+
 ## [0.0.1499] — 2026-11-20
 
 **Builders' changes (#2405, #2406)**

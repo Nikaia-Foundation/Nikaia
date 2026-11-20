@@ -437,7 +437,7 @@ impl SvSimplex {
 		for c in cols {
 			let at = self.row_of[c as i64]
 			if at >= 0 && sv_row_coef(row, c) != 0 {
-				row = sv_row_eliminate(row, self.rows[at], c) ?? return null
+				row = sv_row_eliminate_exact(row, self.rows[at], c) ?? return null
 			}
 		}
 		self.rows.push(row)
@@ -673,8 +673,10 @@ impl SvSimplex {
 
 	/// Pivots row `r` on non-basic variable `j`: `j` basic in `r`, every
 	/// other row with `j` combined with it by the smallest multipliers.
-	/// False, nothing changed, where a row would leave `i64`.
-	fn pivot(ref mut self, r: i64, j: i64) -> bool {
+	/// False, nothing changed, where a row would leave `i64`: `exact`
+	/// forms a combination that leaves it in double width (#2307), so then
+	/// only where its reduced row does not fit.
+	fn pivot(ref mut self, r: i64, j: i64, exact: bool) -> bool {
 		let col = j.checked_u32() ?? return false
 		// Each other row with `j` combined with row `r` read in place: the
 		// elimination gives the same row whichever sign `r` has, so `r`
@@ -685,7 +687,10 @@ impl SvSimplex {
 		let mut t = 0
 		while t < self.rows.len() {
 			if t != r && sv_row_coef(self.rows[t], col) != 0 {
-				made.push(sv_row_eliminate(self.rows[t], self.rows[r], col) ?? return false)
+				let row = if exact { sv_row_eliminate_exact(self.rows[t], self.rows[r], col) } else {
+					sv_row_eliminate(self.rows[t], self.rows[r], col)
+				}
+				made.push(row ?? return false)
 				changed.push(t)
 			}
 			t += 1
@@ -802,11 +807,22 @@ impl SvSimplex {
 				parts.push(sv_side_part(side, !at.below, d))
 				return self.conflict(parts, book)
 			}
+			// Every candidate in `i64` first: one whose rows leave it hands
+			// over to the next, which keeps the coefficients small. Only
+			// where all leave it, in double width (#2307).
 			let mut pivoted = false
 			for j in candidates {
-				if self.pivot(r, j) {
+				if self.pivot(r, j, false) {
 					pivoted = true
 					break
+				}
+			}
+			if !pivoted {
+				for j in candidates {
+					if self.pivot(r, j, true) {
+						pivoted = true
+						break
+					}
 				}
 			}
 			if !pivoted {
