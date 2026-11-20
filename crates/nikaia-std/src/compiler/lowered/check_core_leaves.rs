@@ -228,6 +228,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
+    if !handed_back && state.facts.bytes_cuts.contains(&node_key(value)) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.shown())];
     let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path); #[allow(clippy::redundant_locals)] let notes = notes;
     if handed_back && !state.flow.lambda_returns.is_empty() { help = format!("Write `{}.clone()` for a copy: a lambda hands back a value of its own.", path); }
