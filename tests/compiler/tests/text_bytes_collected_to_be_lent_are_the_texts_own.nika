@@ -2,17 +2,18 @@
 // is the text's own bytes (#2385): the lowered call lends `s.as_bytes()`, not
 // a list collected, copied into and dropped. A collect into a declared list,
 // or into a type variable's parameter, still collects.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let lines: Vec[String] = [
         "use std::hash",
         "use std::collections",
@@ -53,14 +54,13 @@ fn main() throws {
         "    println(generic_len(s.bytes().collect()))",
         "}",
     ]
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, lines.join("\n") + "\n")
-    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, lines.join("\n") + "\n")
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
     if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    let rust = fs::read_to_string("p.rs", tmp)
     println(f"lent as the text's bytes: {rust.matches(".as_bytes()").count()}")
     println(f"still collected: {rust.matches(".bytes().collect").count()}")
-    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
     println(ran.stdout.trim())
     println(ran.stderr.trim())
-    process::run("rm", ["-rf", tmp])
 }

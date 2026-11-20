@@ -6,21 +6,18 @@
 // ledger) and `examples/ignored` (a ledger on disk that git ignores). Only the
 // first two are ledger directories, and `--check` reports the stale one and
 // exits 1 before any Rust is built.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/ledgers.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/ledgers.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn sh(dir: String, script: String) throws {
@@ -29,8 +26,8 @@ fn sh(dir: String, script: String) throws {
 }
 
 // The lines of a ledgers.nika run naming a directory, and its exit code.
-fn ledgers(nikaia: String, repo: String, work: String, mode: String) throws {
-    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/ledgers.nika", "--", mode, "--exe", nikaia]; dir: work)
+fn ledgers(nikaia: String, repo: String, work: ref fs::Root, mode: String) throws {
+    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/ledgers.nika", "--", mode, "--exe", nikaia]; dir: work.path().to_text())
     for line in out.stdout.lines() {
         if line.starts_with("examples/") || line.starts_with("packages/") { println(f"  {line}") }
     }
@@ -38,20 +35,19 @@ fn ledgers(nikaia: String, repo: String, work: String, mode: String) throws {
 }
 
 fn main() throws {
-    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    let work = f"{tmp}/work"
+    let work = tmp.join("work")
     let manifest = "printf '[package]\\nname = \"%s\"\\nversion = \"0.1.0\"\\n'"
-    sh(tmp.clone(), "mkdir -p work/examples/app/src work/packages/lib/src work/examples/plain/src work/examples/ignored/src")
-    sh(work.clone(), f"{manifest} app > examples/app/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/app/src/main.nika; echo '# stale' > examples/app/nikaia.contracts")
-    sh(work.clone(), f"{manifest} lib > packages/lib/nikaia.toml; printf '[build]\\nartifact = \"rust-library\"\\n' >> packages/lib/nikaia.toml; printf 'pub fn one() -> i64 {{\\n    return 1\\n}}\\n' > packages/lib/src/main.nika; echo '# stale' > packages/lib/nikaia.derived")
-    sh(work.clone(), f"{manifest} plain > examples/plain/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/plain/src/main.nika")
-    sh(work.clone(), f"{manifest} ignored > examples/ignored/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/ignored/src/main.nika; echo nikaia.contracts > examples/ignored/.gitignore; echo '# local' > examples/ignored/nikaia.contracts")
-    sh(work.clone(), "git init -q -b develop; git config user.email t@t; git config user.name t; git config commit.gpgsign false; git add -A; git commit -q -m base")
+    sh(tmp.path().to_text(), "mkdir -p work/examples/app/src work/packages/lib/src work/examples/plain/src work/examples/ignored/src")
+    sh(work.path().to_text(), f"{manifest} app > examples/app/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/app/src/main.nika; echo '# stale' > examples/app/nikaia.contracts")
+    sh(work.path().to_text(), f"{manifest} lib > packages/lib/nikaia.toml; printf '[build]\\nartifact = \"rust-library\"\\n' >> packages/lib/nikaia.toml; printf 'pub fn one() -> i64 {{\\n    return 1\\n}}\\n' > packages/lib/src/main.nika; echo '# stale' > packages/lib/nikaia.derived")
+    sh(work.path().to_text(), f"{manifest} plain > examples/plain/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/plain/src/main.nika")
+    sh(work.path().to_text(), f"{manifest} ignored > examples/ignored/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/ignored/src/main.nika; echo nikaia.contracts > examples/ignored/.gitignore; echo '# local' > examples/ignored/nikaia.contracts")
+    sh(work.path().to_text(), "git init -q -b develop; git config user.email t@t; git config user.name t; git config commit.gpgsign false; git add -A; git commit -q -m base")
     println("--list:")
-    ledgers(nikaia.clone(), repo.clone(), work.clone(), "--list")
+    ledgers(nikaia.clone(), repo.clone(), work, "--list")
     println("--check:")
     ledgers(nikaia, repo, work, "--check")
-    process::run("rm", ["-rf", tmp])
 }

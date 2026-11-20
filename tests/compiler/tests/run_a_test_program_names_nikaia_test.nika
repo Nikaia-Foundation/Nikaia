@@ -2,32 +2,32 @@
 // not the entry (ADR-260 D4), and the refusal names the command that runs a
 // test program, `nikaia test --project ROOT --filter NAME`; another file that
 // is not the entry gets no such sentence.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, args: Vec[String]) -> String throws {
-    let out = process::run(toolchain(), args; dir: tmp.clone())
-    let real = process::run("realpath", [tmp.clone()]).stdout.trim().clone()
-    let told = f"{out.stdout}{out.stderr}".replace(real, "TMP").replace(tmp, "TMP")
+fn shown(tmp: ref fs::Root, args: Vec[String]) -> String throws {
+    let out = process::run(toolchain(), args; dir: tmp.path().to_text())
+    let real = process::run("realpath", [tmp.path().to_text()]).stdout.trim().clone()
+    let told = f"{out.stdout}{out.stderr}".replace(real, "TMP").replace(tmp.path().to_text(), "TMP")
     return f"{told.trim()}\nexit {out.code}"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests", f"{tmp}/tools"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"p\"\nversion = \"0.1.0\"\n")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests", f"{tmp.path().to_text()}/tools"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"p\"\nversion = \"0.1.0\"\n")
     let hello = "fn main() throws {\n\tprintln(\"hello\")\n}\n"
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, hello)
-    fs::write(f"{tmp}/tests/greets.nika", fs::Root::Anywhere, hello)
-    fs::write(f"{tmp}/tools/other.nika", fs::Root::Anywhere, hello)
-    println(shown(tmp.clone(), ["run", "tests/greets.nika"]))
+    fs::write("src/main.nika", tmp, hello)
+    fs::write("tests/greets.nika", tmp, hello)
+    fs::write("tools/other.nika", tmp, hello)
+    println(shown(tmp, ["run", "tests/greets.nika"]))
     println("--")
-    println(shown(tmp.clone(), ["run", "tools/other.nika"]))
-    process::run("rm", ["-rf", tmp])
+    println(shown(tmp, ["run", "tools/other.nika"]))
 }

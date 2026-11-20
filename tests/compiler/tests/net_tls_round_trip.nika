@@ -4,17 +4,12 @@
 // port fails its handshake, which is said on stderr and ends that connection
 // alone, and the next TLS client is answered. `net::Tls::files` names the file
 // it could not use. The certificate is the committed `tests/compiler/tls/`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
@@ -22,18 +17,18 @@ fn toolchain() -> String throws {
 fn main() throws {
 	let repo = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
 	let tls = f"{repo}/tests/compiler/tls"
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/app/src"])
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/app/src"])
 	fs::write(
-		f"{tmp}/app/nikaia.toml",
-		fs::Root::Anywhere,
+		"app/nikaia.toml",
+		tmp,
 		"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhttp = { path = \""
 			+ repo
 			+ "/examples/http\" }\n",
 	)
 	fs::write(
-		f"{tmp}/app/src/main.nika",
-		fs::Root::Anywhere,
+		"app/src/main.nika",
+		tmp,
 		"use http\nuse std::net\nuse std::time\n\nfn free() -> String throws {\n\tlet probe = net::listen(\"127.0.0.1:0\")\n\treturn probe.address()\n}\n\n// Reads until `wanted` has arrived; the first line and the last.\nfn until(mut conn: net::Connection, wanted: String) -> String throws {\n\tlet mut got = String()\n\twhile !got.contains(wanted) {\n\t\tlet more = conn.read()\n\t\tif more.len() == 0 {\n\t\t\treturn f\"closed before {wanted}\"\n\t\t}\n\t\tgot.push_str(more.text())\n\t}\n\tlet lines: Vec[String] = got.lines().collect()\n\tif lines.len() == 0 {\n\t\treturn \"closed without an answer\"\n\t}\n\treturn f\"{lines[0]} / {lines[lines.len() - 1]}\"\n}\n\nfn clients(at: String, cert: String) throws {\n\tlet mut first = net::connect(at; tls: net::Tls::trusting(cert))\n\tfirst.write(\"GET /one HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n\")\n\tprintln(f\"over TLS: {until(first, \"answered /one\")}\")\n\tlet mut plain = net::connect(at)\n\tplain.write(\"GET /plain HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n\")\n\tlet mut more = plain.read()\n\twhile more.len() > 0 {\n\t\tmore = plain.read()\n\t}\n\tprintln(\"without TLS: the server closed the connection\")\n\tlet mut next = net::connect(at; tls: net::Tls::trusting(cert))\n\tnext.write(\"GET /two HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n\")\n\tprintln(f\"the next TLS client: {until(next, \"answered /two\")}\")\n}\n\n// What `net::Tls::files` says about a pair of files.\nfn refused(certificate: String, key: String) -> String {\n\tlet tls = net::Tls::files(certificate, key) catch { return f\"refused: {error}\" }\n\treturn \"accepted\"\n}\n\nfn main() throws {\n\tprintln(refused(\""
 			+ tls
 			+ "/localhost.key.pem\", \""
@@ -54,7 +49,7 @@ fn main() throws {
 			+ tls
 			+ "/localhost.key.pem\")\n\thttp::listen(at; idle_timeout: 500.millis(), connections: 3, tls: tls) fn(request) {\n\t\treturn http::Response::text(f\"answered {request.path()}\")\n\t}\n\tclient.join()\n\tprintln(\"listen returned after three connections\")\n}\n",
 	)
-	let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+	let out = process::run(toolchain(), ["run"]; dir: f"{tmp.path().to_text()}/app")
 	for line in out.stdout.lines() {
 		if !line.starts_with("http: listening on ") {
 			println(line.replace(tls, "TLS"))
@@ -63,7 +58,6 @@ fn main() throws {
 	println(f"exit {out.code}")
 	println(f"a failed handshake said on stderr: {out.stderr.contains("net::serve: a TLS handshake failed")}")
 	if out.code != 0 {
-		println(out.stderr.replace(tmp, "TMP"))
+		println(out.stderr.replace(tmp.path().to_text(), "TMP"))
 	}
-	process::run("rm", ["-rf", tmp])
 }

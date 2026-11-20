@@ -6,31 +6,32 @@
 // words arrive (status 2 and the usage). `--trust` names the command line,
 // through `cli::args` or `main`'s parameters, and the marker's place, and the
 // marker is recorded in the program's ledger.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+fn said(nikaia: String, tmp: ref fs::Root, label: String, source: String, verb: Vec[String]) throws {
+    fs::write("p.nika", tmp, source)
     let mut args = verb.clone()
     args.push("p.nika")
-    let out = process::run(nikaia, args; dir: tmp.clone())
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(f"-- {label}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         let kept = line.starts_with("error") || line.starts_with("Checked") || line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ") || line.contains("= help: Check it where it arrives")
         if kept {
-            println(line.replace(tmp, "TMP"))
+            println(line.replace(tmp.path().to_text(), "TMP"))
         }
     }
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
     let head = "use std::cli\nuse std::text\n\nfn main() throws {\n"
     let plain = "    let n: i64 = text::parse_i64(cli::args().nth(1) ?? \"8\") ?? 8\n"
@@ -44,17 +45,16 @@ fn main() throws {
     said(nikaia, tmp, "a map keyed by cli::args, no marker", f"{map}{rest}", ["lower", "--trust", "-o", "p.rs"])
     said(nikaia, tmp, "a map keyed by cli::args, trusted: true", f"{map}trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
     println("-- the ledger")
-    for line in fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string("nikaia.contracts", tmp).lines() {
         if line.starts_with("[fn.") || line.starts_with("trusted") {
             println(line)
         }
     }
     let param = "fn main(n: i64) throws {\n    assert(n > 0)\n    println(n)\n}\n"
     said(nikaia, tmp, "a parameter of main", param, ["lower", "--trust", "-o", "p.rs"])
-    let ran = process::run(nikaia, ["run", "p.nika", "--", "0"]; dir: tmp.clone())
+    let ran = process::run(nikaia, ["run", "p.nika", "--", "0"]; dir: tmp.path().to_text())
     println(f"-- main(0) exits with {ran.code}")
     for line in ran.stderr.lines() {
         println(line)
     }
-    process::run("rm", ["-rf", tmp])
 }

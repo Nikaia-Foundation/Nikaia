@@ -1,20 +1,20 @@
 // `process::exit(code)` ends the program with that code, after what it
 // printed (#2215; it was a Rust test of `process.rs`).
+use std::env
 use std::fs
 use std::process
 
 // The `nikaia` that runs this test, found among its ancestors.
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{tmp}/ends.nika", fs::Root::Anywhere, "use std::process\n\nfn main() throws {\n    println(\"before\")\n    process::exit(3)\n    println(\"after\")\n}\n")
-    let out = process::run(toolchain(), ["run", "ends.nika"]; dir: tmp.clone())
+    let tmp = fs::scratch()
+    fs::write("ends.nika", tmp, "use std::process\n\nfn main() throws {\n    println(\"before\")\n    process::exit(3)\n    println(\"after\")\n}\n")
+    let out = process::run(toolchain(), ["run", "ends.nika"]; dir: tmp.path().to_text())
     println(f"exit {out.code}")
     print(out.stdout)
-    process::run("rm", ["-rf", tmp])
 }

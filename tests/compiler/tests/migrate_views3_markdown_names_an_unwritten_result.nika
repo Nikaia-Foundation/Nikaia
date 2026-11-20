@@ -3,22 +3,22 @@
 // whose source the old declaration does not fix keeps its `ref`, and
 // `nikaia migrate views-3` names it with its line in the Markdown file and
 // exits 1. A block of another language is not read.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    fs::write(f"{tmp}/p.md", fs::Root::Anywhere, "Intro\n\n```nika\ntrait Pick {\n    fn pick(a: ref String, b: ref String) -> ref String\n}\n```\n\n```rust\ntrait X { fn x(a: ref String, b: ref String) -> ref String }\n```\n\n```nikaia\n// second\ntrait Q {\n    fn none() -> ref String\n    fn one(a: ref String) -> ref String\n}\n```\n")
-    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/p.md"])
-    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    fs::write("p.md", tmp, "Intro\n\n```nika\ntrait Pick {\n    fn pick(a: ref String, b: ref String) -> ref String\n}\n```\n\n```rust\ntrait X { fn x(a: ref String, b: ref String) -> ref String }\n```\n\n```nikaia\n// second\ntrait Q {\n    fn none() -> ref String\n    fn one(a: ref String) -> ref String\n}\n```\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp.path().to_text()}/p.md"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP"))
     println(f"exit {out.code}")
-    print(fs::read_to_string(f"{tmp}/p.md", fs::Root::Anywhere))
-    process::run("rm", ["-rf", tmp])
+    print(fs::read_to_string("p.md", tmp))
 }

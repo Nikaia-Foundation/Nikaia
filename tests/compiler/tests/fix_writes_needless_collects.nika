@@ -3,32 +3,32 @@
 // from two `for`s. `--dry-run` names each edit and writes nothing; `fix`
 // writes the file, which then checks with no `NK1354` and runs with the
 // output it had.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    let file = f"{tmp}/main.nika"
-    fs::write(file, fs::Root::Anywhere, "fn main() throws {\n    let xs = [3, 1, 2]\n    let s = \"a b c\"\n    println(xs.iter().collect().len())\n    let w = s.split(\" \")\n        .collect()\n        .len()\n    println(w)\n    for p in s.split(\" \").collect() {\n        println(p)\n    }\n    for x in xs.iter().rev().collect() {\n        println(x)\n    }\n}\n")
-    let before = process::run(nikaia, ["run", f"{tmp}/main.nika"])
-    let dry = process::run(nikaia, ["fix", "--dry-run", f"{tmp}/main.nika"])
-    print(f"dry run: {dry.stdout}{dry.stderr}".replace(tmp, "TMP"))
-    let same = fs::read_to_string(file, fs::Root::Anywhere) == "fn main() throws {\n    let xs = [3, 1, 2]\n    let s = \"a b c\"\n    println(xs.iter().collect().len())\n    let w = s.split(\" \")\n        .collect()\n        .len()\n    println(w)\n    for p in s.split(\" \").collect() {\n        println(p)\n    }\n    for x in xs.iter().rev().collect() {\n        println(x)\n    }\n}\n"
+    let file = f"{tmp.path().to_text()}/main.nika"
+    fs::write("main.nika", tmp, "fn main() throws {\n    let xs = [3, 1, 2]\n    let s = \"a b c\"\n    println(xs.iter().collect().len())\n    let w = s.split(\" \")\n        .collect()\n        .len()\n    println(w)\n    for p in s.split(\" \").collect() {\n        println(p)\n    }\n    for x in xs.iter().rev().collect() {\n        println(x)\n    }\n}\n")
+    let before = process::run(nikaia, ["run", f"{tmp.path().to_text()}/main.nika"])
+    let dry = process::run(nikaia, ["fix", "--dry-run", f"{tmp.path().to_text()}/main.nika"])
+    print(f"dry run: {dry.stdout}{dry.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let same = fs::read_to_string("main.nika", tmp) == "fn main() throws {\n    let xs = [3, 1, 2]\n    let s = \"a b c\"\n    println(xs.iter().collect().len())\n    let w = s.split(\" \")\n        .collect()\n        .len()\n    println(w)\n    for p in s.split(\" \").collect() {\n        println(p)\n    }\n    for x in xs.iter().rev().collect() {\n        println(x)\n    }\n}\n"
     println(f"unchanged after the dry run: {same}")
-    let fixed = process::run(nikaia, ["fix", f"{tmp}/main.nika"])
-    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp, "TMP"))
-    print(fs::read_to_string(file, fs::Root::Anywhere))
-    let checked = process::run(nikaia, ["check", f"{tmp}/main.nika"])
-    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
-    let after = process::run(nikaia, ["run", f"{tmp}/main.nika"])
+    let fixed = process::run(nikaia, ["fix", f"{tmp.path().to_text()}/main.nika"])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+    let checked = process::run(nikaia, ["check", f"{tmp.path().to_text()}/main.nika"])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let after = process::run(nikaia, ["run", f"{tmp.path().to_text()}/main.nika"])
     println(f"same output: {after.stdout == before.stdout}")
     print(after.stdout)
-    process::run("rm", ["-rf", tmp])
 }

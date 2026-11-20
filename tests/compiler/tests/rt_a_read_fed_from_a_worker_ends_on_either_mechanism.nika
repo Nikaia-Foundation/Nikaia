@@ -10,41 +10,35 @@
 // `a_future_fed_from_a_worker_finishes_under_block_on`,
 // `a_sequential_build_starts_no_pool_for_user_code` and
 // `a_concurrent_build_starts_one` (#2210).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	fs::write(
-		f"{tmp}/child.nika",
-		fs::Root::Anywhere,
+		"child.nika",
+		tmp,
 		"use std::net\nuse std::task\nuse std::time\n\nfn main() throws {\n\tlet listener = net::listen(\"127.0.0.1:0\")\n\tlet at = listener.address()\n\tlet mut rounds = 0\n\tlet mut bytes = 0\n\twhile rounds < 20 {\n\t\tlet mut client = net::connect(at)\n\t\tlet mut conn = listener.accept()\n\t\tlet writer = spawn fn {\n\t\t\ttime::sleep(5.millis())\n\t\t\tconn.write(\"x\")\n\t\t}\n\t\tlet got = client.read()\n\t\twriter.join()\n\t\tbytes = bytes + got.len()\n\t\trounds = rounds + 1\n\t}\n\tlet cores = task::cores()\n\tprintln(f\"rounds {rounds}, bytes {bytes}, cores {cores}\")\n}\n",
 	)
 	for method in ["auto", "blocking"] {
 		fs::write(
-			f"{tmp}/runtime.toml",
-			fs::Root::Anywhere,
+			"runtime.toml",
+			tmp,
 			f"io-method = \"{method}\"\nuser-pool = 3\n",
 		)
 		for setting in ["no", "yes"] {
 			let out = process::run(
 				toolchain(),
-				["run", "--user-parallelism", setting.clone(), "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+				["run", "--user-parallelism", setting.clone(), "child.nika"]; dir: tmp.path().to_text(), env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp.path().to_text()}/runtime.toml")],
 			)
 			println(f"{method}, {setting}: {out.stdout.trim()}")
 		}
 	}
-	process::run("rm", ["-rf", tmp])
 }

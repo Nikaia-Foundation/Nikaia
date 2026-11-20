@@ -5,20 +5,21 @@
 // `read_to_string`, which does not hang (#2204). A pause between two pieces
 // needs a shell pipe; if the pieces happen to arrive together, the output is
 // the same.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 // Runs `child` with what `feed` (a shell command) writes on its standard
 // input, and prints the child's standard output.
-fn row(nikaia: String, tmp: String, title: String, feed: String, child: String) throws {
+fn row(nikaia: String, tmp: ref fs::Root, title: String, feed: String, child: String) throws {
     println(f"== {title}")
-    let out = process::run("sh", ["-c", f"({feed}) | '{nikaia}' run {child}"]; dir: tmp, within: 10.seconds())
+    let out = process::run("sh", ["-c", f"({feed}) | '{nikaia}' run {child}"]; dir: tmp.path().to_text(), within: 10.seconds())
     if out.timed_out {
         println("timed out")
     }
@@ -27,14 +28,14 @@ fn row(nikaia: String, tmp: String, title: String, feed: String, child: String) 
 
 fn main() throws {
     let nikaia = toolchain()
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{tmp}/lines.nika", fs::Root::Anywhere, "use std::io\n\nfn main() throws {\n    while true {\n        let line = io::read_line() catch {\n            println(f\"failed: {error}\")\n            continue\n        }\n        if line == null {\n            break\n        }\n        println(f\"[{line ?? \"\"}]\")\n    }\n    println(\"end\")\n}\n")
-    fs::write(f"{tmp}/each.nika", fs::Root::Anywhere, "use std::io\n\nfn each() throws {\n    for line in io::lines() {\n        println(f\"[{line}]\")\n    }\n    println(\"end\")\n}\n\nfn main() throws {\n    each() catch {\n        println(f\"failed: {error}\")\n    }\n}\n")
-    fs::write(f"{tmp}/whole.nika", fs::Root::Anywhere, "use std::io\n\nfn main() throws {\n    let all = io::read_to_string()\n    println(f\"READ[{all}]\")\n}\n")
+    let tmp = fs::scratch()
+    fs::write("lines.nika", tmp, "use std::io\n\nfn main() throws {\n    while true {\n        let line = io::read_line() catch {\n            println(f\"failed: {error}\")\n            continue\n        }\n        if line == null {\n            break\n        }\n        println(f\"[{line ?? \"\"}]\")\n    }\n    println(\"end\")\n}\n")
+    fs::write("each.nika", tmp, "use std::io\n\nfn each() throws {\n    for line in io::lines() {\n        println(f\"[{line}]\")\n    }\n    println(\"end\")\n}\n\nfn main() throws {\n    each() catch {\n        println(f\"failed: {error}\")\n    }\n}\n")
+    fs::write("whole.nika", tmp, "use std::io\n\nfn main() throws {\n    let all = io::read_to_string()\n    println(f\"READ[{all}]\")\n}\n")
     // Each child once with closed input, so that it is compiled before a
     // pipe's pause starts.
     for child in ["lines.nika", "each.nika", "whole.nika"] {
-        process::run(nikaia, ["run", child.clone()]; dir: tmp)
+        process::run(nikaia, ["run", child.clone()]; dir: tmp.path().to_text())
     }
     row(nikaia, tmp, "lines, at once", "printf 'one\\n\\nthree\\r\\n'", "lines.nika")
     row(nikaia, tmp, "lines, split across a pause", "printf 'one\\ntw'; sleep 0.3; printf 'o\\nthree'", "lines.nika")
@@ -43,5 +44,4 @@ fn main() throws {
     row(nikaia, tmp, "lines, bytes that are not text", "printf 'fine\\n\\377\\376\\nlast\\n'", "lines.nika")
     row(nikaia, tmp, "each, bytes that are not text", "printf 'fine\\n\\377\\376\\nlast\\n'", "each.nika")
     row(nikaia, tmp, "whole, written late", "sleep 0.3; printf 'eins\\nzwei\\n'", "whole.nika")
-    process::run("rm", ["-rf", tmp])
 }
