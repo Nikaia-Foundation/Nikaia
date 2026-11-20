@@ -1,0 +1,4 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    bottom_up: `Tree::Node` in the block: its result stays in the task at every call (ADR-327 D17)

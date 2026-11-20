@@ -3117,3 +3117,322 @@ pub(crate) fn check_core_stmt_slot_read(value: &Expr) -> &Expr {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_place_returned(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    if state.facts.boxed_members.is_empty() { return; }
+    let mut candidates: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut has_grammar = false;
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                let sym = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let named = format!("{}", world.words.resolve(sym));
+                if !is_public && !is_extern && named != "main" { candidates.insert(named); }
+            },
+            Item::Grammar(_) => { has_grammar = true; },
+            _ => { },
+        }
+    }
+    if candidates.is_empty() { return; }
+    let mut calls: Vec<(String, String)> = vec![];
+    let mut sites: Vec<(i64, String, String)> = vec![];
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name, body, config, .. } => {
+                let name = *name;
+                let sym = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let owner = format!("{}", world.words.resolve(sym));
+                for option in config.iter() { check_core_returned_leaves(world, &option.default, &owner, &candidates, &mut calls); }
+                check_core_returned_block(&state, world, body, &owner, &format!("<{}", owner), &candidates, &mut calls, &mut sites);
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, config, .. } => {
+                            let name = *name;
+                            let sym = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let owner = format!("{}::{}", world.here.text(target.name), world.words.resolve(sym));
+                            for option in config.iter() { check_core_returned_leaves(world, &option.default, &owner, &candidates, &mut calls); }
+                            check_core_returned_block(&state, world, body, &owner, &format!("<{}", owner), &candidates, &mut calls, &mut sites);
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            Item::Test { name, body } => { check_core_returned_block(&state, world, body, name, &format!("!{}", name), &candidates, &mut calls, &mut sites); },
+            Item::Bench { name, body } => { check_core_returned_block(&state, world, body, name, &format!("!{}", name), &candidates, &mut calls, &mut sites); },
+            Item::Comptime { value, .. } => { check_core_returned_leaves(world, value, "a constant", &candidates, &mut calls); },
+            Item::Struct { fields, rules, .. } => {
+                for field in fields.iter() {
+                    match &field.default {
+                        None => { },
+                        Some(given) => { check_core_returned_leaves(world, &given.value, "a field's default", &candidates, &mut calls); },
+                    }
+                }
+                for rule in rules.iter() { check_core_returned_leaves(world, &rule.node, "a rule", &candidates, &mut calls); }
+            },
+            _ => { },
+        }
+    }
+    let mut local: collections::BTreeSet<String> = if has_grammar { collections::BTreeSet::new() } else { candidates.copy_owned() };
+    let mut why: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    if has_grammar { for named in candidates.iter() { why.insert(nikaia_std::block::Text::from(named.to_string()), String::from("a grammar in this file reads code the walk does not follow")); } }
+    for named in check_core_returned_beside(world, &candidates) { if local.remove(&named) { why.insert(nikaia_std::block::Text::from(named.to_string()), String::from("another file of the package names it, where the walk does not follow")); } }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (callee, dest) in calls.iter() {
+            if !local.contains(callee) { continue; }
+            let left: Option<String> = match dest.strip_prefix('!') {
+                None => {
+                    match dest.strip_prefix('<') {
+                        None => None,
+                        Some(given) => if local.contains(given) { None } else { Some(format!("a call in `{}` returns it, and the result of `{}` leaves the task", given, given)) },
+                    }
+                },
+                Some(caller) => Some(format!("a call in `{}` lets it leave the task", caller)),
+            };
+            match left {
+                None => { },
+                Some(ref reason) => {
+                    local.remove(callee);
+                    why.insert(nikaia_std::block::Text::from(callee.to_string()), nikaia_std::block::Text::from(reason.to_string()));
+                    changed = true;
+                },
+            }
+        }
+    }
+    for (key, site, owner) in sites.iter() {
+        let key = nikaia_std::num::value(key);
+        if local.contains(owner) {
+            state.facts.placed_in_block.insert(key);
+            state.facts.box_sites.insert(key, format!("{}: `{}` in the block: its result stays in the task at every call (ADR-327 D17)", owner, site));
+        } else if candidates.contains(owner) {
+            let reason = nikaia_std::index::or(match why.get(owner) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "a call lets it leave the task".into());
+            state.facts.box_sites.insert(key, format!("{}: `{}` outside: it is returned, and {} (ADR-327 D17)", owner, site, reason));
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_returned_leaves(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, owner: &str, candidates: &collections::BTreeSet<String>, calls: &mut Vec<(String, String)>) {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(expr, world.words, &mut read);
+    for named in read.iter() { if candidates.contains(named) { calls.push((nikaia_std::block::Text::from(named.to_string()), format!("!{}", owner))); } }
+}
+
+pub(crate) fn check_core_returned_beside(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, candidates: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut at: i64 = -1;
+    for other in world.beside.iter() {
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        if at == world.here_at { continue; }
+        for item in other.items.iter() {
+            match &item.node {
+                Item::Fn { body, config, .. } => {
+                    for option in config.iter() { names_in(&option.default, other.words, &mut read); }
+                    names_in_block(body, other.words, &mut read);
+                },
+                Item::Impl { methods, .. } => {
+                    for method in methods.iter() {
+                        match &method.node {
+                            Item::Fn { body, config, .. } => {
+                                for option in config.iter() { names_in(&option.default, other.words, &mut read); }
+                                names_in_block(body, other.words, &mut read);
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                Item::Test { body, .. } => { names_in_block(body, other.words, &mut read); },
+                Item::Bench { body, .. } => { names_in_block(body, other.words, &mut read); },
+                Item::Comptime { value, .. } => { names_in(value, other.words, &mut read); },
+                Item::Struct { fields, rules, .. } => {
+                    for field in fields.iter() {
+                        match &field.default {
+                            None => { },
+                            Some(given) => { names_in(&given.value, other.words, &mut read); },
+                        }
+                    }
+                    for rule in rules.iter() { names_in(&rule.node, other.words, &mut read); }
+                },
+                Item::Grammar(_) => { return candidates.copy_owned(); },
+                _ => { },
+            }
+        }
+    }
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in read.iter() { if candidates.contains(name) { named.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    named
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_returned_block(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, owner: &str, dest: &str, candidates: &collections::BTreeSet<String>, calls: &mut Vec<(String, String)>, sites: &mut Vec<(i64, String, String)>) {
+    let count = block.stmts.len() as i64;
+    let leaves = format!("!{}", owner);
+    let result = format!("<{}", owner);
+    let mut at: i64 = 0;
+    while at < count {
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (at) as usize) }.node {
+            Stmt::Let { names, value, .. } => {
+                let mut kept = false;
+                if names.len() == 1 {
+                    let name = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
+                    kept = check_core_view_list_bound_once(world, block, &name);
+                    let mut later: i64 = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+                    while later < count && kept {
+                        kept = check_core_tree_stays_in_stmt(state, world, &unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, &name).is_empty();
+                        later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
+                    }
+                }
+                check_core_returned_expr(state, world, value, owner, if kept { "=" } else { &leaves }, candidates, calls, sites);
+            },
+            Stmt::Expr(value) => { check_core_returned_expr(state, world, value, owner, if at == unsafe { nikaia_std::proven::sub::<i64>(count, 1) } { dest } else { "=" }, candidates, calls, sites); },
+            Stmt::Return(value) => {
+                match value {
+                    None => { },
+                    Some(given) => { check_core_returned_expr(state, world, given, owner, &result, candidates, calls, sites); },
+                }
+            },
+            Stmt::For { iter, body, .. } => {
+                check_core_returned_expr(state, world, iter, owner, &leaves, candidates, calls, sites);
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites);
+            },
+            Stmt::While { cond, body } => {
+                check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites);
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites);
+            },
+            Stmt::Assign { target, value, .. } => {
+                check_core_returned_leaves(world, target, owner, candidates, calls);
+                check_core_returned_expr(state, world, value, owner, &leaves, candidates, calls, sites);
+            },
+            Stmt::Comptime { value, .. } => { check_core_returned_leaves(world, value, owner, candidates, calls); },
+            Stmt::Emit(value) => { check_core_returned_leaves(world, value, owner, candidates, calls); },
+            _ => { },
+        }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_returned_expr(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, owner: &str, dest: &str, candidates: &collections::BTreeSet<String>, calls: &mut Vec<(String, String)>, sites: &mut Vec<(i64, String, String)>) {
+    let leaves = format!("!{}", owner);
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let site = check_core_box_site(state, world, expr);
+            let mut parts: String = nikaia_std::block::Text::from(leaves.to_string());
+            if !site.is_empty() {
+                let key = check_core_box_site_key(expr);
+                if state.facts.placed_in_block.contains(&key) { parts = String::from("="); } else {
+                    match dest.strip_prefix('<') {
+                        None => { },
+                        Some(returned) => {
+                            sites.push((key, nikaia_std::block::Text::from(site.to_string()), nikaia_std::block::Text::from(returned.to_string())));
+                            parts = nikaia_std::block::Text::from(dest.to_string());
+                        },
+                    }
+                }
+            } else {
+                let callee: Option<String> = match func {
+                    Expr::Variable(sym, _) => { let sym = *sym; Some(format!("{}", world.words.resolve(sym))) },
+                    Expr::Path(segments, _) => if segments.len() == 1 { Some(format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }))) } else { None },
+                    _ => None,
+                };
+                match callee {
+                    None => { check_core_returned_leaves(world, func, owner, candidates, calls); },
+                    Some(ref named) => { if candidates.contains(named) { calls.push((nikaia_std::block::Text::from(named.to_string()), nikaia_std::block::Text::from(dest.to_string()))); } },
+                }
+            }
+            for arg in args.iter() {
+                let lent = site.is_empty() && state.facts.lent_args.contains(&node_key(arg));
+                check_core_returned_expr(state, world, arg, owner, if lent { "=" } else { &parts }, candidates, calls, sites);
+            }
+            for option in config.iter() { check_core_returned_leaves(world, &option.value, owner, candidates, calls); }
+        },
+        Expr::StructLit { fields, .. } => {
+            let site = check_core_box_site(state, world, expr);
+            let mut parts: String = nikaia_std::block::Text::from(leaves.to_string());
+            if !site.is_empty() {
+                let key = check_core_box_site_key(expr);
+                if state.facts.placed_in_block.contains(&key) { parts = String::from("="); } else {
+                    match dest.strip_prefix('<') {
+                        None => { },
+                        Some(returned) => {
+                            sites.push((key, nikaia_std::block::Text::from(site.to_string()), nikaia_std::block::Text::from(returned.to_string())));
+                            parts = nikaia_std::block::Text::from(dest.to_string());
+                        },
+                    }
+                }
+            }
+            for field in fields.iter() { check_core_returned_expr(state, world, match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, owner, &parts, candidates, calls, sites); }
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            check_core_returned_leaves(world, receiver, owner, candidates, calls);
+            for arg in args.iter() { check_core_returned_expr(state, world, arg, owner, if state.facts.lent_args.contains(&node_key(arg)) { "=" } else { &leaves }, candidates, calls, sites); }
+            for option in config.iter() { check_core_returned_leaves(world, &option.value, owner, candidates, calls); }
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            check_core_returned_leaves(world, value, owner, candidates, calls);
+            for arm in arms.iter() {
+                match &arm.guard {
+                    None => { },
+                    Some(guard) => { check_core_returned_expr(state, world, guard, owner, "=", candidates, calls, sites); },
+                }
+                check_core_returned_expr(state, world, &arm.body, owner, dest, candidates, calls, sites);
+            }
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites);
+            check_core_returned_block(state, world, then_branch, owner, dest, candidates, calls, sites);
+            match else_branch {
+                None => { },
+                Some(given) => { check_core_returned_block(state, world, given, owner, dest, candidates, calls, sites); },
+            }
+        },
+        Expr::Block(inner, _) => { check_core_returned_block(state, world, inner, owner, dest, candidates, calls, sites); },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr: hole, .. } => { check_core_returned_expr(state, world, hole, owner, "=", candidates, calls, sites); },
+                    _ => { },
+                }
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let compared = matches!(op, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge | BinaryOp::And | BinaryOp::Or);
+            let parts: String = if compared { String::from("=") } else { leaves };
+            check_core_returned_expr(state, world, lhs, owner, &parts, candidates, calls, sites);
+            check_core_returned_expr(state, world, rhs, owner, &parts, candidates, calls, sites);
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            check_core_returned_expr(state, world, value, owner, dest, candidates, calls, sites);
+            check_core_returned_expr(state, world, fallback, owner, dest, candidates, calls, sites);
+        },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); check_core_returned_expr(state, world, inner, owner, dest, candidates, calls, sites); },
+        Expr::Return(value, _) => {
+            let value = nikaia_std::boxed::open(value);
+            match value {
+                None => { },
+                Some(given) => { check_core_returned_expr(state, world, given, owner, &format!("<{}", owner), candidates, calls, sites); },
+            }
+        },
+        _ => { check_core_returned_leaves(world, expr, owner, candidates, calls); },
+    }
+}
+

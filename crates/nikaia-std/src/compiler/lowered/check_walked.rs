@@ -258,6 +258,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     if harvesting { return; }
     check_program_instantiations_beside(state, world, host);
     check_program_unroll(state, world, host);
+    check_core_place_returned(state, world);
     check_walked_unsigned_slots(state, &mut |facts, nodes| { passes.nonnegative(facts, nodes) });
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();
