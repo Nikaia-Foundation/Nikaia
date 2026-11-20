@@ -1,0 +1,8 @@
+error[NK1103]: This value is `Array[(?, String, ?), 1]`, but the `let` declares an `Array[(u32, String, u32), 1]` whose items are views.
+  --> tests/a_built_text_into_an_array_of_views_is_refused.nika:5:48
+   |
+ 5 | 	let table: Array[(u32, ref String, u32), 1] = [(10, built, 3)]
+   |                                                ^^^^^^^^^^^^^^^^
+   |
+   = help: Make it an `Array[(u32, String, u32), 1]`, or change the declaration to `Array[(?, String, ?), 1]`.
+1 type error

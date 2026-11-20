@@ -24,11 +24,12 @@ pub(crate) struct KeepsWalk {
     pub(crate) aliases: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub(crate) views: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub(crate) grown: collections::BTreeSet<String>,
+    pub(crate) declared_views: collections::BTreeSet<i64>,
 }
 
 pub fn uses_in(body: &Block, interner: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger) -> Uses {
     let grown = grown_text_of(interner, body);
-    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet::new(), passed: vec![] }, aliases: collections::BTreeMap::new(), views: collections::BTreeMap::new(), grown };
+    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet::new(), passed: vec![] }, aliases: collections::BTreeMap::new(), views: collections::BTreeMap::new(), grown, declared_views: collections::BTreeSet::new() };
     keeps_block(body, interner, &mut *holes_of, context, own, library, &mut walk);
     if context.hands_back_its_last && !body.stmts.is_empty() {
         match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
@@ -54,6 +55,7 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
             let owned_declared = keeps_an_owned_declared((ty).as_ref());
             if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } } }
             let viewed = keeps_viewed_of(value, interner, context, own, library, &walk);
+            if !mutable && ty.is_some() { keeps_lent_into_declared(value, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, interner, context, &mut walk.declared_views); }
             if mutable {
                 for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
                 if names.len() == 1 && walk.grown.contains(interner.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) {
@@ -126,6 +128,27 @@ pub(crate) fn keeps_statement_parts(stmt: &Stmt, interner: &winnow_grammar::Inte
         Stmt::Return(value) => {
             let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             keeps_blocks_in(returned, interner, &mut &mut *holes_of, context, own, library, walk);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn keeps_lent_into_declared(expr: &Expr, ty: &Type, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, marked: &mut collections::BTreeSet<i64>) {
+    if ty.is_nullable { return; }
+    match expr {
+        Expr::Variable(ident, _) => {
+            let ident = *ident;
+            let name = interner.resolve(ident);
+            if ty.is_view && !ty.is_tuple && name != "self" && keeps_lendable(name, context) { marked.insert(id_of(expr) as i64); }
+        },
+        Expr::Tuple(items, _) => {
+            if !ty.is_tuple || ty.is_view || (ty.generics.len() as i64) != items.len() as i64 { return; }
+            for (k, item) in items.iter().enumerate().map(|(at, item)| (at as i64, item)) { keeps_lent_into_declared(item, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(k)), interner, context, marked); }
+        },
+        Expr::ListLit { items, .. } => {
+            let base = interner.resolve(ty.name);
+            if ty.is_view || ty.is_tuple || ty.generics.is_empty() || base != "Array" && base != "Vec" { return; }
+            for item in items.iter() { keeps_lent_into_declared(item, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, interner, context, marked); }
         },
         _ => { },
     }
@@ -450,13 +473,13 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         },
         Expr::ListLit { items, .. } => {
             for item in items.iter() {
-                keep_part(Some(item), interner, context, own, library, walk);
+                if !walk.declared_views.contains(&(id_of(item) as i64)) { keep_part(Some(item), interner, context, own, library, walk); }
                 keep_lambda(Some(item), interner, &mut *holes_of, context, walk);
             }
         },
         Expr::Tuple(items, _) => {
             for item in items.iter() {
-                keep_part(Some(item), interner, context, own, library, walk);
+                if !walk.declared_views.contains(&(id_of(item) as i64)) { keep_part(Some(item), interner, context, own, library, walk); }
                 keep_lambda(Some(item), interner, &mut *holes_of, context, walk);
             }
         },
