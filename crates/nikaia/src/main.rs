@@ -348,6 +348,10 @@ pub enum Command {
         /// Write nothing: print the diff of each file instead.
         #[arg(long)]
         dry_run: bool,
+        /// Make only the edits of this finding (`NK1301`); repeat it for
+        /// several. Without it, every finding's edit is made (#2183).
+        #[arg(long, value_name = "CODE")]
+        only: Vec<std::string::String>,
     },
     /// Run one `.nika` file in the interpreter; nothing is written and
     /// nothing is compiled.
@@ -1299,7 +1303,11 @@ fn run() -> Result<()> {
             };
             std::process::exit(code);
         }
-        Command::Fix { paths, dry_run } => {
+        Command::Fix {
+            paths,
+            dry_run,
+            only,
+        } => {
             let named: Vec<String> = paths
                 .iter()
                 .map(|path| path.display().to_string().into())
@@ -1308,6 +1316,10 @@ fn run() -> Result<()> {
                 &project::Lsp,
                 &named,
                 *dry_run,
+                &only
+                    .iter()
+                    .map(|code| code.to_uppercase().into())
+                    .collect::<Vec<String>>(),
             ))
             .map_err(|error| anyhow::anyhow!("{error}"))?;
             std::process::exit(code as i32);

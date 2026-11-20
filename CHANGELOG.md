@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1485] — 2026-11-20
+
+**Builders' changes (#2183, #2363)**
+- `nikaia fix --only CODE` makes only the edits of the findings `CODE` names (repeatable), so a migration to one new fix-able finding leaves the others' edits out
+- The ADR citation check and adr-rename search packages/; adr-rename lists a link that reaches no record directory; briefs may quote example ADR names.
+
 ## [0.0.1484] — 2026-11-20
 
 **The ADR citation check and adr-rename search packages/ too (#2362)**

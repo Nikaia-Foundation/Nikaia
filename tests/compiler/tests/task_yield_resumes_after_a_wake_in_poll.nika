@@ -1,4 +1,4 @@
-// `task::yield_now()` pauses the calling task once and resumes it (Part II
+// `task::yield()` pauses the calling task once and resumes it (Part II
 // 11.1, #2316): the task wakes itself from inside its own poll, while it is
 // running, and the worker must put it back. A lost wake leaves the task idle
 // for ever and the program hangs, which the test's time limit fails. Moved
@@ -9,7 +9,7 @@ use std::task
 fn turns(name: i64) -> i64 {
 	let mut done = 0
 	while done < 3 {
-		task::yield_now()
+		task::yield()
 		done = done + 1
 	}
 	return name * 10 + done

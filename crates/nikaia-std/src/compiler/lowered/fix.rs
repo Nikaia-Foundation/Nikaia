@@ -16,7 +16,7 @@ pub(crate) struct FixEdit {
     pub(crate) code: String,
 }
 
-pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> Result<i64, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool, only: &[String]) -> Result<i64, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     #[allow(unused_mut)] let mut files: Vec<String> = vec![];
     for path in named.iter() { fix_files_under(path, &mut files).await; }
     let open: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
@@ -37,7 +37,7 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> R
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        let plan = fix_planned(file, &source, &here);
+        let plan = fix_planned(file, &source, &here, only);
         if plan.left { code = 1; }
         for line in plan.said.iter() { nikaia_std::io::println(format_args!("{}", line))?; }
         if plan.text == source { continue; }
@@ -67,12 +67,13 @@ pub(crate) fn fix_diagnosed<H: LspHost>(host: &H, file: &str, key: &str, open: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown]) -> FixPlan {
+pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown], only: &[String]) -> FixPlan {
     for shown in found.iter() { if !shown.warning && shown.edit.is_none() { return FixPlan { text: nikaia_std::block::Text::from(source.to_string()), said: vec![format!("{}: not fixed: its check has errors", path)], left: true }; } }
     let size = source.as_bytes().len() as i64;
     let mut edits: Vec<FixEdit> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for shown in found.iter() {
         let edit = match shown.edit.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !only.is_empty() && !nikaia_std::list::contains(&only, &shown.code) { continue; }
         let one = FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: nikaia_std::block::Text::from(edit.text.to_string()), code: nikaia_std::block::Text::from(shown.code.to_string()) };
         if one.start > one.end || one.end > size { continue; }
         if !edits.iter().any(|e| { e.start == one.start && e.end == one.end && e.text == one.text }) { edits.push(one); }

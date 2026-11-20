@@ -230,7 +230,10 @@ read the record in the right-hand column.
 ## What the archived records displaced in one another
 
 The history of partial supersessions among these records, as the live index
-carried it before they were archived.
+carried it before they were archived. A row whose other side is still live
+(an archived record changed a live one) is here too; the consolidating `-v`
+record's **Supersedes / Related** line names that change for the live
+record's reader.
 
 | Displaced or amended | By | What moved |
 | :--- | :--- | :--- |

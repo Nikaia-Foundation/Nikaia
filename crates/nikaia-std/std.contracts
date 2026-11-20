@@ -6238,10 +6238,10 @@ sync = true
 touches = []
 signature = "() -> i64"
 
-# Let the other tasks run: the calling task pauses once and resumes after the
-# tasks already ready (Part II 11.1). A long loop that never waits calls it to
-# share its thread.
-[fn."task::yield_now"]
+# Give the thread up once (Part II 11.1): a suspension point with no I/O and
+# no time behind it. The task goes behind the ready ones and returns when it
+# is polled again; no `sync` line, like `time::sleep`.
+[fn."task::yield"]
 pub = true
 panics = false
 signature = "()"
