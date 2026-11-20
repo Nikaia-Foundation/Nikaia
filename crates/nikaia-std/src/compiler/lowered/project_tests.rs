@@ -116,14 +116,14 @@ pub(crate) fn shown_path(path: &std::path::Path, root: &std::path::Path) -> Stri
     nikaia_std::fs::path::display(&(nikaia_std::index::or(nikaia_std::fs::path::strip_prefix(&(path), &root), || path.into())))
 }
 
-pub(crate) async fn files_under(dir: &std::path::Path) -> Result<Vec<(String, fs::Path)>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
-    let mut found: Vec<(String, fs::Path)> = fs::walk(dir, &fs::Root::Anywhere).await?.iter().map(|name| { (nikaia_std::fs::path::text_of(&(name)), nikaia_std::fs::path::join(&(dir), name)) }).collect::<Vec<_>>();
+pub(crate) async fn files_under(dir: &std::path::Path, at: &fs::Root) -> Result<Vec<(String, fs::Path)>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    let mut found: Vec<(String, fs::Path)> = fs::walk(dir, at).await?.iter().map(|name| { (nikaia_std::fs::path::text_of(&(name)), nikaia_std::fs::path::join(&(dir), name)) }).collect::<Vec<_>>();
     found.sort();
     Ok(found)
 }
 
-pub(crate) fn project_tests_is_dir(path: &std::path::Path) -> bool {
-    let found = match fs::metadata(path, &fs::Root::Anywhere) {
+pub(crate) fn project_tests_is_dir(path: &std::path::Path, at: &fs::Root) -> bool {
+    let found = match fs::metadata(path, at) {
         Ok(value) => value,
         Err(_error) => { return false; },
     };
@@ -138,14 +138,22 @@ pub(crate) fn project_tests_is_file(path: &std::path::Path) -> bool {
     found.is_file()
 }
 
-pub(crate) async fn project_tests_optional(path: &std::path::Path) -> Result<Option<Bytes>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
-    if !fs::exists(path, &fs::Root::Anywhere)? { return Ok(None); }
-    Ok(Some(fs::read(path, &fs::Root::Anywhere).await?))
+pub(crate) fn project_tests_is_file_under(path: &std::path::Path, at: &fs::Root) -> bool {
+    let found = match fs::metadata(path, at) {
+        Ok(value) => value,
+        Err(_error) => { return false; },
+    };
+    found.is_file()
 }
 
-pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir: bool) -> collections::BTreeSet<String> {
+pub(crate) async fn project_tests_optional(path: &std::path::Path, at: &fs::Root) -> Result<Option<Bytes>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    if !fs::exists(path, at)? { return Ok(None); }
+    Ok(Some(fs::read(path, at).await?))
+}
+
+pub(crate) fn project_tests_stems(at: &fs::Root, ending: &str, want_dir: bool) -> collections::BTreeSet<String> {
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let entries = match fs::read_dir(dir, &fs::Root::Anywhere) {
+    let entries = match fs::read_dir(std::path::Path::new(&(".")), at) {
         Ok(value) => value,
         Err(_error) => { return names; },
     };
@@ -153,10 +161,9 @@ pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir:
         let text = nikaia_std::fs::path::text_of(&(name));
         let stem: String = nikaia_std::block::Text::from(nikaia_std::index::or(text.strip_suffix(AsRef::<str>::as_ref(ending)), || "").to_string());
         if stem.is_empty() { continue; }
-        let path = nikaia_std::fs::path::join(&(dir), name);
         let right = match want_dir {
-            true => project_tests_is_dir(&path),
-            false => project_tests_is_file(&path),
+            true => project_tests_is_dir(name, at),
+            false => project_tests_is_file_under(name, at),
         };
         if right { names.insert(stem); }
     }
@@ -165,43 +172,47 @@ pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir:
 
 pub async fn output_tests(root: &std::path::Path) -> Result<Vec<OutputTest>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
-    let mut names = project_tests_stems(&dir, ".stdout", false);
-    names.extend(project_tests_stems(&dir, ".out", true));
-    names.extend(project_tests_stems(&dir, ".stops", false));
+    let at = fs::Root::Dir(nikaia_std::fs::path::clone(&(dir)));
+    let mut names = project_tests_stems(&at, ".stdout", false);
+    names.extend(project_tests_stems(&at, ".out", true));
+    names.extend(project_tests_stems(&at, ".stops", false));
     let mut tests: Vec<OutputTest> = vec![];
     tests.reserve(names.iter().size_hint().0); for name in names.iter() {
-        if project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", name))))) { continue; }
-        let stdout = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdout", name))))).await?;
-        let out = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.out", name))));
+        let program: fs::Path = std::path::PathBuf::from(format!("{}.nika", name));
+        if project_tests_is_file_under(&program, &at) { continue; }
+        let stdout = project_tests_optional(std::path::Path::new(&(format!("{}.stdout", name))), &at).await?;
+        let out: fs::Path = std::path::PathBuf::from(format!("{}.out", name));
         let mut files: Vec<(String, Bytes)> = vec![];
-        if project_tests_is_dir(&out) { for (relative, path) in files_under(&out).await? { files.push((relative, fs::read(&path, &fs::Root::Anywhere).await?)); } }
-        let given = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.in", name))));
-        let inputs: Option<fs::Path> = match project_tests_is_dir(&given) {
-            true => Some(given),
+        if project_tests_is_dir(&out, &at) { for (relative, path) in files_under(&out, &at).await? { files.push((relative, fs::read(&path, &at).await?)); } }
+        let given: fs::Path = std::path::PathBuf::from(format!("{}.in", name));
+        let inputs: Option<fs::Path> = match project_tests_is_dir(&given, &at) {
+            true => Some(nikaia_std::fs::path::join(&(dir), &given)),
             false => None,
         };
-        let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
+        let stdin = nikaia_std::index::or(project_tests_optional(std::path::Path::new(&(format!("{}.stdin", name))), &at).await?, || Bytes(vec![]).into());
         let mut args: Vec<String> = vec![];
-        let listed = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.args", name))))).await?;
+        let listed = project_tests_optional(std::path::Path::new(&(format!("{}.args", name))), &at).await?;
         if listed.is_some() {
             let bytes = nikaia_std::index::or(listed, || Bytes(vec![]).into());
             args = bytes.text()?.lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
         }
-        let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
-        let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
+        let stderr = project_tests_optional(std::path::Path::new(&(format!("{}.stderr", name))), &at).await?;
+        let stops = project_tests_optional(std::path::Path::new(&(format!("{}.stops", name))), &at).await?;
         tests.push(OutputTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, files, inputs, stdin, args });
     }
     Ok(tests)
 }
 
 pub async fn copy_into(from: &std::path::Path, to: &std::path::Path) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
-    for (relative, path) in files_under(from).await? {
-        let target = nikaia_std::fs::path::join(&(to), std::path::Path::new(&(relative)));
+    let from_at = fs::Root::Dir(nikaia_std::fs::path::clone(&(from)));
+    let to_at = fs::Root::Dir(nikaia_std::fs::path::clone(&(to)));
+    for (relative, path) in files_under(std::path::Path::new(&(".")), &from_at).await? {
+        let target: fs::Path = std::path::PathBuf::from(relative);
         match nikaia_std::fs::path::parent(&(target)) {
             None => { },
-            Some(ref parent) => { fs::create_dir(parent, &fs::Root::Anywhere, true)?; },
+            Some(ref parent) => { fs::create_dir(parent, &to_at, true)?; },
         }
-        fs::copy(&path, &target, &fs::Root::Anywhere)?;
+        fs::write(&target, &to_at, fs::read(&path, &from_at).await?, false, true).await?;
     }
     Ok(())
 }
@@ -239,28 +250,28 @@ pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<St
 }
 
 pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, __NikaiaThrows_ProjectTestsRefusal__io_IoError> {
-    let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
+    let at = fs::Root::Dir(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))));
     let mut tests: Vec<ProgramTest> = vec![];
-    for stem in project_tests_stems(&dir, ".loops.bounds", false) { return Err(nikaia_std::error::throwing(ProjectTestsRefusal::Refused(format!("tests/{}.loops.bounds: a test program has one `--bounds` expectation, `{}.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `{}.bounds` and delete it", stem, stem, stem)), &"program_tests").into()); }
-    for name in project_tests_stems(&dir, ".nika", false) {
-        let stdout = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdout", name))))).await?;
-        let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
-        let bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.bounds", name))))).await?;
-        let asserts = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.asserts", name))))).await?;
-        let sharing = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.sharing", name))))).await?;
-        let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
-        let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
+    for stem in project_tests_stems(&at, ".loops.bounds", false) { return Err(nikaia_std::error::throwing(ProjectTestsRefusal::Refused(format!("tests/{}.loops.bounds: a test program has one `--bounds` expectation, `{}.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `{}.bounds` and delete it", stem, stem, stem)), &"program_tests").into()); }
+    for name in project_tests_stems(&at, ".nika", false) {
+        let stdout = project_tests_optional(std::path::Path::new(&(format!("{}.stdout", name))), &at).await?;
+        let stderr = project_tests_optional(std::path::Path::new(&(format!("{}.stderr", name))), &at).await?;
+        let bounds = project_tests_optional(std::path::Path::new(&(format!("{}.bounds", name))), &at).await?;
+        let asserts = project_tests_optional(std::path::Path::new(&(format!("{}.asserts", name))), &at).await?;
+        let sharing = project_tests_optional(std::path::Path::new(&(format!("{}.sharing", name))), &at).await?;
+        let stops = project_tests_optional(std::path::Path::new(&(format!("{}.stops", name))), &at).await?;
+        let stdin = nikaia_std::index::or(project_tests_optional(std::path::Path::new(&(format!("{}.stdin", name))), &at).await?, || Bytes(vec![]).into());
         tests.push(ProgramTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, asserts, sharing, stdin });
     }
     Ok(tests)
 }
 
 pub fn project_tests_stray_bounds(root: &std::path::Path) -> Vec<String> {
-    let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
+    let at = fs::Root::Dir(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))));
     let mut stray: Vec<String> = vec![];
-    for stem in project_tests_stems(&dir, ".bounds", false) { if !stem.ends_with(".loops") && !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.bounds", stem)); } }
-    for stem in project_tests_stems(&dir, ".asserts", false) { if !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.asserts", stem)); } }
-    for stem in project_tests_stems(&dir, ".sharing", false) { if !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.sharing", stem)); } }
+    for stem in project_tests_stems(&at, ".bounds", false) { if !stem.ends_with(".loops") && !project_tests_is_file_under(std::path::Path::new(&(format!("{}.nika", stem))), &at) { stray.push(format!("{}.bounds", stem)); } }
+    for stem in project_tests_stems(&at, ".asserts", false) { if !project_tests_is_file_under(std::path::Path::new(&(format!("{}.nika", stem))), &at) { stray.push(format!("{}.asserts", stem)); } }
+    for stem in project_tests_stems(&at, ".sharing", false) { if !project_tests_is_file_under(std::path::Path::new(&(format!("{}.nika", stem))), &at) { stray.push(format!("{}.sharing", stem)); } }
     stray
 }
 
@@ -666,13 +677,19 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
         fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &fs::Root::Anywhere, project_tests_batch_carrier(), false, true).await?;
         let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        fs::create_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs"))), &fs::Root::Anywhere, true)?;
+        let programs = fs::Root::Dir(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs"))));
         lines.reserve(chunk.iter().size_hint().0); for program in chunk.iter() {
-            let at = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), std::path::Path::new(&(program.name)));
-            fs::create_dir(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
-            fs::write(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
-            let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
+            let at: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(program.name.to_string()));
+            fs::create_dir(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src"))), &programs, true)?;
+            fs::write(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))), &programs, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
+            let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), &at)), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
             let source = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
-            match fs::copy(&source, &entry, &fs::Root::Anywhere) {
+            let text = match fs::read(std::path::Path::new(&(format!("{}.nika", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir)))).await {
+                Ok(value) => value,
+                Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_batches")) },
+            };
+            match fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &programs, text, false, true).await {
                 Ok(_) => {},
                 Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_batches")); },
             };
@@ -721,8 +738,7 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
 }
 
 pub(crate) async fn project_tests_starts_processes(program: &ProgramTest) -> bool {
-    let source = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
-    let text = match fs::read_to_string(&source, &fs::Root::Anywhere).await {
+    let text = match fs::read_to_string(std::path::Path::new(&(format!("{}.nika", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir)))).await {
         Ok(value) => value,
         Err(_error) => { return false; },
     };
@@ -750,16 +766,16 @@ pub async fn project_tests_warm_up<H: ProjectTestsProgramHost>(host: &H, program
 }
 
 pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Result<(), nikaia_std::error::Thrown<ProjectTestsRefusal>> {
-    let names = match fs::read_dir(dir, &fs::Root::Anywhere) {
+    let at = fs::Root::Dir(nikaia_std::fs::path::clone(&(dir)));
+    let names = match fs::read_dir(std::path::Path::new(&(".")), &at) {
         Ok(value) => value,
         Err(_error) => { return Ok(()); },
     };
     for name in names.iter() {
         if nikaia_std::fs::path::text_of(&(name)) == keep { continue; }
-        let path = nikaia_std::fs::path::join(&(dir), name);
-        match fs::remove(&path, &fs::Root::Anywhere, true) {
+        match fs::remove(name, &at, true) {
             Ok(_) => {},
-            Err(error) => { return Err(nikaia_std::error::throwing(ProjectTestsRefusal::Refused(format!("emptying {}: {}", nikaia_std::fs::path::display(&(path)), error)), &"project_tests_empty_but")); },
+            Err(error) => { return Err(nikaia_std::error::throwing(ProjectTestsRefusal::Refused(format!("emptying {}: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(dir), name))), error)), &"project_tests_empty_but")); },
         };
     }
     Ok(())
@@ -783,7 +799,11 @@ pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H,
     fs::create_dir(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
     let source = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
     let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
-    match fs::copy(&source, &entry, &fs::Root::Anywhere) {
+    let text = match fs::read(std::path::Path::new(&(format!("{}.nika", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir)))).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_prepared")) },
+    };
+    match fs::write(&entry, &fs::Root::Anywhere, text, false, true).await {
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_prepared")); },
     };
@@ -896,9 +916,9 @@ pub(crate) async fn project_tests_bless_program(program: &ProgramTest, outcomes:
     let new_stdout = !refused && program.stdout.is_none() && !first.stdout.is_empty();
     let new_stderr = stderr && !refused && !stops && program.stderr.is_none() && !first.stderr.is_empty();
     if first.passed && !new_stdout && !new_stderr { return Ok(ProjectTestsBlessed::Unchanged); }
-    if !refused && (program.stdout.is_some() || new_stdout) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
-    if stops { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stops", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; } else if refused || program.stderr.is_some() || new_stderr { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
-    for (name, _, got) in first.bounds.iter() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(name))), &fs::Root::Anywhere, got.copy_of(), false, true).await?; }
+    if !refused && (program.stdout.is_some() || new_stdout) { fs::write(std::path::Path::new(&(format!("{}.stdout", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir))), first.stdout.copy_of(), false, true).await?; }
+    if stops { fs::write(std::path::Path::new(&(format!("{}.stops", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir))), nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; } else if refused || program.stderr.is_some() || new_stderr { fs::write(std::path::Path::new(&(format!("{}.stderr", program.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir))), nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    for (name, _, got) in first.bounds.iter() { fs::write(std::path::Path::new(&(name)), &fs::Root::Dir(nikaia_std::fs::path::clone(&(program.dir))), got.copy_of(), false, true).await?; }
     Ok(ProjectTestsBlessed::Written)
 }
 
@@ -958,10 +978,11 @@ pub(crate) async fn project_tests_bless(output: &OutputTest, outcomes: &[(String
     if !stops && output.stops.is_some() { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not stop, as its .stops expects"))); }
     if first.files.iter().any(|file| { file.1.is_none() }) { return Ok(ProjectTestsBlessed::Refused(String::from("a file its .out/ names was not written"))); }
     if first.passed { return Ok(ProjectTestsBlessed::Unchanged); }
-    if output.stdout.is_some() { fs::write(&nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.stdout", output.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
-    if stops { fs::write(&nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.stops", output.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; } else if output.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.stderr", output.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    if output.stdout.is_some() { fs::write(std::path::Path::new(&(format!("{}.stdout", output.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(output.dir))), first.stdout.copy_of(), false, true).await?; }
+    if stops { fs::write(std::path::Path::new(&(format!("{}.stops", output.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(output.dir))), nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; } else if output.stderr.is_some() { fs::write(std::path::Path::new(&(format!("{}.stderr", output.name))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(output.dir))), nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    let out: fs::Path = std::path::PathBuf::from(format!("{}.out", output.name));
     for (relative, got) in first.files.iter() {
-        fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.out", output.name))))), std::path::Path::new(&(relative))), &fs::Root::Anywhere, match got {
+        fs::write(&nikaia_std::fs::path::join(&(out), std::path::Path::new(&(relative))), &fs::Root::Dir(nikaia_std::fs::path::clone(&(output.dir))), match got {
             None => Bytes(vec![]),
             Some(written) => written.copy_of(),
         }, false, true).await?;
