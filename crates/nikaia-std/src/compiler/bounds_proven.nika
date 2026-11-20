@@ -171,10 +171,13 @@ pub fn bounds_proven(
 				record(walked.loops)
 				// **The rules that hold, found once** (#1581): what a body
 				// found serves the bodies after it, until a derived
-				// precondition the walks start from is added.
+				// precondition the walks start from is added; what each method
+				// walked to check them failed, by all that walk read (#2396),
+				// serves them for good.
 				for (of, holding) in walked.held {
 					context.around.held.insert(of.clone(), holding.clone())
 				}
+				rules_checked_keep(context, walked.checked)
 				let entries = context.around.derived.entry.len()
 				derived_note(context.around, walked)
 				if context.around.derived.entry.len() != entries {
@@ -194,6 +197,7 @@ pub fn bounds_proven(
 	// What a grammar binding matched changes every walk: each finds the
 	// rules that hold itself.
 	context.around.held.clear()
+	context.around.checked.clear()
 	for item in program.items {
 		match item.node {
 			Item::Grammar(def) => {

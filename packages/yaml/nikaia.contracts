@@ -592,6 +592,13 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> bool"
 
+[fn."line_part"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed", "<result>: borrowed"]
+signature = "(t: ref String, at_break: bool) -> ref(t) String"
+
 [fn."load"]
 pub = true
 sync = true

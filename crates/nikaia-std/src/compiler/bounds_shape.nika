@@ -48,6 +48,14 @@ pub struct BodyShape {
 /// function's parameters, `true` where one is `mut`, and the methods of this
 /// program that take a parameter `mut` - they change what they are handed,
 /// whichever type they are called on.
+/// **What one walk to check the rules failed** (#2396), with the found
+/// returns of the callees it could read (`context.returns`, ADR-306 D23):
+/// it serves a walk with the same key only where those are the same.
+pub struct RulesChecked {
+	pub reads: collections::BTreeMap[String, BoundsReturns],
+	pub failed: collections::BTreeSet[i64],
+}
+
 pub struct Around {
 	pub functions: collections::BTreeMap[String, Vec[bool]],
 	pub changing_methods: collections::BTreeSet[String],
@@ -66,6 +74,19 @@ pub struct Around {
 	/// context (#1581): a round of `bounds_fields` or `bounds_returns`, the
 	/// bodies of `bounds_proven` until a derived precondition is added.
 	pub held: collections::BTreeMap[String, Vec[BoundsRule]],
+	/// **What each method walked to check rules failed** (`rules_check`,
+	/// #2396), by everything that walk reads: the type, the method, the
+	/// body, the walking body's type, the body's derived precondition and
+	/// the rules given. A `held` cleared by a new derived precondition is
+	/// found again from it, walking only the bodies it changed; kept by
+	/// `bounds_proven` for the bodies after.
+	pub checked: collections::BTreeMap[String, RulesChecked],
+	/// **The field bounds and the list-returning functions `checked` was
+	/// found under**: a walk reads them, so `checked` serves only a context
+	/// that holds the same, and is emptied when they change
+	/// (`rules_checked_keep`).
+	pub checked_fields: collections::BTreeMap[String, Range],
+	pub checked_returning: collections::BTreeSet[String],
 	/// The private functions whose callers may bound their parameters, and
 	/// what the walks so far proved at their calls (ADR-391 D1,
 	/// `bounds_derived.nika`).
