@@ -62,18 +62,12 @@
 //                                 <brief>: Found: ...`, then filed as an
 //                                 issue (`ready` or `decision`, the area,
 //                                 `bugs`; `FILED #N <brief>`,
-//                                 drive_found_file); the report's new
+//                                 drive_found_file); the report's
 //                                 `Issue:`, `Needs:` and `Friction:` points
-//                                 filed as one issue for the improvement
-//                                 lane (`ready`, `improve`; `IMPROVE #N
-//                                 <brief>`, drive_improve_file; its body
-//                                 names the run's report and commit,
-//                                 #1706), a `broke` or `wrong` answer said on the
-//                                 run's issue (`IMPROVE-BROKE #N`), a
-//                                 point an improvement issue has added
-//                                 there (`IMPROVE-DUP #M`), a deviation or
-//                                 a point the run settled dropped
-//                                 (`IMPROVE-DROP`, #1818); each
+//                                 are not filed (owner, 2026-11-20: too
+//                                 many improvement issues); the supervisor
+//                                 reads them and files one by hand
+//                                 (`--improve-issue`); each
 //                                 `Comment: #N <text>` posted on issue N
 //                                 (`COMMENT #N <brief>`, drive_comment_file,
 //                                 #1698); the batch goes on
@@ -3212,8 +3206,10 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 
 // The follow-up of a builder run once its agent ended: its report's `Pushed:`
 // checked, its issue's labels, the tidy, the brief appended to
-// DIR/unpushed.txt, its `Found:`, `Comment:` and improvement lines filed;
-// last, BRIEF.running removed.
+// DIR/unpushed.txt, its `Found:` and `Comment:` lines filed (its `Issue:`,
+// `Needs:` and `Friction:` points no longer: owner, 2026-11-20, too many
+// improvement issues; the supervisor reads them in the report and files by
+// hand, `--improve-issue`); last, BRIEF.running removed.
 fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 	drive_report_pushed(dry, brief)
 	drive_wip_end(dry, brief)
@@ -3227,7 +3223,6 @@ fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 		drive_found_file(dir.clone(), brief.clone())
 	}
 	drive_comment_file(dir.clone(), brief.clone())
-	drive_improve_file(dir, brief.clone())
 	process::run("rm", ["-f", f"{brief}.running"])
 }
 

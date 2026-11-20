@@ -252,6 +252,19 @@ jobs:
       # the next commit could restore them (x64 missed in most runs). GitHub
       # lets a branch restore only its own and the default branch's entries,
       # so a `ci/*` run's saves served nobody but its own next run.
+      # The registry alone, for the shards' "Restore the cargo registry"
+      # (#2092): a cache hits only with the same path list, and nothing saved
+      # this one, so every shard missed. Once per `Cargo.lock`; a key that
+      # exists already is not written again.
+      - name: Save the cargo registry for the shards
+        if: github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+
       - name: Save the build for the next commit
         if: github.ref == 'refs/heads/develop'
         uses: actions/cache/save@v4
