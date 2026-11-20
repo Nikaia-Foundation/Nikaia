@@ -706,6 +706,33 @@ fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name
     }
 }
 
+/// **A method called by its path is refused** (Part III 17, #2336): one way
+/// to call a method, on a value. The help writes the first argument as the
+/// receiver, `T::m(x, y)` as `x.m(y)`, where the checker can write it (a
+/// literal, a name); with no argument, it names the type.
+fn check_core_call_a_method_by_its_path(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+    let parts: Vec[String] = name.split("::").map(fn(p) { p.clone() }).collect()
+    let method: String = parts.last()?.clone() ?? name.clone()
+    let owner: String = (name.strip_suffix(f"::{method}") ?? name).clone()
+    let mut notes: Vec[String] = []
+    let signature = contract.signature ?? return
+    notes.push(f"It's declared as `{name}{signature.shown(contract.keeps)}`.")
+    let mut help: String = f"Call it on a `{owner}`: `value.{method}()`."
+    if args.len() > 0 {
+        let mut rest: Vec[String] = []
+        for arg in args.iter().skip(1) {
+            rest.push(check_walked_written(arg, world.words))
+        }
+        let receiver = check_walked_written(args[0], world.words)
+        help = f"Write `{receiver}.{method}({rest.join(", ")})`."
+        // The checker writes a literal or a name; the rest is said in words.
+        if receiver == "…" {
+            help = f"Put the first argument before `.{method}`: `value.{method}({rest.join(", ")})`."
+        }
+    }
+    state.findings.push(check_refusal("NK1101", span, f"`{name}` is a method: it's called on a value, not by its path.", notes, help))
+}
+
 /// A call the ledger describes: reached, asked, and typed from its signature
 /// and what the arguments bind.
 fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, key: ref String, contract: ref FnContract, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync {
@@ -1010,6 +1037,12 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return check_core_call_unresolved(state, world, host, func, name, args, found, config, passed, shadowed, span)
     }
     let contract: FnContract = callee ?? return Ty::Unknown
+    // **A method has one call form, `x.m()`** (Part III 17, #2336): its path
+    // form, `T::m(x)` or `T::m()`, is refused before its count is.
+    if contract.signature?.takes_a_receiver() ?? false {
+        check_core_call_a_method_by_its_path(state, world, name, contract, args, span)
+        return Ty::Unknown
+    }
     let described = check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
     // **`simd::Fixed::from([…])` takes the lanes as an array** (ADR-377 D3).
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
