@@ -3153,12 +3153,15 @@ fn bounding_halves(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> i64? {
-	match value {
+	match bounding_unwrapped(value) {
 		Expr::MethodCall { receiver, method, args, .. } => {
+			let picked = words.resolve(method)
+			if picked == "narrowing_div_rem" && args.len() == 2 {
+				return bounding_division_halves(walk, names, bounding_unwrapped(value), receiver, args, facts, context, program, words)
+			}
 			if args.len() != 1 {
 				return null
 			}
-			let picked = words.resolve(method)
 			let ty = context.std_receivers[node_key(value)] ?? return null
 			if !is_whole_number(ty) {
 				return null
@@ -3201,6 +3204,69 @@ fn bounding_halves(
 		else => {},
 	}
 	return null
+}
+
+/// **The halves of `let (q, r) = high.narrowing_div_rem(low, d) ?? return`**
+/// (#2013): the rest is smaller than the divisor, `d <= 0 || -d < r < d` and
+/// `d >= 0 || d < r < -d`; and where `d` is a constant and the type no wider
+/// than 32 bits, `d * q + r == high * 2^w + low`, which a 64-bit type's
+/// `2^64` does not fit as a constant. Null where a side is no linear term or
+/// reads a name the `let` binds again.
+fn bounding_division_halves(
+	mut walk: BoundsWalk,
+	names: ref Vec[winnow_grammar::Symbol],
+	call: ref Expr,
+	receiver: ref Expr,
+	args: ref Vec[Expr],
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) -> i64? {
+	let ty = context.std_receivers[node_key(call)] ?? ""
+	if !is_whole_number(ty) {
+		return null
+	}
+	let high = bounding_lin(walk, receiver, facts, context, program, words) ?? return null
+	let low = bounding_lin(walk, args[0], facts, context, program, words) ?? return null
+	let by = bounding_lin(walk, args[1], facts, context, program, words) ?? return null
+	let first = words.resolve(names[0]).clone()
+	let second = words.resolve(names[1]).clone()
+	for side in [high, low, by] {
+		if walk.arena.mentions(side, first) || walk.arena.mentions(side, second) {
+			return null
+		}
+	}
+	let quotient = walk.arena.var(first)
+	let rest = walk.arena.var(second)
+	let zero = walk.arena.int(0)
+	let below = walk.arena.neg(by)
+	let not_up = walk.arena.le(by, zero)
+	let over = walk.arena.lt(below, rest)
+	let under = walk.arena.lt(rest, by)
+	let inside = walk.arena.and([over, under])
+	let up_side = walk.arena.or([not_up, inside])
+	let not_down = walk.arena.ge(by, zero)
+	let over_down = walk.arena.lt(by, rest)
+	let under_down = walk.arena.lt(rest, below)
+	let inside_down = walk.arena.and([over_down, under_down])
+	let down_side = walk.arena.or([not_down, inside_down])
+	let mut parts = [up_side, down_side]
+	let bits = match ty {
+		"u8" => 8,
+		"u32" => 32,
+		"i32" => 32,
+		else => 0,
+	}
+	if bits != 0 && walk.arena.constant(by) != null {
+		let shift = walk.arena.int(1 << bits)
+		let top = walk.arena.mul(high, shift)
+		let whole = walk.arena.add(top, low)
+		let times = walk.arena.mul(by, quotient)
+		let back = walk.arena.add(times, rest)
+		parts.push(walk.arena.equal(back, whole))
+	}
+	return walk.arena.and(parts)
 }
 
 /// **`expr` as a linear term**, where it is one.
@@ -7755,10 +7821,12 @@ fn bounding_let(
 	}
 	if halves != null {
 		facts.ints.insert(words.resolve(names[0]).clone())
-		// The high half of a product is a number, a flag is not.
-		match value {
+		// The high half of a product is a number, so is a division's rest;
+		// a flag is not.
+		match bounding_unwrapped(value) {
 			Expr::MethodCall { method, .. } => {
-				if words.resolve(method) == "widening_mul" {
+				let named = words.resolve(method)
+				if named == "widening_mul" || named == "narrowing_div_rem" {
 					facts.ints.insert(words.resolve(names[1]).clone())
 				}
 			},

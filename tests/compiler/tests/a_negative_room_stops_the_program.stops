@@ -1,0 +1,1 @@
+tests/a_negative_room_stops_the_program.nika:5: the program stopped: a count cannot be negative: the count is -1

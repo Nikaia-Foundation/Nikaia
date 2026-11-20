@@ -1,0 +1,37 @@
+== drive
+scripts scripts/drive.nika
+scripts-only
+== drive-doc
+scripts scripts/drive.nika
+docs docs/supervisor.md
+scripts-only
+== workflow-run
+scripts scripts/drive.nika
+code scripts/solver.nika
+suite
+== workflows
+code scripts/check-adr-refs.nika
+code scripts/java_binding.nika
+code scripts/ledgers.nika
+suite
+== tools
+code tools/x.nika
+suite
+== untested
+scripts scripts/drive.nika
+code scripts/zz-nothing.nika
+suite
+== ci-changes
+scripts scripts/drive.nika
+code scripts/ci-changes.sh
+suite
+== pre-push
+code scripts/pre-push.nika
+suite
+== docs
+docs docs/a.md
+suite
+== test
+scripts scripts/drive.nika
+code tests/compiler/tests/drive_docs.nika
+suite

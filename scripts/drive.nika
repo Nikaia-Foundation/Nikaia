@@ -141,7 +141,18 @@
 // skips its build and test jobs for them too), HEAD is pushed as on green
 // without a suite, `SUITE <sha8> docs-only, pushed without the suite`, and
 // unpushed.txt is emptied. `--docs-only FILE` prints `docs`/`code` for each
-// path in FILE and `docs-only` or `suite` (for tests).
+// path in FILE and `docs-only` or `suite` (for tests). The same trade-off
+// holds for helper scripts (owner, 2026-11-19, #2347; the compiler does not
+// change, and the tests named after the script are the real check): when every
+// path is documentation or a `scripts/X.nika` that no workflow runs (read from
+// .github/workflows/*.yml, a comment not counting), that is not pre-push and
+// that has a test named after it (`drive_scripts_only`; tools/, tests,
+// ci-changes.sh and the workflows stay code), the named tests run here after
+// the lock as before a ci/ push; green pushes HEAD without the suite, `SUITE
+// <sha8> scripts-only, local tests green, pushed without the suite`, and
+// empties unpushed.txt; red is `Gate: red local-tests` as below. CI's
+// `changes` job skips build and test for the same set. `--scripts-only FILE`
+// prints `scripts`/`docs`/`code` for each path and `scripts-only` or `suite`.
 // Before a suite is pushed to its `ci/` branch, the tests named after the
 // changed scripts run here (owner, 2026-11-06; drive_named_filters,
 // `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
@@ -234,12 +245,14 @@
 // Disk (#1521): each batch ends with the cleanup (drive_cleanup: target/debug,
 // target/nikaia-example-tests, the sandboxes of dead `nikaia test` runs,
 // `nikaia cache prune` of target/nikaia-project-tests at 2G; under 6 GB after
-// that, target/*/incremental unless a build writes there) and its line
+// that, target/*/incremental and the old variants in target/*/deps unless a
+// build writes there) and its line
 // `CLEANUP freed <N> MB, <M> MB free: ...`; before each agent, under 6 GB free
 // (`df -m` of /) it runs at once (`DISK <M> MB free, under 6 GB: cleanup`),
 // and still under 3 GB the driver escalates instead of starting the agent.
 // NIKAIA_DRIVE_FREE_MB fakes the free figure (for tests, with `--dry-run`);
 // `--cleanup` runs the cleanup alone, in the directory it runs in.
+// `--old-deps DIR...` removes the old variants in each DIR alone (for tests).
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
 // `--wake DIR LINE...` prints each LINE's WAKE line (drive_wake_line).
@@ -2190,8 +2203,13 @@ fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 }
 
 fn drive_launch(dir: String) throws {
-	drive_badges()
-	drive_ledgers("cargo build -q --profile fast -p nikaia")
+	let paths = drive_unpushed_paths()
+	// A helper-scripts batch changes neither the badge's share nor a ledger.
+	let quick = drive_scripts_only(paths.clone())
+	if !quick {
+		drive_badges()
+		drive_ledgers("cargo build -q --profile fast -p nikaia")
+	}
 	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	let branch = drive_ci_branch(dir)
 	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
@@ -2201,7 +2219,7 @@ fn drive_launch(dir: String) throws {
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 		if l.trim() != "" { covered += 1 }
 	}
-	let failed = drive_local_tests(drive_unpushed_paths())
+	let failed = drive_local_tests(paths)
 	if failed != "" {
 		fs::write(
 			log.clone(),
@@ -2211,6 +2229,13 @@ fn drive_launch(dir: String) throws {
 		fs::write(exit.clone(), fs::Root::Anywhere, "1\n")
 		fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
 		println(f"SUITE {drive_short(sha)} red locally (tests named after the changed scripts), not sent to CI")
+		return
+	}
+	if quick {
+		println(f"SUITE {drive_short(sha)} scripts-only, local tests green, pushed without the suite")
+		let how = drive_push(dir.clone(), sha)
+		if how != "none" { fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "") }
+		drive_unlock()
 		return
 	}
 	// The branch is the driver's, but someone else may have pushed to it (the
@@ -2517,6 +2542,64 @@ fn drive_docs_only(paths: Vec[String]) -> bool {
 	return any
 }
 
+// The scripts a workflow runs, as X for each `scripts/X.nika` written on a
+// line of a .github/workflows/*.yml outside a comment (`#` at the line's
+// start or after a blank): read each time, so the list never goes stale.
+// scripts/ci-changes.sh reads the same list.
+fn drive_workflow_scripts() -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	let wf = ".github/workflows"
+	if !fs::exists(wf, fs::Root::Anywhere) { return out }
+	for entry in fs::read_dir(wf, fs::Root::Anywhere) {
+		let file = entry.to_text()
+		if !file.ends_with(".yml") && !file.ends_with(".yaml") { continue }
+		for raw in drive_read(f"{wf}/{file}").split("\n") {
+			if raw.trim().starts_with("#") { continue }
+			let line = raw.split(" #").collect()[0].clone()
+			let parts: Vec[String] = line.split("scripts/").collect()
+			let mut i: i64 = 1
+			while i < parts.len() {
+				let part = parts[i]
+				i += 1
+				if !part.contains(".nika") { continue }
+				let name = part.split(".nika").collect()[0].clone()
+				if name == "" || name.contains(" ") || name.contains("/") { continue }
+				if !out.contains(name.clone()) { out.push(name) }
+			}
+		}
+	}
+	return out
+}
+
+// True when PATH is a helper script whose change needs no suite (owner,
+// 2026-11-19, #2347): `scripts/X.nika` directly under scripts/, X not run by a
+// workflow (RUN, drive_workflow_scripts), not pre-push (the gate itself), and
+// with a test named after it (drive_named_filters): without one nothing has
+// checked it. tools/ is lowered into the build and stays code; so do
+// scripts/ci-changes.sh and every other script that is not `.nika`.
+fn drive_script_path(path: String, run: Vec[String]) -> bool throws {
+	let parts: Vec[String] = path.split("/").collect()
+	if parts.len() != 2 || parts[0] != "scripts" || !parts[1].ends_with(".nika") { return false }
+	let name = parts[1].replace(".nika", "")
+	if name == "pre-push" || run.contains(name) { return false }
+	return drive_named_filters([path]).len() > 0
+}
+
+// True when every path is documentation (drive_docs_path) or a helper script
+// (drive_script_path), and at least one is a script: the batch is pushed
+// after its named tests ran green here, without the suite.
+fn drive_scripts_only(paths: Vec[String]) -> bool throws {
+	let run = drive_workflow_scripts()
+	let mut any = false
+	for p in paths {
+		if p == "" { continue }
+		if drive_docs_path(p.clone()) { continue }
+		if !drive_script_path(p.clone(), run.clone()) { return false }
+		any = true
+	}
+	return any
+}
+
 // The paths the unpushed commits touch, each commit's own.
 fn drive_unpushed_paths() -> Vec[String] throws {
 	let log = process::run(
@@ -2652,6 +2735,11 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 		dry,
 		"git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty "
 			+ f"{dir}/unpushed.txt",
+	)
+	drive_say(
+		dry,
+		"all documentation or helper scripts with named tests (drive_scripts_only): after the lock, the named tests here; green: push HEAD without the suite (SUITE <sha8> scripts-only, local tests green, pushed without the suite), empty "
+			+ f"{dir}/unpushed.txt; red: Gate: red local-tests, QA",
 	)
 	drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
 	drive_say(
@@ -2995,12 +3083,18 @@ fn drive_sweep() -> i64 throws {
 // no cargo or rustc building into them, cargo's incremental caches (target/fast,
 // target/release and the ledger tree's target/ledger-target/fast, often 9 GB
 // together; the last held 5 GB on 2026-11-17 while the cleanup missed it and
-// the driver stopped for disk; the next build only takes longer). Prints `CLEANUP freed <N> MB, <M> MB
-// free: ...`.
+// the driver stopped for disk; the next build only takes longer), and in the
+// same step the old variants in target/fast/deps, target/release/deps and
+// target/ledger-target/fast/deps (drive_old_deps, #2318: cargo never removes
+// a crate's build of an older fingerprint; on 2026-11-19 target/fast/deps held
+// 336 `nikaia-<hash>` test binaries, and removing the variants older than 3 h
+// with a newer one beside them freed 6.4 GB, 1498 files there and 162 in the
+// ledger tree, free space from 4.4 GB to 11 GB). Prints `CLEANUP freed <N> MB,
+// <M> MB free: ...`.
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
@@ -3040,10 +3134,23 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		["-c", "ps -eo comm=,args= | awk '$1 == \"cargo\" || $1 == \"rustc\"' | grep -E 'target/(fast|release)|--profile fast|--release'"],
 	).stdout.trim() == "" {
 		process::run("rm", ["-rf", "target/fast/incremental", "target/release/incremental", f"{drive_tree_target()}/fast/incremental"])
-		incremental = ", target/*/incremental"
+		let deps = drive_old_deps(["target/fast/deps", "target/release/deps", f"{drive_tree_target()}/fast/deps"])
+		incremental = f", target/*/incremental, {deps} old deps variants"
 	}
 	let after = drive_free()
 	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
+}
+
+// Removes, in each directory of DIRS, every file `<name>-<16 hex
+// digits><rest>` last changed more than 3 h ago for which a newer file of the
+// same `<name>` and another hash exists (#2318): the old variants cargo leaves
+// in target/*/deps. The newest hash of each name stays, whatever its age.
+// Returns how many files went.
+fn drive_old_deps(dirs: Vec[String]) -> i64 throws {
+	let mut args: Vec[String] = ["-c", "cut=$(($(date +%s) - 10800)); for d in \"$@\"; do [ -d \"$d\" ] || continue; find \"$d\" -maxdepth 1 -type f -printf '%T@ %f\\n' | sort -rn | awk -v cut=$cut -v d=\"$d\" '{ if (match($2, /-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/)) { name = substr($2, 1, RSTART - 1); h = substr($2, RSTART + 1, 16); if (!(name in keep)) keep[name] = h; else if (h != keep[name] && $1 + 0 < cut) print d \"/\" $2 } }'; done | { n=0; while read -r f; do rm -f \"$f\" && n=$((n + 1)); done; echo $n; }", "sh"]
+	for dir in dirs { args.push(dir.clone()) }
+	let out = process::run("sh", args)
+	return text::parse_i64(out.stdout.trim()) ?? 0
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and
@@ -5308,6 +5415,13 @@ fn main() throws {
 		drive_cleanup(drive_exe(), false)
 		return
 	}
+	// The old deps variants step alone (#2318), on the directories named.
+	if args.len() >= 3 && args[1] == "--old-deps" {
+		let mut dirs: Vec[String] = []
+		for k in 2..<args.len() { dirs.push(args[k].clone()) }
+		println(f"{drive_old_deps(dirs)} old deps variants")
+		return
+	}
 	// The badges step alone (#1348), in the repository it runs in.
 	if args.len() == 2 && args[1] == "--badges" {
 		drive_badges()
@@ -5379,6 +5493,24 @@ fn main() throws {
 			paths.push(p)
 		}
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--scripts-only" {
+		let run = drive_workflow_scripts()
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			let p = line.trim().clone()
+			if p == "" { continue }
+			if drive_docs_path(p.clone()) {
+				println(f"docs {p}")
+			} else if drive_script_path(p.clone(), run.clone()) {
+				println(f"scripts {p}")
+			} else {
+				println(f"code {p}")
+			}
+			paths.push(p)
+		}
+		if drive_scripts_only(paths) { println("scripts-only") } else { println("suite") }
 		return
 	}
 	if args.len() == 3 && args[1] == "--local-tests" {

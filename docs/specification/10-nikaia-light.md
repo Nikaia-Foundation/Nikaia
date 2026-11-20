@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1479 (Draft)
+**Version:** 0.0.1481 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -595,6 +595,18 @@ compiler reads them as it reads a `checked_` answer: past `if !overflowed`
 the result is the exact value, and past `high == 0` with the low half within
 the receiver's type it is the product, so an index computed from it is proved
 there.
+
+`narrowing_div_rem` is the way back (#2013): `high.narrowing_div_rem(low,
+divisor)` divides the double-width value `high * 2^w + low` (the halves as
+`widening_mul` gives them) by a `divisor` of the receiver's type and gives
+`(quotient, rest)?`, rounded as `/` and `%` round: the quotient toward zero,
+the rest with the sign of the dividend. It is `null` where the divisor is `0`
+or the quotient does not fit the receiver's type; the rest always fits, it is
+smaller than the divisor. It is on the same five types.
+
+```nika
+let (q, r) = high.narrowing_div_rem(low, d) ?? return   // q * d + r == high * 2^64 + low
+```
 
 Two conversions lose digits without anything failing:
 
@@ -1630,6 +1642,20 @@ type, `Type(field: value)` is refused with `NK1146`, naming the braces.
 constructor handed over as a **value** is the same spelling,
 `par_fold(M, Summary, …)`. The ledger writes `Type::new`, the name the lowering
 uses.
+
+**Room ahead is an option of the constructor.** `Vec(capacity: n)`,
+`String(capacity: n)` and `HashMap(capacity: n)` build the same empty value as
+`Vec()`, with room for `n` elements (bytes, entries) held ahead, so the first
+`n` pushes ask for memory once. The option's default is `0`, which is `Vec()`;
+a negative room stops the program, as any negative count does.
+
+```nika
+let n = 10
+let mut squares = Vec(capacity: n)
+for i in 0..<n {
+    squares.push(i * i)
+}
+```
 
 **A copy with fields changed: `with`.** `with` writes a copy of a value with
 named fields changed, without naming the rest:

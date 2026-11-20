@@ -958,7 +958,7 @@ pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &Che
         _ => { },
     }
     let mut name: String = String::from("");
-    let mut args: Vec<Ty> = vec![];
+    let mut args: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match on {
         Ty::Named { name: ref n, args: ref a, .. } => {
             name = nikaia_std::block::Text::from(n.to_string());

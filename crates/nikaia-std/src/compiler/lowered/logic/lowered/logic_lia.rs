@@ -732,7 +732,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
         }
         at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
     }
-    let mut renumbered: Vec<i64> = vec![];
+    let mut renumbered: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in steps.iter() { renumbered.push(-1); }
     let mut kept: Vec<LgStep> = vec![];
     at = 0;

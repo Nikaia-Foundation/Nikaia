@@ -29,6 +29,14 @@
 #   job builds the compiler and compares every example with
 #   tests/page-examples/EXPECTED.txt. A change to the prose around them needs no
 #   compiler. Without `docs` the examples run in a `test` shard.
+# * `docs` too for a change of helper scripts only (owner, 2026-11-19, #2347):
+#   every path is documentation or a `scripts/X.nika` that no workflow runs
+#   (a `scripts/X.nika` on a line of .github/workflows/*.yml outside a
+#   comment), that is not pre-push.nika and that has a test named after it
+#   (tests/compiler/tests/*.nika holding X, `-` as `_`, or its first `_`
+#   word of five letters or more: drive_named_filters in scripts/drive.nika,
+#   which ran those tests before the push). tools/, tests, this script and
+#   the workflows stay code. The rule is drive_scripts_only's.
 #
 # Everything is on for a manual run, a scheduled one, a first push of a branch
 # (but a `ci/` branch: it is compared with main like develop)
@@ -98,8 +106,37 @@ code=$(echo "$changed" | grep -v -E '^(guide|website)/' |
     grep -v -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/.*)$' |
     grep -v -E '\.md$' || true)
 code2=$(echo "$changed" | grep -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/)' || true)
+# The paths that are not documentation by the rule above.
+nondocs=$( { echo "$changed" | grep -v -E '^(guide|website)/' | grep -v -E '\.md$'
+    echo "$changed" | grep -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/)'; } |
+    grep -v '^$' | sort -u || true)
+# The scripts a workflow runs, one name a line.
+run_by_workflow=$(cat .github/workflows/*.yml 2>/dev/null | grep -v '^[[:space:]]*#' |
+    sed 's/ #.*//' | grep -o 'scripts/[A-Za-z0-9_-]*\.nika' | sed 's|^scripts/||; s|\.nika$||' | sort -u || true)
+# True when a test in tests/compiler/tests is named after script X.
+named_test() {
+    key=$(echo "$1" | tr - _)
+    first=${key%%_*}
+    tests=$(ls tests/compiler/tests 2>/dev/null | grep '\.nika$' || true)
+    echo "$tests" | grep -q -F "$key" && return 0
+    [ "$first" != "$key" ] && [ ${#first} -ge 5 ] && echo "$tests" | grep -q -F "$first" && return 0
+    return 1
+}
+scripts_only=true
+[ -n "$nondocs" ] || scripts_only=false
+for f in $nondocs; do
+    x=$(echo "$f" | sed -n 's|^scripts/\([^/]*\)\.nika$|\1|p')
+    if [ -z "$x" ] || [ "$x" = pre-push ] || echo "$run_by_workflow" | grep -q -x -F "$x" || ! named_test "$x"; then
+        scripts_only=false
+        break
+    fi
+done
 if [ -z "$code" ] && [ -z "$code2" ] && [ -n "$changed" ]; then
     echo "documentation only: build and test jobs are skipped"
+elif [ "$scripts_only" = true ]; then
+    echo "helper scripts with named tests and documentation only: build and test jobs are skipped"
+fi
+if [ "$scripts_only" = true ] || { [ -z "$code" ] && [ -z "$code2" ] && [ -n "$changed" ]; }; then
     for k in unsafe floor arm64; do echo "$k=false" >>"$out"; done
     echo "docs=true" >>"$out"
     examples=false
