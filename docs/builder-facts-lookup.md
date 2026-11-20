@@ -460,18 +460,17 @@ Paths: `scripts/`, `drive.nika`, `agent.nika`, `badges`, `pre-push`
   `Deviation`.
 * A `sync` tools function cannot call `fs::write` (NK2202); write through the host, e.g. `host.write_if_changed`. (issue-1582)
 * **A new `nikaia` flag is declared in clap in `crates/nikaia/src/main.rs` (Rust)**: the command line cannot be Nikaia-only, so a flag needs that Rust plumbing even under *no new Rust*. A development aid read deep inside is kept in a static `OnceLock` set there, not passed through every caller. (issue-1495)
-* **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`
-  changed the self-hosting share: regenerate it from what you commit, `git
-  checkout-index -a --prefix=target/badge/`, run `scripts/badges.py` in that
-  copy, copy its `assets/badges/self-hosted.svg` back and list it under
-  `Files:`.
+* **`pre-push` prints `badges stale (the driver's)`** when a `.nika` or a
+  Rust change moved the self-hosting share: it fails nothing, and the badge is
+  the driver's (owner, 2026-11-15), so a builder neither regenerates nor
+  commits it; `version` leaves the badges out (`bump.py check --no-badges`,
+  #2414).
 * A script test that compares a driver's `--dry-run` text fails when `scripts/*.nika` wording changes; bless it from the project dir (`nikaia test --filter NAME --bless` in `tests/compiler`) and review the diff. (qa-task)
 * Two `qa-input.txt` files exist (`docs/briefs/` and `docs/briefs/views/`); read the one in the lane directory your task names. (qa-task)
 * `scripts/where.nika -- NKnnnn` can run past the 120 s tool timeout; grep the `NKnnnn` in `crates/` and the spec row instead. (issue-1155)
-* `pre-push` "self-hosted.svg out of date" can persist even when `badges.py` on the staged tree gives a byte-identical badge; compare with `cmp` and report it, don't chase it. (issue-1261)
 * A driver step is tested by running `{repo}/scripts/drive.nika -- --SUBCOMMAND` with `dir:` set to a temp git repo, as in `tests/compiler/tests/drive_relower.nika`; a step with no subcommand gets one added. (issue-1348)
 * `badges.py`'s self-hosted share reads `crates/nikaia/src/**/*.rs` plus the `COMPILER_NIKA` tools files, so a temp repo for it needs those paths from `git archive HEAD`, without `lowered/`. (issue-1348)
-* A commit that adds Rust makes `assets/badges/self-hosted.svg` stale at HEAD, so pre-push `badges`/`version` and `tests/compiler/pre_push_staged_only` turn red until the supervisor runs `badges.py`. (issue-1582)
+* A commit that adds Rust makes `assets/badges/self-hosted.svg` stale at HEAD: a builder's pre-push only shows `badges stale (the driver's)` (its `version` leaves the badges out, #2414); `pre-push -- push` turns `badges` and `version` red until the driver runs `badges.py`. (issue-1582)
 * The ADR that ADR-270 replaced is archived: cite ADR-270 (D2→D4, D6→D22) and never name the archived number, not even in a warning, or pre-push's adr-refs check is red. (issue-1591, #1662)
 * A test of a driver step that builds a compiler needs a stub `cargo` on PATH whose built "compiler" bakes in the source it was built from; with a BUILD of `true` the old code finds no compiler and the test passes there for nothing. (issue-1665)
 

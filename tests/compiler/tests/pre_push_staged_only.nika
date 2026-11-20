@@ -5,8 +5,10 @@
 // temp repository made of HEAD with this checkout's scripts, a tools file
 // grows by five thousand code lines, unstaged, and an unrelated file is staged:
 // every step stays green. Staged, the same growth turns `badges` and
-// `version` red. It runs `pre-push -- push`, where the badges are strict (a
-// builder's run only shows them; the driver redraws them).
+// `version` red under `pre-push -- push`, where the badges are strict. A
+// builder's run (no argument) only shows the stale badge, and its `version`
+// stays green: it checks the version lines without the badges (#2414: Rust
+// staged turned `version` red on the driver's stale badge alone).
 use std::fs
 use std::process
 
@@ -30,13 +32,18 @@ fn sh(dir: String, script: String) -> String throws {
     return out.stdout.trim().clone()
 }
 
-// The step lines of a strict pre-push run (`-- push`), without the output of
-// a red one.
-fn steps(nikaia: String, work: String) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/pre-push.nika", "--", "push"]; dir: work)
+// The step lines of a pre-push run, strict (`-- push`) or a builder's,
+// without the output of a red one.
+fn steps(nikaia: String, work: String, strict: bool) -> String throws {
+    let mut args: Vec[String] = ["run", "scripts/pre-push.nika"]
+    if strict {
+        args.push("--")
+        args.push("push")
+    }
+    let out = process::run(nikaia, args; dir: work)
     let mut lines = String()
     for line in out.stdout.lines() {
-        if line.ends_with(" green") || line.ends_with(" red") {
+        if line.ends_with(" green") || line.ends_with(" red") || line.starts_with("badges stale") {
             lines.push_str(f"  {line}\n")
         }
     }
@@ -59,9 +66,11 @@ fn main() throws {
     sh(work.clone(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/check-adr-refs.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
     sh(work.clone(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
     println("unstaged tools move, a docs file staged:")
-    println(steps(nikaia.clone(), work.clone()))
+    println(steps(nikaia.clone(), work.clone(), true))
     sh(work.clone(), f"git add {tool}")
     println("the tools move staged:")
-    println(steps(nikaia, work))
+    println(steps(nikaia.clone(), work.clone(), true))
+    println("the tools move staged, a builder's run:")
+    println(steps(nikaia, work, false))
     process::run("rm", ["-rf", tmp])
 }
