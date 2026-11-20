@@ -351,6 +351,20 @@ where
     }
 }
 
+/// [`covered`] of a bound `bytes(p)` over a `Bytes`, where `p` binds names
+/// (#2409): the covered bytes as they are, unchecked (ADR-grammar-input-v1 D4).
+#[doc(hidden)]
+pub fn covered_raw<'a, S: Clone + std::fmt::Debug>(
+    input: &winnow_grammar::ParseBytes<'a, S>,
+    at: std::ops::Range<usize>,
+) -> &'a [u8] {
+    let mut whole = input.input;
+    whole.reset_to_start();
+    let all: &'a [u8] = *whole;
+    let origin = input.state.origin;
+    &all[at.start - origin..at.end - origin]
+}
+
 /// **Where a member's key stands among the fields `members[S]` builds**
 /// (ADR-grammar-typed-read-v1 D3): its index, or the number of fields for a key that
 /// names none. The value rule is chosen by it.

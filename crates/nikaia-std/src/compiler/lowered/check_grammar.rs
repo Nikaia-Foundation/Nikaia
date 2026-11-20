@@ -33,7 +33,7 @@ pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '
 // this was written - see `contracts::sync`.
 pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
     match pattern {
-        Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && !args.is_empty() && world.words.resolve(name) == "text" && !rules.contains(world.words.resolve(name)) },
+        Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && !args.is_empty() && (world.words.resolve(name) == "text" || world.words.resolve(name) == "bytes") && !rules.contains(world.words.resolve(name)) },
         _ => false,
     }
 }

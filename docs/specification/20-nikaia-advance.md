@@ -740,7 +740,7 @@ and `rule WS = "" { }` skips nothing.
 | element | matches | yields |
 | :--- | :--- | :--- |
 | `"text"` | that text, exactly | nothing; a label on it binds the text matched |
-| `x:p` | `p`, and binds what it yields to `x` for the action; a name below a repeat, a counted repeat, a choice or a built-in's argument other than `text(..)` and a labelled `span(..)` is not in the action's scope (`xs:(d:P ",")*` binds `xs`, not `d`) | — |
+| `x:p` | `p`, and binds what it yields to `x` for the action; a name below a repeat, a counted repeat, a choice or a built-in's argument other than `text(..)`, `bytes(..)` and a labelled `span(..)` is not in the action's scope (`xs:(d:P ",")*` binds `xs`, not `d`) | — |
 | `p q` | `p` then `q` (whitespace between them in a syntactic rule) | each binding |
 | `p \| q` | `p`, or where `p` fails without a cut, `q` | the alternative's action |
 | `p => q` | the **cut**: after `p`, `q` must follow; a failure in `q` is an error and no enclosing alternative is retried | as `p q` |

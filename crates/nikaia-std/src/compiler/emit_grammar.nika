@@ -527,12 +527,14 @@ impl EmitState {
         let mut heres = false
         let mut counts = false
         let mut covers = false
+        let mut covers_bytes = false
         for rule in def.rules {
             for alt in rule.alts {
                 spans = spans || emit_writes_a_built_in(world, walk, alt.pattern.node, "span", 1)
                 heres = heres || emit_writes_a_built_in(world, walk, alt.pattern.node, "here", 0)
                 counts = counts || emit_writes_a_built_in(world, walk, alt.pattern.node, "count", 1)
                 covers = covers || emit_reads_a_text_in_a_guard(world, walk, alt.pattern)
+                covers_bytes = covers_bytes || emit_reads_bytes_in_a_guard(world, walk, alt.pattern)
             }
         }
         // **A guard reads a bound `text(..)` through a rule** (#1033): the
@@ -545,6 +547,16 @@ impl EmitState {
                 out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n")
             } else {
                 out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n")
+            }
+        }
+        // a bound `bytes(..)` a guard reads: its bytes, unchecked (#2409)
+        if covers_bytes {
+            out.push(f"\n        rule {emit_covered_bytes_rule()}(at: ::core::ops::Range<usize>) -> &'a [u8] =\n")
+            out.push("          empty\n")
+            if bytes {
+                out.push("            -> { ::nikaia_std::grammar::covered_raw(input, at.clone()) }\n")
+            } else {
+                out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()).as_bytes() }\n")
             }
         }
         if counts {
@@ -661,17 +673,29 @@ impl EmitState {
                     let mut spanned: Vec[String] = []
                     emit_span_bindings(world, walk, alt.pattern.node, as_spans, spanned, false)
                     let mut prelude = ""
+                    let mut as_texts: Vec[String] = []
+                    let mut covered: Vec[String] = []
+                    emit_text_bindings(world, walk, alt.pattern, as_texts, covered)
                     for name in as_bytes {
-                        prelude = f"{prelude}let {name} = {name}.as_bytes(); "
+                        if !as_texts.contains(name) {
+                            prelude = f"{prelude}let {name} = {name}.as_bytes(); "
+                        }
                     }
                     for (name, range) in as_spans.iter().zip(spanned.iter()) {
                         prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({range}); "
                     }
-                    let mut as_texts: Vec[String] = []
-                    let mut covered: Vec[String] = []
-                    emit_text_bindings(world, walk, alt.pattern, as_texts, covered)
+                    // a bound `bytes(p)` whose `p` binds names is read as it
+                    // is, unchecked (#2409)
+                    let mut bound_bytes: Vec[String] = []
+                    emit_bytes_bindings(world, alt.pattern.node, bound_bytes)
                     for (name, range) in as_texts.iter().zip(covered.iter()) {
-                        if bytes {
+                        if bound_bytes.contains(name) {
+                            if bytes {
+                                prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_raw(input, {range}); "
+                            } else {
+                                prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}).as_bytes(); "
+                            }
+                        } else if bytes {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {range})?; "
                         } else {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
