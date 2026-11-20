@@ -2313,46 +2313,6 @@ panics = false
 sync = true
 signature = "() -> i64"
 
-# ## The process's runtime, for `std`'s own tests (ADR-303 D4; #2338)
-#
-# **There is one runtime, and `rt::handle()` finds it already running**: a
-# second call requests no memory, where building one (`rt::Runtime::build`)
-# does. Not a program's: the runtime is started by the emitted `main`, and these
-# are named only so a `test` block of `runtime/run_config.nika` can count them
-# with `mem::allocations()` (ADR-400 D1).
-[type."rt::Runtime"]
-pub = false
-
-# Whether user code runs on a pool of its own (`user_parallelism`).
-[type."rt::UserCode"]
-pub = false
-copies = true
-variants = ["Sequential", "Concurrent"]
-
-# The process's runtime, started on the first call.
-[fn."rt::handle"]
-pub = false
-panics = false
-sync = true
-touches = []
-signature = "() -> ref rt::Runtime"
-
-# A runtime of its own, beside the process's: its threads start.
-[fn."rt::Runtime::build"]
-pub = false
-panics = true
-sync = true
-keeps = ["config"]
-signature = "(user_code: rt::UserCode, config: Config) -> rt::Runtime"
-
-# The settings the runtime started with.
-[fn."rt::Runtime::config"]
-pub = false
-panics = false
-sync = true
-touches = []
-signature = "(self: ref rt::Runtime) -> Config"
-
 # ## The name of the calling thread (ADR-401)
 #
 # **`thread::id()` names the thread that calls it with a `thread::Id`**: two

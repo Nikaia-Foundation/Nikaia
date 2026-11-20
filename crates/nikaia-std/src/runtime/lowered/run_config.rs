@@ -135,21 +135,6 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
-pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    let first = rt::handle();
-    if !(first.config().io_workers >= 1) { nikaia_std::abort::assertion_failed("assert(first.config().io_workers >= 1)", None, &[("first.config().io_workers", (&&nikaia_std::abort::Operand(&(first.config().io_workers))).shown()), ]) };
-    let before = mem::allocations();
-    let second = rt::handle();
-    let found = mem::allocations();
-    if !(found == before) { nikaia_std::abort::assertion_failed("assert(found == before)", None, &[("found", (&&nikaia_std::abort::Operand(&(found))).shown()), ("before", (&&nikaia_std::abort::Operand(&(before))).shown()), ]) };
-    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default());
-    let built = mem::allocations();
-    if !(built > found) { nikaia_std::abort::assertion_failed("assert(built > found)", None, &[("built", (&&nikaia_std::abort::Operand(&(built))).shown()), ("found", (&&nikaia_std::abort::Operand(&(found))).shown()), ]) };
-    if !(second.config().io_workers >= 1) { nikaia_std::abort::assertion_failed("assert(second.config().io_workers >= 1)", None, &[("second.config().io_workers", (&&nikaia_std::abort::Operand(&(second.config().io_workers))).shown()), ]) };
-    if !(other.config().io_workers == 1) { nikaia_std::abort::assertion_failed("assert(other.config().io_workers == 1)", None, &[("other.config().io_workers", (&&nikaia_std::abort::Operand(&(other.config().io_workers))).shown()), ]) };
-    Ok(())
-}
-
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
@@ -157,6 +142,5 @@ pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(),
         ("run_config::nothing_written_is_the_documented_defaults", __nikaia_test_0),
         ("run_config::a_duration_takes_seconds_thousandths_and_minutes", __nikaia_test_1),
         ("run_config::the_file_knows_four_keys_and_no_others", __nikaia_test_2),
-        ("run_config::there_is_one_runtime_and_it_is_already_running", __nikaia_test_3),
     ]
 }

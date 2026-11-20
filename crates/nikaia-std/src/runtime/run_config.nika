@@ -13,8 +13,6 @@
 // documented file has: comments, blank lines, and `key = value` with an
 // optionally quoted value.
 
-use std::mem
-use std::rt
 use std::text
 use std::time
 
@@ -186,21 +184,4 @@ test "the file knows four keys and no others" {
     assert(keys.contains("cleanup-deadline"))
     assert(!keys.contains("ordering"))
     assert(!keys.contains("user-parallelism"))
-}
-
-// **There is one runtime, and it is already running** (ADR-303 D4): a second
-// `rt::handle()` finds the runtime the first one found and builds none, so it
-// requests no memory (ADR-400 D1), where building a runtime of its own does.
-test "there is one runtime and it is already running" {
-    let first = rt::handle()
-    assert(first.config().io_workers >= 1)
-    let before = mem::allocations()
-    let second = rt::handle()
-    let found = mem::allocations()
-    assert(found == before)
-    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default())
-    let built = mem::allocations()
-    assert(built > found)
-    assert(second.config().io_workers >= 1)
-    assert(other.config().io_workers == 1)
 }

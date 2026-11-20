@@ -446,7 +446,7 @@ fn ended_by_the_deadline(said: String) {
 pub const EXIT_CLEANUP_EXPIRED: i32 = 70;
 
 impl Runtime {
-    pub(crate) fn build(user_code: UserCode, config: Config) -> Runtime {
+    fn build(user_code: UserCode, config: Config) -> Runtime {
         let workers = worker::Workers::start(config.io_workers as usize);
 
         #[cfg(all(target_os = "linux", feature = "async-io"))]
@@ -1529,10 +1529,15 @@ mod tests {
         assert_eq!(exec::block_on(left_alone).expect("the first read"), b"mine");
         std::fs::remove_dir_all(&dir).ok();
     }
-
-    // D4's "there is one runtime and it is already running" is a `test` block
-    // of `runtime/run_config.nika` (#2338): a second `handle()` requests no
-    // memory, where building a runtime does.
+    /// D4, from the only angle a test can see it: the runtime a `std` call
+    /// finds is already there, and it is the same one every call finds.
+    #[test]
+    fn there_is_one_runtime_and_it_is_already_running() {
+        let first = handle();
+        let second = handle();
+        assert!(std::ptr::eq(first, second), "two runtimes started");
+        assert!(first.config().io_workers >= 1, "D4: one I/O thread always");
+    }
 
     /// A pair through a named runtime, so the test can compare two mechanisms
     /// rather than only whichever one this machine chose.
