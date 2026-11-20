@@ -1,4 +1,4 @@
-// A text key hashes as its text (ADR-010 D5, ADR-296 D42, #2315): a
+// A text key hashes as its text (ADR-010 D5, ADR-grammar-lowering-v1 D5, #2315): a
 // `String` key of a trusted map is found by a literal, a view (`trim`, a line
 // of `lines()`) and an `f"…"` string, at every length from 0 to 39, across
 // the word-at-a-time steps at 8 and 16. Were the forms hashed apart, a lookup
