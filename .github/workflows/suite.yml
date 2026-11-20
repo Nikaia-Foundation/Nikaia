@@ -61,9 +61,12 @@ jobs:
 
       # **Nothing built twice, across runs either.** The build is
       # incremental and its state is cached per commit: the next run restores
-      # the newest one and rustc recompiles only what changed (measured on 4
-      # cores: a whole test build 278 s, after a fresh checkout with a change
-      # in `std` 48-51 s). A cache keyed on `Cargo.lock` alone hit exactly
+      # the newest one and rustc recompiles only what changed (measured
+      # 2026-11-20, run 44726537733: arm64 with no cache 4:53; x86 with the cache of a
+      # commit 207 files back, 23 of 196 targets compiled, `std` once,
+      # 1:56). The sources unchanged since the cached commit are dated back
+      # first, or the checkout's fresh mtimes rebuild every crate (#2403).
+      # A cache keyed on `Cargo.lock` alone hit exactly
       # and was never saved again, so our own crates were rebuilt every time.
       - name: Restore the build of an earlier commit
         id: incr
