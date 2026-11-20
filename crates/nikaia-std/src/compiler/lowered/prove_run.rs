@@ -145,9 +145,9 @@ pub(crate) fn prove_summaries(walk: &ProverWalk, program: &Program, words: &winn
         let function = match prover_summed_function(program, words, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !function.options.is_empty() || exits.is_empty() { continue; }
         let mut chars: Vec<bool> = vec![];
-        for _ in function.params.iter() { chars.push(false); }
+        chars.reserve(function.params.iter().size_hint().0); for _ in function.params.iter() { chars.push(false); }
         let mut conditions: Vec<Vec<logic::SolverTerm>> = vec![];
-        for exit in exits.iter() { conditions.push(walk.arena.nodes_of(exit.term)); }
+        conditions.reserve(exits.iter().size_hint().0); for exit in exits.iter() { conditions.push(walk.arena.nodes_of(exit.term)); }
         out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params: function.params.copy_owned(), chars, options: vec![], conditions });
     }
     out
@@ -173,13 +173,13 @@ pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeS
     if to.iter().all(|c| { nikaia_std::list::contains(&from, &c) }) { return true; }
     let mut arena = logic::TermArena::empty();
     let mut facts: Vec<i64> = vec![];
-    for c in from.iter() {
+    facts.reserve(from.iter().size_hint().0); for c in from.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
         facts.push(arena.adopt(&nodes));
     }
     let mut goals: Vec<i64> = vec![];
-    for c in to.iter() {
+    goals.reserve(to.iter().size_hint().0); for c in to.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
         goals.push(arena.adopt(&nodes));

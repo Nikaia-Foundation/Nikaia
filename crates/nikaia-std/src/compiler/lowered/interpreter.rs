@@ -28,7 +28,7 @@ pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, de
     match stmt {
         Stmt::Let { names, value, .. } => {
             let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for n in names.iter() {
+            bound.reserve(names.iter().size_hint().0); for n in names.iter() {
                 let n = *n;
                 bound.push(nikaia_std::block::Text::from(words.resolve(n).to_string()));
             }

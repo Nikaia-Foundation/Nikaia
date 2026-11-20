@@ -132,7 +132,7 @@ pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, 
     match held {
         BuildValue::Constant { ref constructor, ref parts } => {
             let mut args: Vec<Expr> = vec![];
-            for part in parts.iter() { args.push(match comptime_literal_of(part, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            args.reserve(parts.iter().size_hint().0); for part in parts.iter() { args.push(match comptime_literal_of(part, &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
             let names: Vec<winnow_grammar::Symbol> = vec![intern(&named)];
             let path: Vec<winnow_grammar::Symbol> = constructor.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
             let call = Expr::Call { func: std::boxed::Box::new(Expr::Path(path, fresh_id())), args, config: vec![], id: fresh_id() };
@@ -353,7 +353,7 @@ pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &mut dyn FnMut(&st
         BuildValue::Struct { name: ty, fields } => {
             let named = intern(ty);
             let mut inits: Vec<FieldInit> = vec![];
-            for (field, held) in fields.iter() {
+            inits.reserve(fields.iter().size_hint().0); for (field, held) in fields.iter() {
                 let value = match comptime_literal_of(held, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 inits.push(FieldInit { name: intern(field), value: Some(value) });
             }
@@ -376,7 +376,7 @@ pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &mut dyn FnMut(&st
 
 pub(crate) fn comptime_literals_of(values: &[BuildValue], intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Vec<Expr>> {
     let mut out: Vec<Expr> = vec![];
-    for value in values.iter() { out.push(match comptime_literal_of(value, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    out.reserve(values.iter().size_hint().0); for value in values.iter() { out.push(match comptime_literal_of(value, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 
@@ -448,7 +448,7 @@ pub(crate) fn comptime_written_type(ty: &Ty, intern: &mut dyn FnMut(&str) -> win
 
 pub(crate) fn comptime_written_types(tys: &[Ty], intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol) -> Option<Vec<Type>> {
     let mut out: Vec<Type> = vec![];
-    for ty in tys.iter() { out.push(match comptime_written_type(ty, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    out.reserve(tys.iter().size_hint().0); for ty in tys.iter() { out.push(match comptime_written_type(ty, &mut &mut *intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 

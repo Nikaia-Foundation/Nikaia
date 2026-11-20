@@ -131,7 +131,7 @@ impl SvSat {
     // this was written - see `contracts::sync`.
     pub fn model(&self) -> Vec<bool> {
         let mut out: Vec<bool> = vec![];
-        for v in self.value.iter() {
+        out.reserve(self.value.iter().size_hint().0); for v in self.value.iter() {
             let v = nikaia_std::num::value(v);
             out.push(v > 0);
         }
@@ -365,7 +365,7 @@ impl SvSat {
         }
         { let __nikaia_stored = p ^ 1u32; nikaia_std::index::set(&mut lits, 0usize, __nikaia_stored); }
         let mut hints: Vec<u32> = vec![];
-        for v in zero.iter() {
+        hints.reserve(zero.iter().size_hint().0); for v in zero.iter() {
             let v = nikaia_std::num::value(v);
             hints.push(u32::try_from(*nikaia_std::index::get(&self.unit, nikaia_std::index::at(v))).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")));
             { let __nikaia_stored = false; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
@@ -492,7 +492,7 @@ impl SvSat {
         let mut ordered: Vec<u32> = vec![];
         let mut falsified: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut holds = false;
-        for l in lits.iter() {
+        falsified.reserve(lits.iter().size_hint().0); for l in lits.iter() {
             let l = nikaia_std::num::value(l);
             let v = self.lit_value(l);
             if v > 0 { holds = true; }
@@ -509,7 +509,7 @@ impl SvSat {
             { let __nikaia_stored = l; nikaia_std::index::set(&mut falsified, nikaia_std::index::at(at), __nikaia_stored); }
         }
         let open = ordered.len() as i64;
-        for l in falsified.iter() {
+        ordered.reserve(falsified.iter().size_hint().0); for l in falsified.iter() {
             let l = nikaia_std::num::value(l);
             ordered.push(l);
         }
@@ -546,7 +546,7 @@ impl SvSat {
         let mut out: Vec<Vec<u32>> = vec![];
         let top = if !self.limits.is_empty() { *unsafe { nikaia_std::proven::read(&self.limits, (0) as usize) } } else { self.trail.len() as i64 };
         for i in 0..top { out.push(vec![*nikaia_std::index::get(&self.trail, (i) as usize)]); }
-        for c in self.learnts.iter() {
+        out.reserve(self.learnts.iter().size_hint().0); for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
             let at = c as i64;
             if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) })) & 2u32 != 0u32 { continue; }
@@ -568,7 +568,7 @@ impl SvSat {
         self.stats.reductions += 1;
         self.next_reduce = self.stats.conflicts + self.reduce_first + self.stats.reductions * self.reduce_step;
         let mut keys: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for c in self.learnts.iter() {
+        keys.reserve(self.learnts.iter().size_hint().0); for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
             let glue = (*nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c as i64, 1) })) >> 2) as i64;
             keys.push(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(glue, 4294967296i64), nikaia_std::proven::sub::<i64>(4294967295i64, c as i64)) });
@@ -800,7 +800,7 @@ pub(crate) fn sv_sat_test_satisfied(q: &SvQuery, s: &SvSat) -> i64 {
 
 pub(crate) fn sv_sat_test_lits_text(lits: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for l in lits.iter() {
+    parts.reserve(lits.iter().size_hint().0); for l in lits.iter() {
         let l = nikaia_std::num::value(l);
         let v = l / 2u32;
         parts.push(if l % 2u32 == 0u32 { format!("x{}", v) } else { format!("-x{}", v) });
@@ -897,7 +897,7 @@ pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Er
     if !(answer == SvSatAnswer::Unsat) { nikaia_std::abort::assertion_failed("assert(answer == SvSatAnswer::Unsat)", None, &[("answer", (&&nikaia_std::abort::Operand(&(answer))).shown()), ("SvSatAnswer::Unsat", (&&nikaia_std::abort::Operand(&(SvSatAnswer::Unsat))).shown()), ]) };
     let mut cut: Vec<SvStep> = vec![];
     let mut done = false;
-    for step in broken.book.log.steps.iter() {
+    cut.reserve(broken.book.log.steps.iter().size_hint().0); for step in broken.book.log.steps.iter() {
         let taken = match step {
             SvStep::Learn(lits, hints) => {
                 if !done && hints.len() > 1 {

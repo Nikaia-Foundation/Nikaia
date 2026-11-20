@@ -147,7 +147,7 @@ pub fn throws_published(name: &str, errors: &[String]) -> Vec<String> {
         } else { out.insert(nikaia_std::block::Text::from(UNNAMED.to_string())); }
     }
     let mut list: Vec<String> = vec![];
-    for error in out.iter() { list.push(nikaia_std::block::Text::from(error.to_string())); }
+    list.reserve(out.iter().size_hint().0); for error in out.iter() { list.push(nikaia_std::block::Text::from(error.to_string())); }
     list
 }
 
@@ -177,7 +177,7 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
     for (name, set) in sets.iter() {
         if places.contains(name) {
             let mut union: Vec<String> = vec![];
-            for error in set.iter() { union.push(nikaia_std::block::Text::from(error.to_string())); }
+            union.reserve(set.iter().size_hint().0); for error in set.iter() { union.push(nikaia_std::block::Text::from(error.to_string())); }
             settled.insert(nikaia_std::block::Text::from(name.to_string()), union);
             continue;
         }
@@ -206,7 +206,7 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
             mapped.insert(through);
         }
         let mut errors: Vec<String> = vec![];
-        for error in mapped.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
+        errors.reserve(mapped.iter().size_hint().0); for error in mapped.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
         if errors.is_empty() { errors.push(String::from("?")); }
         settled.insert(nikaia_std::block::Text::from(name.to_string()), errors);
     }
@@ -246,7 +246,7 @@ pub(crate) fn theirs(sets: &collections::BTreeMap<String, collections::BTreeSet<
         return errors;
     }
     let contract = match *nikaia_std::index::get(&own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return errors };
-    for error in contract.fails_with.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
+    errors.reserve(contract.fails_with.iter().size_hint().0); for error in contract.fails_with.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
     errors
 }
 

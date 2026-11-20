@@ -107,7 +107,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        for field in declared.iter() { fields.push(format!("{}: …", field.name)); }
+        fields.reserve(declared.iter().size_hint().0); for field in declared.iter() { fields.push(format!("{}: …", field.name)); }
         self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("A type is called through a constructor, `impl {} {{ pub fn(…) … }}`, and `{}` doesn't declare one.", name, name)], Some(format!("Build it with a literal: `{} {{ {} }}`.", name, nikaia_std::block::Text::from(fields.join(", "))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -204,7 +204,7 @@ pub(crate) fn a_known_value(ty: &Ty) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn left_out_text(missing: &[String]) -> String {
     let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for field in missing.iter() { quoted.push(format!("`{}`", field)); }
+    quoted.reserve(missing.iter().size_hint().0); for field in missing.iter() { quoted.push(format!("`{}`", field)); }
     nikaia_std::block::Text::from(quoted.join(", "))
 }
 

@@ -96,7 +96,7 @@ pub(crate) fn bt_expr<H: BtHost>(expr: &Expr, host: &H, state: &mut BtState) -> 
         },
         Expr::Tuple(parts, _) => {
             let mut held: Vec<BuildValue> = vec![];
-            for part in parts.iter() { held.push(bt_expr(part, host, state)?); }
+            held.reserve(parts.iter().size_hint().0); for part in parts.iter() { held.push(bt_expr(part, host, state)?); }
             BuildValue::Tuple(held)
         },
         Expr::LitInterpolated { parts, .. } => bt_interpolated(parts, host, state)?,
@@ -113,7 +113,7 @@ pub(crate) fn bt_expr<H: BtHost>(expr: &Expr, host: &H, state: &mut BtState) -> 
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); bt_if_value(cond, then_branch, (else_branch).as_ref(), host, state)? },
         Expr::ListLit { items, .. } => {
             let mut values: Vec<BuildValue> = vec![];
-            for item in items.iter() { values.push(bt_expr(item, host, state)?); }
+            values.reserve(items.iter().size_hint().0); for item in items.iter() { values.push(bt_expr(item, host, state)?); }
             BuildValue::List(values)
         },
         Expr::Index { base, index, .. } => {
@@ -243,7 +243,7 @@ pub(crate) fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[Conf
             let rule = host.text(state.unit, *unsafe { nikaia_std::proven::read(&path, (1) as usize) });
             if host.variant_of(state.unit, &parser, &rule) {
                 let mut payload: Vec<BuildValue> = vec![];
-                for arg in args.iter() { payload.push(bt_expr(arg, host, state)?); }
+                payload.reserve(args.iter().size_hint().0); for arg in args.iter() { payload.push(bt_expr(arg, host, state)?); }
                 return Ok(BuildValue::Variant { ty: parser, variant: rule, payload });
             }
             if args.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded(format!("{}::{}(…)", parser, rule)), &"bt_call_expr")); }

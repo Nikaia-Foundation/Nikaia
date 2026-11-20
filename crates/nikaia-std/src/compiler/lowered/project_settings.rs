@@ -305,7 +305,7 @@ pub fn project_settings_environment(words: &ProjectWords, flag: Option<&str>) ->
 
 pub fn project_settings_allowed(manifest: &[String], flags: &[String]) -> Result<Vec<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     let mut allowed = manifest.copy_owned();
-    for flag in flags.iter() {
+    allowed.reserve(flags.iter().size_hint().0); for flag in flags.iter() {
         let named = match flag.split_once(":") {
             Some((_, key)) => nikaia_std::either_text::either(key),
             None => nikaia_std::either_text::either(nikaia_std::block::Text::from(flag.to_string())),

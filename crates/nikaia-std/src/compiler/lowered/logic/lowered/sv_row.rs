@@ -194,7 +194,7 @@ impl SvVars {
 
 pub(crate) fn sv_row_of_lin(lin: &LgLin, vars: &mut SvVars) -> Option<SvRow> {
     let mut terms: Vec<SvTerm> = vec![];
-    for (name, k) in lin.terms.iter() {
+    terms.reserve(lin.terms.iter().size_hint().0); for (name, k) in lin.terms.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: match vars.column(name) { Some(__nikaia_value) => __nikaia_value, None => return None }, k });
     }

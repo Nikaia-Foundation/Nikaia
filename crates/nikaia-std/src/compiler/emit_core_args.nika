@@ -442,6 +442,54 @@ impl EmitState {
         return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
     }
 
+    /// Whether argument `i` is a text's `bytes().collect()` lent, as it is,
+    /// to a parameter declared `Vec[u8]` (#2385): one the callee only reads,
+    /// as `&[u8]`, so the text's own bytes are what it takes. Not where the
+    /// argument is nullable, changed, a type variable's or collected into a
+    /// declared type.
+    fn emit_arg_lent_text_bytes(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64) -> bool {
+        let node = node_key(arg)
+        if !self.facts.lent_args.contains(node) || self.facts.mut_args.contains(node) || self.facts.changing_code_args.contains_key(node) || self.facts.nullable_args.contains_key(node) {
+            return false
+        }
+        let collected = match arg {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if emit_text(world, method) != "collect" || args.len() != 0 {
+                    return false
+                }
+                receiver
+            },
+            else => return false,
+        }
+        let text = match collected {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if emit_text(world, method) != "bytes" || args.len() != 0 {
+                    return false
+                }
+                receiver
+            },
+            else => return false,
+        }
+        if (self.facts.method_callees[node_key(collected)]?.clone() ?? "") != "Seq::collect" || self.facts.collected_into.contains(node_key(collected)) {
+            return false
+        }
+        let bytes = self.facts.method_callees[node_key(text)]?.clone() ?? ""
+        if bytes != "String::bytes" && bytes != "str::bytes" {
+            return false
+        }
+        let key = method_callee ?? callee
+        let contract = self.own_contracts.functions.get(key) ?? world.library.functions.get(key) ?? return false
+        let signature = contract.signature ?? return false
+        let at = if method_callee != null && emit_takes_self(contract) { i + 1 } else { i }
+        if at < 0 || at >= signature.params.len() {
+            return false
+        }
+        return match signature.params[at].1 {
+            Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && names_u8(args[0]),
+            else => false,
+        }
+    }
+
     /// Whether argument `i` of a call goes to a parameter the library's or a
     /// described crate's entry names in `os_text` (Part III 13.5, #2351): one
     /// its Rust function takes as `&OsStr`. This unit's own functions take
@@ -617,6 +665,25 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
             out.push(")")
             return
+        }
+        // **A text's bytes collected only to be lent are the text's own**
+        // (#2385): `s.bytes().collect()` handed to a `Vec[u8]` the callee only
+        // reads is `s.as_bytes()`, the `&[u8]` it takes, without the list a
+        // collect would make, copy into and drop.
+        if self.emit_arg_lent_text_bytes(world, callee, method_callee, arg, i) {
+            match arg {
+                Expr::MethodCall { receiver: collected, .. } => {
+                    match collected {
+                        Expr::MethodCall { receiver: text, .. } => {
+                            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                            out.push(".as_bytes()")
+                            return
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
         }
         // **A part of a variant that is boxed is built in its box** (ADR-246 D3),
         // around everything else this argument is written with.

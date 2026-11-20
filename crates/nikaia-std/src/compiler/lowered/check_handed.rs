@@ -107,7 +107,7 @@ pub(crate) fn check_handed_params(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>,
     match item {
         Item::Fn { receiver, args, .. } => {
             if receiver.is_some() { out.push(String::from("self")); }
-            for arg in args.iter() { out.push(view.text(arg.name)); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(view.text(arg.name)); }
         },
         _ => { },
     }
@@ -291,7 +291,7 @@ pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
                     for arg in args.iter() {
                         match arg {
                             Expr::Closure { params, .. } => {
-                                for param in params.iter() {
+                                scoped.reserve(params.iter().size_hint().0); for param in params.iter() {
                                     let param = *param;
                                     let text = view.text(param);
                                     check_handed_bind(state, &text, (origin).as_deref());
@@ -310,7 +310,7 @@ pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
             Stmt::For { bindings, iter, .. } => {
                 looping = true;
                 let origin = check_handed_carries(world, view, key, iter, &held);
-                for bound in bindings.iter() {
+                scoped.reserve(bindings.iter().size_hint().0); for bound in bindings.iter() {
                     let bound = *bound;
                     let text = view.text(bound);
                     check_handed_bind(state, &text, (origin).as_deref());
@@ -575,7 +575,7 @@ pub(crate) fn check_handed_callee(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>,
         Expr::Variable(name, _) => { let name = *name; Some(view.text(name)) },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for segment in segments.iter() {
+            parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(view.text(segment));
             }

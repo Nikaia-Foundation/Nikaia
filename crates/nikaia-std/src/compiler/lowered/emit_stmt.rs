@@ -956,6 +956,16 @@ impl EmitState {
             out.push("}");
             return Ok(());
         }
+        let lent_walk = is_a_place(iter) && !viewed && !self.facts.owned_loops.contains(&at) && !self.facts.timed_loops.contains(&at);
+        if lent_walk && !self.reads_through_handle(world, &walk, &scope.function, iter) {
+            let grown = self.emit_stmt_for_grown(world, bindings, body);
+            if grown.is_some() {
+                let name = match grown { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                out.push(&format!("{}.reserve(", self.emit_stmt_local(&name)));
+                self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?;
+                out.push(".iter().size_hint().0); ");
+            }
+        }
         out.push(&format!("{}for {} in ", allowed, bound));
         let timed = self.facts.timed_loops.contains(&at);
         if timed { out.push("nikaia_std::par::listed("); }
@@ -1000,6 +1010,49 @@ impl EmitState {
         }
         self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), &inside, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
         Ok(())
+    }
+    pub(crate) fn emit_stmt_for_grown(&self, world: &EmitWorld<'_, '_, '_, '_>, bindings: &[winnow_grammar::Symbol], body: &Block) -> Option<String> {
+        let mut grown: Option<String> = None;
+        #[allow(unused_mut)] let mut shadowed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        shadowed.reserve(bindings.iter().size_hint().0); for one in bindings.iter() {
+            let one = *one;
+            shadowed.push(emit_text(world, one));
+        }
+        for stmt in body.stmts.iter() {
+            match &stmt.node {
+                Stmt::Let { names, .. } => {
+                    shadowed.reserve(names.iter().size_hint().0); for one in names.iter() {
+                        let one = *one;
+                        shadowed.push(emit_text(world, one));
+                    }
+                },
+                Stmt::Expr(e) => {
+                    match e {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                            if emit_text(world, method) == "push" && args.len() == 1 && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &(node_key(receiver))) {
+                                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                                None => None,
+                            }, || "".into()) == "Vec::push" {
+                                match receiver {
+                                    Expr::Variable(v, _) => {
+                                        let v = *v;
+                                        if grown.is_some() { return None; }
+                                        grown = Some(emit_text(world, v));
+                                    },
+                                    _ => { },
+                                }
+                            }
+                        },
+                        _ => { },
+                    }
+                },
+                _ => { },
+            }
+        }
+        let name = match grown { Some(__nikaia_value) => __nikaia_value, None => return None }; #[allow(unused_mut, clippy::redundant_locals)] let mut shadowed = shadowed;
+        if nikaia_std::list::contains(&shadowed, &name) { return None; }
+        Some(name)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

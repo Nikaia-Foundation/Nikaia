@@ -21,7 +21,7 @@ impl KeepContext {
                 Item::Struct { name, generics, fields, .. } => {
                     let name = *name;
                     let mut written: Vec<(String, Type)> = vec![];
-                    for field in fields.iter() { written.push((nikaia_std::block::Text::from(names.resolve(field.name).to_string()), field.ty.clone())); }
+                    written.reserve(fields.iter().size_hint().0); for field in fields.iter() { written.push((nikaia_std::block::Text::from(names.resolve(field.name).to_string()), field.ty.clone())); }
                     structs.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()), DeclaredStruct { generic: !generics.is_empty(), fields: written });
                 },
                 _ => { },

@@ -182,7 +182,7 @@ pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '
             Item::Fn { .. } => { out.push(match plan_of(&item.node, None, ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(ask.names.resolve(target.name).to_string());
-                for method in methods.iter() { out.push(match plan_of(&method.node, Some(nikaia_std::block::Text::from(owner.to_string())), ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                out.reserve(methods.iter().size_hint().0); for method in methods.iter() { out.push(match plan_of(&method.node, Some(nikaia_std::block::Text::from(owner.to_string())), ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
             },
             _ => { },
         }
@@ -261,7 +261,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
 
 pub(crate) fn late_puts(walk: &BufferWalk, plan: &mut BufferPlan) {
     let mut found: Vec<(i64, Mutated)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (at, _) in plan.puts.iter() {
+    found.reserve(plan.puts.iter().size_hint().0); for (at, _) in plan.puts.iter() {
         let at = nikaia_std::num::value(at);
         let changed = match walk.mutated.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         found.push((at.clone(), changed.clone()));
@@ -449,7 +449,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
     let mut parts: Vec<bool> = vec![];
     if names.len() == 1 && ty.is_none() {
         match value {
-            Expr::Tuple(items, _) => { for item in items.iter() { parts.push(formats_a_number(item, ask, &walk)); } },
+            Expr::Tuple(items, _) => { parts.reserve(items.iter().size_hint().0); for item in items.iter() { parts.push(formats_a_number(item, ask, &walk)); } },
             _ => { },
         }
     }
@@ -501,7 +501,7 @@ pub(crate) fn tails_made_here(names: &[winnow_grammar::Symbol], value: &Expr, at
             tails.push(match ending_of(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None });
             tails.push(match ending_of(other) { Some(__nikaia_value) => __nikaia_value, None => return None });
         },
-        Expr::Match { arms, .. } => { for arm in arms.iter() { tails.push(arm.body.clone()); } },
+        Expr::Match { arms, .. } => { tails.reserve(arms.iter().size_hint().0); for arm in arms.iter() { tails.push(arm.body.clone()); } },
         Expr::Block(block, _) => { tails.push(match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return None }); },
         _ => { return None; },
     }
@@ -1825,7 +1825,7 @@ pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_
         }
         let sequence = a_sequence_container((written).as_ref(), ask);
         let not_a_list = plan.struct_keepers.contains(keeper) && !sequence;
-        if !not_a_list { for why in whys.iter() { found.push(element_refusal(keeper, &format!("it holds {}, which isn't supported there yet", why), "Keep text, or structs of text views, in it, or store copies made with `.clone()`.", &plan)); } } else { found.push(element_refusal(keeper, "it isn't a list, and only a list can hold structs of views here yet", "Keep the structs in a list, or store copies made with `.clone()`.", &plan)); }
+        if !not_a_list { found.reserve(whys.iter().size_hint().0); for why in whys.iter() { found.push(element_refusal(keeper, &format!("it holds {}, which isn't supported there yet", why), "Keep text, or structs of text views, in it, or store copies made with `.clone()`.", &plan)); } } else { found.push(element_refusal(keeper, "it isn't a list, and only a list can hold structs of views here yet", "Keep the structs in a list, or store copies made with `.clone()`.", &plan)); }
     }
     for one in found.iter() { plan.refusals.push(one.clone()); }
 }

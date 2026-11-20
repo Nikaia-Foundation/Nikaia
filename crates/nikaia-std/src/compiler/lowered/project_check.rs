@@ -87,7 +87,7 @@ pub(crate) fn project_check_let_unproved_claims_through(findings: &mut Vec<Check
 
 pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw_sinks: &str, allow: &[String], package: &str) -> Vec<CheckFinding> {
     let mut kept: Vec<CheckFinding> = vec![];
-    for finding in findings.iter() {
+    kept.reserve(findings.iter().size_hint().0); for finding in findings.iter() {
         if finding.code != "NK1308" {
             kept.push(finding.clone());
             continue;

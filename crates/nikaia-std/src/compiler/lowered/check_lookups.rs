@@ -20,7 +20,7 @@ impl CheckState {
                 self.variant_owner.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(name.to_string()));
                 if variant.positional && !variant.holds.is_empty() {
                     let mut parts: Vec<Ty> = vec![];
-                    for held in variant.holds.iter() { parts.push(held.ty.clone()); }
+                    parts.reserve(variant.holds.iter().size_hint().0); for held in variant.holds.iter() { parts.push(held.ty.clone()); }
                     self.variant_parts.insert(key, parts);
                 } else if !variant.holds.is_empty() { self.structs.insert(key, variant.holds.copy_owned()); }
             }
@@ -39,7 +39,7 @@ impl CheckState {
                 for generic in generics.iter() {
                     if generic.bounds.is_empty() { continue; }
                     let mut traits: Vec<String> = vec![];
-                    for bound in generic.bounds.iter() {
+                    traits.reserve(generic.bounds.iter().size_hint().0); for bound in generic.bounds.iter() {
                         let bound = *bound;
                         traits.push(nikaia_std::block::Text::from(world.words.resolve(bound).to_string()));
                     }
@@ -83,7 +83,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_grammar_rule(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for part in segments.iter() {
+        written.reserve(segments.iter().size_hint().0); for part in segments.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
@@ -137,7 +137,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_function_by_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for part in segments.iter() {
+        written.reserve(segments.iter().size_hint().0); for part in segments.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
@@ -226,7 +226,7 @@ pub(crate) fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
     for bound in signature.bounds.iter() {
         if bound.1.is_empty() { continue; }
         let mut traits: Vec<String> = vec![];
-        for one in bound.1.iter() { traits.push(as_this_program_says(world, key, one)); }
+        traits.reserve(bound.1.iter().size_hint().0); for one in bound.1.iter() { traits.push(as_this_program_says(world, key, one)); }
         bounds.insert(nikaia_std::block::Text::from(bound.0.to_string()), traits);
     }
     if bounds.is_empty() { return None; }

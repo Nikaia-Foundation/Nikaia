@@ -97,7 +97,7 @@ impl CheckState {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         }, || vec![].into());
-                        for field in fields.iter() { types.push(field.ty.clone()); }
+                        types.reserve(fields.iter().size_hint().0); for field in fields.iter() { types.push(field.ty.clone()); }
                     }
                     self.bind_positional(world, parts, &types, &mut out);
                 }
@@ -154,7 +154,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for part in path.iter() {
+        written.reserve(path.iter().size_hint().0); for part in path.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
@@ -264,7 +264,7 @@ impl CheckState {
             MatchPattern::Named { path, fields, rest } => {
                 let rest = *rest;
                 #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for part in path.iter() {
+                written.reserve(path.iter().size_hint().0); for part in path.iter() {
                     let part = *part;
                     written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
                 }
@@ -275,7 +275,7 @@ impl CheckState {
                     None => None,
                 }, || vec![].into());
                 #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for each in fields.iter() {
+                named.reserve(fields.iter().size_hint().0); for each in fields.iter() {
                     let name = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
                     named.push(nikaia_std::block::Text::from(name.to_string()));
                     for field in declared.iter() {

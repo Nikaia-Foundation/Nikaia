@@ -1312,6 +1312,20 @@ impl EmitState {
             out.push("}")
             return
         }
+        // **A list the body pushes onto once a turn is asked for its room
+        // first** (#2385): a `for` over a place it lends walks a known number
+        // of elements, so one `reserve` of that many replaces the doubling
+        // growth the pushes would cause. Nothing a program reads changes.
+        let lent_walk = is_a_place(iter) && !viewed && !self.facts.owned_loops.contains(at) && !self.facts.timed_loops.contains(at)
+        if lent_walk && !self.reads_through_handle(world, walk, scope.function, iter) {
+            let grown = self.emit_stmt_for_grown(world, bindings, body)
+            if grown != null {
+                let name = grown ?? return
+                out.push(f"{self.emit_stmt_local(name)}.reserve(")
+                self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)
+                out.push(".iter().size_hint().0); ")
+            }
+        }
         out.push(f"{allowed}for {bound} in ")
         // **A `for` over a walk with `within:` lists it first** (ADR-async-5
         // D27), and throws `task::TimedOut` there where its deadline ran out.
@@ -1380,6 +1394,50 @@ impl EmitState {
             inside = scope.clone() with { changed: changed }
         }
         self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), inside, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
+    }
+
+    /// The local list a `for` body pushes onto exactly once, at its top level,
+    /// if it is one (#2385): a `Vec`'s `push` on a name that neither the loop
+    /// head nor a `let` of the body shadows, and the only such push there.
+    fn emit_stmt_for_grown(ref self, world: ref EmitWorld, bindings: ref Vec[winnow_grammar::Symbol], body: ref Block) -> String? {
+        let mut grown: String? = null
+        let mut shadowed: Vec[String] = []
+        for one in bindings {
+            shadowed.push(emit_text(world, one))
+        }
+        for stmt in body.stmts {
+            match stmt.node {
+                Stmt::Let { names, .. } => {
+                    for one in names {
+                        shadowed.push(emit_text(world, one))
+                    }
+                },
+                Stmt::Expr(e) => {
+                    match e {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            if emit_text(world, method) == "push" && args.len() == 1 && (self.facts.method_callees[node_key(receiver)]?.clone() ?? "") == "Vec::push" {
+                                match receiver {
+                                    Expr::Variable(v, _) => {
+                                        if grown != null {
+                                            return null
+                                        }
+                                        grown = emit_text(world, v)
+                                    },
+                                    else => {},
+                                }
+                            }
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
+        let name = grown ?? return null
+        if shadowed.contains(name) {
+            return null
+        }
+        return name
     }
 
     /// What a `for` iterates over, written.

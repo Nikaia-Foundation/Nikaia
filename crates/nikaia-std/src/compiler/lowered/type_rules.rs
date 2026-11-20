@@ -91,7 +91,7 @@ pub(crate) fn tr_renumbered(base: &Expr, renew: &mut dyn FnMut(&Expr) -> Expr) -
 
 pub(crate) fn tr_all_on(claims: &[Expr], words: &winnow_grammar::InternerContext, base: &Expr, fields: &collections::BTreeSet<String>, renew: &mut dyn FnMut(&Expr) -> Expr) -> Option<Vec<Expr>> {
     let mut out: Vec<Expr> = vec![];
-    for claim in claims.iter() {
+    out.reserve(claims.iter().size_hint().0); for claim in claims.iter() {
         let one = match tr_on(words, claim, base, fields, &mut &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
         out.push(one);
     }
@@ -157,7 +157,7 @@ pub(crate) fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base:
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn tr_asserts_as(words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, renew: &mut impl FnMut(&Expr) -> Expr, ruled: &TrRuled, type_name: &str, base: &Expr, span: &Span, given: bool, said: bool) -> Vec<Spanned<Stmt>> {
     let mut out: Vec<Spanned<Stmt>> = vec![];
-    for rule in ruled.rules.iter() {
+    out.reserve(ruled.rules.iter().size_hint().0); for rule in ruled.rules.iter() {
         let condition = match tr_on(words, &rule.claim, base, &ruled.fields, &mut *renew) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut config: Vec<ConfigArg> = vec![];
         if given { config.push(ConfigArg { name: intern(&tr_given()), value: Expr::LitStr { text: nikaia_std::block::Text::from(type_name.to_string()), id: node_id::NodeId::fresh() } }); }
@@ -208,7 +208,7 @@ pub(crate) fn tr_collect(words: &winnow_grammar::InternerContext, intern: &mut i
                 let mut field_names: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for f in fields.iter() { field_names.insert(nikaia_std::block::Text::from(words.resolve(f.name).to_string())); }
                 let mut read: Vec<TrRule> = vec![];
-                for rule in rules.iter() {
+                read.reserve(rules.iter().size_hint().0); for rule in rules.iter() {
                     let found = tr_a_rule(words, &rule.node, tr_span(&rule.span));
                     if found.is_none() { return TrFound { ruled, refusal: Some(TrRefusal { span: tr_span(&rule.span), head: format!("A rule of `{}` has to be an `assert`.", type_name), help: String::from("Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields.") }) }; }
                     if !generics.is_empty() { return TrFound { ruled, refusal: Some(TrRefusal { span: tr_span(&rule.span), head: format!("`{}` is generic, and a generic struct states no rule yet.", type_name), help: String::from("Check what the methods need with an `assert` in each of them.") }) }; }
@@ -681,7 +681,7 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
                 }
                 let mut reads_public = false;
                 let mut written: Vec<String> = vec![];
-                for rule in rules.iter() {
+                written.reserve(rules.iter().size_hint().0); for rule in rules.iter() {
                     let found = tr_a_rule(words, &rule.node, tr_span(&rule.span));
                     if found.is_none() { reads_public = true; } else {
                         let one = match found { Some(__nikaia_value) => __nikaia_value, None => continue };

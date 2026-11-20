@@ -219,7 +219,7 @@ pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             if check_crossings_named_in(world, name, value) { return CheckCrossingsPath::Taken; }
-            for arm in arms.iter() { branches.push(check_crossings_arm(world, name, arm, in_loop)); }
+            branches.reserve(arms.iter().size_hint().0); for arm in arms.iter() { branches.push(check_crossings_arm(world, name, arm, in_loop)); }
         },
         _ => { return check_crossings_mentioned(world, name, expr); },
     }

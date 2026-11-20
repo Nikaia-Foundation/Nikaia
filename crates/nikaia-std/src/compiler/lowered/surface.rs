@@ -152,7 +152,7 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
                 let path = joined(at, r.name);
                 if r.what == "struct" {
                     let mut types: Vec<String> = vec![];
-                    for part in r.parts.iter() { types.push(nikaia_std::block::Text::from(part.ty.to_string())); }
+                    types.reserve(r.parts.iter().size_hint().0); for part in r.parts.iter() { types.push(nikaia_std::block::Text::from(part.ty.to_string())); }
                     surface.fields.insert(nikaia_std::block::Text::from(path.to_string()), types);
                 }
                 let none: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -199,7 +199,7 @@ pub(crate) fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections
     let mut args: Vec<Arg> = vec![];
     for part in f.parts.iter() { if part.name != "self" { args.push(Arg { name: nikaia_std::block::Text::from(part.name.to_string()), ty: nikaia_std::block::Text::from(part.ty.to_string()) }); } }
     let mut calls: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
-    for call in f.calls.iter() {
+    calls.reserve(f.calls.iter().size_hint().0); for call in f.calls.iter() {
         let call = *call;
         let full = nikaia_std::index::or(imports.get(call), || call);
         calls.push(nikaia_std::block::Text::from(full.to_string()));

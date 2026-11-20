@@ -38,13 +38,13 @@ impl CheckState {
                     match &variant.fields {
                         VariantFields::Named(fields) => {
                             let mut held: Vec<FieldContract> = vec![];
-                            for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] }); }
+                            held.reserve(fields.iter().size_hint().0); for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] }); }
                             self.variant_owner.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(owner.to_string()));
                             self.structs.insert(key, held);
                         },
                         VariantFields::Tuple(types) => {
                             let mut parts: Vec<Ty> = vec![];
-                            for ty in types.iter() { parts.push(written_ty(other.words, other.aliases, ty)); }
+                            parts.reserve(types.iter().size_hint().0); for ty in types.iter() { parts.push(written_ty(other.words, other.aliases, ty)); }
                             self.variant_parts.insert(key, parts);
                         },
                         _ => { },
@@ -56,12 +56,12 @@ impl CheckState {
                 if generics.is_empty() { return; }
                 #[allow(unused_mut)] let mut order: Vec<String> = vec![];
                 let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
-                for generic in generics.iter() {
+                order.reserve(generics.iter().size_hint().0); for generic in generics.iter() {
                     order.push(other.text(generic.name));
                     parameters.insert(other.text(generic.name));
                 }
                 let mut held: Vec<FieldContract> = vec![];
-                for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
+                held.reserve(fields.iter().size_hint().0); for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
                 let named = other.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
                 self.struct_parameters.insert(nikaia_std::block::Text::from(named.to_string()), order);
                 self.structs.insert(named, held);
@@ -91,13 +91,13 @@ impl CheckState {
     pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
         #[allow(unused_mut)] let mut order: Vec<String> = vec![];
         let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
-        for generic in generics.iter() {
+        order.reserve(generics.iter().size_hint().0); for generic in generics.iter() {
             order.push(world.here.text(generic.name));
             parameters.insert(world.here.text(generic.name));
         }
         for field in fields.iter() { self.nameable(&world.here.text(field.name), &field.span, "a field"); }
         let mut held: Vec<FieldContract> = vec![];
-        for field in fields.iter() {
+        held.reserve(fields.iter().size_hint().0); for field in fields.iter() {
             let ty = self.collect_declared(world, beside, &field.ty, &field.span);
             held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] });
         }
@@ -116,7 +116,7 @@ impl CheckState {
             match &variant.fields {
                 VariantFields::Named(fields) => {
                     let mut held: Vec<FieldContract> = vec![];
-                    for field in fields.iter() {
+                    held.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                         let ty = self.collect_declared(world, beside, &field.ty, &field.span);
                         held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: String::from(""), attributes: vec![] });
                     }
@@ -141,7 +141,7 @@ impl CheckState {
                     }
                     self.variant_parts.insert(format!("{}::{}", own, world.here.text(variant.name)), parts);
                 },
-                VariantFields::Named(fields) => { for field in fields.iter() { payloads.push(written_ty(world.here.words, world.here.aliases, &field.ty)); } },
+                VariantFields::Named(fields) => { payloads.reserve(fields.iter().size_hint().0); for field in fields.iter() { payloads.push(written_ty(world.here.words, world.here.aliases, &field.ty)); } },
             }
         }
         self.enum_payloads.insert(nikaia_std::block::Text::from(own.to_string()), payloads);

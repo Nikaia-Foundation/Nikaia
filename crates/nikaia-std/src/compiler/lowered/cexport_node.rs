@@ -28,7 +28,7 @@ impl CxNode {
         let before = *nikaia_std::index::get(&self.members, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
+            list.reserve(held.iter().size_hint().0); for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
         }
         list.push(text);
         self.members.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -38,7 +38,7 @@ impl CxNode {
         let before = *nikaia_std::index::get(&self.methods, owner);
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for (a, b) in held.iter() { list.push((nikaia_std::block::Text::from(a.to_string()), nikaia_std::block::Text::from(b.to_string()))); }
+            list.reserve(held.iter().size_hint().0); for (a, b) in held.iter() { list.push((nikaia_std::block::Text::from(a.to_string()), nikaia_std::block::Text::from(b.to_string()))); }
         }
         list.push((name, function));
         self.methods.insert(nikaia_std::block::Text::from(owner.to_string()), list);
@@ -207,7 +207,7 @@ impl CxNode {
         let mut failed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if !calls.is_empty() {
             let mut each: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for one in calls.iter() { each.push(format!("{}.failed", one)); }
+            each.reserve(calls.iter().size_hint().0); for one in calls.iter() { each.push(format!("{}.failed", one)); }
             failed = format!("if ({}) goto done;\n    ", nikaia_std::block::Text::from(each.join(" || ")));
         }
         let check = format!("{}if (status != 0) {{\n        nk_fail(env, status);\n        goto done;\n    }}", failed); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
@@ -353,7 +353,7 @@ impl CxNode {
         let status_names: [&str; 7] = ["ARGUMENT", "TOO_SMALL", "NOT_RUNNING", "PANICKED", "REENTRANT", "CLEANUP", "CANCELLED"];
         let mut statuses: Vec<(i64, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut number = 0;
-        for name in status_names.iter() {
+        statuses.reserve(status_names.iter().size_hint().0); for name in status_names.iter() {
             let name = *name;
             number -= 1;
             statuses.push((number, format!("{}_E_{}", upper, name)));
@@ -419,7 +419,7 @@ impl CxNode {
         }
         out.push_str(&cx_node_init(prefix));
         let mut functions: Vec<String> = nikaia_std::block::List::from_array_in([String::from("{ \"init\", NULL, nk_init, NULL, NULL, NULL, napi_enumerable, NULL }"), String::from("{ \"shutdown\", NULL, nk_shutdown, NULL, NULL, NULL, napi_enumerable, NULL }")], nikaia_std::block::Place::Block);
-        for (name, function) in self.exported.iter() { functions.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
+        functions.reserve(self.exported.iter().size_hint().0); for (name, function) in self.exported.iter() { functions.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_property_descriptor functions[] = {{\n            {}\n        }};\n        napi_define_properties(env, exports, sizeof functions / sizeof *functions, functions);\n    }}\n", nikaia_std::block::Text::from(functions.join(",\n            ")))); };
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
@@ -428,7 +428,7 @@ impl CxNode {
             let own = *nikaia_std::index::get(&self.members, &ty); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
             if own.is_some() {
                 let held = match own { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in held.iter() { members.push(nikaia_std::block::Text::from(one.to_string())); }
+                members.reserve(held.iter().size_hint().0); for one in held.iter() { members.push(nikaia_std::block::Text::from(one.to_string())); }
             }
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value class;\n        napi_define_class(env, \"{}\", NAPI_AUTO_LENGTH, nk_class_{}, NULL, sizeof members / sizeof *members, members, &class);\n        napi_create_reference(env, class, 1, &state->{});\n        napi_set_named_property(env, exports, \"{}\", class);\n    }}\n", nikaia_std::block::Text::from(members.join(",\n            ")), ty, ty, ty, ty)); };
         }
@@ -443,7 +443,7 @@ impl CxNode {
         }
         for (owner, methods) in self.methods.iter() {
             let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (name, function) in methods.iter() { listed.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
+            listed.reserve(methods.iter().size_hint().0); for (name, function) in methods.iter() { listed.push(format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_enumerable, NULL }}", name, function)); }
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("    {{\n        napi_value methods;\n        napi_property_descriptor listed[] = {{\n            {}\n        }};\n        napi_create_object(env, &methods);\n        napi_define_properties(env, methods, sizeof listed / sizeof *listed, listed);\n        napi_object_freeze(env, methods);\n        napi_set_named_property(env, exports, \"{}\", methods);\n    }}\n", nikaia_std::block::Text::from(listed.join(",\n            ")), owner)); };
         }
         out.push_str("    return exports;\n}\n");

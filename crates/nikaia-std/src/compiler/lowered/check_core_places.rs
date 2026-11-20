@@ -629,7 +629,7 @@ pub(crate) fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, wo
     if order.is_none() { return check_core_places_named(&name); }
     let parameters = match order { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let mut args: Vec<Ty> = vec![];
-    for p in parameters.iter() { args.push(check_core_places_bound(&bound, p)); }
+    args.reserve(parameters.iter().size_hint().0); for p in parameters.iter() { args.push(check_core_places_bound(&bound, p)); }
     Ty::Named { name, args, view: false }
 }
 

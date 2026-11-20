@@ -138,7 +138,7 @@ pub(crate) fn bounds_report_sites(program: &Program, words: &winnow_grammar::Int
 
 pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> Vec<String> {
     let mut rows: Vec<String> = vec![];
-    for (_, found) in facts.outside.iter() {
+    rows.reserve(facts.outside.iter().size_hint().0); for (_, found) in facts.outside.iter() {
         let mut from = String::from("from outside");
         if found.source != "" { from = format!("from `{}`", found.source); }
         let mut verdict = String::from("refused NK1302");
@@ -156,7 +156,7 @@ pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> 
 
 pub fn bounds_report_derived(derived: &[String], source: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for row in derived.iter() {
+    out.reserve(derived.iter().size_hint().0); for row in derived.iter() {
         let parts: Vec<&str> = row.split("\t").collect::<Vec<_>>();
         if parts.len() != 3 { continue; }
         let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;

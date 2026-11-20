@@ -16,7 +16,7 @@ pub(crate) fn free_function(program: &Program, words: &winnow_grammar::InternerC
                 let can_throw = *can_throw; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
                     #[allow(unused_mut)] let mut params: Vec<String> = vec![];
-                    for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
+                    params.reserve(args.iter().size_hint().0); for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
                     let mut options: Vec<(String, Expr)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                     for option in config.iter() {
                         params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
@@ -43,7 +43,7 @@ pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerCont
                                 let can_throw = *can_throw; let name = *name;
                                 if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
                                     #[allow(unused_mut)] let mut params: Vec<String> = vec![];
-                                    for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
+                                    params.reserve(args.iter().size_hint().0); for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
                                     let mut options: Vec<(String, Expr)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                                     for option in config.iter() {
                                         params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
@@ -65,7 +65,7 @@ pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerCont
 
 pub(crate) fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
     let mut all: Vec<Expr> = args.copy_owned();
-    for (option, default) in function.options.iter() {
+    all.reserve(function.options.iter().size_hint().0); for (option, default) in function.options.iter() {
         let mut value = default.clone();
         for given in config.iter() { if words.resolve(given.name) == option { value = given.value.clone(); } }
         all.push(value);

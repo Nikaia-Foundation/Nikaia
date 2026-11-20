@@ -7,7 +7,7 @@ impl CheckState {
     pub(crate) fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
         #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for param in params.iter() {
+        named.reserve(params.iter().size_hint().0); for param in params.iter() {
             let param = *param;
             named.push(format!("`{}`", world.words.resolve(param)));
         }
@@ -42,7 +42,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn no_such_option(&mut self, key: &str, name: &str, signature: &Signature, span: &Span) {
         let mut names: Vec<String> = vec![];
-        for option in signature.config.iter() { names.push(nikaia_std::block::Text::from(option.name.to_string())); }
+        names.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { names.push(nikaia_std::block::Text::from(option.name.to_string())); }
         self.no_such_option_among(key, name, &names, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -74,7 +74,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
         let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for setting in config.iter() { fields.push(nikaia_std::block::Text::from(world.words.resolve(setting.name).to_string())); }
+        fields.reserve(config.iter().size_hint().0); for setting in config.iter() { fields.push(nikaia_std::block::Text::from(world.words.resolve(setting.name).to_string())); }
         self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec![String::from("Parentheses after a type call its constructor; a struct literal with field names uses braces.")], Some(format!("Write `{} {{ {}: … }}`.", name, nikaia_std::block::Text::from(fields.join(": …, "))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -157,7 +157,7 @@ pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pat
 
 pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections::BTreeSet<i64>) -> Vec<CheckFinding> {
     let mut kept: Vec<CheckFinding> = vec![];
-    for f in findings.iter() {
+    kept.reserve(findings.iter().size_hint().0); for f in findings.iter() {
         if (f.code == "NK1110" || f.code == "NK1186") && reached.contains(&(f.span.start as i64)) { continue; }
         kept.push(f.clone());
     }
@@ -166,7 +166,7 @@ pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections:
 
 pub fn check_access_in_own_tests(findings: &[CheckFinding], reached: &collections::BTreeMap<i64, String>, tested: &collections::BTreeSet<String>) -> Vec<CheckFinding> {
     let mut kept: Vec<CheckFinding> = vec![];
-    for f in findings.iter() {
+    kept.reserve(findings.iter().size_hint().0); for f in findings.iter() {
         if f.code == "NK1110" && tested.contains(nikaia_std::index::or(reached.get(&(f.span.start as i64)), || "")) { continue; }
         kept.push(f.clone());
     }

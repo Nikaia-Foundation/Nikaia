@@ -78,7 +78,7 @@ pub(crate) fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 pub(crate) fn mem_listed(names: &[String], before: &str) -> String {
     let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for name in names.iter() { shown.push(format!("`{}{}`", before, name)); }
+    shown.reserve(names.iter().size_hint().0); for name in names.iter() { shown.push(format!("`{}{}`", before, name)); }
     nikaia_std::block::Text::from(shown.join(", "))
 }
 
@@ -150,7 +150,7 @@ impl CheckState {
     pub(crate) fn a_variant_nothing_declares(&mut self, ty: &str, member: &str, span: &Span) {
         #[allow(unused_mut)] let mut variants: Vec<String> = vec![];
         let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return }; #[allow(unused_mut, clippy::redundant_locals)] let mut variants = variants;
-        for variant in held.iter() { variants.push(nikaia_std::block::Text::from(variant.to_string())); }
+        variants.reserve(held.iter().size_hint().0); for variant in held.iter() { variants.push(nikaia_std::block::Text::from(variant.to_string())); }
         let listed = mem_listed(&variants, &format!("{}::", ty));
         let near = nearest_name(member, &variants);
         let mut help: String = format!("Write one of {}.", listed);

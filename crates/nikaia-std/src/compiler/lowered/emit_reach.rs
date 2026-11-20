@@ -116,7 +116,7 @@ pub(crate) fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &
                     Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(words.resolve(name).to_string()), &mut out); },
                     Expr::Path(segments, _) => {
                         let mut joined: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                        for segment in segments.iter() {
+                        joined.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                             let segment = *segment;
                             joined.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
                         }

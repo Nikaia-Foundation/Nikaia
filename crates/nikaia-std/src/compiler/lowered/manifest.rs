@@ -194,7 +194,7 @@ pub(crate) fn manifest_rust_library(items: &[ManifestItem]) -> Option<ManifestRu
 
 pub(crate) fn manifest_features(items: &[ManifestItem]) -> Vec<ManifestFeature> {
     let mut out: Vec<ManifestFeature> = vec![];
-    for item in items.iter() {
+    out.reserve(items.iter().size_hint().0); for item in items.iter() {
         if item.section != "features" || item.name.is_empty() || !item.key.is_empty() { continue; }
         let text = item.text.trim();
         let listed = text.starts_with('[') && text.ends_with(']') && !text.contains("\\");

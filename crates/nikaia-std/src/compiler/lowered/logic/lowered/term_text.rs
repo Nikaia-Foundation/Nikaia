@@ -39,7 +39,7 @@ pub(crate) fn term_binary(op: &str, a: i64, b: i64, r: i64, arrow: bool, term_of
 
 pub(crate) fn term_joined(op: &str, parts: &[i64], r: i64, arrow: bool, term_of: &mut dyn FnMut(i64) -> SolverTerm) -> String {
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for part in parts.iter() {
+    written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(term_inner(part, r + 1, arrow, &mut &mut *term_of));
     }

@@ -412,7 +412,7 @@ pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, f
 
 pub(crate) fn emit_seeds_roots(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for a in args.iter() {
+    out.reserve(args.iter().size_hint().0); for a in args.iter() {
         let root = match emit_seeds_root(unit, a) { Some(__nikaia_value) => __nikaia_value, None => continue };
         out.push(root);
     }
@@ -510,7 +510,7 @@ pub(crate) fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, group
     emit_seeds_declare(place, base);
     place.share = false;
     let mut names: Vec<String> = vec![];
-    for _group in groups.iter() {
+    names.reserve(groups.iter().size_hint().0); for _group in groups.iter() {
         let _group = nikaia_std::num::value(_group);
         names.push(String::from(""));
     }

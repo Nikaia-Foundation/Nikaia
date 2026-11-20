@@ -176,7 +176,7 @@ impl EmitState {
         let callee = self.emit_call_callee(world, func);
         let mut lent: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0;
-        for arg in args.iter() {
+        lent.reserve(args.iter().size_hint().0); for arg in args.iter() {
             lent.push(self.facts.mut_args.contains(&node_key(arg)) || self.changes_at(&callee, at));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
@@ -261,7 +261,7 @@ impl EmitState {
         let callee = self.emit_call_checked_callee(world, func);
         if callee.is_some() {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for arg in args.iter() { written.push(host.written(arg)); }
+            written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(host.written(arg)); }
             let key = (nikaia_std::index::or(callee, || "".into()), nikaia_std::block::Text::from(written.join(", ")));
             if self.facts.reaches.contains_key(&key) {
                 let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -301,7 +301,7 @@ impl EmitState {
         let callee = format!("{}::{}", owner, name);
         if !self.facts.entries.contains_key(&callee) { return false; }
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in args.iter() { written.push(host.written(arg)); }
+        written.reserve(args.iter().size_hint().0); for arg in args.iter() { written.push(host.written(arg)); }
         let key = (callee, nikaia_std::block::Text::from(written.join(", ")));
         let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(reach.clone(), CallReach::Proved)
@@ -536,7 +536,7 @@ impl EmitState {
                                 Some(result) => { streamed = a_sequence_type(result); },
                                 None => { },
                             }
-                            for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
+                            options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
                         },
                         None => { },
                     }
@@ -627,7 +627,7 @@ impl EmitState {
                 for at in 0..args.len() as i64 { counts.push(self.count_at(host.crossings_are_possible(), "<field>", &variant_slot(&owner, &variant, at))); }
                 walk.variant_counts = Some(counts);
                 let mut names: Vec<String> = vec![];
-                for s in segments.iter() {
+                names.reserve(segments.iter().size_hint().0); for s in segments.iter() {
                     let s = *s;
                     names.push(emit_text(world, s));
                 }

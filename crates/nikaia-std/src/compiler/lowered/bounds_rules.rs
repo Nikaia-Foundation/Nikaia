@@ -65,7 +65,7 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
                 let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for field in fields.iter() { types.insert(rules_last_name(words.resolve(field.ty.name))); }
                 held.insert(nikaia_std::block::Text::from(owner.to_string()), types);
-                for field in fields.iter() {
+                found.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                     let ty = words.resolve(field.ty.name);
                     let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(&format!("{}.{}", owner, words.resolve(field.name))) && (!field.is_public || !is_public || a_program);
                     if seen && field.ty.generics.is_empty() && is_whole_number(ty) {
@@ -361,7 +361,7 @@ pub(crate) fn rules_scalar_shape(value: Option<&Expr>) -> String {
 pub(crate) fn rules_scalar_values(literals: &[String], a: &str, default: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
     let key = format!("{}=", a); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
-    for given in literals.iter() {
+    out.reserve(literals.iter().size_hint().0); for given in literals.iter() {
         if given == "any" {
             out.push(String::from("any"));
             continue;
@@ -467,8 +467,8 @@ pub(crate) fn rules_fields_of(path: &str) -> Vec<String> {
 
 pub(crate) fn rules_outside(changed: &BoundsChanged, types: &collections::BTreeMap<String, String>, lists: &collections::BTreeMap<String, Vec<String>>, dropped: &mut collections::BTreeSet<String>) {
     let mut paths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for p in changed.values.iter() { paths.push(nikaia_std::block::Text::from(p.to_string())); }
-    for p in changed.lengths.iter() {
+    paths.reserve(changed.values.iter().size_hint().0); for p in changed.values.iter() { paths.push(nikaia_std::block::Text::from(p.to_string())); }
+    paths.reserve(changed.lengths.iter().size_hint().0); for p in changed.lengths.iter() {
         let of = nikaia_std::index::or(match types.get(&path_root(p)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -483,7 +483,7 @@ pub(crate) fn rules_outside(changed: &BoundsChanged, types: &collections::BTreeM
         }
         paths.push(nikaia_std::block::Text::from(p.to_string()));
     }
-    for p in changed.parts.iter() {
+    paths.reserve(changed.parts.iter().size_hint().0); for p in changed.parts.iter() {
         let of = nikaia_std::index::or(match types.get(&path_root(p)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -495,7 +495,7 @@ pub(crate) fn rules_outside(changed: &BoundsChanged, types: &collections::BTreeM
         }, || false) && !p.contains("].") { continue; }
         paths.push(nikaia_std::block::Text::from(p.to_string()));
     }
-    for place in changed.elements.iter() {
+    paths.reserve(changed.elements.iter().size_hint().0); for place in changed.elements.iter() {
         let list = frame_list(place);
         let of = nikaia_std::index::or(match types.get(&path_root(&list)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1934,10 +1934,10 @@ pub(crate) fn rules_handed(paths: &[String]) -> BoundsChanged {
 
 pub(crate) fn rules_writes(changed: &BoundsChanged, path: &str) -> bool {
     let mut all: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for p in changed.values.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
-    for p in changed.lengths.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
-    for p in changed.parts.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
-    for place in changed.elements.iter() { all.push(frame_list(place)); }
+    all.reserve(changed.values.iter().size_hint().0); for p in changed.values.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
+    all.reserve(changed.lengths.iter().size_hint().0); for p in changed.lengths.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
+    all.reserve(changed.parts.iter().size_hint().0); for p in changed.parts.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
+    all.reserve(changed.elements.iter().size_hint().0); for place in changed.elements.iter() { all.push(frame_list(place)); }
     for p in all.iter() { if path_within(p, path) || path_within(path, p) && path != p { return true; } }
     false
 }
