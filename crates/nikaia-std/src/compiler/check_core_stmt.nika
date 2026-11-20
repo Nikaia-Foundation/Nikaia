@@ -623,7 +623,7 @@ fn check_core_stmt_wraps_into_nullable[H: CheckHost](mut state: CheckState, worl
 
 /// A list, a map, a set, or a `struct` or an `enum` this unit declares.
 fn check_core_stmt_has_no_arithmetic(world: ref CheckWorld, ty: ref Ty) -> bool sync {
-    return is_a_collection_type(ty) || declared_with_no_arithmetic(world.here, ty) != null
+    return is_a_collection_type(ty) || declared_with_no_arithmetic(world.here, ty) != null || is_a_text_position(ty)
 }
 
 /// A name nothing typed bound to `bound`.
