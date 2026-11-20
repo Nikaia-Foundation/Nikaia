@@ -18,3 +18,23 @@ warning[NK1308]: `here` reaches the path `fs::exists` opens under `fs::Root::Any
     = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
     = note: `raw-sinks = "warn"` lets this build through.
     = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(here) if !path::is_component(here)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `k` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_guarded_join_carries_its_proof_to_a_binding.nika:30:5
+    |
+ 30 |     println(fs::exists(f"{k}/x", fs::Root::Anywhere))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `k` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(k) if !path::is_component(k)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `k` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_guarded_join_carries_its_proof_to_a_binding.nika:31:5
+    |
+ 31 |     println(fs::exists(k + "/x", fs::Root::Anywhere))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `k` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(k) if !path::is_component(k)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.

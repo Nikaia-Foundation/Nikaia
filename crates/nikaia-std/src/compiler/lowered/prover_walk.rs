@@ -2026,7 +2026,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
             for j in 0..i {
                 let mut parts: Vec<Expr> = vec![];
                 raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
-                let joined = raw_sink_joined(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, scope, words);
+                let joined = raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, scope, words, library, &walk.state, &mut *holes_of);
                 let mut guard = String::new();
                 if joined && !root_outside { guard.push_str("path"); }
                 let operation = raw_sink_operation(callee, j, config, words, &mut *written_of);

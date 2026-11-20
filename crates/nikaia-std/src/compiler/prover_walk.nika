@@ -2748,11 +2748,11 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             for j in 0..<i {
                 let mut parts: Vec[Expr] = []
                 raw_sink_parts(args[j], holes_of, parts)
-                // D14: a guarded name is admitted joined to a part that is
-                // not outside, under a root that is not; alone under
-                // `Anywhere` it is relative to the working directory, which
-                // no guard proves.
-                let joined = raw_sink_joined(args[j], scope, words)
+                // D14: a guarded name is admitted joined after a part that
+                // is not outside, under a root that is not; alone under
+                // `Anywhere`, or leading the text (`f"{key}/x"`), it is
+                // relative to the working directory, which no guard proves.
+                let joined = raw_sink_clean_lead(args[j], scope, words, library, walk.state, holes_of)
                 let mut guard = String()
                 if joined && !root_outside {
                     guard.push_str("path")
