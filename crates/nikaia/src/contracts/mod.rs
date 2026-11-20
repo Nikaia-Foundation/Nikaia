@@ -384,7 +384,7 @@ impl LedgerOps for Ledger {
     /// is the whole rule.
     ///
     /// It used to match on the last segment, which was name-for-name resolution
-    /// (ADR-296 D17) rather than import tracking, and it is what a compiler
+    /// (ADR-grammar-lowering-v1 D2) rather than import tracking, and it is what a compiler
     /// without a module graph could honestly do before there was a written
     /// list. What it cost, beyond the prelude being undefined, was answering
     /// about the **wrong function**: a program with its own `fn read` found
@@ -559,7 +559,7 @@ fn toolchain() -> String {
 pub const UNNAMED_ERROR: &str = "?";
 
 /// What a parse fails with
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D38).
+/// ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md) D4).
 ///
 /// A `std` type with no module in front, which is `Overtaken`'s shape: a
 /// program never writes a path to it, because it arrives in a `catch`.

@@ -602,7 +602,7 @@ impl CheckState {
         if here < 0 {
             here = 0
         }
-        // **A grammar run is its own** (ADR-177): its parser is compiled and
+        // **A grammar run is its own** (ADR-grammar-build-time-v1): its parser is compiled and
         // run by the grammar's build-time directory, and the text it reads is folded.
         let mut grammars: collections::BTreeSet[String] = collections::BTreeSet()
         let mut enums: collections::BTreeSet[String] = collections::BTreeSet()

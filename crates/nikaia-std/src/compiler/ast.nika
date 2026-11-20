@@ -112,7 +112,7 @@ pub enum Item {
         /// Kap 5.1: what stands after the `;` - options, named at the call and
         /// never positional. Empty for a function that has no `;`.
         config: Vec[ConfigParam],
-        /// ADR-296 D5: `...args: Self::dsl` - the typed spread a driver accepts
+        /// ADR-grammar-build-time-v1 D12: `...args: Self::dsl` - the typed spread a driver accepts
         /// a DSL's deferred parameters with. It stands where the options stand,
         /// because a DSL parameter *is* configuration, and it is exclusive with
         /// them: a function takes options or a spread, never both.
@@ -635,7 +635,7 @@ pub enum Expr {
         method: winnow_grammar::Symbol,
         args: Vec[Expr],
         /// Kap 5.1 at a method call: what stands after the `;`. A DSL's
-        /// deferred parameters arrive here (ADR-296 D5), which is why a method
+        /// deferred parameters arrive here (ADR-grammar-build-time-v1 D12), which is why a method
         /// call carries them at all - before that they were parsed and dropped.
         config: Vec[ConfigArg],
         id: node_id::NodeId,
@@ -667,7 +667,7 @@ pub enum Expr {
     /// the operand's type is the checker's answer rather than the parser's. So
     /// the checker records it under this node's id and the emitter reads it
     /// back, which is the handover a `comptime`'s value already makes
-    /// ([ADR-296](../../../docs/specification/adr/adr-296.md) D17: the emitter
+    /// ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2: the emitter
     /// is told, it does not work it out). `at` is the byte the `with` stands at,
     /// read as a place for a message.
     With {
@@ -1125,7 +1125,7 @@ pub struct PatternField {
 
 /// What an arm matches. Deliberately small: every shape here is one the
 /// language it lowers to spells the same way, so the lowering stays name for
-/// name (ADR-296 D17) and no pattern means something different in the two.
+/// name (ADR-grammar-lowering-v1 D2) and no pattern means something different in the two.
 pub enum MatchPattern {
     /// `else`: the arm taken when none of the others matched
     /// ([ADR-291](../../../docs/specification/adr/adr-291.md) D16).
@@ -1416,7 +1416,7 @@ pub struct GrammarRule {
     pub generics: Vec[GenericParam],
 }
 
-/// The keyed attribute of ADR-296 D9: `@frame`, `@frame(boundary: "\n")`,
+/// The keyed attribute of ADR-grammar-parallel-v1 D1: `@frame`, `@frame(boundary: "\n")`,
 /// `@frame(boundary: "\n", unchecked)`. A bare `@frame` leaves `boundary`
 /// empty and the boundary is inferred downstream from the trailing literal.
 pub struct FrameAttr {
@@ -1558,7 +1558,7 @@ pub enum Repeat {
 
 /// `fold(rule, init, step)` and `par_fold(rule, init, step, merge)`.
 ///
-/// The merge is what separates them: ADR-296 D10 - parallel parsing is a frame
+/// The merge is what separates them: ADR-grammar-parallel-v1 D2 - parallel parsing is a frame
 /// plus a monoid, and the monoid is exactly this merge.
 pub struct FoldSpec {
     pub parallel: bool,
@@ -1586,7 +1586,7 @@ pub struct FnParams {
     pub receiver: Receiver?,
     pub args: Vec[FnArg],
     pub config: Vec[ConfigParam],
-    /// ADR-296 D5: `...args: Self::dsl`, where a config zone holds one instead
+    /// ADR-grammar-build-time-v1 D12: `...args: Self::dsl`, where a config zone holds one instead
     /// of options.
     pub spread: winnow_grammar::Symbol?,
 }

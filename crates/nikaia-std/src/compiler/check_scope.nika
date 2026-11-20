@@ -123,7 +123,7 @@ fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? sync 
     // is the anonymous constructor, exactly as `Stats(first)` is for a type a
     // `.nika` file declares. The ledger's key stays `Vec::new`, because that is
     // the name the **lowering** writes and the lowering is name for name
-    // (ADR-296 D17).
+    // (ADR-grammar-lowering-v1 D2).
     if world.library.functions.contains_key(constructed) {
         let contract = check_scope_found(world.library.functions, constructed) ?? return null
         return CheckResolved { key: constructed.clone(), contract: contract }

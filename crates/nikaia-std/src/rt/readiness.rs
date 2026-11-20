@@ -15,7 +15,7 @@
 //! has.
 //!
 //! Measured on the way in, and the numbers chose this shape
-//! ([ADR-296](../../../../docs/specification/adr/adr-296.md) D12):
+//! ([ADR-grammar-parallel-v1](../../../../docs/specification/adr/adr-grammar-parallel-v1.md) D4):
 //!
 //! | | per wait |
 //! | :--- | ---: |

@@ -1066,6 +1066,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         if copies_as_a_view(&bound) { bound = unviewed_type(&bound); }
     }
     if check_core_stmt_a_path(&bound) && state.made_from_text(world, value) { state.flow.text_paths.insert(id); }
+    if ty.is_none() && check_core_stmt_a_path(&bound) { state.a_let_of_names_in_holes(world, id, value); }
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;
     if ty.is_none() { literal = check_core_stmt_literal(value); }

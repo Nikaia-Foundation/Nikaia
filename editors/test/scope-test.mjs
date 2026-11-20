@@ -245,7 +245,7 @@ const cases = [
     expect: [[";", "punctuation.terminator.statement.nika"]],
   },
   {
-    name: "the typed spread (ADR-296 D5)",
+    name: "the typed spread (ADR-grammar-build-time-v1 D12)",
     src: `pub fn prepare(&self, statement: &str; ...args: Self::dsl) -> Self::dsl { }\n`,
     expect: [
       ["...", "keyword.operator.spread.nika"],
@@ -402,7 +402,7 @@ const cases = [
     // scope on a word the language still has and a program still writes, so
     // what this holds is the rule - an attribute is coloured as one - rather
     // than a word that left.
-    name: "an attribute is a modifier (ADR-296 D9)",
+    name: "an attribute is a modifier (ADR-grammar-parallel-v1 D1)",
     src: `grammar Log {\n    @frame(boundary: "\\n")\n    rule LINE -> i64 = n:dec[i64](digit+) -> { n }\n}\n`,
     expect: [["@frame", "storage.modifier.attribute.nika"]],
   },

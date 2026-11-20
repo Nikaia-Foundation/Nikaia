@@ -8,6 +8,42 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1479] — 2026-11-20
+
+**The decisions on a grammar run at build time and what it hands back live in one record, ADR-grammar-build-time-v1 (#2269)**
+- The decisions on a grammar run while the program is built and what it hands back (the generated parser compiled and run, cached, its result crossing or refused by name; meta::Type, meta::Statement, the type the compiler writes; how a hole binds and the shadow type) live in one record, ADR-grammar-build-time-v1; ADR-177 and ADR-323 archived, three decisions of ADR-296 moved.
+
+## [0.0.1478] — 2026-11-19
+
+**The decisions on how a grammar is lowered live in one record, ADR-grammar-lowering-v1 (#2268)**
+- The decisions on how a grammar is lowered (a grammar! macro invocation, name for name, guessing no meaning, @frame's check left to the backend, a fold step's callees inline(always), a map std's own type over hashbrown's table) live in one record, ADR-grammar-lowering-v1; five decisions of ADR-296 moved.
+
+## [0.0.1477] — 2026-11-19
+
+**Builders' changes (#2305, #2321)**
+- meta::Access reaches the running program: `let a = P::access` and `field.ty::access` are std::meta::Access values that can be compared, matched, kept and printed with {a:?} (ADR-330 D8).
+- A `String` parameter handed back whole on one path and cut on another (`return s` beside `return s[i..]`) is lent on both, as beside `s.trim()`; it no longer fails in rustc (NK1343) or with NK2302.
+
+## [0.0.1476] — 2026-11-19
+
+**The decisions on frames and folds, and how fast a grammar scans, live in one record, ADR-grammar-parallel-v1 (#2267)**
+- The decisions on frames and folds and how fast a grammar scans (@frame checked never rewritten, par_fold written never inferred, the blind cut and seam repair, the word-at-a-time scan, user_parallelism, a fold's lambdas walked as ordinary code) live in one record, ADR-grammar-parallel-v1; ten decisions of ADR-296 moved.
+
+## [0.0.1475] — 2026-11-19
+
+**An f"…" with a file's name in a hole is text where its use asks for text, as a list item or a let's first use (ADR-319 D4) (#2328)**
+- An `f"…"` with a file's name in a hole, used as text as a list item or through a `let`, is refused at the hole with NK1201 (write `.to_text()` or `.display()`), not with a `Vec[fs::Path]` mismatch (ADR-319 D4).
+
+## [0.0.1474] — 2026-11-19
+
+**solver.nika: a target that does not exist stops run, compare and oracle at once, with the joined path as a hint; $NIKAIA names the toolchain of a copy (#2006)**
+- `scripts/solver.nika` stops at once when a target of `run`, `compare` or `oracle` does not exist, and suggests the joined path for `DIR/ FILE` split into two arguments (it used to answer every file under `DIR` first); `$NIKAIA` names the toolchain when the script runs from a copy of the repository.
+
+## [0.0.1473] — 2026-11-19
+
+**The decisions on what a rule's action may do and how a parse fails live in one record, ADR-grammar-actions-v1 (#2266)**
+- The decisions on what a rule's action may do and how a parse fails (no pause in an action, an entry `sync`, `ParseError` with its message only, rule values lent) live in one record, ADR-grammar-actions-v1; ADR-grammar-1 archived, six decisions of ADR-296 moved.
+
 ## [0.0.1472] — 2026-11-19
 
 **The decisions on what a grammar reads and how it holds it live in one record, ADR-grammar-input-v1 (#2265)**

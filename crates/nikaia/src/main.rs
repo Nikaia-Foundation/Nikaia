@@ -523,7 +523,7 @@ pub enum CacheAction {
 ///
 /// Every message rustc reports about the emitted file is placed back in the
 /// `.nika` it came from. The text is left alone: because the lowering is name
-/// for name (ADR-296 D17), only the position was ever wrong.
+/// for name (ADR-grammar-lowering-v1 D2), only the position was ever wrong.
 fn explain(input: &std::path::Path, settings: &Settings, source: &str) -> Result<()> {
     use std::io::Read;
 

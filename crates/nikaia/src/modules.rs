@@ -11,7 +11,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // declared - which is what keeps a library's internal file layout from being its
 // public surface.
 //
-// What this does is **resolution**, and resolution is the one thing ADR-296 D17
+// What this does is **resolution**, and resolution is the one thing ADR-grammar-lowering-v1 D2
 // said Stage 0 does not do: the lowering is name for name, and nothing looks a
 // name up. That stays true of the *emitter* - what changes is that the compiler
 // knows which files take part, and hands the emitter each of them in turn.
@@ -805,7 +805,7 @@ impl Program {
     ///
     /// **A dependency is a `mod` at that root** (D2), named by the manifest key,
     /// so `http::serve()` in Nikaia is `http::serve()` in Rust and nothing
-    /// resolved it (ADR-296 D17). Each opens with `use super::*` under an
+    /// resolved it (ADR-grammar-lowering-v1 D2). Each opens with `use super::*` under an
     /// `#[allow]`, which brings in the preamble the root wrote - the allow is
     /// because the import is **ours**, and a module that happens to use nothing
     /// from the preamble would otherwise produce a warning about a line no Nikaia

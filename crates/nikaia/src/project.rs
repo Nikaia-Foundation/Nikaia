@@ -637,7 +637,7 @@ pub fn lower(
 
 /// **What a build may read, and where it compiles a parser**
 /// ([ADR-310](../../docs/specification/adr/adr-310.md) D4 and D5,
-/// [ADR-177](../../docs/specification/adr/adr-177.md) D2).
+/// [ADR-grammar-build-time-v1](../../../docs/specification/adr/adr-grammar-build-time-v1.md) D3).
 ///
 /// **One function rather than two constructions**, because both of this
 /// build's lowerings have to answer the same question. The second one is
@@ -2196,7 +2196,8 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
         // **`Reads::none()`**, because what is reported is which types a
         // function was **used with**, and no file a build reads changes that.
         // Handing it a real allowlist would run a grammar to answer a question
-        // about call sites ([ADR-177](../../docs/specification/adr/adr-177.md)).
+        // about call sites
+        // ([ADR-grammar-build-time-v1](../../../docs/specification/adr/adr-grammar-build-time-v1.md)).
         crate::check::unrolling_report(
             &beside,
             &self.program.contracts,
@@ -2720,7 +2721,7 @@ impl Project {
     ///
     /// **The position is translated and the text is not**, which is ADR-300's
     /// own choice and is honest for most of what arrives: the lowering is name
-    /// for name (ADR-296 D17), so "`xs` does not live long enough" is already a
+    /// for name (ADR-grammar-lowering-v1 D2), so "`xs` does not live long enough" is already a
     /// sentence about the Nikaia source and only its place was wrong. It is
     /// *not* honest for a trait-bound error, whose every noun is a Rust type the
     /// author did not write - and rewriting one into Nikaia vocabulary is a
@@ -2746,7 +2747,7 @@ impl Project {
             true => modules::Program::read_for_tests(&self.entry(), &self.packages()?, true)?,
             false => modules::Program::read_with(&self.entry(), &self.packages()?)?,
         };
-        // **The same reads the build lowered under** (ADR-310, ADR-177). This
+        // **The same reads the build lowered under** (ADR-310, ADR-grammar-build-time-v1). This
         // lowering has to be the lowering, or an item the build wrote a `const`
         // for is refused here and the backend's message never arrives.
         let layout = Layout::resolve(&self.entry());

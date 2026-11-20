@@ -441,7 +441,7 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
     if segments.len() != 2 { return None; }
     let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
     let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }).to_string());
-    if member != "kind" && member != "name" && member != "doc" { return None; }
+    if member != "kind" && member != "name" && member != "doc" && member != "access" { return None; }
     if state.is_variant(&ty, &member) || resolve_call(world, &format!("{}::{}", ty, member)).is_some() || !check_reflect_a_type(&state, &ty) { return None; }
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64);
@@ -450,6 +450,10 @@ pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, 
     if member == "doc" {
         state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Some(Ty::Named { name: String::from("str"), args: vec![], view: true });
+    }
+    if member == "access" {
+        state.facts.reflected_accesses.insert(id_of(expr) as i64);
+        return Some(Ty::Named { name: String::from("meta::Access"), args: vec![], view: false });
     }
     state.a_kind_kept_at_run_time(&format!("{}::kind", ty), span);
     Some(meta)
@@ -465,6 +469,10 @@ pub(crate) fn check_reflect_field_type(state: &mut CheckState, expr: &Expr, memb
     if member == "doc" {
         state.facts.reflected_docs.insert(id_of(expr) as i64);
         return Ty::Named { name: String::from("str"), args: vec![], view: true };
+    }
+    if member == "access" {
+        state.facts.reflected_accesses.insert(id_of(expr) as i64);
+        return Ty::Named { name: String::from("meta::Access"), args: vec![], view: false };
     }
     if member == "kind" {
         state.a_kind_kept_at_run_time("field.ty::kind", span);

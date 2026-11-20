@@ -1,0 +1,18 @@
+// crates/nikaia-std/src/runtime/meta.nika
+//
+// **How a value is reached, as a value of the running program** (ADR-330
+// D8): `T::access` and `field.ty::access` are one of these cases, written in
+// Nikaia. `lib.rs` re-exports `Access` as `nikaia_std::meta::Access`, beside
+// `meta::Type`, which stays at build time (D6) because it carries types; this
+// carries none. `std.contracts` writes the type's entry by hand.
+
+/// How a value of a type is reached: `Shared[A]` is `Shared`, `SharedMut[A]`
+/// is `SharedMut`, every other type `Owned`.
+pub enum Access {
+    /// The value is held directly.
+    Owned,
+    /// The value is shared, read by all who hold it (`Shared[A]`).
+    Shared,
+    /// The value is shared behind a lock (`SharedMut[A]`).
+    SharedMut,
+}

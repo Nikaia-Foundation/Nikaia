@@ -1,0 +1,33 @@
+error[NK1201]: You can't put the file name `dir` in an `f"…"` that is text.
+   --> tests/a_path_hole_in_text_asked_by_its_use_is_refused.nika:14:5
+    |
+ 14 |     many([f"{dir}/p.txt"])
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f"…"` is used as text.
+    = help: Write `{dir.to_text()}` to use it as text where it is text, or `{dir.display()}` to show it.
+error[NK1201]: You can't put the file name `dir` in an `f"…"` that is text.
+   --> tests/a_path_hole_in_text_asked_by_its_use_is_refused.nika:16:5
+    |
+ 16 |     many([arg])
+    |     ^^^^^^^^^^^
+    |
+    = note: A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f"…"` is used as text.
+    = help: Write `{dir.to_text()}` to use it as text where it is text, or `{dir.display()}` to show it.
+error[NK1201]: You can't put the file name `tmp.path()` in an `f"…"` that is text.
+   --> tests/a_path_hole_in_text_asked_by_its_use_is_refused.nika:18:5
+    |
+ 18 |     take(one)
+    |     ^^^^^^^^^
+    |
+    = note: A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f"…"` is used as text.
+    = help: Write `{(tmp.path()).to_text()}` to use it as text where it is text, or `{(tmp.path()).display()}` to show it.
+error[NK1201]: You can't put the file name `dir` in an `f"…"` that is text.
+   --> tests/a_path_hole_in_text_asked_by_its_use_is_refused.nika:19:28
+    |
+ 19 |     let all: Vec[String] = [f"{dir}/s.txt"]
+    |                            ^^^^^^^^^^^^^^^^
+    |
+    = note: A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f"…"` is used as text.
+    = help: Write `{dir.to_text()}` to use it as text where it is text, or `{dir.display()}` to show it.
+4 type errors

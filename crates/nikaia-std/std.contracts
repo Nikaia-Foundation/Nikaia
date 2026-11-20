@@ -3580,7 +3580,7 @@ signature = "[T](self: ref Shared[T]) -> ref(self) T"
 # `examples/` named it as the callee nobody had described, which is what asked
 # for the entry. **The key stays `String::new`** and the spelling is `String()`
 # (ADR-140 D2): the key is what the lowering writes, and the lowering is name
-# for name (ADR-296 D17).
+# for name (ADR-grammar-lowering-v1 D2).
 # Text with nothing in it. It is written `String()`, and `String(capacity: n)`
 # holds room for `n` bytes ahead (#2114). The room is a count: a negative one
 # stops the program, as every count `std` takes (ADR-285 D15).
@@ -5902,8 +5902,8 @@ compares = true
 # kind and it carries the thing*.
 variants = ["NotFound(fs::Path)", "PermissionDenied(fs::Path)", "NotText(String)", "Outside(fs::Path)", "Other(String)"]
 
-# **What a parse fails with** ([ADR-296](../../docs/specification/adr/adr-296.md)
-# D38), and the end of the last `"?"` in this tree. A `dsl` entry rule's ledger
+# **What a parse fails with** ([ADR-grammar-actions-v1](../../docs/specification/adr/adr-grammar-actions-v1.md)
+# D4), and the end of the last `"?"` in this tree. A `dsl` entry rule's ledger
 # entry wrote `throws = ["?"]` because a parse fails with a rendered string and
 # a string is not a type; seven of the corpus' eight `main`s carried that into
 # their own set, and each of them has a **sum of two named members** now.
@@ -6105,6 +6105,16 @@ pub = true
 crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
+
+# **How a value is reached** ([ADR-330](../../docs/specification/adr/adr-330.md)
+# D8): what `T::access` and `field.ty::access` are, a value the running
+# program compares, matches, prints with `{a:?}` and keeps.
+[type."meta::Access"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["Owned", "Shared", "SharedMut"]
 
 # **What a program sizes parallel work by** ([ADR-372](../../docs/specification/adr/adr-372.md)
 # D1): the threads that run user code, not the machine's total, which a

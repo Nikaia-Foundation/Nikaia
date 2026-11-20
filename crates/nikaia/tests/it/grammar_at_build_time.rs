@@ -349,7 +349,7 @@ fn the_decoder_reads_every_shape_the_dumper_writes() {
 
 /// **A rule handing back a run crosses into a `&[T]`**
 /// ([ADR-179](../../../docs/specification/adr/adr-179.md) D1, D3), which is the
-/// crossing [ADR-177](../../../docs/specification/adr/adr-177.md) §5's
+/// crossing [ADR-179](../../../../docs/specification/adr/adr-179.md) §1's
 /// measurement said neither corpus grammar had.
 ///
 /// The count is not in the type, so the same program takes a file with three

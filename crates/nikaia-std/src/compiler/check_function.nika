@@ -566,7 +566,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             let outer_action: String? = state.inside_an_action?.clone()
             state.inside_an_action = world.words.resolve(rule.name).clone()
             // What an argument, a bound or a guard computes may not pause,
-            // as an action may not (ADR-296 D35).
+            // as an action may not (ADR-grammar-actions-v1 D1).
             state.grammar_values(world, host, gram, alt.pattern, rules, values.clone())
             let mut frame = values.clone()
             for bound in state.bindings_of(world, alt.pattern.node, rules) {
@@ -747,7 +747,7 @@ fn check_function_options_lowered(world: ref CheckWorld, key: ref String) -> Vec
 }
 
 /// **What a function binds before its body is walked**: `self`, the parameters,
-/// the options after the `;` and a spread (ADR-296 D5), each as a local of its
+/// the options after the `;` and a spread (ADR-grammar-build-time-v1 D12), each as a local of its
 /// own. A `String` the body only reads is a view of text here, as it is below
 /// (ADR-282 D2, D5, #654).
 fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, receiver: ref Receiver?, args: ref Vec[FnArg], config: ref Vec[ConfigParam], spread: winnow_grammar::Symbol?, target: String?, key: ref String, parameters: ref collections::BTreeSet[String]) -> Vec[CheckLocal] sync {

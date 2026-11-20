@@ -90,7 +90,7 @@ fn a_rejected_frame_is_reported_on_the_nika_line_that_caused_it() {
     let error = &errors[0];
 
     // The backend's message is already about the Nikaia source, because the
-    // lowering is name for name (ADR-296 D17) - `NAME` and `MEASUREMENT` are
+    // lowering is name for name (ADR-grammar-lowering-v1 D2) - `NAME` and `MEASUREMENT` are
     // the user's own rule names. Only the position had to be corrected.
     assert!(
         error.message.contains("until"),

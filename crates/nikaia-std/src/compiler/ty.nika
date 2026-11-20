@@ -1677,7 +1677,7 @@ pub struct FnContract {
     /// `t.counts: from(word)`, `seen: keyed`. A map no line covers is keyed.
     pub maps: Vec[String],
     pub ends_by_length: bool,
-    /// **A grammar entry whose body is a `par_fold`** (ADR-296 D19, #521):
+    /// **A grammar entry whose body is a `par_fold`** (ADR-grammar-parallel-v1 D5, #521):
     /// a consumer in another package drives it in pieces, as the grammar's own
     /// file does. Written only where it holds.
     pub pieces: bool,
@@ -2544,7 +2544,7 @@ fn substituted_result(result: ref Ty?, bound: ref collections::BTreeMap[String, 
 }
 
 /// **Every named type `declared` lists, written with `module::` in front**
-/// (ADR-296 D17): a module's own signature says `-> Conn`, and a caller writes
+/// (ADR-grammar-lowering-v1 D2): a module's own signature says `-> Conn`, and a caller writes
 /// `pool::Conn`. Made one where a unit is absorbed, the only place that knows
 /// both the module and what it declares.
 pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeSet[String]) -> Ty {

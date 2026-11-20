@@ -200,7 +200,7 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 }
 
 /// **The measurement, kept** ([ADR-105](../../../docs/specification/adr/adr-105.md)
-/// §1 and [ADR-296](../../../docs/specification/adr/adr-296.md) D12).
+/// §1 and [ADR-grammar-parallel-v1](../../../../docs/specification/adr/adr-grammar-parallel-v1.md) D4).
 ///
 /// §1 counts *35 unanswered method calls in the corpus*. The number this
 /// harness reads on the same tree was **38** before these entries and is **33**

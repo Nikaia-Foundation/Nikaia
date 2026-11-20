@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1472 (Draft)
-**Date:** 2026-11-19
+**Version:** 0.0.1479 (Draft)
+**Date:** 2026-11-20
 
 ---
 
@@ -429,7 +429,7 @@ The `dsl` keyword embeds **foreign syntax** in a Nikaia file: SQL, HTML, regex, 
 | `meta::capture(id)` | compile time, from the surrounding scope | assembly operands, table names — anything meaning *this variable, here* |
 | a field of the `parameters` its grammar returns | runtime, as a named argument | SQL placeholders — anything the statement should be *reusable* over |
 
-**A statement's grammar returns a description of it** ([ADR-323](adr/adr-323.md) D5): its entry hands back a `meta::Statement { row, parameters }`, two `std::meta::Type`s (10.3), and the compiler writes the row type and the parameter type from them. A `meta::Type` is `Text`, `Maybe(String)` for `String?`, `List(i64)` for `Vec[i64]`, any kind whose parts the grammar can name, and `Record(fields)` for a struct the compiler writes ([ADR-330](adr/adr-330.md) D6-D7). A block whose entry returns a `meta::Statement` is a statement: what the program holds is the statement, never the description. A grammar names no type of the program; a block maps its rows onto one with `-> T`. A type crosses out of the grammar run as its full name. A message about a field of a type the compiler wrote names the block and the grammar that declared it, and `--comptime` prints the type of each block.
+**A statement's grammar returns a description of it** ([ADR-grammar-build-time-v1](adr/adr-grammar-build-time-v1.md) D8): its entry hands back a `meta::Statement { row, parameters }`, two `std::meta::Type`s (10.3), and the compiler writes the row type and the parameter type from them. A `meta::Type` is `Text`, `Maybe(String)` for `String?`, `List(i64)` for `Vec[i64]`, any kind whose parts the grammar can name, and `Record(fields)` for a struct the compiler writes ([ADR-330](adr/adr-330.md) D6-D7). A block whose entry returns a `meta::Statement` is a statement: what the program holds is the statement, never the description. A grammar names no type of the program; a block maps its rows onto one with `-> T`. A type crosses out of the grammar run as its full name. A message about a field of a type the compiler wrote names the block and the grammar that declared it, and `--comptime` prints the type of each block.
 
 **A grammar from a package is named with its package** ([ADR-299](adr/adr-299.md) D20): `dsl sqlite::Sql { … } eod`, as every name from a package is (Part I 9.2), with no short form. A grammar the program declares is named bare: `dsl Json { … } eod`. A block that names a package where a grammar stands is `NK1228`. **A block over a grammar with several entries names the one it runs**, as the call does: `dsl Json::value { … } eod`, `dsl json::Json::value { … } eod`. A grammar with one entry, or one marked `main entry rule`, needs no name; several entries and no `main` is `NK1242`, naming them, and two `main` entries is `NK1243`.
 

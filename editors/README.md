@@ -23,7 +23,7 @@ Rust's with different words:
 | :--- | :--- | :--- |
 | `f"…"` interpolation | Part I 2.5, ADR-309 | the holes are **Nikaia expressions** and are highlighted as such; `"…"` has no holes at all, so a brace in it is a brace; `{{` is one brace; `\u{0041}` is an escape and not a hole; the first colon outside a call or an index is a format spec, so `{utils::double(21)}` keeps its path and `{Point(x: 1)}` its named argument |
 | the `;` config zone | Part I 5.1 | the `;` inside a parameter list or a call gets `punctuation.separator.config`, and what follows it is named arguments; a statement's `;` is a terminator instead |
-| `...args: Self::dsl` | ADR-296 D5 | the typed spread, with `Self::dsl` as a type rather than the `dsl` keyword |
+| `...args: Self::dsl` | ADR-grammar-build-time-v1 D12 | the typed spread, with `Self::dsl` as a type rather than the `dsl` keyword |
 | `break`, `continue` | Part I 3.3, ADR-276 | `keyword.control.flow`, with `return` rather than with `while` and `for`: `keyword.control.loop` is the word that **opens** a loop and these two are words that **leave** one. Neither takes a value and neither takes a label, so in each case the word is the whole token and there is nothing after it to scope |
 | `throws`, `throw`, `catch`, `??` | Part I 7.1, ADR-023, ADR-025 | `catch` is an ordinary keyword in expression position; `throws` carries no type; `??` is the coalescing operator |
 | `sync` | Part II 12.1 | `storage.modifier.sync`, on either side of the return type |
@@ -34,7 +34,7 @@ Rust's with different words:
 | `Vec[i64]`, `HashMap[&str, Stats]` | Part I 4.6 | square brackets, never angle |
 | `grammar Name { … }` | Part II 10.1 | see below |
 | `dsl <target> { … } eod` | Part II 10.5 | see below |
-| `@frame(boundary: "\n", unchecked)`, `@detached`, `@immediate` | ADR-296 D9 | attributes, with `unchecked` given a scope of its own because it is an assertion you make rather than a question you ask. `@borrowed` was here and is gone ([ADR-283](../docs/specification/adr/adr-283.md) D4); `@tethers` replaces it and is not built (D3), so the grammar takes neither |
+| `@frame(boundary: "\n", unchecked)`, `@detached`, `@immediate` | ADR-grammar-parallel-v1 D1 | attributes, with `unchecked` given a scope of its own because it is an assertion you make rather than a question you ask. `@borrowed` was here and is gone ([ADR-283](../docs/specification/adr/adr-283.md) D4); `@tethers` replaces it and is not built (D3), so the grammar takes neither |
 | numbers | Part I 2.2 | an integer, or a float with an optional exponent. **Nothing else**: this language has no digit separators, no radix prefixes and no literal suffixes, so `1_000`, `0xFF` and `1i64` are each something other than a number and the grammar colours them as what they are |
 | comments | parser `rule COMMENT = "//" until(line_ending)` | `//` to the end of the line, and that is the only comment there is — no block comment, no doc comment |
 

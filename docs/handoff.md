@@ -247,7 +247,7 @@ is left is 3 and 4, and neither is a performance question.
    was in the way of. What it waits on now is two runtime pieces and no
    language question:
 
-   * **The `postgres` block**, a deferred-parameter DSL (ADR-296 D4): the
+   * **The `postgres` block**, a deferred-parameter DSL (ADR-grammar-build-time-v1 D11): the
      statement has to reach a driver intact, which is a different machinery
      from the template that is built.
    * **G6, the runtime binding.** [ADR-289](specification/adr/adr-289.md)

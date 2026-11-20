@@ -428,7 +428,7 @@ impl EmitState {
         }
     }
 
-    /// ADR-296 D5: the shadow struct a call to a DSL driver builds. A struct
+    /// ADR-grammar-build-time-v1 D12: the shadow struct a call to a DSL driver builds. A struct
     /// literal names its fields, so a call may write them in any order.
     fn emit_core_dsl_parameters[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if config.len() == 0 || !self.dsl_drivers.contains(callee) {
@@ -599,7 +599,7 @@ impl EmitState {
             let mut handed = String()
             for i in 0..<rule.args.len() {
                 out.push(f"let __wg_value{i} = ")
-                // **A lent value is the caller's still** (ADR-grammar-1 D6):
+                // **A lent value is the caller's still** (ADR-grammar-actions-v1 D7):
                 // the reader's thread takes a copy, once, and lends it on.
                 let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
                 if lent {
@@ -673,8 +673,8 @@ impl EmitState {
                         out.push(", ")
                     }
                     first = false
-                    // **A lent value is handed as a reference** (ADR-grammar-1
-                    // D6): the caller keeps it.
+                    // **A lent value is handed as a reference** (ADR-grammar-actions-v1
+                    // D7): the caller keeps it.
                     let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
                     if i < values.len() && lent {
                         out.push("&(")
@@ -740,9 +740,9 @@ impl EmitState {
     }
 
     /// A `dsl ... { ... } eod` body: the `html` template compiled here
-    /// (ADR-017), or a statement whose holes the call site fills (ADR-296 D5).
+    /// (ADR-017), or a statement whose holes the call site fills (ADR-grammar-build-time-v1 D12).
     fn emit_core_template[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, context: winnow_grammar::Symbol?, content: ref String, site: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        // ADR-296 D5: a body with `:name` holes and a target this compiler is not
+        // ADR-grammar-build-time-v1 D12: a body with `:name` holes and a target this compiler is not
         // itself the grammar for is a *statement*, and its value is its own text.
         if is_deferred(name, content) {
             if context != null {

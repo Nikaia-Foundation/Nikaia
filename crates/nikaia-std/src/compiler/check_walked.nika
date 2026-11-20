@@ -370,7 +370,7 @@ pub struct CheckWalkedProved {
 /// #125, M10): each still Rust where it reads the parsed file whole, so each
 /// is a question to `check/host.rs`, answered with findings.
 pub trait CheckWalkedPasses {
-    /// The DSL parameters a call forgot, and the ones it invented (ADR-296 D5).
+    /// The DSL parameters a call forgot, and the ones it invented (ADR-grammar-build-time-v1 D12).
     fn dsl_findings(ref self) -> Vec[CheckFinding] sync
     /// Which of `nodes` are proved `>= 0` where they stand (`bounds::proven`).
     fn nonnegative(ref self, facts: ref CheckFacts, nodes: ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync
@@ -423,7 +423,7 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
     check_walked_unsigned_slots(state, fn(facts, nodes) { passes.nonnegative(facts, nodes) })
     state.walls_a_refusal_explains()
     state.facts.walks_fields = state.walks_fields.clone()
-    // ADR-296 D5: a question about a statement's holes rather than a type.
+    // ADR-grammar-build-time-v1 D12: a question about a statement's holes rather than a type.
     state.findings.extend(passes.dsl_findings())
     // **What carries outside data** (ADR-396 D1, #1573), in the ledger's pass
     // too: a function whose result comes from outside is a source its

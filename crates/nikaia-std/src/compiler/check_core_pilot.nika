@@ -47,7 +47,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
                     let mut given = check_core_expr(state, world, host, args[i], span)
                     let mut wanted = signature.params[i].1.clone()
                     // **A value the entry does not change is lent**
-                    // (ADR-grammar-1 D6): a view is handed as the value is.
+                    // (ADR-grammar-actions-v1 D7): a view is handed as the value is.
                     if !signature.mutable.contains(named) {
                         given = given.owned()
                         wanted = wanted.owned()
@@ -635,7 +635,7 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
     }
     let ty = world.words.resolve(segments[0]).clone()
     let member = world.words.resolve(segments[1]).clone()
-    if member != "kind" && member != "name" && member != "doc" {
+    if member != "kind" && member != "name" && member != "doc" && member != "access" {
         return null
     }
     if state.is_variant(ty, member) || resolve_call(world, f"{ty}::{member}") != null || !check_reflect_a_type(state, ty) {
@@ -650,6 +650,12 @@ fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Ex
     if member == "doc" {
         state.facts.reflected_docs.insert(id_of(expr) as i64)
         return Ty::Named { name: "str", args: [], view: true }
+    }
+    // **`T::access`, a `meta::Access` the running program keeps** (ADR-330
+    // D8): it carries no type, so D6's reason does not hold it back.
+    if member == "access" {
+        state.facts.reflected_accesses.insert(id_of(expr) as i64)
+        return Ty::Named { name: "meta::Access", args: [], view: false }
     }
     state.a_kind_kept_at_run_time(f"{ty}::kind", span)
     return meta
@@ -666,6 +672,10 @@ fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: ref S
     if member == "doc" {
         state.facts.reflected_docs.insert(id_of(expr) as i64)
         return Ty::Named { name: "str", args: [], view: true }
+    }
+    if member == "access" {
+        state.facts.reflected_accesses.insert(id_of(expr) as i64)
+        return Ty::Named { name: "meta::Access", args: [], view: false }
     }
     if member == "kind" {
         state.a_kind_kept_at_run_time("field.ty::kind", span)

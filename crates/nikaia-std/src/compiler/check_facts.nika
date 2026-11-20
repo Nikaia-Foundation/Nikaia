@@ -134,6 +134,10 @@ pub struct CheckFacts {
     /// ADR-330 D2): `T::doc`, `field.doc` and `field.ty::doc`, each text
     /// known while building.
     pub reflected_docs: collections::BTreeSet[i64],
+    /// **The paths and members that are an access as a value** (ADR-330
+    /// D8): `T::access` and `field.ty::access` outside a comparison of two
+    /// accesses, a `meta::Access` case decided per copy.
+    pub reflected_accesses: collections::BTreeSet[i64],
     /// **The `///` lines of each type the package declares**, keyed by its
     /// name, and of each of its fields, keyed `Type.field` (ADR-329 D2).
     /// A type without them, or without source here, has none.
@@ -586,7 +590,7 @@ pub struct CheckFacts {
     pub bytes_grammars: collections::BTreeSet[String],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
-    /// **A rule's value it is lent** (ADR-grammar-1 D6), by
+    /// **A rule's value it is lent** (ADR-grammar-actions-v1 D7), by
     /// `Grammar::rule::value`: written plain or `ref`, not `mut` or `keep`,
     /// and not a word. The rule takes it as a reference and a call hands it
     /// one, so nothing is cloned per call.
@@ -837,6 +841,7 @@ impl CheckFacts {
             kind_compares: collections::BTreeSet(),
             reflected_names: collections::BTreeSet(),
             reflected_docs: collections::BTreeSet(),
+            reflected_accesses: collections::BTreeSet(),
             docs: collections::BTreeMap(),
             fallible_loops: collections::BTreeSet(),
             pausing_walks: collections::BTreeSet(),

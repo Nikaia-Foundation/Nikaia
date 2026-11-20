@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/diagnostics.nika
 //
-// **Where an error is reported** (ADR-296 D18, ADR-300): `rustc` reports
+// **Where an error is reported** (ADR-grammar-lowering-v1 D3, ADR-300): `rustc` reports
 // byte offsets into the emitted Rust, the emitter's map trades them for the
 // `.nika` span that produced them, and this file turns each backend message
 // into one about the program - its place as an editor counts, its words put
@@ -15,7 +15,7 @@
 // compiler only asks its map where a primary byte came from.
 //
 // What it deliberately does not do is rewrite the message. Because the
-// lowering is name-for-name (ADR-296 D17), a backend sentence is already about
+// lowering is name-for-name (ADR-grammar-lowering-v1 D2), a backend sentence is already about
 // the Nikaia source - only its position was wrong.
 
 use json
@@ -126,7 +126,7 @@ pub struct DiagnosticsPlaced {
     pub internal: String?,
     pub label: String?,
     /// Whether the message is a statement about the program rather than this
-    /// compiler's defect: the parser backend's frame check, which ADR-296 D18
+    /// compiler's defect: the parser backend's frame check, which ADR-grammar-lowering-v1 D3
     /// leaves to the backend and which speaks of the grammar in its own
     /// words. Every other backend error is `NK1343` (Part III C.1).
     pub about_the_program: bool,
@@ -178,7 +178,7 @@ pub fn diagnostics_placed(read: ref Vec[DiagnosticsRead], sources: ref Vec[ref S
 }
 
 /// **Whether byte `at` of `source` lies in a `grammar` declaration**, the
-/// part the parser backend's macro reads (ADR-296 D18): the last line before
+/// part the parser backend's macro reads (ADR-grammar-lowering-v1 D3): the last line before
 /// it that starts an item, at the margin, declares a grammar.
 fn diagnostics_in_a_grammar(starts: ref Vec[i64], source: String, at: i64) -> bool {
     let lines: Vec[String] = source.split("\n").collect()
