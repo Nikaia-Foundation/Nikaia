@@ -1,4 +1,4 @@
-// ADR-views-3 D5, #1490: `let s = h.name` is a view of the field, and a
+// ADR-views-v4 D5, #1490: `let s = h.name` is a view of the field, and a
 // struct or list literal a `let` binds lends it, read again or not: neither
 // literal needs text of its own.
 

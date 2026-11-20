@@ -1,5 +1,5 @@
 // A lambda that changes a binding it captures, handed to a code parameter of
-// a trait method's impl (ADR-views-3 D17, #2045): the trait declares the
+// a trait method's impl (ADR-views-v4 D17, #2045): the trait declares the
 // parameter as the impl writes it, every impl of the trait writes it alike,
 // and a call through a bound hands it so too. The methods are `sync`: a
 // trait method whose code parameter may pause is NK1343 at

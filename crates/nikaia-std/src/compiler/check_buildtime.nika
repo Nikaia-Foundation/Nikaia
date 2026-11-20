@@ -43,7 +43,7 @@ impl CheckState {
         let mut fixed: String = "a `String`, as a view"
         // **Text is the case with no length in it**, which is why the way out is
         // shorter: a `comptime` `String` is a view of the text the build
-        // fixed (ADR-views-3 D15, #1403), with no `ref` to write.
+        // fixed (ADR-views-v4 D15, #1403), with no `ref` to write.
         let mut way_out: String = "Declare it as `String`: the text is built into the program, and a `comptime` `String` is a view of it."
         match computed {
             BuildValue::List(items) => {

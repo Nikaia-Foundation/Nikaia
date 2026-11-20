@@ -1,5 +1,5 @@
 // A struct literal stored where the call does not end takes along what its
-// view fields lend (ADR-views-3 D5, #1225): `b.w = W { own: l }` keeps `l`,
+// view fields lend (ADR-views-v4 D5, #1225): `b.w = W { own: l }` keeps `l`,
 // so the caller may not use it after the call.
 struct L { n: i64, tag: String }
 struct W { own: ref L, k: i64 }

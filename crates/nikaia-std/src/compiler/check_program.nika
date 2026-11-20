@@ -141,7 +141,7 @@ fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWo
 
 /// **Each trait method an `impl` of this file writes, by the trait method it
 /// answers** (`S::each` to `Walk::each`): its code parameters lower alike in
-/// the trait and in each impl (ADR-views-3 D17), or Rust refuses the impl.
+/// the trait and in each impl (ADR-views-v4 D17), or Rust refuses the impl.
 fn check_program_trait_methods(world: ref CheckWorld) -> collections::BTreeMap[String, String] sync {
     let mut groups: collections::BTreeMap[String, String] = collections::BTreeMap()
     for item in world.here.items {

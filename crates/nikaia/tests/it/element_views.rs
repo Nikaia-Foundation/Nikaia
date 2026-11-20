@@ -1,5 +1,5 @@
 //! **An element or a field read off a place is a view where a `let` declares
-//! `ref T`** ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md), #613).
+//! `ref T`** ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md), #613).
 
 use crate::common;
 use nikaia::contracts::LedgerOps;

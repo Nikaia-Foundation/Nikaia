@@ -1,4 +1,4 @@
-// #1346, ADR-views-3 D2: a `String?` parameter read through `??` is lent, as
+// #1346, ADR-views-v4 D2: a `String?` parameter read through `??` is lent, as
 // an option of any other type is: `let f = p ?? return ".."` only read, and
 // `t?.clone() ?? ".."` in a `match` arm, leave the caller's `p` usable, with
 // literal and built text alike. A `??` handed back still keeps (`give`).

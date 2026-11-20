@@ -1,5 +1,5 @@
 // `let s = c.signature ?? return -1` reads the option field in place
-// (ADR-views-3 D2, #1472): `c` stays lent, so it is handed in twice.
+// (ADR-views-v4 D2, #1472): `c` stays lent, so it is handed in twice.
 struct Sig { name: String }
 struct C { signature: Sig? }
 

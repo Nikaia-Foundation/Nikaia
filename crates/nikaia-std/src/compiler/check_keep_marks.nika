@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/check_keep_marks.nika
 //
-// **The written `keep` held against the inferred keeps** (ADR-views-3 D2,
+// **The written `keep` held against the inferred keeps** (ADR-views-v4 D2,
 // #1213 step 2). The keep inference (`keeps.nika`) has already written into
 // the ledger which parameters each body keeps; this compares that with the
 // mark the signature carries. A parameter kept and not marked is `NK2302` at
@@ -155,7 +155,7 @@ fn keep_marks_against_trait(view: ref ParsedView, method: ref Spanned[Item], own
             if receiver != null && consumes != marks[0] {
                 let written = if marks[0] { "`keep self`" } else { "`self` without `keep`" }
                 let help = f"Write {written}, as the trait does."
-                out.push(check_refusal("NK2302", method.span, f"`{own}` marks `self` otherwise than `{at_trait}` does.", ["A trait's signature fixes `keep` for every implementation (ADR-views-3 D2)."], help))
+                out.push(check_refusal("NK2302", method.span, f"`{own}` marks `self` otherwise than `{at_trait}` does.", ["A trait's signature fixes `keep` for every implementation (ADR-views-v4 D2)."], help))
             }
             let mut at = 0
             for arg in args {
@@ -164,7 +164,7 @@ fn keep_marks_against_trait(view: ref ParsedView, method: ref Spanned[Item], own
                     let parameter = view.text(arg.name)
                     let help = if marked { f"Write `keep` before `{parameter}`, as the trait does." } else { f"Remove `keep` before `{parameter}`, as the trait does." }
                     let said = if marked { "keeps" } else { "lends" }
-                    out.push(check_refusal("NK2302", arg.span, f"`{own}` marks `{parameter}` otherwise than `{at_trait}`, which {said} it.", ["A trait's signature fixes `keep` for every implementation (ADR-views-3 D2): a caller through the trait reads that signature, not this one."], help))
+                    out.push(check_refusal("NK2302", arg.span, f"`{own}` marks `{parameter}` otherwise than `{at_trait}`, which {said} it.", ["A trait's signature fixes `keep` for every implementation (ADR-views-v4 D2): a caller through the trait reads that signature, not this one."], help))
                 }
                 at += 1
             }
@@ -192,15 +192,15 @@ fn keep_marks_of_body(view: ref ParsedView, item: ref Spanned[Item], target: Str
                     continue
                 }
                 let kept = contract.keeps.contains(parameter)
-                // **A copy is never asked to be marked** (ADR-views-3 D2,
+                // **A copy is never asked to be marked** (ADR-views-v4 D2,
                 // #1254): handed over by value, it keeps no caller's value.
                 let a_copy = !arg.ty.is_view && !arg.mutable && keeps_a_copy_type(written_ty(view.words, view.aliases, arg.ty), copies)
                 if kept && !arg.keep && opted && !a_copy {
                     let at = keep_marks_keeping_statement(view, item, target?.clone(), parameter, own, library, indexes, resolved, holes_of) ?? arg.span.clone()
-                    out.push(check_refusal("NK2302", at, f"`{found.key}` keeps `{parameter}`, but `{parameter}` is not marked `keep`.", ["A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).", "Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213)."], keep_marks_help(view, item, parameter, found.key)))
+                    out.push(check_refusal("NK2302", at, f"`{found.key}` keeps `{parameter}`, but `{parameter}` is not marked `keep`.", ["A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-v4 D2).", "Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213)."], keep_marks_help(view, item, parameter, found.key)))
                 }
                 if arg.keep && !kept {
-                    let mut warned = check_refusal("NK1334", arg.span, f"`{parameter}` is marked `keep`, but `{found.key}` never keeps it.", ["A parameter the body only reads or changes is lent (ADR-views-3 D2)."], f"Remove `keep` before `{parameter}`.")
+                    let mut warned = check_refusal("NK1334", arg.span, f"`{parameter}` is marked `keep`, but `{found.key}` never keeps it.", ["A parameter the body only reads or changes is lent (ADR-views-v4 D2)."], f"Remove `keep` before `{parameter}`.")
                     warned.severity = CheckSeverity::Warning
                     out.push(warned)
                 }

@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/check_result_from.nika
 //
-// **A result's written source held against the body** (ADR-views-3 D8, D10,
+// **A result's written source held against the body** (ADR-views-v4 D8, D10,
 // #1213 step 4). `-> String from a | b` names the parameters the result's
 // views point into. Where a body is written, the views pass (`views.nika`,
 // `result_sources_inferred`) has worked out which parameters its ways out
@@ -77,7 +77,7 @@ fn result_from_as_written(names: ref winnow_grammar::InternerContext, items: ref
         source.borrows = named
         source.returns = ""
     }
-    // **A `from` the body gives the inference no way to see** (ADR-views-3
+    // **A `from` the body gives the inference no way to see** (ADR-views-v4
     // D8, D14, #1254): `return f(s)` through a `fn(s: String) -> String from
     // s` reaches nothing the views pass follows, and the written sources are
     // the ledger's all the same.
@@ -130,10 +130,10 @@ fn result_from_unknown(function: ref String, named: ref String) -> String {
 }
 
 fn result_from_note() -> String {
-    return "A result's `from` names the parameters its views point into (ADR-views-3 D8)."
+    return "A result's `from` names the parameters its views point into (ADR-views-v4 D8)."
 }
 
-/// **A function type's `from` names its own parameters** (ADR-views-3 D14):
+/// **A function type's `from` names its own parameters** (ADR-views-v4 D14):
 /// `fn(s: String, n: i64) -> String from s`. A name that is no parameter of
 /// the type, or a `from` on a type whose parameters have no names, is
 /// `NK1335`. The types inside it are walked by the caller
@@ -168,7 +168,7 @@ fn result_from_of_code(names: ref winnow_grammar::InternerContext, ty: ref Type,
         let named = names.resolve(source).clone()
         if !parameters.contains(named) {
             let help = if parameters.is_empty() { "Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`." } else { f"Name one of `{function}`'s parameters after `from`." }
-            return refusal("NK1335", span.clone(), result_from_unknown(function, named), [result_from_note(), "A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14)."], help)
+            return refusal("NK1335", span.clone(), result_from_unknown(function, named), [result_from_note(), "A function type names the parameters its `from` reads; the names do not change the type (ADR-views-v4 D14)."], help)
         }
     }
     return null
@@ -193,7 +193,7 @@ fn result_from_of_body(view: ref ParsedView, item: ref Spanned[Item], owner: Str
             for source in sources {
                 if !named.contains(source) {
                     let written = named.join(" | ")
-                    out.push(check_refusal("NK1335", item.span, f"`{key}` hands back a view of `{source}`'s data, but its result says `from {written}`.", [f"A caller reads the signature: it keeps `{written}` unchanged while the result is used, and nothing holds `{source}` (ADR-views-3 D8)."], f"Write `from {written} | {source}`, or hand back a copy of what comes from `{source}` with `.clone()`."))
+                    out.push(check_refusal("NK1335", item.span, f"`{key}` hands back a view of `{source}`'s data, but its result says `from {written}`.", [f"A caller reads the signature: it keeps `{written}` unchanged while the result is used, and nothing holds `{source}` (ADR-views-v4 D8)."], f"Write `from {written} | {source}`, or hand back a copy of what comes from `{source}` with `.clone()`."))
                     return
                 }
             }
@@ -230,5 +230,5 @@ fn result_from_of_signature(view: ref ParsedView, method: ref Spanned[TraitMetho
         choices.push(f"`from {parameters.join(" | ")}`")
     }
     let help = if parameters.is_empty() { "Hand back text of its own: declare the result without `ref`." } else { f"Write one of {choices.join(", ")} after the result type, or declare it without `ref` to hand back text of its own." }
-    out.push(check_refusal("NK1336", method.span, f"`{function}` hands back a view, but has no body to tell whose data it points into, and no `from`.", ["Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-3 D8, D14)."], help))
+    out.push(check_refusal("NK1336", method.span, f"`{function}` hands back a view, but has no body to tell whose data it points into, and no `from`.", ["Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-v4 D8, D14)."], help))
 }

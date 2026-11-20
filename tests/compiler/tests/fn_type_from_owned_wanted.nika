@@ -1,4 +1,4 @@
-// ADR-views-3 D14: a function whose result is a view does not fit a
+// ADR-views-v4 D14: a function whose result is a view does not fit a
 // function type whose result owns its value.
 
 fn first(s: String) -> String {

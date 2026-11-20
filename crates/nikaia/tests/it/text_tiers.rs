@@ -897,7 +897,7 @@ fn a_lent_parameter_or_option_handed_on_lowers_as_a_written_view() {
 }
 
 /// **`examples/http` writes no `ref` and lowers to the same Rust as with `ref`
-/// on its methods' parameters** (#654, ADR-views-3 D1): a parameter is lent
+/// on its methods' parameters** (#654, ADR-views-v4 D1): a parameter is lent
 /// unless written `keep`, so `ref self, name: ref String` says what
 /// `self, name: String` already says.
 #[test]

@@ -1,4 +1,4 @@
-// #2321, ADR-views-3 D12: a parameter handed back whole on one path and cut
+// #2321, ADR-views-v4 D12: a parameter handed back whole on one path and cut
 // on another is lent on both, as beside a `trim()`: the result is a view of
 // it, whether the early return is a statement or inside a `??`, and whether
 // the caller hands it a literal, another call's result or text of its own.

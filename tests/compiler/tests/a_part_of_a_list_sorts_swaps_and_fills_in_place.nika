@@ -1,5 +1,5 @@
 // A part `v[a..<b]` of a `mut` list changes in place: the list sees it
-// (ADR-views-3 D11, #1209).
+// (ADR-views-v4 D11, #1209).
 fn main() throws {
     let mut p: Vec[u32] = [5, 4, 3, 2, 1, 0]
     p[2..<5].sort()

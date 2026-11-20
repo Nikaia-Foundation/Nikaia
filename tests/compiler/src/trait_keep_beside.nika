@@ -1,6 +1,6 @@
 /// A trait whose method marks its parameter `keep`, with no impl in this
 /// package, and a function that calls it through a bound: the mark fixes the
-/// method's `keeps` column (ADR-views-3 D2), so the call hands `text` over
+/// method's `keeps` column (ADR-views-v4 D2), so the call hands `text` over
 /// rather than lending it. `tests/a_trait_keep_reaches_a_caller_in_its_package.nika`
 /// implements it (#116).
 pub trait TraitKeepBesideSink {

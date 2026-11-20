@@ -1,5 +1,5 @@
 /// Lends a field of `mut self` to a `mut` parameter `mut_lent_beside.nika`
-/// declares: it is changed in place, not given away (#1315, ADR-views-3 D3).
+/// declares: it is changed in place, not given away (#1315, ADR-views-v4 D3).
 pub struct MutLentColumns { pub vars: MutLentVars }
 
 impl MutLentColumns {

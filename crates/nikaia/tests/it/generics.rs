@@ -405,7 +405,7 @@ fn main() throws {
 "#,
     );
     // One way out is the owned `other`, so the result is no view of `self`
-    // (ADR-views-3 D7 makes it one only where every way out is a place of
+    // (ADR-views-v4 D7 makes it one only where every way out is a place of
     // `self`, #1257) and `self.value` leaves a borrowed subject.
     let refusal = found
         .iter()

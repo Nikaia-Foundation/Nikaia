@@ -1,4 +1,4 @@
-// ADR-views-3 D16 (#1507): a list or a tuple handed back that is built from
+// ADR-views-v4 D16 (#1507): a list or a tuple handed back that is built from
 // several `String` parameters holds views of each, and each argument stays
 // the caller's, whatever the caller reads after the call.
 fn pair(a: String, b: String) -> Vec[String] {

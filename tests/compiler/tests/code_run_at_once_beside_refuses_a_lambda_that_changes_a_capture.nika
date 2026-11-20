@@ -3,7 +3,7 @@ use compiler_tests
 // A function of another package that runs its code parameter from tasks at
 // once, or hands it on to one that does, refuses a lambda that changes what it
 // captures, as one in the same file does: its ledger entry says `at_once`
-// (ADR-views-3 D17, #2046).
+// (ADR-views-v4 D17, #2046).
 fn main() throws {
     let mut total = 0
     compiler_tests::code_beside_each_at_once([1, 2], fn(v) { total = total + v })

@@ -1,5 +1,5 @@
 // The fallback of a `??` handed to a callee that keeps it is kept too
-// (ADR-views-3 D1, #1213): `store(first ?? other)` stores `other`, so the
+// (ADR-views-v4 D1, #1213): `store(first ?? other)` stores `other`, so the
 // caller cannot use `t` after handing it over.
 
 struct Name {

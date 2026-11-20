@@ -1,5 +1,5 @@
 // `keep` before a parameter, `mut self` and `keep self` parse and run as
-// today (ADR-views-3 D2, #1213 step 2); `ref self`, `ref mut self`, a bare
+// today (ADR-views-v4 D2, #1213 step 2); `ref self`, `ref mut self`, a bare
 // `self` and a parameter called `keep` (D13) still do.
 
 struct Bag {

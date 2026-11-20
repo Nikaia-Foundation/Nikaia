@@ -1,4 +1,4 @@
-// ADR-views-3 D4, D5, D15, #1254: `nikaia migrate views-3` writes
+// ADR-views-v4 D4, D5, D15, #1254: `nikaia migrate views-3` writes
 // `Vec[ref String]` as `Vec[String]`. The migrated file runs: a field and a
 // local filled from a parameter's `split` and `lines`, and from a `comptime`.
 use std::fs

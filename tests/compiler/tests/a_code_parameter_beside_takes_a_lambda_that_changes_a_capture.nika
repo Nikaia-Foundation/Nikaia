@@ -3,7 +3,7 @@ use compiler_tests
 // A code parameter run one call at a time takes a lambda that changes what it
 // captures from a caller in another file of the package
 // (`src/code_beside_caller.nika`) and from one in another package (this
-// program): the callee's body decides it, not its callers (ADR-views-3 D17,
+// program): the callee's body decides it, not its callers (ADR-views-v4 D17,
 // #2046).
 fn main() throws {
     println(compiler_tests::code_beside_sum([1, 2, 3]))

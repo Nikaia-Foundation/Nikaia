@@ -118,7 +118,7 @@ impl EmitState {
         let mut out: String = ""
 
         // **A function type that writes `from` is written as the views it
-        // names** (ADR-views-3 D14, `code_as_read`): `fn(s: String) -> String
+        // names** (ADR-views-v4 D14, `code_as_read`): `fn(s: String) -> String
         // from s` is `Fn(&str) -> &str`, and a plain text parameter is lent
         // without one (D2, #1254): `fn(s: String) -> i64` is `Fn(&str) -> i64`.
         if code_lends_unmarked(world.words, ty) {

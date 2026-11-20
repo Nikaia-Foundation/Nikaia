@@ -112,7 +112,7 @@ pub struct BufferAsk {
     pub given_up: ref collections::BTreeMap[i64, String],
     /// The names the text tiers took as a view of themselves where they
     /// stand, by their nodes (`viewed_arms`): a buffer moved so into a
-    /// literal is a view of it (ADR-views-3 D9).
+    /// literal is a view of it (ADR-views-v4 D9).
     pub viewed: ref collections::BTreeSet[i64],
     /// The cuts the text tiers took as text of their own (`given_pushes`):
     /// each takes its local's buffer, so it views nothing (ADR-text-reuse-1
@@ -323,7 +323,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => {
             let anchored = untethered_returns(plan.key, ret_type, body, ask)
             plan.refusals.extend(anchored.findings)
-            // **The local moves into the caller's keep** (ADR-views-3 D9,
+            // **The local moves into the caller's keep** (ADR-views-v4 D9,
             // ADR-283 D23, #1218): a buffer that is no text, which no view is
             // found in by address, put there whole.
             for (at, source) in anchored.anchored {
@@ -514,7 +514,7 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
     }
     let at = span.start as i64
     // **A move into another local** while a view of the buffer is used
-    // afterwards (ADR-views-3 D9, `view_changes`' answer in `ask.given_up`): the
+    // afterwards (ADR-views-v4 D9, `view_changes`' answer in `ask.given_up`): the
     // buffer lives in the frame's keep from its `let`, and the new name holds
     // the same data. No copy.
     match value {
@@ -1155,7 +1155,7 @@ fn flow_into(root: ref String, origins: collections::BTreeSet[(i64, String)], mu
 }
 
 // **A buffer given a new value inside a block nested below its `let`**, while
-// a view of it made outside that block is used afterwards (ADR-views-3 D9; which
+// a view of it made outside that block is used afterwards (ADR-views-v4 D9; which
 // ones is `view_changes`' answer, `ask.given_up`): a binding of its own would
 // end with the inner block, so the buffer lives in the frame's keep from its
 // `let`, and the assignment puts the new value there too (#293). No copy.
@@ -2054,7 +2054,7 @@ fn a_library_struct_of_views(name: ref String, ask: ref BufferAsk) -> bool {
 }
 
 // **A call that hands back a view of its arguments makes no buffer**
-// (ADR-views-3 D8): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
+// (ADR-views-v4 D8): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
 // which the inner call's origins already carry. So does one that hands back a
 // struct of views (#1378): `look(make(text))`, where `make` gives an `N`
 // viewing `text`, holds views, never a `'static` buffer a keep could hold.
@@ -2499,7 +2499,7 @@ fn element_refusal(keeper: ref String, why: ref String, help: ref String, plan: 
 // ---------------------------------------------------------------------------
 
 // **A view of a local that is no text or bytes, handed back**, bare or in a
-// field of the struct the function returns (ADR-283 D9, D23; ADR-views-3 D9,
+// field of the struct the function returns (ADR-283 D9, D23; ADR-views-v4 D9,
 // D10; #1218): a view of an element of a list the body made, or of a part of
 // a struct it built. The function gives the local up while the result holds a
 // view of it, so the local moves whole into the caller's keep (`anchored`, by

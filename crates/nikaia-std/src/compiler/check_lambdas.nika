@@ -223,7 +223,7 @@ impl CheckState {
     /// change reaches only its own copy, never the binding the reader sees.
     fn a_kept_lambda_changes_a_capture(ref mut self, name: ref String, span: ref Span) sync {
         let message = f"This lambda is kept for later, so it takes its own copy of `{name}`; a change it makes never reaches `{name}` here."
-        let note = f"A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17)."
+        let note = f"A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-v4 D17)."
         let help = f"Hand the value back instead: take `{name}` as a parameter and return what it becomes (`fn(v, {name}) {{ {name} + v }}`), or keep `{name}` in a `Shared` value both sides reach."
         self.findings.push(check_refusal("NK2101", span, message, [note], help))
     }
@@ -264,7 +264,7 @@ impl CheckState {
 impl CheckState {
     /// **`NK1104`: a lambda that hands back text it does not own** (#1264):
     /// a function type whose result is `String` without `from` owns its text
-    /// (ADR-views-3 D12, D14), and no copy is ever put in (ADR-283 D3). A
+    /// (ADR-views-v4 D12, D14), and no copy is ever put in (ADR-283 D3). A
     /// view handed back there - `.to_string()` of text is one, not a copy
     /// (ADR-282 D8) - or a `String` the lambda captures is refused, as a
     /// named function's view is where that type is wanted, with the help

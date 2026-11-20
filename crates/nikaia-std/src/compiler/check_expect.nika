@@ -161,14 +161,14 @@ impl CheckState {
             help = "Take it apart first: `match error { … }`, and use what each arm binds."
         }
         // **A declared result that is a view is said as its signature
-        // writes it** (ADR-views-3 D10, #1528): `Vec[String] from self`.
+        // writes it** (ADR-views-v4 D10, #1528): `Vec[String] from self`.
         if what == "returns" && want.is_a_view() {
             let sources = written_from_of(world, self.current ?? "")
             if sources.len() > 0 {
                 said = said.replace(f"`{want_text}`", f"`{want.shown()} from {sources.join(" | ")}`")
             }
         }
-        // **No message prints `ref T`** (ADR-views-3 D4): a view is said in
+        // **No message prints `ref T`** (ADR-views-v4 D4): a view is said in
         // words, against the other side.
         said = spoken_in(said, found, want)
         help = shown_in(help, found, want)
@@ -196,7 +196,7 @@ impl CheckState {
         if !self.facts.static_field_reads.contains(id_of(check_peeled(given)) as i64) {
             return
         }
-        // The view as the message said it (ADR-views-3 D4, #1528).
+        // The view as the message said it (ADR-views-v4 D4, #1528).
         let shown = spoken(present, null)
         let said = spoken(present.owned(), null)
         if shown == said {

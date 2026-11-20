@@ -1,5 +1,5 @@
 // The five in-place methods on a list of a `mut` place, on an array and on a
-// `mut xs: Array[T]` (ADR-views-3 D11, #1209).
+// `mut xs: Array[T]` (ADR-views-v4 D11, #1209).
 fn tidy(mut xs: Array[u32]) {
     xs.swap(0, xs.len() - 1)
     xs.sort()

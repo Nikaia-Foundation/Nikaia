@@ -1,4 +1,4 @@
-// A lent plain parameter takes a hull as `ref T` did (ADR-views-3 D4, #1254):
+// A lent plain parameter takes a hull as `ref T` did (ADR-views-v4 D4, #1254):
 // `serve(db: Conn)` is lent `db`, so a `Shared[Conn]` is lent through its
 // `deref`, never moved; a lent `SharedMut[i64]` is lent as the handle.
 struct Conn { host: String }

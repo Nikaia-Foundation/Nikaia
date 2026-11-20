@@ -88,7 +88,7 @@ fn check_core_args_lent(world: ref CheckWorld, callee: ref FnContract?, at: i64)
 
 /// Whether `arg` is a field of `mut self` that a keeper takes out, to be
 /// given back: one whose type has an empty value or a stand-in
-/// (ADR-views-1 D3, #1208).
+/// (ADR-views-v4 D20, #1208).
 fn check_core_args_taken_from_self[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, span: ref Span) -> bool sync {
     let field = check_core_field_of_self(world, arg) ?? return false
     let ty = check_core_expr(state, world, host, arg, span)
@@ -153,7 +153,7 @@ fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld,
     }
 }
 
-/// **What a run lambda changes that it captures** (ADR-views-3 D17): the
+/// **What a run lambda changes that it captures** (ADR-views-v4 D17): the
 /// first binding bound outside it that its body changed, and the parameters
 /// of code it ran, which may change what they capture in turn.
 fn check_core_args_what_a_lambda_changes(mut state: CheckState, id: i64, changed_from: i64, runs_from: i64) sync {
@@ -344,20 +344,20 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
             else => {}
         }
     }
-    // **Nor one the callee lends** (ADR-views-3 D2): a plain parameter of a
+    // **Nor one the callee lends** (ADR-views-v4 D2): a plain parameter of a
     // function that does not keep it, where the call writes the reference,
     // as `lends_in` answers for the emitter.
     if !lends {
         lends = check_core_args_lent(world, callee, at)
     }
     // **A field of `mut self` handed to a `mut` parameter is lent in place**
-    // (ADR-views-3 D3, #1315), whatever its type and whichever file declares
+    // (ADR-views-v4 D3, #1315), whatever its type and whichever file declares
     // the callee: nothing is given away, so nothing is taken out.
     if !lends && state.changing_self && check_core_args_changes(callee, at) {
         lends = true
     }
     // **A field of `mut self` handed to a keeper is taken out**, to be given
-    // back (ADR-views-3 D3, ADR-views-1 D1, #1208): `NK2108` asks that it is.
+    // back (ADR-views-v4 D3, ADR-views-v4 D18, #1208): `NK2108` asks that it is.
     let taken = !lends && state.changing_self && check_core_args_taken_from_self(state, world, host, arg, span)
     if !lends && !taken {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at))
@@ -1114,7 +1114,7 @@ fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref Che
         Ty::Fn { params, result, is_sync, can_throw, .. } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
-            // **What it takes as a view or `mut` is lent to it** (ADR-views-3
+            // **What it takes as a view or `mut` is lent to it** (ADR-views-v4
             // D2, D14), as through a function value called by name: an owned
             // `String` field handed to `fn(String)` went below by value.
             let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), world.words.resolve(method), span)

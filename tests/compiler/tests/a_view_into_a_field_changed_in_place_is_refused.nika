@@ -1,4 +1,4 @@
-// A field the program changes in place holds text of its own (ADR-views-3
+// A field the program changes in place holds text of its own (ADR-views-v4
 // D5, #1213): a piece of the buffer `text` flowing into it is refused where it
 // flows in, and the help names `.clone()`. The same field given a copy is
 // `a_copy_into_a_field_changed_in_place_is_accepted`.

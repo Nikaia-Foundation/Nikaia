@@ -5,7 +5,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-// ADR-views-3 D9 (#944): `v` is made from `c.input` alone, so changing `c.pos`
+// ADR-views-v4 D9 (#944): `v` is made from `c.input` alone, so changing `c.pos`
 // while `v` is still used is no change to data it may point into.
 fn main() throws {
     let n = 1

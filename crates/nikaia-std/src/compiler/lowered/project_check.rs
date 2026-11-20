@@ -168,14 +168,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple25296| {
-            let (param, _) = __nikaia_tuple25296;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple25355| {
-                let (p, _) = __nikaia_tuple25355;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple25297| {
+            let (param, _) = __nikaia_tuple25297;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple25356| {
+                let (p, _) = __nikaia_tuple25356;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple25396| {
-            let (param, ty) = __nikaia_tuple25396;
+        }).filter_map(|__nikaia_tuple25397| {
+            let (param, ty) = __nikaia_tuple25397;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -203,11 +203,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple27974| {
-        let (_, asked) = __nikaia_tuple27974; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple27975| {
+        let (_, asked) = __nikaia_tuple27975; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple28004| {
-        let (kind, _) = __nikaia_tuple28004;
+    }).map(|__nikaia_tuple28005| {
+        let (kind, _) = __nikaia_tuple28005;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }

@@ -1,5 +1,5 @@
 // Without a body, `from` alone makes a trait method's result a view of what it
-// names (ADR-views-3 D14, #1224): an implementation that writes no `from` of
+// names (ADR-views-v4 D14, #1224): an implementation that writes no `from` of
 // its own is held to the trait's, by position, whatever it names its
 // parameters, and lowers as a view of it.
 trait Pick {

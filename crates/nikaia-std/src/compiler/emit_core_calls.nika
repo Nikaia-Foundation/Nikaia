@@ -266,7 +266,7 @@ impl EmitState {
             }
             i += 1
         }
-        // **And one that runs the code called** (ADR-views-3 D17): a
+        // **And one that runs the code called** (ADR-views-v4 D17): a
         // parameter of code is `&mut impl FnMut` below, which Rust holds for
         // the call from before its arguments, so `f(f(x))` is
         // `({ let a = f(x); f(a) })`.

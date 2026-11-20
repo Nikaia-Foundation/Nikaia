@@ -1,6 +1,6 @@
 // A view a method of text hands back may be used before the text changes,
 // and a struct literal given one may be handed back while the text stays as
-// it is (ADR-views-3 D9, #1478).
+// it is (ADR-views-v4 D9, #1478).
 
 struct Line {
     text: String,

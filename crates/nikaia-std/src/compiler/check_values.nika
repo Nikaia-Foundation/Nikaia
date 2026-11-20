@@ -320,7 +320,7 @@ impl CheckState {
     /// body does not own: the language below said *cannot move out of
     /// `p.name` which is behind a shared reference*, about a file nobody wrote.
     fn a_part_of_a_loan_handed_over(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
-        // **`mut self` is changed in place, not only borrowed** (ADR-views-3
+        // **`mut self` is changed in place, not only borrowed** (ADR-views-v4
         // D3, #1208): a part reaching here could not be taken out and given
         // back (inside a lambda, or a type with no stand-in).
         if root == "self" && self.changing_self {

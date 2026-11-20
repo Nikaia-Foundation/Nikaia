@@ -80,7 +80,7 @@ fn a_key_written_is_given_away() {
     );
 }
 
-// The long form `Person { name: name }` lends the local since ADR-views-3 D5 (#1490,
+// The long form `Person { name: name }` lends the local since ADR-views-v4 D5 (#1490,
 // tests/compiler a_field_lends_what_it_is_given); the shorthand still hands it over.
 #[test]
 fn a_field_holds_what_it_is_given() {
@@ -567,7 +567,7 @@ fn a_parameter_only_compared_in_a_match_is_read() {
 }
 
 /// An arm that hands the scrutinee on keeps it. (A match that is the tail of
-/// the body lends it instead, ADR-views-3 D8: `views_a_tail_choice_hands_back_a_lent_parameter`.)
+/// the body lends it instead, ADR-views-v4 D8: `views_a_tail_choice_hands_back_a_lent_parameter`.)
 #[test]
 fn a_parameter_a_match_arm_returns_is_kept() {
     let found = findings(

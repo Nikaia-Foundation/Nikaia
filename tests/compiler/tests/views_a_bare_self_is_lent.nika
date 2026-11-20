@@ -1,4 +1,4 @@
-// `self` looks (ADR-views-3 D1, #1213): a bare `self` is lent, so the object
+// `self` looks (ADR-views-v4 D1, #1213): a bare `self` is lent, so the object
 // is still there after the call, and called again.
 
 struct Box {

@@ -1,5 +1,5 @@
 // A lent optional parameter a `match` takes apart binds its payload as a
-// view, and the caller's value is usable again (ADR-views-3 D1).
+// view, and the caller's value is usable again (ADR-views-v4 D1).
 
 fn size(name: String?) -> i64 {
     return match name {

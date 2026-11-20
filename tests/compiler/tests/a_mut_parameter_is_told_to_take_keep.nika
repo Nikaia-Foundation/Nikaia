@@ -1,6 +1,6 @@
 // NK1131 over a `mut` parameter handed back: the help names `keep` and a
 // local of its own, not dropping the `mut`, which leads to NK1138
-// (ADR-views-3, #1486).
+// (ADR-views-v4, #1486).
 struct U { s: String }
 fn grow(mut u: U) -> U {
     u.s.push_str("!")

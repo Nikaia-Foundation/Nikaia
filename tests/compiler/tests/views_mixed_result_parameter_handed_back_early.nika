@@ -1,5 +1,5 @@
 // #1334: a `String` parameter one `return` hands back and a later statement
-// hands to `own` goes into a mixed `String?` result (ADR-views-3 D8). Where
+// hands to `own` goes into a mixed `String?` result (ADR-views-v4 D8). Where
 // one statement calls the function twice with the same text, the first
 // result still views it at the second call, so the text is lent there too,
 // not moved out from under that view.

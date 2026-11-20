@@ -1,4 +1,4 @@
-// ADR-views-3 D14: an argument a function type's `from` names is lent, so an
+// ADR-views-v4 D14: an argument a function type's `from` names is lent, so an
 // owned `String` given there, its type written or not, goes in as a view
 // whose view comes back (#1254).
 fn same(s: String) -> String from s {

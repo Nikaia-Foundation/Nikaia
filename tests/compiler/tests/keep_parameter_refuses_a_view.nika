@@ -1,4 +1,4 @@
-// A `keep` parameter holds a value of its own (ADR-views-3 D5, #1532): an
+// A `keep` parameter holds a value of its own (ADR-views-v4 D5, #1532): an
 // element of a list, which the list keeps, handed to it is refused with a
 // `.clone()` help, not lowered to a view of the list.
 fn f(keep a: String) -> String { return a }

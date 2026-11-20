@@ -1,5 +1,5 @@
 // A lent parameter handed on to an own method that does not keep it stays
-// lent: the method lends it as a free function does (ADR-views-3 D1, #1213).
+// lent: the method lends it as a free function does (ADR-views-v4 D1, #1213).
 
 enum Op {
     Add,

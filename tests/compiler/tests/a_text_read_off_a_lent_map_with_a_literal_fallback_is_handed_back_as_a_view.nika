@@ -1,6 +1,6 @@
 // A `String` result that reads an element off a lent list or map, with a
 // literal or a jump behind its `??`, hands back a view of the parameter or of
-// static text, as `-> ref String` says (ADR-282 D13, D29; ADR-views-3 D12;
+// static text, as `-> ref String` says (ADR-282 D13, D29; ADR-views-v4 D12;
 // #1720): no NK1104 "returning `ref String`", no copy behind your back.
 use std::collections
 

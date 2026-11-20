@@ -471,7 +471,7 @@ impl EmitState {
                 out.push(", ")
             }
             n += 1
-            // **What it takes as a view or `mut` is lent to it** (ADR-views-3
+            // **What it takes as a view or `mut` is lent to it** (ADR-views-v4
             // D2), as through a function value called by name.
             let change = self.facts.mut_args.contains(node_key(arg))
             if change && self.facts.reborrowed_args.contains(node_key(arg)) {

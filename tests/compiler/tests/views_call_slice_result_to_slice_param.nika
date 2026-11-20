@@ -1,5 +1,5 @@
 // A call's slice result that is a view of its parameter, handed to a lent
-// `Array[T]`, is a view already (ADR-views-3 D8, D11, #1254), as a part
+// `Array[T]`, is a view already (ADR-views-v4 D8, D11, #1254), as a part
 // `v[1..]` is; so are a `Bytes` result (D15) and a text result.
 fn rest(xs: Array[i64]) -> Array[i64] {
     return xs[1..]

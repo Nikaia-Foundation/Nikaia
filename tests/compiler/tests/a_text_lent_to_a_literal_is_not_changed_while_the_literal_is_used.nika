@@ -1,4 +1,4 @@
-// ADR-views-3 D5, #1490: a struct literal a `let` binds lends the text built
+// ADR-views-v4 D5, #1490: a struct literal a `let` binds lends the text built
 // into it while the value stays in the function, so `s` is still used after
 // it; a change of `s` in place while the literal is used is refused, as one
 // while a view a call made is used.
