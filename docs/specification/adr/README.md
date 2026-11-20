@@ -16,7 +16,7 @@ Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
 
-The records of the earlier schemes (`ADR-296`, `ADR-views-3`) keep their
+The records of the earlier schemes (`ADR-299`, `ADR-views-3`) keep their
 names until something changes them; a change to one of them consolidates its
 topic into a `-v` record (D4). Until then such a record may still carry
 *Changed by ADR-MMM Dn* notes from before.
@@ -217,7 +217,6 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | yes |
 | [grammar-syntax-v1](adr-grammar-syntax-v1.md) | How a grammar is written: scannerless, a DSL block ends with `} eod`, a grammar is parsed, comments are whitespace and strings Nikaia's own; entered by an ordinary call to any `entry rule` (`Json::value(x)`, no `parse` alias, `pub` belongs to the grammar); Part II 10.8 lists every element; an action stands after `->` and a brace after a pattern is a bound; a rule takes values as a function does (Subject ; Config), a bound may be a value, a guard `if(cond)`, `count(p)` an `i64`; `span(p)`, `here`, `same_line`, `///` a rule, no state and no `extern rule`; hardware instructions leave the core, auto-AST and regex terminals are goals | Accepted | no |
 | [grammar-input-v1](adr-grammar-input-v1.md) | What a grammar reads and how it holds it: an entry takes a `String` or a `Bytes`, the argument decides; over `Bytes` what becomes text is checked as UTF-8 where it becomes text (a map's key only where the map misses), a bad byte is a parse error at its offset, `bytes(p)` hands back the bytes; `asset("…")` says where the bytes come from; identifiers are interned and bulk text is a view with the input's lifetime; a view key may be hashed from a prefix, never compared by one; the interning table is the caller's, handed as `words:` (`NK1330` where the result can hold a `Symbol`), made in `std`; a read-only buffer's teardown may be skipped at exit | Accepted | no |
 | [grammar-actions-v1](adr-grammar-actions-v1.md) | What a rule's action may do and how a parse fails: an action may not pause and a call that can is `NK2209` where it stands, so an entry is `sync` (asserted in the ledger); an action may fail and a pausing body may enter a grammar; a parse fails with the prelude's `ParseError`, which carries the message and nothing else, and every entry's ledger says so, read by the `throws` fixpoint though an entry is no `Item::Fn`; a rule's values are lent as a function's are, never cloned per call | Accepted | yes |
@@ -368,7 +367,6 @@ makes the next version of the changed topic instead. Records replaced as a whole
 | [283](adr-283.md) D25 | [views-3](adr-views-3.md) D8, D9 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
-| [296](adr-296.md) D25 | [299](adr-299.md) D21 | the author may mark one entry `main`; the compiler still picks none |
 | [299](adr-299.md) D4, D8 | [338](adr-338.md) D2 | the database protocol is the official package `db` |
 | [017](adr-017.md), [289](adr-289.md) | [338](adr-338.md) D2 | `std::html`, `std::http1` and `std::db` are the official packages `html`, `http1` and `db` |
 | [329](adr-329.md) D1 | [330](adr-330.md) D5 | `.ty` is the field's type, not a `meta::Type` |

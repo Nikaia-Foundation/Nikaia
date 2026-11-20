@@ -9,7 +9,8 @@ written as, and what a map lowers to
 [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695),
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904))
 **Supersedes / Related:** takes the decisions on how a grammar is lowered from
-[ADR-296](adr-296.md) (its other decisions stay there);
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records);
 [ADR-001](adr-001.md) D2 and D4 (the parser backend; Stage 0 is a transpiler);
 [ADR-013](adr-013.md) D2 (the fold adapter is a lookup in the program's
 declarations); [ADR-300](adr-300.md) (errors reported against the `.nika`

@@ -9,7 +9,8 @@ what that failure carries, and how a rule's values reach it
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904),
 [#1548](https://github.com/Nikaia-Foundation/Nikaia/issues/1548))
 **Supersedes / Related:** takes the decisions on actions and failure from
-[ADR-296](adr-296.md) (its other decisions stay there) and the last decision of
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records) and the last decision of
 a record now in [`docs/history/adr/`](../../history/adr/README.md) (rule values
 lent); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule declares
 values as a function does); [ADR-views-3](adr-views-3.md) D1-D4 (lent, `keep`,

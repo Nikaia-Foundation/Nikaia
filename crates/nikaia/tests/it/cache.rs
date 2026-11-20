@@ -47,7 +47,7 @@ fn cache_in(dir: &std::path::Path) -> Cache {
 
 /// An example that lowers differently at either `user_parallelism`, so that a cache
 /// which confused the two would be caught. `1brc.nika` is the one the
-/// specification leans on for exactly this difference (ADR-296's `par_fold`).
+/// specification leans on for exactly this difference (ADR-grammar-parallel-v1's `par_fold`).
 fn a_switch_sensitive_example() -> String {
     let path = repo_root().join("examples/1brc.nika");
     let source = std::fs::read_to_string(&path).expect("1brc.nika is readable");

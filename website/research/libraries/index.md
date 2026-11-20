@@ -24,7 +24,7 @@ The first library is the official
 into a tree of nodes that point into the input rather than copy it, each with
 the place in the text it came from, and it applies limits on depth and size by
 default. Its parser is a `grammar`, part of the language itself
-([ADR-296](/docs/specification/adr/adr-296.html)). YAML suits the question
+([ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html)). YAML suits the question
 well, because its rules depend on indentation and context, its input often
 comes from outside the program, and there is a tuned parser to measure
 against, `saphyr-parser`.
@@ -142,7 +142,7 @@ optimising a library the compiler can take on by naming where it goes.
 The package's parser is one `grammar` that reads the text and builds the
 tree ([ADR-yaml-1](/docs/specification/adr/adr-yaml-1.html)
 D3), and a grammar is part of the language
-([ADR-296](/docs/specification/adr/adr-296.html)). YAML needs rules that take
+([ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html)). YAML needs rules that take
 values, such as the current indentation, and guards that decide which rule
 applies, which
 [ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html)
@@ -198,7 +198,7 @@ once the parser underneath is as fast as it can be.
 | Idea | Recorded in |
 | :--- | :--- |
 | The official yaml package: one grammar builds the tree, nodes point into the input, limits on by default | [ADR-yaml-1](/docs/specification/adr/adr-yaml-1.html) |
-| A grammar is part of the language | [ADR-296](/docs/specification/adr/adr-296.html) |
+| A grammar is part of the language | [ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html) |
 | A grammar's rules take values, with bounds and guards, and the values are lent rather than cloned | [ADR-grammar-syntax-v1](/docs/specification/adr/adr-grammar-syntax-v1.html), [ADR-grammar-actions-v1](/docs/specification/adr/adr-grammar-actions-v1.html) |
 | A package becomes a Rust library, and hand-written Rust can sit over it | [ADR-393](/docs/specification/adr/adr-393.html) |
 | A check is dropped only where a proof shows it cannot fail, and dropping is asked for | [ADR-306](/docs/specification/adr/adr-306.html) |
