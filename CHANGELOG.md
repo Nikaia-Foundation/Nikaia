@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1480] — 2026-11-20
+
+**Builders' changes (#2051, #2347)**
+- When `nikaia test --bless` leaves a refused program unblessed because it has no `.stderr`, the failure line now says that `--bless-stderr` was not given, the flag that records the refusal.
+- The driver pushes a batch that changes only helper scripts with named tests (and documentation) after those tests ran green locally, without the full suite, and CI skips build and test for it (owner, 2026-11-19).
+
 ## [0.0.1479] — 2026-11-20
 
 **The decisions on a grammar run at build time and what it hands back live in one record, ADR-grammar-build-time-v1 (#2269)**
