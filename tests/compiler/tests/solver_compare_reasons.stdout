@@ -1,0 +1,4 @@
+exit 0
+ours solved 1 wrong 0 overflow 1 timeout 0 unknown 0
+z3 is not on the path (nor $Z3): left out
+cvc5 is not on the path (nor $CVC5): left out

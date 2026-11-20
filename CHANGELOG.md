@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1489] — 2026-11-20
+
+**The decisions on database statements live in one record, ADR-database-v1 (#2272)**
+- The decisions on database statements (SQL a driver's grammar checks against a schema, the connection as subject typed by its schema, a row's namespaces and short names, -> T mapping, package::Grammar, the main entry) live in one record, ADR-database-v1; ADR-299 archived.
+
+## [0.0.1488] — 2026-11-20
+
+**Builders' changes (#2259)**
+- The comparison with z3 and cvc5 re-measured at 0.0.1481: ours solves 512 of 578 QF_LIA and 510 of 519 QF_LRA files; 50 and 8 of the rest leave i64 (ADR-270 D11), counted in their own column by `compare`; ours costs fewer instructions than z3 on every sample family.
+- `compare` splits ours' unsolved files by reason: overflow (the file leaves i64, ADR-270 D11), timeout, unknown.
+
 ## [0.0.1487] — 2026-11-20
 
 **Builders' changes (#2214)**

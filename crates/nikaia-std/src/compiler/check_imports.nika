@@ -14,7 +14,7 @@ use std::collections
 /// for every other question asked of `std`. It is the wrong one for a **refusal**:
 /// a module the specification promises and the compiler has not built is a
 /// correct program refused. `use std::db` is how
-/// [ADR-299](../../docs/specification/adr/adr-299.md)'s driver is reached, and
+/// [ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md)'s driver is reached, and
 /// the day it exists nothing about that line changes.
 ///
 /// So the refusal stands on the join of two lists, and this half is **written
@@ -24,7 +24,7 @@ use std::collections
 /// in the order they appear below: `use std::backend::x86`
 /// ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D20, Part III 16); the build
 /// script's own API (Part III 13.4);
-/// [ADR-299](../../docs/specification/adr/adr-299.md)'s driver protocol; Part III
+/// [ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md)'s driver protocol; Part III
 /// 17.1's *other key modules*; Part I 2.6's panic hook, `panic::on_panic`
 /// ([ADR-141](../../docs/specification/adr/adr-141.md)); Part III 17.2's table,
 /// which says what a target withholds; Part II 12.7's `task::scope`; and that

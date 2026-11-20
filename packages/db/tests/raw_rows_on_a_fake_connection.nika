@@ -1,5 +1,5 @@
 // A fake in-memory connection implements `db::Connection`; a `raw` statement
-// is executed on it with the connection as its subject (ADR-299 D5, D7, D8),
+// is executed on it with the connection as its subject (ADR-database-v1 D5, D7, D8),
 // and the rows it hands back are printed.
 use db
 use std::collections
