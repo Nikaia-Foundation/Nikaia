@@ -39,14 +39,54 @@ pub fn known() -> Vec[String] {
     return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "unproved-checks", "artifact", "symbol-prefix", "raw-sinks", "environment"]
 }
 
-/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4): one per raw
-/// sink, each letting data from outside the program reach it unproved. A key
-/// outside these is refused naming them, as a `[build]` typo is.
+/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4, D10, D15): one
+/// per raw sink, each letting data from outside the program reach it
+/// unproved, a path one per operation and `untrusted-paths-anywhere` for all
+/// three. A key outside these is refused naming them, as a `[build]` typo is.
 pub fn raw_sinks_allow_keys() -> Vec[String] {
-    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-paths-anywhere"]
+    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-program", "untrusted-paths-read", "untrusted-paths-write", "untrusted-paths-remove", "untrusted-paths-anywhere"]
 }
 
-/// **One `[allow]` key, checked** (ADR-raw-sinks-1 D4, D5): one of the four,
+/// **The sources a path key's list may name** (ADR-raw-sinks-1 D15, ADR-010
+/// D7): `untrusted-paths-read = ["args"]` admits a path from the command
+/// line, and no other.
+pub fn raw_sinks_allow_sources() -> Vec[String] {
+    return ["args", "stdin", "env", "request", "file", "process", "network"]
+}
+
+/// **The words one `[allow]` value lets through** (ADR-raw-sinks-1 D4, D15):
+/// `word` itself for `true`, nothing for `false`, and for a path key a list
+/// of sources, `word=source` for each. Anything else is refused, as is a
+/// source outside `raw_sinks_allow_sources`.
+fn raw_sinks_allow_value(table: ref String, key: ref String, word: ref String, text: ref String) -> Vec[String] throws {
+    let value = text.trim()
+    if value == "true" {
+        return [word.clone()]
+    }
+    if value == "false" {
+        return []
+    }
+    let listed = value.starts_with("[") && value.ends_with("]") && !value.contains("\\")
+    if !key.starts_with("untrusted-paths-") || !listed {
+        let ways = if key.starts_with("untrusted-paths-") { "`true`, `false` or a list of sources" } else { "`true` or `false`" }
+        throw Refused::Because(f"`{key}` in `{table}` is {ways}, not `{value}`.")
+    }
+    let mut words: Vec[String] = []
+    let mut at = 0
+    for piece in value.split("\"") {
+        if at % 2 == 1 {
+            if !contains(raw_sinks_allow_sources(), piece) {
+                let expected = choices(raw_sinks_allow_sources())
+                throw Refused::Because(f"`{key}` in `{table}` lists `{piece}`, which is no source. The sources are: {expected}.")
+            }
+            words.push(f"{word}={piece}")
+        }
+        at += 1
+    }
+    return words
+}
+
+/// **One `[allow]` key, checked** (ADR-raw-sinks-1 D4, D5): one of the keys,
 /// where `table` is how the message names its table (`[allow]`,
 /// `[allow.packages.thumbs]`).
 pub fn raw_sinks_allow_key(table: ref String, key: ref String) throws {
@@ -490,8 +530,9 @@ pub fn manifest_described_at(manifest: ref ManifestFile) -> fs::Path? throws {
 }
 
 /// **`[allow]` and `[allow.packages.NAME]`** (ADR-raw-sinks-1 D4, D5): the
-/// keys set to `true`, a dependency's written `NAME:key`. A key outside the
-/// four, or a value that is not `true` or `false`, is refused.
+/// keys set to `true`, a dependency's written `NAME:key`, and a path key's
+/// sources as `key=source` (D15). A key outside the known ones, or a value
+/// that is not `true`, `false` or such a list, is refused.
 fn manifest_allow(items: ref Vec[ManifestItem]) -> Vec[String] throws {
     let mut allowed: Vec[String] = []
     for item in items {
@@ -515,10 +556,8 @@ fn manifest_allow(items: ref Vec[ManifestItem]) -> Vec[String] throws {
             continue
         }
         raw_sinks_allow_key(table, key)
-        match item.text {
-            "true" => allowed.push(word),
-            "false" => {}
-            else => throw Refused::Because(f"`{key}` in `{table}` is `true` or `false`, not `{item.text}`."),
+        for one in raw_sinks_allow_value(table, key, word, item.text) {
+            allowed.push(one)
         }
     }
     return allowed

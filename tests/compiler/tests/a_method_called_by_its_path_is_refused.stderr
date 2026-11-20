@@ -1,0 +1,33 @@
+error[NK1101]: `P::get` is a method: it's called on a value, not by its path.
+   --> tests/a_method_called_by_its_path_is_refused.nika:14:2
+    |
+ 14 | 	println(P::get(P { x: 3 }))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `P::get(self) -> i64`.
+    = help: Put the first argument before `.get`: `value.get()`.
+error[NK1101]: `P::get` is a method: it's called on a value, not by its path.
+   --> tests/a_method_called_by_its_path_is_refused.nika:16:2
+    |
+ 16 | 	println(P::get(p))
+    |  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `P::get(self) -> i64`.
+    = help: Write `p.get()`.
+error[NK1101]: `P::get` is a method: it's called on a value, not by its path.
+   --> tests/a_method_called_by_its_path_is_refused.nika:17:2
+    |
+ 17 | 	println(P::get())
+    |  ^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `P::get(self) -> i64`.
+    = help: Call it on a `P`: `value.get()`.
+error[NK1101]: `fs::Root::path` is a method: it's called on a value, not by its path.
+   --> tests/a_method_called_by_its_path_is_refused.nika:18:2
+    |
+ 18 | 	println(fs::Root::path(fs::scratch()))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `fs::Root::path(self) -> fs::Path`.
+    = help: Put the first argument before `.path`: `value.path()`.
+4 type errors

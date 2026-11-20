@@ -206,7 +206,9 @@ fn without_the_users_linker_cargo_is_not_started() {
         .env_remove(format!("CARGO_TARGET_{triple}_RUSTFLAGS"))
         .output()
         .expect("the nikaia binary runs");
-    let fast = dir.join("target/nikaia/fast/below").is_file();
+    let fast = std::fs::read_dir(dir.join("target/nikaia/fast/slots")).is_ok_and(|mut slots| {
+        slots.any(|slot| slot.is_ok_and(|s| s.path().join("below").is_file()))
+    });
     let by_cargo = dir.join("target/nikaia/bin/below").exists();
     let _ = std::fs::remove_dir_all(&dir);
     assert!(out.status.success(), "{}", said(&out));

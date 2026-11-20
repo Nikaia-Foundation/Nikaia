@@ -27,6 +27,7 @@ signature = "(said: String) -> Vec[String]"
 throws = ["io::IoError"]
 panics = true
 places = true
+provenance = "untrusted"
 views = ["dir: borrowed"]
 signature = "(dir: String) -> Vec[Block]"
 
@@ -79,6 +80,7 @@ throws = ["?", "io::IoError"]
 locks = "?"
 panics = true
 places = true
+provenance = "untrusted"
 signature = "() -> String"
 
 [fn."split_at_the_first_statement"]

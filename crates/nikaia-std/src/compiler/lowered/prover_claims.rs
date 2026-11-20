@@ -13,6 +13,20 @@ pub struct UnwrittenCheck {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ParamSink {
+    pub index: i64,
+    pub kind: String,
+    pub sink: String,
+    pub operation: String,
+    pub root_part: bool,
+    pub guard: String,
+}
+
+impl ParamSink {
+    pub(crate) fn same(&self, other: &ParamSink) -> bool { self.index == other.index && self.kind == other.kind && self.sink == other.sink && self.operation == other.operation && self.root_part == other.root_part && self.guard == other.guard }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OutsideIndex {
     pub at: i64,
     pub written: String,

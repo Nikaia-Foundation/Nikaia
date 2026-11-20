@@ -68,7 +68,15 @@ fn said(output: &std::process::Output) -> String {
 
 /// The program compiled without Cargo, where it is.
 fn fast_binary(project: &Path, name: &str) -> PathBuf {
-    project.join("target/nikaia/fast").join(name)
+    // Each build keeps a place of its own, `slots/<key prefix>/` (the run cache).
+    let fast = project.join("target/nikaia/fast");
+    std::fs::read_dir(fast.join("slots"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|slot| slot.path().join(name))
+        .find(|binary| binary.is_file())
+        .unwrap_or_else(|| fast.join(name))
 }
 
 /// A single file is run, edited and run again: the new output appears, and it

@@ -192,6 +192,10 @@ pub struct CheckFacts {
     pub map_keys: collections::BTreeMap[(i64, bool), FactKeyForm],
     pub slice_indices: collections::BTreeSet[i64],
     pub list_indices: collections::BTreeSet[i64],
+    /// **The base of each index that reads a map's key** (ADR-396 D4,
+    /// #2371), by its node: such an index has no bound, so outside data in
+    /// its key is no `NK1302`, whatever the base is written as.
+    pub map_indices: collections::BTreeSet[i64],
     /// **A function value read by index is a copy** (Part I, *A function type stands wherever a type does*, #1018):
     /// the bases of the reads whose element is a `fn`, so the lowering clones
     /// the `Kept` handle the list holds instead of moving it out.
@@ -884,6 +888,7 @@ impl CheckFacts {
             map_keys: collections::BTreeMap(),
             slice_indices: collections::BTreeSet(),
             list_indices: collections::BTreeSet(),
+            map_indices: collections::BTreeSet(),
             kept_fn_reads: collections::BTreeSet(),
             kept_fn_copies: collections::BTreeSet(),
             kept_fn_fields: collections::BTreeSet(),

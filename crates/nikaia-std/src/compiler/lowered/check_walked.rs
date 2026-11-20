@@ -8,7 +8,7 @@ pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
     let mut untold = false;
     for f in state.findings.copy_owned() {
         match f.severity {
-            CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" { other_error = true; } },
+            CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" && f.code != "NK1308" { other_error = true; } },
             _ => { },
         }
     }

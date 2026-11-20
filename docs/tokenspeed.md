@@ -1358,6 +1358,11 @@ nothing else.
 | 2026-11-20 | 3d1257 | check | 71 | 5.4 | 0 | - | |
 | 2026-11-20 | 4a00a2 | check | 18 | 0.8 | 0 | - | |
 | 2026-11-20 | 3743d3 | check | 35 | 1.6 | 0 | - | |
+| 2026-11-19 | 62d58d | check | 156 | 10.9 | 0 | - | |
+| 2026-11-20 | 36f787 | check | 19 | 0.8 | 0 | - | |
+| 2026-11-20 | 0e3b66 | check | 15 | 0.5 | 0 | - | |
+| 2026-11-20 | 15c373 | check | 39 | 2.0 | 0 | - | |
+| 2026-11-20 | 48be9a | check | 68 | 4.5 | 0 | - | |
 | 2026-11-20 | 8bc595 | check | 65 | 5.9 | 0 | - | |
 | 2026-11-20 | 38f6e8 | check | 17 | 0.7 | 0 | - | |
 | 2026-11-20 | b8a9a7 | check | 46 | 2.4 | 0 | - | |
@@ -1368,15 +1373,25 @@ nothing else.
 | 2026-11-20 | c9d64b | check | 22 | 1.3 | 0 | - | |
 | 2026-11-20 | c98ec6 | check | 10 | 0.4 | 0 | - | |
 | 2026-11-20 | e4d5dc | check | 22 | 0.9 | 0 | - | |
+| 2026-11-20 | 83275d | check | 7 | 0.2 | 0 | - | |
+| 2026-11-20 | 245620 | check | 53 | 2.9 | 0 | - | |
+| 2026-11-20 | 553420 | check | 137 | 10.1 | 0 | - | |
 | 2026-11-20 | a9a625 | check | 54 | 4.0 | 0 | - | |
+| 2026-11-20 | 1eae29 | check | 16 | 0.6 | 0 | - | |
+| 2026-11-20 | 5a1b4e | check | 19 | 0.7 | 0 | - | |
 | 2026-11-20 | e9a7ff | check | 11 | 0.4 | 0 | - | |
 | 2026-11-20 | fbc0ed | check | 68 | 5.4 | 0 | - | |
 | 2026-11-20 | c52bea | check | 30 | 1.4 | 0 | - | |
 | 2026-11-20 | dafcf2 | check | 84 | 6.3 | 0 | - | |
+| 2026-11-20 | d02273 | check | 33 | 1.7 | 0 | - | |
+| 2026-11-20 | f450b5 | check | 62 | 4.3 | 0 | - | |
+| 2026-11-20 | 5daf62 | check | 26 | 1.2 | 0 | - | |
+| 2026-11-20 | b9dead | check | 61 | 4.0 | 0 | - | |
 | 2026-11-20 | 161cfe | check | 59 | 3.9 | 0 | - | |
 | 2026-11-20 | 41da19 | check | 42 | 3.8 | 0 | - | |
 | 2026-11-20 | 3ccfe3 | check | 9 | 0.3 | 0 | - | |
 | 2026-11-20 | 3bc785 | check | 10 | 0.3 | 0 | - | |
+| 2026-11-20 | 60f264 | check | 138 | 9.5 | 0 | - | |
 | 2026-11-20 | 980173 | check | 79 | 6.3 | 0 | - | |
 | 2026-11-19 | 1daa69 | check | 142 | 10.0 | 0 | - | |
 | 2026-11-19 | 630445 | check | 13 | 0.5 | 0 | - | |
@@ -1398,6 +1413,10 @@ nothing else.
 | 2026-11-20 | 3c5d18 | check | 10 | 0.4 | 0 | - | |
 | 2026-11-20 | 754d23 | check | 86 | 6.0 | 0 | - | |
 | 2026-11-20 | b80b41 | check | 61 | 6.8 | 0 | - | |
+| 2026-11-20 | f4f3c7 | check | 46 | 2.4 | 0 | - | |
+| 2026-11-20 | cd73b5 | check | 9 | 0.3 | 0 | - | |
+| 2026-11-20 | 57d04c | check | 15 | 0.5 | 0 | - | |
+| 2026-11-20 | 2ff491 | check | 34 | 1.7 | 0 | - | |
 | 2026-11-20 | 607e5c | check | 52 | 3.1 | 0 | - | |
 | 2026-11-20 | 60969b | check | 82 | 6.5 | 0 | - | |
 | 2026-11-20 | e3dd7e | check | 38 | 2.6 | 0 | - | |
@@ -1418,6 +1437,7 @@ nothing else.
 | 2026-11-20 | 081ff7 | check | 139 | 9.7 | 0 | - | |
 | 2026-11-20 | baeb1b | check | 16 | 0.6 | 0 | - | |
 | 2026-11-20 | 09b961 | check | 9 | 0.3 | 0 | - | |
+| 2026-11-20 | 6cae48 | check | 11 | 0.4 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
@@ -1427,3 +1447,7 @@ committed no `crates/nikaia/src` Rust. The turn count is assistant messages in
 the transcript (a66fd3 shows 185, not about 100). The full table also has
 "read after 150k / 300k" columns: no agent but a96a76 (75 % / 2 %) read
 meaningfully past 150k, so context size is not what made the long agents dear.
+| 2026-11-20 | aa8d2f | check | 22 | 1.0 | 0 | - | |
+| 2026-11-20 | cd0775 | check | 15 | 0.5 | 0 | - | |
+| 2026-11-20 | 6a5ed3 | check | 14 | 0.5 | 0 | - | |
+| 2026-11-20 | 017307 | check | 10 | 0.4 | 0 | - | |

@@ -38,15 +38,37 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain()
-	let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	// The script takes only names below the directory it runs in
+	// (ADR-raw-sinks-1 D14, #2364): it runs in `tmp` on `files`.
+	let dir = f"{tmp}/files"
+	process::run("mkdir", [dir.clone()])
 	let head = "(set-logic QF_LIA)\n(set-info :status sat)\n(declare-const x Int)\n"
 	// A numeral past `i64`: the reader answers `unknown (overflow)`.
-	fs::write(f"{dir}/big.smt2", fs::Root::Anywhere, head + "(assert (<= 99999999999999999999 x))\n(check-sat)\n")
-	fs::write(f"{dir}/small.smt2", fs::Root::Anywhere, head + "(assert (<= 1 x))\n(assert (<= x 3))\n(check-sat)\n")
+	fs::write(
+		f"{dir}/big.smt2",
+		fs::Root::Anywhere,
+		head + "(assert (<= 99999999999999999999 x))\n(check-sat)\n",
+	)
+	fs::write(
+		f"{dir}/small.smt2",
+		fs::Root::Anywhere,
+		head + "(assert (<= 1 x))\n(assert (<= x 3))\n(check-sat)\n",
+	)
 	let out = process::run(
 		"env",
-		["Z3=/nonexistent/z3", "CVC5=/nonexistent/cvc5", nikaia, "run", "scripts/solver.nika", "--", "compare", "--files", dir.clone()];
-		dir: repo,
+		[
+			"Z3=/nonexistent/z3",
+			"CVC5=/nonexistent/cvc5",
+			nikaia,
+			"run",
+			f"{repo}/scripts/solver.nika",
+			"--",
+			"compare",
+			"--files",
+			"files",
+		];
+		dir: tmp.clone(),
 	)
 	println(f"exit {out.code}")
 	for line in out.stdout.lines() {
@@ -56,5 +78,5 @@ fn main() throws {
 	for line in out.stdout.lines() {
 		if line.contains("not on the path") { println(line.trim()) }
 	}
-	process::run("rm", ["-rf", dir])
+	process::run("rm", ["-rf", tmp])
 }

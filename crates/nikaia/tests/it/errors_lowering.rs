@@ -585,6 +585,10 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
         "error",
         // `unproved-checks` at its default (ADR-306 D29).
         "allow",
+        // `raw-sinks` at its default, nothing allowed, no package (#2303).
+        "warn",
+        &[],
+        "",
         // A program, not a library (ADR-284 D4).
         false,
         None,

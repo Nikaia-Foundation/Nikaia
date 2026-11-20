@@ -1360,6 +1360,7 @@ fn check_core_index_of(mut state: CheckState, world: ref CheckWorld, expr: ref E
     }
     // **A map answers a `T?`** (D1), and a map of `T?` reads one `T?`.
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
+        state.facts.map_indices.insert(id_of(base) as i64)
         state.flow.read_a_map = !writing
         state.a_map_key(world, args[0], key, index, writing, span)
         // **A key read is a use of a map's open keys** (ADR-285 D43).

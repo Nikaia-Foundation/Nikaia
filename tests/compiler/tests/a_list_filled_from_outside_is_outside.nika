@@ -1,0 +1,47 @@
+// A list a changing call fills from outside is outside, as one bound to
+// outside data is (ADR-raw-sinks-1 D10, #2371; here warnings,
+// `raw-sinks = "warn"`, the default): `pushed` takes a word in a line of its
+// own, `looped` in a loop's body, `assigned` is the name a loop's body
+// assigns, and `gathered` comes from a function that hands back the list it
+// filled. `clean` is filled with literals only and draws nothing.
+use std::cli
+use std::process
+
+fn gather() -> Vec[String] {
+    let mut all: Vec[String] = []
+    for a in cli::args() {
+        all.push(a.clone())
+    }
+    return all
+}
+
+fn main() throws {
+    let mut one: Vec[String] = []
+    let word = cli::args().nth(1) ?? "abc"
+    one.push(word)
+    let pushed = one.first() ?? ""
+    let mut rest: Vec[String] = []
+    for a in cli::args() {
+        rest.push(a.clone())
+    }
+    let looped = rest.first() ?? ""
+    let mut assigned = String()
+    for a in cli::args() {
+        assigned = a.clone()
+    }
+    let all = gather()
+    let gathered = all.first() ?? ""
+    let mut fixed: Vec[String] = []
+    for _ in cli::args() {
+        fixed.push("true")
+    }
+    let clean = fixed.first() ?? ""
+    if cli::args().nth(5) != null {
+        process::run(pushed, [])
+        process::run(looped, [])
+        process::run(assigned, [])
+        process::run(gathered, [])
+        process::run(clean, [])
+    }
+    println("built")
+}

@@ -1,0 +1,40 @@
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/rt_the_blocking_path_reads_what_the_completion_path_reads.nika:26:2
+    |
+ 26 | 	fs::write(f"{tmp}/cities.txt", fs::Root::Anywhere, "Hamburg;12.0\n".repeat(10000))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/rt_the_blocking_path_reads_what_the_completion_path_reads.nika:27:2
+    |
+ 27 | 	fs::write(
+    |  ^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `tmp` reaches the path `fs::write` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/rt_the_blocking_path_reads_what_the_completion_path_reads.nika:34:3
+    |
+ 34 | 		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, f"io-method = \"{method}\"\n")
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `tmp` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(tmp) if !path::is_component(tmp)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to write paths from `process`, `untrusted-paths-write = ["process"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `toolchain()` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/rt_the_blocking_path_reads_what_the_completion_path_reads.nika:35:3
+    |
+ 35 | 		let out = process::run(
+    |   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `toolchain()` comes from `process::run`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.

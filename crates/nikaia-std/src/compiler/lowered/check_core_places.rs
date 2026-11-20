@@ -1026,6 +1026,7 @@ pub(crate) fn check_core_index_of(state: &mut CheckState, world: &CheckWorld<'_,
         return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone();
     }
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
+        state.facts.map_indices.insert(id_of(base) as i64);
         state.flow.read_a_map = !writing;
         state.a_map_key(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &key, index, writing, span);
         if !writing { check_core_call_on_key_read(state, world, base, index, span); }

@@ -130,6 +130,11 @@ fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref fs::
     let mut modules: Vec[String] = []
     let mut sources: Vec[fs::Path] = []
     for (k, made) in lowered.iter().enumerate() {
+        // The host hands back one answer per program of the list it was
+        // given, read from outside (ADR-396 D2, #2371).
+        if k >= listed.len() {
+            continue
+        }
         let (rust, read) = made ?? continue
         let module = project_batch_module(k, rust) ?? continue
         names.push(listed[k].clone())

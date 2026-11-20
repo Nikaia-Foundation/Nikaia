@@ -117,9 +117,8 @@ pub struct Cli {
     pub unproved_checks: Option<String>,
 
     /// What data from outside the program at a raw sink is, unproved and not
-    /// allowed (ADR-raw-sinks-1 D3): `error`, the default, refuses the
-    /// program; `warn` builds it and checks the data where the call is
-    /// reached.
+    /// allowed (ADR-raw-sinks-1 D3): `warn`, the default, builds it with a
+    /// warning; `error` refuses the program.
     ///
     /// Overrides `nikaia.toml`'s `[build] raw-sinks`.
     #[arg(long, global = true, value_name = "error|warn")]
@@ -136,9 +135,11 @@ pub struct Cli {
     pub environment: Option<String>,
 
     /// Allow one raw sink for this build, as `[allow]` does
-    /// (ADR-raw-sinks-1 D4, D5): `untrusted-shell`, `untrusted-sql`,
-    /// `untrusted-markup` or `untrusted-paths-anywhere`, or `PACKAGE:KEY` for a
-    /// dependency's. May be given more than once.
+    /// (ADR-raw-sinks-1 D4, D5, D15): `untrusted-shell`, `untrusted-sql`,
+    /// `untrusted-markup`, `untrusted-program`, `untrusted-paths-read`,
+    /// `-write`, `-remove` or `-anywhere` (a path key also as `KEY=SOURCE`,
+    /// one source), or `PACKAGE:KEY` for a dependency's. May be given more
+    /// than once.
     #[arg(long, global = true, value_name = "KEY")]
     pub allow: Vec<String>,
 

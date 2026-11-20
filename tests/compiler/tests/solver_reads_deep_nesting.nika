@@ -81,8 +81,10 @@ fn main() throws {
 	fs::write(f"{dir}/lets.smt2", fs::Root::Anywhere, lets(1100))
 	fs::write(f"{dir}/nots.smt2", fs::Root::Anywhere, nots(5000))
 	fs::write(f"{dir}/folds.smt2", fs::Root::Anywhere, folds(5000))
-	let all = ["run", "scripts/solver.nika", "--", "run", dir.clone()]
-	let out = process::run(nikaia, all.clone(); dir: repo)
+	// The script takes only names below the directory it runs in
+	// (ADR-raw-sinks-1 D14, #2364): it runs in `tmp` on `deep`.
+	let all = ["run", f"{repo}/scripts/solver.nika", "--", "run", "deep"]
+	let out = process::run(nikaia, all.clone(); dir: tmp.clone())
 	println(out.stdout.trim())
 	if !out.ok || out.stderr.trim().len() > 0 {
 		println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")

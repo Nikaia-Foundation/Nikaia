@@ -1,0 +1,19 @@
+// The root of `Dir` is a part of the path (ADR-raw-sinks-1 D11): a
+// directory from outside keeps a name inside a directory a stranger chose,
+// so `fs::Root::Dir(dir)` with `dir` from the command line is `NK1308`, here
+// a warning under `raw-sinks = "warn"`, the default. A root the program
+// made, `fs::scratch()`, a root `join` builds from it, and a `Dir` of a
+// literal are not sinks: a name under them stays inside.
+use std::cli
+use std::fs
+
+fn main() throws {
+    let dir = cli::args().nth(1) ?? "."
+    println(fs::exists("notes.txt", fs::Root::Dir(dir)))
+    let tmp = fs::scratch()
+    fs::create_dir("x", tmp)
+    let sub = tmp.join("x")
+    fs::write("a.txt", sub, "under a clean root")
+    println(fs::read_to_string("a.txt", sub))
+    println(fs::exists("a.txt", fs::Root::Dir(".")))
+}

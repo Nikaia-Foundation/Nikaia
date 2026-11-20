@@ -57,7 +57,7 @@ fn main() throws {
 
     // A run log, if a file was named. `append: true` is an option set at the
     // call; without it `fs::write` replaces the file.
-    let log = cli::args().nth(1) ?? ""
+    let log = cli::args(trusted: true).nth(1) ?? ""
     if log.len() > 0 {
         let row = summary(lines, blank; separator: "\t")
         fs::write(log, fs::Root::Anywhere, f"{row}\n"; append: true) catch {

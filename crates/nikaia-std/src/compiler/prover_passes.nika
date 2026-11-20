@@ -37,9 +37,12 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     let bound = program.items.len() + 2
     let mut preconditions: collections::BTreeMap[String, Precondition] = collections::BTreeMap()
     let mut unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]] = collections::BTreeMap()
+    let mut sinks: collections::BTreeMap[String, Vec[ParamSink]] = collections::BTreeMap()
     for _ in 0..<bound {
         walk.state.known = preconditions
         walk.state.known_unwritten = unwritten
+        walk.state.known_sinks = sinks
+        walk.state.sinks.clear()
         walk.state.preconditions.clear()
         walk.state.candidates.clear()
         walk.state.unwritten.clear()
@@ -47,11 +50,14 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         preconditions = walk.state.preconditions.clone()
         unwritten = walk.state.unwritten.clone()
-        if same_preconditions(walk.arena, preconditions, walk.state.known) && same_unwritten(unwritten, walk.state.known_unwritten) {
+        sinks = walk.state.sinks.clone()
+        if same_preconditions(walk.arena, preconditions, walk.state.known) && same_unwritten(unwritten, walk.state.known_unwritten) && same_sinks(sinks, walk.state.known_sinks) {
             break
         }
     }
     walk.state.known_unwritten.clear()
+    // Pass 2 asks the sinks the last pass found at each call (#2354).
+    walk.state.known_sinks = sinks
     walk.state.known.clear()
     walk.state.collecting = false
     walk.state.preconditions = preconditions
@@ -96,6 +102,26 @@ fn same_unwritten(now: ref collections::BTreeMap[String, Vec[UnwrittenCheck]], b
         }
         for (one, other) in checks.iter().zip(earlier.iter()) {
             if one.written != other.written || one.within != other.within || one.holds != other.holds {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+/// Whether two walks found the same raw sinks on the same parameters, by
+/// function (ADR-raw-sinks-1 D2, #2354).
+fn same_sinks(now: ref collections::BTreeMap[String, Vec[ParamSink]], before: ref collections::BTreeMap[String, Vec[ParamSink]]) -> bool {
+    if now.len() != before.len() {
+        return false
+    }
+    for (function, found) in now {
+        let earlier = before.get(function) ?? return false
+        if earlier.len() != found.len() {
+            return false
+        }
+        for (one, other) in found.iter().zip(earlier.iter()) {
+            if !one.same(other) {
                 return false
             }
         }

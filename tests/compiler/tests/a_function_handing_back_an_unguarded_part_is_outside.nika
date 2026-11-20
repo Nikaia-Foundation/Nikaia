@@ -1,0 +1,49 @@
+// The twin of `a_function_handing_back_a_guarded_join_is_not_outside`: one
+// returned value not proved makes the call outside, `NK1308` at the sink
+// (ADR-raw-sinks-1 D14, #2375; here warnings, `raw-sinks = "warn"`, the
+// default). `echoed` hands back its unguarded parameter among its returns;
+// `led` starts its join with a parameter whose argument comes from outside;
+// `nested` guards its name only under a condition; `both` writes the guard
+// with `&&`, which does not hold after it.
+use std::cli
+use std::env
+use std::path
+use std::process
+
+fn echoed(store: String, key: String) -> String {
+    if !path::is_component(key) { return key }
+    return f"{store}/{key}/bin"
+}
+
+fn led(store: String, key: String) -> String {
+    if !path::is_component(key) { return "" }
+    return f"{store}/{key}/bin"
+}
+
+fn nested(store: String, key: String) -> String {
+    if store == "" {
+        if !path::is_component(key) { return "" }
+    }
+    return f"{store}/{key}/bin"
+}
+
+fn both(store: String, key: String) -> String {
+    if !path::is_component(key) && store == "" { return "" }
+    return f"{store}/{key}/bin"
+}
+
+fn main() throws {
+    let store = env::current_main()?.display() ?? "."
+    let asked = cli::args().nth(1) ?? "abc"
+    let first = echoed(store.clone(), asked.clone())
+    let second = led(cli::args().nth(2) ?? "/nikaia-none", asked.clone())
+    let third = nested(store.clone(), asked.clone())
+    let fourth = both(store, asked)
+    if cli::args().nth(5) != null {
+        process::run(first, [])
+        process::run(second, [])
+        process::run(third, [])
+        process::run(fourth, [])
+    }
+    println("built")
+}

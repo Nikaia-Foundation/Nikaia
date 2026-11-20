@@ -1,0 +1,40 @@
+// A function that hands back literals only is not outside, whatever it is
+// given (ADR-raw-sinks-1 D10, as a `match` whose arms are literals): its
+// value is one of its literals. One that hands back a part of what it is
+// given is still outside (`NK1308`, here a warning, `raw-sinks = "warn"`).
+use std::cli
+use std::fs
+
+fn kind(source: String) -> String {
+    if source.contains("(set-logic QF_LIA)") { return "qflia" }
+    if source.contains("(set-logic QF_LRA)") { return "qflra" }
+    return ""
+}
+
+fn chosen(source: String) -> String {
+    return if source.contains("a") { "x" } else { "y" }
+}
+
+fn arm(source: String) -> String {
+    return match source.len() {
+        0 => "none",
+        else => "some",
+    }
+}
+
+fn echoed(source: String) -> String {
+    if source.contains("a") { return "x" }
+    return source.clone()
+}
+
+fn main() throws {
+    let asked = cli::args().nth(1) ?? ""
+    let k = kind(asked.clone())
+    println(fs::exists(f"d/{k}", fs::Root::Anywhere))
+    let c = chosen(asked.clone())
+    println(fs::exists(f"d/{c}", fs::Root::Anywhere))
+    let a = arm(asked.clone())
+    println(fs::exists(f"d/{a}", fs::Root::Anywhere))
+    let e = echoed(asked.clone())
+    println(fs::exists(f"d/{e}", fs::Root::Anywhere))
+}

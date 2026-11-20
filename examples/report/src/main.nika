@@ -62,8 +62,8 @@ fn page(entries: Vec[Entry], total: i64) -> String {
 }
 
 fn main() throws {
-    let path = cli::args().nth(1) ?? "stock.csv"
-    let out = cli::args().nth(2) ?? "report.html"
+    let path = cli::args(trusted: true).nth(1) ?? "stock.csv"
+    let out = cli::args(trusted: true).nth(2) ?? "report.html"
 
     let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")
