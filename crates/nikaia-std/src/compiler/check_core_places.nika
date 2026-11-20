@@ -671,7 +671,7 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             found = want.clone()
         }
         // **An element or a field read off a place is a view of it**
-        // (ADR-views-3 D5, #1274), as under a `let` that declares a view:
+        // (ADR-views-v4 D5, #1274), as under a `let` that declares a view:
         // `W { own: xs[0] }` is `W { own: ref xs[0] }`. A `ref T?` field
         // wraps it on the widened slot's path below.
         let plain = match want {
@@ -683,7 +683,7 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
         }
     }
     // **A declared function that lends a parameter fits a field whose function
-    // type lends it** (ADR-views-3 D2, D14, #1254), as a `let` and an argument do.
+    // type lends it** (ADR-views-v4 D2, D14, #1254), as a `let` and an argument do.
     if state.lends_where_a_function_type_reads(world, value, found, want) {
         found = want.clone()
     }
@@ -994,7 +994,7 @@ fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
 /// Whether a field's value is a local of this body, or a field read off one
 /// (#1152): a place that lives on past the literal, so it can be lent. A cut
 /// of one (`a[1..]`) is a piece of that place, a `Bytes`'s too (ADR-320 D7,
-/// ADR-views-3 D15, #1271).
+/// ADR-views-v4 D15, #1271).
 fn check_core_places_a_local_lent(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
         Expr::Variable(name, _) => state.binding(world.words.resolve(name)) != null,
@@ -1234,6 +1234,9 @@ fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text
     state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
 }
 
+/// **An index into what a lock handed out** (ADR-281 D22, D23, #2208): a
+/// `Seen[T]` is indexed as the `T` it stamps, and what the index reads keeps
+/// the stamp, inside a nullable where a map's read answers one.
 fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, index: ref Expr, span: ref Span) -> Ty sync {
     let writing = state.flow.writing_index
     state.flow.writing_index = false
@@ -1241,6 +1244,23 @@ fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let key = check_core_expr(state, world, host, index, span)
     // **An index of a mapping is a page fault** (ADR-281 D35).
     state.io_inside_a_door(world, first, "this index", span)
+    let stamped = match first {
+        Ty::Named { name, args, .. } => name == SEEN && args.len() == 1,
+        else => false,
+    }
+    let read = check_core_index_of(state, world, expr, base, index, first.unseen(), key, writing, span)
+    if !stamped {
+        return read
+    }
+    return match read {
+        Ty::Unknown => Ty::Unknown,
+        Ty::Nullable(held) => Ty::Nullable(a_seen_ty(held.unseen())),
+        else => a_seen_ty(read.unseen()),
+    }
+}
+
+/// What an index reads from a value of type `first`, its key of type `key`.
+fn check_core_index_of(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, base: ref Expr, index: ref Expr, first: Ty, key: Ty, writing: bool, span: ref Span) -> Ty sync {
     // A type seen through is indexed as what it holds (#497).
     let mut on: Ty = first.clone()
     let through: Ty? = state.seen_through(world, first)

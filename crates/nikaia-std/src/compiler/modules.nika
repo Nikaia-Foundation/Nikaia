@@ -481,7 +481,7 @@ pub fn is_single_file(units: i64) -> bool {
 // --- A test build (ADR-269 D1) ---
 
 /// The name the `k`th test's function has in a test build.
-fn test_function(k: i64) -> String {
+pub fn test_function(k: i64) -> String {
     return f"__nikaia_test_{k}"
 }
 
@@ -590,7 +590,10 @@ pub fn modules_tests_as_functions(mut items: Vec[Spanned[Item]], source: ref Str
 /// snake case, and the function. No `#[cfg(test)]`: the tests are compiled
 /// into the compiler, and `nikaia test --std` runs them through the package's
 /// `nikaia_tests()` (`sysroot_package_tests`), so `nikaia-std` has no test build.
-pub fn modules_test_wrappers(titles: ref Vec[String], stem: ref String) -> String {
+/// A test that pauses (`pausing`) is an `async fn`, and the list names the
+/// function beside it that runs it to its end (#2316).
+pub fn modules_test_wrappers(titles: ref Vec[String], stem: ref String, pausing: ref Vec[bool]) -> String {
+    let mut shims: String = ""
     let mut text: String = f"\n/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.\npub(crate) fn {stem}_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {{\n    vec![\n"
     let mut k = 0
     for title in titles {
@@ -614,10 +617,16 @@ pub fn modules_test_wrappers(titles: ref Vec[String], stem: ref String) -> Strin
                 gap = true
             }
         }
-        text.push_str(f"        (\"{stem}::{slug}\", {test_function(k)}),\n")
+        let mut run = test_function(k)
+        if k < pausing.len() && pausing[k] {
+            shims.push_str(f"\nfn {run}_to_its_end() -> Result<(), std::boxed::Box<dyn std::error::Error>> {{\n    nikaia_std::rt::exec::block_on({run}())?;\n    Ok(())\n}}\n")
+            run = f"{run}_to_its_end"
+        }
+        text.push_str(f"        (\"{stem}::{slug}\", {run}),\n")
         k += 1
     }
     text.push_str("    ]\n}\n")
+    text.push_str(shims)
     return text
 }
 

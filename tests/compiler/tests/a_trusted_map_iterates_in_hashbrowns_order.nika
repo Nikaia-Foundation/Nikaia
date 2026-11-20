@@ -1,0 +1,37 @@
+// A map whose text keys no untrusted key reaches lowers to std's `TrustedMap`
+// (ADR-010 D5), `hashbrown`'s table with the `Fast` hasher. The same 500
+// `entry`/`insert`/`remove` steps as map.rs's Rust test
+// `the_order_is_hashbrowns` (#2315): the `.stdout` holds that map's entries,
+// the same set as the one the Rust test compared, sorted by text because the
+// table's own order is not the same on every CPU.
+use std::collections
+
+fn main() throws {
+	let mut keys: Vec[String] = Vec()
+	for i in 0..<500 {
+		keys.push(f"k{i * 7919 % 1000}")
+	}
+	let mut m: collections::HashMap[String, i64] = collections::HashMap()
+	let mut i = 0
+	while i < 500 {
+		m.entry(keys[i].clone()).or_insert(i)
+		if i % 3 == 0 {
+			m.insert(keys[i].clone(), i)
+		}
+		if i % 5 == 0 {
+			m.remove(keys[i / 2])
+		}
+		i += 1
+	}
+	// The table's order is hashbrown's and hashbrown's groups are 16 slots wide
+	// with SSE2 and 8 with NEON, so the order differs between x86-64 and
+	// aarch64; the lines are printed by key, the same on both.
+	let mut lines: Vec[String] = Vec()
+	for (k, v) in m {
+		lines.push(f"{k} {v}")
+	}
+	lines.sort()
+	for line in lines {
+		println(line)
+	}
+}

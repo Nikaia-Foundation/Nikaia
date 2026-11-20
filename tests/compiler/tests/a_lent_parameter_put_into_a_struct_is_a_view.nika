@@ -1,6 +1,6 @@
 // A lent parameter, or a field of one, put into a struct literal is a view:
 // the field is tethered and the caller goes on using what it lent
-// (ADR-views-3 D5, Part I 6.6; #1218). Before, the parameter was taken as
+// (ADR-views-v4 D5, Part I 6.6; #1218). Before, the parameter was taken as
 // kept and the caller's use refused (NK2105). A parameter marked `keep`
 // still moves into the struct, which owns it.
 struct L { n: i64, tag: String }

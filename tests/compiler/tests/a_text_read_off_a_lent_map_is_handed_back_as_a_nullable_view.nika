@@ -1,6 +1,6 @@
 // A `String?` result that reads an element off a lent list or map hands back
 // a view of it, as `xs[0]` does for a `String` result (ADR-282 D12, D13;
-// ADR-views-3 D12; #1711): no `ref` (NK1261) and no `?.clone()` (NK1102).
+// ADR-views-v4 D12; #1711): no `ref` (NK1261) and no `?.clone()` (NK1102).
 use std::collections
 
 fn make(t: String) -> String {

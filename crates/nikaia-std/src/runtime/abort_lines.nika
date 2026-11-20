@@ -1,0 +1,31 @@
+// crates/nikaia-std/src/runtime/abort_lines.nika
+//
+// **Where a stop is reported, asked by hand** (ADR-rust-boundary-1 D24): the
+// tests of `abort::lookup`, which is Rust (`src/abort.rs`). The table of
+// generated lines is `comptime`, so its file names are text the build holds,
+// the `&'static str` the Rust takes (decision on #2310).
+
+use std::abort
+
+comptime TABLE: Array[(u32, ref String, u32), 3] = [
+	(10, "src/main.nika", 3),
+	(24, "src/parse.nika", 41),
+	(99, "src/main.nika", 7),
+]
+comptime NONE: Array[(u32, ref String, u32), 0] = []
+
+/// The half that keeps a program from being worse off: a line the table does
+/// not know is not answered wrongly.
+test "an unknown line is not guessed at" {
+	assert(abort::lookup(TABLE, 11) == null)
+	assert(abort::lookup(TABLE, 1) == null)
+	assert(abort::lookup(TABLE, 1000) == null)
+	assert(abort::lookup(NONE, 10) == null)
+}
+
+/// A line the table knows is answered with its file and line.
+test "a known line is answered" {
+	let (file, line) = abort::lookup(TABLE, 24) ?? ("", 0)
+	assert(file == "src/parse.nika")
+	assert(line == 41)
+}

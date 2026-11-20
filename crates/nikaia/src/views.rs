@@ -61,7 +61,7 @@ pub fn result_sources(
 }
 
 /// What each body's result points into whatever its `from` says
-/// (ADR-views-3 D8, `tools/views.nika`): what `check_result_from` holds a
+/// (ADR-views-v4 D8, `tools/views.nika`): what `check_result_from` holds a
 /// written `from` against.
 pub fn result_sources_inferred(
     parsed: &Parsed,

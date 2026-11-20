@@ -275,7 +275,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R222 a receiver rust-analyzer finds an `Option`'s `map`/`and_then`/`map_or`/`is_some_and` on (`--facts`) counts as an option for R96: `name.map(|n| f(n))` -> `(match name { n => f(n), null => null })`",
         "R223 `e == Some(v)` -> `(match e { got => got == v, null => false })`, `!=` with `null => true` (a `T?` is compared with `null` or a `T?` only, NK1102)",
         "R225 a slice `[T]` without its `&` (`x: &mut [T]`, R3) -> `Vec[T]`: `mut findings: Vec[CheckFinding]`",
-        "R226 `for x in xs.iter_mut().filter(|f| c) {` -> `for mut x in xs {`, `if !c { continue }` with `f` -> `x` (ADR-views-2 D2: an adapter hands no changeable element); `x`, `f` plain names, `xs` a place",
+        "R226 `for x in xs.iter_mut().filter(|f| c) {` -> `for mut x in xs {`, `if !c { continue }` with `f` -> `x` (ADR-views-v4 D25: an adapter hands no changeable element); `x`, `f` plain names, `xs` a place",
         "R228 `--only` of a method of a type the Rust side keeps (not `Checker`/`Emitter`, not one tools/*.nika define) -> a free function over the fields it reads: `&self` -> `f: ref T` for each `self.f`, typed from the `struct`, `self.f` -> `f`, `self.m(` -> `m(`; over a tools type the `impl` shell stays (R207)",
         "R229 a `let` Rust wrapped after its `=` (`let x =` then the value on the next line) is one line",
         "R230 `if let Some(x) = e {` as the last statement of a loop, no `else` -> `let x = e ?? continue` and its body one level out; `e.filter(|_| c)` -> `if !c { continue }` before it",
@@ -310,7 +310,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R259 `let mut t = BTreeSet::new();` filled only by calls taking `&mut t`, then `acc.extend(t);` -> the calls fill `acc` (the set was there for a closure's borrow)",
         "R260 `if let Some(x) = v.last() {` -> `if v.len() > 0 {`, `x` -> `v[v.len() - 1]` in its block",
         "R261 an arm `A { m, .. } | B { m, .. } => ..` whose alternatives bind names -> one arm each with the same body (a Nikaia or-pattern binds nothing)",
-        "R262 `for x in &mut v {` (`v` a place) -> `for x in v.iter_mut() {`, written `for mut x in v` (ADR-views-2 D2); `*name = x` through a match binding gets a TODO",
+        "R262 `for x in &mut v {` (`v` a place) -> `for x in v.iter_mut() {`, written `for mut x in v` (ADR-views-v4 D25); `*name = x` through a match binding gets a TODO",
         "R263 `anyhow::bail!(m)` / `bail!(m)` -> `throw format!(m)` (R12 makes it an f-string), a plain text as it is",
         "R264 a `match` arm's block closed by `}` before the next arm -> `},`, `_ => {}` -> `else => {},`, as tools/*.nika write them",
         "R265 a two-arm `match` of one statement and `else => {},` (a Rust `if let`) -> `P => s,`",
@@ -381,7 +381,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R331 `[forms]`: `{x}` may stand on the right side again, and `F({a}, {b})` takes two arguments",
         "R335 rs2nika.names' `[accessors]` (and `[accessors X_]`): `proofs::ask = ask: fn(..) -> T sync` makes a call of the thread-local accessor (or a static's read `WARNED.with(fn(w) { w.get() })`) a call of the parameter `ask`, which every function calling it, and every caller of such a function in the draft, takes last (ADR-281 D32: no thread-local state; it is passed)",
         "R334 C1's shapes: under a `-free` profile with a prefix a failure that is no statement about the program (`anyhow!`, `bail!`, `.context(..)`) is the file refusal's `Failed(..)`, a refusal (`refuse!`, `diagnostics::refuse`) its `Refused(..)`, the enum declaring the ones used; `anyhow!(text)` of a non-literal text is that text; a constant inside a function takes the prefix as a top-level one; under `--only` the file's forwarders to tools (R256) are called as their targets; a table rename `module::name new` (R47) holds in the tree's draft",
-        "R333 `for x in xs.iter_mut() {` and `for x in &mut xs {` (a list or an array) -> `for mut x in xs {` (ADR-views-2 D2); Rust's owned `for mut x in xs` -> `for mut x in xs.drain()` (D3); a map's `iter_mut()` / `values_mut()` and an adapter over `iter_mut()` get a TODO (section 6)",
+        "R333 `for x in xs.iter_mut() {` and `for x in &mut xs {` (a list or an array) -> `for mut x in xs {` (ADR-views-v4 D25); Rust's owned `for mut x in xs` -> `for mut x in xs.drain()` (D3); a map's `iter_mut()` / `values_mut()` and an adapter over `iter_mut()` get a TODO (section 6)",
         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
         "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
@@ -13708,7 +13708,7 @@ fn rs2nika_or_arms(mut ctx: Rs2nikaCtx, src: String) -> String {
 
 /// Whether `name` above line `at` is the element of a `for name in
 /// v.iter_mut()` (or `in &mut v`), which the engines write `for mut name in
-/// v`: a write through it reaches the list (ADR-views-2 D2).
+/// v`: a write through it reaches the list (ADR-views-v4 D25).
 fn rs2nika_walked_mut(lines: Vec[String], at: i64, name: String) -> bool {
     let mut j = at - 1
     while j >= 0 {
@@ -13725,7 +13725,7 @@ fn rs2nika_walked_mut(lines: Vec[String], at: i64, name: String) -> bool {
 }
 
 /// R333: the line engine's `for x in xs.iter_mut() {` (`x` a name, `xs` a
-/// place) -> `for mut x in xs {`, a view of each element (ADR-views-2 D2);
+/// place) -> `for mut x in xs {`, a view of each element (ADR-views-v4 D25);
 /// a pair stays for its TODO: it may be a map's, whose values changed in
 /// place are not decided yet (section 6).
 fn rs2nika_for_mut(keep line: String) -> String {
@@ -13741,7 +13741,7 @@ fn rs2nika_for_mut(keep line: String) -> String {
 }
 
 /// R262: `for x in &mut v {` (`v` a place) -> `for x in v.iter_mut() {`,
-/// which both engines write `for mut x in v` (ADR-views-2 D2; M2 rebuilt
+/// which both engines write `for mut x in v` (ADR-views-v4 D25; M2 rebuilt
 /// the items by draining them before #951). A write through a match
 /// binding (`*name = x`) gets a TODO: the value is rebuilt by hand.
 fn rs2nika_drained(mut ctx: Rs2nikaCtx, src: String) -> String {
@@ -17817,7 +17817,7 @@ fn rs2nika_negated(cond: String) -> String {
 
 /// R226: `for x in xs.iter_mut().filter(|f| c) {` .. `}` -> `for x in
 /// xs.iter_mut() {`, `if !c { continue }` with `f` -> `x`: the loop is then
-/// a `for mut x in xs` (ADR-views-2 D2), whose element a lending adapter
+/// a `for mut x in xs` (ADR-views-v4 D25), whose element a lending adapter
 /// would not hand out changeable. `x` and `f` are plain names, `xs` a
 /// place; else the line stays for its TODO.
 fn rs2nika_filter_loops(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {

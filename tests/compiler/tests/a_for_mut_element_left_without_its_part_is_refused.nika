@@ -1,4 +1,4 @@
-// #949, #951, ADR-views-1 per turn (ADR-views-2): the turn ends with
+// #949, #951, ADR-views-v4 D18-D23 per turn (D28): the turn ends with
 // `p.names` still out of the element.
 struct P { pub names: Vec[String], pub count: i64 }
 fn keep(names: Vec[String]) -> Vec[String] sync {

@@ -1,5 +1,5 @@
 // `x.clone()` makes a copy: its result reaches nothing of `x`, so `id` does
-// not keep `x` (ADR-views-3 D8, D12, #1243). With no bound on `T` the call
+// not keep `x` (ADR-views-v4 D8, D12, #1243). With no bound on `T` the call
 // itself is refused (NK1126), and that is the only refusal: no NK2302.
 struct Item {
     n: i64,

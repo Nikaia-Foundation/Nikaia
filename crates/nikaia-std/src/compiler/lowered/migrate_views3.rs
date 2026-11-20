@@ -500,7 +500,7 @@ pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
                 }
                 let name = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(k, 1) })).text.to_string());
                 let help = if choices.is_empty() { String::from("or drop `ref` to hand back text of its own") } else { format!("write one of {} after its result type, or drop `ref` to hand back text of its own", nikaia_std::block::Text::from(choices.join(", "))) };
-                out.push(format!("{}: `{}` hands back a view but says of no parameter whose data it points into: {} (ADR-views-3 D14)", line, name, help));
+                out.push(format!("{}: `{}` hands back a view but says of no parameter whose data it points into: {} (ADR-views-v4 D14)", line, name, help));
             }
         }
     }

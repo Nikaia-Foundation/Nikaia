@@ -1,6 +1,6 @@
 // A `let` declared `Array[T]` with no length holds a view where its value
 // is a piece of a buffer: a call whose result views its argument, a piece
-// or an element of a place (ADR-views-3 D8, D11; #1270).
+// or an element of a place (ADR-views-v4 D8, D11; #1270).
 
 struct Item {
     name: String,

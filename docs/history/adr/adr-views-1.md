@@ -8,9 +8,9 @@
 `let mut` view and puts a new one in, without a copy: what Rust writes with
 `std::mem::take` and `std::mem::replace` (#949)
 **Supersedes / Related:**
-[ADR-094](adr-094.md) D7 (a part taken out of a `mut` parameter is given back; widened by D1 to a `let mut` view);
-[ADR-293](adr-293.md) D31, D32 (an assignment gives back what was taken);
-[ADR-282](adr-282.md) D7 (a copy is written or refused, never inserted);
+[ADR-094](../../specification/adr/adr-094.md) D7 (a part taken out of a `mut` parameter is given back; widened by D1 to a `let mut` view);
+[ADR-293](../../specification/adr/adr-293.md) D31, D32 (an assignment gives back what was taken);
+[ADR-282](../../specification/adr/adr-282.md) D7 (a copy is written or refused, never inserted);
 Part I 6.5; #816 (`let mut x = m[k] ?? continue` on a `mut` map is a view of the entry, lowered to `get_mut`)
 
 ## 1. Question

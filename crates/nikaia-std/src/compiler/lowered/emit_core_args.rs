@@ -307,6 +307,16 @@ impl EmitState {
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
     }
+    pub(crate) fn emit_arg_os_text(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> bool {
+        let key = nikaia_std::index::or(method_callee, || std::convert::AsRef::<str>::as_ref(callee));
+        if self.own_contracts.functions.contains_key(key) { return false; }
+        let contract = match world.library.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => match self.described.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false } };
+        if contract.os_text.is_empty() { return false; }
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let params = call_arguments(signature);
+        if i >= params.len() as i64 { return false; }
+        nikaia_std::list::contains(&contract.os_text, &unsafe { nikaia_std::proven::read(&params, (i) as usize) }.0)
+    }
     pub(crate) fn emit_arg_opening(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> String {
         let key = nikaia_std::index::or(method_callee, || std::convert::AsRef::<str>::as_ref(callee));
         if self.own_contracts.functions.contains_key(key) {
@@ -368,6 +378,8 @@ impl EmitState {
         let mut i: i64 = 0;
         for arg in args.iter() {
             if i > 0 { out.push(", "); }
+            let os_text = self.emit_arg_os_text(world, callee, (method_callee).as_deref(), i);
+            if os_text { out.push("std::ffi::OsStr::new("); }
             if hoisted.contains(nikaia_std::index::AsKey::as_key(&i)) {
                 let mut one = EmitOut::empty();
                 self.emit_core_argument(world, walk, &mut one, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
@@ -376,6 +388,7 @@ impl EmitState {
                 lets.push("; ");
                 out.push(&format!("__nikaia_arg{}", i));
             } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
+            if os_text { out.push(")"); }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         if !hoisted.is_empty() { walk.hoisted_lets = Some(lets); }

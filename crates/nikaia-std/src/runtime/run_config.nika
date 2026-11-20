@@ -13,8 +13,11 @@
 // documented file has: comments, blank lines, and `key = value` with an
 // optionally quoted value.
 
+use std::fs
 use std::text
 use std::time
+use std::rt
+use std::mem
 
 /// Which mechanism serves a file operation (ADR-303 D3).
 pub enum Method {
@@ -184,4 +187,73 @@ test "the file knows four keys and no others" {
     assert(keys.contains("cleanup-deadline"))
     assert(!keys.contains("ordering"))
     assert(!keys.contains("user-parallelism"))
+}
+
+/// What the `--runtime` line has to be able to say: the method asked for,
+/// and which one detection picked (`src/rt/mod.rs`, #2304).
+test "the description names the mechanism that was chosen" {
+    let runtime = rt::Runtime::build(rt::UserCode::Sequential, config_default())
+    let said = runtime.describe()
+    assert(said.contains("io-method=auto"))
+    assert(said.contains("chose completion") || said.contains("chose blocking"))
+}
+
+/// **An idle pool stays quiet** (#693; `src/rt/pool.rs`, #2316): with no task
+/// and no I/O, a turn that waited out its slice wakes nobody. Before, every
+/// turn rearmed and rang, so `rang` counted one ring per turn per worker.
+///
+/// The other tests run alongside and move the runtime's completion count,
+/// which is a real wake for this pool too: those are subtracted. Their I/O can
+/// still ring the pool more often than it moves the count (on CI: 49 rings for
+/// 24 moves, and 1145 for 886), so the pool is watched for up to ten windows
+/// and must stay quiet in one of them; a pool that wakes itself rings in every
+/// window.
+test "an idle pool does not wake itself" {
+    let pool = rt::pool::Pool::start(2)
+    let mut quiet = false
+    let mut windows = 0
+    while windows < 10 && !quiet {
+        let rang_before = pool.rang()
+        let before = rt::io::generation()
+        time::sleep(300.millis())
+        let rang = pool.rang() - rang_before
+        let mut others = rt::io::generation() - before - rang
+        if others < 0 {
+            others = 0
+        }
+        quiet = rang <= others + 3
+        windows += 1
+    }
+    pool.close()
+    assert(quiet)
+}
+
+/// **The calling thread is never an I/O worker** (ADR-037 D2; `src/rt/worker.rs`,
+/// #2316): a file read through `std`, which under `io-method = "blocking"` is
+/// answered by a worker, leaves the thread that asked as it was.
+test "the calling thread is never an io worker" {
+    let before = rt::worker::on_io_worker()
+    assert(!before)
+    let root = fs::scratch()
+    fs::write("eins", root, "eins")
+    let bytes = fs::read("eins", root)
+    assert(bytes.len() == 4)
+    let after = rt::worker::on_io_worker()
+    assert(!after)
+}
+
+/// **There is one runtime, and it is already running** (ADR-037 D4; moved from
+/// `src/rt/mod.rs`, #2338): asking for the runtime a `std` call finds requests
+/// no memory, so it builds none; building one, the control, does (ADR-400 D1).
+test "there is one runtime and it is already running" {
+    let first = rt::handle()
+    let before = mem::allocations()
+    let second = rt::handle()
+    let after = mem::allocations()
+    assert(after == before)
+    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default())
+    let built = mem::allocations()
+    assert(built > after)
+    assert(first.describe() == second.describe())
+    assert(other.describe().contains("io-method"))
 }

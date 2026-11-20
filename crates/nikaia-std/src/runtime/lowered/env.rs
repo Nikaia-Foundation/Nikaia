@@ -33,3 +33,17 @@ pub fn vars(prefix: &str) -> Vec<(String, String)> {
     listed
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    if !(process::same_name(std::ffi::OsStr::new("Path"), std::ffi::OsStr::new("PATH"), true)) { nikaia_std::abort::assertion_failed("assert(process::same_name(\"Path\", \"PATH\", true))", None, &[]) };
+    if !(!process::same_name(std::ffi::OsStr::new("Path"), std::ffi::OsStr::new("PATH"), false)) { nikaia_std::abort::assertion_failed("assert(!process::same_name(\"Path\", \"PATH\", false))", None, &[]) };
+    if !(process::same_name(std::ffi::OsStr::new("PATH"), std::ffi::OsStr::new("PATH"), false)) { nikaia_std::abort::assertion_failed("assert(process::same_name(\"PATH\", \"PATH\", false))", None, &[]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn env_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("env::environment_names_compare_as_the_platform_does", __nikaia_test_0),
+    ]
+}

@@ -107,7 +107,7 @@ pub const INFERENCE: &str =
 /// always meant - and the version is what tells a *reader* that the file it has
 /// may say more than it knows how to use.
 ///
-/// 4 since [ADR-views-3](../../../../docs/specification/adr/adr-views-3.md) D10: a
+/// 4 since [ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D10: a
 /// type's `tethered` lists its places in the order the fields are written, and
 /// a reading package takes one lifetime per place from it.
 pub const VERSION: u32 = 4;

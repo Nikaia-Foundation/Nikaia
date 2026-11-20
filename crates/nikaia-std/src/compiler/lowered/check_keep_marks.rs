@@ -102,7 +102,7 @@ pub(crate) fn keep_marks_against_trait(view: &ParsedView<'_, '_, '_, '_, '_, '_,
             if receiver.is_some() && consumes != *unsafe { nikaia_std::proven::read(&marks, (0) as usize) } {
                 let written = if *unsafe { nikaia_std::proven::read(&marks, (0) as usize) } { "`keep self`" } else { "`self` without `keep`" };
                 let help = format!("Write {}, as the trait does.", written);
-                out.push(check_refusal("NK2302", &method.span, format!("`{}` marks `self` otherwise than `{}` does.", own, at_trait), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-3 D2).")], Some(help)));
+                out.push(check_refusal("NK2302", &method.span, format!("`{}` marks `self` otherwise than `{}` does.", own, at_trait), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-v4 D2).")], Some(help)));
             }
             let mut at: i64 = 0;
             for arg in args.iter() {
@@ -111,7 +111,7 @@ pub(crate) fn keep_marks_against_trait(view: &ParsedView<'_, '_, '_, '_, '_, '_,
                     let parameter = view.text(arg.name);
                     let help = if marked { format!("Write `keep` before `{}`, as the trait does.", parameter) } else { format!("Remove `keep` before `{}`, as the trait does.", parameter) };
                     let said = if marked { "keeps" } else { "lends" };
-                    out.push(check_refusal("NK2302", &arg.span, format!("`{}` marks `{}` otherwise than `{}`, which {} it.", own, parameter, at_trait, said), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-3 D2): a caller through the trait reads that signature, not this one.")], Some(help)));
+                    out.push(check_refusal("NK2302", &arg.span, format!("`{}` marks `{}` otherwise than `{}`, which {} it.", own, parameter, at_trait, said), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-v4 D2): a caller through the trait reads that signature, not this one.")], Some(help)));
                 }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
@@ -142,10 +142,10 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, 
                         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }).as_deref(), &parameter, own, library, &indexes, resolved, &mut *holes_of), || arg.span.clone().into());
-                    out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(keep_marks_help(view, item, &parameter, &found.key))));
+                    out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-v4 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(keep_marks_help(view, item, &parameter, &found.key))));
                 }
                 if arg.keep && !kept {
-                    let mut warned = check_refusal("NK1334", &arg.span, format!("`{}` is marked `keep`, but `{}` never keeps it.", parameter, found.key), vec![String::from("A parameter the body only reads or changes is lent (ADR-views-3 D2).")], Some(format!("Remove `keep` before `{}`.", parameter)));
+                    let mut warned = check_refusal("NK1334", &arg.span, format!("`{}` is marked `keep`, but `{}` never keeps it.", parameter, found.key), vec![String::from("A parameter the body only reads or changes is lent (ADR-views-v4 D2).")], Some(format!("Remove `keep` before `{}`.", parameter)));
                     warned.severity = CheckSeverity::Warning;
                     out.push(warned);
                 }

@@ -1,4 +1,4 @@
-// ADR-views-3 D2: a plain text parameter of a function type is lent, with or
+// ADR-views-v4 D2: a plain text parameter of a function type is lent, with or
 // without a `from`, so the caller's text stays its own and is usable after
 // the call (#1254).
 fn count(s: String) -> i64 {

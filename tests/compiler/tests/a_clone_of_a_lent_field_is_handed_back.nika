@@ -1,6 +1,6 @@
 // A copy of a lent parameter, or of a field of it, is a value of its own:
 // handing it back keeps nothing of the parameter, so no `keep` is asked for
-// in a file that writes `keep` (ADR-views-3 D8, D12, #1243).
+// in a file that writes `keep` (ADR-views-v4 D8, D12, #1243).
 struct Person {
     name: String,
     tags: Vec[String],

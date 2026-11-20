@@ -49,12 +49,12 @@ pub struct KeepsBody {
     /// owner, so the parameter takes the `Bytes` with its owner rather than a
     /// run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
-    /// **The parameters written `T?`**, text among them (ADR-views-3 D2,
+    /// **The parameters written `T?`**, text among them (ADR-views-v4 D2,
     /// #1254, #1346): `p ?? e` over one whose result is only read keeps
     /// nothing of `p`.
     pub options: collections::BTreeSet[String],
     /// **The parameters of function type, by which of their own parameters
-    /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
+    /// the code lends** (ADR-views-v4 D14): one written `ref`, or named by the
     /// type's `from`. An argument handed there is lent to the call, not kept.
     pub code_lends: collections::BTreeMap[String, Vec[bool]],
     /// **The traits a parameter of a type variable is bound by**, `c: C` of
@@ -75,12 +75,15 @@ struct KeepsWalk {
     /// The names the body grows (`grown_text_of`): a cut of a parameter
     /// bound `mut` to one is given the parameter's text (ADR-text-reuse-1 D2).
     grown: collections::BTreeSet[String],
+    /// The parameters put into a part a `let` declares a view of, by their
+    /// node (`keeps_lent_into_declared`): lent there, not kept.
+    declared_views: collections::BTreeSet[i64],
 }
 
 /// What `body` does with each of its function's parameters.
 pub fn uses_in(body: ref Block, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> Uses {
     let grown = grown_text_of(interner, body)
-    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap(), grown: grown }
+    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap(), grown: grown, declared_views: collections::BTreeSet() }
     keeps_block(body, interner, holes_of, context, own, library, walk)
     // **The value a body ends in leaves the call**, as a `return` does.
     if context.hands_back_its_last && body.stmts.len() > 0 {
@@ -130,6 +133,9 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                 }
             }
             let viewed = keeps_viewed_of(value, interner, context, own, library, walk)
+            if !mutable && ty != null {
+                keeps_lent_into_declared(value, ty ?? return, interner, context, walk.declared_views)
+            }
             // **A `let mut` changes what it binds**, so a parameter bound to
             // one is owned: a view cannot be changed (D40). A lent one stays
             // the reference the author wrote. A call's result that points into
@@ -162,7 +168,7 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                     alias(interner.resolve(bound).clone(), reached, walk.aliases)
                 }
             }
-            // **`let x = p ?? e` over an option binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
+            // **`let x = p ?? e` over an option binds a view of `p`** (ADR-views-v4 D2, #1254): `p` is lent, and
             // kept only where `x` leaves - returned, handed on, matched apart
             // and handed on, taken by a method, or bound `mut`.
             if !mutable && !owned_declared {
@@ -206,7 +212,7 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         Stmt::For { iter, .. } => keeps_expression(iter, interner, holes_of, context, own, library, walk),
         Stmt::While { cond, .. } => keeps_expression(cond, interner, holes_of, context, own, library, walk),
         // **`return p ?? e` of a view result hands back a view of `p`**
-        // (ADR-views-3 D2, D7, #1254): the option is read, not moved, as in
+        // (ADR-views-v4 D2, D7, #1254): the option is read, not moved, as in
         // a `let` of one.
         Stmt::Return(value) => {
             let returned = value ?? return
@@ -238,6 +244,44 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         Stmt::Return(value) => {
             let returned = value ?? return
             keeps_blocks_in(returned, interner, holes_of, context, own, library, walk)
+        }
+        else => {}
+    }
+}
+
+// **A parameter put into a literal at a part the `let` declares a view of
+// is lent there** (ADR-282 D2, ADR-views-v4 D5, #2346): `name: String` says
+// what `name: ref String` says, so `let t: Array[(u32, ref String), 1] =
+// [(1, name)]` holds the view the parameter is and keeps nothing, as a view
+// field of a struct literal does. Where `t` leaves, the alias `reached_of`
+// gave it keeps the parameter. The parts are marked by their node.
+fn keeps_lent_into_declared(expr: ref Expr, ty: ref Type, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, mut marked: collections::BTreeSet[i64]) {
+    if ty.is_nullable {
+        return
+    }
+    match expr {
+        Expr::Variable(ident, _) => {
+            let name = interner.resolve(ident)
+            if ty.is_view && !ty.is_tuple && name != "self" && keeps_lendable(name, context) {
+                marked.insert(id_of(expr) as i64)
+            }
+        }
+        Expr::Tuple(items, _) => {
+            if !ty.is_tuple || ty.is_view || ty.generics.len() != items.len() {
+                return
+            }
+            for (k, item) in items.iter().enumerate() {
+                keeps_lent_into_declared(item, ty.generics[k], interner, context, marked)
+            }
+        }
+        Expr::ListLit { items, .. } => {
+            let base = interner.resolve(ty.name)
+            if ty.is_view || ty.is_tuple || ty.generics.len() == 0 || (base != "Array" && base != "Vec") {
+                return
+            }
+            for item in items {
+                keeps_lent_into_declared(item, ty.generics[0], interner, context, marked)
+            }
         }
         else => {}
     }
@@ -301,7 +345,7 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
             reached_by_last(otherwise, interner, context, own, library, walk, through_calls, found)
         }
         // **An arm that hands on what it binds hands on a part of the
-        // parameter it takes apart** (ADR-views-3 D1): `let model = match asked
+        // parameter it takes apart** (ADR-views-v4 D1): `let model = match asked
         // { Refuted(model) => model, .. }` binds a part of `asked`, before the
         // walk of the `match` aliases the arm's own names.
         Expr::Match { value, arms, .. } => {
@@ -328,7 +372,7 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
                 found.extend(keeps_viewed_of(base, interner, context, own, library, walk))
             }
             // **A field of a name bound to a part of a parameter is a part
-            // of it too** (ADR-views-3 D1): `Refuted(model) => model.values`
+            // of it too** (ADR-views-v4 D1): `Refuted(model) => model.values`
             // moves out of the parameter the arm takes apart.
             let aliased = match base {
                 Expr::Variable(ident, _) => walk.aliases[interner.resolve(ident)]?.clone() ?? collections::BTreeSet(),
@@ -425,7 +469,7 @@ fn through_a_view(func: ref Expr, args: ref Vec[Expr], interner: ref winnow_gram
 }
 
 // **Whether the callee's result points into its parameter at `at`**: the
-// ledger's `ref(..)`, whole (`borrows`) or by path (`returns`, ADR-views-3 D10). A
+// ledger's `ref(..)`, whole (`borrows`) or by path (`returns`, ADR-views-v4 D10). A
 // callee no ledger describes is not one: its arguments keep (D2).
 fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledger, library: ref Ledger) -> bool {
     let known = (callee ?? return false).clone()
@@ -596,7 +640,7 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
             }
         }
         // **A `return` inside an expression hands back as the statement
-        // does** (ADR-views-3 D2, #2285): `p.find(";") ?? return p` keeps `p`.
+        // does** (ADR-views-v4 D2, #2285): `p.find(";") ?? return p` keeps `p`.
         Expr::Return(value, _) => {
             if !context.returns_a_view {
                 hand_over_maybe(value, interner, holes_of, context, own, library, walk)
@@ -689,11 +733,11 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // **A struct literal keeps every field it is given**: the struct
         // outlives the call wherever it goes. `P { x }` is the field and the
         // name in one, and the name may be a parameter. **A text parameter
-        // the tiers lent is not kept by moving it in** (Part I 6.5, ADR-views-3
+        // the tiers lent is not kept by moving it in** (Part I 6.5, ADR-views-v4
         // D8, #945): the field it goes into is a view of it, and a result
         // built from the literal points into it (`returns`). Nor is a lent
         // parameter of any type, or a piece of one, put into a field the
-        // struct holds as a view (ADR-views-3 D5, #1218), **whether the author
+        // struct holds as a view (ADR-views-v4 D5, #1218), **whether the author
         // or the tiers lend it** (#1225): the literal lends it while the struct
         // stays in the function, and `keeps_viewed_of` carries it along where
         // the struct leaves.
@@ -723,13 +767,17 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // (ADR-297 D13): `[h]` builds a list that holds `h`.
         Expr::ListLit { items, .. } => {
             for item in items {
-                keep_part(item, interner, context, own, library, walk)
+                if !walk.declared_views.contains(id_of(item) as i64) {
+                    keep_part(item, interner, context, own, library, walk)
+                }
                 keep_lambda(item, interner, holes_of, context, walk)
             }
         }
         Expr::Tuple(items, _) => {
             for item in items {
-                keep_part(item, interner, context, own, library, walk)
+                if !walk.declared_views.contains(id_of(item) as i64) {
+                    keep_part(item, interner, context, own, library, walk)
+                }
                 keep_lambda(item, interner, holes_of, context, walk)
             }
         }
@@ -750,7 +798,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
             }
         },
         // **A read through `?.` of a field that copies keeps nothing**
-        // (ADR-views-3 D2, #1254): `row?.id ?? 0` copies the number out and
+        // (ADR-views-v4 D2, #1254): `row?.id ?? 0` copies the number out and
         // leaves the row where it is.
         Expr::SafeField { base, name, .. } => {
             let parameter = parameter_named(base, interner, context)
@@ -771,7 +819,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 }
             }
         }
-        // **A parameter a `match` takes apart stays lent** (ADR-views-3 D1):
+        // **A parameter a `match` takes apart stays lent** (ADR-views-v4 D1):
         // Rust matches through the reference with its default binding modes,
         // so an arm that only reads what it binds keeps nothing. **A name an
         // arm binds is a part of the parameter**, as a `let` of one is
@@ -822,7 +870,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::Call { func, args, config, .. } => {
             let callee = resolved_callee(func, interner, own, library)
             // **A parameter of function type lends what its type lends**
-            // (ADR-views-3 D14): `f(s)` over `f: fn(s: String) -> String from s`
+            // (ADR-views-v4 D14): `f(s)` over `f: fn(s: String) -> String from s`
             // keeps nothing.
             let lends: Vec[bool] = match func {
                 Expr::Variable(ident, _) => context.code_lends[interner.resolve(ident)]?.clone() ?? [],
@@ -963,7 +1011,7 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let ours = receiver_taken_in(own, context.own_methods, method, owner)
     let theirs = receiver_taken_in(library, context.library_methods, method, owner)
     // **`.clone()` reads its receiver and makes a copy** (Part I 2.3;
-    // ADR-views-3 D8, D12, #1243): its result reaches nothing of the
+    // ADR-views-v4 D8, D12, #1243): its result reaches nothing of the
     // receiver, so a body whose calls did not resolve (`x.clone()` of a `T`)
     // or a call no entry describes is no reason to count it moved. An entry
     // that does take its receiver by value still says so.
@@ -1042,7 +1090,7 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // keeps (D2).
 fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     // **What a field's code takes as a view or `mut` is lent to it**
-    // (ADR-views-3 D2, D14), as the call lowers it; what it takes whole it
+    // (ADR-views-v4 D2, D14), as the call lowers it; what it takes whole it
     // keeps.
     let code = keeps_code_field(receiver, method, interner, context)
     if code != null {
@@ -1330,7 +1378,7 @@ fn keeps_a_view_field(of: ref String, field: ref String, own: ref Ledger) -> boo
 
 // **A name a view field of a literal may lend**: a parameter the author
 // lent, or any other but the receiver, which the tiers lend where the struct
-// stays in the function (ADR-views-3 D5, #1225).
+// stays in the function (ADR-views-v4 D5, #1225).
 fn keeps_lendable(name: ref String, context: ref KeepsBody) -> bool {
     return context.lent.contains(name) || (name != "self" && context.parameters.contains(name))
 }
@@ -1374,7 +1422,7 @@ fn keeps_place_root(expr: ref Expr, interner: ref winnow_grammar::InternerContex
 
 // **A `String` parameter that is a view below** - lent by the tiers or
 // written `ref` - and not the receiver: moved into a struct literal, the field
-// views it (ADR-views-3 D9).
+// views it (ADR-views-v4 D9).
 fn keeps_a_lent_text(name: ref String, context: ref KeepsBody) -> bool {
     if name == "self" || !context.lent.contains(name) {
         return false
@@ -1416,7 +1464,7 @@ fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, c
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) {
         names.push(one)
     }
-    // **The fallback of a `??` is handed on as it stands** (ADR-views-3 D1):
+    // **The fallback of a `??` is handed on as it stands** (ADR-views-v4 D1):
     // `store(first ?? other)` gives the callee `other` where `first` is null,
     // so what keeps the result keeps `other`.
     match expr {
@@ -1457,7 +1505,7 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
     }
 }
 
-// **`p ?? e` over an option parameter** (ADR-views-3 D2, #1254, #1346): the
+// **`p ?? e` over an option parameter** (ADR-views-v4 D2, #1254, #1346): the
 // parameter `p`, or `null`. **So is `p.f ?? e` over an option field of one**
 // (#1472): `let s = c.signature ?? return -1` reads the field in place.
 fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
@@ -1503,7 +1551,7 @@ fn a_read_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, 
     return coalesced_option(expr, interner, context) != null
 }
 
-// **`p ?? e` whose result is only read keeps nothing of `p`** (ADR-views-3
+// **`p ?? e` whose result is only read keeps nothing of `p`** (ADR-views-v4
 // D2, #1254): a field read, a method that takes its receiver lent, a
 // comparison. Its two sides are walked as they stand; the `??` itself is not
 // classified. A `let` of one still keeps `p`: the name may leave the call.
@@ -1791,7 +1839,7 @@ fn keeps_a_copied_scalar(ty: ref Ty) -> bool {
     }
 }
 
-/// **Whether a parameter of this type is a copy** (ADR-views-3 D2, #1254):
+/// **Whether a parameter of this type is a copy** (ADR-views-v4 D2, #1254):
 /// a copied scalar, or one of the file's copy types (`keeps_copy_types`), or
 /// such a value that may be `null`. Kept below, it is handed over by value
 /// all the same, so no caller's value goes with it and no `keep` is written
@@ -1957,8 +2005,8 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 // own evidence is empty (a trait method has no body); the
                 // edges to its impls are added below. **Every by-value
                 // parameter, code or data**: by value no longer means kept
-                // (D17, #1012; ADR-views-3 D2, a plain parameter is lent).
-                // **And what its signature marks `keep`** (ADR-views-3 D2):
+                // (D17, #1012; ADR-views-v4 D2, a plain parameter is lent).
+                // **And what its signature marks `keep`** (ADR-views-v4 D2):
                 // the mark fixes the column for every implementation, in any
                 // package, so a caller through the trait in another package
                 // reads it from the ledger and hands the value over (#116:
@@ -2118,7 +2166,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
 }
 
 // **The parameters an own method takes by value though it keeps none of
-// them** (ADR-views-3 D1, #1213), for `lends_in_own`: one whose type holds a
+// them** (ADR-views-v4 D1, #1213), for `lends_in_own`: one whose type holds a
 // view, which a borrow below would need a lifetime for, and every parameter
 // of a method named as a function value anywhere in the package, whose type
 // the `fn(..)` parameter it is handed to fixes (`par`'s merge, `in_place`).
@@ -2492,7 +2540,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // (ADR-282 D21): an `EitherText` may own its text, so returning a
             // field of one takes it out of the parameter, as returning a
             // `String` field does.
-            // **Nor does a result that copies** (ADR-views-3 D1): `-> i64`
+            // **Nor does a result that copies** (ADR-views-v4 D1): `-> i64`
             // hands back a number, never the parameter, so an arm's `n =>
             // return n` over a part of one keeps nothing.
             let returns_a_view = keeps_result_is_a_view(ret_type) || keeps_result_copies(view, ret_type)
@@ -2578,7 +2626,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     }
                 }
             }
-            // **The options** (ADR-views-3 D2, #1254), text among them (#1346):
+            // **The options** (ADR-views-v4 D2, #1254), text among them (#1346):
             // `let f = p ?? return ".."` over a `p: String?` reads `p`.
             let mut options: collections::BTreeSet[String] = collections::BTreeSet()
             for a in args {
@@ -2586,7 +2634,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     options.insert(view.text(a.name))
                 }
             }
-            // **What each parameter of function type lends** (ADR-views-3 D2, D14).
+            // **What each parameter of function type lends** (ADR-views-v4 D2, D14).
             let mut code_lends: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
             for a in args {
                 if a.ty.code == null {

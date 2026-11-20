@@ -294,7 +294,7 @@ pub(crate) fn fmt_last_code(toks: &[FmtToken]) -> i64 {
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_spaced(toks: &[FmtToken], k: i64) -> bool {
     if k == 0 { return false; }
-    (unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.spaced || unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Comment && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text.starts_with("//"))
+    unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.spaced || unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Comment && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text.starts_with("//")
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -507,7 +507,7 @@ impl FmtPrinter {
     pub(crate) fn inner(&self) -> i64 {
         let n = self.frames.len() as i64;
         if n == 0 { return 0; }
-        (unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.inner)
+        unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.inner
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

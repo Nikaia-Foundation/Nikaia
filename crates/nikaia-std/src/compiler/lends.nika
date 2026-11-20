@@ -31,7 +31,7 @@ pub fn lends_in(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger])
 
 /// The same, for a contract of **this program's own** method: a parameter it
 /// does not keep is lent as a free function's is, because the declaration is
-/// ours and `kept_by` reads its column (ADR-views-3 D1), but for the ones
+/// ours and `kept_by` reads its column (ADR-views-v4 D1), but for the ones
 /// `by_value` names; so a method can also hand its own function value to
 /// itself in a loop (`&F` is an `impl Fn` as `F` is).
 pub fn lends_in_own(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger]) -> bool {
@@ -50,20 +50,20 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
                 return true
             }
             // **An `Array[T]` with no length is a view of a run unless it is
-            // kept** (ADR-views-3 D11, #1209): the caller lends a list, an
+            // kept** (ADR-views-v4 D11, #1209): the caller lends a list, an
             // array or a part of either; ADR-184 D3's function generic over
             // the length stays for a `keep` parameter.
             if a_run_parameter(ty) {
                 return !contract.keeps.contains(name)
             }
             // **A method's parameter its result is written to view is lent**
-            // (ADR-views-3 D2, D14, #1230): `fn pick(self, a: String) -> String
+            // (ADR-views-v4 D2, D14, #1230): `fn pick(self, a: String) -> String
             // from a` hands back a view of the caller's `a`, at the trait's
             // entry and every impl's alike, so the entry a call goes to does
             // not change the answer.
             let viewed_by_the_result = contract.borrows.contains(name)
             // **An own method's parameter it does not keep is lent**, as a
-            // free function's is (ADR-views-3 D1): the fixpoint of `kept_by`
+            // free function's is (ADR-views-v4 D1): the fixpoint of `kept_by`
             // reads the method's column as "not kept", so a caller hands a
             // lent value on to it without moving it. `by_value` names the
             // ones lowered by value all the same: a type that holds a view,
@@ -71,7 +71,7 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
             // (`keeps_by_value`). An impl keeps what its trait method keeps
             // (D17), so every entry of a trait agrees.
             let own_lends = own && (a_function_value(ty) || !contract.by_value.contains(name))
-            // **A plain parameter of a type variable is lent too** (ADR-views-3
+            // **A plain parameter of a type variable is lent too** (ADR-views-v4
             // D2, #1342): `fn twice[C: Named](c: C)` only reads `c`, so the
             // caller's value is usable after the call. `moves` answers no for
             // a type variable, which a library's entry still means (its Rust

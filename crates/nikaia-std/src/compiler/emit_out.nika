@@ -77,7 +77,11 @@ impl EmitOut {
     /// **Whether the text from `start` begins with an `unsafe { … }` block and
     /// goes on after it** (ADR-306 D26): `unsafe { add(i, 3) } == n` as a
     /// statement or a tail, which Rust reads as the block statement and then
-    /// a stray `== n`, so the caller writes it in brackets.
+    /// a stray `== n`, so the caller writes it in brackets. **A field or a
+    /// call read off the block goes on it** (#2346): Rust reads a `.` or a
+    /// `?` after a block statement as part of it, and what follows as the
+    /// rest of that expression, so `unsafe { read(&t, 0) }.0 == 1` needs no
+    /// brackets, and brackets there are `unused_parens`.
     fn block_headed_from(ref self, start: i64) -> bool {
         let text = self.buf.bytes[start..].text() catch { return false }
         if !text.starts_with("unsafe { ") { return false }
@@ -88,7 +92,13 @@ impl EmitOut {
             if b as i64 == 123 { depth += 1 }
             if b as i64 == 125 {
                 depth -= 1
-                if depth == 0 { return at < text.len() }
+                if depth == 0 {
+                    if at >= text.len() {
+                        return false
+                    }
+                    let rest = text.bytes[at..].text() catch { return true }
+                    return !rest.starts_with(".") && !rest.starts_with("?")
+                }
             }
         }
         return false

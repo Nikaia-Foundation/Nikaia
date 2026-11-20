@@ -1,4 +1,4 @@
-// ADR-views-3 D14: a function whose result owns its value does not fit a
+// ADR-views-v4 D14: a function whose result owns its value does not fit a
 // function type whose result writes `from`.
 
 fn shout(s: String) -> String {

@@ -1,5 +1,5 @@
 // A part of a list, the list itself and an array are handed to a lent and a
-// `mut` `Array[T]`: a view of the run, `&[T]` and `&mut [T]` (ADR-views-3
+// `mut` `Array[T]`: a view of the run, `&[T]` and `&mut [T]` (ADR-views-v4
 // D11, #1209).
 
 fn sum(xs: Array[u32]) -> u32 {

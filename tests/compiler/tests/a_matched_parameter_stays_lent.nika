@@ -1,4 +1,4 @@
-// A plain parameter a `match` takes apart is lent (ADR-views-3 D1): an arm
+// A plain parameter a `match` takes apart is lent (ADR-views-v4 D1): an arm
 // that only reads what it binds keeps nothing, so the caller uses its value
 // again after the call. Variant payloads, a struct variant's fields and a
 // list's rest are all bound as views.

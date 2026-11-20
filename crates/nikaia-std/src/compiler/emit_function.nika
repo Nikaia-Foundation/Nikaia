@@ -29,7 +29,7 @@ pub struct EmitSeedsEnd {
 }
 
 /// A result of several view fields: each source parameter's own lifetime and
-/// the result's lifetime arguments (ADR-views-3 D8).
+/// the result's lifetime arguments (ADR-views-v4 D8).
 pub struct EmitSplit {
     pub own: Vec[EmitPair],
     pub fields: Vec[String],
@@ -275,7 +275,7 @@ impl EmitState {
     }
 
     /// Whether the result points into the parameter `name`, whole
-    /// (`borrows`) or by path (`returns`, ADR-views-3 D10).
+    /// (`borrows`) or by path (`returns`, ADR-views-v4 D10).
     fn emit_fn_result_points_into(ref self, key: ref String, name: ref String) -> bool {
         let c = self.own_contracts.functions.get(key) ?? return false
         if c.borrows.contains(name) {
@@ -617,7 +617,7 @@ impl EmitState {
                 let source_kept = source_name != null && has_kept && self.tethered_position(key, "<result>")
                 let shared = source_name != null && !source_kept
                 // **A parameter handed back whole is borrowed apart from what
-                // it views** (ADR-views-3 D12, #1498): `fn leaf<'r, 'a>(n: &'r
+                // it views** (ADR-views-v4 D12, #1498): `fn leaf<'r, 'a>(n: &'r
                 // N<'a>) -> &'r N<'a>`, so a copy of the result outlives the
                 // argument it was read from.
                 let mut lifted_whole = false
@@ -660,7 +660,7 @@ impl EmitState {
                 // **`keep xs: Array[T]` is an array of any length, and the call
                 // says which** (ADR-184 D3): a `const` parameter per position.
                 // A lent or `mut` one is a view of a run, `&[T]` or `&mut [T]`
-                // (ADR-views-3 D11, #1209).
+                // (ADR-views-v4 D11, #1209).
                 let mut lengths: Vec[String] = []
                 let mut runs: Vec[bool] = []
                 let mut open: Vec[String] = []
@@ -776,7 +776,7 @@ impl EmitState {
                             spelled = f"dyn {bound}"
                         }
                         // **Code run one call at a time changes what it
-                        // captures** (ADR-views-3 D17), whoever calls:
+                        // captures** (ADR-views-v4 D17), whoever calls:
                         // `&mut impl FnMut`, `&mut impl AsyncFnMut`. Code run
                         // from tasks at once stays shared.
                         if runs && ty.code != null && !ty.is_nullable && reference.starts_with("&") && !reference.contains("mut") && !self.emit_fn_code_at_once(key, pname) {
@@ -784,7 +784,7 @@ impl EmitState {
                             reference = f"{reference}mut "
                         }
                         // **Code run from tasks at once is shared between
-                        // threads** where user code overlaps (ADR-views-3
+                        // threads** where user code overlaps (ADR-views-v4
                         // D17, ADR-292 D6): `&(impl Fn(..) + Send + Sync)`.
                         if runs && ty.code != null && !ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(key, pname) {
                             spelled = emit_fn_code_that_crosses(spelled)
@@ -1003,7 +1003,7 @@ impl EmitState {
                     channel = self.error_channel(world, key, emit_is_elided(lifetimes), lifetimes.params(), static_lifetimes.params(), borrows_any)
                 }
                 // **One lifetime per parameter a view field points into**
-                // (ADR-views-3 D8).
+                // (ADR-views-v4 D8).
                 let returns_text = self.emit_fn_returns(key)
                 if shared && !source_nested && several_at.len() >= 2 && returns_text != null {
                     let mut sources: Vec[String] = []
@@ -1376,13 +1376,13 @@ impl EmitState {
 }
 
 /// **Each source parameter's own lifetime, and the result's lifetime
-/// arguments** (ADR-views-3 D8, D10), where the result is a struct of several view
+/// arguments** (ADR-views-v4 D8, D10), where the result is a struct of several view
 /// fields and `returns` names one of `sources` for each; null where it does
 /// not.
 ///
 /// A union (`ref(a | b)`) is one lifetime over its group: every parameter a
 /// field may view is tied to the others it may view, and to nothing else
-/// (ADR-views-3 D8). A group is named by its lowest parameter, `'r` first and
+/// (ADR-views-v4 D8). A group is named by its lowest parameter, `'r` first and
 /// `'r1`, `'r2` after.
 fn emit_split_lifetimes(state: ref EmitState, world: ref EmitWorld, ty: ref Type, returns: ref String, sources: ref Vec[String]) -> EmitSplit? {
     if !ty.generics.is_empty() || ty.is_view || returns.is_empty() {
@@ -1497,12 +1497,12 @@ fn emit_holds_a_ref_of_a_type(world: ref EmitWorld, ty: ref Type) -> bool {
     return false
 }
 
-/// **The trait of code that may change what it captures** (ADR-views-3 D17):
+/// **The trait of code that may change what it captures** (ADR-views-v4 D17):
 /// `impl Fn(..)` is `impl FnMut(..)`, `impl AsyncFn(..)` `impl AsyncFnMut(..)`,
 /// and the same behind `dyn` or `for<'call>`.
 impl EmitState {
     /// **Whether a function runs its parameter of code `param` from tasks at
-    /// once** (ADR-views-3 D17): the file's own walk, or the function's ledger
+    /// once** (ADR-views-v4 D17): the file's own walk, or the function's ledger
     /// entry, which the package's other files decided it from.
     fn emit_fn_code_at_once(ref self, key: ref String, param: ref String) -> bool {
         if self.facts.code_at_once.contains(f"{key}::{param}") {

@@ -1,4 +1,4 @@
-// #949, ADR-views-1 D1, D3: `c` is a view of the map's entry; handing
+// #949, ADR-views-v4 D18, D20: `c` is a view of the map's entry; handing
 // `c.ensures` and `c.from` to a callee that keeps them takes them out, with no
 // copy, and the assignments give them back before the view's block ends.
 use std::collections

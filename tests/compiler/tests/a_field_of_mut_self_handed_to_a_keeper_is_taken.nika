@@ -1,4 +1,4 @@
-// #1208, ADR-views-3 D3, ADR-views-1 D1-D3: a field of `mut self` handed to
+// #1208, ADR-views-v4 D3, ADR-views-v4 D18-D20: a field of `mut self` handed to
 // a keeper is taken out, and assigning it gives it back.
 struct TakenTrail {
 	trail: Vec[u32],

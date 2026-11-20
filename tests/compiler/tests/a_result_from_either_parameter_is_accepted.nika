@@ -1,5 +1,5 @@
 // A result that points into either parameter, written `from a | b`, is
-// accepted (ADR-views-3 D8).
+// accepted (ADR-views-v4 D8).
 fn longest(a: String, b: String) -> String from a | b {
     if a.len() >= b.len() {
         return a.trim()

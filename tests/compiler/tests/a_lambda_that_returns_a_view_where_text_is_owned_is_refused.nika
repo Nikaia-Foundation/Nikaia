@@ -1,5 +1,5 @@
 // A lambda handed where a function type's result is `String` without `from`
-// hands back text of its own (#1264, ADR-views-3 D12, D14): `` of
+// hands back text of its own (#1264, ADR-views-v4 D12, D14): `` of
 // text is a view of the lambda's lent parameter (ADR-282 D8), so it is
 // `NK1104` with the help `.clone()`, whether the type writes the parameter
 // `s: String` or `ref String`, as a last value or a `return`, and where a

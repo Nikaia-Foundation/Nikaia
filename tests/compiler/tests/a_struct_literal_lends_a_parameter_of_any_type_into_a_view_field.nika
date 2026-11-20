@@ -1,5 +1,5 @@
 // A struct literal that stays in the function lends a parameter of any type,
-// or a part of one, into a field it holds as a view (ADR-views-3 D5, #1225).
+// or a part of one, into a field it holds as a view (ADR-views-v4 D5, #1225).
 struct In { n: i64 }
 struct L { n: i64, part: In, tag: String }
 struct W { own: ref L, k: i64 }

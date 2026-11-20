@@ -1,6 +1,6 @@
 // A function type's `from` names its own parameters: a name that is no
 // parameter, or a `from` on a type whose parameters have no names, is
-// refused (ADR-views-3 D14, NK1335).
+// refused (ADR-views-v4 D14, NK1335).
 fn apply(f: fn(s: ref String) -> ref String from t, s: String) -> String {
     return f(s).to_uppercase()
 }

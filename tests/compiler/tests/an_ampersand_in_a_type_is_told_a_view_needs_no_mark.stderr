@@ -4,4 +4,4 @@ error: Expected type here, but found `&`.
  4 | fn total(xs: &Vec[i64]) -> i64 {
    |              ^
    |
-   = note: Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-3 D4). (`&&` still means *and*.)
+   = note: Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-v4 D4). (`&&` still means *and*.)

@@ -45,7 +45,7 @@ pub struct Trivia {
     /// The byte after the last `;` a statement read.
     semi_end: usize,
     /// Where a `mut` stood in front of one name of a tuple pattern
-    /// (`NK1307`, ADR-views-2 D1): the first one is refused.
+    /// (`NK1307`, ADR-views-v4 D24): the first one is refused.
     mut_name: Option<usize>,
     /// Where an `async` stood before a `let`, a loop or a function's
     /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
@@ -353,7 +353,7 @@ pub struct Parsed {
     pub given_pushes: std::collections::BTreeSet<i64>,
     /// **The names moved into a literal's position that must hold text of
     /// its own while a view of them is still used**, by their nodes
-    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
+    /// ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D9):
     /// [`crate::view_changes`] refuses each (`NK2305`).
     pub refused_moves:
         std::collections::BTreeMap<i64, nikaia_std::compiler::text_tiers::TierRefusal>,
@@ -776,7 +776,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             refuse_parsing(finding, input)
         })?;
 
-    // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-2 D1).
+    // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-v4 D24).
     if let Some(at) = stream.state.user_state.mut_name {
         let finding =
             nikaia_std::compiler::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
@@ -1516,7 +1516,7 @@ grammar! {
             }
           | KW_REF KW_SELF -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
           // **`self` looks, `mut self` changes the object, `keep self`
-          // consumes it** (ADR-views-3 D1, D2): a bare `self` is lent, as
+          // consumes it** (ADR-views-v4 D1, D2): a bare `self` is lent, as
           // `ref self` is, and `mut self` is what `ref mut self` is.
           | KW_MUT KW_SELF -> { Receiver { is_ref: true, is_mut: true, is_keep: false } }
           | KW_KEEP KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: true } }
@@ -1740,7 +1740,7 @@ grammar! {
         // its type, because the caller needs it - what `_` says is that this body
         // does not read the value, never that the signature is shorter.
         rule fn_arg_def -> FnArg @=
-            // **`keep item: Item`** (ADR-views-3 D2): the callee keeps the
+            // **`keep item: Item`** (ADR-views-v4 D2): the callee keeps the
             // argument. `keep` is no reserved word (D13): when no name follows,
             // this arm fails and `keep: i64` is a parameter called `keep`.
             attributes:attribute* KW_KEEP name:NAME ":" ty:type_ref -> {
@@ -1774,7 +1774,7 @@ grammar! {
         rule return_type_arrow -> Type =
             "->" ty:type_ref -> { ty }
 
-        // **`-> String from a | b`** (ADR-views-3 D8): the parameters the
+        // **`-> String from a | b`** (ADR-views-v4 D8): the parameters the
         // result's views point into, after a declaration's result type. `from`
         // is no reserved word (D13): it means the source only here, after a
         // result type, where no other form may stand.
@@ -1935,7 +1935,7 @@ grammar! {
           // `fn make() sync -> fn(i64) -> i64`.
           //
           // **A parameter may be named, and the result may write `from`**
-          // (ADR-views-3 D14): `fn(s: String, n: i64) -> String from s`. The
+          // (ADR-views-v4 D14): `fn(s: String, n: i64) -> String from s`. The
           // names serve the `from` and the reader; they are not part of the
           // type. `from` is greedy as the trailing words are.
           | KW_FN "(" params:code_params? ")" result:result_with_from?
@@ -2027,7 +2027,7 @@ grammar! {
         // `mut` parameter of a named function is lent. The word is recorded
         // as `is_mut` without `is_view`, which no other position writes.
         // `fn(keep r: Row)` keeps what it is handed (Part I §C, #1466); a
-        // plain parameter is lent (ADR-views-3 D2). `keep` is no reserved
+        // plain parameter is lent (ADR-views-v4 D2). `keep` is no reserved
         // word: `fn(keep: i64)` names a parameter `keep`, so the plain arm
         // follows.
         rule code_params -> Vec<(Option<Symbol>, Type, bool)> =
@@ -2049,7 +2049,7 @@ grammar! {
                 (n, t, false)
             }
 
-        // `s:` in `fn(s: String)` (ADR-views-3 D14). The `not(":")` keeps a
+        // `s:` in `fn(s: String)` (ADR-views-v4 D14). The `not(":")` keeps a
         // path's `::` (`fn(collections::BTreeSet[i64])`) a type.
         rule code_param_name -> Symbol = n:NAME ":" not(":") -> { n }
 
@@ -2884,7 +2884,7 @@ grammar! {
         // Names in written order and the shape in prefix order (a tuple's
         // width, `0` for a name). `(p)` is `p`.
         //
-        // **`mut` in front of one name is read and refused** (ADR-views-2 D1,
+        // **`mut` in front of one name is read and refused** (ADR-views-v4 D24,
         // `NK1307`): the grammar keeps the place for it, `parse_unrefined`
         // says the refusal once the parse is through.
         rule tuple_pattern -> (Vec<Symbol>, Vec<i64>) =
@@ -2937,7 +2937,7 @@ grammar! {
                 Stmt::While { cond, body }
             }
 
-        // **`mut` stands in front of the whole head** (ADR-views-2 D1), as it
+        // **`mut` stands in front of the whole head** (ADR-views-v4 D24), as it
         // stands in front of a `let`'s, and marks every name in it.
         rule for_stmt -> Stmt =
             KW_FOR mutable:kw_mut? head:let_names KW_IN
@@ -4487,7 +4487,7 @@ grammar! {
         // polarity). `crates/nikaia/tests/reserved_below.rs` is what found it,
         // by writing the word in every position a name may stand.
         rule KW_REF = "ref" not(ident)
-        // Not reserved (ADR-views-3 D13): only the mark before a parameter or
+        // Not reserved (ADR-views-v4 D13): only the mark before a parameter or
         // `self` in a parameter list.
         rule KW_KEEP = "keep" not(ident)
 

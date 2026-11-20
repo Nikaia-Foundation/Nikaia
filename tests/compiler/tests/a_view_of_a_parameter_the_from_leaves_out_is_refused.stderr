@@ -4,6 +4,6 @@ error[NK1335]: `second` hands back a view of `b`'s data, but its result says `fr
  3 | fn second(a: String, b: String) -> String from a {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+   = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-v4 D8).
    = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
 1 type error

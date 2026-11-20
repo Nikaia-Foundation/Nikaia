@@ -1,5 +1,5 @@
 // A part handed to a `mut` `Array[T]` changes the list, which a `let` without
-// `mut` does not allow (ADR-views-3 D11, #1209).
+// `mut` does not allow (ADR-views-v4 D11, #1209).
 
 fn zero(mut xs: Array[u32]) {
     for i in 0..<xs.len() { xs[i] = 0 }

@@ -8,6 +8,33 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1491] — 2026-11-20
+
+**The decisions on views live in one record, ADR-views-v4 (#2273)**
+- The decisions on views (keep and lent parameters, no ref, a result's source with from, a let mut view that gives back what it takes, for mut) live in one record, ADR-views-v4; ADR-views-1, -2 and -3 archived.
+
+## [0.0.1490] — 2026-11-20
+
+**Builders' changes (#2208, #2297, #2310, #2316, #2320, #2346, #2351)**
+- An entry, a cut or a map's value read by index out of what a lock handed out (`order.get()[0]`) is typed and keeps the lock's stamp, instead of being refused NK1245.
+- An entry of a package's own Rust saying `pub = true` is refused once with NK2508 at its line in `contracts/crate.contracts`, whether anything calls it or not.
+- Six of std's Rust tests (html, the default restart policy, the runtime's --runtime description) are test blocks of runtime/*.nika that call std's own Rust through ADR-rust-boundary-1 D24; a trait method that std implements for a std type (`supervisor::Backoff().decide(h)`) is callable from Nikaia
+- A trait method that std's contracts give a std type through an `[impl]` (`policy.decide(history)` on `supervisor::Backoff`) is found by the checker and lowered with the trait in scope; it drew NK1171 before.
+- `rt::Runtime`, `rt::UserCode`, `rt::Runtime::build` (widened to `pub(crate)`) and `describe` are described with `pub = false`; the test that `--runtime`'s line names the chosen I/O mechanism is a `test` block of `runtime/run_config.nika`.
+- `html::Raw::escaped` and `as_str` are described with `pub = false` in std.contracts; the test that escaped text becomes markup, and is not escaped twice, is a `test` block of `runtime/raw_sinks.nika`, and html.rs has no Rust test left.
+- The default restart policy's tests (the delay grows under the ceiling and a long cycle gives up; a healthy run starts a new cycle) are `test` blocks of `runtime/restart_policy.nika`, which hand `supervisor::Backoff` a written-out history; supervision.rs has no Rust test left.
+- A described Rust function whose parameter holds `ref String` inside a list or tuple (`&'static str` in Rust) takes only a `comptime` value: a table built at run time is NK1102, naming `comptime`, not an internal compiler error. abort.rs's unknown-line test is test blocks of `runtime/abort_lines.nika`, and map.rs's entry/retain/drain test is a test program.
+- Runtime tests: rt/pool.rs, rt/worker.rs and rt/mod.rs keep only the runtime-identity test (for #2319). The idle-pool and I/O-worker checks are test blocks of runtime/run_config.nika over std-private contracts (rt::pool::Pool, rt::io::generation, rt::worker::on_io_worker); the reaped-answer and pair checks are the programs rt_two_reads_at_once_each_get_their_own_answer and rt_a_pair_of_reads_answers_the_same_on_either_mechanism. The pool counts its rings in every build.
+- `task::yield_now()` (Part II 11.1): the calling task pauses once and resumes after the tasks already ready, so a long loop lets the others run. The `rt::pool` unit test of a wake arriving during a poll is the program `task_yield_now_resumes`.
+- `lower-std`: a `test` block of std's Nikaia that pauses (a `time::sleep`, an `fs::read`) is lowered as an `async fn` and listed through a shim that runs it with `block_on`; before, it lowered to a plain `fn` holding `.await`, which rustc refused (E0728). Which tests pause is `sync::unit_pausing`, the check a `sync` promise makes.
+- That throwing and catching an error that carries only its site requests no memory, and that a call that can fail holds no memory more when it succeeds, is a program counting `mem::allocations()` and `mem::usage()`, with a joined second error as the control; the Rust test that read the tail's layout is gone.
+- That a borrowed left side joined to an owned right side keeps the right's buffer is a program counting `mem::allocations()`, with a control that grows the buffer; the Rust test that compared addresses is gone.
+- That a lock's `update` appends without copying and `access` reads a large value in place is a program counting `mem::allocations()`, with `get` and a growing append as controls; the two Rust tests that compared addresses are gone.
+- NK1186: `use std::rt` in a program is refused, and the `std offers:` list leaves out modules whose every entry is `pub = false` (rt, abort); std's own sources still reach them.
+- A `String` parameter put into an array, `Vec` or tuple of views is accepted as `ref String` is (ADR-282 D2).
+- A proved read whose part is read at a function's tail no longer draws rustc's unused_parens warning.
+- A Rust function taking `&OsStr` is callable from Nikaia: its contract entry names such parameters in `os_text`, each `ref String` in the signature, and the call hands a `String` over as `std::ffi::OsStr::new(arg)` (Part III 13.5, 15.2). `let e = a.get(k) ?? b.get(k) ?? return` now binds a reference like the single get.
+
 ## [0.0.1489] — 2026-11-20
 
 **The decisions on database statements live in one record, ADR-database-v1 (#2272)**

@@ -1,4 +1,4 @@
-// `r` may point into `y`, whose source is inferred; changing `y` after `r`'s last use is free (ADR-views-3 D9).
+// `r` may point into `y`, whose source is inferred; changing `y` after `r`'s last use is free (ADR-views-v4 D9).
 fn longest(a: String, b: String) -> String {
     if a.len() >= b.len() {
         return a.trim()

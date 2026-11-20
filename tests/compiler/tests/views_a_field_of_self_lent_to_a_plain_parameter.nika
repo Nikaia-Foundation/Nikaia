@@ -1,4 +1,4 @@
-// ADR-views-3 D2, #1213: a plain parameter is lent, so a field of `self`,
+// ADR-views-v4 D2, #1213: a plain parameter is lent, so a field of `self`,
 // `ref self` or `mut self` handed to one stays where it is (NK1131 refused
 // it before).
 

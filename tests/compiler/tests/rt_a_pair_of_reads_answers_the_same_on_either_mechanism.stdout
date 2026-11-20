@@ -1,0 +1,8 @@
+blocking:
+first: eins
+second: zwei zwei
+missing: an error
+auto:
+first: eins
+second: zwei zwei
+missing: an error

@@ -1,0 +1,43 @@
+// An entry of the package's own Rust saying `pub = true` is refused at the
+// entry, once, whether anything calls it or not (ADR-rust-boundary-1 D26,
+// #2297): `words::thrice`, which no Nikaia code calls, is `NK2508` at its
+// line in `contracts/crate.contracts`; and `words::twice`, which `quad` calls
+// twice, is refused once there too, not again at its calls.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn checked(nikaia: String, tmp: String, case: String) throws {
+    let ran = process::run(nikaia, ["check", "src/demo.nika"]; dir: f"{tmp}/demo")
+    println(f"--- {case}: exit {ran.code}")
+    print(ran.stdout.replace(tmp, "TMP"))
+    print(ran.stderr.replace(tmp, "TMP"))
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/demo", tmp.clone()])
+    let demo = f"{tmp}/demo"
+    let entries = fs::read_to_string(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere)
+    let thrice: String = "\n[fn.\"words::thrice\"]\npub = true\nsync = true\ntouches = []\nlocks = false\nthreads = false\nsignature = \"(x: i64) -> i64\"\n"
+    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, f"{entries}{thrice}")
+    checked(nikaia.clone(), tmp.clone(), "uncalled")
+    fs::write(f"{demo}/contracts/crate.contracts", fs::Root::Anywhere, f"{entries.replace("pub = false", "pub = true")}{thrice}")
+    checked(nikaia, tmp.clone(), "called and uncalled")
+    process::run("rm", ["-rf", tmp])
+}

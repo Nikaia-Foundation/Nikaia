@@ -1,4 +1,4 @@
-// **Code a function runs from tasks at once crosses threads** (ADR-views-3
+// **Code a function runs from tasks at once crosses threads** (ADR-views-v4
 // D17, ADR-292 D6): at `user-parallelism = "yes"` its parameter is lowered
 // `Send + Sync`, by a function, a function handing it on, and a trait
 // method alike; before, rustc refused `par_iter().for_each(f)` (NK1343).

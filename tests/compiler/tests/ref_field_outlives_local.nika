@@ -1,5 +1,5 @@
 // A view of a local that is no text, handed back bare or in a struct's
-// field, moves the local into the caller's keep (ADR-views-3 D9, D10,
+// field, moves the local into the caller's keep (ADR-views-v4 D9, D10,
 // ADR-283 D23; #1218): nothing is copied and the view is read after the
 // call. Before, it was refused at the `return` (NK2304, #1155).
 struct L { n: i64 }

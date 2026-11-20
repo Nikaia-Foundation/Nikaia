@@ -271,7 +271,7 @@ impl EmitState {
                 continue
             }
             // A part read off a place into a `ref T?` slot goes inside its
-            // option (ADR-views-3 D5, #655).
+            // option (ADR-views-v4 D5, #655).
             let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part))
             out.push(before)
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)
@@ -416,7 +416,7 @@ impl EmitState {
             return
         }
         // **A part taken out of a `mut` parameter or a `let mut` view** to be
-        // given back (ADR-views-1 D3): the place keeps its type's empty value,
+        // given back (ADR-views-v4 D20): the place keeps its type's empty value,
         // or a stand-in, until an assignment gives it back. Nothing is copied.
         let taken: String? = self.facts.taken_parts.get(node_key(node))?.clone()
         if taken != null {
@@ -500,7 +500,7 @@ impl EmitState {
     /// language below's own.
     fn emit_core_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An element taken out of a `mut` place** to be given back
-        // (ADR-views-1 D3, #1208): the brackets are the place, and the
+        // (ADR-views-v4 D20, #1208): the brackets are the place, and the
         // element's empty value or stand-in stays there until it is.
         let taken: String? = self.facts.taken_parts.get(node_key(node))?.clone()
         if taken != null && !flow.in_a_place {

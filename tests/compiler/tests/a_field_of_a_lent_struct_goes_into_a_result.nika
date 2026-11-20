@@ -1,4 +1,4 @@
-// ADR-views-3 D5: a text field of a lent struct parameter, stored in a
+// ADR-views-v4 D5: a text field of a lent struct parameter, stored in a
 // result, is a view of that parameter; the caller's struct stays usable.
 
 struct Node {

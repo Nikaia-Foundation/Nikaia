@@ -1,4 +1,4 @@
-// ADR-views-3 D2 for options and function types (#1346): a `String?` read
+// ADR-views-v4 D2 for options and function types (#1346): a `String?` read
 // through `??` and a list read by code handed in are lent, not kept.
 fn show(p: String?) -> String {
     let f = p ?? return "none"

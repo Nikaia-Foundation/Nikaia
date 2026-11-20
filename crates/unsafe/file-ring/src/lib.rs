@@ -398,10 +398,10 @@ impl Ring {
     /// from being lost.
     pub fn park(
         &mut self,
-        since: u64,
+        since: i64,
         elsewhere: bool,
         limit: Option<std::time::Duration>,
-        generation: impl Fn() -> u64,
+        generation: impl Fn() -> i64,
     ) -> bool {
         self.arm_bell();
         // **A bell already answered is not waited for**, which is D3's *a hang

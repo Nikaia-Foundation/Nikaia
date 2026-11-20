@@ -1,0 +1,6 @@
+--- comptime table: exit 0
+running 2 tests
+test "an unknown line is not guessed at" (src/lines.nika:18) ... ok
+test "a known line is answered" (src/lines.nika:24) ... ok
+
+test result: ok. 2 passed; 0 failed

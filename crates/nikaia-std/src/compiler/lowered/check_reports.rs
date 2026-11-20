@@ -241,7 +241,7 @@ impl CheckState {
         if known { return; }
         let suffix = format!("::{}", name);
         let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (key, _) in world.library.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
+        for (key, contract) in world.library.functions.iter() { if contract.public && key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
         if keys.len() != 1 { return; }
         let key = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string());
         let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();

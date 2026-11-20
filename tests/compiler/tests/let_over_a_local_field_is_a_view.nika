@@ -1,5 +1,5 @@
 // A plain `let` over a `String` field of a local is a view of it
-// (ADR-views-3 D5, #1404): read and lent it works, handed to a keeper it is
+// (ADR-views-v4 D5, #1404): read and lent it works, handed to a keeper it is
 // refused with a `.clone()` help (NK1102), never by the language below
 // (NK1343).
 

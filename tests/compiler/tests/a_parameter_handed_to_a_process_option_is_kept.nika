@@ -1,5 +1,5 @@
 // A parameter handed on to an option of `process::run` that takes an owned
-// value is kept, not lent (ADR-views-3 D14, #1797): `env`, `env_remove` and
+// value is kept, not lent (ADR-views-v4 D14, #1797): `env`, `env_remove` and
 // `stdin` each reached rustc as a borrow before.
 use std::process
 

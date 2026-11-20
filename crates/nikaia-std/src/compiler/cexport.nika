@@ -105,7 +105,7 @@ fn cx_lent(contracts: ref Ledger, key: ref String, position: i64) -> bool {
 }
 
 /// Whether the function the ledger knows by `key` runs its parameter of code
-/// `param` from tasks at once (ADR-views-3 D17, the ledger's `at_once`).
+/// `param` from tasks at once (ADR-views-v4 D17, the ledger's `at_once`).
 fn cx_code_at_once(contracts: ref Ledger, key: ref String, param: ref String) -> bool {
     let contract = contracts.functions[key] ?? return false
     return contract.at_once.contains(param)
@@ -886,7 +886,7 @@ fn cx_parameter(ctx: ref CxCtx, contracts: ref Ledger, key: ref String, position
             params.c_params.push(f"{c_result} (*{param})({c_args.join(", ")}), void *{param}_ctx")
             passed.push(f"{local}_ctx")
             // **Lent to change what it captures unless the function runs it
-            // from tasks at once** (ADR-views-3 D17), as its declaration was
+            // from tasks at once** (ADR-views-v4 D17), as its declaration was
             // lowered: `&mut impl FnMut`, else `&impl Fn`.
             let mut binding: String = ""
             let mut lend: String = "&"

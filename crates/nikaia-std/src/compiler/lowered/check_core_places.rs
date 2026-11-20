@@ -936,6 +936,23 @@ pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &Che
     let first = check_core_expr(state, world, host, base, span);
     let key = check_core_expr(state, world, host, index, span);
     state.io_inside_a_door(world, &first, "this index", span);
+    let stamped = match first {
+        Ty::Named { ref name, ref args, .. } => name == SEEN && args.len() == 1,
+        _ => false,
+    };
+    let read = check_core_index_of(state, world, expr, base, index, &first.unseen(), key, writing, span);
+    if !stamped { return read; }
+    match read {
+        Ty::Unknown => Ty::Unknown,
+        Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(std::boxed::Box::new(a_seen_ty(held.unseen()))) },
+        _ => a_seen_ty(read.unseen()),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_index_of(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, base: &Expr, index: &Expr, first: &Ty, key: Ty, writing: bool, span: &Span) -> Ty {
     let mut on: Ty = first.clone();
     let through: Option<Ty> = state.seen_through(world, &first);
     if through.is_some() {

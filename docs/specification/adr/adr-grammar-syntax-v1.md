@@ -21,7 +21,7 @@ the grammar's own strings), D27 (`asset("…")`); [ADR-database-v1](adr-database
 [ADR-140](adr-140.md) D3 (a path is `::`); Part I 5.1 (Subject ; Config);
 [ADR-037](adr-037.md) (the target decides nothing about what a program means);
 [ADR-375](adr-375.md) D5 (a position carries its fact); [ADR-135](adr-135.md)
-D3 (a `///` run belongs to the item after it); [ADR-views-3](adr-views-3.md)
+D3 (a `///` run belongs to the item after it); [ADR-views-v4](adr-views-v4.md)
 D1-D4 (how a value is passed); Part II 10.8 (the grammar's vocabulary);
 winnow-grammar's ADR 26 (values in the grammar), the engine a grammar is
 lowered to

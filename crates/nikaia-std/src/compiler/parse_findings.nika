@@ -73,7 +73,7 @@ pub fn parse_findings_failure(error: ref Failure, source: String, stops_at: fn(r
 }
 
 /// **`mut` in front of one name inside a tuple pattern is not supported yet**
-/// (`NK1307`, ADR-views-2 D1, section 6): refused now, possible later, and not
+/// (`NK1307`, ADR-views-v4 D24, section 6): refused now, possible later, and not
 /// refused on purpose. `at` is the byte the `mut` starts at.
 pub fn parse_findings_mut_name_in_a_tuple(at: i64) -> Finding {
     let span = Span { start: at as u32, end: (at + 3) as u32 }

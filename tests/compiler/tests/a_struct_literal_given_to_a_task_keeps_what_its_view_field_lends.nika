@@ -1,5 +1,5 @@
 // A struct literal that leaves the function takes along what its view
-// fields lend (ADR-views-3 D5, #1225): given to a task, it keeps the
+// fields lend (ADR-views-v4 D5, #1225): given to a task, it keeps the
 // parameter it views, so the caller may not use it after the call.
 struct L { n: i64, tag: String }
 struct W { own: ref L, k: i64 }

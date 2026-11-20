@@ -1,5 +1,5 @@
 // A `return` inside an expression hands a `keep` parameter back as a
-// `return` statement does (ADR-views-3 D2, #2285).
+// `return` statement does (ADR-views-v4 D2, #2285).
 
 fn moved(keep line: String) -> String {
     let m = line.find(";") ?? return line

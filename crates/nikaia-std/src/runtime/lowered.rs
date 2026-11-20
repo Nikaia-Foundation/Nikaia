@@ -27,15 +27,38 @@ use nikaia_std::seq::Join as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextQuoted as _;
 #[allow(unused_imports)]
+use nikaia_std::abort;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
 use nikaia_std::fs;
 #[allow(unused_imports)]
+use nikaia_std::html;
+#[allow(unused_imports)]
+use nikaia_std::mem;
+#[allow(unused_imports)]
+use nikaia_std::process;
+#[allow(unused_imports)]
+use nikaia_std::rt;
+#[allow(unused_imports)]
+use nikaia_std::supervisor;
+#[allow(unused_imports)]
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
+
+#[allow(unsafe_code)]
+mod abort_lines_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/abort_lines.rs");
+}
+#[allow(unused_imports)]
+pub use abort_lines_lowered::*;
 
 #[allow(unsafe_code)]
 mod cli_lowered {
@@ -148,6 +171,17 @@ mod raw_sinks_lowered {
 pub use raw_sinks_lowered::*;
 
 #[allow(unsafe_code)]
+mod restart_policy_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/restart_policy.rs");
+}
+#[allow(unused_imports)]
+pub use restart_policy_lowered::*;
+
+#[allow(unsafe_code)]
 mod run_config_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -213,6 +247,7 @@ mod time_spans_lowered {
 #[allow(unused_imports)]
 pub use time_spans_lowered::*;
 
+pub mod abort_lines {}
 pub mod cli {
     #[allow(unused_imports)]
     pub use super::{an};
@@ -249,6 +284,7 @@ pub mod raw_sinks {
     #[allow(unused_imports)]
     pub use super::{is_plain};
 }
+pub mod restart_policy {}
 pub mod run_config {
     #[allow(unused_imports)]
     pub use super::{Method, Config, ConfigRead, config_default, config_keys, method_named, method_spelled, config_read};
@@ -278,7 +314,11 @@ pub mod time_spans {
 /// name, as `nikaia test --std` runs them.
 pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
+    all.extend(abort_lines_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(env_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(hash_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(raw_sinks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(restart_policy_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(run_config_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(text_float_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all
@@ -321,4 +361,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "ad8f3c4a44a6a9bbad3d04f0428698ea1cd673f32cd3bd0b39c15c5aa3df7ee5";
+pub const LOWERED_DIGEST: &str = "6901c97a42dce07ca7cfaca12f9fad00fd5b45a7284612ce01d7918b1c25315a";
