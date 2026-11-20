@@ -280,7 +280,21 @@ pub(crate) fn check_core_method_text_local(state: &CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, name: &str, span: &Span) {
+pub(crate) fn check_core_method_a_field_of(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, name: &str) -> bool {
+    match on {
+        Ty::Named { name: owner, .. } => {
+            let fields: Vec<FieldContract> = match state.fields_of(world, owner) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            for field in fields.iter() { if field.name == name { return true; } }
+            false
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, span: &Span) {
+    if check_core_method_a_field_of(&state, world, on, name) { return; }
     let root: String = match state.rooted_at(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut count = 0;
     let mut all = true;
@@ -442,7 +456,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let holding = (name == "update" || name == "access") && locked_content_of(&on).is_some();
     let outer_inside = state.inside_a_door;
     state.inside_a_door = holding;
-    check_core_method_changes(state, world, receiver, &name, span);
+    check_core_method_changes(state, world, &on, receiver, &name, span);
     state.a_copy_under_another_name(world, receiver, method, args, span);
     state.a_call_on_a_literal_that_adds_nothing(world, receiver, method, args, span);
     state.a_text_form_of_text(world, expr, receiver, method, args, &on, span);
