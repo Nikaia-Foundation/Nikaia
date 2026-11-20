@@ -34,6 +34,32 @@ pub struct UnwrittenCheck {
     pub site: Span,
 }
 
+/// **A raw sink a parameter reaches** (ADR-raw-sinks-1 D2, #2354): in the
+/// function's body, or in a function it hands the parameter to. A call that
+/// hands it data from outside is reported there, `NK1308`.
+pub struct ParamSink {
+    /// The parameter's place in the function's order (`arguments_in_order`),
+    /// -1 for a sink of the body itself before it is carried.
+    pub index: i64,
+    /// `markup`, `program` or `path`.
+    pub kind: String,
+    /// The sink as the message names it: the program `process::run` runs.
+    pub sink: String,
+    /// For a path, its operation: `read`, `write`, `remove` or `anywhere`.
+    pub operation: String,
+    /// For a path, whether the part is the root's (D11).
+    pub root_part: bool,
+    /// The guard where the value arrives that passes it: `html::is_plain`,
+    /// `path` (`path::is_component` or `path::is_below`, D14), "" for none.
+    pub guard: String,
+}
+
+impl ParamSink {
+    fn same(ref self, other: ref ParamSink) -> bool {
+        return self.index == other.index && self.kind == other.kind && self.sink == other.sink && self.operation == other.operation && self.root_part == other.root_part && self.guard == other.guard
+    }
+}
+
 /// **An index that data from outside the program reaches, and what became
 /// of it** (ADR-396 D5), and likewise an operation (D7), for `--bounds`:
 /// where it stands - the index, the operation, or the call that hands it

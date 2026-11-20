@@ -18,6 +18,13 @@ pub struct ProverScope {
     /// its value reads (`io::read_to_string`, `Request::query`), for the
     /// message of an index it reaches. Read only for a name `tainted` holds.
     pub sources: collections::BTreeMap[String, String],
+    /// **Names whose value reads a parameter** (ADR-raw-sinks-1 D2, #2354):
+    /// a parameter itself and what a binding makes of one, so that a raw
+    /// sink it reaches is asked at each call, of the argument (ADR-396 D1).
+    pub carried: collections::BTreeSet[String],
+    /// **The parameter each name of `carried` reads**, as `sources` names
+    /// the source of a name of `tainted`.
+    pub carried_from: collections::BTreeMap[String, String],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -111,6 +118,8 @@ impl ProverScope {
             ints: collections::BTreeSet(),
             tainted: collections::BTreeSet(),
             sources: collections::BTreeMap(),
+            carried: collections::BTreeSet(),
+            carried_from: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -141,6 +150,14 @@ impl ProverScope {
         return scope
     }
 
+    /// **`name` reads the parameter `from`** where it is one (#2354),
+    /// bound after `rebind`.
+    fn carry(ref mut self, name: ref String, from: ref String?) {
+        let parameter = from ?? return
+        self.carried.insert(name.clone())
+        self.carried_from.insert(name.clone(), parameter.clone())
+    }
+
     /// `name` is bound again: nothing known about the old binding holds.
     fn rebind(ref mut self, arena: ref logic::TermArena, name: ref String) {
         // **The paths of fields from it go with it** (ADR-306 D17).
@@ -166,6 +183,8 @@ impl ProverScope {
         self.ints.remove(name)
         self.ints.remove(length)
         self.tainted.remove(name)
+        self.carried.remove(name)
+        self.carried_from.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
         self.locals.insert(name.clone())
@@ -519,6 +538,8 @@ impl ProverScope {
         let mut scope = ProverScope::unknown()
         scope.tainted = self.tainted.clone()
         scope.sources = self.sources.clone()
+        scope.carried = self.carried.clone()
+        scope.carried_from = self.carried_from.clone()
         scope.locals = self.locals.clone()
         scope.maps = self.maps.clone()
         return scope

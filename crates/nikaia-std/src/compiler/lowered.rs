@@ -3715,7 +3715,7 @@ pub mod prover_calls {
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
+    pub use super::{UnwrittenCheck, ParamSink, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "2ceb5e76d8f8b33579615f66bd352eed3547c01e0b19ab2016b7ea1da41aad51";
+pub const LOWERED_DIGEST: &str = "8fb04a798f85ddb03213e3d081209d2c90f62911e37b86c6958e2144d893bde2";

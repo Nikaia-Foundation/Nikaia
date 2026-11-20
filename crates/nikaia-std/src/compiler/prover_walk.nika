@@ -249,6 +249,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             for arg in args {
                 let arg_name = words.resolve(arg.name).clone()
                 scope.locals.insert(arg_name.clone())
+                scope.carry(arg_name, arg_name.clone())
                 let ty = words.resolve(arg.ty.name)
                 if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(arg_name.clone())
@@ -293,6 +294,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             for option in config {
                 let option_name = words.resolve(option.name).clone()
                 scope.locals.insert(option_name.clone())
+                scope.carry(option_name, option_name.clone())
                 let ty = words.resolve(option.ty.name)
                 if option.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(option_name.clone())
@@ -450,6 +452,10 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                 Expr::Variable(name, _) => {
                     let n = words.resolve(name).clone()
                     let tainted = from_outside(value, scope.tainted, words, library, walk.state, holes_of) || (op != null && scope.tainted.contains(n))
+                    let mut carried = carried_param(value, scope, words, library, walk.state, holes_of)
+                    if carried == null && op != null {
+                        carried = scope.carried_from[n]?.clone()
+                    }
                     if !prover_assigned(walk, n, op, value, span, scope, words) {
                         // **An unreadable value of a followed whole number is
                         // a fresh loose name** (ADR-361 D9, #2108).
@@ -471,8 +477,9 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                         if source != null {
                             scope.sources.insert(n.clone(), source ?? "")
                         }
-                        scope.tainted.insert(n)
+                        scope.tainted.insert(n.clone())
                     }
+                    scope.carry(n, carried)
                 },
                 else => {},
             }
@@ -758,10 +765,12 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     if tainted {
         source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state, holes_of) ?? ""
     }
+    let carried = carried_param(value, scope, words, library, walk.state, holes_of)
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
         scope.maps.remove(n)
+        scope.carry(n, carried)
         if tainted {
             scope.tainted.insert(n.clone())
             scope.loose.insert(n.clone())
@@ -1519,10 +1528,12 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], m
     if !changed.is_empty() {
         scope.exact = false
     }
+    let carried = carried_param(iter, scope, words, library, walk.state, holes_of)
     for binding in bindings {
         let n = words.resolve(binding).clone()
         inner.rebind(walk.arena, n)
         inner.maps.remove(n)
+        inner.carry(n, carried)
         if tainted {
             let source = outside_source(iter, scope.tainted, scope.sources, words, library, walk.state, holes_of)
             if source != null {
@@ -2360,7 +2371,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
             let callee = prover_called(func, words, unaliased)
             if callee != null {
                 prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, unaliased, written_of, condition)
-                prover_raw_sink(walk, callee ?? "", args, config, span, scope, words, library, holes_of, ask, written_of)
+                prover_raw_sink(walk, callee ?? "", args, config, span, scope, at, program, words, library, holes_of, ask, written_of)
             }
         },
         else => {},
@@ -2671,8 +2682,8 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 /// names the `[allow]` key of the operation and the source
 /// (`untrusted-paths-read = ["args"]`, D15), by which the build lets it
 /// through (`project_check_let_raw_sinks_through`).
-fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
-    if walk.state.collecting || walk.state.in_test {
+fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    if walk.state.in_test {
         return
     }
     if callee == "html::Raw" {
@@ -2680,28 +2691,16 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
         for arg in args {
             raw_sink_parts(arg, holes_of, parts)
         }
+        let sink = ParamSink { index: -1, kind: "markup", sink: "the markup of `html::Raw`, written to the page as it is", operation: "", root_part: false, guard: "html::is_plain" }
         for part in parts {
-            if !raw_sink_outside(part, scope, words, library, walk.state, holes_of) || raw_sink_guarded(walk, part, "html::is_plain", scope, words, ask) {
-                continue
-            }
-            let first = written_of(part)
-            let source = outside_source(part, scope.tainted, scope.sources, words, library, walk.state, holes_of)
-            let notes: Vec[String] = [outside_note(first, source), "Markup from outside can carry a script that runs in the page of whoever opens it."]
-            let help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
-            walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches the markup of `html::Raw`, written to the page as it is, and it comes from outside the program.", notes: notes, help: help, warning: false, labels: [] })
+            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec[Expr] = []
         raw_sink_parts(args[0], holes_of, parts)
+        let sink = ParamSink { index: -1, kind: "program", sink: "the program `process::run` runs", operation: "", root_part: false, guard: "" }
         for part in parts {
-            if !raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
-                continue
-            }
-            let first = written_of(part)
-            let source = outside_source(part, scope.tainted, scope.sources, words, library, walk.state, holes_of)
-            let notes: Vec[String] = [outside_note(first, source), "No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file."]
-            let help = "Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
-            walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches the program `process::run` runs, and it comes from outside the program.", notes: notes, help: help.clone(), warning: false, labels: [] })
+            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, arg) in args.iter().enumerate() {
@@ -2719,9 +2718,6 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                     root_outside = true
                 }
             }
-            if !anywhere && !root_outside {
-                continue
-            }
             let root = written_of(arg)
             // D11: the root's own parts, under the call's one operation, or
             // under all three where it has two (`copy`, `rename`).
@@ -2729,11 +2725,12 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             if i > 1 && raw_sink_operation(callee, 1, config, words, written_of) != whole {
                 whole = "anywhere"
             }
+            let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
             for part in root_parts {
-                if !raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
-                    continue
-                }
-                raw_sink_path_finding(walk, part, f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", whole, true, span, scope, words, library, holes_of, written_of)
+                raw_sink_part(walk, root_sink, root_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+            }
+            if !anywhere && !root_outside {
+                continue
             }
             for j in 0..<i {
                 let mut parts: Vec[Expr] = []
@@ -2743,19 +2740,138 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 // `Anywhere` it is relative to the working directory, which
                 // no guard proves.
                 let joined = raw_sink_joined(args[j])
+                let mut guard = String()
+                if joined && !root_outside {
+                    guard.push_str("path")
+                }
                 let operation = raw_sink_operation(callee, j, config, words, written_of)
+                let sink = ParamSink { index: -1, kind: "path", sink: f"the path `{callee}` opens under `{root}`, which may name any file", operation: operation, root_part: false, guard: guard }
                 for part in parts {
-                    if !raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
-                        continue
-                    }
-                    if joined && !root_outside && (raw_sink_guarded(walk, part, "path::is_component", scope, words, ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, ask)) {
-                        continue
-                    }
-                    raw_sink_path_finding(walk, part, f"the path `{callee}` opens under `{root}`, which may name any file", operation, false, span, scope, words, library, holes_of, written_of)
+                    raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
                 }
             }
         }
+    } else {
+        raw_sink_through(walk, callee, args, config, span, scope, at, program, words, library, holes_of, ask, written_of)
     }
+}
+
+/// **A call of a function whose parameters reach a raw sink** (ADR-raw-sinks-1
+/// D2, ADR-396 D1, #2354): each argument at such a parameter is a part of
+/// that sink here, asked as at the sink itself, and the message names the
+/// function called.
+fn raw_sink_through(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    if scope.locals.contains(callee) {
+        return
+    }
+    let sinks = walk.state.known_sinks[callee]?.clone() ?? return
+    let function = free_function(program, words, callee) ?? return
+    let all = arguments_in_order(function, args, config, words)
+    for sink in sinks {
+        if sink.index < 0 || sink.index >= all.len() {
+            continue
+        }
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(all[sink.index], holes_of, parts)
+        let shown = f"{sink.sink}, through `{callee}`"
+        for part in parts {
+            raw_sink_part(walk, sink, shown, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
+    }
+}
+
+/// **One part of a raw sink's text** (ADR-raw-sinks-1 D2): from outside and
+/// not passed by the sink's guard, reported in pass 2 (`NK1308`, the sink
+/// named as `shown`); read from a parameter of the free function it stands
+/// in, carried to that function's callers in pass 1 (#2354).
+fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, part: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    if raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
+        if walk.state.collecting || raw_sink_passes(walk, sink.guard, part, scope, words, ask) {
+            return
+        }
+        raw_sink_finding(walk, sink, shown, part, span, scope, words, library, holes_of, written_of)
+        return
+    }
+    if !walk.state.collecting || !at.free {
+        return
+    }
+    match part {
+        Expr::Variable(name, _) => {
+            if scope.ints.contains(words.resolve(name)) {
+                return
+            }
+        },
+        else => {},
+    }
+    let from = carried_param(part, scope, words, library, walk.state, holes_of) ?? return
+    if raw_sink_passes(walk, sink.guard, part, scope, words, ask) {
+        return
+    }
+    let owner = carrying_function(at.function) ?? return
+    let function = free_function(program, words, owner) ?? return
+    let mut index = -1
+    for (k, name) in function.params.iter().enumerate() {
+        if name == from && index < 0 {
+            index = k
+        }
+    }
+    if index < 0 {
+        return
+    }
+    let carried = ParamSink { index: index, kind: sink.kind.clone(), sink: sink.sink.clone(), operation: sink.operation.clone(), root_part: sink.root_part, guard: sink.guard.clone() }
+    let mut found = walk.state.sinks.remove(owner) ?? []
+    let mut known = false
+    for one in found {
+        if one.same(carried) {
+            known = true
+        }
+    }
+    if !known {
+        found.push(carried)
+    }
+    walk.state.sinks.insert(owner, found)
+}
+
+/// The parameter `expr` reads, by `scope.carried` (#2354), as
+/// `outside_source` names the source of outside data.
+fn carried_param(expr: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+    if scope.carried.is_empty() || !from_outside(expr, scope.carried, words, library, state, holes_of) {
+        return null
+    }
+    return outside_source(expr, scope.carried, scope.carried_from, words, library, state, holes_of)
+}
+
+/// Whether the guard a sink admits (`html::is_plain`, or `path` for
+/// `path::is_component` or `path::is_below`) proves `part` here.
+fn raw_sink_passes(mut walk: ProverWalk, guard: ref String, part: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> bool {
+    if guard == "" {
+        return false
+    }
+    if guard == "path" {
+        return raw_sink_guarded(walk, part, "path::is_component", scope, words, ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, ask)
+    }
+    return raw_sink_guarded(walk, part, guard, scope, words, ask)
+}
+
+/// **Data from outside at a raw sink, reported** (`NK1308`): the sink named
+/// as `shown`, the notes and the help by its kind.
+fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, part: ref Expr, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, written_of: fn(ref Expr) -> String sync) {
+    if sink.kind == "path" {
+        raw_sink_path_finding(walk, part, shown, sink.operation, sink.root_part, span, scope, words, library, holes_of, written_of)
+        return
+    }
+    let first = written_of(part)
+    let source = outside_source(part, scope.tainted, scope.sources, words, library, walk.state, holes_of)
+    let mut notes: Vec[String] = [outside_note(first, source)]
+    let mut help: String = ""
+    if sink.kind == "markup" {
+        notes.push("Markup from outside can carry a script that runs in the page of whoever opens it.")
+        help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
+    } else {
+        notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
+        help = "Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
+    }
+    walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches {shown}, and it comes from outside the program.", notes: notes, help: help, warning: false, labels: [] })
 }
 
 /// Whether a part of a raw sink's text comes from outside the program and is
