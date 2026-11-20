@@ -1,0 +1,6 @@
+cold: app ledger inferred, lib ledger inferred
+built 0
+note: 1 pub function never pauses and does not promise it: `twice`
+  help: write `sync` after the result, and callers in other packages can rely on it
+wrapper again: none inferred; says the same true
+warm: none inferred; says the same true
