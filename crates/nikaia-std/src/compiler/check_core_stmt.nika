@@ -1451,6 +1451,13 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.text_positions.insert(id, position ?? CheckTextPosition { text: "", step: -1 })
         }
     }
+    // **A position, or a match, keeps the text it belongs to** (ADR-374 D5).
+    if names.len() == 1 && shape.len() == 0 {
+        let held: CheckPosText? = check_pos_text_of(state, world, value)
+        if held != null {
+            state.facts.pos_texts.insert(id, held ?? return check_core_stmt_unit())
+        }
+    }
     // **A `'…'` nothing typed is typed by its uses** (ADR-320 D8, as a
     // number is, ADR-285 D23): a `u8` where they ask one.
     if ty == null && !mutable {
@@ -2015,6 +2022,9 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
     // **An assignment keeps what it is given** (ADR-282 D3, ADR-293 D28).
     if op == null {
         check_core_a_kept_lambda(state, world, host, into, value, span)
+    }
+    if op == null {
+        check_pos_assigned(state, world, target, value, span)
     }
     if op == null && state.mixed_text_assigned(world, target, value, found) {
         return check_core_stmt_unit()

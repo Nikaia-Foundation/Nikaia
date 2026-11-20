@@ -1,0 +1,9 @@
+// A move names exactly one unit (ADR-374 D4): none, or two, is NK1285 (#743).
+use std::text
+
+fn main() throws {
+    let t = "abc"
+    let p = t.start().forward() ?? return
+    let q = t.start().forward(scalars: 1, bytes: 1) ?? return
+    println(t.between(p, q))
+}

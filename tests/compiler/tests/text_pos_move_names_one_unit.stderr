@@ -1,0 +1,17 @@
+error[NK1285]: `t.start().forward(…)` names no unit: a position moves in scalars, in graphemes or in bytes, exactly one of them.
+  --> tests/text_pos_move_names_one_unit.nika:6:5
+   |
+ 6 |     let p = t.start().forward() ?? return
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A scalar, a grapheme and a byte are steps of different lengths, so a move says which it takes (ADR-374 D4).
+   = help: Write one of `t.start().forward(scalars: n)`, `t.start().forward(graphemes: n)` or `t.start().forward(bytes: n)`.
+error[NK1285]: `t.start().forward(…)` names more than one unit: a position moves in scalars, in graphemes or in bytes, exactly one of them.
+  --> tests/text_pos_move_names_one_unit.nika:7:5
+   |
+ 7 |     let q = t.start().forward(scalars: 1, bytes: 1) ?? return
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A scalar, a grapheme and a byte are steps of different lengths, so a move says which it takes (ADR-374 D4).
+   = help: Write one of `t.start().forward(scalars: n)`, `t.start().forward(graphemes: n)` or `t.start().forward(bytes: n)`.
+2 type errors

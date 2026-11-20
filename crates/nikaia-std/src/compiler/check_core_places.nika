@@ -1233,6 +1233,208 @@ fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text
     state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Cut at a match with `{shown}.before(m.start)`, `{shown}.after(m.end)` or `{shown}.between(p, q)`; or say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
 }
 
+/// **The text a position is taken from, as a place** (ADR-374 D5): a name, or
+/// a field read off one, as `check_core_places_text_key` writes it. Anything
+/// else, a call's result, is no place the compiler can name again: `null`.
+fn check_pos_text_named(state: ref CheckState, world: ref CheckWorld, text: ref Expr) -> CheckPosText? sync {
+    let mut root: ref Expr = text
+    let mut walking = true
+    while walking {
+        match root {
+            Expr::Field { base, .. } => { root = base },
+            else => { walking = false },
+        }
+    }
+    let named = match root {
+        Expr::Variable(name, _) => state.binding(world.words.resolve(name)) != null,
+        else => false,
+    }
+    if !named {
+        return null
+    }
+    return CheckPosText { key: check_core_places_text_key(state, world, text), text: text.clone(), chosen: false }
+}
+
+/// Two texts a position may belong to, each a branch's: the one text where
+/// both are it, else a text chosen at run time (`ref(a | b)`).
+fn check_pos_texts_either(one: ref CheckPosText, other: ref CheckPosText) -> CheckPosText sync {
+    return CheckPosText { key: one.key.clone(), text: one.text.clone(), chosen: one.chosen || other.chosen || one.key != other.key }
+}
+
+/// The text the position of a block of one expression belongs to, `{ p }`.
+fn check_pos_block_text(state: ref CheckState, world: ref CheckWorld, block: ref Block) -> CheckPosText? sync {
+    if block.stmts.len() != 1 {
+        return null
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(value) => check_pos_text_of(state, world, value),
+        else => null,
+    }
+}
+
+/// **Which text a position, or a match, belongs to** (ADR-374 D5, Part I
+/// 6.6): the text `t.start()`, `t.end()`, `t.find(…)` and `t.rfind(…)` are
+/// called on and the one a regex searched, a match's `start` and `end`, a move
+/// of a position, a `let` bound to one, and either branch of an `if` or a
+/// `??`. A position of anything else (a parameter, a call's result) belongs to
+/// a text this function cannot name: `null`.
+fn check_pos_text_of(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> CheckPosText? sync {
+    match expr {
+        Expr::MethodCall { receiver, args, .. } => {
+            let key: String = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? return null
+            if key == "str::start" || key == "str::end" || key == "str::find" || key == "str::rfind" {
+                return check_pos_text_named(state, world, receiver)
+            }
+            if key == "regex::Regex::find" && args.len() == 1 {
+                return check_pos_text_named(state, world, args[0])
+            }
+            if key == "text::Pos::forward" || key == "text::Pos::back" {
+                return check_pos_text_of(state, world, receiver)
+            }
+            return null
+        },
+        Expr::Field { base, name, .. } => {
+            let field = world.words.resolve(name)
+            if field == "start" || field == "end" {
+                return check_pos_text_of(state, world, base)
+            }
+            return null
+        },
+        Expr::SafeField { base, name, .. } => {
+            let field = world.words.resolve(name)
+            if field == "start" || field == "end" {
+                return check_pos_text_of(state, world, base)
+            }
+            return null
+        },
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name)) ?? return null
+            let kept = state.facts.pos_texts[local.id] ?? return null
+            return kept.clone()
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let found: CheckPosText = check_pos_text_of(state, world, value) ?? return null
+            // A fallback that never comes back: the value is the left side's.
+            if check_core_places_leaves(fallback) || state.exits(world, fallback) {
+                return found
+            }
+            let other: CheckPosText = check_pos_text_of(state, world, fallback) ?? return null
+            return check_pos_texts_either(found, other)
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise: ref Block = else_branch ?? return null
+            let one: CheckPosText = check_pos_block_text(state, world, then_branch) ?? return null
+            let other: CheckPosText = check_pos_block_text(state, world, otherwise) ?? return null
+            return check_pos_texts_either(one, other)
+        },
+        else => return null,
+    }
+}
+
+/// **A position moves, cuts and searches only in its own text** (ADR-374
+/// D4, D5): a move names exactly one unit (`NK1285`) and is handed the text
+/// its position belongs to; a cut or a search at a position of another text,
+/// or of a text chosen at run time, is `NK1214`.
+fn check_pos_call(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) sync {
+    let key: String = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? return
+    if key == "text::Pos::forward" || key == "text::Pos::back" {
+        check_pos_move(state, world, expr, receiver, key, config, span)
+        return
+    }
+    if key == "str::before" || key == "str::after" || key == "str::between" || key == "str::split_at" {
+        for arg in args {
+            check_pos_in_text(state, world, receiver, arg, "cut", span)
+        }
+    }
+    if key == "str::find" {
+        for option in config {
+            if world.words.resolve(option.name) == "from" {
+                check_pos_in_text(state, world, receiver, option.value, "searched", span)
+            }
+        }
+    }
+}
+
+/// **`p.forward(scalars: n)` and the rest** (ADR-374 D4): one unit, and the
+/// text `p` belongs to, which the move walks below the language.
+fn check_pos_move(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, key: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
+    let way = if key == "text::Pos::forward" { "forward" } else { "back" }
+    let shown = written_expression(world.words, receiver)
+    let mut units = 0
+    for option in config {
+        let unit = world.words.resolve(option.name)
+        if unit == "scalars" || unit == "graphemes" || unit == "bytes" {
+            units += 1
+        }
+    }
+    if units != 1 {
+        let said = if units == 0 { "names no unit" } else { "names more than one unit" }
+        state.findings.push(check_refusal("NK1285", span, f"`{shown}.{way}(…)` {said}: a position moves in scalars, in graphemes or in bytes, exactly one of them.", ["A scalar, a grapheme and a byte are steps of different lengths, so a move says which it takes (ADR-374 D4)."], f"Write one of `{shown}.{way}(scalars: n)`, `{shown}.{way}(graphemes: n)` or `{shown}.{way}(bytes: n)`."))
+        return
+    }
+    let help: String = "Take the position from the text the move walks: `t.start()`, `t.end()` or a match of `t.find(…)`, bound by a `let` in this function; a scanner that keeps its place holds a `text::Cursor`."
+    let notes: Vec[String] = ["A position is a byte offset below the language: a move is handed the text the position came from, which the compiler follows through names and branches (ADR-374 D4, D5)."]
+    let held: CheckPosText? = check_pos_text_of(state, world, receiver)
+    if held == null {
+        state.findings.push(check_refusal("NK1214", span, f"`{shown}` moves {way}, but which text it belongs to is not known here: a position moves only in the text it was taken from.", notes, help))
+        return
+    }
+    let text: CheckPosText = held ?? return
+    if text.chosen {
+        state.findings.push(check_refusal("NK1214", span, f"`{shown}` moves {way}, but it is a position of a text chosen at run time: a position moves only in one text.", notes, help))
+        return
+    }
+    // The text's name must still stand for that text here.
+    let now: CheckPosText? = check_pos_text_named(state, world, text.text)
+    let again: String = now?.key?.clone() ?? ""
+    if again != text.key {
+        state.findings.push(check_refusal("NK1214", span, f"`{shown}` moves {way}, but `{written_expression(world.words, text.text)}`, the text it belongs to, is another text here.", notes, help))
+        return
+    }
+    state.facts.pos_moves.insert(id_of(expr) as i64, text.text.clone())
+}
+
+/// **A text is cut and searched at its own positions** (ADR-374 D5): one of
+/// another text, or of a text chosen at run time, is `NK1214`. A position the
+/// compiler cannot follow keeps the cut's check below (D8 drops it once every
+/// position is followed).
+fn check_pos_in_text(mut state: CheckState, world: ref CheckWorld, text: ref Expr, position: ref Expr, doing: ref String, span: ref Span) sync {
+    let held: CheckPosText = check_pos_text_of(state, world, position) ?? return
+    let shown = written_expression(world.words, text)
+    let at = written_expression(world.words, position)
+    let notes: Vec[String] = ["A position is a boundary in exactly one text, the one it was taken from; in another it may fall inside a scalar, or read the wrong place (ADR-374 D5)."]
+    let help: String = f"Take the position from `{shown}` itself: `{shown}.start()`, `{shown}.end()`, or a match of `{shown}.find(…)`."
+    if held.chosen {
+        state.findings.push(check_refusal("NK1214", span, f"`{shown}` is {doing} at `{at}`, a position of a text chosen at run time.", notes, help))
+        return
+    }
+    let own: CheckPosText = check_pos_text_named(state, world, text) ?? return
+    if own.key != held.key {
+        state.findings.push(check_refusal("NK1214", span, f"`{shown}` is {doing} at `{at}`, a position of `{written_expression(world.words, held.text)}`, another text.", notes, help))
+    }
+}
+
+/// **A `let mut` position stays in its text** (ADR-374 D5): assigned a
+/// position of another text, of one chosen at run time, or of one the
+/// compiler cannot follow, it is `NK1214`, since a move or a cut met before
+/// in a loop has been handed the first text.
+fn check_pos_assigned(mut state: CheckState, world: ref CheckWorld, target: ref Expr, value: ref Expr, span: ref Span) sync {
+    let local: CheckLocal = match target {
+        Expr::Variable(name, _) => state.binding(world.words.resolve(name)) ?? return,
+        else => return,
+    }
+    let held: CheckPosText = state.facts.pos_texts.get(local.id)?.clone() ?? return
+    let given: CheckPosText? = check_pos_text_of(state, world, value)
+    let given_key: String = given?.key?.clone() ?? ""
+    let chosen: bool = given?.chosen ?? true
+    if given != null && !chosen && given_key == held.key {
+        return
+    }
+    let of = written_expression(world.words, held.text)
+    let which = if given == null { "whose text is not known here" } else if chosen { "of a text chosen at run time" } else { f"of `{written_expression(world.words, (given ?? return).text)}`" }
+    state.findings.push(check_refusal("NK1214", span, f"`{local.name}` holds positions of `{of}`, and is given `{written_expression(world.words, value)}`, a position {which}.", ["A name keeps the text its positions belong to, which every move and cut of it is handed (ADR-374 D5)."], f"Give `{local.name}` positions of `{of}` only: its `start()`, `end()`, a match of `{of}.find(…)` or a move of one."))
+}
+
 /// **An index into what a lock handed out** (ADR-281 D22, D23, #2208): a
 /// `Seen[T]` is indexed as the `T` it stamps, and what the index reads keeps
 /// the stamp, inside a nullable where a map's read answers one.
