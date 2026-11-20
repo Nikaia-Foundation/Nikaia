@@ -234,6 +234,9 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 // receiver in for `self`; not on a private field of a `pub`
                 // method, which its callers cannot see (D16).
                 let lent = receiver ?? Receiver { is_ref: true, is_mut: true, is_keep: false }
+                if !lent.is_mut {
+                    scope.fixed.insert("self")
+                }
                 if !lent.is_mut && has_owner {
                     let mut fields: collections::BTreeSet[String] = collections::BTreeSet()
                     prover_parameter_fields(walk, scope, fields, "self", owner ?? "", true, program, words)
@@ -250,6 +253,9 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 let arg_name = words.resolve(arg.name).clone()
                 scope.locals.insert(arg_name.clone())
                 scope.carry(arg_name, arg_name.clone())
+                if !arg.mutable {
+                    scope.fixed.insert(arg_name.clone())
+                }
                 let ty = words.resolve(arg.ty.name)
                 if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(arg_name.clone())
@@ -817,6 +823,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if rooted {
             scope.roots.insert(n.clone(), root.clone())
             scope.root_joins.insert(n.clone(), joins.clone())
+        }
+        if !mutable {
+            scope.fixed.insert(n.clone())
         }
     }
     // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
@@ -4395,8 +4404,13 @@ fn prover_a_method_property(program: ref Program, words: ref winnow_grammar::Int
 /// (ADR-381 D1, D2): `elements_change`, but the condition of an `if` that
 /// hands `base` only to named properties changes nothing, since a property
 /// changes nothing, so a guard `return if !p(xs)` keeps what it made known,
-/// and so does an `unsafe` block of `assume`s.
+/// and so does an `unsafe` block of `assume`s. Nor does anything but
+/// binding it again change a path from a name bound without `mut` (#2450,
+/// ADR-306 D17): no call can be handed it to change.
 fn prover_property_changed(stmt: ref Stmt, base: ref String, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+    if scope.fixed.contains(path_root(base)) {
+        return false
+    }
     let expr = match stmt {
         Stmt::Expr(e) => e,
         else => return elements_change(stmt, base, words),

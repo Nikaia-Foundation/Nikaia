@@ -80,6 +80,11 @@ pub struct ProverScope {
     /// by a deferred body. Each is a variable of the proof until the next
     /// assignment, and a loop that changes it is read through its invariant.
     pub mutables: collections::BTreeSet[String],
+    /// **Names whose binding here is not `mut`** (ADR-381 D2, ADR-306
+    /// D17, #2450): a `let` or a parameter without `mut`. No call can change
+    /// one (a `mut` parameter refuses it, `NK1139`), so what a named
+    /// property knows of it goes only where it is bound again.
+    pub fixed: collections::BTreeSet[String],
     /// **The loops passed whose names are not bound again since** (ADR-361
     /// D2): a claim what is known leaves open is asked through them.
     pub loops: Vec[LoopRecord],
@@ -146,6 +151,7 @@ impl ProverScope {
             summed: collections::BTreeMap(),
             leaned: collections::BTreeMap(),
             mutables: collections::BTreeSet(),
+            fixed: collections::BTreeSet(),
             loops: [],
             around: [],
             history: [],
@@ -206,6 +212,7 @@ impl ProverScope {
         self.root_joins.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
+        self.fixed.remove(name)
         self.locals.insert(name.clone())
         self.loose.remove(name)
         self.loose.remove(length)

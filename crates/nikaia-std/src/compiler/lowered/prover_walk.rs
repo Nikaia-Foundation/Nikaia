@@ -159,6 +159,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             if receiver.is_some() {
                 scope.locals.insert(String::from("self"));
                 let lent = nikaia_std::index::or(receiver, || Receiver { is_ref: true, is_mut: true, is_keep: false });
+                if !lent.is_mut { scope.fixed.insert(String::from("self")); }
                 if !lent.is_mut && has_owner {
                     let mut fields: collections::BTreeSet<String> = collections::BTreeSet::new();
                     prover_parameter_fields(walk, &mut scope, &mut fields, "self", nikaia_std::index::or(owner, || ""), true, program, words);
@@ -173,6 +174,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                 let arg_name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
                 scope.locals.insert(nikaia_std::block::Text::from(arg_name.to_string()));
                 scope.carry(&arg_name, Some(&nikaia_std::block::Text::from(arg_name.to_string())));
+                if !arg.mutable { scope.fixed.insert(nikaia_std::block::Text::from(arg_name.to_string())); }
                 let ty = words.resolve(arg.ty.name);
                 if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(nikaia_std::block::Text::from(arg_name.to_string()));
@@ -602,6 +604,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             scope.roots.insert(nikaia_std::block::Text::from(n.to_string()), root.clone());
             scope.root_joins.insert(nikaia_std::block::Text::from(n.to_string()), joins.copy_owned());
         }
+        if !mutable { scope.fixed.insert(nikaia_std::block::Text::from(n.to_string())); }
     }
     if names.len() == 1 && prover_let_typed(&walk, ty, &span, words, 3) { scope.maps.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
     if names.len() == 1 && value_lin.is_none() && !tainted {
@@ -3214,6 +3217,7 @@ pub(crate) fn prover_a_method_property(program: &Program, words: &winnow_grammar
 }
 
 pub(crate) fn prover_property_changed(stmt: &Stmt, base: &str, scope: &ProverScope, state: &ProverState, program: &Program, words: &winnow_grammar::InternerContext) -> bool {
+    if scope.fixed.contains(&path_root(base)) { return false; }
     let expr = match stmt {
         Stmt::Expr(e) => e,
         _ => return elements_change(stmt, base, words),
