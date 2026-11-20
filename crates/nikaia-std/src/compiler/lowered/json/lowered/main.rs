@@ -51,59 +51,63 @@ impl std::fmt::Display for ConvertError {
 impl std::error::Error for ConvertError {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Reader {
-    pub(crate) cs: Vec<scalar>,
+pub(crate) struct Reader<'a> {
+    pub(crate) bs: &'a [u8],
     pub(crate) pos: i64,
 }
 
-pub(crate) fn fail(r: &Reader, message: String, path: String) -> Error {
+pub(crate) fn fail(r: &Reader<'_>, message: String) -> Error {
     let mut line: i64 = 1;
     let mut column: i64 = 1;
     let mut i: i64 = 0;
-    while i < r.pos && i < r.cs.len() as i64 {
-        if *unsafe { nikaia_std::proven::read(&r.cs, (i) as usize) } == '\n' {
+    while i < r.pos && ((i) as usize) < r.bs.len() {
+        let b = *unsafe { nikaia_std::proven::read(&r.bs, (i) as usize) };
+        if b == b'\x0a' {
             line = unsafe { nikaia_std::proven::add::<i64>(line, 1) };
             column = 1;
-        } else { column = unsafe { nikaia_std::proven::add::<i64>(column, 1) }; }
+        } else if b & 192 != 128 { column = unsafe { nikaia_std::proven::add::<i64>(column, 1) }; }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
-    Error { message, line, column, path }
+    Error { message, line, column, path: String::new() }
 }
 
-pub(crate) fn at_end(r: &Reader) -> bool { r.pos >= r.cs.len() as i64 }
+pub(crate) fn within(e: Error, step: &str) -> Error { Error { message: e.message, line: e.line, column: e.column, path: format!("{}{}", step, e.path) } }
 
-pub(crate) fn peek(r: &Reader) -> scalar {
-    if r.pos < r.cs.len() as i64 { return *nikaia_std::index::get(&r.cs, nikaia_std::index::at(r.pos)); }
-    '\u{0}'
+pub(crate) fn at_end(r: &Reader<'_>) -> bool { r.pos >= r.bs.len() as i64 }
+
+pub(crate) fn peek(r: &Reader<'_>) -> u8 {
+    if r.pos < r.bs.len() as i64 { return *nikaia_std::index::get(&r.bs, nikaia_std::index::at(r.pos)); }
+    b'\x00'
 }
 
-pub(crate) fn blanks(r: &mut Reader) {
-    while r.pos < r.cs.len() as i64 {
-        let c = *nikaia_std::index::get(&r.cs, nikaia_std::index::at(r.pos));
-        if c == ' ' || c == '\n' || c == '\t' || c == '\r' { r.pos = unsafe { nikaia_std::proven::add::<i64>(r.pos, 1) }; } else { return; }
+pub(crate) fn blanks(r: &mut Reader<'_>) {
+    while r.pos < r.bs.len() as i64 {
+        let c = *nikaia_std::index::get(&r.bs, nikaia_std::index::at(r.pos));
+        if c == b' ' || c == b'\x0a' || c == b'\x09' || c == b'\x0d' { r.pos = unsafe { nikaia_std::proven::add::<i64>(r.pos, 1) }; } else { return; }
     }
 }
 
-pub(crate) fn expect_word(r: &mut Reader, word: &str, path: &str) -> Result<(), nikaia_std::error::Thrown<Error>> {
-    for w in word.chars() {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), nikaia_std::block::Text::from(path.to_string())), &"expect_word")); }
+pub(crate) fn expect_word(r: &mut Reader<'_>, word: &str) -> Result<(), nikaia_std::error::Thrown<Error>> {
+    for w in word.as_bytes().iter() {
+        let w = nikaia_std::num::value(w);
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word)), &"expect_word")); }
         let c = peek(&r);
-        if c != w { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), nikaia_std::block::Text::from(path.to_string())), &"expect_word")); }
+        if c != w { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word)), &"expect_word")); }
         r.pos += 1;
     }
     Ok(())
 }
 
-pub(crate) fn hex4(r: &mut Reader, path: &str) -> Result<i64, nikaia_std::error::Thrown<Error>> {
+pub(crate) fn hex4(r: &mut Reader<'_>) -> Result<i64, nikaia_std::error::Thrown<Error>> {
     let mut n: i64 = 0;
     let mut k = 0;
     while k < 4 {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"hex4")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string")), &"hex4")); }
         let c = peek(&r);
         let d = c as i64;
         let mut v: i64 = -1;
         if d >= 48 && d <= 57 { v = unsafe { nikaia_std::proven::sub::<i64>(d, 48) }; } else if d >= 65 && d <= 70 { v = unsafe { nikaia_std::proven::sub::<i64>(d, 55) }; } else if d >= 97 && d <= 102 { v = unsafe { nikaia_std::proven::sub::<i64>(d, 87) }; }
-        if v < 0 { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected four hex digits after `\\u`"), nikaia_std::block::Text::from(path.to_string())), &"hex4")); }
+        if v < 0 { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected four hex digits after `\\u`")), &"hex4")); }
         n = n * 16 + v;
         r.pos += 1;
         k += 1;
@@ -112,173 +116,191 @@ pub(crate) fn hex4(r: &mut Reader, path: &str) -> Result<i64, nikaia_std::error:
     Ok(n)
 }
 
-pub(crate) fn string(r: &mut Reader, path: &str) -> Result<String, nikaia_std::error::Thrown<Error>> {
+pub(crate) fn cut(r: &Reader<'_>, from: i64, to: i64) -> String { nikaia_std::index::get(&r.bs, nikaia_std::index::at(from..to)).text_lossy() }
+
+pub(crate) fn string(r: &mut Reader<'_>) -> Result<String, nikaia_std::error::Thrown<Error>> {
     let mut out = String::new();
+    let mut run = r.pos;
     loop {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string")), &"string")); }
         let c = peek(&r);
-        let code = c as i64;
-        if c == '"' {
+        if c == b'"' {
+            if out.is_empty() { out = cut(&r, run, r.pos); } else { out.push_str(&cut(&r, run, r.pos)); }
             r.pos += 1;
             return Ok(out);
         }
-        if code < 32 { return Err(nikaia_std::error::throwing(fail(&r, String::from("control character in string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
-        if c != '\\' {
-            out.push(c);
+        if c < 32 { return Err(nikaia_std::error::throwing(fail(&r, String::from("control character in string")), &"string")); }
+        if c != b'\\' {
             r.pos += 1;
             continue;
         }
+        out.push_str(&cut(&r, run, r.pos));
         r.pos += 1;
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string")), &"string")); }
         let e = peek(&r);
-        if e == 'u' {
+        if e == b'u' {
             let start = r.pos - 1;
             r.pos += 1;
-            let mut cp = hex4(r, path)?;
+            let mut cp = hex4(r)?;
             if cp >= 55296 && cp <= 56319 {
                 let a = peek(&r);
-                if a != '\\' {
+                if a != b'\\' {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate")), &"string"));
                 }
                 r.pos += 1;
                 let b = peek(&r);
-                if b != 'u' {
+                if b != b'u' {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate")), &"string"));
                 }
                 r.pos += 1;
-                let low = hex4(r, path)?;
+                let low = hex4(r)?;
                 if low < 56320 || low > 57343 {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate")), &"string"));
                 }
                 cp = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(65536, nikaia_std::proven::mul::<i64>(nikaia_std::proven::sub::<i64>(cp, 55296), 1024)), nikaia_std::proven::sub::<i64>(low, 56320)) };
             } else if cp >= 56320 && cp <= 57343 {
                 r.pos = start;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate")), &"string"));
             }
             out.push(nikaia_std::num::scalar_from(cp));
+            run = r.pos;
             continue;
         }
-        if e == 'n' { out.push('\n'); } else if e == 't' { out.push('\t'); } else if e == 'r' { out.push('\r'); } else if e == 'b' { out.push('\u{8}'); } else if e == 'f' { out.push('\u{c}'); } else if e == '"' || e == '\\' || e == '/' { out.push(e); } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("unknown escape"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
+        if e == b'n' { out.push('\n'); } else if e == b't' { out.push('\t'); } else if e == b'r' { out.push('\r'); } else if e == b'b' { out.push('\u{8}'); } else if e == b'f' { out.push('\u{c}'); } else if e == b'"' || e == b'\\' || e == b'/' { out.push(e as scalar); } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("unknown escape")), &"string")); }
         r.pos += 1;
+        run = r.pos;
     }
     Ok(out)
 }
 
-pub(crate) fn is_digit(c: scalar) -> bool {
+pub(crate) fn is_digit(c: u8) -> bool {
     let d = c as i64;
     d >= 48 && d <= 57
 }
 
-pub(crate) fn number(r: &mut Reader, path: &str) -> Result<Value, nikaia_std::error::Thrown<Error>> {
+pub(crate) fn number(r: &mut Reader<'_>) -> Result<Value, nikaia_std::error::Thrown<Error>> {
     let start = r.pos;
-    if peek(&r) == '-' { r.pos += 1; }
-    if peek(&r) == '0' { r.pos += 1; } else if is_digit(peek(&r)) { while is_digit(peek(&r)) { r.pos += 1; } } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
-    if peek(&r) == '.' {
+    if peek(&r) == b'-' { r.pos += 1; }
+    if peek(&r) == b'0' { r.pos += 1; } else if is_digit(peek(&r)) { while is_digit(peek(&r)) { r.pos += 1; } } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit")), &"number")); }
+    if peek(&r) == b'.' {
         r.pos += 1;
-        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit after `.`"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
+        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit after `.`")), &"number")); }
         while is_digit(peek(&r)) { r.pos += 1; }
     }
-    if peek(&r) == 'e' || peek(&r) == 'E' {
+    if peek(&r) == b'e' || peek(&r) == b'E' {
         r.pos += 1;
-        if peek(&r) == '+' || peek(&r) == '-' { r.pos += 1; }
-        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit in the exponent"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
+        if peek(&r) == b'+' || peek(&r) == b'-' { r.pos += 1; }
+        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit in the exponent")), &"number")); }
         while is_digit(peek(&r)) { r.pos += 1; }
     }
-    let mut text = String::new();
-    let mut i = start;
-    while i < r.pos {
-        text.push(*nikaia_std::index::get(&r.cs, nikaia_std::index::at(i)));
-        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-    }
-    Ok(Value::Number(text))
+    Ok(Value::Number(cut(&r, start, r.pos)))
 }
 
-pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nikaia_std::error::Thrown<Error>> {
+pub(crate) fn value(r: &mut Reader<'_>, depth: i64) -> Result<Value, nikaia_std::error::Thrown<Error>> {
     blanks(r);
-    if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected end of text"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
+    if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected end of text")), &"value")); }
     let c = peek(&r);
-    if depth > 512 { return Err(nikaia_std::error::throwing(fail(&r, String::from("nesting too deep"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
-    if c == 'n' {
-        expect_word(r, "null", path)?;
+    if depth > 512 { return Err(nikaia_std::error::throwing(fail(&r, String::from("nesting too deep")), &"value")); }
+    if c == b'n' {
+        expect_word(r, "null")?;
         return Ok(Value::Null);
     }
-    if c == 't' {
-        expect_word(r, "true", path)?;
+    if c == b't' {
+        expect_word(r, "true")?;
         return Ok(Value::Bool(true));
     }
-    if c == 'f' {
-        expect_word(r, "false", path)?;
+    if c == b'f' {
+        expect_word(r, "false")?;
         return Ok(Value::Bool(false));
     }
-    if c == '"' {
+    if c == b'"' {
         r.pos += 1;
-        return Ok(Value::Str(string(r, path)?));
+        return Ok(Value::Str(string(r)?));
     }
-    if c == '[' {
+    if c == b'[' {
         r.pos += 1;
         let mut items: Vec<Value> = vec![];
         blanks(r);
-        if peek(&r) == ']' {
+        if peek(&r) == b']' {
             r.pos += 1;
             return Ok(Value::Array(items));
         }
         loop {
             let at = items.len() as i64;
-            items.push(value(r, &format!("{}[{}]", path, at), unsafe { nikaia_std::proven::add::<i64>(depth, 1) })?);
+            let item = match value(r, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }) {
+                Ok(value) => value,
+                Err(error) => {
+                    let (error, __nikaia_site) = error.split();
+                    return Err(nikaia_std::error::throwing(within(error, &format!("[{}]", at)), &"value"))
+                },
+            };
+            items.push(item);
             blanks(r);
-            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
+            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`")), &"value")); }
             let d = peek(&r);
             r.pos += 1;
-            if d == ']' { return Ok(Value::Array(items)); }
-            if d != ',' {
+            if d == b']' { return Ok(Value::Array(items)); }
+            if d != b',' {
                 r.pos -= 1;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), nikaia_std::block::Text::from(path.to_string())), &"value"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`")), &"value"));
             }
         }
     }
-    if c == '{' {
+    if c == b'{' {
         r.pos += 1;
         let mut members: Vec<Member> = vec![];
         blanks(r);
-        if peek(&r) == '}' {
+        if peek(&r) == b'}' {
             r.pos += 1;
             return Ok(Value::Object(members));
         }
         loop {
             blanks(r);
-            if peek(&r) != '"' { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a member name"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
+            if peek(&r) != b'"' { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a member name")), &"value")); }
             r.pos += 1;
-            let key = string(r, path)?;
+            let key = string(r)?;
             blanks(r);
-            if peek(&r) != ':' { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `:`"), format!("{}.{}", path, key)), &"value")); }
+            if peek(&r) != b':' { return Err(nikaia_std::error::throwing(within(fail(&r, String::from("expected `:`")), &format!(".{}", key)), &"value")); }
             r.pos += 1;
-            let v = value(r, &format!("{}.{}", path, key), unsafe { nikaia_std::proven::add::<i64>(depth, 1) })?;
+            let v = match value(r, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }) {
+                Ok(value) => value,
+                Err(error) => {
+                    let (error, __nikaia_site) = error.split();
+                    return Err(nikaia_std::error::throwing(within(error, &format!(".{}", key)), &"value"))
+                },
+            };
             members.push(Member { key, value: v });
             blanks(r);
-            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
+            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`")), &"value")); }
             let d = peek(&r);
             r.pos += 1;
-            if d == '}' { return Ok(Value::Object(members)); }
-            if d != ',' {
+            if d == b'}' { return Ok(Value::Object(members)); }
+            if d != b',' {
                 r.pos -= 1;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), nikaia_std::block::Text::from(path.to_string())), &"value"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`")), &"value"));
             }
         }
     }
-    if c == '-' || is_digit(c) { return Ok(number(r, path)?); }
-    return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character"), nikaia_std::block::Text::from(path.to_string())), &"value"))
+    if c == b'-' || is_digit(c) { return Ok(number(r)?); }
+    return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character")), &"value"))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn parse(text: &str) -> Result<Value, nikaia_std::error::Thrown<Error>> {
-    let mut r = Reader { cs: nikaia_std::list::scalars(text.chars()), pos: 0 };
-    let v = value(&mut r, "$", 0)?;
+    let mut r = Reader { bs: &text.as_bytes(), pos: 0 };
+    let v = match value(&mut r, 0) {
+        Ok(value) => value,
+        Err(error) => {
+            let (error, __nikaia_site) = error.split();
+            return Err(nikaia_std::error::throwing(within(error, "$"), &"parse"))
+        },
+    };
     blanks(&mut r);
-    if r.pos < r.cs.len() as i64 { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character after the value"), String::from("$")), &"parse")); }
+    if r.pos < r.bs.len() as i64 { return Err(nikaia_std::error::throwing(within(fail(&r, String::from("unexpected character after the value")), "$"), &"parse")); }
     Ok(v)
 }
 
