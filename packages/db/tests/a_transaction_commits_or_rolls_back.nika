@@ -1,5 +1,5 @@
 // A connection that offers transactions hands one out with `begin`; the
-// transaction ends by `commit` or by `rollback` (ADR-299 D4).
+// transaction ends by `commit` or by `rollback` (ADR-database-v1 D4).
 use db
 
 struct Fake {

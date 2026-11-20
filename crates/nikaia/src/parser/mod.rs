@@ -4195,7 +4195,7 @@ grammar! {
         // before the marker, taken verbatim; what it *means* is the target
         // grammar's business and is decided when it is lowered.
         // **A grammar from a package is `package::Grammar`**
-        // ([ADR-299](../../../docs/specification/adr/adr-299.md) D20); one the
+        // ([ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md) D20); one the
         // program declares is bare.
         rule dsl_block_expr -> Expr =
             KW_DSL first:NAME rest:dsl_grammar? "{" body:until("} eod") "} eod" -> {

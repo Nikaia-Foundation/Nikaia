@@ -90,12 +90,12 @@ fn main() throws {
     let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
     let repo = root()
     let nikaia = toolchain()
-    // Another live driver holds the merge lock for some seconds, longer than a slow start of the driver.
-    let held = "mkdir -p target/merge.lock; sleep 15 >/dev/null 2>&1 & echo \"$! other lane\" > target/merge.lock/owner; echo $! > pid.txt; (sleep 15; rm -rf target/merge.lock) >/dev/null 2>&1 &"
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "another driver merges", held, "60", "true")
+    // Another live driver holds the merge lock for 45 seconds, longer than a slow start of the driver.
+    let held = "mkdir -p target/merge.lock; sleep 45 >/dev/null 2>&1 & echo \"$! other lane\" > target/merge.lock/owner; echo $! > pid.txt; (sleep 45; rm -rf target/merge.lock) >/dev/null 2>&1 &"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "another driver merges", held, "180", "true")
     // Another git command holds the index for some seconds, much longer than a slow start of the driver (a CI start took over 10).
-    let index = "touch .git/index.lock; (sleep 40; rm -f .git/index.lock) >/dev/null 2>&1 &"
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "the index is locked", index, "60", "true")
+    let index = "touch .git/index.lock; (sleep 90; rm -f .git/index.lock) >/dev/null 2>&1 &"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "the index is locked", index, "180", "true")
     // An index lock nobody removes.
     case(nikaia.clone(), repo.clone(), tmp.clone(), "the index stays locked", "touch .git/index.lock", "2", "true")
     // A builder writes a source in the checkout while the merge builds.

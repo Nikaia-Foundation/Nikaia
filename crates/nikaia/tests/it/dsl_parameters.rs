@@ -367,7 +367,7 @@ fn parameters_handed_to_a_callee_that_is_no_driver_are_refused() {
 }
 
 /// **A grammar from a package is `package::Grammar`**
-/// ([ADR-299](../../../docs/specification/adr/adr-299.md) D20, #485): the path
+/// ([ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md) D20, #485): the path
 /// parses, and the block is what a bare one was - a statement whose holes the
 /// driver binds.
 #[test]

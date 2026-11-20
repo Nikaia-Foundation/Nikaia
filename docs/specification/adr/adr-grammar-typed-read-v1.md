@@ -18,7 +18,7 @@ program: its reason amended, the rule holds), D9 (`f[T]()` warned with
 `NK1233`); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule takes values; this adds
 types); [ADR-specialization-1](adr-specialization-1.md) D1, D5, D7 (a copy per
 build-time value, the build's budget, a result type from a `comptime`
-parameter); [ADR-299](adr-299.md) D15-D18 (a row is the struct the block
+parameter); [ADR-database-v1](adr-database-v1.md) D15-D18 (a row is the struct the block
 names, columns matched by name); [ADR-331](adr-331.md) D5, D6 (field defaults,
 attributes read as members); [ADR-329](adr-329.md) (`meta::Field`);
 [ADR-304](adr-304.md) D6 (a generic original is not emitted);
@@ -129,7 +129,7 @@ rule Object[S: Struct] -> S =
 ```
 
 `Value[_]` is applied with each field's type. One mapping rule, stated once in
-Part II and shared with ADR-299 D16-D18:
+Part II and shared with ADR-database-v1 D16-D18:
 
 * a missing member takes the field's default, else `null` in a `T?`, else it
   is an error;
@@ -219,7 +219,7 @@ nothing it reads back, and shares `wire_name` with the grammar (ADR-344 D7).
 
 A query's columns are known while building and its rows arrive typed from the
 driver, so there is no text to parse while running. SQL keeps its strict
-settings (no extra columns, no missing fields, ADR-299 D17) and checks them
+settings (no extra columns, no missing fields, ADR-database-v1 D17) and checks them
 while building; JSON uses its own and checks them while running.
 
 ### D10 — The `json` package offers `pub grammar Json` with the entries `read[T]` and `parse`, and `json::read` stays, forwarding to it.
@@ -274,7 +274,7 @@ there is no text to parse while running.
 * ADR-344 D3, D6a and §5 say what holds now; its D4, D5 and D8 are JSON's
   settings of D3. ADR-330 D7's reason gains a sentence: a
   grammar still names no type of the program, it receives one from its caller,
-  as a generic function in a package does. ADR-299 D16-D18 point to D3's rule.
+  as a generic function in a package does. ADR-database-v1 D16-D18 point to D3's rule.
 * Part II 10.8 holds type parameters on rules, `match` in a pattern,
   `members`, `refuse`, `@stream` and `Value[_]`; the mapping rule stands in
   Part II, and generic frames in 10.7; Part III 17.3 and Appendix C.3 follow.

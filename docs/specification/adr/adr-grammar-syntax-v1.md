@@ -16,7 +16,7 @@ record now in the history (its last decision went to
 [ADR-grammar-actions-v1](adr-grammar-actions-v1.md)) and the whole of a record now in
 [`docs/history/adr/`](../../history/adr/README.md) (spans, `same_line`, `///`);
 [ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11 (the two ways a hole binds), D18 (the backend is handed
-the grammar's own strings), D27 (`asset("…")`); [ADR-299](adr-299.md) D20, D21
+the grammar's own strings), D27 (`asset("…")`); [ADR-database-v1](adr-database-v1.md) D20, D21
 (a package's grammar is `package::Grammar`; `main entry rule`);
 [ADR-140](adr-140.md) D3 (a path is `::`); Part I 5.1 (Subject ; Config);
 [ADR-037](adr-037.md) (the target decides nothing about what a program means);
@@ -120,7 +120,7 @@ from e` is refused at the parse with the call in the message; `dsl` takes a
 As the backend does: one function per entry. The compiler picks no rule as the
 grammar's main one - such a pick chooses wrong silently - so there is no
 *"grammar has no entry to enter through"* to refuse. The grammar's author may
-say which one is main (`main entry rule`, [ADR-299](adr-299.md) D21); that is a
+say which one is main (`main entry rule`, [ADR-database-v1](adr-database-v1.md) D21); that is a
 decision written down, not a pick. Naming a rule that is not an entry has its
 own message.
 
@@ -254,7 +254,7 @@ one.
 ### D20 — Hardware instructions leave the language core.
 
 `unsafe asm`, its register-constraint table and `clobber` are removed.
-Assembly is a library DSL, `dsl x86::Asm { … } eod` ([ADR-299](adr-299.md)
+Assembly is a library DSL, `dsl x86::Asm { … } eod` ([ADR-database-v1](adr-database-v1.md)
 D20), using [ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11's immediate capture. A core construct that
 cannot be given meaning on WebAssembly, a stack machine, is a defect in the
 core. `unsafe` stays reserved for FFI.
