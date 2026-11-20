@@ -1,4 +1,4 @@
-// A DSL with deferred parameters generates a shadow type (ADR-296 D5): the
+// A DSL with deferred parameters generates a shadow type (ADR-grammar-build-time-v1 D12): the
 // statement reaches the driver with its holes as written, and the values the
 // call site gave arrive beside it. The type, the hole syntax and the refusals
 // are `crates/nikaia/tests/dsl_parameters.rs`.
@@ -8,7 +8,7 @@ struct DslParametersDb {
 }
 
 impl DslParametersDb {
-    // The driver. `...args: Self::dsl` is the typed spread of ADR-296 D5: the
+    // The driver. `...args: Self::dsl` is the typed spread of ADR-grammar-build-time-v1 D12: the
     // parameters of whatever statement this call was given, as one value on
     // the stack.
     fn prepare(self, statement: String; ...args: Self::dsl) -> Self::dsl throws {

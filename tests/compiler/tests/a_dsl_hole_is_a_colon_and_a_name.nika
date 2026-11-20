@@ -1,4 +1,4 @@
-// The holes of a deferred `dsl` body (ADR-296 D4), once the unit tests of
+// The holes of a deferred `dsl` body (ADR-grammar-build-time-v1 D11), once the unit tests of
 // the crossing `dsl.rs`: `:name` is a hole, each name once however often the
 // body writes it, and neither a path (`a::b`) nor a time (`12:30`) is one. A
 // false hole would be a missing parameter (`NK1112`), a lost one an unknown

@@ -43,7 +43,7 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
         // happens is a question about the receiver's value; which names it
         // reads is the same question either way. What stands after a call's
         // `;` reads names like anything else - a DSL's deferred parameters
-        // arrive there (ADR-296 D5).
+        // arrive there (ADR-grammar-build-time-v1 D12).
         Expr::MethodCall { receiver, method, args, config, .. } => {
             names_in(receiver, words, out)
             out.insert(words.resolve(method).clone())

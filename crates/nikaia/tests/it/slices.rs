@@ -82,7 +82,7 @@ fn a_run_crosses_and_the_program_reads_it() {
 /// `Array[Setting, N]` cannot type a field whose run is a different length per
 /// value, and a `Vec` owns memory a `const` cannot hold. This is the shape
 /// both corpus grammars produce
-/// ([ADR-177](../../../docs/specification/adr/adr-177.md) §5's measurement).
+/// ([ADR-179](../../../../docs/specification/adr/adr-179.md) §1's measurement).
 #[test]
 fn a_field_may_view_a_run() {
     let source = "struct Setting { key: ref String, value: ref String }\n\

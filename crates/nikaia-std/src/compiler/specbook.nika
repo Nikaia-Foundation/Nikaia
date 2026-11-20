@@ -73,7 +73,7 @@ pub fn discusses_a_refusal(code: ref String) -> bool {
 }
 
 /// Whether an elision stands where code would. `...args` is not one: three
-/// dots against a name are the typed spread of ADR-296 D5, which a driver
+/// dots against a name are the typed spread of ADR-grammar-build-time-v1 D12, which a driver
 /// writes as code.
 pub fn is_a_sketch(code: ref String) -> bool {
     let c: Vec[scalar] = code.scalars.collect()

@@ -173,7 +173,7 @@ fn walk_template_holes(segments: ref Vec[Segment], mut bound: Vec[(String, Strin
             Segment::Hole { expr, .. } => out.push((expr.clone(), bound.clone())),
             Segment::For { binding, collection, body } => {
                 // The collection is captured from the enclosing scope with `:`
-                // (ADR-296 D4), and it is a name this program wrote - so it is
+                // (ADR-grammar-build-time-v1 D11), and it is a name this program wrote - so it is
                 // read *outside* the binding, which is where it lives.
                 out.push((collection.clone(), bound.clone()))
                 bound.push((binding.clone(), collection.clone()))

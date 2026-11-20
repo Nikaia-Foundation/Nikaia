@@ -1214,9 +1214,10 @@ fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(Stri
     let stops = first.stopped && program.stops != null
     // A refusal is an expectation only where a `.stderr` holds one, or
     // `--bless-stderr` asks for a new one: else it fails like at a plain run
-    // and nothing is written (#1236).
+    // and nothing is written (#1236). The reason names the flag that records
+    // it, which builders kept missing (#2051).
     if refused && program.stderr == null && !stderr {
-        return ProjectTestsBlessed::Refused("the program is refused and no .stderr expects it")
+        return ProjectTestsBlessed::Refused("the program is refused, no .stderr expects it and --bless-stderr was not given")
     }
     if !first.ended_well && !refused && !stops && first.stderr.starts_with("the program does not compile") {
         return ProjectTestsBlessed::Refused("the program does not compile")
