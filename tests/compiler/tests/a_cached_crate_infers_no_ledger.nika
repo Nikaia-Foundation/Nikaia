@@ -42,6 +42,7 @@ fn build(nikaia: String, p: String, cache: String, trace: String) -> String thro
 		["build"]; dir: p.clone(),
 		env: [
 			("RUST_BACKTRACE", "0"),
+			("CARGO_TERM_COLOR", "never"),
 			("NIKAIA_CACHE_DIR", cache.clone()),
 			("NIKAIA_WRAPPER_TRACE", trace.clone()),
 		],
