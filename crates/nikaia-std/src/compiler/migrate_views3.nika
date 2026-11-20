@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/migrate_views3.nika
 //
-// **`nikaia migrate views-3`** (ADR-views-3 D4, D2; #1213 step 6): the one-off
+// **`nikaia migrate views-3`** (ADR-views-v4 D4, D2; #1213 step 6): the one-off
 // rewrite that takes `ref` out of a program and writes `keep` where the keep
 // inference says a parameter is kept.
 //
@@ -459,7 +459,7 @@ fn migrate_a_ref_code(tokens: ref Vec[MigrateToken], k: i64, in_brackets: bool) 
     return migrate_text_at(tokens, close + 1) == "->" && migrate_text_at(tokens, close + 2) == "ref" && migrate_text_at(tokens, close + 3) != "mut" && migrate_text_at(tokens, close + 3) != "("
 }
 
-/// **A function type with a `ref` result, written as D14 says** (ADR-views-3
+/// **A function type with a `ref` result, written as D14 says** (ADR-views-v4
 /// D14, #1254): each parameter named by its position, `a`, `b`, `c`, … (a
 /// name written already stays), and the result reads `from` the ones written
 /// `ref`. `fn(ref String) -> ref String` becomes `fn(a: String) -> String from
@@ -521,7 +521,7 @@ fn migrate_letter(position: i64) -> String sync {
 }
 
 /// **A declaration whose `ref` result may come out of a function value it
-/// takes** (ADR-views-3 D8, D14, #1254): `fn apply(f: fn(ref String) -> ref
+/// takes** (ADR-views-v4 D8, D14, #1254): `fn apply(f: fn(ref String) -> ref
 /// String, s: ref String) -> ref String` hands back what `f` makes of `s`,
 /// which no body tells the inference, so the result is written `from` the
 /// parameters the old one could point into, those written `ref` (and a `ref
@@ -569,7 +569,7 @@ fn migrate_from_of_a_declaration(tokens: ref Vec[MigrateToken], k: i64, mut suff
     suffix[last] = f"{suffix[last]} from {sources.join(" | ")}"
 }
 
-/// **A trait method's `ref` result, written as D14 says** (ADR-views-3 D14,
+/// **A trait method's `ref` result, written as D14 says** (ADR-views-v4 D14,
 /// #1224): without a body, `from` alone makes a result a view, so dropping
 /// the `ref` of `fn name(self) -> ref String` would make it own its value.
 /// The migration writes the `from` the old declaration meant, which is what
@@ -659,7 +659,7 @@ fn migrate_trait_end(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
     return migrate_closing(tokens, j)
 }
 
-/// **What the migration of `code` could not write** (ADR-views-3 D14,
+/// **What the migration of `code` could not write** (ADR-views-v4 D14,
 /// #1224): each trait method whose `ref` result names no source the old
 /// declaration fixes, with its line and the `from`s to choose from. Its `ref`
 /// stays, and the checker refuses it (`NK1336`) until one is written.
@@ -727,7 +727,7 @@ fn migrate_unwritten_from(code: String, before: i64) -> Vec[String] sync {
                 }
                 let name = tokens[k + 1].text.clone()
                 let help = if choices.is_empty() { "or drop `ref` to hand back text of its own" } else { f"write one of {choices.join(", ")} after its result type, or drop `ref` to hand back text of its own" }
-                out.push(f"{line}: `{name}` hands back a view but says of no parameter whose data it points into: {help} (ADR-views-3 D14)")
+                out.push(f"{line}: `{name}` hands back a view but says of no parameter whose data it points into: {help} (ADR-views-v4 D14)")
             }
         }
     }
@@ -745,7 +745,7 @@ fn migrate_ordinal_of(items: ref Vec[i64], wanted: i64) -> i64 sync {
 
 /// **Which declared parameters were written `ref`**, in
 /// `migrate_parameters`'s order: read on the code as written, before `ref`
-/// goes, since `p: ref T` and `p: T` read alike after it (ADR-views-3 D4:
+/// goes, since `p: ref T` and `p: T` read alike after it (ADR-views-v4 D4:
 /// such a one was a borrow, and is never marked `keep`).
 pub fn migrate_views3_lent(code: String) -> Vec[bool] sync {
     let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
@@ -759,7 +759,7 @@ pub fn migrate_views3_lent(code: String) -> Vec[bool] sync {
 
 /// **Which receivers were the old by-value `self`**, in order: read on the
 /// code as written, before `ref` goes, since `ref self` and `self` read
-/// alike after it (ADR-views-3 D2: a consumed one becomes `keep self`).
+/// alike after it (ADR-views-v4 D2: a consumed one becomes `keep self`).
 pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
     let mut lexer = MigrateLexer { c: code.scalars.collect(), at: 0, tokens: [] }
     lexer.run()
@@ -877,7 +877,7 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
                 prefix[receivers[r].0] = "keep "
             }
         } else if j < n && prefix[j] == "" && !guarded[j] && tokens[j].text != "keep" && tokens[j].text != "mut" {
-            // **An old `ref` parameter is never kept** (ADR-views-3 D2, D4,
+            // **An old `ref` parameter is never kept** (ADR-views-v4 D2, D4,
             // #1254): it was a borrow, so the body reads it, hands back a view
             // of it (D7/D8) or stores one (D5), and the lent `T` says that.
             let at_parameter = migrate_ordinal_of(parameters, j)
@@ -949,7 +949,7 @@ pub fn migrate_views3_markdown(source: String, keeps_of: fn(ref String) -> Vec[i
     return out
 }
 
-/// **The parameters the checker would refuse unmarked** (ADR-views-3 D2,
+/// **The parameters the checker would refuse unmarked** (ADR-views-v4 D2,
 /// `check_keep_marks.nika`'s `NK2302` without its transition rule): each a
 /// parameter of a free function or an inherent method that the inference
 /// keeps and that says neither `keep` nor `mut`, as the byte offset its
@@ -1011,7 +1011,7 @@ fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: 
                 if parameter == "" || parameter == "_" || arg.keep || arg.mutable || !arg.attributes.is_empty() {
                     continue
                 }
-                // **A copy is never marked `keep`** (ADR-views-3 D2, #1254):
+                // **A copy is never marked `keep`** (ADR-views-v4 D2, #1254):
                 // a data-less enum or a struct of copied fields is handed over
                 // by value, so storing it keeps no caller's value.
                 if !arg.ty.is_view && keeps_a_copy_type(written_ty(view.words, view.aliases, arg.ty), copies) {

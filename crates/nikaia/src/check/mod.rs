@@ -750,7 +750,7 @@ pub fn refuse_unproved_claims(checked: &mut Checked) {
 }
 
 /// **The written `keep` against the inferred keeps** (`NK2302`, `NK1334`,
-/// ADR-views-3 D2): `tools/check_keep_marks.nika`. The ledger `own` carries
+/// ADR-views-v4 D2): `tools/check_keep_marks.nika`. The ledger `own` carries
 /// what the keep inference decided; this hands it the file and its neighbours.
 pub fn check_keep_marks(
     parsed: &Parsed,
@@ -779,7 +779,7 @@ pub fn check_keep_marks(
 }
 
 /// **A result's written `from` against the body** (`NK1335`, `NK1336`,
-/// ADR-views-3 D8): `tools/check_result_from.nika`, handed what the views pass
+/// ADR-views-v4 D8): `tools/check_result_from.nika`, handed what the views pass
 /// finds each body reaches before a written `from` replaces it.
 pub fn check_result_from(parsed: &Parsed, own: &Ledger, library: &Ledger, checked: &mut Checked) {
     let view = parsed_view_of(parsed);

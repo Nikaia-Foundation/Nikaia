@@ -24,6 +24,15 @@ pub(crate) fn starts_with_a_capital(name: &str) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn not_a_module(name: &str) -> bool { name == "f64" || name == "i32" || name == "i64" || name == "list" || name == "str" }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn something_public_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, module: &str) -> bool {
+    let prefix = format!("{}::", module);
+    for (key, contract) in world.library.functions.iter() { if contract.public && key.starts_with(AsRef::<str>::as_ref(&prefix)) { return true; } }
+    for (key, contract) in world.library.types.iter() { if contract.public && key.starts_with(AsRef::<str>::as_ref(&prefix)) { return true; } }
+    false
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -46,7 +55,7 @@ impl CheckState {
             }
         }
         if !a_type {
-            self.a_std_module_nobody_declared(unsafe { nikaia_std::proven::read(&segments, (1) as usize) }, &segments, span);
+            self.a_std_module_nobody_declared(world, unsafe { nikaia_std::proven::read(&segments, (1) as usize) }, &segments, span);
             return;
         }
         let mut help: String = format!("Remove the line: `{}` is always available, no `use` needed.", last);
@@ -62,19 +71,26 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_std_module_nobody_declared(&mut self, module: &str, segments: &[String], span: &Span) {
+    pub(crate) fn a_std_module_nobody_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, module: &str, segments: &[String], span: &Span) {
+        if is_promised(module) || self.offers_as_a_module(module) && something_public_in(world, module) { return; }
         let mut offered: Vec<String> = vec![];
-        for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(nikaia_std::block::Text::from(name.to_string())); } }
+        for name in self.std_modules.iter() { if self.offers_as_a_module(name) && something_public_in(world, name) { offered.push(nikaia_std::block::Text::from(name.to_string())); } }
         offered.sort();
-        if nikaia_std::list::contains(&offered, &module) || is_promised(module) { return; }
         let written = nikaia_std::block::Text::from(segments.join("::"));
         let near = nearest_name(module, &offered);
         let mut why: String = format!("`{}` is not one of the modules `std` offers.", module);
         if module == "compiler" { why = String::from("`compiler` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"); }
+        if self.offers_as_a_module(module) {
+            why = format!("`{}` is `std`'s own: everything in it is private to `std`, for its test blocks, and a program cannot reach it", module);
+            self.facts.std_helpers_reached.insert(span.start as i64);
+        }
         let mut help: String = format!("`std` offers: {}.", nikaia_std::block::Text::from(offered.join(", ")));
         if near.is_some() { help = format!("Did you mean `use std::{}`?", nikaia_std::index::or(near.as_deref(), || "")); }
         self.findings.push(check_refusal("NK1186", span, format!("`std` has no module called `{}`.", written), vec![why], Some(help)));
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn offers_as_a_module(&self, name: &str) -> bool { self.std_modules.contains(name) && !starts_with_a_capital(name) && !not_a_module(name) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {

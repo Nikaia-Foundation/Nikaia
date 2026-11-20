@@ -1312,7 +1312,7 @@ fn length_given(mut arena: logic::TermArena, words: ref winnow_grammar::Interner
             return arena.var(length)
         },
         // **A part of a list or an array is as long as its range**
-        // (ADR-views-3 D11, #1209): `v[a..<b]` handed to an `Array[T]` is
+        // (ADR-views-v4 D11, #1209): `v[a..<b]` handed to an `Array[T]` is
         // `b - a` long, since a range outside the list stops the program at
         // the call.
         Expr::Index { index, .. } => {

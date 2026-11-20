@@ -1,6 +1,6 @@
 // `take` moves a field out of its parameter into a local and hands that
 // back: the result outlives the call, so `take` keeps `x` and must say so
-// (ADR-views-3 D12, #1239).
+// (ADR-views-v4 D12, #1239).
 struct Box[T] {
     item: T,
 }

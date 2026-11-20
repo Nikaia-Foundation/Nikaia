@@ -1,5 +1,5 @@
 // While a part of a list is handed out as `mut`, another argument of the
-// same call does not read the list (ADR-views-3 D11, NK2305).
+// same call does not read the list (ADR-views-v4 D11, NK2305).
 
 fn put(mut xs: Array[u32], x: u32) {
     xs[0] = x

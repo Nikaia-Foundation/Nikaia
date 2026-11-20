@@ -1,4 +1,4 @@
-// ADR-views-3 D14, #1224: without a body, `from` alone makes a result a view,
+// ADR-views-v4 D14, #1224: without a body, `from` alone makes a result a view,
 // so `nikaia migrate views-3` writes a trait method's `ref` result as the
 // `from` the old declaration meant, the one its implementations are held to:
 // a lent receiver, `from self`; else the one parameter written `ref`. Where

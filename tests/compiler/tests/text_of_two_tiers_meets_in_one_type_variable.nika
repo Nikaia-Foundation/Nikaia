@@ -1,4 +1,4 @@
-// Text of two tiers in one type variable (ADR-views-3 D12, #1342, #1498): a
+// Text of two tiers in one type variable (ADR-views-v4 D12, #1342, #1498): a
 // literal or a cut meets text of its own in `T`, so `T` is the view and the
 // owned text is lent as one; the result is read at the call, and `o` and
 // `o2` stay usable.

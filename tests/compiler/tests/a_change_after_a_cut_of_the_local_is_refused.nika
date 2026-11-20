@@ -1,5 +1,5 @@
 // A change to a local after a cut of it is made, while the cut is still
-// used, is refused (NK2305, ADR-views-3 D4, #1363): the cut points into what
+// used, is refused (NK2305, ADR-views-v4 D4, #1363): the cut points into what
 // it cuts, so the change cannot be emitted as Rust that rustc then refuses.
 
 fn pushed() -> ref Array[i64] {

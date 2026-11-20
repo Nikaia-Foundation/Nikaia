@@ -614,8 +614,8 @@ impl CheckState {
         return f"{name} {{ {joined} }}"
     }
 
-    /// **What stands in a part's place while it is taken out** (ADR-views-1
-    /// D3): empty where the type has an empty value, which `std::mem::take`
+    /// **What stands in a part's place while it is taken out** (ADR-views-v4
+    /// D20): empty where the type has an empty value, which `std::mem::take`
     /// leaves; the stand-in a `match` arm leaves otherwise; `null` where there
     /// is neither.
     fn a_stand_in(ref self, world: ref CheckWorld, ty: ref Ty) -> String? {

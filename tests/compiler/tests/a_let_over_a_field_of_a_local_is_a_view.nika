@@ -1,5 +1,5 @@
 // A plain `let` over a field or an element of a local is a view of it
-// (ADR-views-3 D5, #1997), for a struct, an enum and a list as for text
+// (ADR-views-v4 D5, #1997), for a struct, an enum and a list as for text
 // (#1404): the emitter lends it, so a keeper handed it, or a `return` of
 // it, is refused with a `.clone()` help, not by rustc (NK1343).
 struct P { name: String }

@@ -1,5 +1,5 @@
 // A `comptime` declared `String` is a view of text the build fixed
-// (ADR-views-3 D15, #1257): it means what `comptime X: ref String` means,
+// (ADR-views-v4 D15, #1257): it means what `comptime X: ref String` means,
 // and nothing allocates.
 comptime GREETING: String = "hello"
 comptime JOINED: String = "ab" + "cd"

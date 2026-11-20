@@ -1,0 +1,11 @@
+// Text built in the function is its own, not a view: put into an array whose
+// items are views, the view would outlive it, so it stays refused (#2346).
+fn first(name: String) -> u32 {
+	let built = f"{name}!"
+	let table: Array[(u32, ref String, u32), 1] = [(10, built, 3)]
+	return table[0].2
+}
+
+fn main() throws {
+	println(f"{first("a")}")
+}

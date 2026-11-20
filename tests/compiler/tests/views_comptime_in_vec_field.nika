@@ -1,4 +1,4 @@
-// A `comptime` String is a view of build-fixed text (ADR-views-3 D15), so it
+// A `comptime` String is a view of build-fixed text (ADR-views-v4 D15), so it
 // goes into a `Vec[String]` field, local and element as a literal does (D5,
 // #1254).
 

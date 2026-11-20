@@ -1,5 +1,5 @@
 // A method that hands back a `T?` field of `self` hands back a view of it,
-// written `-> U? from self`, `-> ref U?`, or inferred (ADR-views-3 D7, D8,
+// written `-> U? from self`, `-> ref U?`, or inferred (ADR-views-v4 D7, D8,
 // #1486); a `null` it hands back points into nothing.
 struct U { s: String, n: i64 }
 struct H { o: U?, p: U }

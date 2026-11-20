@@ -1,0 +1,22 @@
+// A pause lets another task run (ADR-055 D4; Part II 11.1, 11.2): two tasks
+// that push to one list, yield and push again come out interleaved, each up
+// to its pause before the other resumes. task::yield() takes no time, so the
+// order does not depend on how soon the second task starts.
+use std::task
+
+fn work(order: SharedMut[Vec[i64]], name: i64) -> i64 {
+	order.update fn(mut list) { list.push(name * 10 + 1) }
+	task::yield()
+	order.update fn(mut list) { list.push(name * 10 + 2) }
+	return name
+}
+
+fn main() throws {
+	let order: SharedMut[Vec[i64]] = SharedMut([])
+	let first = async(handle) fn { work(order, 1) }
+	let second = async(handle) fn { work(order, 2) }
+	let done = first.join() + second.join()
+	let seen = order.get()
+	println(f"order: {seen[0]} {seen[1]} {seen[2]} {seen[3]}")
+	println(f"joined: {done}")
+}

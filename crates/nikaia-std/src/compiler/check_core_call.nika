@@ -188,7 +188,7 @@ fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref 
 /// **A parameter a function type keeps is given to it** (Part I 5.4 C,
 /// ADR-293 D29, #1990), as a named function's kept parameter is: a name
 /// handed there is gone after the call (`NK2105` at a later use), and a view
-/// is no value of its own (`NK1102`, ADR-views-3 D5). A text literal is text
+/// is no value of its own (`NK1102`, ADR-views-v4 D5). A text literal is text
 /// of its own there (`kept_arguments_are_its_own`).
 fn check_core_call_kept_by_code(mut state: CheckState, world: ref CheckWorld, given: ref Expr, found: ref Ty, want: ref Ty, name: ref String, nth: i64, span: ref Span) sync {
     if a_text_literal_expr(given) || check_core_call_opaque(found) {
@@ -281,7 +281,7 @@ fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee
 }
 
 // **The arguments handed to parameters of code of a function of this
-// package or another one** (ADR-views-3 D17), kept until the whole file is
+// package or another one** (ADR-views-v4 D17), kept until the whole file is
 // walked: the callee's body alone decides whether it runs one from tasks at
 // once, which its ledger entry says for another file or package and the
 // file's own walk finds for this one.
@@ -615,7 +615,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         state.flow.guarded = guarded
     }
     // **A parameter of code run one call at a time, or from tasks at once**
-    // (ADR-views-3 D17).
+    // (ADR-views-v4 D17).
     if is_variable && state.run_code.contains(name) {
         state.a_code_parameter_named(name)
     }
@@ -1073,7 +1073,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     // **A view of a parameter bound to a copied word is read at the call**
-    // (ADR-views-3 D12, D4, #1239): `hand(3)` of `fn hand[T](x: T) -> T` hands
+    // (ADR-views-v4 D12, D4, #1239): `hand(3)` of `fn hand[T](x: T) -> T` hands
     // back a view of `x`, and a view of a number is the number (ADR-279 D8);
     // so is a view of an open number, whose type its uses decide (#497).
     let open = args.len() > 0 && state.flow.open_calls.contains_key(id_of(args[0]) as i64)
@@ -1082,7 +1082,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return unviewed_type(made)
     }
     // **A view of a variable that holds a view of text is read at the call**
-    // (ADR-views-3 D12, #1498): the `&&str` the result is points into the
+    // (ADR-views-v4 D12, #1498): the `&&str` the result is points into the
     // call's own `&`, and its copy is the `&str` the arguments view.
     if check_core_call_hands_back_a_variable(contract) && state.facts.viewed_text_calls.contains(span.start as i64) {
         state.facts.copied_results.insert(id_of(func) as i64)

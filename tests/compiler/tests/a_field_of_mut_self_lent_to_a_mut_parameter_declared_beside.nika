@@ -1,7 +1,7 @@
 use compiler_tests
 
 // #1315: a field of `mut self` handed to a `mut` parameter is lent in place
-// (ADR-views-3 D3), not given away: no NK1131, whichever file declares the
+// (ADR-views-v4 D3), not given away: no NK1131, whichever file declares the
 // callee (`src/mut_lent_beside_caller.nika` calls into
 // `src/mut_lent_beside.nika`) and whether or not the field's type has an
 // empty value to stand in for it (`Kind` has none).

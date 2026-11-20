@@ -1,4 +1,4 @@
-//! `nikaia migrate views-3 PATH...` (ADR-views-3 D4, #1213 step 6). The
+//! `nikaia migrate views-3 PATH...` (ADR-views-v4 D4, #1213 step 6). The
 //! rewriting is Nikaia (`tools/migrate_views3.nika`); this is the adapter: it
 //! finds the files, hands the tool the parameters the keep inference names
 //! (the checker's own, `tools/keeps.nika`, read through the ledger), and
@@ -62,7 +62,7 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
             }
         };
         // A trait's `ref` result whose source the old declaration does not fix
-        // keeps its `ref`, and the choices are named (ADR-views-3 D14).
+        // keeps its `ref`, and the choices are named (ADR-views-v4 D14).
         // A Markdown file is asked block by block, its lines counted in the file.
         let unwritten = if file.extension().is_some_and(|e| e == "md") {
             nikaia_std::compiler::migrate_views3::migrate_views3_markdown_unwritten(&source)

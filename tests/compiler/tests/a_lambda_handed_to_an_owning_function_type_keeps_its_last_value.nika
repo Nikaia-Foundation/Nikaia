@@ -1,5 +1,5 @@
 // A lambda handed where a function type's result owns its text keeps its
-// last value there (ADR-views-3 D14, #1263): static text it hands back is
+// last value there (ADR-views-v4 D14, #1263): static text it hands back is
 // text of its own, handed to a parameter or bound by a typed `let`.
 fn apply(f: fn(s: String) -> String, s: String) -> String {
 	f(s)

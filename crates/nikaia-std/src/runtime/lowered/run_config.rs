@@ -135,6 +135,59 @@ pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let runtime = rt::Runtime::build(rt::UserCode::Sequential, config_default());
+    let said = runtime.describe();
+    if !(said.contains("io-method=auto")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"io-method=auto\"))", None, &[]) };
+    if !(said.contains("chose completion") || said.contains("chose blocking")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"chose completion\") || said.contains(\"chose blocking\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) async fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let pool = rt::pool::Pool::start(2);
+    let mut quiet = false;
+    let mut windows = 0;
+    while windows < 10 && !quiet {
+        let rang_before = pool.rang();
+        let before = rt::io::generation();
+        time::sleep(300i32.millis()).await;
+        let rang = pool.rang() - rang_before;
+        let mut others = rt::io::generation() - before - rang;
+        if others < 0 { others = 0; }
+        quiet = rang <= others + 3;
+        windows += 1;
+    }
+    pool.close();
+    if !(quiet) { nikaia_std::abort::assertion_failed("assert(quiet)", None, &[]) };
+    Ok(())
+}
+
+pub(crate) async fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let before = rt::worker::on_io_worker();
+    if !(!before) { nikaia_std::abort::assertion_failed("assert(!before)", None, &[]) };
+    let root = fs::scratch()?;
+    fs::write(std::path::Path::new(&("eins")), &root, "eins", false, true).await?;
+    let bytes = fs::read(std::path::Path::new(&("eins")), &root).await?;
+    if !(bytes.len() == 4) { nikaia_std::abort::assertion_failed("assert(bytes.len() == 4)", None, &[("bytes.len()", (&&nikaia_std::abort::Operand(&(bytes.len() as i64))).shown()), ]) };
+    let after = rt::worker::on_io_worker();
+    if !(!after) { nikaia_std::abort::assertion_failed("assert(!after)", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let first = rt::handle();
+    let before = mem::allocations();
+    let second = rt::handle();
+    let after = mem::allocations();
+    if !(after == before) { nikaia_std::abort::assertion_failed("assert(after == before)", None, &[("after", (&&nikaia_std::abort::Operand(&(after))).shown()), ("before", (&&nikaia_std::abort::Operand(&(before))).shown()), ]) };
+    let other = rt::Runtime::build(rt::UserCode::Sequential, config_default());
+    let built = mem::allocations();
+    if !(built > after) { nikaia_std::abort::assertion_failed("assert(built > after)", None, &[("built", (&&nikaia_std::abort::Operand(&(built))).shown()), ("after", (&&nikaia_std::abort::Operand(&(after))).shown()), ]) };
+    if !(first.describe() == second.describe()) { nikaia_std::abort::assertion_failed("assert(first.describe() == second.describe())", None, &[("first.describe()", (&&nikaia_std::abort::Operand(&(first.describe()))).shown()), ("second.describe()", (&&nikaia_std::abort::Operand(&(second.describe()))).shown()), ]) };
+    if !(other.describe().contains("io-method")) { nikaia_std::abort::assertion_failed("assert(other.describe().contains(\"io-method\"))", None, &[]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
@@ -142,5 +195,19 @@ pub(crate) fn run_config_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(),
         ("run_config::nothing_written_is_the_documented_defaults", __nikaia_test_0),
         ("run_config::a_duration_takes_seconds_thousandths_and_minutes", __nikaia_test_1),
         ("run_config::the_file_knows_four_keys_and_no_others", __nikaia_test_2),
+        ("run_config::the_description_names_the_mechanism_that_was_chosen", __nikaia_test_3),
+        ("run_config::an_idle_pool_does_not_wake_itself", __nikaia_test_4_to_its_end),
+        ("run_config::the_calling_thread_is_never_an_io_worker", __nikaia_test_5_to_its_end),
+        ("run_config::there_is_one_runtime_and_it_is_already_running", __nikaia_test_6),
     ]
+}
+
+pub(crate) fn __nikaia_test_4_to_its_end() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    nikaia_std::rt::exec::block_on(__nikaia_test_4())?;
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_5_to_its_end() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    nikaia_std::rt::exec::block_on(__nikaia_test_5())?;
+    Ok(())
 }

@@ -1,0 +1,3 @@
+a site alone caught (-1), requests: 0
+a second error joined (2, -1), more requests: true
+a call that can fail succeeded (1), bytes held more: 0

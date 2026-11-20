@@ -175,7 +175,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_kept_lambda_changes_a_capture(&mut self, name: &str, span: &Span) {
         let message = format!("This lambda is kept for later, so it takes its own copy of `{}`; a change it makes never reaches `{}` here.", name, name);
-        let note = nikaia_std::block::Text::from("A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-3 D17).");
+        let note = nikaia_std::block::Text::from("A function value in a field, a `let`, a result, an element or a `keep` parameter is kept, and a kept lambda moves what it captures (Part I 5.4 C). Only a lambda run in place changes the binding itself (ADR-views-v4 D17).");
         let help = format!("Hand the value back instead: take `{}` as a parameter and return what it becomes (`fn(v, {}) {{ {} + v }}`), or keep `{}` in a `Shared` value both sides reach.", name, name, name, name);
         self.findings.push(check_refusal("NK2101", span, message, vec![note], Some(help)));
     }

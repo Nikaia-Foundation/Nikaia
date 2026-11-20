@@ -1,5 +1,5 @@
 // Keys and elements that are pieces of a buffer and never changed stay views
-// of it (ADR-views-3 D5, #1213): no copy is asked for, and the ledger lists
+// of it (ADR-views-v4 D5, #1213): no copy is asked for, and the ledger lists
 // `Index.counts` as `tethered` and `count`'s map keys as `ref(text)`. A list
 // whose element is changed in place is
 // `a_view_into_an_element_changed_in_place_is_refused`.

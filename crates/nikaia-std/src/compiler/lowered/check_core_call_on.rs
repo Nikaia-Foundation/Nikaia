@@ -179,6 +179,14 @@ pub(crate) fn check_core_call_on_fallback<'r>(state: &CheckState, world: &CheckW
                 let cleanup = match state.cleanup_of(world, on) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 if check_core_call_on_base(&cleanup.owner) == check_core_call_on_base(name) { return resolve_method(world, "cleanup::close"); }
             }
+            if args.is_empty() {
+                for (trait_name, types) in world.library.implementations.iter() {
+                    if types.contains(name) {
+                        let found = resolve_method(world, &format!("{}::{}", trait_name, entry));
+                        if found.is_some() { return std::convert::identity(found); }
+                    }
+                }
+            }
         },
         _ => { },
     }

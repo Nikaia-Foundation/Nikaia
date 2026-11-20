@@ -1,5 +1,5 @@
 /// Functions with a parameter of code, for the lambdas another file of the
-/// package hands them (ADR-views-3 D17, #2046): one runs it a call at a time,
+/// package hands them (ADR-views-v4 D17, #2046): one runs it a call at a time,
 /// one from tasks at once, and one hands it on to the second.
 pub fn code_beside_each(xs: Vec[i64], f: fn(i64)) {
     for x in xs {

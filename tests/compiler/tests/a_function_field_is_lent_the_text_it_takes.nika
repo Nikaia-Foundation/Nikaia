@@ -1,4 +1,4 @@
-// **What a function field takes as a view is lent to it** (ADR-views-3 D2,
+// **What a function field takes as a view is lent to it** (ADR-views-v4 D2,
 // D14, #1254): an owned `String` field or local handed to `fn(String)` went
 // below by value, and `rustc` refused the call.
 struct Ask {

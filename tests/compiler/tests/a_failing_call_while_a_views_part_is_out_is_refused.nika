@@ -1,4 +1,4 @@
-// #949, ADR-views-1 D2: between taking `c.names` out of the view and giving
+// #949, ADR-views-v4 D19: between taking `c.names` out of the view and giving
 // it back stands no call that can fail.
 use std::collections
 struct C { pub names: Vec[String] }

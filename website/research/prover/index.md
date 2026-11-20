@@ -190,13 +190,13 @@ that it cannot fall back.
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 30 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 40%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
 <div class="rq-row"><span>Evidence</span><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 5%"></span></div></div>
-<p class="rq-note">The rules that make arguments and views visible (ADR-views-3) are being built now. The reach of a small solver is suggestive, but the share owed to the language is not yet measured.</p>
+<p class="rq-note">The rules that make arguments and views visible (ADR-views-v4) are being built now. The reach of a small solver is suggestive, but the share owed to the language is not yet measured.</p>
 </div>
 
 A prover can only use what the code makes visible. In Nikaia a function
 declares whether it keeps, changes or only looks at each argument, and the
 compiler refuses a change to a value while a view of it is still in use
-([ADR-views-3](/docs/specification/adr/adr-views-3.html)). Lengths, guards and types are facts the
+([ADR-views-v4](/docs/specification/adr/adr-views-v4.html)). Lengths, guards and types are facts the
 prover reads directly. The working assumption is that a language designed for
 this needs a smaller prover, and fewer annotations, for the same reach. The
 question is how much of the reach measured above comes from the language and
@@ -407,7 +407,7 @@ programs above it.
 | A type's rule about its fields is proved where values are built and known where they are read | [ADR-369](/docs/specification/adr/adr-369.html) |
 | A pure `bool` call is a property the prover knows by name | [ADR-381](/docs/specification/adr/adr-381.html) |
 | A loop is a problem in Horn clauses, and invariants are found, checked, and may be proposed from outside | [ADR-361](/docs/specification/adr/adr-361.html) |
-| A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
+| A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-v4](/docs/specification/adr/adr-views-v4.html) |
 | The solver is written in Nikaia, untrusted, its proofs checked and committed | [ADR-270](/docs/specification/adr/adr-270.html) |
 | A strategy layer switches engines during a search, and effort is counted in work, not time | [ADR-270](/docs/specification/adr/adr-270.html) D14, D25, [ADR-306](/docs/specification/adr/adr-306.html) |
 | A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798) |

@@ -1,4 +1,4 @@
-// #1213 step 6, ADR-views-3 D2: `nikaia migrate views-3` writes `keep self`
+// #1213 step 6, ADR-views-v4 D2: `nikaia migrate views-3` writes `keep self`
 // where the old by-value `self` is consumed by the body, and leaves a `self`
 // that only looks, and a `ref self`, without it.
 use std::fs

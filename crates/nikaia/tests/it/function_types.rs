@@ -643,7 +643,7 @@ fn a_handler_passed_on_inside_a_loop_is_lent() {
         "the declaration takes a view of it: {rust}"
     );
     // **And the call hands it on as it has it**: `f` is a `&mut impl
-    // AsyncFnMut` already (ADR-views-3 D17), reborrowed. A second `&` compiled
+    // AsyncFnMut` already (ADR-views-v4 D17), reborrowed. A second `&` compiled
     // here and was a new type at every level of a recursion (ADR-294 D11,
     // found moving `fold`).
     assert!(

@@ -1,0 +1,19 @@
+// A `String` parameter says what `ref String` says (ADR-282 D2, #2346), so
+// it goes into an array, a list or a tuple whose parts are views as the view
+// it already is.
+fn first(name: String) -> u32 {
+	let table: Array[(u32, ref String, u32), 1] = [(10, name, 3)]
+	return table[0].2
+}
+
+fn names(name: String) -> i64 {
+	let bare: Array[ref String, 1] = [name]
+	let listed: Vec[(u32, ref String)] = [(1, name)]
+	let pair: (u32, ref String) = (2, name)
+	return bare[0].len() + listed[0].1.len() + pair.1.len()
+}
+
+fn main() throws {
+	println(f"{first("a")}")
+	println(f"{names("abc")}")
+}

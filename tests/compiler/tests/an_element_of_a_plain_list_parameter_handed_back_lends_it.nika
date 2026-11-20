@@ -1,5 +1,5 @@
 // An element of a plain `Vec[String]` parameter handed back as the `String`
-// result lends the list (#1343, ADR-views-3 D8): the result is a view of it,
+// result lends the list (#1343, ADR-views-v4 D8): the result is a view of it,
 // whole, beside text of its own, nested or through a struct field, and the
 // caller uses the list again. It used to lower as a move out of the borrow.
 struct Shelf { items: Vec[String] }

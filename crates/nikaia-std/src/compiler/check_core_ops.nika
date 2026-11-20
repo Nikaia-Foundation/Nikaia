@@ -676,7 +676,7 @@ fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value:
     return found.changing
 }
 
-/// **A field of a parameter the function lends** (ADR-views-3 D2, #1472):
+/// **A field of a parameter the function lends** (ADR-views-v4 D2, #1472):
 /// `c.signature ?? return -1` of a lent `c: C` reads the option in place.
 fn check_core_ops_field_of_a_lent_parameter(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {

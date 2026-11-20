@@ -1,4 +1,4 @@
-// #1254 step 2, ADR-views-3 D2, D4, D5, D7/D8: `nikaia migrate views-3`
+// #1254 step 2, ADR-views-v4 D2, D4, D5, D7/D8: `nikaia migrate views-3`
 // never writes `keep` for a parameter written `ref`. A `ref T` was a borrow,
 // so the body reads it, hands back a view of it or stores one, and the lent
 // `T` it becomes says that: `text_of` hands back the text or a fallback,

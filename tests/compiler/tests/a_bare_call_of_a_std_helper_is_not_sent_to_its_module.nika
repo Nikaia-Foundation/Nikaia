@@ -1,0 +1,5 @@
+// `abort::lookup` is `pub = false`: a program cannot call it, so the hint
+// "isn't available without its module" does not offer it for a bare `lookup()`.
+fn main() throws {
+    let found = lookup()
+}

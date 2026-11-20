@@ -103,6 +103,56 @@ fn check_arguments_wrote_ref(value: ref Expr?) -> bool sync {
     }
 }
 
+/// **Whether a type holds a `ref String` below its top** (decision on #2310):
+/// a part of a list, an array or a tuple; a function type's parameters are
+/// its own call's, not a part.
+fn check_arguments_holds_text_inside(ty: ref Ty, depth: i64) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            if depth > 0 && view && (name == "String" || name == "str") {
+                return true
+            }
+            for arg in args {
+                if check_arguments_holds_text_inside(arg, depth + 1) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_arguments_holds_text_inside(part, depth + 1) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Pointed { item, .. } => check_arguments_holds_text_inside(item, depth + 1),
+        Ty::Nullable(held) => check_arguments_holds_text_inside(held, depth + 1),
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **Whether an argument is a `comptime` read by name**, `ref` written or
+    /// not: an item's or one a body declares, not a binding that shadows one
+    /// (#703).
+    fn check_arguments_a_comptime(ref self, world: ref CheckWorld, given: ref Expr?) -> bool sync {
+        let value = given ?? return false
+        return match value {
+            Expr::Unary { op, expr, .. } => match op {
+                UnaryOp::Ref => self.check_arguments_a_comptime(world, expr),
+                else => false,
+            },
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                self.facts.comptime_names.contains(name) && !(self.frame_holding(name) > 0 && self.binding(name)?.built == null)
+            },
+            else => false,
+        }
+    }
+}
+
 fn check_arguments_a_print(written: ref String) -> bool sync {
     return written == "println" || written == "eprintln" || written == "print" || written == "eprint"
 }
@@ -368,7 +418,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     }
     let own = world.own.functions.contains_key(key)
     let offset = if signature.takes_a_receiver() { 1 } else { 0 }
-    // **Text of two tiers meeting in one type variable** (ADR-views-3 D12,
+    // **Text of two tiers meeting in one type variable** (ADR-views-v4 D12,
     // #1498): a type variable this program's function lends holds what the
     // caller holds behind one `&` (#1342), so where one argument is a view of
     // text (or a literal), the variable is that `&str`, every text of its own
@@ -414,6 +464,15 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         let mut found_here = argument.found.clone()
         if is_a_view_of_a_string(found_here) {
             found_here = text_view.clone()
+        }
+        // **Text a described Rust function holds inside a container is the
+        // build's** (ADR-rust-boundary-1 D24, decision on #2310): a `ref
+        // String` part of a parameter's list or tuple is a `&'static str`
+        // there, so only a `comptime` value can be handed to it; a run-time
+        // one would reach rustc as a borrow that escapes.
+        if contract.described && !own && check_arguments_holds_text_inside(declared, 0) && !state.check_arguments_a_comptime(world, given_here) {
+            state.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be a `comptime` value: its `ref String` parts are text the build holds (`&'static str` in Rust).", [f"It's declared as `{key}{signature.shown(contract.keeps)}`; a value built at run time lives only as long as its function."], f"Declare the value as `comptime` and pass it by name."))
+            continue
         }
         // A literal that cannot fit the parameter it is given, asked here
         // rather than where the argument was walked: a free call walks its
@@ -518,7 +577,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
                 found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? state.tuple_list_literal(world, found_here, literal_wants, value) ?? found_here.clone()
             }
             // **A text literal a method lends is the view it is** (ADR-282
-            // D5, ADR-views-3 D2, #1230): a method call walks its arguments
+            // D5, ADR-views-v4 D2, #1230): a method call walks its arguments
             // against the parameter's type (ADR-288), which made the literal
             // text of its own before the position was known to be lent.
             if lent && a_text_literal_expr(value) {
@@ -536,7 +595,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A type variable this program's function lends takes one `&`**
-        // (ADR-views-3 D2, #1342): `c: C` lowers `c: &C`, and a generic is not
+        // (ADR-views-v4 D2, #1342): `c: C` lowers `c: &C`, and a generic is not
         // reached through the language below's deref coercion, so the
         // argument has exactly one. None where it is a view of a value
         // already (a lent `C` handed on, a `for` element); one otherwise, text
@@ -560,7 +619,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A declared function that lends a parameter fits a function type
-        // whose `from` reads it** (ADR-views-3 D14).
+        // whose `from` reads it** (ADR-views-v4 D14).
         if state.lends_where_a_function_type_reads(world, given_here, found_here, want) {
             let value = given_here ?? continue
             if lent {
@@ -569,7 +628,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A library function's text view is lent where it is read**
-        // (ADR-views-3 D1, D4, #1213): `html::escape` hands back a view the
+        // (ADR-views-v4 D1, D4, #1213): `html::escape` hands back a view the
         // language below holds as a value of its own (a `Cow`), so the
         // compiler writes the `&` the source no longer does.
         if (lent || want.is_a_view()) && given_here != null {
@@ -625,7 +684,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             check_overflow_list_into_nullables(state, value, found_here, want)
         }
         // **A list, or a part of a list or an array, handed to a lent
-        // `Array[T]`** (ADR-views-3 D11, #1209): the parameter is a view of
+        // `Array[T]`** (ADR-views-v4 D11, #1209): the parameter is a view of
         // the run, so a list is lent (`&v`) and a part is one already
         // (`&v[a..b]`), as a call's result that is a view of a run is
         // (#1254). A `mut` one is `lent_to_a_mut_parameter`'s below.
@@ -671,7 +730,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         }
         // **An element or a field read off a place, handed to a `ref T?`
         // slot (a `Vec` element), is lent and goes inside the option**
-        // (ADR-views-3 D5, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
+        // (ADR-views-v4 D5, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
         if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
             let value = given_here ?? continue
             if check_core_stmt_element_view(state, world, value, found_here, want) == 1 {
@@ -820,7 +879,7 @@ fn check_arguments_mut_differs(found: ref Ty, want: ref Ty) -> i64 sync {
 
 impl CheckState {
     /// **A declared function that lends a parameter, handed where a function
-    /// type's `from` reads it** (ADR-views-3 D14): `first(s: String) ->
+    /// type's `from` reads it** (ADR-views-v4 D14): `first(s: String) ->
     /// String` that hands back a view of `s` fits `fn(s: String) -> String
     /// from s`, whose `s` is lent and whose result is a view; the language
     /// below takes both as `&str`. A parameter the function keeps does not

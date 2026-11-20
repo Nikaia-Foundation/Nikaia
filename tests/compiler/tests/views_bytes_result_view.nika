@@ -1,5 +1,5 @@
 // A `Bytes` result that is a piece of a lent `Bytes` is a view of it
-// (ADR-views-3 D15, D11), with or without `from`.
+// (ADR-views-v4 D15, D11), with or without `from`.
 fn rest(b: Bytes) -> Bytes {
     return b[1..]
 }

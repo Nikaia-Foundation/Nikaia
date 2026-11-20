@@ -1,4 +1,4 @@
-// #949, ADR-views-1 D4: a `let mut` view of a map's entry handed whole to
+// #949, ADR-views-v4 D21: a `let mut` view of a map's entry handed whole to
 // something that keeps it is `NK1131`: the entry is the map's.
 use std::collections
 struct C { pub names: Vec[String] }

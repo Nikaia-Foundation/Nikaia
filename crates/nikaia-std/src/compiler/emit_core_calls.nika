@@ -266,7 +266,7 @@ impl EmitState {
             }
             i += 1
         }
-        // **And one that runs the code called** (ADR-views-3 D17): a
+        // **And one that runs the code called** (ADR-views-v4 D17): a
         // parameter of code is `&mut impl FnMut` below, which Rust holds for
         // the call from before its arguments, so `f(f(x))` is
         // `({ let a = f(x); f(a) })`.
@@ -953,6 +953,22 @@ impl EmitState {
         // borrows the receiver from before the arguments to the call, so
         // `w.add(g(w))` is `({ let a = g(&mut w); w.add(a) })`. Only on a
         // receiver that is a place, which nothing is done to evaluate.
+        // **A method of a trait a library's `impl` gives the type** (#2304):
+        // the checker keyed `supervisor::Restart::decide`, and the language
+        // below finds `decide` only with the trait in scope.
+        let in_scope = emit_call_library_trait(world, self.facts.method_callees[on_node]?.clone() ?? "")
+        if in_scope != "" {
+            out.push(f"{{ use nikaia_std::{in_scope} as _; ")
+        }
+        self.emit_core_method_call_hoisted(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)
+        if in_scope != "" {
+            out.push(" }")
+        }
+    }
+
+    /// `emit_core_method_call`, its arguments bound first where they lend the
+    /// receiver's local.
+    fn emit_core_method_call_hoisted[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let hoisted = self.emit_method_hoisted(world, receiver, args)
         if hoisted.len() == 0 {
             walk.hoisted_args = null
@@ -2178,4 +2194,18 @@ fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
         return f"({copies[0]},)"
     }
     return f"({copies.join(", ")})"
+}
+
+/// **The trait a method call's ledger key names, where a library `impl` gives
+/// it a type** (#2304): `supervisor::Restart` for `supervisor::Restart::decide`,
+/// else `""`. Only a trait of a module, the path the language below writes
+/// under `nikaia_std::`.
+fn emit_call_library_trait(world: ref EmitWorld, key: ref String) -> String {
+    for (trait_name, _) in world.library.implementations {
+        let method = key.strip_prefix(f"{trait_name}::") ?? continue
+        if trait_name.contains("::") && !method.contains("::") {
+            return trait_name.clone()
+        }
+    }
+    return ""
 }

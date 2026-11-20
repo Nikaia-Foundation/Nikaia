@@ -3,7 +3,7 @@
 // Each cell either runs (its `.stdout` beside it) or is refused with a
 // specific NK code (its `.stderr`); none may reach rustc and come back as
 // NK1343. The expectations are reviewed and committed by hand from what the
-// language specifies (ADR-282, ADR-views-3), never blessed blindly.
+// language specifies (ADR-282, ADR-views-v4), never blessed blindly.
 //
 //     nikaia run scripts/ownership_matrix.nika [-- --list]
 //
@@ -14,7 +14,7 @@
 // The axes:
 //
 // * form: the value `s` is `owned` (a `String` made by a call) or a `view`
-//   (`let s = h.name`, a view of a field of a local, ADR-views-3 D5);
+//   (`let s = h.name`, a view of a field of a local, ADR-views-v4 D5);
 // * mode: `lent` puts `s` where the position lends it and uses `s` again
 //   after; `kept` puts it where the position keeps it and never uses it
 //   again; `given` keeps it and uses `s` again after (refused for an owned
