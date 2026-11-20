@@ -11,12 +11,12 @@ pub fn lg_smtlib_write(arena: &TermArena, facts: &[i64], goal: i64) -> String {
     }
     arena.variables(goal, &mut names);
     let mut out: String = String::from("(set-logic QF_LIA)\n");
-    for name in names.iter() { out.push_str(&format!("(declare-const {} Int)\n", lg_symbol(name))); }
+    for name in names.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(declare-const {} Int)\n", lg_symbol(name))); }; }
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        out.push_str(&format!("(assert {})\n", lg_term(arena, fact)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(assert {})\n", lg_term(arena, fact))); };
     }
-    out.push_str(&format!("(assert (not {}))\n", lg_term(arena, goal)));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("(assert (not {}))\n", lg_term(arena, goal))); };
     out.push_str("(check-sat)\n");
     out
 }

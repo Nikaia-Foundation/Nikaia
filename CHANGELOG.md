@@ -8,6 +8,24 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1495] — 2026-11-20
+
+**Builders' changes (#2367)**
+- A plain `b: Bytes` parameter that keeps only a cut or a clone of `b` now takes the `Bytes` with its owner, the way `ref Bytes` does: the cut or clone shares the owner instead of copying, the caller can still use `b`, and `keep b: Bytes` kept this way no longer warns NK1334 (ADR-views-3 D15, ADR-373 D4).
+- `s.push_str(f"…{x}…")` on a local lowers to `write_fmt` into the text, not `push_str(&format!(…))`: one String allocated and freed less per call; allocator Ir of a check 1,009M -> 912M.
+- The integer solver's elimination works on the bounds' rank forms (no LgLin rebuilt per pair), reads the branch's atoms by view instead of cloning them, moves names it no longer needs and pre-sizes its vectors; `lg_add` takes its first operand by value. Allocator Ir of a check 912M -> 693M, total 2,583M -> 2,224M, output unchanged.
+- `lg_written`, `LgNormal::text` and `proofs_written` pre-size their text, so a key is written without a chain of reallocations; allocator Ir of a check 693M -> 678M, total 2,224M -> 2,190M, output unchanged.
+
+## [0.0.1494] — 2026-11-20
+
+**A child's environment is assembled in Nikaia, its Windows case tested directly (#2119)**
+- A child process's environment (clear, remove, set; names without case on Windows) is decided in std's Nikaia (`runtime/env.nika`), and its Windows case is tested by a test block; nikaia-std has no Rust unit test left.
+
+## [0.0.1493] — 2026-11-20
+
+**The decisions on collections live in one record, ADR-collections-v3 (#2274)**
+- The decisions on collections (entry and extend on every map, extend on every set, iter() on arrays and sets) live in one record, ADR-collections-v3; ADR-collections-1 and -2 archived.
+
 ## [0.0.1492] — 2026-11-20
 
 **solver: build the program as a package of files, rustc's lints capped**
@@ -53,9 +71,8 @@ has no heading here; `CLAUDE.md` draws the line.
 
 ## [0.0.1487] — 2026-11-20
 
-**Builders' changes (#2214, #2338)**
+**Builders' changes (#2214)**
 - Keeping a cut of a `ref Bytes` parameter (`out.push(b[0..<2])`) keeps the parameter: the function takes the `Bytes` with its owner and the cut shares it instead of copying, so a cut of a mapped file handed in keeps the file mapped (ADR-373 D4); it was refused with NK1131 before.
-- The compiler counts its own allocations: `mem::allocations()` and `mem::usage()` read the calling thread's requests in a `test` block of `nikaia test --std` (ADR-400 D1), so std's own tests can count, and the one-runtime check of ADR-303 D4 is a test block. Costs about 4 % instructions on a check.
 
 ## [0.0.1486] — 2026-11-20
 

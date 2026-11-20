@@ -41,8 +41,8 @@ pub(crate) fn pb_render(entries: &[PbLine], limit: i64) -> PbRendered {
     for entry in entries.iter() {
         if entry.kind == "proved" && (entry.body.len() as i64) > limit {
             long.insert(nikaia_std::block::Text::from(entry.key.to_string()), nikaia_std::block::Text::from(entry.body.to_string()));
-            out.push_str(&format!("{} proved @\n", entry.key));
-        } else { out.push_str(&format!("{} {} {}\n", entry.key, entry.kind, entry.body)); }
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{} proved @\n", entry.key)); };
+        } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{} {} {}\n", entry.key, entry.kind, entry.body)); }; }
     }
     PbRendered { text: out, long }
 }

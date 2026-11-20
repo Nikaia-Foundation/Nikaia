@@ -1,0 +1,23 @@
+// `s.push_str(f"…{x}…")` writes the formatted text into `s` (#2382): on a
+// local, on a `mut` parameter, in a loop, with a hole that reads the text
+// itself (formatted first, then appended), and with braces in the text.
+
+fn add_to(mut out: String, n: i64) {
+    out.push_str(f"[{n}]")
+}
+
+fn main() throws {
+    let mut s = "a"
+    let n = 7
+    s.push_str(f"-{n}-")
+    for i in 0..<3 {
+        s.push_str(f"{i},")
+    }
+    s.push_str(f"({s.len()})")
+    s.push_str(f"{{{n}}}")
+    add_to(s, 42)
+    let mut copy = ""
+    copy.push_str(f"<{s}>")
+    print(s)
+    print(copy)
+}

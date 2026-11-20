@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1492 (Draft)
+**Version:** 0.0.1495 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -1546,7 +1546,7 @@ Every value of every build option has the same `std::fs` surface; only the targe
 **`std::collections` — and where keys come from**
 
 **The ordered and the hashed collections offer the same entries**
-([ADR-collections-1](adr/adr-collections-1.md)). `BTreeMap` has what `HashMap`
+([ADR-collections-v3](adr/adr-collections-v3.md)). `BTreeMap` has what `HashMap`
 has apart from hashing, and `BTreeSet` what `HashSet` has: `m.entry(k)` with
 `or_insert`, `or_insert_with`, `or_default` and `and_modify` on both maps, and
 `s.extend(items)` on both sets, as on `Vec`. `or_default()` is
@@ -1557,8 +1557,8 @@ sequence of owned elements, and keeps them; `s.extend(xs.clone())` copies the
 elements, never a list in between. Only what depends on order (`first`,
 `last`) is the ordered kind's alone.
 
-**A set is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)
-D3): `s.iter()` lends the elements one at a time, the sequence `Vec::iter()` is,
+**A set is walked as a list is** ([ADR-collections-v3](adr/adr-collections-v3.md)
+D9): `s.iter()` lends the elements one at a time, the sequence `Vec::iter()` is,
 so `any`, `all`, `filter`, `map`, `count` and `collect` follow. A `BTreeSet`
 hands them back smallest first and from either end (`rev`); a `HashSet` in no
 order, as `HashMap::keys` does, so a program that prints them says which order

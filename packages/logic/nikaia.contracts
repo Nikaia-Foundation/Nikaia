@@ -1835,18 +1835,18 @@ signature = "(ref self, id: i64, mut names: collections::BTreeSet[String])"
 
 [fn."lg_add"]
 sync = "inferred"
+keeps = ["a"]
 panics = false
 touches = []
-views = ["a: borrowed", "b: borrowed"]
-signature = "(a: ref LgLin, b: ref LgLin) -> LgLin?"
+views = ["b: borrowed"]
+signature = "(a: LgLin, b: ref LgLin) -> LgLin?"
 
 [fn."lg_add_constant"]
 sync = "inferred"
 keeps = ["a"]
 panics = false
 touches = []
-views = ["a: borrowed"]
-signature = "(a: ref LgLin, c: i64) -> LgLin"
+signature = "(a: LgLin, c: i64) -> LgLin"
 
 [fn."lg_add_constant_checked"]
 sync = "inferred"
@@ -1996,6 +1996,14 @@ touches = []
 views = ["bounds: borrowed", "budget: borrowed"]
 signature = "(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed"
 
+[fn."lg_contradictory_at"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+views = ["atoms: borrowed", "places: borrowed", "budget: borrowed"]
+signature = "(atoms: ref Vec[LgLin], places: ref Vec[i64], budget: ref LgBudget) -> LgClosed"
+
 [fn."lg_copy"]
 sync = "inferred"
 panics = true
@@ -2006,10 +2014,9 @@ signature = "(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: c
 [fn."lg_eliminate"]
 sync = "inferred"
 panics = true
-places = true
 touches = []
-views = ["now: borrowed", "name: borrowed", "budget: borrowed", "ranks: borrowed"]
-signature = "(mut held: Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_places: Vec[Vec[i64]], ranks: ref collections::BTreeMap[String, i64], mut stop: Vec[LgClosed]) -> Vec[i64]"
+views = ["now: borrowed", "budget: borrowed"]
+signature = "(mut held: Vec[LgHeld], now: ref Vec[i64], rank: i64, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_places: Vec[Vec[i64]], mut stop: Vec[LgClosed]) -> Vec[i64]"
 
 [fn."lg_follow"]
 sync = "inferred"
@@ -2024,6 +2031,20 @@ panics = false
 touches = []
 views = ["a: borrowed", "b: borrowed"]
 signature = "(a: ref Vec[i64], b: ref Vec[i64]) -> i64"
+
+[fn."lg_form_coefficient"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["form: borrowed"]
+signature = "(form: ref Vec[i64], rank: i64) -> i64"
+
+[fn."lg_form_combine"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref Vec[i64], ka: i64, b: ref Vec[i64], kb: i64) -> Vec[i64]?"
 
 [fn."lg_form_of"]
 sync = "inferred"
@@ -2136,6 +2157,13 @@ places = true
 touches = []
 views = ["step: borrowed", "bounds: borrowed", "source_text: borrowed", "source_weight: borrowed", "made_lin: borrowed", "made_atom: borrowed"]
 signature = "(step: ref LgStep, bounds: ref Vec[LgLin], source_text: ref Vec[String], source_weight: ref Vec[i64], made_lin: ref Vec[LgLin], made_atom: ref Vec[String], mut used: Vec[String]) -> LgMade?"
+
+[fn."lg_lin_of_form"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["form: borrowed", "rank_names: borrowed"]
+signature = "(form: ref Vec[i64], constant: i64, rank_names: ref Vec[String]) -> LgLin"
 
 [fn."lg_linear"]
 sync = "inferred"
@@ -2471,10 +2499,10 @@ signature = "(a: ref collections::BTreeMap[String, i64], b: ref collections::BTr
 
 [fn."lg_tighten_step"]
 sync = "inferred"
+keeps = ["form"]
 panics = true
 touches = []
-views = ["bound: borrowed", "ranks: borrowed"]
-signature = "(bound: ref LgLin, mut steps: Vec[LgStep], ranks: ref collections::BTreeMap[String, i64]) -> LgHeld"
+signature = "(form: Vec[i64], constant: i64, mut steps: Vec[LgStep]) -> LgHeld"
 
 [fn."lg_tightened"]
 sync = "inferred"
@@ -5183,7 +5211,7 @@ equates = true
 hashes = true
 
 [type."LgHeld"]
-fields = ["lin: LgLin", "step: i64", "form: Vec[i64]"]
+fields = ["constant: i64", "step: i64", "form: Vec[i64]"]
 compares = true
 equates = true
 hashes = true

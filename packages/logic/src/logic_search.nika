@@ -59,11 +59,7 @@ fn lg_search(indexed: ref LgIndexed, state: ref LgBranch, budget: ref LgBudget, 
     if work.n > budget.cases {
         return LgSearched::Unknown(LgUnknown::TooManyCases)
     }
-    let mut bounds: Vec[LgLin] = []
-    for atom in state.held_atoms {
-        bounds.push(indexed.atoms[atom].clone())
-    }
-    let closed = lg_contradictory(bounds, budget)
+    let closed = lg_contradictory_at(indexed.atoms, state.held_atoms, budget)
     match closed {
         LgClosed::Refuted(refutation) => {
             let mut relies: collections::BTreeSet[i64] = collections::BTreeSet()
@@ -205,7 +201,7 @@ fn lg_consistent_answer(arena: ref TermArena, facts: ref Vec[i64], goal: i64, fo
 
 /// A Boolean term's value under `values`, where it has one.
 fn lg_bool_value(arena: ref TermArena, id: i64, values: ref collections::BTreeMap[String, i64]) -> bool? {
-    let node = arena.at(id)
+    let node = arena.nodes[id]
     return match node {
         SolverTerm::Bool(x) => x,
         SolverTerm::Not(a) => {

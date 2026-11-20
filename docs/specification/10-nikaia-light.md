@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1492 (Draft)
+**Version:** 0.0.1495 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -1981,7 +1981,7 @@ length does not match `N` is refused with `NK1157` naming both numbers.
 `[v; n]` (4.5) is such a literal too: `let buf: Array[u8, 4096] = [0; 4096]`,
 where `n` is a number the build knows and equal to `N`.
 
-**An array is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)):
+**An array is walked as a list is** ([ADR-collections-v3](adr/adr-collections-v3.md)):
 `for x in a` lends it (3.3), and `a.iter()`, on an array and on a run of one,
 is the sequence a list's `iter()` is, so `a.iter().zip(b.iter())`, `map`,
 `filter` and `enumerate` follow. Nothing is copied.

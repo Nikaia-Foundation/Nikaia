@@ -1817,6 +1817,10 @@ pub struct KeepsIndexes {
 pub struct KeepsFound {
     pub key: String,
     pub uses: Uses,
+    /// **The plain `Bytes` parameters kept only through a cut or a clone**
+    /// (ADR-views-v4 D15, ADR-373 D4, #2367), left out of `uses.kept`: the
+    /// function takes each with its owner as a `ref Bytes`, not by value.
+    pub counted: Vec[String],
 }
 
 /// A parameter taken by value: neither written `ref` nor `mut`.
@@ -1941,12 +1945,18 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
     // which of them answer a trait of another package is known only once
     // every unit's traits are in the graph.
     let mut impl_rows: Vec[KeepsImplRow] = []
+    // **The plain `Bytes` each body keeps only through a cut or a clone**
+    // (#2367), by the function's ledger name.
+    let mut counted: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let mut unit = 0
     for view in units {
         for item in view.items {
             match item.node {
                 Item::Fn { .. } => {
                     let found = keeps_uses_of(view, item.node, null, ledger, library, indexes, resolved, fn(e) { host.holes(unit, e) }) ?? continue
+                    if !found.counted.is_empty() {
+                        counted.insert(found.key.clone(), found.counted.clone())
+                    }
                     graph.insert(found.key.clone(), found.uses)
                 },
                 Item::Impl { trait_name, target, methods } => {
@@ -1981,6 +1991,9 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                                 },
                                 else => {},
                             }
+                        }
+                        if !found.counted.is_empty() {
+                            counted.insert(found.key.clone(), found.counted.clone())
                         }
                         graph.insert(found.key.clone(), found.uses)
                     }
@@ -2119,6 +2132,34 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
             }
             contract.keeps = list
         }
+    }
+    // **A plain `Bytes` kept only through a cut or a clone is a `ref Bytes`
+    // kept** (ADR-views-v4 D15, ADR-373 D4, #2367): unless a callee keeps it
+    // whole, the signature lends it and `keeps` names it, so it is lowered to
+    // `&Bytes`, the cut or clone is a count on the caller's owner, and the
+    // caller still has it after the call.
+    for (name, names) in counted {
+        let mut contract = ledger.functions[name] ?? continue
+        let signature = contract.signature ?? continue
+        let mut params: Vec[(String, Ty)] = []
+        let mut changed = false
+        for (parameter, ty) in signature.params {
+            if names.contains(parameter) && !contract.keeps.contains(parameter) {
+                params.push((parameter.clone(), Ty::Named { name: "Bytes", args: [], view: true }))
+                changed = true
+            } else {
+                params.push((parameter.clone(), ty.clone()))
+            }
+        }
+        if !changed {
+            continue
+        }
+        for parameter in names {
+            if !contract.keeps.contains(parameter) {
+                contract.keeps.push(parameter.clone())
+            }
+        }
+        contract.signature = Signature { bounds: signature.bounds.clone(), params: params, mutable: signature.mutable.clone(), config: signature.config.clone(), result: signature.result?.clone() }
     }
     keeps_by_value(ledger, units, library)
     return column
@@ -2457,7 +2498,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 parameters.insert("self")
             }
             if parameters.len() == 0 {
-                return KeepsFound { key: key, uses: no_uses() }
+                return KeepsFound { key: key, uses: no_uses(), counted: [] }
             }
             // **The parameters the author lent**: `ref self`, `ref mut self`, an
             // argument whose type is written `ref`, and one written `mut`,
@@ -2569,11 +2610,20 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             if is_method {
                 types.insert("self", target_name.clone())
             }
-            // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4).
+            // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4), and a
+            // plain `b: Bytes` (`keep` or not), which ADR-views-v4 D15 spells
+            // the same where it is lent (#2367): kept only through a cut or a
+            // clone, it is counted below and taken as a `ref Bytes` is.
             let mut cloned_keeps: collections::BTreeSet[String] = collections::BTreeSet()
+            let mut plain_bytes: collections::BTreeSet[String] = collections::BTreeSet()
             for a in args {
-                if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.len() == 0 && view.text(a.ty.name) == "Bytes" {
-                    cloned_keeps.insert(view.text(a.name))
+                if !a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null && a.ty.generics.len() == 0 && view.text(a.ty.name) == "Bytes" {
+                    if a.ty.is_view {
+                        cloned_keeps.insert(view.text(a.name))
+                    } else if !a.mutable {
+                        cloned_keeps.insert(view.text(a.name))
+                        plain_bytes.insert(view.text(a.name))
+                    }
                 }
             }
             // **The options** (ADR-views-v4 D2, #1254), text among them (#1346):
@@ -2599,8 +2649,24 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // **The walk** (`uses_in`): every statement's expressions
             // classified where they stand, then the blocks it holds, and **the
             // value a body ends in leaves the call**, as a `return` does.
-            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options, bounds: bounds }
+            let mut context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options, bounds: bounds }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
+            // **A plain `Bytes` kept only through a cut or a clone is
+            // counted** (ADR-views-v4 D15, ADR-373 D4, #2367): the walk again
+            // without counting its cuts and clones tells it from one kept
+            // whole (`out.push(b)`), which is still taken by value.
+            let mut counted: Vec[String] = []
+            if plain_bytes.iter().any(fn(name) { uses.kept.contains(name) }) {
+                for name in plain_bytes {
+                    context.cloned_keeps.remove(name)
+                }
+                let whole = uses_in(body, view.words, holes_of, context, ledger, library)
+                for name in plain_bytes {
+                    if uses.kept.contains(name) && !whole.kept.contains(name) && !unkept.contains(name) {
+                        counted.push(name.clone())
+                    }
+                }
+            }
             // **A receiver the author wrote `ref` is not kept** (issue #173),
             // **nor an argument written `mut`** (0.0.258): each is a reference
             // by the author's word, which no walk here widens - a use that
@@ -2609,7 +2675,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // (ADR-186 D1).
             let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
             for name in uses.kept {
-                if !unkept.contains(name) {
+                if !unkept.contains(name) && !counted.contains(name) {
                     kept.insert(name.clone())
                 }
             }
@@ -2619,7 +2685,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     passed.push(Passed { parameter: p.parameter.clone(), callee: p.callee.clone(), at: p.at })
                 }
             }
-            return KeepsFound { key: key, uses: Uses { kept: kept, passed: passed } }
+            return KeepsFound { key: key, uses: Uses { kept: kept, passed: passed }, counted: counted }
         },
         else => {
             return null

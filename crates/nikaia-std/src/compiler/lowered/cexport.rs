@@ -142,7 +142,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             arms.push(format!("{} => ({}_Kind::{}, \"{}\"),", variant.pattern, ty, cx_escaped(&variant.name), variant.name));
             names.push(cx_escaped(&variant.name));
         }
-        rust.push_str(&format!("\n/// The kinds of `{}`, as `{}_{}_kind` writes them (ADR-284 D31).\n#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone, Copy)]\nenum {}_Kind {{ {} }}\n\n#[allow(non_snake_case, dead_code)]\nfn __nikaia_kind_{}(value: &{}) -> ({}_Kind, &'static str) {{\n    match value {{ {} }}\n}}\n", ty, prefix, ty, ty, nikaia_std::block::Text::from(names.join(", ")), ty, ty, ty, nikaia_std::block::Text::from(arms.join(" "))));
+        { use ::core::fmt::Write as _; let _ = rust.write_fmt(format_args!("\n/// The kinds of `{}`, as `{}_{}_kind` writes them (ADR-284 D31).\n#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone, Copy)]\nenum {}_Kind {{ {} }}\n\n#[allow(non_snake_case, dead_code)]\nfn __nikaia_kind_{}(value: &{}) -> ({}_Kind, &'static str) {{\n    match value {{ {} }}\n}}\n", ty, prefix, ty, ty, nikaia_std::block::Text::from(names.join(", ")), ty, ty, ty, nikaia_std::block::Text::from(arms.join(" ")))); };
         all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: String::from("kind"), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: None, getter: true, of_variant: None, kind_of: std::convert::identity(kind) });
         for variant in handle.variants.iter() { for (getter, pattern, field) in variant.fields.iter() { all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: nikaia_std::block::Text::from(getter.to_string()), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(field.clone()), getter: true, of_variant: Some(CxVariantOf { variant: nikaia_std::block::Text::from(variant.name.to_string()), pattern: nikaia_std::block::Text::from(pattern.to_string()) }), kind_of: None }); } }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
@@ -171,7 +171,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
                 None => None,
             };
             if named.is_some() { errno = format!(", {}", nikaia_std::index::or(named.as_deref(), || "")); }
-            constants.push_str(&format!("#define {}_E_{} {} /* {}{} */\n", upper, code.constant, code.number, what, errno));
+            { use ::core::fmt::Write as _; let _ = constants.write_fmt(format_args!("#define {}_E_{} {} /* {}{} */\n", upper, code.constant, code.number, what, errno)); };
         }
     }
     let ctx = CxCtx { plains: plains.copy_owned(), handles: handles.copy_owned(), records: records.copy_owned(), codes: codes.copy_owned(), prefix: nikaia_std::block::Text::from(prefix.to_string()), upper: nikaia_std::block::Text::from(upper.to_string()), user_code: nikaia_std::block::Text::from(user_code.to_string()) };
@@ -196,12 +196,12 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
         build.declarations.push_str(&format!("\n/* An _async call's ticket: cancel it at its next pause point, free it after done (ADR-284 D19). */\nint {}_cancel({}_op *op);\nint {}_op_free({}_op *op);\n", prefix, prefix, prefix, prefix));
     }
     let mut types: String = String::from("");
-    if build.any_pause { types.push_str(&format!("typedef struct {}_op {}_op;\n\n", prefix, prefix)); }
+    if build.any_pause { { use ::core::fmt::Write as _; let _ = types.write_fmt(format_args!("typedef struct {}_op {}_op;\n\n", prefix, prefix)); }; }
     at = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
             let name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&handles, (at) as usize) }.name.to_string());
-            types.push_str(&format!("typedef struct {}_{} {}_{};\n\n", prefix, name, prefix, name));
+            { use ::core::fmt::Write as _; let _ = types.write_fmt(format_args!("typedef struct {}_{} {}_{};\n\n", prefix, name, prefix, name)); };
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
@@ -215,7 +215,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
                 values.push(format!("    {}_{}_{} = {}", upper, plain.stem, nikaia_std::block::Text::from(variant.to_uppercase()), number));
                 number += 1;
             }
-            types.push_str(&format!("typedef enum {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(values.join(",\n")), prefix, plain.name));
+            { use ::core::fmt::Write as _; let _ = types.write_fmt(format_args!("typedef enum {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(values.join(",\n")), prefix, plain.name)); };
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
@@ -487,7 +487,7 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
             }
             rust_params.push(format!("__nikaia_at: {} __nikaia_c_{}", pointer, owner));
             c_params.push(format!("{}{}_{} *self", constant, prefix, owner));
-            checks.push_str(&format!("    // SAFETY: the C caller hands its struct, or NULL, and leaves it alone for the call (ADR-284 D16).\n    let Some(__nikaia_self) = (unsafe {{ nikaia_std::c_boundary::read(__nikaia_at) }}) else {{ return -1; }};\n    let Some({}__nikaia_self) = __nikaia_self.into_nikaia() else {{ return -1; }};\n", binding));
+            { use ::core::fmt::Write as _; let _ = checks.write_fmt(format_args!("    // SAFETY: the C caller hands its struct, or NULL, and leaves it alone for the call (ADR-284 D16).\n    let Some(__nikaia_self) = (unsafe {{ nikaia_std::c_boundary::read(__nikaia_at) }}) else {{ return -1; }};\n    let Some({}__nikaia_self) = __nikaia_self.into_nikaia() else {{ return -1; }};\n", binding)); };
         } else {
             rust_params.push(format!("__nikaia_self: *const nikaia_std::c_boundary::Handle<{}>", owner));
             let mut constant: &'static str = "";
@@ -499,7 +499,7 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
                 binding = "";
             }
             c_params.push(format!("{}{}_{} *self", constant, prefix, owner));
-            checks.push_str(&format!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {}__nikaia_self = match unsafe {{ nikaia_std::c_boundary::{}(__nikaia_self) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", binding, how));
+            { use ::core::fmt::Write as _; let _ = checks.write_fmt(format_args!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {}__nikaia_self = match unsafe {{ nikaia_std::c_boundary::{}(__nikaia_self) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", binding, how)); };
         }
     }
     #[allow(unused_mut)] let mut params = CxParams { rust_params: rust_params.copy_owned(), c_params: c_params.copy_owned(), checks: nikaia_std::block::Text::from(checks.to_string()), call_args: call_args.copy_owned() };
@@ -539,7 +539,7 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     let variant_pattern = nikaia_std::block::Text::from(pattern.to_string());
     if variant_of && owner_name.is_some() {
         let owner = nikaia_std::block::Text::from(owner_text.to_string());
-        checks.push_str(&format!("    if !matches!(&*__nikaia_self, {}) {{\n        __nikaia_failed(format!(\"the {} holds `{{}}`, not `{}`\", __nikaia_kind_{}(&__nikaia_self).1));\n        return -1;\n    }}\n", pattern, owner, variant, owner));
+        { use ::core::fmt::Write as _; let _ = checks.write_fmt(format_args!("    if !matches!(&*__nikaia_self, {}) {{\n        __nikaia_failed(format!(\"the {} holds `{{}}`, not `{}`\", __nikaia_kind_{}(&__nikaia_self).1));\n        return -1;\n    }}\n", pattern, owner, variant, owner)); };
     }
     let args_text = nikaia_std::block::Text::from(call_args.join(", "));
     let mut call = cx_call_text(entry, &owner_text, &name, &args_text, variant_of, &variant_pattern);
