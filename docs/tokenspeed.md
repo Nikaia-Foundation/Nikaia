@@ -1437,6 +1437,7 @@ nothing else.
 | 2026-11-20 | 081ff7 | check | 139 | 9.7 | 0 | - | |
 | 2026-11-20 | baeb1b | check | 16 | 0.6 | 0 | - | |
 | 2026-11-20 | 09b961 | check | 9 | 0.3 | 0 | - | |
+| 2026-11-20 | 6cae48 | check | 11 | 0.4 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
@@ -1446,3 +1447,7 @@ committed no `crates/nikaia/src` Rust. The turn count is assistant messages in
 the transcript (a66fd3 shows 185, not about 100). The full table also has
 "read after 150k / 300k" columns: no agent but a96a76 (75 % / 2 %) read
 meaningfully past 150k, so context size is not what made the long agents dear.
+| 2026-11-20 | aa8d2f | check | 22 | 1.0 | 0 | - | |
+| 2026-11-20 | cd0775 | check | 15 | 0.5 | 0 | - | |
+| 2026-11-20 | 6a5ed3 | check | 14 | 0.5 | 0 | - | |
+| 2026-11-20 | 017307 | check | 10 | 0.4 | 0 | - | |
