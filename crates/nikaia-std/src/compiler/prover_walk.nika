@@ -1282,8 +1282,8 @@ fn prover_summed_function(program: ref Program, words: ref winnow_grammar::Inter
         return free
     }
     let cut = callee.rfind("::") ?? return null
-    let owner = callee[0..<cut].clone()
-    let name = callee[cut + 2..<callee.len()].clone()
+    let owner = callee.before(cut.start).clone()
+    let name = callee.after(cut.end).clone()
     return own_method(program, words, owner, name)
 }
 
@@ -1295,7 +1295,7 @@ fn prover_own_method_callee(receiver: ref Expr, method: winnow_grammar::Symbol, 
     }
     let function = carrying_function(at.function) ?? return null
     let cut = function.rfind("::") ?? return null
-    let owner = function[0..<cut].clone()
+    let owner = function.before(cut.start).clone()
     return f"{owner}::{words.resolve(method)}"
 }
 
@@ -3707,7 +3707,7 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
     }
     let function = carrying_function(at.function) ?? return
     let cut = function.rfind("::") ?? return
-    let owner = function[0..<cut].clone()
+    let owner = function.before(cut.start).clone()
     let name = words.resolve(method).clone()
     let callee = f"{owner}::{name}"
     walk.state.edges.insert((function.clone(), callee.clone()))
@@ -3738,7 +3738,7 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
 fn prover_a_call_on(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     let callee: String = walk.state.method_callees.get(id_of(receiver) as i64)?.clone() ?? return
     let cut = callee.rfind("::") ?? return
-    let owner = callee[0..<cut].clone()
+    let owner = callee.before(cut.start).clone()
     let name = words.resolve(method).clone()
     let mine = own_method(program, words, owner, name)
     if mine == null {
@@ -3856,7 +3856,7 @@ fn prover_std_requires(mut walk: ProverWalk, key: ref String, library: ref Ledge
         return null
     }
     let mut shape = foreign_shape(contract)
-    let owner = key[0..<(key.rfind("::") ?? 0)].clone()
+    let owner = key.before(key.rfind("::")?.start ?? key.start()).clone()
     let mut requires: Vec[i64] = []
     for text in contract.requires {
         let property = prover_std_property_named(text, owner, walk.state.std_properties)
@@ -3874,7 +3874,7 @@ fn prover_std_requires(mut walk: ProverWalk, key: ref String, library: ref Ledge
 fn prover_std_property_named(text: ref String, owner: ref String, properties: ref collections::BTreeSet[String]) -> String? {
     let called = text.strip_prefix("self.") ?? return null
     let open = called.find("(") ?? return null
-    if !called.ends_with(")") || !properties.contains(f"{owner}::{called[0..<open]}") {
+    if !called.ends_with(")") || !properties.contains(f"{owner}::{called.before(open.start)}") {
         return null
     }
     return f"self.{property_mark()}.{called}"
@@ -4225,7 +4225,7 @@ fn prover_std_ensured(library: ref Ledger, properties: ref collections::BTreeSet
         if !signature.takes_a_receiver() {
             continue
         }
-        let owner = key[0..<(key.rfind("::") ?? 0)].clone()
+        let owner = key.before(key.rfind("::")?.start ?? key.start()).clone()
         let mut rests: Vec[String] = []
         for text in contract.ensures {
             let named = prover_std_property_named(text, owner, properties) ?? continue

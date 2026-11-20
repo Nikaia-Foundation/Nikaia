@@ -89,12 +89,13 @@ fn where_is_def(line: String, name: String) -> bool throws {
 fn where_calls_in(line: String, name: String) -> i64 throws {
     let sep = name + "("
     let mut n = 0
-    let mut from = 0
-    while from < line.len() {
-        let at = line.find(sep.clone(); from: from) ?? -1
-        if at < 0 { break }
+    let mut from = line.start()
+    while from < line.end() {
+        let found = line.find(sep.clone(); from: from) ?? break
+        let at = line.before(found.start).bytes.len()
         if at == 0 || !where_ident(line.bytes[at - 1..<at].text()) { n += 1 }
-        from = at + 1
+        // A `name(` cannot start inside another: `name` holds no `(`.
+        from = found.end
     }
     return n
 }
@@ -178,7 +179,7 @@ fn where_at(s: String, i: i64) -> scalar {
 // (a Rust lifetime, or a lone quote).
 fn where_quote_end(line: String, i: i64) -> i64 {
     if where_at(line, i + 1) == '\\' {
-        let close = line.find("'"; from: i + 3) ?? -1
+        let close = line.bytes.find('\'' as u8; from: i + 3) ?? -1
         if close > 0 { return close }
         return i
     }

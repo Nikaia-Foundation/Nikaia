@@ -72,12 +72,14 @@ impl CheckState {
     /// binding is a place as much as `m[k]` is (#1194): the member is lent
     /// out of it, never moved. So is a base that is a view (`viewed`), such as
     /// a method that hands back a field of its receiver (ADR-views-v4 D7, #1486).
+    /// **A type a ledger says copies is copied too** (ADR-294 D9.3): `m?.end`
+    /// of a `text::Match` is a `text::Pos?`, not a view of one (#743).
     fn a_safe_reach(ref mut self, world: ref CheckWorld, base: ref Expr, held_ty: ref Ty, viewed: bool) -> Ty sync {
         let place = viewed || roots_in_a_binding(base) || shapes_lends_from_a_binding(world, base)
         let key = fact_key(base)
         match held_ty {
             Ty::Nullable(held) => {
-                if place && moves(held) {
+                if place && moves(held) && !self.copied(world, held) {
                     self.facts.viewed_reaches.insert(key, viewed_of(held))
                     self.facts.flattened_reaches.insert(key)
                     return viewed_nullable(held)
@@ -86,7 +88,7 @@ impl CheckState {
                 return held_ty.clone()
             },
             else => {
-                if !moves(held_ty) {
+                if !moves(held_ty) || self.copied(world, held_ty) {
                     self.facts.copied_reaches.insert(key)
                     return Ty::Nullable(held_ty.clone())
                 }

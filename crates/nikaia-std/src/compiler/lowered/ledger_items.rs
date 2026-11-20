@@ -416,9 +416,9 @@ pub(crate) fn ledger_code_at_once(ledger: &mut Ledger, derives: &LedgerDerives) 
         }
     }
     for one in at_once.iter() {
-        let at = match nikaia_std::search::rfind(&one, &"::") { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let key = nikaia_std::index::get(&one, nikaia_std::index::at(0..at));
-        let param = nikaia_std::index::get(&one, nikaia_std::index::at(at + 2..));
+        let at = match nikaia_std::text::rfind(&one, &"::") { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let key = one.before(at.start);
+        let param = one.after(at.end);
         let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !nikaia_std::list::contains(&contract.at_once, &param) { contract.at_once.push(nikaia_std::block::Text::from(param.to_string())); }
     }

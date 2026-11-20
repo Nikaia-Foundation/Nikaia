@@ -812,8 +812,8 @@ pub(crate) fn given_paths(arena: &mut logic::TermArena, words: &winnow_grammar::
 
 pub(crate) fn property_given(rest: &str, params: &[String], args: &[Expr], words: &winnow_grammar::InternerContext) -> Option<String> {
     if !rest.starts_with(&*property_mark()) && !::core::convert::identity(match (AsRef::<str>::as_ref(&(rest)), AsRef::<str>::as_ref(&(property_mark())), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find(".") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + ".".len()..].strip_prefix(__nikaia_f1).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { return Some(nikaia_std::block::Text::from(rest.to_string())); }
-    let open = match nikaia_std::search::find(&rest, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
-    let inner = match property_inner(nikaia_std::index::get(&rest, nikaia_std::index::at(open..))) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
+    let open = match nikaia_std::text::find_first(&rest, &"(") { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
+    let inner = match property_inner(rest.after(open.start)) { Some(__nikaia_value) => __nikaia_value, None => return Some(nikaia_std::block::Text::from(rest.to_string())) };
     if inner.is_empty() { return Some(nikaia_std::block::Text::from(rest.to_string())); }
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in inner.split(", ") {
@@ -828,7 +828,7 @@ pub(crate) fn property_given(rest: &str, params: &[String], args: &[Expr], words
         }
         parts.push(given);
     }
-    Some(format!("{}({})", nikaia_std::index::get(&rest, nikaia_std::index::at(0..open)), nikaia_std::block::Text::from(parts.join(", "))))
+    Some(format!("{}({})", rest.before(open.start), nikaia_std::block::Text::from(parts.join(", "))))
 }
 
 pub(crate) fn given_path(arena: &mut logic::TermArena, words: &winnow_grammar::InternerContext, arg: &Expr, rest: &str, scope: &ProverScope, pinned: &collections::BTreeMap<String, i64>) -> Option<i64> {
@@ -840,15 +840,15 @@ pub(crate) fn given_path(arena: &mut logic::TermArena, words: &winnow_grammar::I
     }
     match arg {
         Expr::StructLit { fields, .. } => {
-            let marked = nikaia_std::search::find(&rest, &format!(".{}", property_mark()), 0);
+            let marked = nikaia_std::text::find_first(&rest, &format!(".{}", property_mark()));
             if marked.is_some() {
-                let at = nikaia_std::index::or(marked, || 0);
-                let wanted = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(0..at)).to_string());
+                let at = match marked { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let wanted = nikaia_std::block::Text::from(rest.before(at.start).to_string());
                 for field in fields.iter() {
                     if words.resolve(field.name) == wanted {
                         let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
                         let on = match path_of(value, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                        return Some(arena.var(&format!("{}{}", on, nikaia_std::index::get(&rest, nikaia_std::index::at(at..)))));
+                        return Some(arena.var(&format!("{}{}", on, rest.after(at.start))));
                     }
                 }
                 return None;

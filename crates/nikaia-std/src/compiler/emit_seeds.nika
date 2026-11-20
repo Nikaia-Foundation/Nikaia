@@ -275,7 +275,7 @@ pub fn emit_seeds_read[H: EmitSeedsHost](host: ref H, units: ref Vec[ParsedView]
                 continue
             }
             let at = key.find("::") ?? continue
-            let target = key[0..<at].clone()
+            let target = key.before(at.start).clone()
             if tables.arity(target) > 0 && !bad.contains(target) {
                 bad.push(target)
             }

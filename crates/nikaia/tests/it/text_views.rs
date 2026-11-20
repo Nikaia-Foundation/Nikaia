@@ -174,7 +174,7 @@ fn main() throws {
     let data = f"a;1\nb;2\na;3\n"
     let mut seen: collections::HashMap[TEXT, i64] = collections::HashMap()
     for line in data.lines() {
-        let at = line.find(";") ?? 0
+        let at = line.find(";")?.start ?? line.start()
         let (name, _) = line.split_at(at)
         seen.entry(name).and_modify fn(n) { n += 1 }.or_insert(1)
     }

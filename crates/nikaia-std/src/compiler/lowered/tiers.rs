@@ -3,7 +3,7 @@
 
 pub(crate) const OWNS: [&str; 10] = ["clone", "to_owned", "to_string", "clone_text", "to_uppercase", "to_lowercase", "repeat", "replace", "join", "concat"];
 
-pub(crate) const VIEWS: [&str; 17] = ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix", "lines", "split", "split_whitespace", "splitn", "rsplit", "rsplitn", "split_terminator", "matches", "as_str"];
+pub(crate) const VIEWS: [&str; 20] = ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix", "lines", "split", "split_whitespace", "splitn", "rsplit", "rsplitn", "split_terminator", "matches", "as_str", "before", "after", "between"];
 
 pub(crate) const ELEMENTS: [&str; 15] = ["collect", "next", "unwrap", "first", "last", "get", "iter", "nth", "peek", "pop", "remove", "values", "keys", "drain", "into_iter"];
 

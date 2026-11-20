@@ -59,7 +59,7 @@ impl CheckState {
         match held_ty {
             Ty::Nullable(held) => {
                 let held = nikaia_std::boxed::open(held);
-                if place && moves(held) {
+                if place && moves(held) && !self.copied(world, held) {
                     self.facts.viewed_reaches.insert(key, viewed_of(held));
                     self.facts.flattened_reaches.insert(key);
                     return viewed_nullable(held);
@@ -68,7 +68,7 @@ impl CheckState {
                 return held_ty.clone();
             },
             _ => {
-                if !moves(held_ty) {
+                if !moves(held_ty) || self.copied(world, held_ty) {
                     self.facts.copied_reaches.insert(key);
                     return Ty::Nullable(nikaia_std::block::Boxed::new(held_ty.clone()));
                 }

@@ -1,7 +1,8 @@
 // #882: a loop element handed to a `String` parameter the body only reads
 // through `find` and `??` is lent, not refused as a `ref String` (NK1102).
 fn first_comma(line: String) -> i64 {
-    return line.find(",") ?? -1
+    let m = line.find(",") ?? return -1
+    return line.before(m.start).bytes.len()
 }
 
 fn main() throws {

@@ -277,10 +277,10 @@ pub(crate) fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes
         }
         if line.starts_with(&*head) {
             inside = true;
-            let cut = nikaia_std::search::find(&line, &" - written without their check: ", 0);
+            let cut = nikaia_std::text::find_first(&line, &" - written without their check: ");
             if cut.is_some() {
-                let at = nikaia_std::index::or(cut, || 0);
-                report.push_str(nikaia_std::index::get(&line, nikaia_std::index::at(0..at)));
+                let at = match cut { Some(__nikaia_value) => __nikaia_value, None => continue };
+                report.push_str(line.before(at.start));
             } else { report.push_str(line); }
             report.push_str("\n");
         }

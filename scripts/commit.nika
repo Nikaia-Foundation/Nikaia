@@ -181,8 +181,8 @@ fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
     let mut open: Vec[String] = []
     for part in commit_field(report, "Issue:").split(";") {
         let t = part.trim()
-        let colon = t.find(": ") ?? t.len()
-        let kind = f"{t[0..<colon]}".trim().clone()
+        let colon = t.find(": ")?.start ?? t.end()
+        let kind = f"{t.before(colon)}".trim().clone()
         if kind.starts_with("rules-gap") || kind.starts_with("broke") || kind.starts_with("wrong") {
             if !kind.ends_with("(built)") { open.push(kind) }
         }

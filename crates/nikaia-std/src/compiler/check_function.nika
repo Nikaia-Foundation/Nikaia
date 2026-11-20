@@ -412,9 +412,10 @@ fn given_cut_source(value: ref Expr, words: ref winnow_grammar::InternerContext)
 }
 
 /// **A trim's result is a cut of its receiver** (ADR-text-reuse-1 D2): the
-/// text methods of `VIEWS` that hand back one piece of it, never null.
+/// text methods of `VIEWS` that hand back one piece of it, never null; so are
+/// the cuts at a `text::Pos` (ADR-374 D3).
 fn a_trim(method: ref String) -> bool {
-    return method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches"
+    return method == "trim" || method == "trim_start" || method == "trim_end" || method == "trim_matches" || method == "trim_start_matches" || method == "trim_end_matches" || method == "before" || method == "after" || method == "between"
 }
 
 /// Whether an `if`, a `match` or a block ends, on some path, in a field read

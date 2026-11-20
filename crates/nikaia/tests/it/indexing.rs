@@ -143,14 +143,13 @@ fn main() throws {
 /// has to be converted, which is [ADR-285](../../../docs/specification/adr/adr-285.md)
 /// D1's whole trade. `examples/k-nucleotide/src/main.nika` writes the second shape.
 #[test]
-fn a_slice_of_text_is_converted_where_the_range_is_computed() {
+fn a_slice_is_converted_where_the_range_is_computed() {
     let rust = lowered(
-        "a computed slice of text",
+        "a computed slice",
         "fn main() throws {\n\
-         \x20   let text = \"hello\"\n\
-         \x20   let at = text.find(\"ell\") ?? return\n\
-         \x20   println(f\"{text[at..<at + 3]}\")\n\
          \x20   let xs = [1, 2, 3, 4, 5]\n\
+         \x20   let at = xs.len() - 4\n\
+         \x20   println(f\"{xs[at..<at + 3].len()}\")\n\
          \x20   println(f\"{xs[1..3].len()}\")\n\
          }\n",
     );

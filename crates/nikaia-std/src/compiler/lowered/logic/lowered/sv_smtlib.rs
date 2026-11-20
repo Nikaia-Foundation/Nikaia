@@ -165,9 +165,9 @@ pub(crate) fn sv_lin_atom(arena: &mut TermArena, rel: &str, d: &SvLin) -> Option
 }
 
 pub(crate) fn sv_ratio(a: &str) -> Option<SvGot> {
-    let at = match nikaia_std::search::find(&a, &"/", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let num = nikaia_std::index::get(&a, nikaia_std::index::at(0..at));
-    let den = nikaia_std::index::get(&a, nikaia_std::index::at(at + "/".len() as i64..));
+    let at = match nikaia_std::text::find_first(&a, &"/") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let num = a.before(at.start);
+    let den = a.after(at.end);
     if !sv_is_numeral(num) || !sv_is_numeral(den) { return None; }
     let n = match text::parse_i64(num) { Some(__nikaia_value) => __nikaia_value, None => return Some(sv_overflow(format!("the numeral {}", a))) };
     let d = match text::parse_i64(den) { Some(__nikaia_value) => __nikaia_value, None => return Some(sv_overflow(format!("the numeral {}", a))) };

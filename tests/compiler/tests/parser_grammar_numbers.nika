@@ -55,9 +55,9 @@ fn driver() -> String {
 // The `slice` of `ledger.nika` that `parse_numbers.nika` calls.
 fn slice_fn(ledger: String) -> String {
     let at = ledger.find("\nfn slice(") ?? return ""
-    let rest = ledger[at..]
+    let rest = ledger.after(at.start)
     let end = rest.find("\n}\n") ?? return ""
-    return f"{rest[0..<end]}\n}}\n"
+    return f"{rest.before(end.start)}\n}}\n"
 }
 
 fn main() throws {

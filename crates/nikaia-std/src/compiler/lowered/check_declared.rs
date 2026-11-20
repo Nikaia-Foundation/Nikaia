@@ -63,9 +63,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn declared_a_variant(&mut self, expr: &Expr, name: &str) -> bool {
-        let at = match nikaia_std::search::rfind(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
-        let member = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
+        let at = match nikaia_std::text::rfind(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let owner = nikaia_std::block::Text::from(name.before(at.start).to_string());
+        let member = nikaia_std::block::Text::from(name.after(at.end).to_string());
         if !self.is_variant(&owner, &member) { return false; }
         self.declared_use(expr, CheckDeclared::Variant(owner, member));
         true

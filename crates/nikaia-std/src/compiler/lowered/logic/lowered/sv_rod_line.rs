@@ -59,13 +59,13 @@ pub(crate) fn sv_new_theory(engine: &str) -> String {
 }
 
 pub(crate) fn sv_engine_name(engine: &str) -> nikaia_std::either_text::EitherText<'_> {
-    let at = match nikaia_std::search::find(&engine, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::either_text::either(nikaia_std::block::Text::from(engine.to_string())) };
-    nikaia_std::either_text::either(nikaia_std::index::get(&engine, nikaia_std::index::at(0..at)))
+    let at = match nikaia_std::text::find_first(&engine, &":") { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::either_text::either(nikaia_std::block::Text::from(engine.to_string())) };
+    nikaia_std::either_text::either(engine.before(at.start))
 }
 
 pub(crate) fn sv_engine_settings(engine: &str) -> &str {
-    let at = match nikaia_std::search::find(&engine, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return "" };
-    &nikaia_std::index::get(&engine, nikaia_std::index::at(at + ":".len() as i64..))
+    let at = match nikaia_std::text::find_first(&engine, &":") { Some(__nikaia_value) => __nikaia_value, None => return "" };
+    engine.after(at.end)
 }
 
 pub(crate) fn sv_line(source: &str, engine: &str) -> String { sv_line_stats(source, engine, false) }

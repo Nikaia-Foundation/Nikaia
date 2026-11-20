@@ -88,8 +88,8 @@ impl CheckState {
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
         let name = nikaia_std::block::Text::from(written.join("::"));
-        let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
+        let at = match nikaia_std::text::find_first(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let owner = nikaia_std::block::Text::from(name.before(at.start).to_string());
         self.grammars.contains_key(&owner) && !world.own.functions.contains_key(&name)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

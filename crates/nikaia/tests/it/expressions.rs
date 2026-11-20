@@ -552,44 +552,45 @@ fn a_borrowed_cast_is_bracketed() {
 fn a_composite_fallback_is_bracketed_before_into() {
     let emitted = emit(
         "fn f(r: ref String) -> i64 {\n\
-             let w = r.find(\" where\") ?? r.len()\n\
-             return w + (r.find(\"x\") ?? (0 - 1))\n\
+             let w = r.bytes.find(' ' as u8) ?? r.len()\n\
+             return w + (r.bytes.find('x' as u8) ?? (0 - 1))\n\
          }\n",
     );
     assert!(!emitted.contains("as i64.into()"), "{emitted}");
     assert!(!emitted.contains("0 - 1.into()"), "{emitted}");
 }
 
-/// `rfind` and `replacen` on text count in `i64`, as `find` does: they lower to
-/// `std`'s helpers, not to the language below's `usize` methods.
+/// `rfind` on text gives a `text::Match` (ADR-374 D2) and `replacen` counts in
+/// `i64`: they lower to `std`'s helpers, not to the language below's `usize`
+/// methods.
 #[test]
-fn rfind_and_replacen_count_in_i64() {
+fn rfind_gives_a_match_and_replacen_counts_in_i64() {
     let emitted = emit(
         "fn f(name: ref String, n: i64) -> String {\n\
-             let at = name.rfind(\"::\") ?? 0\n\
-             return name.replacen(\"::\", \"/\", n + at)\n\
+             let at = name.rfind(\"::\") ?? return \"\"\n\
+             return name.before(at.start).replacen(\"::\", \"/\", n)\n\
          }\n",
     );
-    assert!(emitted.contains("nikaia_std::search::rfind(&"), "{emitted}");
+    assert!(emitted.contains("nikaia_std::text::rfind(&"), "{emitted}");
     assert!(
         emitted.contains("nikaia_std::search::replacen(&"),
         "{emitted}"
     );
 }
 
-/// `split_at` on text takes the `i64` position `find` gives (#616): it lowers to
-/// `std`'s helper, not to the language below's `usize` method.
+/// `split_at` on text takes the `text::Pos` a match gives (ADR-374 D3): it
+/// lowers to `std`'s helper, not to the language below's `usize` method.
 #[test]
-fn split_at_takes_an_i64_position() {
+fn split_at_takes_a_pos() {
     let emitted = emit(
         "fn f(line: ref String) -> i64 {\n\
-             let at = line.find(\";\") ?? 0\n\
-             let (name, rest) = line.split_at(at)\n\
+             let at = line.find(\";\") ?? return 0\n\
+             let (name, rest) = line.split_at(at.start)\n\
              return name.len() + rest.len()\n\
          }\n",
     );
     assert!(
-        emitted.contains("nikaia_std::search::split_at(&"),
+        emitted.contains("nikaia_std::text::split_at(&"),
         "{emitted}"
     );
 }

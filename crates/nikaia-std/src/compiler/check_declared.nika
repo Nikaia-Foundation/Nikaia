@@ -93,8 +93,8 @@ impl CheckState {
     /// `Enum::Variant` as the variant it is, where it is one.
     fn declared_a_variant(ref mut self, expr: ref Expr, name: ref String) -> bool sync {
         let at = name.rfind("::") ?? return false
-        let owner = name[0..<at].clone()
-        let member = name[at + 2..<name.len()].clone()
+        let owner = name.before(at.start).clone()
+        let member = name.after(at.end).clone()
         if !self.is_variant(owner, member) {
             return false
         }

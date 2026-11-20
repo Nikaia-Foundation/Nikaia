@@ -65,7 +65,7 @@ impl CheckState {
     /// this compiler cannot see are both left alone (Part III, C.4).
     fn a_module_used_before_it_is_introduced(ref mut self, name: ref String, span: ref Span) sync {
         let at = name.find("::") ?? return
-        let module = name[0..<at].clone()
+        let module = name.before(at.start).clone()
         if !self.std_modules.contains(module) || self.std_in_scope.contains(module) {
             return
         }
@@ -107,8 +107,8 @@ impl CheckState {
     /// exactly this reason.
     fn a_prelude_name_with_a_module_in_front(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         let at = name.find("::") ?? return
-        let module = name[0..<at].clone()
-        let last = name[at + 2..<name.len()].clone()
+        let module = name.before(at.start).clone()
+        let last = name.after(at.end).clone()
         // A module of **this program** wins, as it does for `NK1117`.
         if !self.std_modules.contains(module) || self.modules.contains(module) {
             return

@@ -142,7 +142,7 @@ fn rsplit_walks_the_pieces_from_the_back() {
 fn split_at_cuts_the_text_in_two() {
     let out = run(
         "text-split-at",
-        "    let name = \"a::b::c\"\n    let (before, from) = name.split_at(3)\n    let (empty, all) = name.split_at(0)\n    println(f\"{before}|{from}|{empty}|{all}\")",
+        "    let name = \"a::b::c\"\n    let m = name.find(\"::\") ?? return\n    let (before, from) = name.split_at(m.end)\n    let (empty, all) = name.split_at(name.start())\n    println(f\"{before}|{from}|{empty}|{all}\")",
     );
     assert_eq!(out, "a::|b::c||a::b::c\n");
 }

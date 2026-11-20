@@ -13,8 +13,8 @@ fn pushed() -> ref Array[i64] {
 fn cut() -> String {
     let mut s = String()
     s.push_str("hello world")
-    let i = s.find(" ") ?? 0
-    let c = s[0..<i]
+    let i = s.find(" ")?.start ?? s.start()
+    let c = s.before(i)
     s.push_str("!")
     return c
 }

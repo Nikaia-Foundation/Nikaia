@@ -947,10 +947,12 @@ fn features_span(toml: ref String, feature: ref String, entry: ref String) -> Sp
                 let indent = line.len() - line.trim_start().len()
                 if entry.len() > 0 {
                     let quoted = f"\"{entry}\""
-                    let found = line.find(quoted)
-                    if found != null {
-                        let start = offset + (found ?? 0)
-                        return Span { start: start as u32, end: (start + quoted.len()) as u32 }
+                    match line.find(quoted) {
+                        null => {},
+                        found => {
+                            let start = offset + line.before(found.start).bytes.len()
+                            return Span { start: start as u32, end: (start + quoted.len()) as u32 }
+                        },
                     }
                 }
                 let start = offset + indent

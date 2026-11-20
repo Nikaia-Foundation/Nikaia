@@ -21,7 +21,7 @@ fn main() throws {
     let dir = f"{root()}/crates/nikaia-std/src/compiler"
     let index = fs::read_to_string(f"{dir}/lowered.rs", fs::Root::Anywhere) catch { "" }
     let marker = "\n/// **The digest of this lowered set**"
-    let at = index.find(marker) ?? index.len()
+    let at = index.find(marker)?.start ?? index.end()
     let line = "pub const LOWERED_DIGEST: &str = \""
     let mut named: String = ""
     for each in index.lines() {
@@ -30,7 +30,7 @@ fn main() throws {
         }
     }
     let mut all: String = ""
-    all.push_str(hash::sha256_hex(index[0..<at].bytes().collect()))
+    all.push_str(hash::sha256_hex(index.before(at).bytes().collect()))
     all.push_str("\n")
     let listed = process::run("sh", ["-c", f"cd '{dir}' && find lowered -name '*.rs' | LC_ALL=C sort"]).stdout.clone()
     for path in listed.lines() {

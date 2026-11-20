@@ -19,8 +19,8 @@ impl CheckState {
     pub(crate) fn field_is_reachable(&mut self, ty: &str, field: &FieldContract, span: &Span) {
         if field.public { return; }
         let shown = ty.trim_start_matches('&');
-        let at = match nikaia_std::search::find(&shown, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let package = nikaia_std::block::Text::from(nikaia_std::index::get(&shown, nikaia_std::index::at(0..at)).to_string());
+        let at = match nikaia_std::text::find_first(&shown, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let package = nikaia_std::block::Text::from(shown.before(at.start).to_string());
         if !self.modules.contains(&package) { return; }
         let name = nikaia_std::block::Text::from(field.name.to_string());
         self.facts.privates_reached.insert(span.start as i64, nikaia_std::block::Text::from(package.to_string()));
@@ -29,9 +29,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn reachable(&mut self, name: &str, of_std: bool, contract: &FnContract, span: &Span) {
-        let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
-        let item = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
+        let at = match nikaia_std::text::find_first(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let module = nikaia_std::block::Text::from(name.before(at.start).to_string());
+        let item = nikaia_std::block::Text::from(name.after(at.end).to_string());
         let helper = of_std && self.std_modules.contains(&module) && !self.modules.contains(&module);
         if !(self.modules.contains(&module) || helper) || contract.public { return; }
         if helper { self.facts.std_helpers_reached.insert(span.start as i64); } else { self.facts.privates_reached.insert(span.start as i64, nikaia_std::block::Text::from(module.to_string())); }

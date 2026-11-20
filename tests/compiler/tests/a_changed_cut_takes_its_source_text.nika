@@ -5,7 +5,7 @@
 
 fn tail_of(keep line: String) -> String {
     let m = line.find(";") ?? return line
-    let mut rest = line[m + ";".len()..]
+    let mut rest = line.after(m.end)
     rest += "!"
     return rest
 }
@@ -13,7 +13,7 @@ fn tail_of(keep line: String) -> String {
 fn own() -> String {
     let line = f"Hamburg;{12}"
     let m = line.find(";") ?? return line
-    let mut rest = line[m..]
+    let mut rest = line.after(m.start)
     rest += "?"
     return rest
 }

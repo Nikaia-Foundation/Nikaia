@@ -514,11 +514,12 @@ impl CheckState {
         let line = host_stopped_line(said);
         let mut place: String = String::from("");
         let mut why: String = nikaia_std::block::Text::from(line.to_string());
-        let cut = nikaia_std::search::find(&line, &": the program stopped: ", 0);
-        if cut.is_some() {
-            let at = nikaia_std::index::or(cut, || 0);
-            place = nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_string());
-            why = nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_string());
+        match nikaia_std::text::find_first(&line, &": the program stopped: ") {
+            None => { },
+            Some(at) => {
+                place = nikaia_std::block::Text::from(line.before(at.start).to_string());
+                why = nikaia_std::block::Text::from(line.after(at.end).to_string());
+            },
         }
         let found = check_walked_place_of(world, &place, here);
         self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);
