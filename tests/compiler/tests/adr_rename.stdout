@@ -1,6 +1,7 @@
 crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+packages/p/src/lib.nika: 1
 crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
@@ -20,6 +21,7 @@ Astray: [ADR~901](adr~901.md) D3.
 crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+packages/p/src/lib.nika: 1
 crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
@@ -44,6 +46,8 @@ Links: [ADR~moved-v1](adr~moved-v1.md) D1, [moved-v1](adr~moved-v1.md) D2, [move
     // D2), and more
 // ADR~901 D3,
 // D4 past the break
+--- packages/p/src/lib.nika
+// ADR~moved-v1 D2 in a package
 --- docs/history/adr/README.md
 ADR~901 D3 is archived.
 --- src/main.nika

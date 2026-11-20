@@ -61,6 +61,7 @@ fn main() throws {
     put(tree.clone(), "docs/specification/adr/adr~beta~v1.md", "# ADR~betta~v1: Beta\n")
     put(tree.clone(), "docs/specification/adr/adr~gamma~v1.md", "# ADR~gamma~v1: Unlisted\n")
     put(tree.clone(), "crates/a/src/lib.rs", "// ADR~alpha~v1 D7, ADR~alpha~v1 §9 and ADR~old~v1 D1\n// ADR~alpha~v9 is no record; ADR~alpha~v1x is no name.\n")
+    put(tree.clone(), "packages/p/src/lib.nika", "// as ADR~old~v1 D1 said\n")
     println("--- one case per check")
     run(repo, nikaia, tree)
     process::run("rm", ["-rf", dir])
