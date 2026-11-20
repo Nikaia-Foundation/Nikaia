@@ -5,16 +5,18 @@
 use std::mem
 
 fn main() throws {
-    // Reading a text requests nothing.
-    let mut text = String()
-    text.push('a')
+    // A `String` with room ahead (`capacity:`, #2114) joined with `+` keeps
+    // its buffer: no request.
+    let mut roomy = String(capacity: 64)
+    roomy.push_str("left-")
     let before = mem::allocations()
-    let length = text.len()
+    let joined = roomy + "right"
     let after = mem::allocations()
-    println(f"{length} byte, no request: {after == before}")
+    println(f"{joined}, requests: {after - before}")
 
     // A `String` pushed past its capacity has to ask for more.
-    let mut small = String()
+    let mut small = String(capacity: 1)
+    small.push('a')
     let start = mem::allocations()
     for _ in 0..<100 {
         small.push('x')
