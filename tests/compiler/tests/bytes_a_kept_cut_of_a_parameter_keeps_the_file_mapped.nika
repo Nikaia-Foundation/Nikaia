@@ -1,0 +1,70 @@
+// #2214: keeping a cut of a `ref Bytes` parameter keeps the parameter
+// (ADR-373 D4): the function takes the `Bytes` with its owner, and the cut
+// is the mapping at a count, not a copy. So the file stays mapped while the
+// kept cut lives, after the mapping it was cut from is gone.
+use std::fs
+
+fn mapped_count(name: String) -> i64 throws {
+    let maps = fs::read_to_string("/proc/self/maps", fs::Root::Anywhere)
+    let mut n = 0
+    for line in maps.split("\n") {
+        if line.ends_with(name) { n += 1 }
+    }
+    return n
+}
+
+fn keep_rome(b: ref Bytes, mut out: Vec[Bytes]) {
+    out.push(b[7..<13])
+}
+
+fn keep_a_cut_of_a_cut(b: ref Bytes, mut out: Vec[Bytes]) {
+    out.push(b[7..<14][0..<4])
+}
+
+// A cut of an element a `for` lends is a count on that element's owner too.
+fn keep_heads(xs: Vec[Bytes], mut out: Vec[Bytes]) {
+    for b in xs { out.push(b[0..<2]) }
+}
+
+fn cuts(root: ref fs::Root) -> Vec[Bytes] throws {
+    let whole: Bytes = fs::map("page", root)
+    let mut out: Vec[Bytes] = []
+    keep_rome(whole, out)
+    keep_a_cut_of_a_cut(whole, out)
+    return out
+}
+
+fn show(root: ref fs::Root) throws {
+    let kept = cuts(root)
+    println(f"{kept[0].text()} {kept[1].text()} mapped: {mapped_count("/page")}")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("page", root, "Oslo;3\nRome;9\nmore text to make it a page or so")
+    show(root)
+    println(f"after: {mapped_count("/page")}")
+    let mut v: Vec[u8] = []
+    v.push(65)
+    v.push(66)
+    v.push(67)
+    v.push(68)
+    v.push(69)
+    v.push(70)
+    v.push(71)
+    v.push(72)
+    v.push(73)
+    v.push(74)
+    v.push(75)
+    v.push(76)
+    v.push(77)
+    v.push(78)
+    let own = Bytes(v)
+    let mut out: Vec[Bytes] = []
+    keep_rome(own, out)
+    keep_rome("0123456789abcdef".bytes, out)
+    let mut xs: Vec[Bytes] = []
+    xs.push(own.clone())
+    keep_heads(xs, out)
+    println(f"{out[0].text()} {out[1].text()} {out[2].text()} {own.len()}")
+}

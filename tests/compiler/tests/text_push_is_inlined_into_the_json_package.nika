@@ -1,0 +1,34 @@
+// #2073: the json package's parser and writer push characters into a
+// `String` (`json::value`, `json::string`, `json::write_string`). A block's
+// `Text::push` is `#[inline(always)]` with its wide-character and growth
+// paths in `push_slow` (the fix for #1864), so it inlines across into the
+// package's crate too, at the game's settings (opt-level 3, one codegen
+// unit): before, `<task_block::text::Text>::push` stayed an out-of-line call
+// there, 277 M instructions over 9.3 M calls in json-large. The program
+// also prints the text written back, so inlining keeps what a push appends.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let repo = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/p/src"])
+    fs::write(f"{tmp}/p/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"game\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n\n[dependencies]\njson = {{ path = \"{repo}/packages/json\" }}\n")
+    fs::write(f"{tmp}/p/src/main.nika", fs::Root::Anywhere, "use std::io\nuse json\n\nfn main() throws {\n\tlet text = io::read_to_string() catch {\n\t\teprintln(f\"cannot read standard input: {error}\")\n\t\treturn\n\t}\n\tlet value = json::parse(text) catch {\n\t\teprintln(f\"standard input is not JSON: {error}\")\n\t\treturn\n\t}\n\tprintln(json::to_string(value))\n}\n")
+    fs::write(f"{tmp}/in.json", fs::Root::Anywhere, "{ \"name\" : \"a\\tb\\u00e9\\\"c\", \"list\": [1, 2.5, -3e2, true, null], \"€\": {} }\n")
+    let built = process::run("sh", ["-c", f"{toolchain()} build 2>&1"]; dir: f"{tmp}/p")
+    if built.code != 0 {
+        println(built.stdout)
+    }
+    let ran = process::run("sh", ["-c", f"{tmp}/p/target/nikaia/bin/game < {tmp}/in.json"])
+    print(ran.stdout)
+    let symbols = process::run("sh", ["-c", f"nm -C {tmp}/p/target/nikaia/bin/game | grep -c 'task_block::text::Text>::push$'"])
+    println(f"out-of-line Text::push: {symbols.stdout.trim()}")
+    process::run("rm", ["-rf", tmp])
+}
