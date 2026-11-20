@@ -4,7 +4,7 @@
 // them performs no operation, so the pair is the pair and the loop is the
 // repeat count.
 //
-// `lowered.sh` builds it beside `sequential.nika`, the same loop with the two
+// `lowered.nika` builds it beside `sequential.nika`, the same loop with the two
 // reads one after the other. The difference between the two binaries is the
 // whole of what the block costs or saves.
 //
@@ -15,15 +15,15 @@ use std::text
 use std::fs
 
 fn main() throws {
-    let runden = cli::args().nth(1) ?? "200000"
-    let n = text::parse_i32(runden) ?? 200000
-    let mut gesamt = 0
-    for _runde in 0..<n {
-        let (a, b) = overlap {
-            fs::read_to_string("eins.txt", fs::Root::Anywhere) catch { "" }
-            fs::read_to_string("zwei.txt", fs::Root::Anywhere) catch { "" }
-        }
-        gesamt = gesamt + a.len() + b.len()
-    }
-    println(f"{gesamt}")
+	let runden = cli::args().nth(1) ?? "200000"
+	let n = text::parse_i32(runden) ?? 200000
+	let mut gesamt = 0
+	for _runde in 0..<n {
+		let (a, b) = overlap {
+			fs::read_to_string("eins.txt", fs::Root::Anywhere) catch { "" }
+			fs::read_to_string("zwei.txt", fs::Root::Anywhere) catch { "" }
+		}
+		gesamt = gesamt + a.len() + b.len()
+	}
+	println(f"{gesamt}")
 }
