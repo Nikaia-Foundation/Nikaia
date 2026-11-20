@@ -265,9 +265,11 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
 	// Looked up under the store's own root, where the guarded key is one
 	// component (ADR-raw-sinks-1 D11, D14).
+	// Made first: a root that does not exist is refused as outside
+	// (ADR-010 D1), which a fresh checkout's first run would meet.
+	process::run("mkdir", ["-p", f"{repo}/target/solver-rod/{key}"])
 	let store = fs::Root::Dir(f"{repo}/target/solver-rod")
 	if fs::exists(f"{key}/solver_rod", store) { return kept }
-	process::run("mkdir", ["-p", f"{repo}/target/solver-rod/{key}"])
 	let main = env::current_main()?.display() ?? f"{repo}/scripts/solver.nika"
 	// Under the lock: built only where no run before this one kept it.
 	let built = process::run(
