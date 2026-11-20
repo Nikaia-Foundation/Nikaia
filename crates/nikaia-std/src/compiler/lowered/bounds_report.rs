@@ -64,10 +64,10 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
             },
         };
         let line = nikaia_std::block::Text::from(site.line.to_string());
-        out.push_str(&format!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how)); };
     }
-    for row in bounds_report_outside(facts, source) { out.push_str(&format!("  outside  {}\n", row)); }
-    for row in bounds_report_derived(&facts.derived, source) { out.push_str(&format!("  derived  {}\n", row)); }
+    for row in bounds_report_outside(facts, source) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("  outside  {}\n", row)); }; }
+    for row in bounds_report_derived(&facts.derived, source) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("  derived  {}\n", row)); }; }
     out
 }
 

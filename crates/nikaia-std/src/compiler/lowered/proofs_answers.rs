@@ -152,8 +152,8 @@ pub(crate) fn proofs_write_term(arena: &logic::TermArena, id: i64, out: &mut Str
     }
     match unsafe { nikaia_std::proven::read(&arena.nodes, (id) as usize) } {
         logic::SolverTerm::Bool(value) => { let value = *value; out.push_str(if value { "T" } else { "F" }); },
-        logic::SolverTerm::Int(value) => { let value = *value; out.push_str(&format!("i{},", value)); },
-        logic::SolverTerm::Var(name) => { out.push_str(&format!("v{}:{}", name.len() as i64, name)); },
+        logic::SolverTerm::Int(value) => { let value = *value; { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("i{},", value)); }; },
+        logic::SolverTerm::Var(name) => { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("v{}:{}", name.len() as i64, name)); }; },
         logic::SolverTerm::Add(a, b) => { let a = *a; let b = *b; proofs_write_two("+", arena, a, b, out); },
         logic::SolverTerm::Sub(a, b) => { let a = *a; let b = *b; proofs_write_two("-", arena, a, b, out); },
         logic::SolverTerm::Mul(a, b) => { let a = *a; let b = *b; proofs_write_two("*", arena, a, b, out); },
@@ -175,7 +175,7 @@ pub(crate) fn proofs_write_term(arena: &logic::TermArena, id: i64, out: &mut Str
         },
         logic::SolverTerm::Quot(a, k) => {
             let a = *a; let k = *k;
-            out.push_str(&format!("q{},", k));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("q{},", k)); };
             proofs_write_term(arena, a, out);
         },
         logic::SolverTerm::And(parts) => { proofs_write_all("&", arena, parts, out); },
@@ -191,7 +191,7 @@ pub(crate) fn proofs_write_two(tag: &str, arena: &logic::TermArena, a: i64, b: i
 }
 
 pub(crate) fn proofs_write_all(tag: &str, arena: &logic::TermArena, parts: &[i64], out: &mut String) {
-    out.push_str(&format!("{}{},", tag, parts.len() as i64));
+    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}{},", tag, parts.len() as i64)); };
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         proofs_write_term(arena, part, out);

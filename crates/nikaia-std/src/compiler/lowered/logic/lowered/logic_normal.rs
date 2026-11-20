@@ -68,7 +68,7 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
     }
     match node {
         SolverTerm::Bool(b) => { let b = *b; out.push_str(if b { "true" } else { "false" }); },
-        SolverTerm::Int(n) => { let n = *n; out.push_str(&format!("{}", n)); },
+        SolverTerm::Int(n) => { let n = *n; { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}", n)); }; },
         SolverTerm::Var(name) => { out.push_str(if shape { "?" } else { name }); },
         SolverTerm::Neg(a) => {
             let a = *a;
@@ -89,7 +89,7 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
             let a = *a; let k = *k;
             out.push_str("(quot ");
             lg_write(arena, a, shape, false, out);
-            out.push_str(&format!(" {})", k));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" {})", k)); };
         },
         SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_write_binary("<=", arena, a, b, shape, out); },
         SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_write_binary("<", arena, a, b, shape, out); },

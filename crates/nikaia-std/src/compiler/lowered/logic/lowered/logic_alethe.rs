@@ -62,7 +62,7 @@ pub(crate) fn lg_negation(literal: &str) -> String {
 
 pub(crate) fn lg_spaced(lits: &[String]) -> String {
     let mut out: String = String::from("");
-    for lit in lits.iter() { out.push_str(&format!(" {}", lit)); }
+    for lit in lits.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" {}", lit)); }; }
     out
 }
 

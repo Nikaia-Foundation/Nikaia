@@ -198,7 +198,7 @@ pub fn specbook_report(lines: &[SpecLine]) -> String {
         if !v.codes.is_empty() { notes.push(nikaia_std::block::Text::from(v.codes.join(","))); }
         let mut noted: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if !notes.is_empty() { noted = format!(" [{}]", nikaia_std::block::Text::from(notes.join(" "))); }
-        out.push_str(&format!("{} #{} {} ({}){}  {}\n", v.file, ordinal, v.stage, v.reading, noted, opening(&v.code)));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{} #{} {} ({}){}  {}\n", v.file, ordinal, v.stage, v.reading, noted, opening(&v.code))); };
     }
     out
 }

@@ -30,7 +30,7 @@ pub(crate) fn cx_python_scalar(shape: &CxByValue) -> String {
 
 pub(crate) fn cx_indent(lines: &[String], by: &str) -> String {
     let mut out: String = String::from("");
-    for line in lines.iter() { out.push_str(&format!("{}{}\n", by, line)); }
+    for line in lines.iter() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}{}\n", by, line)); }; }
     out
 }
 
@@ -337,7 +337,7 @@ impl CxPython {
         for name in boundary_names.iter() {
             let name = *name;
             number -= 1;
-            out.push_str(&format!("class {}(BoundaryError):\n    code = {}\n\n\n", name, number));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(BoundaryError):\n    code = {}\n\n\n", name, number)); };
             errors.push((nikaia_std::block::Text::from(name.to_string()), number));
             taken.insert(nikaia_std::block::Text::from(name.to_string()));
         }
@@ -372,8 +372,8 @@ impl CxPython {
                     let named = nikaia_std::index::or(errno, || "".into());
                     let mut os: &'static str = "OSError";
                     if named == "ENOENT" { os = "FileNotFoundError"; } else if named == "EACCES" { os = "PermissionError"; }
-                    out.push_str(&format!("class {}(Error, {}):\n    \"\"\"`{}`, `{}`.\"\"\"\n    code = {}\n\n    def __init__(self, said):\n        {}.__init__(self, {}, said)\n\n\n", name, os, what, named, code_number, os, code_number));
-                } else { out.push_str(&format!("class {}(Error):\n    \"\"\"`{}`.\"\"\"\n    code = {}\n\n\n", name, what, code_number)); }
+                    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(Error, {}):\n    \"\"\"`{}`, `{}`.\"\"\"\n    code = {}\n\n    def __init__(self, said):\n        {}.__init__(self, {}, said)\n\n\n", name, os, what, named, code_number, os, code_number)); };
+                } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(Error):\n    \"\"\"`{}`.\"\"\"\n    code = {}\n\n\n", name, what, code_number)); }; }
                 errors.push((name, code_number));
             }
         }
@@ -389,10 +389,10 @@ impl CxPython {
             let mut values: String = String::from("");
             let mut at = 0;
             for variant in plain.variants.iter() {
-                values.push_str(&format!("    {} = {}\n", variant, at));
+                { use ::core::fmt::Write as _; let _ = values.write_fmt(format_args!("    {} = {}\n", variant, at)); };
                 at += 1;
             }
-            out.push_str(&format!("class {}(enum.IntEnum):\n{}\n\n", plain.name, values));
+            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(enum.IntEnum):\n{}\n\n", plain.name, values)); };
         }
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
@@ -401,17 +401,17 @@ impl CxPython {
                 #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for variant in record.variants.iter() {
                     if variant.fields.is_empty() { continue; }
-                    out.push_str(&format!("class _{}_{}(ctypes.Structure):\n    _fields_ = [{}]\n\n\n", ty, variant.name, cx_python_laid_out(&variant.fields, ctx)));
+                    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class _{}_{}(ctypes.Structure):\n    _fields_ = [{}]\n\n\n", ty, variant.name, cx_python_laid_out(&variant.fields, ctx))); };
                     members.push(format!("(\"{}\", _{}_{})", variant.member, ty, variant.name));
                 }
                 let mut tags: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
                 let mut tag = 0;
                 for variant in record.variants.iter() {
-                    tags.push_str(&format!("    {} = {}\n", variant.name, tag));
+                    { use ::core::fmt::Write as _; let _ = tags.write_fmt(format_args!("    {} = {}\n", variant.name, tag)); };
                     tag += 1;
                 }
-                if members.is_empty() { out.push_str(&format!("class {}(ctypes.Structure):\n    _fields_ = [(\"tag\", ctypes.c_int)]\n{}\n", ty, tags)); } else { out.push_str(&format!("class _{}_Union(ctypes.Union):\n    _fields_ = [{}]\n\n\nclass {}(ctypes.Structure):\n    _anonymous_ = (\"_u\",)\n    _fields_ = [(\"tag\", ctypes.c_int), (\"_u\", _{}_Union)]\n{}\n", ty, nikaia_std::block::Text::from(members.join(", ")), ty, ty, tags)); }
-            } else { out.push_str(&format!("class {}(ctypes.Structure):\n    _fields_ = [{}]\n\n", record.name, cx_python_laid_out(&record.fields, ctx))); }
+                if members.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(ctypes.Structure):\n    _fields_ = [(\"tag\", ctypes.c_int)]\n{}\n", ty, tags)); }; } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class _{}_Union(ctypes.Union):\n    _fields_ = [{}]\n\n\nclass {}(ctypes.Structure):\n    _anonymous_ = (\"_u\",)\n    _fields_ = [(\"tag\", ctypes.c_int), (\"_u\", _{}_Union)]\n{}\n", ty, nikaia_std::block::Text::from(members.join(", ")), ty, ty, tags)); }; }
+            } else { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("class {}(ctypes.Structure):\n    _fields_ = [{}]\n\n", record.name, cx_python_laid_out(&record.fields, ctx))); }; }
             let own = *nikaia_std::index::get(&self.classes, &record.name);
             if own.is_some() {
                 let held = match own { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -426,7 +426,7 @@ impl CxPython {
         while ((at) as usize) < ctx.handles.len() {
             if *nikaia_std::index::get(&held, (at) as usize) {
                 let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (at) as usize) }.name.to_string());
-                out.push_str(&format!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty));
+                { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty)); };
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
                     let held_members = match own { Some(__nikaia_value) => __nikaia_value, None => return out };

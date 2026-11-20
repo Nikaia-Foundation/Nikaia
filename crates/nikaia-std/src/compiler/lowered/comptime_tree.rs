@@ -515,7 +515,7 @@ pub fn comptime_dependency_modules<H: ComptimeLowerHost>(host: &H, packages: &co
     for (name, own) in packages.iter() {
         let wanted: Option<String> = Some(nikaia_std::block::Text::from(name.to_string()));
         let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
-        rust.push_str(&format!("pub mod {} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n", name));
+        { use ::core::fmt::Write as _; let _ = rust.write_fmt(format_args!("pub mod {} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n", name)); };
         rust.push_str(&block_types_import(true));
         for at in theirs.iter() {
             let at = nikaia_std::num::value(at);
