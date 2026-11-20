@@ -1043,6 +1043,31 @@ impl EmitState {
         return hoisted
     }
 
+    /// Whether a call is `String`'s `push_str` on a local, of an `f"…"` with
+    /// holes none of which reads that local (it is lent for the write) and
+    /// whose text is not a file's name (ADR-319 D4): formatted into the local
+    /// (#2382).
+    fn emit_call_formatted_into(ref self, world: ref EmitWorld, walk: ref EmitWalk, receiver: ref Expr?, on_node: i64, name: ref String, args: ref Vec[Expr]) -> bool {
+        if name != "push_str" || args.len() != 1 || walk.hoisted_args != null {
+            return false
+        }
+        if (self.facts.method_callees[on_node]?.clone() ?? "") != "String::push_str" {
+            return false
+        }
+        let on = receiver ?? return false
+        let local = match on {
+            Expr::Variable(v, _) => emit_text(world, v),
+            else => return false,
+        }
+        if self.facts.path_holes.contains_key(node_key(args[0])) || emit_mentions(world, args[0], local) {
+            return false
+        }
+        return match args[0] {
+            Expr::LitInterpolated { parts, .. } => emit_leaf_has_holes(parts),
+            else => false,
+        }
+    }
+
     /// Whether `expr` hands the local `name`, or a part of it, to a `mut`
     /// parameter or a `ref mut self` receiver anywhere in it.
     fn emit_lends_mut(ref self, world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
@@ -1253,6 +1278,23 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                 out.push(")")
                 return
+            }
+        }
+        // **Formatted text appended is formatted into the text** (#2382):
+        // `s.push_str(f"…{x}…")` writes into `s`, without the `String` a
+        // `format!` would make, copy from and drop.
+        if self.emit_call_formatted_into(world, walk, receiver, on_node, name, args) {
+            let text = args[0]
+            match text {
+                Expr::LitInterpolated { parts, .. } => {
+                    out.push("{ use ::core::fmt::Write as _; let _ = ")
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                    out.push(".write_fmt(format_args!(")
+                    self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)
+                    out.push(")); }")
+                    return
+                },
+                else => {},
             }
         }
         // **A `replace` on the text a `replace` made works in its buffer**

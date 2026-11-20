@@ -204,7 +204,7 @@ pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_,
                     Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                     None => None,
                 }).as_deref(), own, library, &indexes, resolved, &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(|passed| { passed.parameter == parameter && keeps_its(&passed.callee, passed.at, &settling, own, library) }) { return Some(stmt.span.clone()); }
+                if found.uses.kept.contains(parameter) || nikaia_std::list::contains(&found.counted, &parameter) || found.uses.passed.iter().any(|passed| { passed.parameter == parameter && keeps_its(&passed.callee, passed.at, &settling, own, library) }) { return Some(stmt.span.clone()); }
             }
         },
         _ => { },

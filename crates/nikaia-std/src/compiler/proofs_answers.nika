@@ -206,7 +206,8 @@ pub fn proofs_shown(place: (String?, i64?, String?), root: ref fs::Path) -> Stri
 /// The question as its terms are written, every node in full: two questions
 /// written alike have one normal form, whatever their term ids.
 fn proofs_written(arena: ref logic::TermArena, facts: ref Vec[i64], goal: i64) -> String {
-    let mut out = ""
+    // Room for the usual question, so the text seldom grows (#2382).
+    let mut out = String(capacity: 128 * (facts.len() + 1))
     for fact in facts {
         proofs_write_term(arena, fact, out)
         out.push_str(";")

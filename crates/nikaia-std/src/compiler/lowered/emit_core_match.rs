@@ -500,7 +500,7 @@ impl EmitState {
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
             self.emit_core_nest_written(world, walk, &mut written, host, pattern, at, 0, false, depth, flow, scope)?;
-            taken_apart.push_str(&format!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at));
+            { use ::core::fmt::Write as _; let _ = taken_apart.write_fmt(format_args!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at)); };
         }
         let opened = self.boxed_bindings(world, pattern);
         let read = self.emit_holes_names_read(world, host, body);
@@ -552,9 +552,9 @@ impl EmitState {
         match body {
             Expr::Block(block, _) => {
                 let mut opening = nikaia_std::block::Text::from(taken_apart.to_string());
-                for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+                for name in opened.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = nikaia_std::boxed::open({}); ", name, name)); }; }
                 for copy in copied.iter() { opening.push_str(copy); }
-                for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
+                for name in cloned.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = {}.clone(); ", name, name)); }; }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(nikaia_std::block::Text::from(opening.trim_end().to_string()));
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;
@@ -562,9 +562,9 @@ impl EmitState {
             },
             Expr::AsyncGroup(block, _, _, _, _) => {
                 let mut opening = nikaia_std::block::Text::from(taken_apart.to_string());
-                for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+                for name in opened.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = nikaia_std::boxed::open({}); ", name, name)); }; }
                 for copy in copied.iter() { opening.push_str(copy); }
-                for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
+                for name in cloned.iter() { { use ::core::fmt::Write as _; let _ = opening.write_fmt(format_args!("let {} = {}.clone(); ", name, name)); }; }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(nikaia_std::block::Text::from(opening.trim_end().to_string()));
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;

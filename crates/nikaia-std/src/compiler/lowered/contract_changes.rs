@@ -12,10 +12,10 @@ pub fn changed_contracts(now: &Ledger, committed: &Ledger, keepers: &collections
     for (key, new) in now.functions.iter() {
         let old = match committed.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !new.public || !mine(key) { continue; }
-        for param in new.at_once.iter() { if !nikaia_std::list::contains(&old.at_once, &param) { out.push_str(&format!("warning[NK1208]: `{}` asks more of its callers than the committed ledger says.\n   = note: it runs `{}` from tasks at once now, and ran it one call at a time.\n   = note: a caller that hands it a lambda changing what it captures is refused now (NK2104).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, param)); } }
+        for param in new.at_once.iter() { if !nikaia_std::list::contains(&old.at_once, &param) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: `{}` asks more of its callers than the committed ledger says.\n   = note: it runs `{}` from tasks at once now, and ran it one call at a time.\n   = note: a caller that hands it a lambda changing what it captures is refused now (NK2104).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, param)); }; } }
         let names = condition_names(new);
-        if !implies(&old.requires, &new.requires, &names) { out.push_str(&format!("warning[NK1208]: `{}` asks more of its callers than the committed ledger says.\n   = note: it required {}, and now requires {}.\n   = note: a caller that showed what it required before may now stop where it is checked.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.requires), conditions_said(&new.requires))); }
-        if !implies(&new.ensures, &old.ensures, &names) { out.push_str(&format!("warning[NK1208]: `{}` promises less than the committed ledger says.\n   = note: it ensured {}, and now ensures {}.\n   = note: a caller's proof that relied on what it ensured may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.ensures), conditions_said(&new.ensures))); }
+        if !implies(&old.requires, &new.requires, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: `{}` asks more of its callers than the committed ledger says.\n   = note: it required {}, and now requires {}.\n   = note: a caller that showed what it required before may now stop where it is checked.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.requires), conditions_said(&new.requires))); }; }
+        if !implies(&new.ensures, &old.ensures, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: `{}` promises less than the committed ledger says.\n   = note: it ensured {}, and now ensures {}.\n   = note: a caller's proof that relied on what it ensured may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.ensures), conditions_said(&new.ensures))); }; }
     }
     out
 }
@@ -30,11 +30,11 @@ pub(crate) fn column_moved(key: &str, old: &FnContract, new: &FnContract, by_par
         }, || vec![].into());
         let mut who = String::from("an impl in this package keeps it"); #[allow(clippy::redundant_locals)] let impls = impls;
         if !impls.is_empty() { who = format!("{} keeps it", nikaia_std::block::Text::from(impls.join(", "))); }
-        out.push_str(&format!("warning[NK1265]: the trait method `{}` keeps `{}` now, and the committed ledger says it runs it.\n   = note: {}.\n   = note: a caller that lends into `{}` through the trait is refused now.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter, who, parameter));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1265]: the trait method `{}` keeps `{}` now, and the committed ledger says it runs it.\n   = note: {}.\n   = note: a caller that lends into `{}` through the trait is refused now.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter, who, parameter)); };
     }
     for parameter in old.keeps.iter() {
         if nikaia_std::list::contains(&new.keeps, &parameter) { continue; }
-        out.push_str(&format!("warning[NK1265]: the trait method `{}` runs `{}` now, and the committed ledger says it keeps it.\n   = note: no impl in this package keeps it any longer.\n   = note: an impl in another package that keeps it is refused now (NK1264).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1265]: the trait method `{}` runs `{}` now, and the committed ledger says it keeps it.\n   = note: no impl in this package keeps it any longer.\n   = note: an impl in another package that keeps it is refused now (NK1264).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter)); };
     }
     out
 }

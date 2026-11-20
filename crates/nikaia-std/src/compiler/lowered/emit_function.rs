@@ -430,6 +430,7 @@ impl EmitState {
                     let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(&key, at);
                     let mut ty = each.ty.clone();
+                    if written_as_a_view && !lent_option && !ty.is_view { ty.is_view = true; }
                     if lent_option {
                         ty.is_view = true;
                         ty.either = false;

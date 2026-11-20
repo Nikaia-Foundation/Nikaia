@@ -82,7 +82,7 @@ pub(crate) fn position_word(owner: &TextOwner, path: &[i64]) -> String {
     word.push_str(" @");
     for step in path.iter() {
         let step = nikaia_std::num::value(step);
-        word.push_str(&format!(" {}", step));
+        { use ::core::fmt::Write as _; let _ = word.write_fmt(format_args!(" {}", step)); };
     }
     word
 }
@@ -2135,7 +2135,7 @@ pub(crate) fn tier_loop_seen(walk: &TierWalk) -> String {
         let top = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
         if top < 0 { continue; }
         let k = unsafe { nikaia_std::proven::read(&stack, (top) as usize) }.kinds;
-        out.push_str(&format!("{} {} {} {} {} {} {}\n", name, k.owned, k.view, k.lasting, k.still, k.either, unsafe { nikaia_std::proven::read(&stack, (top) as usize) }.literal));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{} {} {} {} {} {} {}\n", name, k.owned, k.view, k.lasting, k.still, k.either, unsafe { nikaia_std::proven::read(&stack, (top) as usize) }.literal)); };
     }
     out
 }

@@ -218,14 +218,14 @@ impl EmitState {
         let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
         for i in 0..rule.args.len() as i64 {
             let value_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty)?;
-            params.push_str(&format!(", __wg_value{}: {}", i, value_ty));
+            { use ::core::fmt::Write as _; let _ = params.write_fmt(format_args!(", __wg_value{}: {}", i, value_ty)); };
             let lent = if self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name))) { "&" } else { "" };
-            handed.push_str(&format!("{}__wg_value{}, ", lent, i));
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("{}__wg_value{}, ", lent, i)); };
         }
         for j in 0..rule.config.len() as i64 {
             let option_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.ty)?;
-            params.push_str(&format!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty));
-            handed.push_str(&format!("__wg_option{}, ", j));
+            { use ::core::fmt::Write as _; let _ = params.write_fmt(format_args!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty)); };
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
         }
         out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), params, self.rust_result(), item));
         for j in 0..rule.config.len() as i64 {

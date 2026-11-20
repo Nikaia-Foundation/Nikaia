@@ -131,9 +131,9 @@ pub(crate) fn fix_diff(path: &str, old: &str, new: &str) -> String {
             a = was.len() as i64;
             b = now.len() as i64;
         }
-        out.push_str(&format!("@@ -{},{} +{},{} @@\n", unsafe { nikaia_std::proven::add::<i64>(i, 1) }, unsafe { nikaia_std::proven::sub::<i64>(a, i) }, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, unsafe { nikaia_std::proven::sub::<i64>(b, j) }));
-        for k in i..a { out.push_str(&format!("-{}\n", *unsafe { nikaia_std::proven::read(&was, (k) as usize) })); }
-        for k in j..b { out.push_str(&format!("+{}\n", *unsafe { nikaia_std::proven::read(&now, (k) as usize) })); }
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("@@ -{},{} +{},{} @@\n", unsafe { nikaia_std::proven::add::<i64>(i, 1) }, unsafe { nikaia_std::proven::sub::<i64>(a, i) }, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, unsafe { nikaia_std::proven::sub::<i64>(b, j) })); };
+        for k in i..a { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("-{}\n", *unsafe { nikaia_std::proven::read(&was, (k) as usize) })); }; }
+        for k in j..b { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("+{}\n", *unsafe { nikaia_std::proven::read(&now, (k) as usize) })); }; }
         i = a;
         j = b;
     }

@@ -54,7 +54,7 @@ pub(crate) fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPla
     for (field, part) in record.fields.iter() {
         let local = cx_escaped(field);
         let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("self.{}", local), &format!("value.{}", local));
-        fields.push_str(&format!("    {}: {},\n", local, lowered));
+        { use ::core::fmt::Write as _; let _ = fields.write_fmt(format_args!("    {}: {},\n", local, lowered)); };
         into.push(format!("{}: {}", local, inward));
         from.push(format!("{}: {}", local, outward));
     }
@@ -88,12 +88,12 @@ pub(crate) fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: 
             let mut named = nikaia_std::block::Text::from(local.to_string());
             if variant.positional { named = format!("__nikaia{}", local); }
             let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("v.{}", local), &named);
-            fields.push_str(&format!("    {}: {},\n", local, lowered));
+            { use ::core::fmt::Write as _; let _ = fields.write_fmt(format_args!("    {}: {},\n", local, lowered)); };
             if variant.positional { taken.push(inward); } else { taken.push(format!("{}: {}", local, inward)); }
             made.push(format!("{}: {}", local, outward));
             bound.push(named);
         }
-        out.push_str(&format!("\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct {} {{\n{}}}\n", shape, fields));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct {} {{\n{}}}\n", shape, fields)); };
         let mut built = format!("{} {{ {} }}", path, nikaia_std::block::Text::from(taken.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         let mut pattern = format!("{} {{ {} }}", path, nikaia_std::block::Text::from(bound.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
         if variant.positional {

@@ -135,7 +135,9 @@ impl TermArena {
     pub fn variables(ref self, id: i64, mut names: collections::BTreeSet[String]) sync {
         match self.nodes[id] {
             SolverTerm::Var(name) => {
-                names.insert(name.clone())
+                if !names.contains(name) {
+                    names.insert(name.clone())
+                }
             },
             SolverTerm::Neg(a) => self.variables(a, names),
             SolverTerm::Not(a) => self.variables(a, names),
