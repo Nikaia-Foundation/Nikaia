@@ -2778,14 +2778,19 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             let anywhere = raw_sink_anywhere(arg, words, written_of)
             let mut root_parts: Vec[Expr] = []
             if !anywhere {
-                match raw_sink_dir(arg, words) {
-                    dir => raw_sink_parts(dir, holes_of, root_parts),
-                    null => continue,
+                raw_sink_root_components(arg, words, holes_of, root_parts)
+                if root_parts.is_empty() {
+                    continue
                 }
+            }
+            let is_join = raw_sink_is_join(arg, words)
+            let mut root_guard = String()
+            if is_join {
+                root_guard.push_str("path")
             }
             let mut root_outside = false
             for part in root_parts {
-                if raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
+                if raw_sink_outside(part, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, root_guard, part, scope, words, ask) {
                     root_outside = true
                 }
             }
@@ -2796,7 +2801,7 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             if i > 1 && raw_sink_operation(callee, 1, config, words, written_of) != whole {
                 whole = "anywhere"
             }
-            let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
+            let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: !is_join, guard: root_guard }
             for part in root_parts {
                 raw_sink_part(walk, root_sink, root_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
             }
@@ -3073,6 +3078,50 @@ fn raw_sink_dir(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> Ex
             if named.ends_with("Root::Dir") && args.len() == 1 { args[0].clone() } else { null }
         },
         else => null,
+    }
+}
+
+/// Collects the path components that may make a root outside: the directory
+/// of `Root::Dir`, and the name argument of `Root::join` or `.join` (ADR-raw-sinks-1
+/// D13, D14). A join of an outside name without a `path::is_component` guard
+/// makes the resulting root outside.
+fn raw_sink_root_components(arg: ref Expr, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut parts: Vec[Expr]) {
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                else => "",
+            }
+            if named.ends_with("Root::Dir") && args.len() == 1 {
+                raw_sink_parts(args[0], holes_of, parts)
+            } else if named.ends_with("Root::join") && args.len() == 2 {
+                raw_sink_root_components(args[0], words, holes_of, parts)
+                raw_sink_parts(args[1], holes_of, parts)
+            }
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "join" && args.len() == 1 {
+                raw_sink_root_components(receiver, words, holes_of, parts)
+                raw_sink_parts(args[0], holes_of, parts)
+            }
+        },
+        else => {},
+    }
+}
+
+/// Whether the root expression is a join that admits a path guard on its name
+/// (ADR-raw-sinks-1 D14).
+fn raw_sink_is_join(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match arg {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                else => "",
+            }
+            named.ends_with("Root::join") && args.len() == 2
+        },
+        Expr::MethodCall { method, args, .. } => words.resolve(method) == "join" && args.len() == 1,
+        else => false,
     }
 }
 
