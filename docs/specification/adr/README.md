@@ -244,8 +244,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [program-path-1](adr-program-path-1.md) | `env::current_exe()` is the program that was started (under `nikaia run` and `nikaia test` the toolchain, a built program itself), `env::current_main()` the file it stands in as (the `.nika` file, the project's entry point, the test file, a built program itself); the launcher hands both over in `NIKAIA_EXE` and `NIKAIA_MAIN`, which `env::var` and `env::vars` hide and no child inherits | Accepted | yes |
-| [collections-1](adr-collections-1.md) | `BTreeMap`/`BTreeSet` offer what `HashMap`/`HashSet` offer apart from hashing: `entry` with `or_insert`, `or_insert_with`, `and_modify` on both maps, `extend` on both sets and `Vec`, taking a list, a set or a sequence of owned elements; `s.extend(xs.clone())` copies elements, not the list | Accepted | no |
-| [collections-2](adr-collections-2.md) | An array is read as a list is: `Array[T, N]` and its run have `iter()`, the sequence `Vec::iter()` is (`zip`, `map`, `filter`, `enumerate` follow); a `for` lends an array; D3: every set has `iter()`, a `BTreeSet` smallest first, a `HashSet` in no order (#1006) | Accepted | no |
+| [collections-v3](adr-collections-v3.md) | `BTreeMap`/`BTreeSet` offer what `HashMap`/`HashSet` offer apart from hashing: `entry` with `or_insert`, `or_insert_with`, `and_modify` on both maps, `extend` on both sets, both maps and `Vec`, taking a list, a set or a sequence of owned elements (pairs on a map); `s.extend(xs.clone())` copies elements, not the list. An array is read as a list is: `Array[T, N]` and its run have `iter()`, the sequence `Vec::iter()` is (`zip`, `map`, `filter`, `enumerate` follow); a `for` lends an array; every set has `iter()`, a `BTreeSet` smallest first, a `HashSet` in no order | Accepted | no |
 | [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a regular expression is `regex::Regex[E]`, typed by its engine (`Literal`, `OnePass`, `Dfa`, `TaggedDfa`, `BitNfa`, `FlatNfa`, `Dynamic`), `regex::Any` for a mix; `regex::compile(comptime p)` chooses the engine while building, `regex::dynamic(p)` compiles at run time on Rust's automata crates; tables lie in the binary as read; `std`'s calls take `comptime? self` and are specialised per known pattern; `--comptime` reports | Accepted | no |
 | [specialization-1](adr-specialization-1.md) | A parameter marked `comptime?` (also `self`) makes a copy of the function per build-time value a call gives it and leaves the function as written for the rest; `@unroll` before a `for` makes the loop variable a build-time value in every turn (`NK1304` where the list is not one), `@unroll(up_to: N)` up to `N` elements, the body checked both ways (`NK1305`); an `if` or `match` on a known value is decided while building; nothing asks whether a value is known; a result type may be computed from `comptime` parameters; `--comptime` reports | Accepted | no |
 | [lambdas-1](adr-lambdas-1.md) | A lambda handed to a parameter that runs it at most once may give away what it captures (no repeat for `NK2105`; gone after the call); `std.contracts` names such parameters with `once` (`or_insert_with`, `and_modify`, `task::scope`, both `access`; not `update`); for user code once-ness is inferred, written to the ledger and lowered as `impl FnOnce`, never written in the source | Accepted | no |
@@ -350,7 +349,6 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 | [346](adr-346.md) D7, [328](adr-328.md) D10 | [async-5](adr-async-5.md) D20, D21 | `task::scope` is removed; its rules hold for an `async` group's children |
 | [327](adr-327.md) D6 | [async-5](adr-async-5.md) D19 | a full block ends a task or a child with `task::OverBudget`; no panic hook; in a group it fails only that child |
 | [276](adr-276.md) D16 | [async-5](adr-async-5.md) D10, D30 | a task an `async` form starts is a boundary no jump leaves; D13 stands: no loop has a value |
-| [253](adr-253.md) D2 | [collections-1](adr-collections-1.md) D3 | `extend` takes a list, a set or a sequence of owned elements, on `Vec` and on both sets |
 | [269](adr-269.md) D4 | [380](adr-380.md) D1, D2 | an `assert` not proved refuses the program (`NK1300`) unless `unproved-claims = "warn"`, where it is checked |
 | [340](adr-340.md) D1 | [383](adr-383.md) D1-D3 | the id is given by a numbering pass right after the parse, in input order without gaps, not by the parser as it makes the node |
 | [269](adr-269.md) D9 | [381](adr-381.md) D1-D3 | a pure `bool` call over unchanged values is a name of the prover (a property), proved by name |
@@ -394,7 +392,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| collections-v3 | collections (collections-1, collections-2) | #904 |
 
 A row here is a claim and nothing else: it says the number is spoken for, not
 what the decision is. Delete the row in the same commit that adds the record.
