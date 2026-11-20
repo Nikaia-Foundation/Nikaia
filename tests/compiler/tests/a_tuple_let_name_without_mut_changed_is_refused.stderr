@@ -1,0 +1,10 @@
+error[NK1139]: You're changing `b`, but it wasn't declared as mutable.
+  --> tests/a_tuple_let_name_without_mut_changed_is_refused.nika:5:5
+   |
+ 4 |     let (a, b) = (1, 2)
+   |             - declared here without `mut`
+ 5 |     b += a
+   |     ^ changed here
+   |
+   = help: Add `mut` where it's declared: `let mut b`.
+1 type error

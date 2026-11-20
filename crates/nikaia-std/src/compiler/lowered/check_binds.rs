@@ -39,7 +39,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
+    pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, String::from("A `let` that binds several names can't have a type."), vec![String::from("The names are taken apart by position, and one type can't say which name it belongs to.")], Some(String::from("Remove the type, or bind one name and read the parts from it.")))); }
         let what = match value {
             Expr::Variable(name, _) => { let name = *name; if world.words.resolve(name).starts_with("__nikaia_tuple") { "A lambda's parameter" } else { "A `let`" } },
@@ -65,7 +65,12 @@ impl CheckState {
             self.a_tuple_part_is_lent(lent, &bound, nikaia_std::index::get(&parts, (index) as usize), at, frame);
             let mut ty = (*unsafe { nikaia_std::proven::read(&parts, (index) as usize) }).clone();
             if self.facts.copied_tuple_parts.contains(&(at, nikaia_std::block::Text::from(bound.to_string()))) { ty = ty.owned(); }
-            self.bind_with(nikaia_std::block::Text::from(bound.to_string()), ty, None);
+            let id = self.a_new_binding();
+            let mut local = CheckLocal::free(nikaia_std::block::Text::from(bound.to_string()), ty, id);
+            let changeable = mutable && (mut_names.is_empty() || *nikaia_std::index::get(&mut_names, (index) as usize));
+            local.written_mut = changeable;
+            if !changeable { local.without_mut = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: String::from("") }); }
+            self.bind_local(local);
             if check_owned_text(unsafe { nikaia_std::proven::read(&parts, (index) as usize) }) && (lent || (*unsafe { nikaia_std::proven::read(&parts, (index) as usize) }).is_a_view()) {
                 let local = match self.binding(&bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 self.flow.lent_text_params.insert(local.id);
