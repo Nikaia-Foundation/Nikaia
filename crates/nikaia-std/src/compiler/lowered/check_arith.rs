@@ -225,6 +225,13 @@ pub(crate) fn is_a_bool_type(ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn is_a_text_position(ty: &Ty) -> bool {
+    match ty.unseen() {
+        Ty::Named { ref name, ref args, .. } => args.is_empty() && name == "text::Pos",
+        _ => false,
+    }
+}
+
 pub(crate) fn text_or_bool_in_arithmetic(op: &BinaryOp, left: &Ty, right: &Ty) -> bool {
     let left_text = is_text_type(&left.unseen());
     let right_text = is_text_type(&right.unseen());
@@ -251,7 +258,11 @@ impl CheckState {
         let symbol = arith_symbol(&op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
-            if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if text_or_bool_in_arithmetic(&op, left, right) {
+            if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if is_a_text_position(left) || is_a_text_position(right) {
+                let note: String = String::from("A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic (ADR-374 D1).");
+                let help: String = String::from("Cut the text there with `before`, `after` or `between`; the bytes before it are `t.before(p).bytes.len()`.");
+                self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on a `text::Pos`.", symbol), vec![note], Some(help)));
+            } else if text_or_bool_in_arithmetic(&op, left, right) {
                 let mut culprit = left.shown();
                 if is_text_type(&left.unseen()) { culprit = String::from("String"); } else if !is_a_bool_type(left) {
                     culprit = right.shown();

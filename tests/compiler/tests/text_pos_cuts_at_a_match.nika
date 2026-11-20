@@ -1,0 +1,17 @@
+// A text is cut by name at its own positions (ADR-374 D1-D3): a match's
+// `start` and `end`, `t.start()` and `t.end()`; `before`, `after` and
+// `between` are views of the text, and two positions of one text compare.
+use std::regex
+
+fn main() throws {
+    let t = "äöü: 12 €"
+    let sep = regex::dynamic(": ")
+    let m = sep.find(t) ?? return
+    println(f"[{t.before(m.start)}] [{t.after(m.end)}]")
+    println(f"[{t.between(t.start(), m.end)}] [{t.between(m.end, t.end())}]")
+    println(f"[{t.between(m.start, m.start)}] [{t.before(t.start())}] [{t.after(t.end())}]")
+    println(f"{m.start < m.end} {m.end == t.end()} {t.start() <= m.start}")
+    let num = regex::dynamic("\\d+")
+    let n = num.find(t) ?? return
+    println(f"[{t.between(m.end, n.end)}] {t.before(n.start).bytes.len()}")
+}
