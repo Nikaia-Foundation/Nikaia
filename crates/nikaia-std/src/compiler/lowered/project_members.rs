@@ -456,9 +456,10 @@ pub struct ProjectMembersOwnRust {
     pub narrow: collections::BTreeSet<String>,
     pub files: collections::BTreeMap<String, String>,
     pub moved: Vec<String>,
+    pub entries: String,
 }
 
-pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeMap::new(), narrow: collections::BTreeSet::new(), files: collections::BTreeMap::new(), moved: vec![] } }
+pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeMap::new(), narrow: collections::BTreeSet::new(), files: collections::BTreeMap::new(), moved: vec![], entries: String::from("") } }
 
 pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank(), own: project_members_no_own_rust() } }
 
@@ -594,6 +595,7 @@ pub(crate) async fn project_members_own_rust<H: ProjectMembersForeignHost>(root:
         Ok(value) => value,
         Err(_error) => { String::from("") },
     }; #[allow(unused_mut, clippy::redundant_locals)] let mut own = own;
+    own.entries = nikaia_std::block::Text::from(written.to_string());
     let mut ledger = match host.read_beside(&entries) { Some(__nikaia_value) => __nikaia_value, None => return own };
     let functions: Vec<String> = ledger.functions.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
     for function in functions.iter() {

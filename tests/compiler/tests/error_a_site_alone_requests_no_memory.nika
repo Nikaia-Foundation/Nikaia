@@ -1,0 +1,68 @@
+// The common case of a failure allocates nothing (`error.rs`, ADR-280): an
+// error that carries only its site keeps the site in the envelope's one word,
+// so throwing and catching it requests no memory, which `mem::allocations()`
+// counts (ADR-400 D1). The control joins a second error beside it in an
+// `overlap`: that moves the tail into a box, and requests more than the same
+// `overlap` where both halves succeed. And the success path of a call that
+// can fail holds no memory more (`mem::usage()`). Each count is read before
+// and after one operation and printed after both (#2319, the pattern of
+// #2215).
+use std::mem
+
+enum Kind {
+	NotFound,
+	Denied,
+}
+
+impl Error for Kind {
+	fn message(ref self) -> String {
+		match self {
+			Kind::NotFound => { return "not found" }
+			Kind::Denied => { return "denied" }
+		}
+	}
+}
+
+fn load(n: i64) -> i64 throws {
+	if n > 2 {
+		throw Kind::NotFound
+	}
+	return n
+}
+
+fn deny(n: i64) -> i64 throws {
+	if n > 2 {
+		throw Kind::Denied
+	}
+	return n
+}
+
+fn both(n: i64) -> i64 throws {
+	let pair = overlap {
+		load(n)
+		deny(n)
+	}
+	return pair.0 + pair.1
+}
+
+fn main() throws {
+	let before = mem::allocations()
+	let caught = load(5) catch { -1 }
+	let after = mem::allocations()
+	println(f"a site alone caught ({caught}), requests: {after - before}")
+
+	let before = mem::allocations()
+	let fine = both(1) catch { -1 }
+	let after = mem::allocations()
+	let succeeded = after - before
+	let before = mem::allocations()
+	let joined = both(5) catch { -1 }
+	let after = mem::allocations()
+	let failed = after - before
+	println(f"a second error joined ({fine}, {joined}), more requests: {failed > succeeded}")
+
+	let before = mem::usage()
+	let loaded = load(1) catch { -1 }
+	let after = mem::usage()
+	println(f"a call that can fail succeeded ({loaded}), bytes held more: {after - before}")
+}

@@ -84,6 +84,46 @@ pub(crate) fn check_arguments_wrote_ref(value: Option<&Expr>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_holds_text_inside(ty: &Ty, depth: i64) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if depth > 0 && view && (name == "String" || name == "str") { return true; }
+            for arg in args.iter() { if check_arguments_holds_text_inside(arg, depth + 1) { return true; } }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_arguments_holds_text_inside(part, depth + 1) { return true; } }
+            false
+        },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); check_arguments_holds_text_inside(item, depth + 1) },
+        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); check_arguments_holds_text_inside(held, depth + 1) },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn check_arguments_a_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>) -> bool {
+        let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match value {
+            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); match op {
+                UnaryOp::Ref => self.check_arguments_a_comptime(world, Some(expr)),
+                _ => false,
+            } },
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
+                self.facts.comptime_names.contains(&name) && !(self.frame_holding(&name) > 0 && self.binding(&name).and_then(|__nikaia_it| __nikaia_it.built).is_none())
+            },
+            _ => false,
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_print(written: &str) -> bool { written == "println" || written == "eprintln" || written == "print" || written == "eprint" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -299,6 +339,10 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let mut want = declared.clone();
         let mut found_here = argument.found.clone();
         if is_a_view_of_a_string(&found_here) { found_here = text_view.clone(); }
+        if contract.described && !own && check_arguments_holds_text_inside(&declared, 0) && !state.check_arguments_a_comptime(world, given_here) {
+            state.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be a `comptime` value: its `ref String` parts are text the build holds (`&'static str` in Rust).", key, name), vec![format!("It's declared as `{}{}`; a value built at run time lives only as long as its function.", key, signature.shown(&contract.keeps))], Some(nikaia_std::block::Text::from("Declare the value as `comptime` and pass it by name."))));
+            continue;
+        }
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.constant_fits(world, value, Some(&want), span);

@@ -42,7 +42,7 @@ pub(crate) fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Exp
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && state.jumps(world, fallback) },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)) },
         _ => false,
     }
 }
@@ -515,6 +515,62 @@ pub(crate) fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_lent_parts_viewed(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, found: &Ty, want: &Ty) -> Option<Ty> {
+    match value {
+        Expr::Variable(_, _) => {
+            if !state.a_lent_parameter(world, value) && !state.an_either_parameter(world, value) { return None; }
+            if check_core_stmt_read_viewed(state, world, found, want) != 1 { return None; }
+            return Some(want.clone());
+        },
+        Expr::Tuple(given, _) => {
+            let found_parts: Vec<Ty> = match found {
+                Ty::Tuple(parts) => parts.copy_owned(),
+                _ => return None,
+            };
+            let wanted: Vec<Ty> = match want {
+                Ty::Tuple(parts) => parts.copy_owned(),
+                _ => return None,
+            };
+            if (given.len() as i64) != found_parts.len() as i64 || (given.len() as i64) != wanted.len() as i64 { return None; }
+            let mut parts: Vec<Ty> = vec![];
+            let mut any = false;
+            for (k, part) in given.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+                let viewed = check_core_stmt_lent_parts_viewed(state, world, part, nikaia_std::index::get(&found_parts, nikaia_std::index::at(k)), unsafe { nikaia_std::proven::read(&wanted, (k) as usize) });
+                if viewed.is_some() { any = true; }
+                parts.push(nikaia_std::index::or(viewed, || (*unsafe { nikaia_std::proven::read(&found_parts, (k) as usize) }).clone().into()));
+            }
+            if !any { return None; }
+            return Some(Ty::Tuple(parts));
+        },
+        Expr::ListLit { items, .. } => {
+            let (name, args, view) = match found {
+                Ty::Named { name, args, view } => { let view = *view; (nikaia_std::block::Text::from(name.to_string()), args.copy_owned(), view) },
+                _ => return None,
+            };
+            let wanted_item: Ty = match want {
+                Ty::Named { args, .. } => match match args.first() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return None },
+                _ => return None,
+            };
+            let found_item: Ty = match match args.first() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if items.is_empty() { return None; }
+            let mut item: Ty = found_item.clone();
+            for given in items.iter() { item = match check_core_stmt_lent_parts_viewed(state, world, given, &found_item, &wanted_item) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
+            let mut out: Vec<Ty> = vec![item];
+            for (k, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if k > 0 { out.push(arg.clone()); } }
+            return Some(Ty::Named { name, args: out, view });
+        },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_read_viewed(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> i64 {
     if found.is_a_view() { return 0; }
     let inner = match want {
@@ -830,6 +886,9 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             let written = check_core_stmt_read_shown(world, value);
             state.findings.push(check_refusal("NK1257", span, format!("A `{}` read out of a place is a copy, so it can't be bound as a `ref {}`.", shown, shown), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.")], Some(format!("an `{}` is copied at a read; write `let {} = {}`.", shown, name, written))));
             found_kept = want.clone();
+        } else if element_view == 0 {
+            let viewed = check_core_stmt_lent_parts_viewed(&state, world, value, &found_kept, &want);
+            if viewed.is_some() { found_kept = nikaia_std::index::or(viewed, || want.clone().into()); }
         }
         if state.lends_where_a_function_type_reads(world, Some(value), &found_kept, &want) { found_kept = want.clone(); }
         state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &mut |was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });

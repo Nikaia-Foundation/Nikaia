@@ -158,7 +158,7 @@ pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pat
 pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections::BTreeSet<i64>) -> Vec<CheckFinding> {
     let mut kept: Vec<CheckFinding> = vec![];
     for f in findings.iter() {
-        if f.code == "NK1110" && reached.contains(&(f.span.start as i64)) { continue; }
+        if (f.code == "NK1110" || f.code == "NK1186") && reached.contains(&(f.span.start as i64)) { continue; }
         kept.push(f.clone());
     }
     kept

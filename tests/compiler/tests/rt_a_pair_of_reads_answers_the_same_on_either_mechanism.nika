@@ -1,0 +1,43 @@
+// Two reads and a missing file answer the same bytes, in the order asked, on
+// either I/O mechanism (ADR-292 D6, ADR-303 D5): what a mechanism costs differs,
+// what it answers may not. A runtime config named by `NIKAIA_RUNTIME_CONFIG`
+// pins `io-method`; the child reads both files and a missing one, which fails
+// in its own read and not in the other's, once under `blocking` and once under
+// `auto`. Moved from the `nikaia-std` unit tests
+// `a_pair_is_answered_in_order_on_either_mechanism` and
+// `the_compilers_pair_answers_the_same_either_way` (#2316).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(f"{tmp}/eins", fs::Root::Anywhere, "eins")
+	fs::write(f"{tmp}/zwei", fs::Root::Anywhere, "zwei zwei")
+	fs::write(
+		f"{tmp}/child.nika",
+		fs::Root::Anywhere,
+		"use std::fs\n\nfn main() throws {\n\tlet first = fs::read(\"eins\", fs::Root::Anywhere)\n\tlet second = fs::read(\"zwei\", fs::Root::Anywhere)\n\tprintln(f\"first: {first.text()}\")\n\tprintln(f\"second: {second.text()}\")\n\tfs::read(\"nicht-da\", fs::Root::Anywhere) catch {\n\t\tprintln(\"missing: an error\")\n\t\treturn\n\t}\n\tprintln(\"missing: read\")\n}\n",
+	)
+	for method in ["blocking", "auto"] {
+		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, f"io-method = \"{method}\"\n")
+		let out = process::run(
+			toolchain(),
+			["run", "child.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		)
+		println(f"{method}:")
+		print(out.stdout)
+	}
+	process::run("rm", ["-rf", tmp])
+}

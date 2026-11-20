@@ -1,0 +1,17 @@
+// A proved read whose part is handed back is written `unsafe { … }.1`, which
+// Rust reads as one expression, a comparison after the part included, so no
+// brackets go around it: they were rustc's `unused_parens` warning (#2346).
+fn second() -> u32 {
+	let pairs: Array[(u32, u32), 2] = [(1, 2), (3, 4)]
+	return pairs[1].1
+}
+
+fn same() -> bool {
+	let pairs: Array[(u32, u32), 2] = [(1, 2), (3, 4)]
+	return pairs[0].0 == 1
+}
+
+fn main() throws {
+	println(f"{second()}")
+	println(f"{same()}")
+}

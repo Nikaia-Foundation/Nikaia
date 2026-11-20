@@ -151,9 +151,9 @@ pub struct Pool {
     /// task may be polled on any worker, so each poll hands its time over here.
     timer: Mutex<Option<std::time::Instant>>,
     /// How often an idle turn woke anybody: the test that an idle pool stays
-    /// quiet (#693) counts it.
-    #[cfg(test)]
-    rang: std::sync::atomic::AtomicUsize,
+    /// quiet (#693) counts it. Counted in every build (#2316): the increment
+    /// sits beside a condvar broadcast on a path that has just left the ring.
+    rang: std::sync::atomic::AtomicI64,
 }
 
 impl Pool {
@@ -175,8 +175,7 @@ impl Pool {
             closing: AtomicBool::new(false),
             threads: std::sync::atomic::AtomicUsize::new(0),
             timer: Mutex::new(None),
-            #[cfg(test)]
-            rang: std::sync::atomic::AtomicUsize::new(0),
+            rang: std::sync::atomic::AtomicI64::new(0),
         });
         for n in 0..threads {
             let mine = pool.clone();
@@ -225,6 +224,12 @@ impl Pool {
     /// `main` asks about (ADR-297 D6).
     pub fn live(&self) -> usize {
         self.live.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    /// How often an idle turn has woken the workers since the pool started:
+    /// what `runtime/run_config.nika`'s idle-pool test reads (#693, #2316).
+    pub(crate) fn rang(&self) -> i64 {
+        self.rang.load(Ordering::Relaxed)
     }
 
     /// Stop the workers.
@@ -376,8 +381,7 @@ impl Pool {
         }
         self.piloting.store(false, Ordering::Release);
         if moved || closing {
-            #[cfg(test)]
-            self.rang.fetch_add(1, Ordering::AcqRel);
+            self.rang.fetch_add(1, Ordering::Relaxed);
             self.bell.notify_all();
         } else if let Some(left) = left {
             // **Off the seat, so the next worker to go idle takes it** — the one
@@ -440,82 +444,5 @@ impl Pool {
         for cell in live {
             cell.wake();
         }
-    }
-}
-
-// Kept as Rust (#2082): no program can observe what these two check. A
-// wake from inside a task's own poll needs a hand-written future, which
-// Nikaia has no form for; the idle pool's quiet is read from `rang`, which
-// only the test build has. Their move waits for #2088.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// **A wake that arrives while the task is being polled is not lost.**
-    ///
-    /// This is what the four states are for. The future wakes *itself* from
-    /// inside its own poll, so the waker sees `RUNNING` and declines to queue;
-    /// what has to happen then is that the worker finishing the poll puts it
-    /// back. If it did not, the task would sit idle for ever and this would
-    /// hang rather than fail.
-    #[test]
-    fn a_wake_during_a_poll_is_not_lost() {
-        let pool = Pool::start(1);
-        let rounds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let mine = rounds.clone();
-        pool.start_task(async move {
-            std::future::poll_fn(move |context| {
-                let seen = mine.fetch_add(1, Ordering::AcqRel);
-                if seen >= 2 {
-                    return std::task::Poll::Ready(());
-                }
-                // Woken from inside the poll: the state is `RUNNING`, so the
-                // waker records it rather than queueing.
-                context.waker().wake_by_ref();
-                std::task::Poll::Pending
-            })
-            .await
-        });
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::yield_now();
-        }
-        assert_eq!(pool.live(), 0, "the task finished rather than sitting idle");
-        assert!(rounds.load(Ordering::Acquire) >= 3, "it was polled again");
-        pool.close();
-    }
-
-    /// **An idle pool stays quiet** (#693): with no task and no I/O, a turn
-    /// that waited out its slice wakes nobody. Before, every turn rearmed and
-    /// rang, so this counted one ring per turn per worker.
-    ///
-    /// The other tests of this binary run alongside and move the runtime's
-    /// count, which is a real wake for this pool too: those are subtracted.
-    /// Their I/O can still ring the pool more often than it moves the count
-    /// (on CI: 49 rings for 24 moves, and 1145 for 886), so the pool is watched
-    /// for up to ten windows, longer than the rest of the binary runs, and must
-    /// stay quiet in one of them; a pool that wakes itself rings in every
-    /// window.
-    #[test]
-    fn an_idle_pool_does_not_wake_itself() {
-        let pool = Pool::start(2);
-        let mut seen = Vec::new();
-        for _ in 0..10 {
-            let before_rang = pool.rang.load(Ordering::Acquire) as u64;
-            let before = crate::rt::io::generation();
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            let rang = pool.rang.load(Ordering::Acquire) as u64 - before_rang;
-            let others = (crate::rt::io::generation() - before).saturating_sub(rang);
-            seen.push((rang, others));
-            if rang <= others + 3 {
-                break;
-            }
-        }
-        pool.close();
-        let (rang, others) = *seen.last().expect("one window");
-        assert!(
-            rang <= others + 3,
-            "an idle pool rang in every window (rings, wakes from elsewhere): {seen:?}, last {rang} for {others}"
-        );
     }
 }

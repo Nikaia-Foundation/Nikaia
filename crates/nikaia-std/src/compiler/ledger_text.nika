@@ -205,6 +205,11 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     if contract.at_once.len() > 0 {
         out.push_str(f"at_once = [{quoted_all(contract.at_once)}]\n")
     }
+    // **The parameters a Rust entry takes as `&OsStr`** (Part III 13.5
+    // `os_text`, #2351): the call hands each over as `OsStr::new(arg)`.
+    if contract.os_text.len() > 0 {
+        out.push_str(f"os_text = [{quoted_all(contract.os_text)}]\n")
+    }
     // Beside `keeps`: the two together are what a caller has to know before
     // it may hand a name over rather than lend it (ADR-094 D3).
     if contract.mutates && !mutates_said {

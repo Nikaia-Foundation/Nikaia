@@ -75,12 +75,15 @@ struct KeepsWalk {
     /// The names the body grows (`grown_text_of`): a cut of a parameter
     /// bound `mut` to one is given the parameter's text (ADR-text-reuse-1 D2).
     grown: collections::BTreeSet[String],
+    /// The parameters put into a part a `let` declares a view of, by their
+    /// node (`keeps_lent_into_declared`): lent there, not kept.
+    declared_views: collections::BTreeSet[i64],
 }
 
 /// What `body` does with each of its function's parameters.
 pub fn uses_in(body: ref Block, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> Uses {
     let grown = grown_text_of(interner, body)
-    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap(), grown: grown }
+    let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet(), passed: [] }, aliases: collections::BTreeMap(), views: collections::BTreeMap(), grown: grown, declared_views: collections::BTreeSet() }
     keeps_block(body, interner, holes_of, context, own, library, walk)
     // **The value a body ends in leaves the call**, as a `return` does.
     if context.hands_back_its_last && body.stmts.len() > 0 {
@@ -130,6 +133,9 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                 }
             }
             let viewed = keeps_viewed_of(value, interner, context, own, library, walk)
+            if !mutable && ty != null {
+                keeps_lent_into_declared(value, ty ?? return, interner, context, walk.declared_views)
+            }
             // **A `let mut` changes what it binds**, so a parameter bound to
             // one is owned: a view cannot be changed (D40). A lent one stays
             // the reference the author wrote. A call's result that points into
@@ -238,6 +244,44 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         Stmt::Return(value) => {
             let returned = value ?? return
             keeps_blocks_in(returned, interner, holes_of, context, own, library, walk)
+        }
+        else => {}
+    }
+}
+
+// **A parameter put into a literal at a part the `let` declares a view of
+// is lent there** (ADR-282 D2, ADR-views-v4 D5, #2346): `name: String` says
+// what `name: ref String` says, so `let t: Array[(u32, ref String), 1] =
+// [(1, name)]` holds the view the parameter is and keeps nothing, as a view
+// field of a struct literal does. Where `t` leaves, the alias `reached_of`
+// gave it keeps the parameter. The parts are marked by their node.
+fn keeps_lent_into_declared(expr: ref Expr, ty: ref Type, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, mut marked: collections::BTreeSet[i64]) {
+    if ty.is_nullable {
+        return
+    }
+    match expr {
+        Expr::Variable(ident, _) => {
+            let name = interner.resolve(ident)
+            if ty.is_view && !ty.is_tuple && name != "self" && keeps_lendable(name, context) {
+                marked.insert(id_of(expr) as i64)
+            }
+        }
+        Expr::Tuple(items, _) => {
+            if !ty.is_tuple || ty.is_view || ty.generics.len() != items.len() {
+                return
+            }
+            for (k, item) in items.iter().enumerate() {
+                keeps_lent_into_declared(item, ty.generics[k], interner, context, marked)
+            }
+        }
+        Expr::ListLit { items, .. } => {
+            let base = interner.resolve(ty.name)
+            if ty.is_view || ty.is_tuple || ty.generics.len() == 0 || (base != "Array" && base != "Vec") {
+                return
+            }
+            for item in items {
+                keeps_lent_into_declared(item, ty.generics[0], interner, context, marked)
+            }
         }
         else => {}
     }
@@ -723,13 +767,17 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // (ADR-297 D13): `[h]` builds a list that holds `h`.
         Expr::ListLit { items, .. } => {
             for item in items {
-                keep_part(item, interner, context, own, library, walk)
+                if !walk.declared_views.contains(id_of(item) as i64) {
+                    keep_part(item, interner, context, own, library, walk)
+                }
                 keep_lambda(item, interner, holes_of, context, walk)
             }
         }
         Expr::Tuple(items, _) => {
             for item in items {
-                keep_part(item, interner, context, own, library, walk)
+                if !walk.declared_views.contains(id_of(item) as i64) {
+                    keep_part(item, interner, context, own, library, walk)
+                }
                 keep_lambda(item, interner, holes_of, context, walk)
             }
         }

@@ -95,6 +95,11 @@ pub trait ProjectLowerHost {
     /// dependency's against its own package's (issue #159): its warnings, or
     /// its refusal. Any other failure is thrown, and kept by the host.
     fn check_unit(ref self, at: i64) -> UnitSaid sync throws
+    /// **Checks what belongs to the package and to none of its units**: the
+    /// entries of `contracts/crate.contracts` that say `pub = true`
+    /// (ADR-rust-boundary-1 D26, #2297), each refused once at its line;
+    /// `null` where nothing is refused.
+    fn check_package(ref self) -> UnitSaid? sync
     /// **Closes the check**: the host keeps the book and the check's facts for
     /// the emitter. `refused` joined is the refusal of the whole program.
     fn check_close(ref self, refused: ref Vec[String]) sync throws
@@ -284,6 +289,13 @@ pub fn project_lower_check[H: ProjectLowerHost](host: ref H) -> String throws {
                 refused.push(text)
             },
         }
+    }
+    match host.check_package() {
+        null => {},
+        UnitSaid::Refused(text) => {
+            refused.push(text)
+        },
+        else => {},
     }
     host.check_close(refused)
     return warnings

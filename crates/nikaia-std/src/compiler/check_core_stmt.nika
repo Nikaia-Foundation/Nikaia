@@ -74,10 +74,12 @@ fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     }
 }
 
-/// **A value `get` hands back past a jump** (D30).
+/// **A value `get` hands back past a jump** (D30), or one of a chain of
+/// `get`s the last of which jumps: `a.get(k) ?? b.get(k) ?? return` binds
+/// the reference either hands back, as one `get` does.
 fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && state.jumps(world, fallback),
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)),
         else => false,
     }
 }
@@ -648,6 +650,78 @@ fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, va
     return check_core_stmt_read_viewed(state, world, found, want)
 }
 
+/// **A parameter the function lends, put into a literal whose parts the `let`
+/// declares views, is the view** (ADR-282 D2, #2346): `name: String` says what
+/// `name: ref String` says, so `[(10, name, 3)]` under `Array[(u32, ref
+/// String, u32), 1]` holds the view the parameter already is. The literal's
+/// type with those parts as declared, or null where a part is not such a
+/// parameter: text built in the function stays its own, and `NK1103`'s.
+fn check_core_stmt_lent_parts_viewed(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> Ty? sync {
+    match value {
+        Expr::Variable(_, _) => {
+            if !state.a_lent_parameter(world, value) && !state.an_either_parameter(world, value) {
+                return null
+            }
+            if check_core_stmt_read_viewed(state, world, found, want) != 1 {
+                return null
+            }
+            return want.clone()
+        },
+        Expr::Tuple(given, _) => {
+            let found_parts: Vec[Ty] = match found {
+                Ty::Tuple(parts) => parts.clone(),
+                else => return null,
+            }
+            let wanted: Vec[Ty] = match want {
+                Ty::Tuple(parts) => parts.clone(),
+                else => return null,
+            }
+            if given.len() != found_parts.len() || given.len() != wanted.len() {
+                return null
+            }
+            let mut parts: Vec[Ty] = []
+            let mut any = false
+            for (k, part) in given.iter().enumerate() {
+                let viewed = check_core_stmt_lent_parts_viewed(state, world, part, found_parts[k], wanted[k])
+                if viewed != null {
+                    any = true
+                }
+                parts.push(viewed ?? found_parts[k].clone())
+            }
+            if !any {
+                return null
+            }
+            return Ty::Tuple(parts)
+        },
+        Expr::ListLit { items, .. } => {
+            let (name, args, view) = match found {
+                Ty::Named { name, args, view } => (name.clone(), args.clone(), view),
+                else => return null,
+            }
+            let wanted_item: Ty = match want {
+                Ty::Named { args, .. } => args.first()?.clone() ?? return null,
+                else => return null,
+            }
+            let found_item: Ty = args.first()?.clone() ?? return null
+            if items.len() == 0 {
+                return null
+            }
+            let mut item: Ty = found_item.clone()
+            for given in items {
+                item = check_core_stmt_lent_parts_viewed(state, world, given, found_item, wanted_item) ?? return null
+            }
+            let mut out: Vec[Ty] = [item]
+            for (k, arg) in args.iter().enumerate() {
+                if k > 0 {
+                    out.push(arg.clone())
+                }
+            }
+            return Ty::Named { name: name, args: out, view: view }
+        },
+        else => return null,
+    }
+}
+
 /// **The same rule for what a read is, wherever it was read**: an element
 /// read off a place, or one unwrapped past a jump (`m[k] ?? return null`,
 /// #1107), under a type that declares a view of it. 1 lent, 2 a word by its
@@ -1102,6 +1176,11 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let written = check_core_stmt_read_shown(world, value)
             state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep."], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
             found_kept = want.clone()
+        } else if element_view == 0 {
+            let viewed = check_core_stmt_lent_parts_viewed(state, world, value, found_kept, want)
+            if viewed != null {
+                found_kept = viewed ?? want.clone()
+            }
         }
         // **A declared function that lends a parameter fits a function type
         // that lends it** (ADR-views-v4 D2, D14, #1254): `let k: fn(s: String)

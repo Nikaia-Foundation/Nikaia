@@ -3517,7 +3517,7 @@ pub mod fold_bound {
 }
 pub mod foreign {
     #[allow(unused_imports)]
-    pub use super::{Seen, written_in, foreign_own_refused};
+    pub use super::{Seen, written_in, foreign_own_published, foreign_own_refused};
 }
 pub mod grammar_decode {
     #[allow(unused_imports)]
@@ -3602,7 +3602,7 @@ pub mod migrate_views3 {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -3659,7 +3659,7 @@ pub mod project_batch {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_summary, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
@@ -3780,7 +3780,7 @@ pub mod surface {
 }
 pub mod sync {
     #[allow(unused_imports)]
-    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations};
+    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations, unit_pausing};
 }
 pub mod sysroot_cache {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "1c070d0f1dc956621f6ecf65058fce2ef2b1175b43e4c0ed76ab62d0d65feaba";
+pub const LOWERED_DIGEST: &str = "200b65d886ecf0984cd569652696af5a9e4d31527d0df0fd03c405fd0d4c7ad8";

@@ -237,6 +237,20 @@ fn check_core_call_on_fallback(state: ref CheckState, world: ref CheckWorld, on:
                     return resolve_method(world, "cleanup::close")
                 }
             }
+            // **A method of a trait a library's `impl` gives the type**
+            // (#2304): `supervisor::Backoff().decide(h)` is the entry
+            // `supervisor::Restart::decide`, since `std` wrote
+            // `impl supervisor::Restart for supervisor::Backoff`.
+            if args.len() == 0 {
+                for (trait_name, types) in world.library.implementations {
+                    if types.contains(name) {
+                        let found = resolve_method(world, f"{trait_name}::{entry}")
+                        if found != null {
+                            return found
+                        }
+                    }
+                }
+            }
         }
         else => {}
     }

@@ -534,10 +534,9 @@ are one.
   and compare what it answers, with no new public API and no move of the
   function first. The same holds for a rust-library's hand-written Rust.
 * *Built (#2233):* D28's code is `NK2507`, given at the `use` whose prefix
-  is a module of the Rust root. D26's `NK2508` stands at the entry's first
-  call, since a finding's place is in the Nikaia text, and a note names the
-  entry's line; an entry with `pub = true` that nothing calls is not refused
-  yet. A test build splices the Rust root's modules in beside the lowered
+  is a module of the Rust root. D26's `NK2508` stands at the entry's line in
+  `contracts/crate.contracts`, once per entry, whether anything calls it or
+  not; its calls are not refused again (#2297). A test build splices the Rust root's modules in beside the lowered
   items, so a `test` block reaches them as the package's code does. std's
   `text.rs` and `text.nika` are one module by construction (the lowered code
   is included in the Rust one), so D28 is not checked in std.

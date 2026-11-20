@@ -330,6 +330,28 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     found.seen.push(Seen::Call { name, wrote, span: span.clone(), literals, trusted: says_trusted(names, config) });
 }
 
+pub fn foreign_own_published(own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
+    let mut out: Vec<CheckFinding> = vec![];
+    if own.published.is_empty() { return out; }
+    let lines: Vec<String> = own.entries.split("\n").map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
+    for (name, line) in own.published.iter() {
+        let line = nikaia_std::num::value(line);
+        let mut start: i64 = 0;
+        let mut end: i64 = 0;
+        for (at, text) in lines.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            if at as i64 + 1 == line {
+                end = start + text.trim_end().len() as i64;
+                break;
+            }
+            start += unsafe { nikaia_std::proven::add::<i64>(text.len() as i64, 1) };
+        }
+        let span = Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(end).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+        let notes: Vec<String> = vec![String::from("What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.")];
+        out.push(check_refusal("NK2508", &span, format!("`{}` is described with `pub = true`, and the package's own Rust stays the package's.", name), notes, Some(String::from("Write `pub = false` in this entry."))));
+    }
+    out
+}
+
 pub fn foreign_own_refused(written: &[(String, Span)], program: &Program, names: &winnow_grammar::InternerContext, own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
     let mut out: Vec<CheckFinding> = vec![];
     if own.heads.is_empty() { return out; }
@@ -363,14 +385,6 @@ pub fn foreign_own_refused(written: &[(String, Span)], program: &Program, names:
         let head = match name.split("::").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if head == name || !own.heads.contains(head) || met.contains(name) { continue; }
         met.insert(nikaia_std::block::Text::from(name.to_string()));
-        match own.published.get(name) {
-            None => { },
-            Some(line) => {
-                let notes: Vec<String> = vec![format!("Its entry is at `contracts/crate.contracts:{}`.", line), String::from("What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them.")];
-                out.push(check_refusal("NK2508", &span, format!("`{}` is described with `pub = true`, and the package's own Rust stays the package's.", name), notes, Some(String::from("Write `pub = false` in its entry in `contracts/crate.contracts`."))));
-                continue;
-            },
-        }
         if !own.described.contains(name) && own.narrow.contains(name) {
             let head = nikaia_std::index::or(name.split("::").next(), || "");
             let file = nikaia_std::block::Text::from(nikaia_std::index::or(own.files.get(head), || "its file").to_string());

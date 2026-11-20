@@ -1,0 +1,24 @@
+// A borrowed left side joined to an owned right side keeps the right's buffer
+// (`concat.rs`, `Plus<String> for &str`): the left's bytes move in front, and
+// nothing is copied to a new buffer, so `mem::allocations()` (ADR-400 D1) does
+// not move. A right side `std` hands back as Rust's `String` reaches that
+// impl: `text::escape_control` builds its answer a character at a time, so
+// nine characters have room for sixteen. The control has no room left: the
+// buffer grows, and the count moves. Each count is read before and after one
+// operation and printed after both (#2319, the pattern of #2215).
+use std::mem
+use std::text
+
+fn main() throws {
+    let roomy = text::escape_control("rrrrrrrrr")
+    let before = mem::allocations()
+    let joined = "left-" + roomy
+    let after = mem::allocations()
+    println(f"{joined}, requests: {after - before}")
+
+    let full = text::escape_control("rrrrrrrr")
+    let before = mem::allocations()
+    let grown = "left-" + full
+    let after = mem::allocations()
+    println(f"{grown}, more requests: {after > before}")
+}

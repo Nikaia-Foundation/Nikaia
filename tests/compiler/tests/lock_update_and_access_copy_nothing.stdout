@@ -1,0 +1,4 @@
+6 entries after an append, requests: 0
+10000 entries read in place, requests: 0
+10000 entries read as a copy, more requests: true
+5 entries after an append that grows, more requests: true

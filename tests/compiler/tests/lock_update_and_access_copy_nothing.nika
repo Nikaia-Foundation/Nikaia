@@ -1,0 +1,44 @@
+// `update` moves the value, it does not copy it, and `access` reads a large
+// value in place (`lock.rs`, `Local`; ADR-281 D1, D2): neither requests
+// memory, which `mem::allocations()` counts (ADR-400 D1). The list has room
+// to spare, so the append does not grow it: what is asked is whether `update`
+// copies, not whether a list grows. The controls copy: `get` hands out a copy
+// of the list, and an append to a list without room grows its buffer. Each
+// count is read before and after one operation and printed after both
+// (#2319, the pattern of #2215).
+use std::mem
+
+fn numbers(n: i64) -> Vec[i64] {
+    let mut items: Vec[i64] = []
+    for i in 0..<n {
+        items.push(i)
+    }
+    items
+}
+
+fn main() throws {
+    // Five pushed, room for eight.
+    let roomy = SharedMut(numbers(5))
+    let before = mem::allocations()
+    roomy.update(fn(mut v) { v.push(5) })
+    let after = mem::allocations()
+    println(f"{roomy.access(fn(v) { v.len() })} entries after an append, requests: {after - before}")
+
+    let large = SharedMut(numbers(10000))
+    let before = mem::allocations()
+    let n = large.access(fn(v) { v.len() })
+    let after = mem::allocations()
+    println(f"{n} entries read in place, requests: {after - before}")
+
+    let before = mem::allocations()
+    let copy = large.get()
+    let after = mem::allocations()
+    println(f"{copy.len()} entries read as a copy, more requests: {after > before}")
+
+    // Four pushed, room for four.
+    let full = SharedMut(numbers(4))
+    let before = mem::allocations()
+    full.update(fn(mut v) { v.push(4) })
+    let after = mem::allocations()
+    println(f"{full.access(fn(v) { v.len() })} entries after an append that grows, more requests: {after > before}")
+}

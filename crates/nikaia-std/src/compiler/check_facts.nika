@@ -91,7 +91,8 @@ pub struct CheckAsyncWait {
 pub struct CheckFacts {
     /// **A call of a `std` helper** (`pub = false` in `std`'s ledger, #1606),
     /// by the start of the call's span: refused (`NK1110`) in a program, and
-    /// let through by `check_access_inside_std` where the file is `std`'s own.
+    /// let through by `check_access_inside_std` where the file is `std`'s own;
+    /// so is a `use` of a module with nothing public (`NK1186`, #2320).
     pub std_helpers_reached: collections::BTreeSet[i64],
     /// **A non-`pub` name of a package reached** (`NK1110`), by the start of
     /// the finding's span, with the package: let through by

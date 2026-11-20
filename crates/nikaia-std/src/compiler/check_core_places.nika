@@ -1234,6 +1234,9 @@ fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text
     state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
 }
 
+/// **An index into what a lock handed out** (ADR-281 D22, D23, #2208): a
+/// `Seen[T]` is indexed as the `T` it stamps, and what the index reads keeps
+/// the stamp, inside a nullable where a map's read answers one.
 fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, index: ref Expr, span: ref Span) -> Ty sync {
     let writing = state.flow.writing_index
     state.flow.writing_index = false
@@ -1241,6 +1244,23 @@ fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let key = check_core_expr(state, world, host, index, span)
     // **An index of a mapping is a page fault** (ADR-281 D35).
     state.io_inside_a_door(world, first, "this index", span)
+    let stamped = match first {
+        Ty::Named { name, args, .. } => name == SEEN && args.len() == 1,
+        else => false,
+    }
+    let read = check_core_index_of(state, world, expr, base, index, first.unseen(), key, writing, span)
+    if !stamped {
+        return read
+    }
+    return match read {
+        Ty::Unknown => Ty::Unknown,
+        Ty::Nullable(held) => Ty::Nullable(a_seen_ty(held.unseen())),
+        else => a_seen_ty(read.unseen()),
+    }
+}
+
+/// What an index reads from a value of type `first`, its key of type `key`.
+fn check_core_index_of(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, base: ref Expr, index: ref Expr, first: Ty, key: Ty, writing: bool, span: ref Span) -> Ty sync {
     // A type seen through is indexed as what it holds (#497).
     let mut on: Ty = first.clone()
     let through: Ty? = state.seen_through(world, first)
