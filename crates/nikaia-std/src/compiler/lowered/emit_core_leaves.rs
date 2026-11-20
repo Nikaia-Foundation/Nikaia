@@ -451,10 +451,11 @@ impl EmitState {
                     context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)";
                 },
             }
-            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
+            out.push(&emit_stream_batched_start());
+            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
             out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut {}, {}{}); ", lowered, rule_name, context, handed, each));
-            out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
+            out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
+            out.push(" })");
             out.push(&format!("{}", question));
             return Ok(());
         }

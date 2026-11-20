@@ -203,7 +203,7 @@ impl EmitState {
         let item = host.ty_named(walk, ty)?;
         out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), self.rust_result(), item));
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
+        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), false);
         out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), {}); ", name, rule_name, each));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
         Ok(())
@@ -233,11 +233,12 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.default, 0, EmitFlow::plain(), &EmitScope::plain())?;
             out.push(" }; ");
         }
-        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+        out.push(&emit_stream_batched_start());
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)));
+        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
         out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
-        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
+        out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
+        out.push(" }\n");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -590,11 +591,16 @@ pub(crate) fn stream_item_rule(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Patt
     }
 }
 
-pub(crate) fn emit_stream_each(item: &str, emitting: bool) -> String {
-    let send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }";
+pub(crate) fn emit_stream_each(item: &str, emitting: bool, batched: bool) -> String {
+    let mut send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }";
+    if batched { send = "{ __wg_batch.push(Ok(__wg_one.clone())); if __wg_batch.len() < 256 { ::std::ops::ControlFlow::Continue(()) } else { match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) } } }"; }
     if emitting { return format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", item, send); }
     format!("|__wg_one: &{}| {}", item, send)
 }
+
+pub(crate) fn emit_stream_batched_start() -> String { String::from("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(1); ::std::thread::spawn(move || { let mut __wg_batch = ::std::vec::Vec::with_capacity(256); ") }
+
+pub(crate) fn emit_stream_batched_end(rendered: &str) -> String { format!("if let Err(__wg_error) = __wg_parsed {{ __wg_batch.push(Err(nikaia_std::grammar::ParseError::of({}))); }} if !__wg_batch.is_empty() {{ let _ = __wg_tx.send(__wg_batch); }} }}); __wg_rx.into_iter().flatten()", rendered) }
 
 pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
     let mut found: Vec<GrammarRule> = vec![];
