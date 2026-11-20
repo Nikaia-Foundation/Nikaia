@@ -2101,6 +2101,33 @@ impl EmitState {
                 return
             }
         }
+        // **`high.narrowing_div_rem(low, d)` divides `high * 2^w + low` in
+        // the type of twice the width** (#2013): the quotient and rest of
+        // `/` and `%`, or `None` where `d` is 0 or the quotient leaves the
+        // receiver's type (the rest never does, it is smaller than `d`).
+        // Rust has no such method; `checked_` keeps the one wide overflow,
+        // the least value divided by -1, a `None` too.
+        if rotation == "narrowing_div_rem" && args.len() == 2 {
+            let on_type = self.facts.std_receivers[node_key(node)] ?? ""
+            let (wide, bits) = match on_type {
+                "u8" => ("u16", 8),
+                "u32" => ("u64", 32),
+                "i32" => ("i64", 32),
+                "u64" => ("u128", 64),
+                "i64" => ("i128", 64),
+                else => ("", 0),
+            }
+            if bits != 0 {
+                out.push(f"{{ let __wide = (((")
+                self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)
+                out.push(f") as {wide}) << {bits}) | ((")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(f") as {wide}); let __by = (")
+                self.emit_core_nested(world, walk, out, host, args[1], 0, depth, flow, scope)
+                out.push(f") as {wide}; match (__wide.checked_div(__by), __wide.checked_rem(__by)) {{ (Some(__q), Some(__r)) => {on_type}::try_from(__q).ok().map(|__q| (__q, __r as {on_type})), _ => None }} }}")
+                return
+            }
+        }
         // **`cloned()` over elements owned below is nothing** (ADR-384 D2),
         // and **`or_default()` of a struct of defaults builds it** (D1): the
         // language below has no `Default` for the struct.

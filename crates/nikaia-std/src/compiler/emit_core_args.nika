@@ -2339,12 +2339,17 @@ impl EmitState {
         // **A text the checker placed in the task's block** (ADR-327 D9,
         // `check_core_place_in_block`) grows there.
         if args.len() == 0 && self.facts.placed_in_block.contains(node_key(func)) {
+            // **With its room held ahead** (#2114): `String(capacity: n)` in
+            // the block is the block's text with that room.
+            if self.emit_call_room(world, walk, out, host, "nikaia_std::block::Text::new_in", config, depth, flow, scope) {
+                return true
+            }
             out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)")
             return true
         }
         match func {
             Expr::Variable(name, _) => {
-                if self.emit_call_by_name(world, walk, out, host, emit_text(world, name), args, depth, flow, scope) {
+                if self.emit_call_by_name(world, walk, out, host, emit_text(world, name), args, config, depth, flow, scope) {
                     return true
                 }
             },
@@ -2352,7 +2357,7 @@ impl EmitState {
         }
         match func {
             Expr::Path(segments, _) => {
-                return self.emit_call_by_path(world, walk, out, host, segments, args, depth, flow, scope)
+                return self.emit_call_by_path(world, walk, out, host, segments, args, config, depth, flow, scope)
             },
             else => return false,
         }
@@ -2576,7 +2581,7 @@ impl EmitState {
 
     /// A call by a bare name: a door over several locks, a hull, `println`, a
     /// struct's constructor, `std`'s own types.
-    fn emit_call_by_name[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, text: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_call_by_name[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, text: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         // **A door over several locks** (ADR-281): the locks go in by reference
         // and the block becomes the last argument, which is what the
         // trailing-lambda rule already made of it. The ordered acquisition is
@@ -2656,7 +2661,11 @@ impl EmitState {
             // **Through `path`**, because one name below depends on more than the
             // name: a **trusted** map is `TrustedMap::default()` and not
             // `TrustedMap::new()` (ADR-010 D5).
-            out.push(self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new"]))
+            let made = self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new"])
+            if self.emit_call_room(world, walk, out, host, made, config, depth, flow, scope) {
+                return true
+            }
+            out.push(made)
             out.push("(")
             let takes = self.takes_a_handle(world, f"{text}::new")
             self.emit_core_args(world, walk, out, host, text, args, takes, depth, flow, scope)
@@ -2730,9 +2739,43 @@ impl EmitState {
         out.push(f"){ending}")
     }
 
+    /// **The room a constructor of `std` holds ahead** (#2114): `Vec(capacity:
+    /// n)`, `String(capacity: n)` and `HashMap(capacity: n)` are the language
+    /// below's `with_capacity`, and the call without the option stays `new`.
+    /// The room is a count `std` takes, converted as every such count is
+    /// (ADR-285 D15): a negative one stops the program, *a count cannot be
+    /// negative*. `made` is the constructor's path below: `Vec::new`, a map's
+    /// `default` (whose hasher is named beside the room), or the task block's
+    /// `Text::new_in` (ADR-327 D9), which takes its place after it. False, and
+    /// nothing written, where the call passes no `capacity`.
+    fn emit_call_room[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, made: ref String, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        if config.len() != 1 || emit_text(world, config[0].name) != "capacity" {
+            return false
+        }
+        let placed = made.strip_suffix("::new_in")
+        let plain = made.strip_suffix("::new")
+        let hashed = made.strip_suffix("::default")
+        let mut after: String = ")"
+        if placed != null {
+            out.push(f"{placed ?? ""}::with_capacity_in(nikaia_std::count::of(")
+            after = "), nikaia_std::block::Place::Block)"
+        } else if plain != null {
+            out.push(f"{plain ?? ""}::with_capacity(nikaia_std::count::of(")
+            after = "))"
+        } else if hashed != null {
+            out.push(f"{hashed ?? ""}::with_capacity_and_hasher(nikaia_std::count::of(")
+            after = "), ::std::default::Default::default())"
+        } else {
+            return false
+        }
+        self.emit_expr(world, walk, out, host, config[0].value, depth, flow, scope)
+        out.push(after)
+        return true
+    }
+
     /// A call by a path: the same constructor written with its module in front
     /// (ADR-313 D3), and a type another *package* publishes (ADR-100 D1).
-    fn emit_call_by_path[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, segments: ref Vec[winnow_grammar::Symbol], args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_call_by_path[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, segments: ref Vec[winnow_grammar::Symbol], args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if segments.len() == 2 {
             let module = emit_text(world, segments[0])
             let name = emit_text(world, segments[1])
@@ -2741,7 +2784,11 @@ impl EmitState {
             // `::new` beside it.
             let key = f"{module}::{name}::new"
             if world.library.functions.contains_key(key) {
-                out.push(f"{module}::{self.path(world, walk.trusting, walk.unpinned, [name.clone(), "new"])}")
+                let made = f"{module}::{self.path(world, walk.trusting, walk.unpinned, [name.clone(), "new"])}"
+                if self.emit_call_room(world, walk, out, host, made, config, depth, flow, scope) {
+                    return true
+                }
+                out.push(made)
                 out.push("(")
                 let takes = self.takes_a_handle(world, key)
                 self.emit_core_args(world, walk, out, host, key, args, takes, depth, flow, scope)

@@ -1,0 +1,17 @@
+// The smallest file of the SMT-LIB family QF_LIA 20231117-c_inference the
+// new engine answers within 10 s once its simplex prefers the entering
+// variable in the fewest rows (#1960): 6615 cases, where it took 66650 and
+// ran past 15 s before. Its status is `sat`: the line says `refuted` only
+// where the model holds in the script and the status agrees
+// (`sv_new_line`), so a wrong answer prints `wrong`. The case budget of
+// 16384 (the rod's parameter `cases`, ADR-270 D17; `lg_budget()`'s 1024 is
+// too small for the file) makes the slow way answer `unknown (cases)`.
+use logic
+use std::fs
+
+fn main() throws {
+	let root = fs::Root::Dir("tests")
+	let source = fs::read_to_string("smtlib/30_30_18_15_sat.smt2", root)
+	let line = logic::sv_line_stats(source, "new:cases=16384", false)
+	println(line.split(" ").next() ?? "")
+}

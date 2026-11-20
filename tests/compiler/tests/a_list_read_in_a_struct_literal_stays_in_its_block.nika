@@ -1,0 +1,50 @@
+// A list used only inside a struct literal's field value stays in its
+// task's block (#2323): `Holder { n: xs.len() }` reads `xs` where it is,
+// so the list is still built in the block, and one that outgrows the
+// block ends the task over budget (ADR-327 D13). A list moved into the
+// struct literal is built outside and outlives the task.
+struct Small {}
+
+impl task::Admission for Small {
+    fn decide(mut self, load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 65536 }
+    }
+}
+
+struct Holder {
+    n: i64,
+}
+
+struct Bag {
+    items: Vec[i64],
+}
+
+fn fill() -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    let held = Holder { n: xs.len() }
+    return held.n
+}
+
+fn bag() -> Bag {
+    let mut items: Vec[i64] = [5]
+    items.push(6)
+    return Bag { items }
+}
+
+fn main() throws {
+    let a = async(admission: Small {}) fill() catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    let b = 1
+    println(f"after: {a + b}")
+    let b = spawn fn { bag() }
+    let held = b.join()
+    println(f"bag: {held.items.len()} {held.items[1]}")
+}

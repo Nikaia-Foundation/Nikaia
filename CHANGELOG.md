@@ -8,6 +8,21 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1482] — 2026-11-20
+
+**Builders' changes (#2071, #2072, #2349)**
+- json: reading no longer builds the path text of every value; it is made only when reading fails (json-large -39 % instructions)
+- json: reading walks the input's bytes in place and takes a number or an escape-free string run as one cut instead of collecting the text into scalars (json-large -12 % instructions)
+- An unannotated list of integer literals that stays in its function (`let mut w = [4, 5]`, push, len, a `for`) is now built in the task's block like any other placeable list (ADR-327 D9).
+
+## [0.0.1481] — 2026-11-20
+
+**Builders' changes (#1960, #2013, #2114, #2318)**
+- Solver: QF_LIA 20231117-c_inference solved 26 of 31 within 10 s (was 6): the simplex skips unchanged rows in its propagation and GCD test, adds integers without a gcd, and picks the entering variable in the fewest rows on a coefficient tie (#1960).
+- The solver adds two fractions exactly when their cross products leave i64 but the reduced sum fits: the sum is formed in double width and divided back with `narrowing_div_rem` (Knuth's rule), where it was `unknown (overflow)` before
+- Room ahead as a constructor option: Vec(capacity: n), String(capacity: n) and HashMap(capacity: n) ask for memory once for the first n elements; a negative room stops the program
+- The driver's cleanup removes old variants in target/*/deps: under 6 GB free, files of a crate's older build hash older than 3 h go, the newest stays; the CLEANUP line counts them (first run: 1132 MB).
+
 ## [0.0.1480] — 2026-11-20
 
 **Builders' changes (#2051, #2347)**

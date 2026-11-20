@@ -1,0 +1,31 @@
+// `narrowing_div_rem` divides the double-width value `high * 2^w + low` by
+// one of the receiver's type (#2013, Part I 2.2): the quotient and rest of
+// `/` and `%`, or `null` where the divisor is 0 or the quotient does not
+// fit the type.
+fn shown(answer: (i64, i64)?) -> String {
+    let (q, r) = answer ?? return "null"
+    return f"({q}, {r})"
+}
+
+fn main() throws {
+    let high: i64 = 1 << 16
+    println(shown(high.narrowing_div_rem(0, 1 << 30)))
+    println(shown(high.narrowing_div_rem(0, 2)))
+    println(shown(high.narrowing_div_rem(0, 0)))
+    // -7 / 3: the high half all ones, the low one 2^64 - 7. The receiver is
+    // written with its type, since a bare `(-1)` takes `i32` (Part I 2.4).
+    let minus: i64 = -1
+    let low: u64 = 18446744073709551615
+    println(shown(minus.narrowing_div_rem(low - 6, 3)))
+    let one: u64 = 1
+    let top: u64 = 1 << 63
+    let (q, r) = one.narrowing_div_rem(0, top) ?? return
+    println(f"({q}, {r})")
+    let least: i64 = -9223372036854775807 - 1
+    println(shown(least.narrowing_div_rem(0, -1)))
+    let small: i32 = -1
+    let (q2, r2) = small.narrowing_div_rem(4294967295 - 6, 3) ?? return
+    println(f"({q2}, {r2})")
+    let byte: u8 = 200
+    println(byte.narrowing_div_rem(0, 100) == null)
+}

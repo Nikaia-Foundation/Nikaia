@@ -665,6 +665,14 @@ pub(crate) fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_constructor_with_options(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    let contract = match world.library.functions.get(&format!("{}::new", name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !signature.config.is_empty()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span, filled: bool) -> Ty {
     check_core_call_names(state, world, func, name, args, span);
@@ -683,7 +691,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         return check_core_grammar_call(state, world, host, &entered_path, args, config, span);
     }
     if !filled { check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span); }
-    if !config.is_empty() && args.is_empty() && state.declares_a_type(world, name) {
+    if !config.is_empty() && args.is_empty() && state.declares_a_type(world, name) && !check_core_a_constructor_with_options(world, name) {
         state.a_literal_written_like_a_call(world, name, config, span);
         for option in config.iter() { check_core_expr(state, world, host, &option.value, span); }
         return check_core_call_named(name);
