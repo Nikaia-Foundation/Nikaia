@@ -1,0 +1,9 @@
+bounds in tests/a_found_rule_holds_while_derived_claims_grow_over_many_methods.nika: 3 indexes, 1 proved; 3 operations, 2 proved
+    16  self.used += 1          proved
+    21  self.limit - self.used  proved
+    25  self.rows[at]           checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    29  self.rows[at]           checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    34  value + 1               checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    48  xs[k]                   proved
+  derived  nth: 0 <= k, k <= xs.len(), k < xs.len(), proved at the calls on lines 56, 64
+  derived  tableau: 0 <= n, proved at the calls on lines 69

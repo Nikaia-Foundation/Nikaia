@@ -229,6 +229,10 @@ pub struct BoundsProven {
 	/// (`rules_settle`, #1581): kept by `bounds_proven` for the next bodies,
 	/// as long as nothing they depend on changed.
 	pub held: collections::BTreeMap[String, Vec[BoundsRule]],
+	/// **What the methods it walked to check rules failed** (`rules_check`,
+	/// #2396), not given in `context.around.checked`: kept by
+	/// `bounds_proven` for the next bodies.
+	pub checked: collections::BTreeMap[String, RulesChecked],
 }
 
 /// What holds at one point of a body.
@@ -546,6 +550,7 @@ fn no_proofs() -> BoundsProven {
 		returned: null,
 		trace: [],
 		held: collections::BTreeMap(),
+		checked: collections::BTreeMap(),
 	}
 }
 
@@ -604,7 +609,8 @@ fn bounds_rounds(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProven {
-	let found_held = rules_settle(walk, args, body, context, program, words, ask)
+	let mut found_checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
+	let found_held = rules_settle(walk, args, body, context, program, words, ask, found_checked)
 	let mut settled = false
 	if !walk.shape.roots.is_empty() {
 		walk.collecting = true
@@ -684,6 +690,7 @@ fn bounds_rounds(
 		walk.proven.returned = bounding_returns_found(walk, body, words)
 	}
 	walk.proven.held = found_held
+	walk.proven.checked = found_checked
 	return walk.proven.clone()
 }
 
@@ -765,6 +772,7 @@ fn fields_round(
 				for (of, holding) in proven.held {
 					context.around.held.insert(of.clone(), holding.clone())
 				}
+				rules_checked_keep(context, proven.checked)
 				for (key, bound) in proven.fields {
 					let was = written.get(key)
 					if was != null {
@@ -11346,6 +11354,7 @@ fn bounding_returns_round(
 				for (of, holding) in proven.held {
 					context.around.held.insert(of.clone(), holding.clone())
 				}
+				rules_checked_keep(context, proven.checked)
 				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
 				let returned = proven.returned != null

@@ -1,0 +1,73 @@
+/// A field rule found over many methods holds after each function's derived
+/// claim is added (#2396): the walk keeps what each method's check of the
+/// rules found, keyed by the claims it read, so a later function asks no
+/// method again whose claims did not change, and each proof stays.
+struct Tableau {
+	used: i64,
+	limit: i64,
+	rows: Vec[i64],
+}
+
+impl Tableau {
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+
+	fn left(self) -> i64 {
+		return self.limit - self.used
+	}
+
+	fn row(self, at: i64) -> i64 {
+		return self.rows[at]
+	}
+
+	fn put(mut self, at: i64, value: i64) sync {
+		self.rows[at] = value
+	}
+
+	fn pivot(mut self, at: i64) sync {
+		let value = self.row(at)
+		self.put(at, value + 1)
+	}
+}
+
+fn tableau(n: i64) -> Tableau {
+	if n < 0 {
+		return Tableau { used: 0, limit: 0, rows: [] }
+	}
+	return Tableau { used: 0, limit: n, rows: [0, 0, 0, 0] }
+}
+
+/// A private function whose callers prove its index: its derived claim is
+/// added after its callers are walked, and the held rules are asked again.
+fn nth(xs: ref Vec[i64], k: i64) -> i64 {
+	return xs[k]
+}
+
+pub fn first(mut t: Tableau, at: i64) throws {
+	if at < 0 || at >= t.rows.len() {
+		return
+	}
+	t.pivot(at)
+	println(nth(t.rows, at))
+}
+
+pub fn second(mut t: Tableau, at: i64) throws {
+	if at < 0 || at >= t.rows.len() {
+		return
+	}
+	t.put(at, 7)
+	println(nth(t.rows, at))
+	println(t.left())
+}
+
+fn main() throws {
+	let mut t = tableau(2)
+	first(t, 1)
+	second(t, 2)
+	println(f"{t.row(1)} {t.row(2)} {t.tick()} {t.tick()} {t.tick()}")
+}

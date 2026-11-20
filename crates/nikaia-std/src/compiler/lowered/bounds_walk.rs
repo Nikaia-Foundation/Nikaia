@@ -85,6 +85,7 @@ pub struct BoundsProven {
     pub returned: Option<collections::BTreeSet<i64>>,
     pub trace: Vec<String>,
     pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
+    pub checked: collections::BTreeMap<String, RulesChecked>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -203,7 +204,7 @@ pub(crate) fn most_held() -> i64 { 256 }
 
 pub(crate) fn call_depth() -> i64 { 4 }
 
-pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![], held: collections::BTreeMap::new() } }
+pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![], held: collections::BTreeMap::new(), checked: collections::BTreeMap::new() } }
 
 pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), bare_falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
@@ -218,7 +219,8 @@ pub(crate) fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: colle
 }
 
 pub(crate) fn bounds_rounds(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) -> BoundsProven {
-    let found_held = rules_settle(walk, args, body, context, program, words, &mut *ask);
+    let mut found_checked: collections::BTreeMap<String, RulesChecked> = collections::BTreeMap::new();
+    let found_held = rules_settle(walk, args, body, context, program, words, &mut *ask, &mut found_checked);
     let mut settled = false;
     if !walk.shape.roots.is_empty() {
         walk.collecting = true;
@@ -279,6 +281,7 @@ pub(crate) fn bounds_rounds(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     for key in walk.poisoned.iter() { if key.starts_with('.') { walk.proven.fields_lost.insert(key_root(key)); } }
     if !walk.return_params.is_empty() { walk.proven.returned = bounding_returns_found(&walk, body, words); }
     walk.proven.held = found_held;
+    walk.proven.checked = found_checked;
     walk.proven.clone()
 }
 
@@ -320,6 +323,7 @@ pub(crate) fn fields_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>
             Item::Fn { args, body, .. } => {
                 let proven = bounds_aggressive(args, body, collections::BTreeSet::new(), &context, program, words, &mut *ask);
                 for (of, holding) in proven.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
+                rules_checked_keep(context, &proven.checked);
                 for (key, bound) in proven.fields.iter() {
                     let bound = *bound;
                     let was = written.get(key);
@@ -6525,6 +6529,7 @@ pub(crate) fn bounding_returns_round(context: &mut BoundsContext, bodies: &[&Spa
                 }
                 let proven = bounds_rounds(&mut walk, args, body, &context, program, words, &mut *ask);
                 for (of, holding) in proven.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
+                rules_checked_keep(context, &proven.checked);
                 let mut held: collections::BTreeSet<i64> = collections::BTreeSet::new();
                 let mut sized: collections::BTreeSet<i64> = collections::BTreeSet::new();
                 let returned = proven.returned.is_some();
