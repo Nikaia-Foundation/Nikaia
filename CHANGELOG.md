@@ -10,9 +10,8 @@ has no heading here; `CLAUDE.md` draws the line.
 
 ## [0.0.1487] — 2026-11-20
 
-**Builders' changes (#2214, #2338)**
+**Builders' changes (#2214)**
 - Keeping a cut of a `ref Bytes` parameter (`out.push(b[0..<2])`) keeps the parameter: the function takes the `Bytes` with its owner and the cut shares it instead of copying, so a cut of a mapped file handed in keeps the file mapped (ADR-373 D4); it was refused with NK1131 before.
-- The compiler counts its own allocations: `mem::allocations()` and `mem::usage()` read the calling thread's requests in a `test` block of `nikaia test --std` (ADR-400 D1), so std's own tests can count, and the one-runtime check of ADR-303 D4 is a test block. Costs about 4 % instructions on a check.
 
 ## [0.0.1486] — 2026-11-20
 
