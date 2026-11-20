@@ -113,14 +113,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   each that fails is named in the line (#1761, `docs/issues.md` I7). A correct program your own change
   refuses (a fail-closed check's false refusal) is a defect too: one
   `Found:` line per shape, with its probe, never a `Deviation:`, which
-  goes to the improvement lane without a probe (#1680, #1701). The
-  driver files each `Found:` line as an issue for the bug lane, and
+  stays in the report without a probe (#1680, #1701). The
+  driver files each `Found:` line as an issue for the bug lane;
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
-  nothing: a tool, a rule, a red check that was not yours) as one issue for the
-  improvement lane. Say friction there, not in `Body:`. Each line stands
-  alone, since each becomes another issue: it says its point, never "see
-  Found" or "see Body" (the improvement issue quotes the Found lines, but
-  not which one is meant, #1783). Any of these lines
+  nothing: a tool, a rule, a red check that was not yours) the supervisor
+  reads, and files what recurs. Say friction there, not in `Body:`. Each line
+  stands alone, since each may become an issue: it says its point, never "see
+  Found" or "see Body" (#1783). Any of these lines
   that says the compiler refuses or lacks something ("every way draws
   NK2105", "cannot be written") carries, in the line, each shape tried as
   its snippet and the code it drew (`` `x = y; y = [2]` NK2105; ... ``):
@@ -279,8 +278,8 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **You have no GitHub access.** The issues your brief names are in your
   prompt, with their comments; put what an issue comment should say in your
   report: on another issue, as `Comment: #N <text>` (one line each), which
-  the driver posts there; never as `Needs:`, which files an improvement
-  issue nobody without GitHub can do (#1698). A *To build* item that needs
+  the driver posts there; never as `Needs:`, which asks the supervisor
+  for what nobody without GitHub can do (#1698). A *To build* item that needs
   GitHub (run a workflow on Actions) is the supervisor's (`docs/issues.md`
   I9): build the rest, `Result: done` when it holds, the step as `Comment:
   #N`, `Issue: broke I9` (#2019).
