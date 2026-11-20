@@ -189,7 +189,7 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
 
 pub(crate) fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> String {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for item in unit.items.iter() {
+    names.reserve(unit.items.iter().size_hint().0); for item in unit.items.iter() {
         let name: String = match &item.node {
             Item::Fn { name, is_public: true, receiver: None, .. } => { let name = *name; unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }) },
             Item::Enum { name, is_public: true, .. } => { let name = *name; unit.text(name) },
@@ -206,7 +206,7 @@ pub(crate) fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '
     }
     for hand in SYSROOT_PACKAGE_HAND_WRITTEN.iter() {
         if hand.file == file {
-            for word in hand.names.iter() {
+            names.reserve(hand.names.iter().size_hint().0); for word in hand.names.iter() {
                 let word = *word;
                 names.push(nikaia_std::block::Text::from(word.to_string()));
             }
@@ -299,7 +299,7 @@ pub fn sysroot_package_with_dependencies__unchecked(package: &[(String, String)]
     let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ");
     for (name, theirs) in dependencies.iter() {
         { use ::core::fmt::Write as _; let _ = index.write_fmt(format_args!("pub mod {} {{\n    #[allow(unused_imports)]\n    use super::{{{}}};\n    include!(\"{}/{}/{}\");\n}}\n", name, handed, SYSROOT_COMPILER_FILES, name, SYSROOT_COMPILER_PACKAGE)); };
-        for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_COMPILER_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
+        files.reserve(theirs.iter().size_hint().0); for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_COMPILER_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
     }
     files.sort();
     index.push_str(&sysroot_package_tests(&package, dependencies));
@@ -346,14 +346,14 @@ pub(crate) fn sysroot_package_tests(package: &[(String, String)], dependencies: 
 
 pub(crate) fn sysroot_package_digest(index: &str, files: &[(String, String)]) -> String {
     let mut all: String = String::from("");
-    all.push_str(&hash::sha256_hex(&index.bytes().collect::<Vec<_>>()));
+    all.push_str(&hash::sha256_hex(index.as_bytes()));
     all.push_str("\n");
     for (path, text) in files.iter() {
         all.push_str(path);
         all.push_str("\n");
-        all.push_str(&hash::sha256_hex(&text.bytes().collect::<Vec<_>>()));
+        all.push_str(&hash::sha256_hex(text.as_bytes()));
         all.push_str("\n");
     }
-    hash::sha256_hex(&all.bytes().collect::<Vec<_>>())
+    hash::sha256_hex(all.as_bytes())
 }
 

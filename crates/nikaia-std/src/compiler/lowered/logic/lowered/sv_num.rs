@@ -55,7 +55,7 @@ pub(crate) fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
     let g = match sv_content(&ks) { Some(__nikaia_value) => __nikaia_value, None => return ks };
     if g <= 1 { return ks; }
     let mut out: Vec<i64> = vec![];
-    for k in ks.iter() {
+    out.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         out.push(k / g);
     }

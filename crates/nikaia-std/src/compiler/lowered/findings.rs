@@ -16,7 +16,7 @@ pub fn refusal(code: &str, span: Span, message: String, notes: Vec<String>, help
 
 pub fn findings_report(findings: &[CheckFinding], source: &str, path: &str) -> String {
     let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for finding in findings.iter() {
+    lines.reserve(findings.iter().size_hint().0); for finding in findings.iter() {
         if finding.severity != CheckSeverity::Warning { continue; }
         let mut end = finding.span.start as i64;
         if end > source.as_bytes().len() as i64 { end = source.as_bytes().len() as i64; }

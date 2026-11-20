@@ -36,7 +36,7 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
         if written_parts.len() == 1 { return Translated { ty: Ty::Unknown, kept: true }; }
         let mut parts: Vec<Ty> = vec![];
         let mut kept = false;
-        for part in written_parts.iter() {
+        parts.reserve(written_parts.iter().size_hint().0); for part in written_parts.iter() {
             let one = translate(part, crate_word, parameters, types, mentioned);
             if one.kept { kept = true; }
             parts.push(one.ty);

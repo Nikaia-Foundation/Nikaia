@@ -1375,7 +1375,7 @@ pub fn pg_render(source: &str) -> String {
         Err(error) => { return format!("refused: {}", error); },
     };
     let mut parts: Vec<String> = Vec::new();
-    for t in ts.iter() {
+    parts.reserve(ts.iter().size_hint().0); for t in ts.iter() {
         let b = if t.broke { "\\n" } else { "" };
         parts.push(format!("{}{}@{}", b, pg_kind_text(&t.kind), t.start));
     }

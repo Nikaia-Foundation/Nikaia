@@ -394,9 +394,9 @@ pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: &Compti
 
 pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String, fs::Path)], libdir: &std::path::Path) -> Result<String, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
     let mut files: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(dylib))], nikaia_std::block::Place::Block);
-    for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
+    files.reserve(rlibs.iter().size_hint().0); for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
     let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for file in files.iter() {
+    lines.reserve(files.iter().size_hint().0); for file in files.iter() {
         let meta = match fs::metadata(file, &fs::Root::Anywhere) {
             Ok(value) => value,
             Err(error) => { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(format!("{}: {}", nikaia_std::fs::path::display(&(file)), error)), &"comptime_bundle_stamp_of")) },

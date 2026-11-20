@@ -286,7 +286,7 @@ impl EmitState {
         out.push(&if raw_any { String::from("byte") } else { nikaia_std::block::Text::from(called.to_string()) });
         if !generics.is_empty() {
             let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
+            params.reserve(generics.iter().size_hint().0); for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
             out.push(&format!("<{}>", nikaia_std::block::Text::from(params.join(", "))));
         }
         if args.len() == 1 && called == "intern" && emit_groups_parts(&unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node) {

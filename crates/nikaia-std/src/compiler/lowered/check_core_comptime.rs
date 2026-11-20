@@ -29,7 +29,7 @@ pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&Bui
     if (tys.len() as i64) != parts.len() as i64 { return found.clone(); }
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
-    for t in tys.iter() {
+    out.reserve(tys.iter().size_hint().0); for t in tys.iter() {
         let mut one = t.clone();
         if t.is_unknown() {
             match *unsafe { nikaia_std::proven::read(&parts, (at) as usize) } {
@@ -116,7 +116,7 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             };
             #[allow(unused_mut)] let mut each: Vec<String> = vec![];
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
-            for part in parts.iter() {
+            each.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                 let part_found: Ty = nikaia_std::index::or(nth_type(&declared, at), || Ty::Unknown).clone();
                 let one: Option<BuildValue> = Some(part.clone());
                 let held = match check_core_comptime_value_below(world, &part_found, (one).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -246,7 +246,7 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
 
 pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[Expr], field: &str) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
-    for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
+    out.reserve(values.iter().size_hint().0); for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
     out
 }
 

@@ -7,20 +7,20 @@ pub(crate) fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             out.push(func);
-            for arg in args.iter() { out.push(arg); }
-            for setting in config.iter() { out.push(setting_value(setting)); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
+            out.reserve(config.iter().size_hint().0); for setting in config.iter() { out.push(setting_value(setting)); }
         },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             out.push(receiver);
-            for arg in args.iter() { out.push(arg); }
-            for setting in config.iter() { out.push(setting_value(setting)); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
+            out.reserve(config.iter().size_hint().0); for setting in config.iter() { out.push(setting_value(setting)); }
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             out.push(receiver);
-            for arg in args.iter() { out.push(arg); }
-            for setting in config.iter() { out.push(setting_value(setting)); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
+            out.reserve(config.iter().size_hint().0); for setting in config.iter() { out.push(setting_value(setting)); }
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -44,7 +44,7 @@ pub(crate) fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
             out.push(start);
             out.push(end);
         },
-        Expr::Tuple(parts, _) => { for part in parts.iter() { out.push(part); } },
+        Expr::Tuple(parts, _) => { out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(part); } },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             out.push(value);
@@ -55,7 +55,7 @@ pub(crate) fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             out.push(value);
-            for arm in arms.iter() {
+            out.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
                 if arm.guard.is_some() { out.push(match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); }
                 out.push(match_body(arm));
             }
@@ -66,7 +66,7 @@ pub(crate) fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
             out.push(value);
             out.push(count);
         },
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        Expr::ListLit { items, .. } => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push(item); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             out.push(base);
@@ -76,7 +76,7 @@ pub(crate) fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
             let value = nikaia_std::boxed::open(value);
             if value.is_some() { out.push(match value { Some(__nikaia_value) => __nikaia_value, None => return out }); }
         },
-        Expr::Select(arms, _) => { for arm in arms.iter() { out.push(select_value(arm)); } },
+        Expr::Select(arms, _) => { out.reserve(arms.iter().size_hint().0); for arm in arms.iter() { out.push(select_value(arm)); } },
         _ => { },
     }
     out
@@ -111,7 +111,7 @@ pub(crate) fn blocks_of_expr(expr: &Expr) -> Vec<&Block> {
             if else_branch.is_some() { out.push(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out }); }
         },
         Expr::TryCatch { handler, .. } => { out.push(handler); },
-        Expr::Select(arms, _) => { for arm in arms.iter() { out.push(select_body(arm)); } },
+        Expr::Select(arms, _) => { out.reserve(arms.iter().size_hint().0); for arm in arms.iter() { out.push(select_body(arm)); } },
         _ => { },
     }
     for child in child_exprs_of(expr) { for block in blocks_of_expr(child) { out.push(block); } }

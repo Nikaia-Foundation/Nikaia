@@ -125,7 +125,7 @@ pub(crate) fn a_named_constant_type(library: &Ledger, name: &str, args: &[Ty], v
 pub(crate) fn tuple_constant_type(library: &Ledger, parts: &[Ty]) -> Option<String> {
     if parts.is_empty() { return None; }
     let mut each: Vec<String> = vec![];
-    for part in parts.iter() {
+    each.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let held = match rust_constant_type(library, part) { Some(__nikaia_value) => __nikaia_value, None => return None };
         each.push(held);
     }

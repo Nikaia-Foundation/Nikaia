@@ -137,7 +137,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
     }
     if contract.touches_known {
         let mut touched: Vec<String> = vec![];
-        for touch in contract.touches.iter() { touched.push(touch.text()); }
+        touched.reserve(contract.touches.iter().size_hint().0); for touch in contract.touches.iter() { touched.push(touch.text()); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("touches = [{}]\n", quoted_all(&touched))); };
     }
     if contract.provenance.is_some() {
@@ -151,12 +151,12 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
     if !contract.trusted.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("trusted = [{}]\n", quoted_all(&contract.trusted))); }; }
     if !contract.views.is_empty() {
         let mut views: Vec<String> = vec![];
-        for held in contract.views.iter() { views.push(held.text()); }
+        views.reserve(contract.views.iter().size_hint().0); for held in contract.views.iter() { views.push(held.text()); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("views = [{}]\n", quoted_all(&views))); };
     }
     if !contract.sharing.is_empty() {
         let mut classes: Vec<String> = vec![];
-        for class in contract.sharing.iter() { classes.push(class.text()); }
+        classes.reserve(contract.sharing.iter().size_hint().0); for class in contract.sharing.iter() { classes.push(class.text()); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("sharing = [{}]\n", quoted_all(&classes))); };
     }
     if !contract.maps.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("maps = [{}]\n", quoted_all(&contract.maps))); }; }
@@ -181,7 +181,7 @@ pub(crate) fn spelled_of(name: &str, contract: &FnContract) -> Option<Spelled> {
 pub(crate) fn claims_text(key: &str, claims: &[String]) -> String {
     if claims.is_empty() { return String::from(""); }
     let mut escaped: Vec<String> = vec![];
-    for claim in claims.iter() { escaped.push(ledger_escaped(claim)); }
+    escaped.reserve(claims.iter().size_hint().0); for claim in claims.iter() { escaped.push(ledger_escaped(claim)); }
     format!("{} = [{}]\n", key, quoted_all(&escaped))
 }
 
@@ -190,22 +190,22 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
     if contract.public { out.push_str("pub = true\n"); }
     if !contract.fields.is_empty() {
         let mut fields: Vec<String> = vec![];
-        for field in contract.fields.iter() {
+        fields.reserve(contract.fields.iter().size_hint().0); for field in contract.fields.iter() {
             let word = if field.public { "pub " } else { "" };
             let default = if !field.default.is_empty() { format!(" = {}", field.default) } else { String::from("") };
             fields.push(ledger_escaped(&format!("{}{}: {}{}", word, field.name, field.ty.text(), default)));
         }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("fields = [{}]\n", quoted_all(&fields))); };
         let mut attributes: Vec<String> = vec![];
-        for field in contract.fields.iter() { for attribute in field.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", field.name, attribute))); } }
+        for field in contract.fields.iter() { attributes.reserve(field.attributes.iter().size_hint().0); for attribute in field.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", field.name, attribute))); } }
         if !attributes.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("field_attributes = [{}]\n", quoted_all(&attributes))); }; }
     }
     if !contract.variants.is_empty() {
         let mut variants: Vec<String> = vec![];
-        for variant in contract.variants.iter() { variants.push(variant.text()); }
+        variants.reserve(contract.variants.iter().size_hint().0); for variant in contract.variants.iter() { variants.push(variant.text()); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("variants = [{}]\n", quoted_all(&variants))); };
         let mut attributes: Vec<String> = vec![];
-        for variant in contract.variants.iter() { for attribute in variant.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", variant.name, attribute))); } }
+        for variant in contract.variants.iter() { attributes.reserve(variant.attributes.iter().size_hint().0); for attribute in variant.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", variant.name, attribute))); } }
         if !attributes.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("variant_attributes = [{}]\n", quoted_all(&attributes))); }; }
     }
     match contract.crosses {
@@ -223,7 +223,7 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
     if !contract.tethered.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("tethered = [{}]\n", quoted_all(&contract.tethered))); }; }
     if !contract.attributes.is_empty() {
         let mut escaped: Vec<String> = vec![];
-        for attribute in contract.attributes.iter() { escaped.push(ledger_escaped(attribute)); }
+        escaped.reserve(contract.attributes.iter().size_hint().0); for attribute in contract.attributes.iter() { escaped.push(ledger_escaped(attribute)); }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("attributes = [{}]\n", quoted_all(&escaped))); };
     }
     if !contract.mark.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("attribute = \"{}\"\n", contract.mark)); }; }

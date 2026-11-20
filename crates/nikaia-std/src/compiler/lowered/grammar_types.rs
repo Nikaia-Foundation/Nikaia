@@ -10,13 +10,13 @@ pub struct GrammarTypesCall {
 
 pub(crate) fn grammar_types_copy_name(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
     let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
+    spelled.reserve(types.iter().size_hint().0); for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
     check_specialised(rule, &nikaia_std::block::Text::from(spelled.join(", ")))
 }
 
 pub(crate) fn grammar_types_spelled(words: &winnow_grammar::InternerContext, ty: &Type) -> String {
     #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for arg in ty.generics.iter() { parts.push(grammar_types_spelled(words, arg)); }
+    parts.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() { parts.push(grammar_types_spelled(words, arg)); }
     let mut text: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     if ty.is_tuple { text = format!("({})", nikaia_std::block::Text::from(parts.join(", "))); } else if parts.is_empty() { text = format!("{}", words.resolve(ty.name)); } else { text = format!("{}[{}]", words.resolve(ty.name), nikaia_std::block::Text::from(parts.join(", "))); }
     if ty.is_nullable { text = format!("{}?", text); }
@@ -144,7 +144,7 @@ pub(crate) fn grammar_types_has_members(pattern: &Spanned<Pattern>) -> bool {
 
 pub(crate) fn grammar_types_called(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
     let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
+    spelled.reserve(types.iter().size_hint().0); for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
     format!("{}[{}]", rule, nikaia_std::block::Text::from(spelled.join(", ")))
 }
 
@@ -244,7 +244,7 @@ pub(crate) fn grammar_types_parts(ty: &Type, kind: &str) -> Vec<Type> {
         let mut inner = ty.clone();
         inner.is_nullable = false;
         parts.push(inner);
-    } else if kind == "List" || kind == "Map" || kind == "Array" { for arg in ty.generics.iter() { parts.push(arg.clone()); } } else if kind == "Struct" || kind == "Enum" || kind == "Opaque" { parts.push(ty.clone()); }
+    } else if kind == "List" || kind == "Map" || kind == "Array" { parts.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() { parts.push(arg.clone()); } } else if kind == "Struct" || kind == "Enum" || kind == "Opaque" { parts.push(ty.clone()); }
     parts
 }
 
@@ -261,14 +261,14 @@ pub(crate) fn grammar_types_rule(rule: &GrammarRule, bound: &collections::BTreeM
         copy.ret_type = Some(grammar_types_put(&written, bound, words));
     }
     let mut args: Vec<FnArg> = vec![];
-    for arg in rule.args.iter() {
+    args.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() {
         let mut a = arg.clone();
         a.ty = grammar_types_put(&arg.ty, bound, words);
         args.push(a);
     }
     copy.args = args;
     let mut config: Vec<ConfigParam> = vec![];
-    for param in rule.config.iter() {
+    config.reserve(rule.config.iter().size_hint().0); for param in rule.config.iter() {
         let mut c = param.clone();
         c.ty = grammar_types_put(&param.ty, bound, words);
         config.push(c);
@@ -309,7 +309,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
     match value {
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for segment in segments.iter() {
+            parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(format!("{}", words.resolve(segment)));
             }
@@ -387,7 +387,7 @@ pub(crate) fn grammar_types_put_expr(expr: &Expr, bound: &collections::BTreeMap<
 
 pub(crate) fn grammar_types_put_exprs(exprs: &[Expr], bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
-    for expr in exprs.iter() { out.push(grammar_types_put_expr(expr, bound, words, &mut *intern)); }
+    out.reserve(exprs.iter().size_hint().0); for expr in exprs.iter() { out.push(grammar_types_put_expr(expr, bound, words, &mut *intern)); }
     out
 }
 
@@ -411,7 +411,7 @@ pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol,
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let called = words.resolve(value);
-    for field in fields.iter() {
+    out.reserve(fields.iter().size_hint().0); for field in fields.iter() {
         let fty = grammar_types_put(&field.ty, &inner, words);
         let types: Vec<Type> = vec![fty.clone()];
         let mut rule = value;
@@ -440,14 +440,14 @@ pub(crate) fn grammar_types_put(ty: &Type, bound: &collections::BTreeMap<String,
     }
     let mut copy = ty.clone();
     let mut generics: Vec<Type> = vec![];
-    for arg in ty.generics.iter() { generics.push(grammar_types_put(arg, bound, words)); }
+    generics.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() { generics.push(grammar_types_put(arg, bound, words)); }
     copy.generics = generics;
     copy
 }
 
 pub(crate) fn grammar_types_patterns(parts: &[Spanned<Pattern>], bound: &collections::BTreeMap<String, Type>, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &mut dyn FnMut(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<Spanned<Pattern>> {
     let mut out: Vec<Spanned<Pattern>> = vec![];
-    for part in parts.iter() { out.push(grammar_types_pattern(part, bound, generic, owner, words, &mut &mut *intern, work)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(grammar_types_pattern(part, bound, generic, owner, words, &mut &mut *intern, work)); }
     out
 }
 
@@ -490,7 +490,7 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
         Pattern::Call { name, args, config } => {
             let name = *name;
             let mut config2: Vec<ConfigArg> = vec![];
-            for one in config.iter() { config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(&one.value, bound, words, &mut &mut *intern) }); }
+            config2.reserve(config.iter().size_hint().0); for one in config.iter() { config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(&one.value, bound, words, &mut &mut *intern) }); }
             copy.node = Pattern::Call { name, args: grammar_types_put_exprs(args, bound, words, &mut &mut *intern), config: config2 };
         },
         Pattern::Choose { .. } => { grammar_types_refuse(work, "NK1310", Some(pattern.span.clone()), String::from("A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern."), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v1 D2)."), String::from("Give the `match` a rule of its own, and call that rule here.")); },
@@ -505,7 +505,7 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
         Pattern::Ref { name, generics, args } => {
             let name = *name;
             let mut types: Vec<Type> = vec![];
-            for ty in generics.iter() { types.push(grammar_types_put(ty, bound, words)); }
+            types.reserve(generics.iter().size_hint().0); for ty in generics.iter() { types.push(grammar_types_put(ty, bound, words)); }
             let parts = grammar_types_patterns(args, bound, generic, owner, words, &mut &mut *intern, work);
             let called = words.resolve(name);
             if generic.contains_key(called) && !types.is_empty() {

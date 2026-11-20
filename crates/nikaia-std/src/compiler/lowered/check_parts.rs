@@ -24,7 +24,7 @@ impl CheckState {
             },
             Expr::Path(parts, _) => {
                 let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for one in parts.iter() {
+                texts.reserve(parts.iter().size_hint().0); for one in parts.iter() {
                     let one = *one;
                     texts.push(nikaia_std::block::Text::from(world.words.resolve(one).to_string()));
                 }

@@ -124,7 +124,7 @@ impl CheckState {
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
         if ty.is_tuple { return Some(String::from("Hand a tuple's parts over one by one, or as a `pub extern struct`.")); }
         let mut args: Vec<String> = vec![];
-        for generic in ty.generics.iter() { args.push(nikaia_std::block::Text::from(world.words.resolve(generic.name).to_string())); }
+        args.reserve(ty.generics.iter().size_hint().0); for generic in ty.generics.iter() { args.push(nikaia_std::block::Text::from(world.words.resolve(generic.name).to_string())); }
         let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
         self.ext_table(world, &name, &a_type_base(&name), &args, ty.is_view, out, declared)
     }

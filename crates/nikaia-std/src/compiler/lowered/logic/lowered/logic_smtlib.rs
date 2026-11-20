@@ -41,7 +41,7 @@ pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &st
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     if parts.len() == 1 { return lg_term(arena, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); }
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for part in parts.iter() {
+    written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
     }
@@ -111,7 +111,7 @@ pub(crate) fn lg_show(sexp: &LgSexp) -> String {
         LgSexp::Atom(a) => nikaia_std::block::Text::from(a.to_string()),
         LgSexp::List(items) => {
             let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for item in items.iter() { shown.push(lg_show(item)); }
+            shown.reserve(items.iter().size_hint().0); for item in items.iter() { shown.push(lg_show(item)); }
             format!("({})", nikaia_std::block::Text::from(shown.join(" ")))
         },
     }

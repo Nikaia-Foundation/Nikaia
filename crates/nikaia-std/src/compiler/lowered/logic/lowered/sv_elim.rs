@@ -434,7 +434,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn sv_omega_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
-    for k in ks.iter() {
+    terms.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: i, k });
         i += 1;
@@ -446,7 +446,7 @@ pub(crate) fn sv_omega_test_le(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: sv_
 
 pub(crate) fn sv_omega_test_eq(atoms: &mut Vec<SvAtom>, ks: &[i64], c: i64) {
     let mut neg: Vec<i64> = vec![];
-    for k in ks.iter() {
+    neg.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         neg.push(-k);
     }
@@ -490,7 +490,7 @@ pub(crate) fn sv_omega_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     let mut out: Vec<SvStep> = vec![];
     let mut extends = 0;
     let mut rounds = 0;
-    for st in steps.iter() {
+    out.reserve(steps.iter().size_hint().0); for st in steps.iter() {
         let mut next = st.clone();
         match st {
             SvStep::Extend(l, m, q) => {
@@ -563,7 +563,7 @@ pub(crate) fn sv_omega_test_run(title: &str, names: &[String], atoms: &[SvAtom],
     match got {
         SvChecked::Conflict(ref c) => {
             let mut hints: Vec<u32> = vec![];
-            for l in c.lits.iter() {
+            hints.reserve(c.lits.iter().size_hint().0); for l in c.lits.iter() {
                 let l = nikaia_std::num::value(l);
                 hints.push(*nikaia_std::index::get(&inputs, nikaia_std::index::at((l / 2u32) as i64)));
             }
@@ -577,7 +577,7 @@ pub(crate) fn sv_omega_test_run(title: &str, names: &[String], atoms: &[SvAtom],
         SvChecked::Consistent => {
             let model = theory.model();
             #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for name in names.iter() {
+            values.reserve(names.iter().size_hint().0); for name in names.iter() {
                 let v = nikaia_std::index::or(model.get(&nikaia_std::block::Text::from(name.to_string())), || 0);
                 values.push(format!("{} = {}", name, v));
             }
@@ -668,7 +668,7 @@ pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Er
     sv_compact(&mut held);
     if !(held.len() == 4) { nikaia_std::abort::assertion_failed("assert(held.len() == 4)", None, &[("held.len()", (&&nikaia_std::abort::Operand(&(held.len() as i64))).shown()), ]) };
     let mut lits: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for h in held.iter() {
+    lits.reserve(held.iter().size_hint().0); for h in held.iter() {
         lits.push(match h.src {
             SvSrc::Lit(l) => format!("{}", l),
             _ => String::from("fact"),

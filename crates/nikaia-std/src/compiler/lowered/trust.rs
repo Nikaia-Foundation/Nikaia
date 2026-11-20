@@ -320,11 +320,11 @@ pub(crate) fn tm_join(a: &KeyDeps, b: &KeyDeps) -> KeyDeps {
     if !a.known { return KeyDeps { known: false, ids: vec![], why: if a.why.is_empty() { nikaia_std::block::Text::from(b.why.to_string()) } else { nikaia_std::block::Text::from(a.why.to_string()) } }; }
     if !b.known { return KeyDeps { known: false, ids: vec![], why: nikaia_std::block::Text::from(b.why.to_string()) }; }
     let mut ids: Vec<i64> = vec![];
-    for id in a.ids.iter() {
+    ids.reserve(a.ids.iter().size_hint().0); for id in a.ids.iter() {
         let id = nikaia_std::num::value(id);
         ids.push(id);
     }
-    for id in b.ids.iter() {
+    ids.reserve(b.ids.iter().size_hint().0); for id in b.ids.iter() {
         let id = nikaia_std::num::value(id);
         ids.push(id);
     }

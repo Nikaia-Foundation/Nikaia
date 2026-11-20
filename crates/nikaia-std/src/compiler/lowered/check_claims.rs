@@ -3,7 +3,7 @@
 
 pub fn check_claims_unproved(findings: &[CheckFinding], claims: &collections::BTreeMap<(i64, i64), FactClaim>) -> Vec<CheckFinding> {
     let mut unproved: Vec<CheckFinding> = vec![];
-    for ((start, _), claim) in claims.iter() {
+    unproved.reserve(claims.iter().size_hint().0); for ((start, _), claim) in claims.iter() {
         let start = nikaia_std::num::value(start);
         if claim.assumed || check_claims_refuted_at(findings, start) { continue; }
         let held = match match claim.held.as_ref() {
@@ -38,7 +38,7 @@ pub(crate) fn check_claims_refuted_at(findings: &[CheckFinding], start: i64) -> 
 
 pub fn check_claims_assumes_in_std(claims: &collections::BTreeMap<(i64, i64), FactClaim>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
-    for ((start, _), claim) in claims.iter() {
+    refused.reserve(claims.iter().size_hint().0); for ((start, _), claim) in claims.iter() {
         let start = nikaia_std::num::value(start);
         if !claim.assumed { continue; }
         let at = u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));

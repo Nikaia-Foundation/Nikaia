@@ -265,7 +265,7 @@ impl FbTy {
     pub(crate) fn of(words: &winnow_grammar::InternerContext, ty: &Type) -> FbTy {
         let written = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
         let mut args: Vec<FbTy> = vec![];
-        for g in ty.generics.iter() { args.push(FbTy::of(words, g)); }
+        args.reserve(ty.generics.iter().size_hint().0); for g in ty.generics.iter() { args.push(FbTy::of(words, g)); }
         FbTy { name: nikaia_std::block::Text::from(nikaia_std::index::or(written.rsplit("::").next(), || "").to_string()), args }
     }
     pub(crate) fn named(name: String) -> FbTy { FbTy { name, args: vec![] } }
@@ -450,7 +450,7 @@ impl<'a> FbIndex<'a, 'a, 'a> {
                 Item::Struct { name, fields, .. } => {
                     let name = *name;
                     let mut list: Vec<FbField<'_>> = vec![];
-                    for f in fields.iter() { list.push(FbField { name: nikaia_std::block::Text::from(words.resolve(f.name).to_string()), ty: FbTy::of(words, &f.ty), default: f.default.as_ref().map(|__nikaia_it| &__nikaia_it.value) }); }
+                    list.reserve(fields.iter().size_hint().0); for f in fields.iter() { list.push(FbField { name: nikaia_std::block::Text::from(words.resolve(f.name).to_string()), ty: FbTy::of(words, &f.ty), default: f.default.as_ref().map(|__nikaia_it| &__nikaia_it.value) }); }
                     ix.structs.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), list);
                 },
                 Item::Fn { name, receiver, args, body, .. } => {
@@ -567,7 +567,7 @@ pub(crate) fn fb_new_merge() -> FbMerge { FbMerge { sites: collections::BTreeMap
 
 pub(crate) fn fb_refs(list: &[Expr]) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
-    for e in list.iter() { out.push(e); }
+    out.reserve(list.iter().size_hint().0); for e in list.iter() { out.push(e); }
     out
 }
 
@@ -1365,7 +1365,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     for (owner, names) in uses.names.iter() {
         let owner = nikaia_std::num::value(owner);
         let inside = if owner >= 0 { region.contains(&owner) } else { owner == me };
-        if !inside { for n in names.iter() { queue.push(nikaia_std::block::Text::from(n.to_string())); } }
+        if !inside { queue.reserve(names.iter().size_hint().0); for n in names.iter() { queue.push(nikaia_std::block::Text::from(n.to_string())); } }
     }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while !queue.is_empty() {

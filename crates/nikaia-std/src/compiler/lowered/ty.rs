@@ -137,7 +137,7 @@ pub(crate) fn lent_mut(ty: &Ty) -> Option<Ty> {
 
 pub(crate) fn unlent_each(params: &[Ty]) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in params.iter() { out.push(nikaia_std::index::or(lent_mut(part), || part.clone().into())); }
+    out.reserve(params.iter().size_hint().0); for part in params.iter() { out.push(nikaia_std::index::or(lent_mut(part), || part.clone().into())); }
     out
 }
 
@@ -515,7 +515,7 @@ pub(crate) fn a_view_of(written: &str) -> Option<String> {
 
 pub(crate) fn each(parts: &[String]) -> Vec<Ty> {
     let mut read: Vec<Ty> = vec![];
-    for part in parts.iter() { read.push(parse(part)); }
+    read.reserve(parts.iter().size_hint().0); for part in parts.iter() { read.push(parse(part)); }
     read
 }
 
@@ -1369,7 +1369,7 @@ pub(crate) fn named_fits(found: &Ty, wanted: &str, wanted_args: &[Ty], wanted_vi
 
 pub(crate) fn erased_each(parts: &[Ty], parameters: &collections::BTreeSet<String>) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in parts.iter() { out.push(part.erase(parameters)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(part.erase(parameters)); }
     out
 }
 
@@ -1380,7 +1380,7 @@ pub(crate) fn erased_name(name: &str, args: &[Ty], view: bool, parameters: &coll
 
 pub(crate) fn parameterised_each(parts: &[Ty], parameters: &collections::BTreeSet<String>) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in parts.iter() { out.push(part.parameterise(parameters)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(part.parameterise(parameters)); }
     out
 }
 
@@ -1509,7 +1509,7 @@ pub(crate) fn text_bound(name: &str, bound: &collections::BTreeMap<String, Ty>, 
 
 pub(crate) fn substituted_each(parts: &[Ty], bound: &collections::BTreeMap<String, Ty>) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in parts.iter() { out.push(substitute(part, bound)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(substitute(part, bound)); }
     out
 }
 
@@ -1539,7 +1539,7 @@ pub(crate) fn qualified_name(name: &str, module: &str, declared: &collections::B
 
 pub(crate) fn qualified_each(parts: &[Ty], module: &str, declared: &collections::BTreeSet<String>) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in parts.iter() { out.push(qualify(part, module, declared)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(qualify(part, module, declared)); }
     out
 }
 
@@ -1589,7 +1589,7 @@ pub(crate) fn renamed_path(name: &str, renames: &collections::BTreeMap<String, S
 
 pub(crate) fn renamed_each(parts: &[Ty], renames: &collections::BTreeMap<String, String>) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for part in parts.iter() { out.push(renamed(part, renames)); }
+    out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(renamed(part, renames)); }
     out
 }
 

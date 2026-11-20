@@ -212,7 +212,7 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
             for k in at..out.len() as i64 { rest.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&out, (k) as usize) }).to_string())); }
             while out.len() > ((at) as usize) { out.pop(); }
             out.push(nikaia_std::block::Text::from(item.to_string()));
-            for r in rest.iter() { out.push(nikaia_std::block::Text::from(r.to_string())); }
+            out.reserve(rest.iter().size_hint().0); for r in rest.iter() { out.push(nikaia_std::block::Text::from(r.to_string())); }
         }
     }
     out
@@ -221,7 +221,7 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
 pub(crate) fn what_was_expected(error: &Failure) -> String {
     #[allow(unused_mut)] let mut listed: Vec<String> = vec![];
     let from = if_empty(&error.expected, &error.also); #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed;
-    for e in from.iter() {
+    listed.reserve(from.iter().size_hint().0); for e in from.iter() {
         if e == "whitespace" || e == "block comment" || e == "`//`" || error.has_found && e == "end of input" { continue; }
         listed.push(nikaia_std::block::Text::from(e.to_string()));
     }
@@ -245,7 +245,7 @@ pub(crate) fn what_was_expected(error: &Failure) -> String {
 
 pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    if first.is_empty() { for s in second.iter() { out.push(nikaia_std::block::Text::from(s.to_string())); } } else { for s in first.iter() { out.push(nikaia_std::block::Text::from(s.to_string())); } }
+    if first.is_empty() { out.reserve(second.iter().size_hint().0); for s in second.iter() { out.push(nikaia_std::block::Text::from(s.to_string())); } } else { out.reserve(first.iter().size_hint().0); for s in first.iter() { out.push(nikaia_std::block::Text::from(s.to_string())); } }
     out
 }
 

@@ -399,7 +399,7 @@ pub(crate) fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world:
         if ask_right { state.number_asked(world, rhs, &left, at, true); }
         let mut both: Vec<i64> = state.open_numbers_in(world, lhs);
         let more: Vec<i64> = state.open_numbers_in(world, rhs);
-        for n in more.iter() {
+        both.reserve(more.iter().size_hint().0); for n in more.iter() {
             let n = nikaia_std::num::value(n);
             both.push(n);
         }
@@ -800,7 +800,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
     };
     if parts != params.len() as i64 { return; }
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for p in params.iter() {
+    names.reserve(params.iter().size_hint().0); for p in params.iter() {
         let p = *p;
         let name = world.words.resolve(p);
         names.push(if name.starts_with("__nikaia_tuple") { String::from("(…)") } else { nikaia_std::block::Text::from(name.to_string()) });

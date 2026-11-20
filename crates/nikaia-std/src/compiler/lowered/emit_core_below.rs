@@ -210,7 +210,7 @@ pub(crate) fn emit_resize_args(next: &Stmt) -> Vec<&Expr> {
     match next {
         Stmt::Expr(inner) => {
             match inner {
-                Expr::MethodCall { args, .. } => { if args.len() == 2 { for arg in args.iter() { out.push(arg); } } },
+                Expr::MethodCall { args, .. } => { if args.len() == 2 { out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); } } },
                 _ => { },
             }
         },

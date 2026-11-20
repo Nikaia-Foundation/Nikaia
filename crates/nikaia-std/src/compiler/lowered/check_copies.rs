@@ -19,7 +19,7 @@ pub(crate) fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, it
             let named = other.text(name);
             if parts.contains_key(&named) { return; }
             let mut held: Vec<Ty> = vec![];
-            for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); }
+            held.reserve(fields.iter().size_hint().0); for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); }
             parts.insert(named, held);
         },
         Item::Enum { name, variants, .. } => {
@@ -30,8 +30,8 @@ pub(crate) fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, it
             for variant in variants.iter() {
                 match &variant.fields {
                     VariantFields::Unit => { },
-                    VariantFields::Tuple(types) => { for ty in types.iter() { held.push(written_ty(other.words, other.aliases, ty)); } },
-                    VariantFields::Named(fields) => { for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); } },
+                    VariantFields::Tuple(types) => { held.reserve(types.iter().size_hint().0); for ty in types.iter() { held.push(written_ty(other.words, other.aliases, ty)); } },
+                    VariantFields::Named(fields) => { held.reserve(fields.iter().size_hint().0); for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); } },
                 }
             }
             parts.insert(named, held);
@@ -84,7 +84,7 @@ impl CheckState {
         let mut cleaned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         loop {
             let mut joining: Vec<String> = vec![];
-            for name in package.iter() {
+            joining.reserve(package.iter().size_hint().0); for name in package.iter() {
                 if copies.contains(name) || dropped.contains(name) || cleaned.contains(name) { continue; }
                 let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 if nikaia_std::list::contains(&declared, &name) {
@@ -93,7 +93,7 @@ impl CheckState {
                         parts = held.copy_owned();
                     } else {
                         let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        for field in fields.iter() { parts.push(field.ty.clone()); }
+                        parts.reserve(fields.iter().size_hint().0); for field in fields.iter() { parts.push(field.ty.clone()); }
                     }
                 } else {
                     let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };

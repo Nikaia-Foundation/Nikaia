@@ -540,7 +540,7 @@ pub(crate) fn bounding_relations_of(walk: &mut BoundsWalk, facts: &BoundsFacts, 
     let callee = match bounding_found_key(&walk, value, context, words) { Some(__nikaia_value) => __nikaia_value, None => return out };
     let found = match context.returns.get(&callee) { Some(__nikaia_value) => __nikaia_value, None => return out };
     if found.each || found.pending { return out; }
-    for k in found.at_least.iter() {
+    out.reserve(found.at_least.iter().size_hint().0); for k in found.at_least.iter() {
         let k = nikaia_std::num::value(k);
         let term = match bounding_found_term(walk, value, k, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !walk.arena.mentions(term, name) {
@@ -843,7 +843,7 @@ pub(crate) fn bounding_traced(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: 
     let mut known: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for fact in bounding_known(&walk, facts, goal) { known.push(walk.arena.text(fact)); }
     let mut rules: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for rule in walk.rules.iter() { rules.push(if rule.times == 1 { format!("{}: {} {} {}", rule.owner, rule.kind, rule.a, rule.b) } else { format!("{}: {} {} {}*{}", rule.owner, rule.kind, rule.a, rule.times, rule.b) }); }
+    rules.reserve(walk.rules.iter().size_hint().0); for rule in walk.rules.iter() { rules.push(if rule.times == 1 { format!("{}: {} {} {}", rule.owner, rule.kind, rule.a, rule.b) } else { format!("{}: {} {} {}*{}", rule.owner, rule.kind, rule.a, rule.times, rule.b) }); }
     let held = if known.is_empty() { String::from("none") } else { nikaia_std::block::Text::from(known.join(", ")) };
     let found = if rules.is_empty() { String::from("none") } else { nikaia_std::block::Text::from(rules.join(", ")) };
     let connected = bounding_nearest(&walk, facts, goal, facts.facts.len() as i64).iter().copied().filter(|&taken| { taken }).count() as i64;
@@ -854,7 +854,7 @@ pub(crate) fn bounding_turn_row(walk: &mut BoundsWalk, at: i64, row: String) { i
 
 pub(crate) fn bounding_texts(walk: &BoundsWalk, terms: &[i64]) -> String {
     let mut out: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for term in terms.iter() {
+    out.reserve(terms.iter().size_hint().0); for term in terms.iter() {
         let term = nikaia_std::num::value(term);
         out.push(walk.arena.text(term));
     }
@@ -896,7 +896,7 @@ pub(crate) fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64,
 
 pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64, most: i64) -> Vec<bool> {
     let mut ways: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for fact in facts.facts.iter() {
+    ways.reserve(facts.facts.iter().size_hint().0); for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(fact, &mut own);
@@ -937,7 +937,7 @@ pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i6
         taken.push(false);
     }
     let mut reached: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for _ in readers.iter() { reached.push(false); }
+    reached.reserve(readers.iter().size_hint().0); for _ in readers.iter() { reached.push(false); }
     let mut goal: collections::BTreeSet<String> = collections::BTreeSet::new();
     walk.arena.variables(asked, &mut goal);
     for name in goal.iter() {
@@ -992,14 +992,14 @@ pub(crate) fn bounding_known(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64)
     }
     for (name, axiom) in walk.axioms.iter() {
         if !walk.unsized_names.contains(name) {
-            for fact in axiom.iter() {
+            all.reserve(axiom.iter().size_hint().0); for fact in axiom.iter() {
                 let fact = nikaia_std::num::value(fact);
                 all.push(fact);
             }
         }
     }
     for (_, defined) in walk.defining.iter() {
-        for fact in defined.iter() {
+        all.reserve(defined.iter().size_hint().0); for fact in defined.iter() {
             let fact = nikaia_std::num::value(fact);
             all.push(fact);
         }
@@ -1546,7 +1546,7 @@ pub(crate) fn bounding_push(walk: &BoundsWalk, facts: &mut BoundsFacts, fact: i6
                 bounding_hold(facts, part);
                 let mut more: collections::BTreeSet<String> = collections::BTreeSet::new();
                 walk.arena.variables(part, &mut more);
-                for other in more.iter() { pending.push(nikaia_std::block::Text::from(other.to_string())); }
+                pending.reserve(more.iter().size_hint().0); for other in more.iter() { pending.push(nikaia_std::block::Text::from(other.to_string())); }
             }
         }
     }
@@ -1564,7 +1564,7 @@ pub(crate) fn bounding_hold(facts: &mut BoundsFacts, fact: i64) {
 pub(crate) fn bounding_settle(walk: &mut BoundsWalk, facts: &mut BoundsFacts) {
     let mut parts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (_, defined) in walk.defining.iter() {
-        for part in defined.iter() {
+        parts.reserve(defined.iter().size_hint().0); for part in defined.iter() {
             let part = nikaia_std::num::value(part);
             parts.push(part);
         }
@@ -2086,7 +2086,7 @@ pub(crate) fn bounding_ensured(walk: &mut BoundsWalk, ensured: &Ensured, args: &
     given.insert(String::from("result"), result);
     let mut read: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for nodes in ensured.conditions.iter() {
+    read.reserve(ensured.conditions.iter().size_hint().0); for nodes in ensured.conditions.iter() {
         let condition = walk.arena.adopt(nodes);
         walk.arena.variables(condition, &mut names);
         read.push(condition);
@@ -2103,7 +2103,7 @@ pub(crate) fn bounding_ensured(walk: &mut BoundsWalk, ensured: &Ensured, args: &
         given.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(length, || bounding_fresh(walk).into()));
     }
     let mut holds: Vec<i64> = vec![];
-    for condition in read.iter() {
+    holds.reserve(read.iter().size_hint().0); for condition in read.iter() {
         let condition = nikaia_std::num::value(condition);
         holds.push(walk.arena.substitute(condition, &given));
     }
@@ -2124,7 +2124,7 @@ pub(crate) fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &E
     if walk.pinned.contains(&path_root(&on)) { return; }
     let mut conditions: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for nodes in required.conditions.iter() {
+    conditions.reserve(required.conditions.iter().size_hint().0); for nodes in required.conditions.iter() {
         let condition = walk.arena.adopt(nodes);
         walk.arena.variables(condition, &mut read);
         conditions.push(condition);
@@ -2144,7 +2144,7 @@ pub(crate) fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &E
         }
     }
     let mut goals: Vec<i64> = vec![];
-    for condition in conditions.iter() {
+    goals.reserve(conditions.iter().size_hint().0); for condition in conditions.iter() {
         let condition = nikaia_std::num::value(condition);
         goals.push(walk.arena.substitute(condition, &given));
     }
@@ -2322,7 +2322,7 @@ pub(crate) fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, turn:
             let before = nikaia_std::index::or(turn, || bounding_fresh(walk).into());
             given.insert(String::from("turn"), before);
             given.insert(length_of("self"), bounding_length_named(walk, &path, true));
-            for nodes in each.conditions.iter() {
+            out.reserve(each.conditions.iter().size_hint().0); for nodes in each.conditions.iter() {
                 let read = walk.arena.adopt(nodes);
                 out.push(walk.arena.substitute(read, &given));
             }
@@ -2386,7 +2386,7 @@ pub(crate) fn bounding_each_guarded(walk: &mut BoundsWalk, fact: i64) -> i64 {
     walk.arena.variables(fact, &mut read);
     let zero = walk.arena.int(0);
     let mut parts: Vec<i64> = vec![];
-    for name in read.iter() {
+    parts.reserve(read.iter().size_hint().0); for name in read.iter() {
         let pieces: Vec<&str> = name.split(".each()").collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
         let len = walk.arena.var(&length_of(*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }));
@@ -2608,7 +2608,7 @@ pub(crate) fn bounding_inline(walk: &mut BoundsWalk, expr: &Expr, env: &collecti
             if config.is_empty() {
                 let callee = match bounding_variable(func, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let mut given: Vec<i64> = vec![];
-                for arg in args.iter() {
+                given.reserve(args.iter().size_hint().0); for arg in args.iter() {
                     let term = match bounding_inline(walk, arg, env, depth, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     given.push(term);
                 }
@@ -2805,12 +2805,12 @@ pub(crate) fn bounding_name_call(walk: &mut BoundsWalk, facts: &mut BoundsFacts,
     walk.codes += 1;
     let n = walk.arena.var(&name);
     let mut held: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for k in found.at_least.iter() {
+    held.reserve(found.at_least.iter().size_hint().0); for k in found.at_least.iter() {
         let k = nikaia_std::num::value(k);
         let term = match bounding_found_term(walk, side, k, &facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
         held.push(walk.arena.ge(n, term));
     }
-    for k in found.within.iter() {
+    held.reserve(found.within.iter().size_hint().0); for k in found.within.iter() {
         let k = nikaia_std::num::value(k);
         let path = match bounding_found_path(side, found, k, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if walk.pinned.contains(&path_root(&path)) { continue; }
@@ -2947,7 +2947,7 @@ pub(crate) fn bounding_stmts(walk: &mut BoundsWalk, block: &Block, from: i64, fa
     for stmt in nikaia_std::index::get(&block.stmts, nikaia_std::index::at(from..)).iter() {
         match &stmt.node {
             Stmt::Let { names, .. } => {
-                for name in names.iter() {
+                bound.reserve(names.iter().size_hint().0); for name in names.iter() {
                     let name = *name;
                     bound.push(nikaia_std::block::Text::from(words.resolve(name).to_string()));
                 }
@@ -3181,7 +3181,7 @@ pub(crate) fn bounding_loop_invariant(walk: &mut BoundsWalk, stmt: &Stmt, start:
     let own_guesses = bounding_loop_guesses(walk, stmt, &reached, changed, context, program, words);
     let proposals = bounding_loop_proposals(walk, stmt, start, &reached, changed, words, &mut &mut *ask);
     let mut offered = proposals.candidates.copy_owned();
-    for guess in own_guesses.iter() {
+    offered.reserve(own_guesses.iter().size_hint().0); for guess in own_guesses.iter() {
         let guess = nikaia_std::num::value(guess);
         offered.push((guess, String::from("guess and check")));
     }
@@ -3191,7 +3191,7 @@ pub(crate) fn bounding_loop_invariant(walk: &mut BoundsWalk, stmt: &Stmt, start:
     }
     let mut origins: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
     let mut guesses: Vec<i64> = vec![];
-    for fixed in proposals.fixed.iter() {
+    guesses.reserve(proposals.fixed.iter().size_hint().0); for fixed in proposals.fixed.iter() {
         let fixed = nikaia_std::num::value(fixed);
         guesses.push(fixed);
         origins.insert(fixed, String::from("closed forms"));
@@ -3209,7 +3209,7 @@ pub(crate) fn bounding_loop_invariant(walk: &mut BoundsWalk, stmt: &Stmt, start:
         }
     }
     let mut asked: Vec<i64> = vec![];
-    for (guess, _) in offered.iter() {
+    asked.reserve(offered.iter().size_hint().0); for (guess, _) in offered.iter() {
         let guess = nikaia_std::num::value(guess);
         asked.push(guess);
     }
@@ -3245,7 +3245,7 @@ pub(crate) fn bounding_loop_invariant(walk: &mut BoundsWalk, stmt: &Stmt, start:
 
 pub(crate) fn bounding_loop_found(walk: &mut BoundsWalk, start: i64, invariant: &BoundsInvariant) {
     let mut parts: Vec<(i64, String)> = vec![];
-    for guess in invariant.guesses.iter() {
+    parts.reserve(invariant.guesses.iter().size_hint().0); for guess in invariant.guesses.iter() {
         let guess = nikaia_std::num::value(guess);
         parts.push((guess, nikaia_std::block::Text::from(nikaia_std::index::or(*nikaia_std::index::get(&invariant.origins, &guess), || "guess and check").to_string())));
     }
@@ -3297,7 +3297,7 @@ pub(crate) fn bounding_back(walk: &mut BoundsWalk, facts: &mut BoundsFacts, boun
     walk.checked_results = mark.checked_results.copy_owned();
     walk.rule_failed = mark.rule_failed.copy_owned();
     bound.clear();
-    for name in mark.bound.iter() { bound.push(nikaia_std::block::Text::from(name.to_string())); }
+    bound.reserve(mark.bound.iter().size_hint().0); for name in mark.bound.iter() { bound.push(nikaia_std::block::Text::from(name.to_string())); }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3387,7 +3387,7 @@ pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &
     #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match stmt {
         Stmt::For { bindings, .. } => {
-            for binding in bindings.iter() {
+            bound.reserve(bindings.iter().size_hint().0); for binding in bindings.iter() {
                 let binding = *binding;
                 bound.push(nikaia_std::block::Text::from(words.resolve(binding).to_string()));
             }
@@ -3793,7 +3793,7 @@ pub(crate) fn bounding_candidates(walk: &BoundsWalk, changed: &BoundsChanged, fa
 
 pub(crate) fn bounding_grow(walk: &mut BoundsWalk, cands: &[String], falls: &[String]) -> Vec<String> {
     let mut added: Vec<String> = vec![];
-    for c in cands.iter() {
+    added.reserve(cands.iter().size_hint().0); for c in cands.iter() {
         if walk.growing.contains(c) || walk.falling.contains(c) { continue; }
         if nikaia_std::list::contains(&falls, &c) {
             walk.falling.insert(nikaia_std::block::Text::from(c.to_string()));
@@ -3831,7 +3831,7 @@ pub(crate) fn bounding_falls(changed: &BoundsChanged, cands: &[String]) -> Vec<S
 
 pub(crate) fn bounding_loop_change(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, cands: &[String]) {
     let mut entries: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for x in cands.iter() {
+    entries.reserve(cands.iter().size_hint().0); for x in cands.iter() {
         let entry = format!("{}#{}", x, walk.entries);
         walk.entries += 1;
         let e = walk.arena.var(&entry);
@@ -4119,7 +4119,7 @@ pub(crate) fn bounding_step_literal(expr: &Expr) -> Option<i64> {
 
 pub(crate) fn bounding_turn_bounds(walk: &mut BoundsWalk, facts: &mut BoundsFacts, steps: &[(String, i64, i64, Option<i64>)], turns: i64) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
-    for (name, low, high, floor) in steps.iter() {
+    out.reserve(steps.iter().size_hint().0); for (name, low, high, floor) in steps.iter() {
         let low = nikaia_std::num::value(low);let high = nikaia_std::num::value(high);let floor = *floor;
         let e = bounding_entry_value(walk, facts, name);
         let now = walk.arena.var(name);
@@ -4160,7 +4160,7 @@ pub(crate) fn bounding_entry_value(walk: &mut BoundsWalk, facts: &mut BoundsFact
 pub(crate) fn bounding_pair_bounds(walk: &mut BoundsWalk, facts: &mut BoundsFacts, pairs: &[(String, String)], skip: &str) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     let mut entered: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    for (n, m) in pairs.iter() {
+    out.reserve(pairs.iter().size_hint().0); for (n, m) in pairs.iter() {
         if out.len() >= 8 || n == skip || m == skip { continue; }
         if !entered.contains_key(n) {
             let e = bounding_entry_value(walk, facts, n);
@@ -4366,7 +4366,7 @@ pub(crate) fn bounding_affine(expr: &Expr, name: &str, words: &winnow_grammar::I
 
 pub(crate) fn bounding_scaled_bounds(walk: &mut BoundsWalk, facts: &BoundsFacts, scales: &[(String, i64, i64)], turns: Option<i64>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
-    for (name, a, b) in scales.iter() {
+    out.reserve(scales.iter().size_hint().0); for (name, a, b) in scales.iter() {
         let a = nikaia_std::num::value(a);let b = nikaia_std::num::value(b);
         if a == 1 && turns.is_none() { continue; }
         let now = walk.arena.var(name);
@@ -4902,7 +4902,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         scaled = bounding_scaled_bounds(walk, &facts, &scales, most, &mut &mut *ask);
     }
     let mut entered: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let followers = followers;
-    for x in followers.iter() {
+    entered.reserve(followers.iter().size_hint().0); for x in followers.iter() {
         let e = bounding_rename(walk, &mut inner, x);
         entered.push((nikaia_std::block::Text::from(x.to_string()), e));
     }
@@ -5076,7 +5076,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     let mut paired: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !breaks(body, words) { paired = bounding_pair_bounds(walk, facts, &pairs, ""); }
     let mut left: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let followers = followers;
-    for x in followers.iter() {
+    left.reserve(followers.iter().size_hint().0); for x in followers.iter() {
         let e = bounding_rename(walk, facts, x);
         left.push((nikaia_std::block::Text::from(x.to_string()), e));
     }
@@ -5136,7 +5136,7 @@ pub(crate) fn bounding_rename(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     given.insert(nikaia_std::block::Text::from(name.to_string()), e);
     let mut kept: Vec<i64> = vec![];
-    for fact in facts.facts.iter() {
+    kept.reserve(facts.facts.iter().size_hint().0); for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         if walk.arena.mentions(fact, name) { kept.push(walk.arena.substitute(fact, &given)); }
         kept.push(fact);
@@ -5733,7 +5733,7 @@ pub(crate) fn bounding_join_candidates(walk: &mut BoundsWalk, facts: &BoundsFact
         let plain = walk.arena.substitute(fact, &given);
         if !out.contains(&plain) && !settled.contains(&plain) && !facts.facts.contains(&plain) { settled.push(plain); }
     }
-    for fact in settled.iter() {
+    out.reserve(settled.iter().size_hint().0); for fact in settled.iter() {
         let fact = nikaia_std::num::value(fact);
         out.push(fact);
     }
@@ -5835,7 +5835,7 @@ pub(crate) fn bounding_method_call(walk: &mut BoundsWalk, call: &Expr, receiver:
     if walk.checking {
         let mut handed: Vec<String> = vec![];
         if context.around.changing_receivers.contains(method) { handed.push(nikaia_std::index::or(path_of(receiver, words), || nikaia_std::index::or(rules_inner_of(receiver, words), || "self".into()).into())); }
-        if context.around.changing_methods.contains(method) { for arg in args.iter() { handed.push(match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue }); } }
+        if context.around.changing_methods.contains(method) { handed.reserve(args.iter().size_hint().0); for arg in args.iter() { handed.push(match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue }); } }
         let changed = rules_changed_by((frame).as_ref(), (receiver_path).as_deref(), &frame_handed(args, words), &handed);
         rules_at_call(walk, call, (receiver_path).as_deref(), method, args, &changed, &facts, context, program, words, &mut &mut *ask);
     }
@@ -6930,7 +6930,7 @@ pub(crate) fn bounding_measured(walk: &mut BoundsWalk, facts: &BoundsFacts, root
     let found = match context.returns.get(&callee) { Some(__nikaia_value) => __nikaia_value, None => return out };
     if found.pending { return out; }
     let mut below: Vec<i64> = vec![];
-    for k in found.guards.iter() {
+    below.reserve(found.guards.iter().size_hint().0); for k in found.guards.iter() {
         let k = nikaia_std::num::value(k);
         let term = match bounding_found_term(walk, value, k, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return out };
         if bounding_touches(&walk, term, root) { return out; }
@@ -6943,7 +6943,7 @@ pub(crate) fn bounding_measured(walk: &mut BoundsWalk, facts: &BoundsFacts, root
         for (m, positions) in sets.iter() {
             let path = if m.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { format!("{}.{}", name, m) };
             let len = bounding_length_named(walk, &path, false);
-            for k in positions.iter() {
+            stated.reserve(positions.iter().size_hint().0); for k in positions.iter() {
                 let k = nikaia_std::num::value(k);
                 let term = if found.listed.contains(&k) {
                     let arg = match bounding_found_path(value, found, k, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -6955,7 +6955,7 @@ pub(crate) fn bounding_measured(walk: &mut BoundsWalk, facts: &BoundsFacts, root
             }
         }
     }
-    for pair in found.alike.iter() {
+    stated.reserve(found.alike.iter().size_hint().0); for pair in found.alike.iter() {
         let parts: Vec<&str> = pair.split('|').collect::<Vec<_>>();
         if parts.len() != 2 { continue; }
         let a = bounding_length_named(walk, &format!("{}.{}", name, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }), false);
@@ -7177,7 +7177,7 @@ pub(crate) fn bounding_fields_found(walk: &mut BoundsWalk, facts: &BoundsFacts, 
     let prefix = format!("{}#", callee);
     let mut projected: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, found) in context.returns.iter() { if key.starts_with(&*prefix) && !found.each && !found.pending { projected.push(nikaia_std::block::Text::from(found.projected.to_string())); } }
-    for field in projected.iter() {
+    paths.reserve(projected.iter().size_hint().0); for field in projected.iter() {
         let path = format!("{}.{}", name, field);
         walk.found_at = node_key(value);
         walk.found_field = nikaia_std::block::Text::from(field.to_string());

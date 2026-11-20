@@ -79,7 +79,7 @@ pub(crate) fn sv_fast_shape(book: &SvBook, cnf: &SvCnf) -> String {
 pub(crate) fn sv_fast_refute(book: &mut SvBook, ids: &[u32], sources: Vec<SvSrc>, multipliers: Vec<i64>, units: &[u32]) -> SvFastEnd {
     let lemma = match book.farkas(sources, multipliers) { Some(__nikaia_value) => __nikaia_value, None => return SvFastEnd::Skip };
     let mut hints: Vec<u32> = vec![];
-    for u in units.iter() {
+    hints.reserve(units.iter().size_hint().0); for u in units.iter() {
         let u = nikaia_std::num::value(u);
         hints.push(*nikaia_std::index::get(&ids, nikaia_std::index::at(u as i64)));
     }

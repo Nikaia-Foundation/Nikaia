@@ -438,7 +438,7 @@ pub(crate) fn check_core_stmt_give_lists(state: &mut CheckState, world: &CheckWo
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_unknown_parts(tys: &[Ty]) -> Vec<bool> {
     let mut out: Vec<bool> = vec![];
-    for t in tys.iter() { out.push(t.is_unknown()); }
+    out.reserve(tys.iter().size_hint().0); for t in tys.iter() { out.push(t.is_unknown()); }
     out
 }
 
@@ -818,7 +818,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
     #[allow(unused_mut)] let mut bound_names: Vec<String> = vec![];
-    for n in names.iter() {
+    bound_names.reserve(names.iter().size_hint().0); for n in names.iter() {
         let n = *n;
         bound_names.push(format!("{}", world.words.resolve(n)));
     }
@@ -1000,7 +1000,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
                 };
                 let mut i: i64 = 0;
                 let mut any = false;
-                for part in parts.iter() {
+                part_opens.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let mut at: i64 = -1;
                     if ((i) as usize) < unknowns.len() && *unsafe { nikaia_std::proven::read(&unknowns, (i) as usize) } && state.number_shaped(world, part) {
                         at = span.start as i64 + i + 1;
@@ -1729,7 +1729,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
         let list: Option<String> = dotted_path(world, iter);
         #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-        for b in bindings.iter() {
+        names.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
             let b = *b;
             let marked = !mut_names.is_empty() && *nikaia_std::index::get(&mut_names, (index) as usize);
             names.push(if marked { format!("mut {}", world.words.resolve(b)) } else { format!("{}", world.words.resolve(b)) });
@@ -1753,7 +1753,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     }
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
-    for b in bindings.iter() {
+    frame.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
         let b = *b;
         if at >= elements.len() as i64 { break; }
         let name: String = format!("{}", world.words.resolve(b));
@@ -2712,19 +2712,19 @@ pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, sp
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let mut parts: Vec<&Expr> = vec![func];
-            for arg in args.iter() { parts.push(arg); }
+            parts.reserve(args.iter().size_hint().0); for arg in args.iter() { parts.push(arg); }
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
         Expr::MethodCall { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             let mut parts: Vec<&Expr> = vec![receiver];
-            for arg in args.iter() { parts.push(arg); }
+            parts.reserve(args.iter().size_hint().0); for arg in args.iter() { parts.push(arg); }
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             let mut parts: Vec<&Expr> = vec![receiver];
-            for arg in args.iter() { parts.push(arg); }
+            parts.reserve(args.iter().size_hint().0); for arg in args.iter() { parts.push(arg); }
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -2734,7 +2734,7 @@ pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, sp
         },
         Expr::Tuple(items, _) => {
             let mut parts: Vec<&Expr> = vec![];
-            for item in items.iter() { parts.push(item); }
+            parts.reserve(items.iter().size_hint().0); for item in items.iter() { parts.push(item); }
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
         Expr::Spawn { child, .. } if { let child = *child; child } => { state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Handle, group }); },

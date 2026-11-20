@@ -218,10 +218,10 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
     #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !texts.is_empty() {
         lines.push(String::from("text (declared `String`):\n"));
-        for line in texts.iter() { lines.push(format!("    {}\n", line)); }
+        lines.reserve(texts.iter().size_hint().0); for line in texts.iter() { lines.push(format!("    {}\n", line)); }
     }
     let copying: Vec<&Ledger> = vec![library];
-    for (key, contract) in ledger.functions.iter() {
+    lines.reserve(ledger.functions.iter().size_hint().0); for (key, contract) in ledger.functions.iter() {
         if contract.views.is_empty() || !here.contains(key) { continue; }
         lines.push(format!("{}:\n", key));
         let mut lent: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -233,7 +233,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 at = at + 1;
             }
         }
-        for held in contract.views.iter() {
+        lines.reserve(contract.views.iter().size_hint().0); for held in contract.views.iter() {
             let state = held.state.as_str();
             let mut from = String::from("");
             if state == "borrowed" && held.position == "<result>" && !lent.is_empty() { from = format!(" - from the caller's argument for {}", nikaia_std::block::Text::from(lent.join(", "))); }
@@ -257,9 +257,9 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         }
         handed.insert(nikaia_std::block::Text::from(plan.key.to_string()), names);
     }
-    for plan in plans.iter() {
+    lines.reserve(plans.iter().size_hint().0); for plan in plans.iter() {
         let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (at, keep) in plan.puts.iter() {
+        said.reserve(plan.puts.iter().size_hint().0); for (at, keep) in plan.puts.iter() {
             let at = nikaia_std::num::value(at);let keep = *keep;
             let name = nikaia_std::index::or(buffer_named(plan, at), || "a buffer".into());
             said.push(format!("    {} lives {}\n", name, keep_words(&keep)));
@@ -275,7 +275,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
             let found = handed.get(nikaia_std::index::as_text(&callee)); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
+                names.reserve(list.iter().size_hint().0); for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
             }
             if lives_in_a_local_keep(&keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", nikaia_std::block::Text::from(names.join(", ")), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(&keep))); }
         }
@@ -289,7 +289,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         }
         if said.is_empty() { continue; }
         lines.push(format!("{} (keeps):\n", plan.key));
-        for line in said.iter() { lines.push(nikaia_std::block::Text::from(line.to_string())); }
+        lines.reserve(said.iter().size_hint().0); for line in said.iter() { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     }
     if lines.is_empty() { return String::from("no view in a signature here, so there is no state to solve.\n"); }
     nikaia_std::block::Text::from(lines.join(""))

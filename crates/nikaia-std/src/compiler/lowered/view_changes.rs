@@ -503,7 +503,7 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             }
             if roots.is_empty() { return None; }
             let mut shown: Vec<String> = vec![];
-            for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
+            shown.reserve(args.iter().size_hint().0); for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
             let written = nikaia_std::block::Text::from(shown.join(", "));
             return Some(VcView { name: nikaia_std::block::Text::from(name.to_string()), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(nikaia_std::block::Text::from(callee.to_string())), shown, help: None, looped: false, exclusive: false });
         },
@@ -622,7 +622,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
     let contract = match *nikaia_std::index::get(&ask.own.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<VcView> = vec![];
-    for entry in contract.stores.iter() {
+    out.reserve(contract.stores.iter().size_hint().0); for entry in contract.stores.iter() {
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
         let place = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string()); ::core::mem::drop(pieces);
@@ -849,8 +849,8 @@ pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '
                 }
             }
         },
-        Expr::Tuple(items, _) => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
+        Expr::Tuple(items, _) => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
+        Expr::ListLit { items, .. } => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
         _ => { },
     }
     out
@@ -862,7 +862,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
             let of = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
-            for field in fields.iter() {
+            out.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                 let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let moved = match vc_variable(given, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 out.push((moved, node_key(given), format!("{} {{ {}: ", of, ask.names.resolve(field.name))));
@@ -871,7 +871,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = nikaia_std::index::or(vc_variable(func, ask), || nikaia_std::index::or(root_of(ask.names, func), || "".into()).into());
-            for arg in args.iter() {
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() {
                 let moved = match vc_variable(arg, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 out.push((moved, node_key(arg), format!("{}(", callee)));
             }
@@ -914,7 +914,7 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
             None => { },
             Some(callee) => {
                 let mut given: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
+                given.reserve(view.shown.iter().size_hint().0); for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
                 { use ::core::fmt::Write as _; let _ = help.write_fmt(format_args!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", ")))); };
             },
         }

@@ -38,7 +38,7 @@ pub(crate) fn result_from_as_written(names: &winnow_grammar::InternerContext, it
         (*source).borrows = named;
         (*source).returns = String::from("");
     }
-    for (key, named) in written.iter() { sources.push(ResultSource { key: nikaia_std::block::Text::from(key.to_string()), borrows: named.copy_owned(), returns: String::from("") }); }
+    sources.reserve(written.iter().size_hint().0); for (key, named) in written.iter() { sources.push(ResultSource { key: nikaia_std::block::Text::from(key.to_string()), borrows: named.copy_owned(), returns: String::from("") }); }
 }
 
 pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, item: &Item, owner: Option<&str>, written: &mut collections::BTreeMap<String, Vec<String>>) {
@@ -83,7 +83,7 @@ pub(crate) fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &
     #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
-    for parameter in ty.generics.iter() {
+    shown.reserve(ty.generics.iter().size_hint().0); for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);
         let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *unsafe { nikaia_std::proven::read(&code.param_names, (at) as usize) } } else { None };
         match written {

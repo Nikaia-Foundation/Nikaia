@@ -334,7 +334,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
-        for arg in rule.args.iter() {
+        out.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() {
             self.next_binding = self.next_binding + 1;
             let name = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
             let mut ty = host.type_of(&arg.ty);
@@ -349,7 +349,7 @@ impl CheckState {
             }
             out.push(CheckLocal::free(name, ty, self.next_binding));
         }
-        for option in rule.config.iter() {
+        out.reserve(rule.config.iter().size_hint().0); for option in rule.config.iter() {
             self.next_binding = self.next_binding + 1;
             out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(option.name).to_string()), host.type_of(&option.ty), self.next_binding));
         }
@@ -820,7 +820,7 @@ pub(crate) fn grammar_emits_undone(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
         if emits.is_empty() { continue; }
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let undone = match grammar_undone_from(world, gram, &name, false, streamed, &mut seen) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for at in emits.iter() {
+        out.reserve(emits.iter().size_hint().0); for at in emits.iter() {
             let at = *at;
             let notes: Vec<String> = vec![format!("The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `{}` fails, the parse goes back and tries {}, and the item is already handed over. The compiler does not hold items back to hide that.", name, undone)];
             out.push(check_refusal("NK1370", &at, format!("This `emit` in rule `{}` could be undone: {} can still be tried after it runs.", name, undone), notes, Some(String::from("Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`."))));

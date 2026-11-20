@@ -239,7 +239,7 @@ pub(crate) fn check_function_shrunk_leaves(state: &mut CheckState, words: &winno
             },
             Expr::MethodCall { method, args, .. } => {
                 let method = *method;
-                if puts_its_argument(words.resolve(method)) { for arg in args.iter() { leaving.push(arg); } }
+                if puts_its_argument(words.resolve(method)) { leaving.reserve(args.iter().size_hint().0); for arg in args.iter() { leaving.push(arg); } }
             },
             _ => { },
         }
@@ -602,7 +602,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         frame.push(CheckLocal::free(String::from("self"), ty, id));
     }
     let mut at: i64 = 0;
-    for arg in args.iter() {
+    frame.reserve(args.iter().size_hint().0); for arg in args.iter() {
         let name = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
         state.nameable(&name, &arg.span, "a parameter");
         let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && (!arg.ty.is_view || arg.ty.either) && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
@@ -626,7 +626,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
     }
     for option in config.iter() { check_defaults_a_computed_default(state, world, host, option); }
     let lowered = check_function_options_lowered(world, key);
-    for option in config.iter() {
+    frame.reserve(config.iter().size_hint().0); for option in config.iter() {
         let name = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
         let mut ty = host.type_of(&option.ty);
         for one in lowered.iter() { if one.name == name && one.ty.is_a_view() { ty = one.ty.clone(); } }
@@ -789,7 +789,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let mut declared: collections::BTreeMap<String, Vec<String>> = state.enclosing.copy_owned();
     for g in generics.iter() {
         let mut bounds: Vec<String> = vec![];
-        for b in g.bounds.iter() {
+        bounds.reserve(g.bounds.iter().size_hint().0); for b in g.bounds.iter() {
             let b = *b;
             bounds.push(nikaia_std::block::Text::from(world.words.resolve(b).to_string()));
         }

@@ -224,7 +224,7 @@ pub(crate) fn fmt_lines(tokens: &[FmtToken]) -> Vec<FmtLine> {
     let mut lines: Vec<FmtLine> = vec![];
     let mut toks: Vec<FmtToken> = vec![];
     let mut blank = false;
-    for t in tokens.iter() {
+    toks.reserve(tokens.iter().size_hint().0); for t in tokens.iter() {
         if t.breaks > 0 && !toks.is_empty() {
             lines.push(FmtLine { toks, blank });
             toks = vec![];
@@ -722,7 +722,7 @@ pub(crate) fn fmt_breakable(toks: &[FmtToken], shape: &FmtShape, open: i64, clos
 pub(crate) fn fmt_cut(line: &FmtLine, cuts: &[i64]) -> Vec<FmtLine> {
     let mut pieces: Vec<FmtLine> = vec![];
     let mut from: i64 = 0;
-    for at in cuts.iter() {
+    pieces.reserve(cuts.iter().size_hint().0); for at in cuts.iter() {
         let at = nikaia_std::num::value(at);
         pieces.push(FmtLine { toks: fmt_slice(&line.toks, from, at), blank: line.blank && from == 0 });
         from = at;
@@ -756,7 +756,7 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
         } else { item.push(t); }
     }
     if !item.is_empty() { items.push(item); }
-    for each in items.iter() {
+    pieces.reserve(items.iter().size_hint().0); for each in items.iter() {
         let mut toks_of = each.copy_owned();
         let end = (*nikaia_std::index::get(&toks_of, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(toks_of.len() as i64, 1) }))).clone();
         if listed && end.text != "," && unsafe { nikaia_std::proven::read(&toks_of, (0) as usize) }.text != ".." { toks_of.push(fmt_comma()); }

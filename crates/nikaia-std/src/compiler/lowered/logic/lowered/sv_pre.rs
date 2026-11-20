@@ -66,7 +66,7 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
     let mut lower: collections::BTreeMap<u32, SvPreSide> = collections::BTreeMap::new();
     let mut upper: collections::BTreeMap<u32, SvPreSide> = collections::BTreeMap::new();
     let mut sides = given;
-    for h in held.iter() { sides.push(h.clone()); }
+    sides.reserve(held.iter().size_hint().0); for h in held.iter() { sides.push(h.clone()); }
     for h in sides.iter() {
         if h.row.cols.len() != 1 { continue; }
         let col = *unsafe { nikaia_std::proven::read(&h.row.cols, (0) as usize) };

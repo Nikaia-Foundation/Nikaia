@@ -128,7 +128,7 @@ pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWor
     };
     if !parts.is_empty() {
         let mut sliced: Vec<bool> = vec![];
-        for _ in parts.iter() { sliced.push(false); }
+        sliced.reserve(parts.iter().size_hint().0); for _ in parts.iter() { sliced.push(false); }
         for arm in arms.iter() { emit_match_list_positions(&arm.pattern, &mut sliced); }
         if sliced.contains(&true) {
             state.emit_core_tuple_sliced(world, walk, out, host, &parts, &sliced, depth, flow, scope)?;
@@ -173,7 +173,7 @@ pub(crate) fn emit_match_list_positions(pattern: &MatchPattern, sliced: &mut Vec
 
 pub(crate) fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for each in path.iter() {
+    parts.reserve(path.iter().size_hint().0); for each in path.iter() {
         let each = *each;
         parts.push(emit_text(world, each));
     }
@@ -591,7 +591,7 @@ impl EmitState {
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(clippy::redundant_locals)] let members = members;
-        for arm in arms.iter() {
+        home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {
@@ -671,7 +671,7 @@ impl EmitState {
         #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
-        for arm in arms.iter() {
+        home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {

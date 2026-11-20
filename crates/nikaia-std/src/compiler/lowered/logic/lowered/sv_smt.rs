@@ -423,7 +423,7 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
     book.log.limit = p.steps;
     let mut ids: Vec<u32> = vec![];
     let mut c: u32 = 0u32;
-    for _ in cnf.query.clauses.iter() {
+    ids.reserve(cnf.query.clauses.iter().size_hint().0); for _ in cnf.query.clauses.iter() {
         ids.push(book.input(c));
         c += 1;
     }

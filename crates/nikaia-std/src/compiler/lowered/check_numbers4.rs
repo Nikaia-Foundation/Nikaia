@@ -781,7 +781,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn open_lambda_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lambda: &Expr, names: &[String], number: i64) -> Option<i64> {
         let mut frame: Vec<CheckLocal> = vec![];
-        for name in names.iter() {
+        frame.reserve(names.iter().size_hint().0); for name in names.iter() {
             let mut local = CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), Ty::Unknown, -1);
             local.open_number = Some(number);
             frame.push(local);

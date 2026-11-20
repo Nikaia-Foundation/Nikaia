@@ -796,7 +796,7 @@ pub(crate) fn keeps_named_by_a_lambda(arg: &Expr, interner: &winnow_grammar::Int
             Seen::Name(name) => {
                 if context.parameters.contains(name) { names.push(nikaia_std::block::Text::from(name.to_string())); }
                 let viewing = match *nikaia_std::index::get(&walk.views, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                for viewed in viewing.iter() { names.push(nikaia_std::block::Text::from(viewed.to_string())); }
+                names.reserve(viewing.iter().size_hint().0); for viewed in viewing.iter() { names.push(nikaia_std::block::Text::from(viewed.to_string())); }
             },
             _ => { },
         }
@@ -933,7 +933,7 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
         Expr::Variable(ident, _) => {
             let ident = *ident;
             let moved = match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return names };
-            for one in moved.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
+            names.reserve(moved.iter().size_hint().0); for one in moved.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
         },
         _ => { },
     }
@@ -1330,7 +1330,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut edges: Vec<Passed> = vec![];
                         let mut at: i64 = 0;
                         for arg in method.node.args.iter() {
-                            if by_value(arg) { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); } }
+                            if by_value(arg) { edges.reserve(impls.iter().size_hint().0); for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); } }
                             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                         }
                         if graph.contains_key(&key) {
@@ -1349,7 +1349,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
         if ledger.functions.contains_key(name) {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut list: Vec<String> = vec![];
-            for parameter in parameters.iter() { list.push(nikaia_std::block::Text::from(parameter.to_string())); }
+            list.reserve(parameters.iter().size_hint().0); for parameter in parameters.iter() { list.push(nikaia_std::block::Text::from(parameter.to_string())); }
             contract.keeps = list;
         }
     }
@@ -1596,7 +1596,7 @@ pub(crate) fn add_keeper(column: &mut KeepsColumn, at_trait: &str, parameter: &s
 
 pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
     let mut copy: Vec<KeepsKeeper> = vec![];
-    for one in keepers.iter() { copy.push(KeepsKeeper { name: nikaia_std::block::Text::from(one.name.to_string()), unit: one.unit, span: one.span.clone() }); }
+    copy.reserve(keepers.iter().size_hint().0); for one in keepers.iter() { copy.push(KeepsKeeper { name: nikaia_std::block::Text::from(one.name.to_string()), unit: one.unit, span: one.span.clone() }); }
     copy
 }
 

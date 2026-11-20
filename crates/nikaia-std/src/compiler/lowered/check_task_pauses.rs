@@ -10,7 +10,7 @@ impl CheckState {
         let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         self.walk_the_body(world, host, body, &mut pauses, &mut named);
         let mut places: Vec<(String, i64)> = vec![];
-        for each in bound.iter() { places.push((nikaia_std::block::Text::from(each.0.to_string()), each.2)); }
+        places.reserve(bound.iter().size_hint().0); for each in bound.iter() { places.push((nikaia_std::block::Text::from(each.0.to_string()), each.2)); }
         let held = held_across_a_pause(&places, &pauses, &named);
         let at = span.start as i64;
         for name in held.iter() { self.facts.held_across_a_pause.insert((at, nikaia_std::block::Text::from(name.to_string()))); }

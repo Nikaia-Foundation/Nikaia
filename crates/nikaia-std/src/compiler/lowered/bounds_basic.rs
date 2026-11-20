@@ -23,7 +23,7 @@ pub(crate) fn without(over: &[CountedLoop], name: &str) -> Vec<CountedLoop> {
 
 pub(crate) fn copied(over: &[CountedLoop]) -> Vec<CountedLoop> {
     let mut kept: Vec<CountedLoop> = vec![];
-    for o in over.iter() { kept.push(CountedLoop { binding: nikaia_std::block::Text::from(o.binding.to_string()), list: nikaia_std::block::Text::from(o.list.to_string()) }); }
+    kept.reserve(over.iter().size_hint().0); for o in over.iter() { kept.push(CountedLoop { binding: nikaia_std::block::Text::from(o.binding.to_string()), list: nikaia_std::block::Text::from(o.list.to_string()) }); }
     kept
 }
 
