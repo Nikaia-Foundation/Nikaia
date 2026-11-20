@@ -1999,7 +1999,9 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec<Expr> = vec![];
         raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
-        let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard: String::from("") };
+        let mut guard = String::new();
+        if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
+        let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
@@ -2200,6 +2202,22 @@ pub(crate) fn raw_sink_joined(arg: &Expr) -> bool {
     match arg {
         Expr::LitInterpolated { .. } => true,
         Expr::Binary { op, .. } => *op == BinaryOp::Add,
+        _ => false,
+    }
+}
+
+pub(crate) fn raw_sink_clean_lead(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    match arg {
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Text(text) => { if !text.is_empty() { return true; } },
+                    FPart::Hole { expr, .. } => { return raw_sink_clean_lead(expr, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(expr) && !raw_sink_outside(expr, scope, words, library, state, &mut &mut *holes_of); },
+                }
+            }
+            false
+        },
+        Expr::Binary { op, lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); *op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, &mut &mut *holes_of) || !raw_sink_joined(lhs) && !raw_sink_outside(lhs, scope, words, library, state, &mut &mut *holes_of)) },
         _ => false,
     }
 }

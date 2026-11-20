@@ -2698,7 +2698,14 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec[Expr] = []
         raw_sink_parts(args[0], holes_of, parts)
-        let sink = ParamSink { index: -1, kind: "program", sink: "the program `process::run` runs", operation: "", root_part: false, guard: "" }
+        // D14: a guarded name joined after a clean part names a file inside
+        // a directory the program chose; a whole name, or one the text
+        // starts with, is looked up on `PATH` or relative to where it runs.
+        let mut guard = String()
+        if raw_sink_clean_lead(args[0], scope, words, library, walk.state, holes_of) {
+            guard.push_str("path")
+        }
+        let sink = ParamSink { index: -1, kind: "program", sink: "the program `process::run` runs", operation: "", root_part: false, guard: guard }
         for part in parts {
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
@@ -3008,6 +3015,31 @@ fn raw_sink_joined(arg: ref Expr) -> bool {
     return match arg {
         Expr::LitInterpolated { .. } => true,
         Expr::Binary { op, .. } => op == BinaryOp::Add,
+        else => false,
+    }
+}
+
+/// Whether a joined text starts with a part that is not outside, a literal
+/// piece or a clean value (ADR-raw-sinks-1 D14, the program of
+/// `process::run`): `f"/r/{key}/x"` does, `f"{key}/x"` and `key` do not.
+fn raw_sink_clean_lead(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    return match arg {
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Text(text) => {
+                        if !text.is_empty() {
+                            return true
+                        }
+                    },
+                    FPart::Hole { expr, .. } => {
+                        return raw_sink_clean_lead(expr, scope, words, library, state, holes_of) || (!raw_sink_joined(expr) && !raw_sink_outside(expr, scope, words, library, state, holes_of))
+                    },
+                }
+            }
+            false
+        },
+        Expr::Binary { op, lhs, .. } => op == BinaryOp::Add && (raw_sink_clean_lead(lhs, scope, words, library, state, holes_of) || (!raw_sink_joined(lhs) && !raw_sink_outside(lhs, scope, words, library, state, holes_of))),
         else => false,
     }
 }
