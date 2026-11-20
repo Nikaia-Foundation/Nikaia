@@ -6135,6 +6135,14 @@ sync = true
 touches = []
 signature = "() -> i64"
 
+# Let the other tasks run: the calling task pauses once and resumes after the
+# tasks already ready (Part II 11.1). A long loop that never waits calls it to
+# share its thread.
+[fn."task::yield_now"]
+pub = true
+panics = false
+signature = "()"
+
 # **A scope's tasks borrow** (Part II 12.7): the scope waits for every task
 # started in it, so a task reads the function's values without taking them.
 # What `task::scope` hands its function, to start tasks with.

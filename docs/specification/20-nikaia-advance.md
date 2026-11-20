@@ -811,6 +811,8 @@ The syntax is identical at both values of the option. A function definition carr
 
 User code is written in direct style: nothing marks where it pauses. The compiler places the suspension points. `await` is not a word of the language, and `async` never marks a function: it starts a task (Part I 8.1.2).
 
+**`task::yield_now()`** is the one pause a program writes: the calling task pauses once and resumes after the tasks already ready to run, so a long loop that never waits lets the others run.
+
 ### 11.2. Parallelism via `async`
 Calling a function runs it now. A task that runs concurrently or in parallel is started with `async` (Part I 8.1.2). This section is about the free task, `async(detached)` (Part I 8.2), which may outlive the function that starts it; a child task borrows and is waited for by its group, so the crossing rules below ask only what it hands back (Part III C.5).
 

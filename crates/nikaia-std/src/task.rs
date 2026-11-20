@@ -349,6 +349,36 @@ pub fn cores() -> i64 {
     i64::try_from(crate::rt::user_cores()).unwrap_or(i64::MAX)
 }
 
+/// **Let the other tasks run** (`task::yield_now()`, Part II 11.1, #2316): the
+/// task wakes itself from inside its own poll and answers pending once, so the
+/// worker puts it back behind whatever else is ready. The wake arrives while
+/// the task is `RUNNING`, which is the case `rt::pool`'s four states exist for:
+/// a wake lost there leaves the task idle for ever.
+pub async fn yield_now() {
+    YieldNow { yielded: false }.await
+}
+
+/// The future behind [`yield_now`]: pending once, woken by itself.
+struct YieldNow {
+    yielded: bool,
+}
+
+impl std::future::Future for YieldNow {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<()> {
+        if self.yielded {
+            return std::task::Poll::Ready(());
+        }
+        self.yielded = true;
+        context.waker().wake_by_ref();
+        std::task::Poll::Pending
+    }
+}
+
 /// **Whether the code running on this thread is a task's** rather than
 /// `main`'s ([ADR-326](../../../docs/specification/adr/adr-326.md) D4): a panic
 /// there ends the task, and the program goes on.

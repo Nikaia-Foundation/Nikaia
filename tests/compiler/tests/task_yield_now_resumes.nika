@@ -1,0 +1,23 @@
+// `task::yield_now()` pauses the calling task once and resumes it (Part II
+// 11.1, #2316): the task wakes itself from inside its own poll, while it is
+// running, and the worker must put it back. A lost wake leaves the task idle
+// for ever and the program hangs, which the test's time limit fails. Moved
+// from the `nikaia-std` unit test `a_wake_during_a_poll_is_not_lost`, which
+// built that wake with a hand-written future.
+use std::task
+
+fn turns(name: i64) -> i64 {
+	let mut done = 0
+	while done < 3 {
+		task::yield_now()
+		done = done + 1
+	}
+	return name * 10 + done
+}
+
+fn main() throws {
+	let first = async(handle) fn { turns(1) }
+	let second = async(handle) fn { turns(2) }
+	let mine = turns(3)
+	println(f"joined: {first.join()} {second.join()} {mine}")
+}

@@ -443,47 +443,12 @@ impl Pool {
     }
 }
 
-// Kept as Rust (#2304): no program can observe what these two check. A
-// wake from inside a task's own poll needs a hand-written future, which
-// Nikaia has no form for; the idle pool's quiet is read from `rang`, which
-// only the test build has. Their move waits for #2088.
+// Kept as Rust (#2304): the idle pool's quiet is read from `rang`, which
+// only the test build has. A wake from inside a task's own poll is
+// `tests/compiler/tests/task_yield_now_resumes.nika` (#2316).
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// **A wake that arrives while the task is being polled is not lost.**
-    ///
-    /// This is what the four states are for. The future wakes *itself* from
-    /// inside its own poll, so the waker sees `RUNNING` and declines to queue;
-    /// what has to happen then is that the worker finishing the poll puts it
-    /// back. If it did not, the task would sit idle for ever and this would
-    /// hang rather than fail.
-    #[test]
-    fn a_wake_during_a_poll_is_not_lost() {
-        let pool = Pool::start(1);
-        let rounds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let mine = rounds.clone();
-        pool.start_task(async move {
-            std::future::poll_fn(move |context| {
-                let seen = mine.fetch_add(1, Ordering::AcqRel);
-                if seen >= 2 {
-                    return std::task::Poll::Ready(());
-                }
-                // Woken from inside the poll: the state is `RUNNING`, so the
-                // waker records it rather than queueing.
-                context.waker().wake_by_ref();
-                std::task::Poll::Pending
-            })
-            .await
-        });
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while pool.live() > 0 && std::time::Instant::now() < until {
-            std::thread::yield_now();
-        }
-        assert_eq!(pool.live(), 0, "the task finished rather than sitting idle");
-        assert!(rounds.load(Ordering::Acquire) >= 3, "it was polled again");
-        pool.close();
-    }
 
     /// **An idle pool stays quiet** (#693): with no task and no I/O, a turn
     /// that waited out its slice wakes nobody. Before, every turn rearmed and
