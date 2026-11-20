@@ -1414,6 +1414,8 @@ nothing else.
 | 2026-11-20 | b80b41 | check | 61 | 6.8 | 0 | - | |
 | 2026-11-20 | f4f3c7 | check | 46 | 2.4 | 0 | - | |
 | 2026-11-20 | cd73b5 | check | 9 | 0.3 | 0 | - | |
+| 2026-11-20 | 57d04c | check | 15 | 0.5 | 0 | - | |
+| 2026-11-20 | 2ff491 | check | 34 | 1.7 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
