@@ -1,7 +1,7 @@
 //! **`from` is an ordinary name** —
 //! [ADR-310](../../../docs/specification/adr/adr-310.md) D12 and D13.
 //!
-//! It was reserved for `dsl X from e`, a form [ADR-296](../../../docs/specification/adr/adr-296.md)
+//! It was reserved for `dsl X from e`, a form [ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D6
 //! removed. What a reservation buys is one sentence — the one a reader who
 //! writes the word gets — and the sentence for a removed form is a `fail` in
 //! the grammar, which needs the **token** and not the reservation. The two are

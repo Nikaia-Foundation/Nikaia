@@ -270,7 +270,7 @@ for I/O ([Spec Part II](docs/specification/20-nikaia-advance.md)).
 the same syntax, and an embedded language such as SQL, JavaScript or x86 assembly gets its own
 syntax in place of string interpolation. A grammar rule marked `@frame` can be folded in
 parallel with `par_fold`, and the compiler checks that the input can be cut at its boundary.
-Parsing benchmarks are therefore a main target ([ADR-296](docs/specification/adr/adr-296.md)).
+Parsing benchmarks are therefore a main target ([ADR-grammar-syntax-v1](docs/specification/adr/adr-grammar-syntax-v1.md)).
 
 #### Where data came from
 

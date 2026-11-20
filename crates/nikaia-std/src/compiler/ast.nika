@@ -1599,7 +1599,7 @@ impl FnParams {
 }
 
 /// What stands after the `;` in a declaration: options, or the typed spread of
-/// [ADR-296](../../../docs/specification/adr/adr-296.md) D5.
+/// [ADR-grammar-build-time-v1](../../../../docs/specification/adr/adr-grammar-build-time-v1.md) D12.
 ///
 /// Exclusive on purpose. An option has a default and a DSL parameter does not -
 /// it is required, and what makes it configuration is that it is named rather
