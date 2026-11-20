@@ -1,5 +1,5 @@
 // A `@stream` entry whose items come from `emit` in the rules it reaches
-// (ADR-grammar-2 D7, amended 2026-11-18, #2061): the walk sees them in the
+// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061): the walk sees them in the
 // order the parse emits them, one at a time, and a `break` ends the parse
 // there, so what follows is never read.
 

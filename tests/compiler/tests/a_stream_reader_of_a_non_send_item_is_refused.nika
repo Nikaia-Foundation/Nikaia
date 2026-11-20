@@ -1,5 +1,5 @@
 // A Rust user's reader of a `@stream` entry parses on a thread of its own and
-// sends each item over (ADR-grammar-2 D7, amended 2026-11-08, #1468): an item
+// sends each item over (ADR-grammar-typed-read-v1 D7, amended 2026-11-08, #1468): an item
 // type that is not `Send` is `NK1345` on the root of the feature that reaches
 // the entry, before rustc runs. A `SharedMut` at one thread is a count around
 // a cell; first the entry holds it in a field, then through a type of its own

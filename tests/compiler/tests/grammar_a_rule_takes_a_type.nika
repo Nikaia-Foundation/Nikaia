@@ -1,4 +1,4 @@
-// ADR-grammar-2 D1, Part II 10.8: a rule and an entry take types. One entry
+// ADR-grammar-typed-read-v1 D1, Part II 10.8: a rule and an entry take types. One entry
 // read with two types: each list of types gets its own copy of the entry and
 // of the rule it hands the type to, and two calls with `i64` share one.
 grammar Num {

@@ -6,20 +6,20 @@
 so that it is a parser specialised for `T` built from the package's grammar,
 rather than a library function that walks `T::fields` and needs a way to build
 a struct from field values that the language does not have (#604, #859)
-**Supersedes / Related:** [ADR-344](adr-344.md) D3 (`read[T]` as a function
+**Supersedes / Related:** [ADR-344](../../specification/adr/adr-344.md) D3 (`read[T]` as a function
 whose decoder is written while building: the call stays, the decoder becomes a
 grammar), D6a (`parse`/`Value`: stays, as a second entry), §5 ("a typed read
-needs a type, not a grammar": reversed); [ADR-330](adr-330.md) D1-D4 (a type as
+needs a type, not a grammar": reversed); [ADR-330](../../specification/adr/adr-330.md) D1-D4 (a type as
 a parameter, `T::kind`, `match` on a kind), D7 (a grammar names no type of the
 program: its reason amended, the rule holds), D9 (`f[T]()` warned with
-`NK1233`); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule takes values; this adds
-types); [ADR-specialization-1](adr-specialization-1.md) D1, D5, D7 (a copy per
+`NK1233`); [ADR-grammar-syntax-v1](../../specification/adr/adr-grammar-syntax-v1.md) D12 (a rule takes values; this adds
+types); [ADR-specialization-1](../../specification/adr/adr-specialization-1.md) D1, D5, D7 (a copy per
 build-time value, the build's budget, a result type from a `comptime`
-parameter); [ADR-299](adr-299.md) D15-D18 (a row is the struct the block
-names, columns matched by name); [ADR-331](adr-331.md) D5, D6 (field defaults,
-attributes read as members); [ADR-304](adr-304.md) D6 (a generic original is
-not emitted); [ADR-grammar-input-v1](adr-grammar-input-v1.md) (an entry reads `String` or `Bytes`);
-[ADR-298](adr-298.md) (no macros)
+parameter); [ADR-299](../../specification/adr/adr-299.md) D15-D18 (a row is the struct the block
+names, columns matched by name); [ADR-331](../../specification/adr/adr-331.md) D5, D6 (field defaults,
+attributes read as members); [ADR-304](../../specification/adr/adr-304.md) D6 (a generic original is
+not emitted); [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) (an entry reads `String` or `Bytes`);
+[ADR-298](../../specification/adr/adr-298.md) (no macros)
 
 ## 1. Question
 

@@ -233,7 +233,7 @@ pub struct EmitWalk {
     pub grammar_values: collections::BTreeMap[String, GrammarRule],
     /// Each `members[S]` of the grammar being written, in the order its
     /// call `__nikaia_members_N` was written: its rules follow the
-    /// grammar's own (ADR-grammar-2 D3).
+    /// grammar's own (ADR-grammar-typed-read-v1 D3).
     pub grammar_members: Vec[Spanned[Pattern]],
     /// The grammar being written is the copy over bytes.
     pub grammar_bytes: bool,
@@ -314,7 +314,7 @@ pub struct EmitWalk {
     /// clone it again; `-1` for none.
     pub uncopied: i64,
     /// **The type arguments of a call reached by a path** (ADR-330 D9,
-    /// ADR-grammar-2 D11), `::<T>`, written after the callee's name by the
+    /// ADR-grammar-typed-read-v1 D11), `::<T>`, written after the callee's name by the
     /// call being written; `""` for none.
     pub path_types: String,
     /// **The groups of `async e` open where the walk is** (ADR-async-5 D9,

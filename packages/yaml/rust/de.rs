@@ -465,8 +465,8 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
 }
 
 /// A scalar event: its text decoded, borrowed where the input holds it as
-/// it reads. The event owns its text (ADR-grammar-2 D7, as amended
-/// 2026-11-08), so the scalar as written is borrowed from its span of the
+/// it reads. The event owns its text (ADR-grammar-typed-read-v1 D7), so
+/// the scalar as written is borrowed from its span of the
 /// input, where that span reads as the event's text.
 fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
     let (style, literal) = match event.style {

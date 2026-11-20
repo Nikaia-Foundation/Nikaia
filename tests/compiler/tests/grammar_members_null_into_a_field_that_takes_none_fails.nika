@@ -1,5 +1,5 @@
 // A `null:` member goes into a `T?`; into another field it takes the
-// default, else the parse fails, naming the field (ADR-grammar-2 D5).
+// default, else the parse fails, naming the field (ADR-grammar-typed-read-v1 D5).
 struct Point { x: i64, y: i64 = 0, label: String?, }
 grammar J {
 	rule WS = "" -> { }

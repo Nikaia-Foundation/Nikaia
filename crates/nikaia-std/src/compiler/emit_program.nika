@@ -80,7 +80,7 @@ impl EmitState {
     }
 
     /// **The copies of a function that takes a reflected field** (Part II
-    /// 10.3, ADR-grammar-2 D4): one per field the checker found it called
+    /// 10.3, ADR-grammar-typed-read-v1 D4): one per field the checker found it called
     /// with, its parameter at `slot` bound to that field as a turn's binding is.
     fn emit_program_field_copies[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, item: ref Spanned[Item], slot: i64) sync throws {
         let name: String = match item.node {

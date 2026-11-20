@@ -1,4 +1,4 @@
-// A function takes a reflected field (Part II 10.3, ADR-grammar-2 D4): each
+// A function takes a reflected field (Part II 10.3, ADR-grammar-typed-read-v1 D4): each
 // call in an unrolled turn goes to the copy made for that field, so two
 // copies differ by attribute and by type, and the turn's field stays readable
 // after it is handed over.
