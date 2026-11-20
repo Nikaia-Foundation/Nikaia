@@ -1,5 +1,5 @@
 // An element of a list a call handed back, a list of views of the argument
-// (ADR-views-3 D16), handed back: the element is a view of that argument,
+// (ADR-views-v4 D16), handed back: the element is a view of that argument,
 // which the caller still uses afterwards (#1481).
 fn words(t: String) -> Vec[String] {
 	t.split(" ").map(fn(w) { w }).collect()

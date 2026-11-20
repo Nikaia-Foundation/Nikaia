@@ -1,5 +1,5 @@
 // A trait method whose result says `from` lowers with one named lifetime
-// shared by the parameters it names and the result (ADR-views-3 D2, D8, D14,
+// shared by the parameters it names and the result (ADR-views-v4 D2, D8, D14,
 // #1230): a plain `a: String` is lent as `ref String` is, a result with `from`
 // is a view with or without a written `ref`, and `from a | b` is one lifetime
 // over both, whatever the receiver.

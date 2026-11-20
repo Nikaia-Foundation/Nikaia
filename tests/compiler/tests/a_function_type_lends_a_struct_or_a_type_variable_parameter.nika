@@ -1,5 +1,5 @@
 // A plain parameter of a function type is lent whatever its type (Part I
-// §C, ADR-views-3 D2, #1504): a struct, a type variable bound to one or to a
+// §C, ADR-views-v4 D2, #1504): a struct, a type variable bound to one or to a
 // number, a payloadless enum and `Bytes` are each read twice. A lambda handed
 // to a generic function reads what the arguments before it bound, and a
 // named function that takes a number by value is handed a copy.

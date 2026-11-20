@@ -1,5 +1,5 @@
 // A view a `std` method hands back is followed as one of the program's own
-// is (ADR-views-3 D9, #1537): `s.trim()` views `s`, so the literal that takes
+// is (ADR-views-v4 D9, #1537): `s.trim()` views `s`, so the literal that takes
 // `s` while `t` is still read lends it, and rustc never sees a move out of a
 // borrowed `s`. An element of a `std` method's result (`next`, an index) and
 // either side of a `??` view what the result views.

@@ -1,4 +1,4 @@
-// ADR-views-3 D7, D8, D11 (#1257): a method that hands back a field or a
+// ADR-views-v4 D7, D8, D11 (#1257): a method that hands back a field or a
 // piece of its plain `self` hands back a view of the subject, of any type,
 // with no `from` written; an `Array[T]` result needs no length there.
 struct Bag {

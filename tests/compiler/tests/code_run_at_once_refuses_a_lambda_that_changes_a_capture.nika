@@ -1,5 +1,5 @@
 // A body that runs its code parameter from tasks at once refuses a lambda
-// that changes what it captures, naming the binding (ADR-views-3 D17, #1553).
+// that changes what it captures, naming the binding (ADR-views-v4 D17, #1553).
 fn each(xs: Vec[i64], f: fn(i64) sync) { xs.par_iter().for_each(f) }
 
 fn main() throws {

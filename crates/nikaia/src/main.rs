@@ -332,7 +332,7 @@ pub enum Command {
     },
     /// Rewrite `.nika` files and the Nikaia blocks of `.md` files to a new
     /// edition of the language: `views-3` drops `ref` outside `extern "C"`
-    /// and writes `keep` where the body keeps a parameter (ADR-views-3 D4);
+    /// and writes `keep` where the body keeps a parameter (ADR-views-v4 D4);
     /// `print-throws` writes `throws` on every function that can fail because
     /// it prints (ADR-392).
     Migrate {

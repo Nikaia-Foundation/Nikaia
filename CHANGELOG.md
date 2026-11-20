@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1491] — 2026-11-20
+
+**The decisions on views live in one record, ADR-views-v4 (#2273)**
+- The decisions on views (keep and lent parameters, no ref, a result's source with from, a let mut view that gives back what it takes, for mut) live in one record, ADR-views-v4; ADR-views-1, -2 and -3 archived.
+
 ## [0.0.1490] — 2026-11-20
 
 **Builders' changes (#2208, #2297, #2310, #2316, #2320, #2346, #2351)**

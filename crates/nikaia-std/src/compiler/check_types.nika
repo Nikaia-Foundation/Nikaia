@@ -68,7 +68,7 @@ fn unviewed_type(ty: ref Ty) -> Ty {
     }
 }
 
-/// **A run handed to a lent or `mut` `Array[T]`** (ADR-views-3 D11, #1209):
+/// **A run handed to a lent or `mut` `Array[T]`** (ADR-views-v4 D11, #1209):
 /// the parameter is an array with no length, and the argument a list, an
 /// array or a part of either, whose elements fit.
 fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
@@ -89,7 +89,7 @@ fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
     }
 }
 
-/// **A view of a run handed to a lent `Array[T]`** (ADR-views-3 D8, D11,
+/// **A view of a run handed to a lent `Array[T]`** (ADR-views-v4 D8, D11,
 /// #1254): a call's `Array[T]` result that is a view of its parameter is
 /// typed as the `ref Array[T]` it lowers to, and is a view already, as a
 /// part `v[a..b]` is. Only a lent parameter takes it: a `mut` one needs a
@@ -300,7 +300,7 @@ fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if found_text == "ref String" && want_text == "String" {
         return "Write `.clone()` to turn this view into text of its own."
     }
-    // **No `ref` to write** (ADR-views-3 D4, #1403): a view is said by
+    // **No `ref` to write** (ADR-views-v4 D4, #1403): a view is said by
     // what it is handed, and the help names that, never a `ref` the next
     // check calls redundant (`NK1261`) or needless (`NK1137`).
     if found_text == "String" && want_text == "ref String" {
@@ -317,7 +317,7 @@ fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if a_number_name(found_text) && a_number_name(want_text) {
         return f"Convert it with `as {want_text}`. A number goes into another type on its own only where every value it can hold fits."
     }
-    // **Two types a message prints alike** (ADR-views-3 D4, #1528): they
+    // **Two types a message prints alike** (ADR-views-v4 D4, #1528): they
     // differ only in which parts are views, which no declaration writes, so
     // the help names what the value has to be.
     if found.shown() == want.shown() && !found.is_a_view() && !want.is_a_view() {

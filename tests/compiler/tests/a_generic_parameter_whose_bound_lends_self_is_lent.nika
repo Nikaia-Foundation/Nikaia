@@ -1,4 +1,4 @@
-// A plain parameter of a type variable is lent (ADR-views-3 D2, D7, #1342):
+// A plain parameter of a type variable is lent (ADR-views-v4 D2, D7, #1342):
 // `twice` only calls a bound's method that takes plain `self`, so the
 // caller's `a` is usable after each call, handed on through `outer` too.
 // A text literal lent beside a returned literal or text view keeps working.

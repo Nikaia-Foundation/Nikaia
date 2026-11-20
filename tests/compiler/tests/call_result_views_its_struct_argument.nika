@@ -2,7 +2,7 @@
 // points into that argument, not into a `ref` argument beside it (#1094):
 // storing it into a field of a struct literal keeps no view of `input`.
 // Row a: a call stored into a field (copied: handing a parameter back alone
-// is a view of it, ADR-views-3 D12); b: the call recursive; c: through a
+// is a view of it, ADR-views-v4 D12); b: the call recursive; c: through a
 // `let`; d: pushed without a struct literal.
 
 struct N { raw: String, kids: Vec[E] }

@@ -673,7 +673,7 @@ fn check_walks_reads[H: CheckHost](world: ref CheckWorld, host: ref H, expr: ref
 }
 
 impl CheckState {
-    /// **A parameter of code named in this body** (ADR-views-3 D17): a lambda
+    /// **A parameter of code named in this body** (ADR-views-v4 D17): a lambda
     /// that names it runs it, and a `par_iter()` lambda or an `async` task that
     /// does runs it from tasks at once.
     fn a_code_parameter_named(ref mut self, name: ref String) sync {
@@ -684,7 +684,7 @@ impl CheckState {
         }
     }
 
-    /// **Which parameters of code run from tasks at once** (ADR-views-3
+    /// **Which parameters of code run from tasks at once** (ADR-views-v4
     /// D17, Part I 5.4 C), once the whole file is walked; the body alone
     /// decides it, whoever calls. One a `par_iter()` lambda or a task names,
     /// one handed on to a callee's such parameter (the callee's ledger entry
@@ -747,7 +747,7 @@ impl CheckState {
 }
 
 /// **A code parameter of a trait method and of each impl's method that
-/// answers it, chosen alike** (ADR-views-3 D17): one marked in an impl marks
+/// answers it, chosen alike** (ADR-views-v4 D17): one marked in an impl marks
 /// it in the trait, and one marked in the trait marks it in every impl.
 /// Whether any was added.
 fn check_walks_share_in_traits(groups: ref collections::BTreeMap[String, String], mut marked: collections::BTreeSet[String]) -> bool sync {

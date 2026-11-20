@@ -65,7 +65,7 @@ fn where_a_result_points_is_written_in_the_result() {
 }
 
 /// **A result holding views writes each view's sources by its path**
-/// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D8, D10), and reads
+/// ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D8, D10), and reads
 /// back to the same contract; a view built from another call's views keeps
 /// its own path's sources.
 #[test]
@@ -97,7 +97,7 @@ fn each_view_of_a_result_is_written_by_its_path() {
 
 /// **A type variable is declared in brackets before the parameters**, as
 /// `fn hand[T](x: T) -> T` declares it, and a bound stays where it stood. A
-/// plain `x: T` is lent (ADR-views-3 D12), which the signature says as `ref`.
+/// plain `x: T` is lent (ADR-views-v4 D12), which the signature says as `ref`.
 #[test]
 fn a_type_variable_is_declared_in_brackets() {
     let (_, text) = written(

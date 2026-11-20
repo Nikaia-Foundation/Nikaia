@@ -151,7 +151,7 @@ pub fn at<I: At>(index: I) -> I::Out {
     index.at()
 }
 
-/// **A part as a place** (ADR-views-3 D11, #1209): `v[a..<b].sort()`. The
+/// **A part as a place** (ADR-views-v4 D11, #1209): `v[a..<b].sort()`. The
 /// output type is written out, so a method on the part resolves while the
 /// bounds' integer type is still open (`let a = 3` in Rust is `{integer}`
 /// until the end of the function); [`at`]'s `I::Out` is not known then.
@@ -949,7 +949,7 @@ impl<V, const N: usize> Set<usize, V> for [V; N] {
 }
 
 /// A changeable run, `mut xs: Array[T]` lowered to `&mut [T]`, is written in
-/// place too ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md)
+/// place too ([ADR-views-v4](../../../docs/specification/adr/adr-views-v4.md)
 /// D11, #1209).
 impl<V> Set<usize, V> for [V] {
     #[track_caller]

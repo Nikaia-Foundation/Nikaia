@@ -1,5 +1,5 @@
 // **A function field called with an owned `String` hands back owned text**
-// (ADR-views-3 D2, D14, #1356): `h.f(g)` with `g: String` and
+// (ADR-views-v4 D2, D14, #1356): `h.f(g)` with `g: String` and
 // `f: fn(s: String) -> String` was a rustc E0308 ("consider borrowing").
 struct Holder {
     f: fn(s: String) -> String,

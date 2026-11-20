@@ -1,5 +1,5 @@
 // A change to text while a view a method of it handed back is still used is
-// refused (NK2305, ADR-views-3 D9, #1478): `s.trim()` points into `s`, and so
+// refused (NK2305, ADR-views-v4 D9, #1478): `s.trim()` points into `s`, and so
 // does a struct literal given it, so the change cannot be emitted as Rust that
 // rustc then refuses.
 

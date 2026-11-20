@@ -1,5 +1,5 @@
 // A plain parameter of a function type is lent, for any type (Part I §C,
-// ADR-views-3 D2, #1466): `read` reads the same list twice. One written
+// ADR-views-v4 D2, #1466): `read` reads the same list twice. One written
 // `keep` keeps: a function that keeps fits it, and so does one that lends.
 
 struct Held {

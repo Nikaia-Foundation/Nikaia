@@ -1,5 +1,5 @@
 // `ref` on a rule's value is read as on a function's parameter (ADR-grammar-actions-v1
-// D7, ADR-views-3 D4, #1560): a word is copied at a read, so `ref i64` says
+// D7, ADR-views-v4 D4, #1560): a word is copied at a read, so `ref i64` says
 // nothing and is refused.
 
 grammar G {

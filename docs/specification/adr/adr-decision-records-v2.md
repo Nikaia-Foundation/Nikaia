@@ -84,7 +84,7 @@ from several places; the new version states it once).
 
 ### D4 — The records of the earlier schemes are consolidated when they are changed.
 
-A numbered record (`ADR-338`) and a record of the scheme before (`ADR-views-3`)
+A numbered record (`ADR-338`) and a record of the scheme before (`ADR-views-v4`)
 keep their names while nothing changes them. A change to a decision in one of
 them is made by consolidating: the topic's next `-v` record takes the decisions
 of every earlier record on that topic, and those records move to the history

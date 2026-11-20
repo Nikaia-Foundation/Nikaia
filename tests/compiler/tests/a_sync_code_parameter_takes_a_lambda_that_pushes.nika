@@ -1,4 +1,4 @@
-// A list pushed to through a `fn(i64) sync` parameter (ADR-views-3 D17,
+// A list pushed to through a `fn(i64) sync` parameter (ADR-views-v4 D17,
 // #1553).
 fn each(xs: Vec[i64], f: fn(i64) sync) { for x in xs { f(x) } }
 

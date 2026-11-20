@@ -9,9 +9,9 @@ pattern, and with it map values written in place, refused now, possible later (s
 or an array in place without an index loop (#951)
 **Supersedes / Related:**
 [ADR-views-1](adr-views-1.md) D1-D4 (a `let mut` view of a place takes and gives back; applied here to each turn);
-[ADR-356](adr-356.md) (a `for` head is a `let`'s pattern);
-[ADR-282](adr-282.md) D7 (a copy is written or refused, never inserted);
-[ADR-118](adr-118.md) (a binding is immutable unless it says `mut`);
+[ADR-356](../../specification/adr/adr-356.md) (a `for` head is a `let`'s pattern);
+[ADR-282](../../specification/adr/adr-282.md) D7 (a copy is written or refused, never inserted);
+[ADR-118](../../specification/adr/adr-118.md) (a binding is immutable unless it says `mut`);
 Part I 3.3, 6.5; #816, #959 (`let mut` of an entry or an element is a view); #960 (`NK2305` in a `for`); #962 (`NK2305` while a `let mut` view lives)
 
 ## 1. Question

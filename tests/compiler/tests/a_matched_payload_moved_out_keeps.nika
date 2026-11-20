@@ -1,5 +1,5 @@
 // An arm that hands on the payload it binds moves it out of the parameter,
-// so the parameter is kept (ADR-views-3 D1): the caller cannot use its value
+// so the parameter is kept (ADR-views-v4 D1): the caller cannot use its value
 // again after the call.
 
 enum Json {

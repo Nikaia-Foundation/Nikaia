@@ -364,7 +364,7 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
     }
     // **`[T: Clone]` gives `.clone()` on a `T`** (Part I 4.7, #1245): the
     // language's trait, so no ledger describes it; the copy is a `T`, of a
-    // lent `T` too (ADR-views-3 D2, #1342).
+    // lent `T` too (ADR-views-v4 D2, #1342).
     if entry == "clone" && args.len() == 0 && check_core_call_on_cloned_parameter(state, world, on) {
         return match on {
             Ty::Named { name, args, .. } => Ty::Named { name: name.clone(), args: args.clone(), view: false },
@@ -875,7 +875,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         i += 1
         state.a_map_read_kept(world, have, want, given, span)
         // **An element or a field read off a place, handed to a `ref T?`
-        // slot, is lent and goes inside the option** (ADR-views-3 D5, #655):
+        // slot, is lent and goes inside the option** (ADR-views-v4 D5, #655):
         // `v.push(given[1])` on a `Vec[ref E?]`.
         if check_overflow_a_nullable(want) && !check_overflow_a_nullable(have) && check_core_stmt_element_view(state, world, given, have, want) == 1 {
             state.facts.lent_reads.insert(node_key(given))
@@ -889,7 +889,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         // **A view of a value that copies, where the value is wanted**
         // (ADR-387 D1): `kept.push(e)` copies out of `e`. **Not where an own
-        // method lends the position** (ADR-views-3 D1): it takes the view as
+        // method lends the position** (ADR-views-v4 D1): it takes the view as
         // it is, as a free function does.
         let lent_here = own && lends_in_own(contract, i - 1 + offset, [world.library])
         if !lent_here && state.a_view_copied_out(world, have, want, given) {

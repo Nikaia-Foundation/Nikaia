@@ -1,6 +1,6 @@
 // A trait method whose result says `from` and hands back the text parameter
 // it names, whole, lends that parameter in the impl as the trait does
-// (ADR-views-3 D2, D8, #1250): `return a` under `from a` keeps nothing, so
+// (ADR-views-v4 D2, D8, #1250): `return a` under `from a` keeps nothing, so
 // the impl's `a: String` is lowered as the trait's view, with one lifetime.
 trait Pick {
     fn pick(a: String) -> String from a

@@ -1,4 +1,4 @@
-// ADR-views-3 D2: a declared function whose plain text parameter is lent fits
+// ADR-views-v4 D2: a declared function whose plain text parameter is lent fits
 // a struct field of a function type that lends it (#1254).
 struct Tools { measure: fn(s: String) -> i64 sync }
 

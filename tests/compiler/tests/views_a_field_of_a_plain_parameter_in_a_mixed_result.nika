@@ -1,4 +1,4 @@
-// #1341, ADR-views-3 D7, D8, D12: a field of a plain struct parameter that
+// #1341, ADR-views-v4 D7, D8, D12: a field of a plain struct parameter that
 // one arm hands back, beside text of the body's own in another, lends the
 // parameter as `ref` would, so the caller uses it again (was NK2105, "passed
 // to `pick`, which keeps it"). A parameter also handed on whole stays as

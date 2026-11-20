@@ -1,6 +1,6 @@
 // `html::escape` hands back a view of its argument where nothing had to
 // change: the compiler lends that result to a parameter that only reads a
-// text, with no `ref` written at the call (ADR-views-3 D1, D4).
+// text, with no `ref` written at the call (ADR-views-v4 D1, D4).
 
 use std::html
 

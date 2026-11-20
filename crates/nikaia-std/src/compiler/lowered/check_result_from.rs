@@ -75,7 +75,7 @@ pub(crate) fn result_from_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, f
 
 pub(crate) fn result_from_unknown(function: &str, named: &str) -> String { format!("`{}` writes `from {}`, but `{}` is no parameter of `{}`.", function, named, named, function) }
 
-pub(crate) fn result_from_note() -> String { String::from("A result's `from` names the parameters its views point into (ADR-views-3 D8).") }
+pub(crate) fn result_from_note() -> String { String::from("A result's `from` names the parameters its views point into (ADR-views-v4 D8).") }
 
 pub(crate) fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -106,7 +106,7 @@ pub(crate) fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &
         let named = nikaia_std::block::Text::from(names.resolve(source).to_string());
         if !nikaia_std::list::contains(&parameters, &named) {
             let help = if parameters.is_empty() { String::from("Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`.") } else { format!("Name one of `{}`'s parameters after `from`.", function) };
-            return Some(refusal("NK1335", span.clone(), result_from_unknown(&function, &named), vec![result_from_note(), String::from("A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14).")], help));
+            return Some(refusal("NK1335", span.clone(), result_from_unknown(&function, &named), vec![result_from_note(), String::from("A function type names the parameters its `from` reads; the names do not change the type (ADR-views-v4 D14).")], help));
         }
     }
     None
@@ -126,7 +126,7 @@ pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>,
             for source in sources.iter() {
                 if !nikaia_std::list::contains(&named, &source) {
                     let written = nikaia_std::block::Text::from(named.join(" | "));
-                    out.push(check_refusal("NK1335", &item.span, format!("`{}` hands back a view of `{}`'s data, but its result says `from {}`.", key, source, written), vec![format!("A caller reads the signature: it keeps `{}` unchanged while the result is used, and nothing holds `{}` (ADR-views-3 D8).", written, source)], Some(format!("Write `from {} | {}`, or hand back a copy of what comes from `{}` with `.clone()`.", written, source, source))));
+                    out.push(check_refusal("NK1335", &item.span, format!("`{}` hands back a view of `{}`'s data, but its result says `from {}`.", key, source, written), vec![format!("A caller reads the signature: it keeps `{}` unchanged while the result is used, and nothing holds `{}` (ADR-views-v4 D8).", written, source)], Some(format!("Write `from {} | {}`, or hand back a copy of what comes from `{}` with `.clone()`.", written, source, source))));
                     return;
                 }
             }
@@ -152,6 +152,6 @@ pub(crate) fn result_from_of_signature(view: &ParsedView<'_, '_, '_, '_, '_, '_,
     let mut choices: Vec<String> = parameters.iter().map(|name| { format!("`from {}`", name) }).collect::<Vec<_>>();
     if parameters.len() > 1 { choices.push(format!("`from {}`", nikaia_std::block::Text::from(parameters.join(" | ")))); }
     let help = if parameters.is_empty() { String::from("Hand back text of its own: declare the result without `ref`.") } else { format!("Write one of {} after the result type, or declare it without `ref` to hand back text of its own.", nikaia_std::block::Text::from(choices.join(", "))) };
-    out.push(check_refusal("NK1336", &method.span, format!("`{}` hands back a view, but has no body to tell whose data it points into, and no `from`.", function), vec![String::from("Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-3 D8, D14).")], Some(help)));
+    out.push(check_refusal("NK1336", &method.span, format!("`{}` hands back a view, but has no body to tell whose data it points into, and no `from`.", function), vec![String::from("Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-v4 D8, D14).")], Some(help)));
 }
 

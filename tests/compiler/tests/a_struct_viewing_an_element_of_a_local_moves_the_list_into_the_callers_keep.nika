@@ -1,6 +1,6 @@
 // A struct handed back with a field filled from an element of a list the
 // body made: the field is a view and the list moves whole into the caller's
-// keep (ADR-views-3 D9, D10, ADR-283 D23; #1218). No element is copied, so a
+// keep (ADR-views-v4 D9, D10, ADR-283 D23; #1218). No element is copied, so a
 // list of 100000 entries costs one move, and the view is read after the call.
 struct L { n: i64, tag: String }
 struct W { own: L, k: i64 }

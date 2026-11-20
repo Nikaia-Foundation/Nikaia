@@ -1,4 +1,4 @@
-// #1213 step 6, ADR-views-3 D2: `nikaia migrate views-3` reads a package's
+// #1213 step 6, ADR-views-v4 D2: `nikaia migrate views-3` reads a package's
 // `tests/*.nika` as `nikaia test` does, with the package's ledger: a call into
 // the package keeps what the package says, so the tool run over a package
 // writes no `keep` into a test that only reads through the package's call

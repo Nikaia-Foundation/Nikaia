@@ -114,7 +114,7 @@ pub(crate) fn first_sentence(text: &str) -> Vec<String> {
 
 pub(crate) fn the_spelling_ref_replaced_note(found: &str) -> Option<String> {
     if found != "&" { return None; }
-    Some(String::from("Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-3 D4). (`&&` still means *and*.)"))
+    Some(String::from("Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-v4 D4). (`&&` still means *and*.)"))
 }
 
 pub(crate) fn an_effect_on_a_lambda_note(found: &str, before: &str) -> Option<String> {

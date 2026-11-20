@@ -664,7 +664,7 @@ impl EmitState {
         let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(node_key(value))
         let mut mut_word = if mutable && !unmuted { "mut " } else { "" }
         // **A lambda a `let` binds is lent `&mut`** to a parameter of code
-        // run one call at a time (ADR-views-3 D17), so Rust's binding is
+        // run one call at a time (ADR-views-v4 D17), so Rust's binding is
         // changeable; one never lent so is no warning.
         let bound_lambda = names.len() == 1 && shape.len() == 0 && emit_arg_is_closure(value)
         let lambda_muted = bound_lambda && mut_word == ""
@@ -867,7 +867,7 @@ impl EmitState {
             },
             else => {}
         }
-        // **Given up while a view of it is used** (ADR-views-3 D9): the new value is
+        // **Given up while a view of it is used** (ADR-views-v4 D9): the new value is
         // a binding of its own, and the old one lives on to the end of the block.
         let rebound = host.given_up_rebound(at)
         if rebound != null {
@@ -1244,8 +1244,8 @@ impl EmitState {
                 each.push(local)
             }
         }
-        // **`mut` in front of the head marks every name in it** (ADR-views-2
-        // D1, D3): Rust's `for mut x in …` and `for (mut a, mut b) in …`.
+        // **`mut` in front of the head marks every name in it** (ADR-views-v4
+        // D24, D26): Rust's `for mut x in …` and `for (mut a, mut b) in …`.
         // **Over a list or an array held `mut` the element is a view of it**
         // (D2, D7): `iter_mut()`, the binding is the `&mut` itself and every
         // mention of it is dereferenced (`scope.changed`, as a `mut` lambda

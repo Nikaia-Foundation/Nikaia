@@ -1,5 +1,5 @@
 // A `String?` parameter read through `??` inside a loop is lent, not handed
-// over, so each turn reads it again (ADR-279 D5, ADR-views-3 D2; #1458).
+// over, so each turn reads it again (ADR-279 D5, ADR-views-v4 D2; #1458).
 
 fn measure(s: String) -> i64 {
     s.len()

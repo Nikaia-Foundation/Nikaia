@@ -55,7 +55,7 @@ fn a_parameter_that_is_only_read_is_not_kept() {
 }
 
 /// **Handed back by value, it is lent**, whatever its type: the result is a
-/// view of the argument (ADR-views-3 D12, #1498; for text ADR-282 D5, D12;
+/// view of the argument (ADR-views-v4 D12, #1498; for text ADR-282 D5, D12;
 /// #678).
 #[test]
 fn a_parameter_returned_by_value_is_lent() {
@@ -111,7 +111,7 @@ fn a_parameter_put_into_a_struct_is_kept() {
     );
 
     // **A text parameter only moved into a field is not kept**
-    // ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9, #945): the
+    // ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D9, #945): the
     // tiers lend it, the field views the caller's argument, and `returns`
     // records where the result points.
     assert!(
@@ -141,7 +141,7 @@ fn a_parameter_assigned_into_a_place_is_kept() {
 
 /// **And it travels up the call graph**, which is what makes the column an
 /// answer about a *program* rather than about one body: `shout` keeps `text`
-/// only because `label` does. A parameter handed back is lent (ADR-views-3
+/// only because `label` does. A parameter handed back is lent (ADR-views-v4
 /// D12), so it is `store` that keeps here.
 #[test]
 fn keeping_travels_up_the_call_graph() {

@@ -1,5 +1,5 @@
 migrated TMP/a.nika
-TMP/a.nika:4: `either` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-3 D14)
+TMP/a.nika:4: `either` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-v4 D14)
 trait Named {
     fn name(self) -> String from self
     fn first(a: String, n: i64) -> String from a

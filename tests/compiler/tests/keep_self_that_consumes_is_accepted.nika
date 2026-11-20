@@ -1,4 +1,4 @@
-// `keep self` consumes the object and is accepted (ADR-views-3 D2).
+// `keep self` consumes the object and is accepted (ADR-views-v4 D2).
 struct Bag {
 	items: Vec[String],
 }

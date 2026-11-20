@@ -1,5 +1,5 @@
 // A slice result chosen between two lent `Array[T]` parameters is a view of
-// both (ADR-views-3 D8, D11), with no `keep` anywhere in the file.
+// both (ADR-views-v4 D8, D11), with no `keep` anywhere in the file.
 fn longer(a: Array[i64], b: Array[i64]) -> Array[i64] {
     if a.len() > b.len() {
         return a

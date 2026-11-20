@@ -5,17 +5,17 @@
 **Answers:** whether a signature says that a parameter keeps its argument, and
 with which word; how a view is written once that is said; how a result that
 points into a parameter is written (#1213, which absorbed #1211)
-**History:** the records this one replaces are archived in [`docs/history/adr`](../../history/adr/README.md); read them only for how the decision was reached
+**History:** the records this one replaces are archived in [`docs/history/adr`](README.md); read them only for how the decision was reached
 **Supersedes / Related:**
-[ADR-094](adr-094.md) (the caller writes no `&`, inferred `keeps`): D2 and D6
+[ADR-094](../../specification/adr/adr-094.md) (the caller writes no `&`, inferred `keeps`): D2 and D6
 are replaced here, D1, D3-D5 and D7 are restated here;
-[ADR-184](adr-184.md) D1 (`ref X` is a view everywhere): replaced here, except
+[ADR-184](../../specification/adr/adr-184.md) D1 (`ref X` is a view everywhere): replaced here, except
 in `extern "C"`;
-[ADR-358](adr-358.md) D3 (`ref`/`mut` on a whole pattern parameter): `mut`
+[ADR-358](../../specification/adr/adr-358.md) D3 (`ref`/`mut` on a whole pattern parameter): `mut`
 only;
-[ADR-251](adr-251.md) D4 (the ledger's `-> ref(a | b) T`): written
+[ADR-251](../../specification/adr/adr-251.md) D4 (the ledger's `-> ref(a | b) T`): written
 `-> T from a | b`;
-[ADR-283](adr-283.md) D3, D13, D23, D24 (no implicit copy, the walk, the keep):
+[ADR-283](../../specification/adr/adr-283.md) D3, D13, D23, D24 (no implicit copy, the walk, the keep):
 leaned on, unchanged;
 [ADR-views-1](adr-views-1.md), [ADR-views-2](adr-views-2.md): unchanged.
 

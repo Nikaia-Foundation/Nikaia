@@ -1,5 +1,5 @@
 // **A function field is lent the owned `String` it is called with**
-// (ADR-views-3 D2, D14, #1379): the field's type is not `sync`, so it holds
+// (ADR-views-v4 D2, D14, #1379): the field's type is not `sync`, so it holds
 // a named function behind the async wrapper, and `h.f(g)` must hand `&g`
 // below as a call of `len` itself does; `rustc` refused it (NK1343).
 struct H {

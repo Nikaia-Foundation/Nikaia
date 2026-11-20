@@ -1,5 +1,5 @@
 // A `match` over a field of a plain parameter, which the contract lends
-// (ADR-views-3 D1), binds the parts through the reference, as the `ref
+// (ADR-views-v4 D1), binds the parts through the reference, as the `ref
 // Response` it replaces did: `text` handed to `write`, which takes any bytes,
 // is a view of the caller's body, not moved out of it. Before, the lowering
 // matched `response.body` by value and rustc refused the move.
