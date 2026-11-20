@@ -14,7 +14,7 @@ a grammar may write ([#202](https://github.com/Nikaia-Foundation/Nikaia/issues/2
 record now in the history (its last decision went to
 [ADR-grammar-actions-v1](adr-grammar-actions-v1.md)) and the whole of a record now in
 [`docs/history/adr/`](../../history/adr/README.md) (spans, `same_line`, `///`);
-[ADR-296](adr-296.md) D4 (the two ways a hole binds), D18 (the backend is handed
+[ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11 (the two ways a hole binds), D18 (the backend is handed
 the grammar's own strings), D27 (`asset("…")`); [ADR-299](adr-299.md) D20, D21
 (a package's grammar is `package::Grammar`; `main entry rule`);
 [ADR-140](adr-140.md) D3 (a path is `::`); Part I 5.1 (Subject ; Config);
@@ -254,7 +254,7 @@ one.
 
 `unsafe asm`, its register-constraint table and `clobber` are removed.
 Assembly is a library DSL, `dsl x86::Asm { … } eod` ([ADR-299](adr-299.md)
-D20), using [ADR-296](adr-296.md) D4's immediate capture. A core construct that
+D20), using [ADR-grammar-build-time-v1](adr-grammar-build-time-v1.md) D11's immediate capture. A core construct that
 cannot be given meaning on WebAssembly, a stack machine, is a defect in the
 core. `unsafe` stays reserved for FFI.
 

@@ -118,7 +118,7 @@ impl EmitState {
             }
             let listed = nikaia_std::block::Text::from(generics.join(", "));
             let body = nikaia_std::block::Text::from(fields.join("\n"));
-            out.push(&format!("// ADR-296 D5: the parameters of a `dsl … {{ … }} eod` statement, as a type.\n#[derive(Debug, Clone, Copy, PartialEq)]\n#[allow(non_camel_case_types, dead_code)]\npub struct {}<{}> {{\n{}\n}}\n\n", name, listed, body));
+            out.push(&format!("// ADR-grammar-build-time-v1 D12: the parameters of a `dsl … {{ … }} eod` statement, as a type.\n#[derive(Debug, Clone, Copy, PartialEq)]\n#[allow(non_camel_case_types, dead_code)]\npub struct {}<{}> {{\n{}\n}}\n\n", name, listed, body));
         }
     }
     pub(crate) fn emit_program_tether_wrappers(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut) {

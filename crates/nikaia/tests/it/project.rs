@@ -2269,7 +2269,7 @@ fn the_target_info_probe_ignores_what_is_on_standard_input() {
 }
 
 /// **A grammar runs in a project build too**, which it did not
-/// ([ADR-177](../../../docs/specification/adr/adr-177.md), 0.0.125).
+/// ([ADR-grammar-build-time-v1](../../../../docs/specification/adr/adr-grammar-build-time-v1.md), 0.0.125).
 ///
 /// The feature shipped able to lower a loose `.nika` file and unable to build
 /// the project shape anybody would actually write it in. The cause was a
