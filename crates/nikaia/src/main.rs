@@ -304,7 +304,9 @@ pub enum Command {
     ///
     /// The file is read as `nikaia lower` reads it (its project's settings and
     /// dependencies) and the build cache is not used, so every finding is
-    /// reported; no `.rs` and no ledger are written.
+    /// reported; no `.rs` and no ledger are written. A report asked with it
+    /// (`--asserts`, `--bounds`, `--overlaps`, ...) covers every file of the
+    /// package, so one call measures a whole package.
     Check {
         /// The `.nika` file.
         #[arg(value_name = "FILE")]

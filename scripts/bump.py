@@ -25,10 +25,12 @@ Usage:
       reword the commit subject if it names the old version (printed).
       REF defaults to HEAD during a rebase, origin/develop otherwise.
 
-  scripts/bump.py check
+  scripts/bump.py check [--no-badges]
       Exit 1 unless the three version lines agree with each other and with the
       top CHANGELOG heading, the top headings are unique and descending, and
-      the badges are current.
+      the badges are current. `--no-badges` leaves the badges out: the
+      builder's pre-push shows them on their own line and does not fail on
+      them, since they are the driver's (#2414).
 """
 
 import argparse
@@ -283,7 +285,7 @@ def cmd_rebase_fix(a):
         print('then: git rebase --continue')
 
 
-def cmd_check(_):
+def cmd_check(a):
     bad = []
     vers = {p.name: spec_version(p.read_text(encoding='utf-8')) for p in SPEC}
     if len(set(vers.values())) != 1:
@@ -299,9 +301,10 @@ def cmd_check(_):
     for p in SPEC + [CHANGELOG, SELF]:
         if '<<<<<<<' in p.read_text(encoding='utf-8'):
             bad.append(f'conflict markers in {p.relative_to(ROOT)}')
-    r = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'badges.py'), '--check'], capture_output=True, text=True, cwd=ROOT)
-    if r.returncode:
-        bad.append(r.stderr.strip() or r.stdout.strip())
+    if not a.no_badges:
+        r = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'badges.py'), '--check'], capture_output=True, text=True, cwd=ROOT)
+        if r.returncode:
+            bad.append(r.stderr.strip() or r.stdout.strip())
     for b in bad:
         print(b)
     sys.exit(1 if bad else 0)
@@ -318,7 +321,8 @@ def main():
     n.add_argument('--date')
     r = sub.add_parser('rebase-fix')
     r.add_argument('--upstream')
-    sub.add_parser('check')
+    c = sub.add_parser('check')
+    c.add_argument('--no-badges', action='store_true', help='leave the badges out (the driver checks them)')
     a = ap.parse_args()
     {'new': cmd_new, 'rebase-fix': cmd_rebase_fix, 'check': cmd_check}[a.cmd](a)
 

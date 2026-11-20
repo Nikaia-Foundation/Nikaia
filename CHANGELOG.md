@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1507] — 2026-11-20
+
+**A builder's pre-push checks the version lines without the driver's badges (#2414)**
+- A builder's `pre-push.nika` no longer turns `version` red on the driver's stale self-hosted badge: `bump.py check --no-badges` checks the version lines alone.
+
 ## [0.0.1506] — 2026-11-20
 
 **tests: the last test programs leave mktemp and Root::Anywhere for fs::scratch() roots (#2301)**
