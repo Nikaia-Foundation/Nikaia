@@ -598,8 +598,9 @@ Paths: `Partial:`, `autostash`, `MERGE_HEAD`, `sweep`, `two commits`
 
 ### Measuring
 
-Paths: `callgrind`, `measure`, `instructions`, `cost`
+Paths: `callgrind`, `measure`, `instructions`, `cost`, `bench`, `valgrind`
 
+* **A Nikaia program that reads standard input hangs under callgrind, silently, unless it runs with `io-method = "blocking"`** (#1874's `io_uring_enter` wait, `docs/measuring.md`): a game-bench binary counted by hand, outside `benches/game/game.nika`, runs as `NIKAIA_RUNTIME_CONFIG=target/game-bench/io-blocking.toml valgrind --tool=callgrind BIN < target/game-bench/out/NAME.input` (the file `game.nika`'s `nikaia_env` writes; elsewhere a file holding that one line), and with `timeout -s KILL`, since a plain `timeout` does not end the hang. (#2072, #2361)
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. To profile one phase, run it with `NIKAIA_LOWER_TIMES=1`: each phase and ledger pass prints a `lower-std~ NAME ended` line the moment it ends, so `callgrind_control -d` then dumps the phase so far (`--dump-after=` misses them, the phase functions are inlined). A criterion in instructions over a whole `lower-std` (ADR-361 D15) is counted on its parts as `docs/measuring.md` says. (issue-1473, #1979, #1980)
 * The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
 
