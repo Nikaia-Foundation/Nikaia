@@ -114,14 +114,14 @@ impl ProverState {
     pub(crate) fn through_loops(&mut self, arena: &mut logic::TermArena, scope: &ProverScope, claim: i64, base: Vec<i64>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer) -> Option<String> {
         let mut facts = base;
         let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for record in scope.loops.iter() {
+        texts.reserve(scope.loops.iter().size_hint().0); for record in scope.loops.iter() {
             let held = match self.loop_invariant(arena, record, &mut *ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
             facts.extend(loop_facts(arena, record, &held));
             texts.push(loop_found_text(arena, record, &held));
         }
         if !scope.around.is_empty() {
             facts.extend(scope.history.iter().cloned());
-            for record in scope.around.iter() {
+            texts.reserve(scope.around.iter().size_hint().0); for record in scope.around.iter() {
                 let held = match self.loop_invariant(arena, record, &mut *ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 facts.extend(loop_turn_facts(arena, record, &held));
                 texts.push(loop_said(arena, record, &held, "inside"));
@@ -429,7 +429,7 @@ impl ProverState {
             let mut this_reach = CallReach::Through;
             if goal.is_some() {
                 let mut operands: Vec<(String, String)> = vec![];
-                for name in read.iter() {
+                operands.reserve(read.iter().size_hint().0); for name in read.iter() {
                     let value = match *nikaia_std::index::get(&given_by, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
                     operands.push((property_shown(name), rust_text(&arena, value, &mut *escape)));
                 }
@@ -462,7 +462,7 @@ impl ProverState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn unwritten_call(&self, arena: &mut logic::TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], checks: &[UnwrittenCheck], args: &[Expr], span: Span, scope: &ProverScope, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, outside: &mut collections::BTreeMap<(i64, String), OutsideIndex>) -> Vec<Finding> {
         let mut findings: Vec<Finding> = vec![];
-        for check in checks.iter() {
+        findings.reserve(checks.iter().size_hint().0); for check in checks.iter() {
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope);
             let goal = match at_call.goal { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -702,7 +702,7 @@ pub(crate) fn summed_facts(arena: &mut logic::TermArena, scope: &ProverScope, re
     let mut facts = scope.facts.copy_owned();
     for bound in read.iter() {
         let alts = match *nikaia_std::index::get(&scope.summed, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for alt in alts.iter() {
+        facts.reserve(alts.iter().size_hint().0); for alt in alts.iter() {
             let named = arena.var(bound);
             let equal = arena.equal(named, alt.value);
             let not_taken = arena.not(alt.guard);
@@ -716,11 +716,11 @@ pub(crate) fn summed_notes(arena: &mut logic::TermArena, scope: &ProverScope, re
     let falsum = arena.boolean(false);
     let values = nikaia_std::index::or(model(&arena, facts, falsum), || collections::BTreeMap::new().into());
     let mut notes: Vec<String> = vec![];
-    for bound in read.iter() {
+    notes.reserve(read.iter().size_hint().0); for bound in read.iter() {
         let alts = match *nikaia_std::index::get(&scope.summed, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if alts.is_empty() { continue; }
         let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
+        whys.reserve(alts.iter().size_hint().0); for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
         let call = nikaia_std::block::Text::from(nikaia_std::index::get(&alts, 0).call.to_string());
         let how = nikaia_std::block::Text::from(whys.join("; "));
         let mut said = format!("`{}`: {}.", call, how);
@@ -942,7 +942,7 @@ pub(crate) fn outside_help(first: &str, holds: &str) -> String { format!("Check 
 
 pub(crate) fn can_be(values: &collections::BTreeMap<String, i64>) -> String {
     let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (name, value) in values.iter() {
+    said.reserve(values.iter().size_hint().0); for (name, value) in values.iter() {
         let value = nikaia_std::num::value(value);
         said.push(format!("`{}` can be {}", name, value));
     }

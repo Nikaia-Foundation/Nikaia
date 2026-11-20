@@ -585,7 +585,7 @@ impl EmitState {
         if count > 8 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `overlap` block has {} branches, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_overlap")); }
         let mut pauses: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut any_fails = false;
-        for stmt in block.stmts.iter() {
+        pauses.reserve(block.stmts.iter().size_hint().0); for stmt in block.stmts.iter() {
             pauses.push(self.branch_pauses(world, &stmt.node, stmt.span.start as i64));
             match &stmt.node {
                 Stmt::Expr(value) => { if self.branch_can_fail(world, stmt.span.start as i64, value) { any_fails = true; } },

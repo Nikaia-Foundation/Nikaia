@@ -635,7 +635,7 @@ pub(crate) fn every_call<'r>(pieces: Vec<Called<'r>>) -> Vec<&'r str> {
         match piece {
             Called::One(one) => { all.push(one); },
             Called::Many(ref many) => {
-                for one in many.iter() {
+                all.reserve(many.iter().size_hint().0); for one in many.iter() {
                     let one = *one;
                     all.push(one);
                 }

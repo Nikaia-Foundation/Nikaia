@@ -297,7 +297,7 @@ impl EmitState {
     pub(crate) fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if config.is_empty() || !self.dsl_drivers.contains(callee) { return Ok(()); }
         let mut names: Vec<String> = vec![];
-        for a in config.iter() { names.push(emit_text(world, a.name)); }
+        names.reserve(config.iter().size_hint().0); for a in config.iter() { names.push(emit_text(world, a.name)); }
         if args > 0 { out.push(", "); }
         out.push(&format!("{} {{ ", type_name(&names)));
         let mut n = 0;

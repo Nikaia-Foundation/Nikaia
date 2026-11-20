@@ -5,7 +5,7 @@ pub(crate) fn check_core_call_named(name: &str) -> Ty { Ty::Named { name: nikaia
 
 pub(crate) fn check_core_call_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for segment in segments.iter() {
+    parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
         let segment = *segment;
         parts.push(format!("{}", world.words.resolve(segment)));
     }
@@ -294,7 +294,7 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
     let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if contract.signature.is_some() {
         let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return given };
-        for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
+        params.reserve(signature.params.iter().size_hint().0); for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
     }
     for error in contract.fails_with.iter() {
         if !throws_given(error) {
@@ -321,7 +321,7 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
         set.extend(stored.thrown.iter().cloned());
     }
     let mut errors: Vec<String> = vec![];
-    for error in set.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
+    errors.reserve(set.iter().size_hint().0); for error in set.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
     given.fails_with = errors;
     given
 }
@@ -333,7 +333,7 @@ pub(crate) fn check_core_call_from_newly<H: CheckHost>(state: &mut CheckState, w
     let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if contract.signature.is_some() {
         let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
-        for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
+        params.reserve(signature.params.iter().size_hint().0); for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
     }
     for error in contract.fails_with.iter() {
         if !throws_given(error) { continue; }
@@ -349,8 +349,8 @@ pub(crate) fn check_core_call_from_newly<H: CheckHost>(state: &mut CheckState, w
         let mut stored = CheckStoredCode::empty();
         check_core_places_code_into(&state, world, host, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, &mut stored);
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for name in stored.free.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
-        for name in stored.resolved.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+        names.reserve(stored.free.iter().size_hint().0); for name in stored.free.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+        names.reserve(stored.resolved.iter().size_hint().0); for name in stored.resolved.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
         for name in names.iter() {
             if world.newly_throws.contains_key(name) {
                 let list = match world.newly_throws.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -620,7 +620,7 @@ pub(crate) fn check_core_call_moving_options(state: &CheckState, contract: &FnCo
     if state.foreign_names.contains(written) { return vec![]; }
     let options = lowered_options(contract);
     let mut out: Vec<(String, Ty)> = vec![];
-    for (name, ty) in passed.iter() {
+    out.reserve(passed.iter().size_hint().0); for (name, ty) in passed.iter() {
         let declared = match options.iter().find(|&o| { o.name == *name }) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if declared.ty.is_a_view() || nikaia_std::list::contains(&signature.mutable, &name) { continue; }
         out.push((nikaia_std::block::Text::from(name.to_string()), ty.clone()));
@@ -632,7 +632,7 @@ pub(crate) fn check_core_call_moving_options(state: &CheckState, contract: &FnCo
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, config: &[ConfigArg], span: &Span) -> Vec<(String, Ty)> {
     let mut passed: Vec<(String, Ty)> = vec![];
-    for option in config.iter() {
+    passed.reserve(config.iter().size_hint().0); for option in config.iter() {
         check_core_a_field_of_a_borrowed_subject(state, world, host, &option.value, span, "passed");
         let ty = check_core_expr(state, world, host, &option.value, span);
         passed.push((format!("{}", world.words.resolve(option.name)), ty));
@@ -928,7 +928,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         _ => { written.push(index.clone()); },
     }
     let mut filled: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for arg in written.iter() { filled.push(check_core_type_argument(state, world, arg, &name, span)); }
+    filled.reserve(written.iter().size_hint().0); for arg in written.iter() { filled.push(check_core_type_argument(state, world, arg, &name, span)); }
     let mut needed = false;
     let mut at: i64 = 0;
     for parameter in parameters.iter() {
@@ -975,7 +975,7 @@ pub(crate) fn check_core_call_type_parameters(world: &CheckWorld<'_, '_, '_, '_,
                 let written = *written;
                 let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if world.here.text(called) == name {
-                    for generic in generics.iter() { found.push(nikaia_std::block::Text::from(world.here.text(generic.name).to_string())); }
+                    found.reserve(generics.iter().size_hint().0); for generic in generics.iter() { found.push(nikaia_std::block::Text::from(world.here.text(generic.name).to_string())); }
                     return found;
                 }
             },
@@ -1057,7 +1057,7 @@ pub(crate) fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &Chec
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, parts: &[Expr], span: &Span) -> Ty {
     let mut found: Vec<Ty> = vec![];
-    for part in parts.iter() { found.push(check_core_expr(state, world, host, part, span)); }
+    found.reserve(parts.iter().size_hint().0); for part in parts.iter() { found.push(check_core_expr(state, world, host, part, span)); }
     let mut i: i64 = 0;
     for part in parts.iter() {
         state.hands_over(world, part, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, "put into a tuple", span);

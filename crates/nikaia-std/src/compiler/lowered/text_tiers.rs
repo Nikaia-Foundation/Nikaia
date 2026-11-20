@@ -403,7 +403,7 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
         keeps.push(arg.keep);
     }
     let mut options: Vec<(String, Type)> = vec![];
-    for option in config.iter() { options.push((nikaia_std::block::Text::from(names.resolve(option.name).to_string()), option.ty.clone())); }
+    options.reserve(config.iter().size_hint().0); for option in config.iter() { options.push((nikaia_std::block::Text::from(names.resolve(option.name).to_string()), option.ty.clone())); }
     let mut text_options: collections::BTreeSet<String> = collections::BTreeSet::new();
     for option in config.iter() { if plain_string(names, &option.ty) { text_options.insert(nikaia_std::block::Text::from(names.resolve(option.name).to_string())); } }
     declared.fns.insert(key, FnDecl { params, changes, keeps, options, text_options, result: match ret_type {
@@ -679,7 +679,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
     if a_container(ask.names, ty) {
         let mut at: i64 = 0;
         let keyed = a_map(ask.names, ty);
-        for arg in ty.generics.iter() {
+        path.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() {
             path.push(at);
             if keyed {
                 let word = seen(owner, &path, walk);
@@ -694,7 +694,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
     if a_followed_tuple(ask.names, ty) {
         tie_parts(owner, ty, &path.copy_owned(), ask, walk);
         let mut at: i64 = 0;
-        for part in ty.generics.iter() {
+        path.reserve(ty.generics.iter().size_hint().0); for part in ty.generics.iter() {
             path.push(at);
             flow_type(owner, part, path, kinds, ask, walk);
             path.pop();
@@ -711,7 +711,7 @@ pub(crate) fn tie_parts(owner: &TextOwner, ty: &Type, path: &[i64], ask: &TierAs
 
 pub(crate) fn tuple_text_words(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
     let mut at: i64 = 0;
-    for part in ty.generics.iter() {
+    path.reserve(ty.generics.iter().size_hint().0); for part in ty.generics.iter() {
         path.push(at);
         if part.is_tuple && !part.is_view && !part.is_nullable { tuple_text_words(owner, part, &mut path.copy_owned(), ask, walk, out); } else if plain_string(ask.names, part) { out.push(seen(owner, &path, walk)); }
         path.pop();
@@ -1108,7 +1108,7 @@ pub(crate) fn read_through(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '
             let local = tier_local(ask.names.resolve(name), &walk);
             if local.is_some() {
                 let found = match local { Some(__nikaia_value) => __nikaia_value, None => return };
-                for word in found.through.iter() { out.push(nikaia_std::block::Text::from(word.to_string())); }
+                out.reserve(found.through.iter().size_hint().0); for word in found.through.iter() { out.push(nikaia_std::block::Text::from(word.to_string())); }
             }
         },
         _ => { },
@@ -1517,7 +1517,7 @@ pub(crate) fn literals_beside_null(value: &Expr) -> bool {
                 _ => { return false; },
             }
         },
-        Expr::Match { arms, .. } => { for arm in arms.iter() { tails.push(arm.body.clone()); } },
+        Expr::Match { arms, .. } => { tails.reserve(arms.iter().size_hint().0); for arm in arms.iter() { tails.push(arm.body.clone()); } },
         _ => { return false; },
     }
     let mut nulls = false;
@@ -1542,7 +1542,7 @@ pub(crate) fn demote_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, a
     }
     if !a_followed(ask.names, ty) { return; }
     let mut at: i64 = 0;
-    for arg in ty.generics.iter() {
+    path.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() {
         path.push(at);
         demote_inside(owner, arg, &mut path.copy_owned(), ask, walk);
         path.pop();
@@ -1558,7 +1558,7 @@ pub(crate) fn unlinked_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>,
     }
     if !a_followed(ask.names, ty) { return; }
     let mut at: i64 = 0;
-    for arg in ty.generics.iter() {
+    path.reserve(ty.generics.iter().size_hint().0); for arg in ty.generics.iter() {
         path.push(at);
         unlinked_inside(owner, arg, &mut path.copy_owned(), ask, walk);
         path.pop();
@@ -2536,7 +2536,7 @@ pub(crate) fn ties_of(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, w
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || vec![].into());
-            for tie in found.iter() { out.push(tie.clone()); }
+            out.reserve(found.iter().size_hint().0); for tie in found.iter() { out.push(tie.clone()); }
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return ties_of(base, ask, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
@@ -2647,7 +2647,7 @@ pub(crate) fn tie_bound(names: &[winnow_grammar::Symbol], value: &Expr, ask: &Ti
     for name in names.iter() {
         let name = *name;
         let mut all: Vec<TextTie> = vec![];
-        for tie in ties.iter() { all.push(tie.clone()); }
+        all.reserve(ties.iter().size_hint().0); for tie in ties.iter() { all.push(tie.clone()); }
         walk.ties.insert(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), all);
     }
 }
@@ -3134,7 +3134,7 @@ pub(crate) fn kept_in_lookup(value: &Expr, owner: &TextOwner, path: &mut Vec<i64
         Expr::Tuple(items, _) => {
             if (items.len() as i64) != ty.generics.len() as i64 { return; }
             let mut at: i64 = 0;
-            for item in items.iter() {
+            path.reserve(items.iter().size_hint().0); for item in items.iter() {
                 path.push(at);
                 if a_followed_tuple(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }) { kept_in_lookup(item, owner, &mut path.copy_owned(), unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, ask, walk); } else { kept_literal(item, owner, &path, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, ask, walk); }
                 path.pop();
@@ -3323,7 +3323,7 @@ pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '
     match item {
         Item::Fn { args, body, .. } => {
             let mut names: Vec<String> = vec![String::from("self")];
-            for arg in args.iter() { names.push(nikaia_std::block::Text::from(ask.names.resolve(arg.name).to_string())); }
+            names.reserve(args.iter().size_hint().0); for arg in args.iter() { names.push(nikaia_std::block::Text::from(ask.names.resolve(arg.name).to_string())); }
             late_body(body, &names, ask, late);
         },
         _ => { },
@@ -3415,7 +3415,7 @@ pub(crate) fn late_read(name: &str, late: &mut TierLate) {
     let mut read: Vec<i64> = vec![];
     let mut handed: Vec<i64> = vec![];
     let mut waiting = late.pending.copy_owned();
-    for arm in late.branch_args.iter() { waiting.push(arm.clone()); }
+    waiting.reserve(late.branch_args.iter().size_hint().0); for arm in late.branch_args.iter() { waiting.push(arm.clone()); }
     for arm in waiting.iter() { if arm.serial == serial && arm.name == name { if arm.argument { handed.push(arm.at); } else { read.push(arm.at); } } }
     late.found.extend(read);
     late.args.extend(handed);
@@ -3441,7 +3441,7 @@ pub(crate) fn late_branches_opened(late: &mut TierLate) -> Vec<TierLateArm> {
 }
 
 pub(crate) fn late_branch_ended(gathered: &mut Vec<TierLateArm>, late: &mut TierLate) {
-    for arm in late.branch_args.iter() { gathered.push(arm.clone()); }
+    gathered.reserve(late.branch_args.iter().size_hint().0); for arm in late.branch_args.iter() { gathered.push(arm.clone()); }
     late.branch_args = vec![];
 }
 
@@ -3927,7 +3927,7 @@ pub(crate) fn late_holding(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_, '
     };
     let holder = match late_key(name, &late) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut held: Vec<(i64, (String, String))> = vec![];
-    for field in fields.iter() {
+    held.reserve(fields.iter().size_hint().0); for field in fields.iter() {
         let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let moved = match given {
             Expr::Variable(moved, _) => { let moved = *moved; nikaia_std::block::Text::from(ask.names.resolve(moved).to_string()) },
@@ -4295,7 +4295,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
         },
         Expr::Tuple(items, _) => {
             let mut parts: Vec<Kinds> = vec![];
-            for item in items.iter() { parts.push(tier_expr(item, ask, walk)); }
+            parts.reserve(items.iter().size_hint().0); for item in items.iter() { parts.push(tier_expr(item, ask, walk)); }
             let mut out = no_kinds();
             for part in parts.iter() {
                 let part = *part;
@@ -4464,7 +4464,7 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
         }
     }
     let mut at: i64 = 0;
-    for arg in args.iter() {
+    given.reserve(args.iter().size_hint().0); for arg in args.iter() {
         walk.closure_owns = a_lambda(arg) && at < params.len() as i64 && code_owns_text(ask.names, Some(unsafe { nikaia_std::proven::read(&params, (at) as usize) }));
         given.push(tier_expr(arg, ask, walk));
         walk.closure_owns = false;
@@ -4635,12 +4635,12 @@ pub(crate) fn tier_written_type(ty: &Ty, names: &winnow_grammar::InternerContext
             let view = *view;
             if name.contains("::") { return None; }
             let mut parts: Vec<Type> = vec![];
-            for arg in args.iter() { parts.push(match tier_written_type(arg, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            parts.reserve(args.iter().size_hint().0); for arg in args.iter() { parts.push(match tier_written_type(arg, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
             Some(Type { name: names.intern_string(name), generics: parts, is_view: view, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
         },
         Ty::Tuple(items) => {
             let mut parts: Vec<Type> = vec![];
-            for item in items.iter() { parts.push(match tier_written_type(item, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            parts.reserve(items.iter().size_hint().0); for item in items.iter() { parts.push(match tier_written_type(item, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
             Some(Type { name: names.intern_string("tuple"), generics: parts, is_view: false, is_tuple: true, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
         },
         Ty::Nullable(inner) => {
@@ -4706,7 +4706,7 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
     let received = tier_expr(receiver, ask, walk);
     if changes_its_text(method) { changed_in_place(receiver, format!("{}.{}(..)", tier_written(receiver, ask), method), ask, walk); }
     let mut given: Vec<Kinds> = vec![];
-    for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
+    given.reserve(args.iter().size_hint().0); for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
     let of = tier_struct_of(receiver, ask, walk);
     let mut keys: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.declared.methods, method) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -5241,7 +5241,7 @@ pub(crate) fn own_stream_items(ret_type: Option<&Type>, ask: &TierAsk<'_, '_, '_
         if key.starts_with(&*prefix) {
             let (of, variant) = variant_named(key);
             let mut at = 0;
-            for part in parts.iter() {
+            owners.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                 owners.push((TextOwner::Variant(nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(variant.to_string()), at), part.clone()));
                 at += 1;
             }
@@ -5947,7 +5947,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) 
         walk.param_arms = arms;
     }
     let mut tiers: Vec<(TextPosition, Tier)> = vec![];
-    for (word, tier) in walk.tiers.iter() {
+    tiers.reserve(walk.tiers.iter().size_hint().0); for (word, tier) in walk.tiers.iter() {
         let tier = *tier;
         let position = match match *nikaia_std::index::get(&walk.flows.known, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -6385,7 +6385,7 @@ pub(crate) fn tw_views(tiers: &collections::BTreeMap<(i64, String, String, i64, 
 
 pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, Vec<i64>), Tier>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for (key, tier) in tiers.iter() {
+    out.reserve(tiers.iter().size_hint().0); for (key, tier) in tiers.iter() {
         let tier = *tier;
         let what: &'static str = match tier {
             Tier::View => "a view: only views and literals flow into it",

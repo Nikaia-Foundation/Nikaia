@@ -1,0 +1,17 @@
+error[NK1171]: `String` has no method called `push_str`.
+   --> tests/a_for_over_a_map_with_mut_on_the_value_writes_it_in_place.nika:20:9
+    |
+ 20 |         v.push_str(f"{k}")
+    |         ^^^^^^^^^^^^^^^^^^
+    |
+    = note: What can be called is what is written down: `.push_str()` is in no declaration, ledger or description this program reads.
+    = help: Did you mean `.push_str()`?
+error[NK1171]: `String` has no method called `push_str`.
+   --> tests/a_for_over_a_map_with_mut_on_the_value_writes_it_in_place.nika:23:9
+    |
+ 23 |         v.push_str("!")
+    |         ^^^^^^^^^^^^^^^
+    |
+    = note: What can be called is what is written down: `.push_str()` is in no declaration, ledger or description this program reads.
+    = help: Did you mean `.push_str()`?
+2 type errors

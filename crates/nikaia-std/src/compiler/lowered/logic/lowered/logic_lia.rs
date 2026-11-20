@@ -290,7 +290,7 @@ pub(crate) fn lg_formula(arena: &TermArena, id: i64, holds: bool, why: &mut LgWh
 
 pub(crate) fn lg_junction(arena: &TermArena, parts: &[i64], holds: bool, conjunction: bool, why: &mut LgWhy) -> Option<LgFormula> {
     let mut made: Vec<LgFormula> = vec![];
-    for part in parts.iter() {
+    made.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         made.push(match lg_formula(arena, part, holds, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
     }
@@ -389,7 +389,7 @@ impl LgIndexed {
         let empty: Vec<Vec<LgItem>> = vec![];
         self.ors.push(empty);
         let mut alternatives: Vec<Vec<LgItem>> = vec![];
-        for part in parts.iter() { alternatives.push(self.items(part)); }
+        alternatives.reserve(parts.iter().size_hint().0); for part in parts.iter() { alternatives.push(self.items(part)); }
         if alternatives.is_empty() { return self.atom(lg_constant(1)); }
         if alternatives.len() == 1 { return (*unsafe { nikaia_std::proven::read(&alternatives, (0) as usize) }).copy_owned(); }
         for alternative in alternatives.iter() { if alternative.is_empty() { return vec![]; } }
@@ -402,7 +402,7 @@ impl LgIndexed {
 
 pub(crate) fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut LgWhy) -> Option<LgIndexed> {
     let mut all: Vec<LgFormula> = vec![];
-    for fact in facts.iter() {
+    all.reserve(facts.iter().size_hint().0); for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
         all.push(match lg_formula(arena, fact, true, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
     }
@@ -584,18 +584,17 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(4, places.len() as i64) }));
     let mut alive: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(places.len() as i64));
-    let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for at in places.iter() {
         let at = nikaia_std::num::value(at);
-        for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !every.contains(name) { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !ranks.contains_key(name) { ranks.insert(nikaia_std::block::Text::from(name.to_string()), 0); } }
     }
-    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut quotients: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for name in every.into_iter() {
-        ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);
+    let mut rank_names: Vec<String> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64)); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    let mut quotients: Vec<bool> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64));
+    for (name, rank) in ranks.iter_mut() {
+        *rank = rank_names.len() as i64;
         quotients.push(name.starts_with("quot#"));
-        rank_names.push(name);
+        rank_names.push(nikaia_std::block::Text::from(name.to_string()));
     }
     let mut present: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut ups: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -627,7 +626,7 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
         let ordered = lg_sorted_places(&held, &live);
         let mut now: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(ordered.len() as i64));
         let mut kept: i64 = -1;
-        for place in ordered.iter() {
+        now.reserve(ordered.iter().size_hint().0); for place in ordered.iter() {
             let place = nikaia_std::num::value(place);
             if kept >= 0 && lg_form_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(kept)).form, &nikaia_std::index::get(&held, nikaia_std::index::at(place)).form) == 0 { continue; }
             now.push(place);
@@ -676,9 +675,9 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
         }
         if !have {
             let mut round_bounds: Vec<Vec<LgLin>> = vec![];
-            for places in round_places.iter() {
+            round_bounds.reserve(round_places.iter().size_hint().0); for places in round_places.iter() {
                 let mut lins: Vec<LgLin> = vec![];
-                for place in places.iter() {
+                lins.reserve(places.iter().size_hint().0); for place in places.iter() {
                     let place = nikaia_std::num::value(place);
                     lins.push(lg_lin_of_form(&nikaia_std::index::get(&held, nikaia_std::index::at(place)).form, unsafe { nikaia_std::proven::read(&held, (place) as usize) }.constant, &rank_names));
                 }
@@ -698,7 +697,7 @@ pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], rank: i64, budge
     let mut up: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
     let mut down: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
     let mut with_places: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
-    for place in now.iter() {
+    with_places.reserve(now.iter().size_hint().0); for place in now.iter() {
         let place = nikaia_std::num::value(place);
         let k = lg_form_coefficient(&nikaia_std::index::get(&held, nikaia_std::index::at(place)).form, rank);
         if k == 0 {
@@ -788,7 +787,7 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
 
 pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
     let mut needed: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for _ in steps.iter() { needed.push(false); }
+    needed.reserve(steps.iter().size_hint().0); for _ in steps.iter() { needed.push(false); }
     { let __nikaia_stored = true; nikaia_std::index::set(&mut needed, nikaia_std::index::at(last), __nikaia_stored); }
     let mut at = last;
     while at >= 0 {
@@ -805,7 +804,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
         at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
     }
     let mut renumbered: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for _ in steps.iter() { renumbered.push(-1); }
+    renumbered.reserve(steps.iter().size_hint().0); for _ in steps.iter() { renumbered.push(-1); }
     let mut kept: Vec<LgStep> = vec![];
     at = 0;
     while at <= last {

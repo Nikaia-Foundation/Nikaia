@@ -1,0 +1,11 @@
+// `mut` on a map's value leaves the key a plain name (#1133): NK1139.
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    m.insert(1, 1)
+    for (k, mut v) in m {
+        k += 1
+        v += k
+    }
+}

@@ -347,7 +347,7 @@ impl CheckState {
 pub(crate) fn items_of(value: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match value {
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        Expr::ListLit { items, .. } => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push(item); } },
         Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); out.push(value); },
         _ => { },
     }

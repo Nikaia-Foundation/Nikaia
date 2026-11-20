@@ -241,7 +241,7 @@ pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     state.scope.pop();
     let mut changed_by: Vec<collections::BTreeSet<String>> = vec![];
-    for (from, to) in ranges.iter() {
+    changed_by.reserve(ranges.iter().size_hint().0); for (from, to) in ranges.iter() {
         let from = nikaia_std::num::value(from);let to = nikaia_std::num::value(to);
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut at = from;
@@ -387,7 +387,7 @@ pub(crate) fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
         }
     }
     let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for symbol in path.iter() {
+    whole.reserve(path.iter().size_hint().0); for symbol in path.iter() {
         let symbol = *symbol;
         whole.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
     }
@@ -586,7 +586,7 @@ pub(crate) fn check_core_flow_same_literal(left: &Expr, right: &Expr) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_path_words(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for part in path.iter() {
+    out.reserve(path.iter().size_hint().0); for part in path.iter() {
         let part = *part;
         out.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
     }
@@ -722,7 +722,7 @@ pub(crate) fn check_core_flow_set_alternatives(state: &mut CheckState, world: &C
     };
     let mut sets: Vec<Vec<i64>> = vec![];
     let mut any = false;
-    for alternative in alternatives.iter() {
+    sets.reserve(alternatives.iter().size_hint().0); for alternative in alternatives.iter() {
         let mut set = check_core_flow_fields_set(&state, world, arms, at, alternative, typed);
         if set.is_empty() { set = check_core_flow_variant_set(&state, world, arms, at, alternative, typed); }
         if !set.is_empty() { any = true; }
@@ -763,7 +763,7 @@ pub(crate) fn check_core_flow_set_parts(pattern: &MatchPattern) -> Option<Vec<Ma
     match pattern {
         MatchPattern::Named { fields, .. } => {
             let mut out: Vec<MatchPattern> = vec![];
-            for field in fields.iter() { out.push(field.pat.clone()); }
+            out.reserve(fields.iter().size_hint().0); for field in fields.iter() { out.push(field.pat.clone()); }
             return Some(out);
         },
         _ => return check_core_flow_variant_values(pattern),
@@ -930,12 +930,12 @@ pub(crate) fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckW
 pub(crate) fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, at: i64, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let names = pattern_names(world, pattern);
     let mut bound: Vec<CheckLocal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for name in names.iter() {
+    bound.reserve(names.iter().size_hint().0); for name in names.iter() {
         let id = state.a_new_binding();
         bound.push(CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), Ty::Unknown, id));
     }
     let mut frame: Vec<CheckLocal> = vec![];
-    for local in bound.iter() {
+    frame.reserve(bound.iter().size_hint().0); for local in bound.iter() {
         let found = check_core_flow_part(parts, &local.name);
         if found.is_none() {
             frame.push(local.clone());
@@ -1211,7 +1211,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     match value {
         Expr::Tuple(parts, _) => {
             let mut patterns: Vec<MatchPattern> = vec![];
-            for arm in arms.iter() { patterns.push(arm.pattern.clone()); }
+            patterns.reserve(arms.iter().size_hint().0); for arm in arms.iter() { patterns.push(arm.pattern.clone()); }
             typed = check_core_flow_text_parts(state, parts, &typed, &patterns);
         },
         _ => { },
@@ -1400,7 +1400,7 @@ pub(crate) fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
     if guarded.unanswered { return Ty::Unknown; }
     let mut thrown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut unknown = false;
-    for name in guarded.thrown.iter() {
+    thrown.reserve(guarded.thrown.iter().size_hint().0); for name in guarded.thrown.iter() {
         if name == "?" || throws_given(name) { unknown = true; }
         thrown.push(nikaia_std::block::Text::from(name.to_string()));
     }
@@ -1408,7 +1408,7 @@ pub(crate) fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
     if thrown.len() == 1 { return check_core_flow_named(unsafe { nikaia_std::proven::read(&thrown, (0) as usize) }); }
     if thrown.len() >= 2 {
         let mut args: Vec<Ty> = vec![];
-        for name in thrown.iter() { args.push(check_core_flow_named(name)); }
+        args.reserve(thrown.iter().size_hint().0); for name in thrown.iter() { args.push(check_core_flow_named(name)); }
         return Ty::Named { name: String::from("Error"), args, view: false };
     }
     Ty::Unknown

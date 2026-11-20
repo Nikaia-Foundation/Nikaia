@@ -201,7 +201,7 @@ pub(crate) fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_,
     let crossed = crossing(&signature.result_or_unit(), walking);
     if !crossed.may() { return Some(Accounted::MayNotCross { callee: nikaia_std::block::Text::from(key.to_string()), crossing: crossed }); }
     let parameters = call_parameters(&signature);
-    for touch in contract.touches.iter() {
+    reaches.reserve(contract.touches.iter().size_hint().0); for touch in contract.touches.iter() {
         let named = nikaia_std::index::or_maybe(match touch.named.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -405,7 +405,7 @@ pub(crate) fn called_key(func: &Expr, names: &winnow_grammar::InternerContext) -
 
 pub(crate) fn joined_segments(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for segment in segments.iter() {
+    parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
         let segment = *segment;
         parts.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
     }
@@ -491,7 +491,7 @@ pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar:
     let mut operations: Vec<Operation> = vec![];
     let mut present: Vec<bool> = vec![];
     let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for stmt in block.stmts.iter() {
+    lines.reserve(block.stmts.iter().size_hint().0); for stmt in block.stmts.iter() {
         let answer = accounted_beside(&stmt.node, names, walking);
         let named = match answer {
             Accounted::Operation(ref operation) => nikaia_std::block::Text::from(operation.callee.to_string()),

@@ -142,7 +142,7 @@ pub(crate) fn promise_lines(promises: &[String]) -> Vec<String> {
     out.push(String::from("**This crate makes promises the toolchain cannot check** (ADR-rust-boundary-1 D10). A tool"));
     out.push(String::from("can see that the promise was made; it cannot see whether it is true - which is"));
     out.push(String::from("the line between a rule the toolchain enforces and one it inherits:"));
-    for promise in promises.iter() { out.push(format!("  {}", promise)); }
+    out.reserve(promises.iter().size_hint().0); for promise in promises.iter() { out.push(format!("  {}", promise)); }
     out
 }
 

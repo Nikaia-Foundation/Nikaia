@@ -4,7 +4,7 @@
 pub(crate) fn call_arguments(signature: &Signature) -> Vec<(String, Ty)> {
     let mut out: Vec<(String, Ty)> = vec![];
     let mut first = true;
-    for (name, ty) in signature.params.iter() {
+    out.reserve(signature.params.iter().size_hint().0); for (name, ty) in signature.params.iter() {
         if first && name == "self" {
             first = false;
             continue;

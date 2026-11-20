@@ -442,7 +442,7 @@ impl EmitState {
         self.write_keep_prelude(walk, out, scope.function, at, depth)
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)
         match node {
-            Stmt::Let { names, shape, mutable, ty, value, .. } => self.emit_stmt_let(world, walk, out, host, names, shape, mutable, ty, value, span, depth, here, scope),
+            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, ty, value, span, depth, here, scope),
             Stmt::Comptime { name, .. } => {
                 let bound = emit_text(world, name)
                 // **Once per turn** where it reads the turn's field (#1087).
@@ -483,7 +483,7 @@ impl EmitState {
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
             },
-            Stmt::For { bindings, shape, mutable, iter, body } => self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, iter, body, span, depth, here, scope),
+            Stmt::For { bindings, shape, mutable, mut_names, iter, body } => self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, span, depth, here, scope),
             Stmt::Break => self.emit_stmt_jump(out, "break", here),
             Stmt::Continue => self.emit_stmt_jump(out, "continue", here),
             Stmt::Return(value) => {
@@ -657,7 +657,7 @@ impl EmitState {
 
     /// `let`: one name with its keep, a task's packing and its nullable hull,
     /// or a tuple of names, Rust's own pattern (ADR-291).
-    fn emit_stmt_let[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt_let[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], ty: ref Type?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
         // **A mutable view of an entry is the `&mut` itself** (#816): the
         // binding is never reassigned, so it takes no `mut`.
@@ -680,11 +680,15 @@ impl EmitState {
         if names.len() > 1 || shape.len() != 0 {
             // **`mut` in front of the pattern marks every name in it** (#1126,
             // as `for mut (a, b)` does): Rust's `let (mut a, mut b)`, and
-            // the names the body leaves alone are no warning.
+            // the names the body leaves alone are no warning. **`mut` on one
+            // name marks that name alone** (section 6, #1133).
             let mut bound: Vec[String] = []
+            let mut index = 0
             for each in names {
                 let local = self.emit_stmt_local(emit_text(world, each))
-                if mut_word != "" && local != "_" {
+                let marked = mut_names.len() == 0 || mut_names[index]
+                index += 1
+                if mut_word != "" && local != "_" && marked {
                     bound.push(f"mut {local}")
                 } else {
                     bound.push(local)
@@ -1194,7 +1198,7 @@ impl EmitState {
     /// `for`: a loop over a type's fields is the block once per field (ADR-304
     /// D5, D6); a step that pauses is a `.next().await` loop (ADR-172 D1); else
     /// Rust's own `for`, which lends what is a place (ADR-094 D4).
-    fn emit_stmt_for[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt_for[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
         if walk.specialising != null {
             let parameter = (walk.specialising?.first ?? "").clone()
@@ -1251,9 +1255,22 @@ impl EmitState {
         // mention of it is dereferenced (`scope.changed`, as a `mut` lambda
         // parameter is).
         let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(node_key(iter))
+        // **Over a map only the marked value is a view** (section 6, #1133):
+        // `iter_mut()`, and `values_mut()` under a `_` key.
+        let map_view = viewed && match self.facts.mut_view_reads.get(node_key(iter)) {
+            null => false,
+            marker => marker == "map",
+        }
+        let values_only = map_view && each.len() == 2 && each[0] == "_"
+        if values_only {
+            each.remove(0)
+        }
         let mut written: Vec[String] = []
+        let mut index = 0
         for one in each {
-            if mutable && !viewed && one != "_" {
+            let marked = mut_names.len() == 0 || mut_names[if values_only { index + 1 } else { index }]
+            index += 1
+            if mutable && !viewed && one != "_" && marked {
                 written.push(f"mut {one}")
             } else {
                 written.push(one.clone())
@@ -1295,6 +1312,20 @@ impl EmitState {
             out.push("}")
             return
         }
+        // **A list the body pushes onto once a turn is asked for its room
+        // first** (#2385): a `for` over a place it lends walks a known number
+        // of elements, so one `reserve` of that many replaces the doubling
+        // growth the pushes would cause. Nothing a program reads changes.
+        let lent_walk = is_a_place(iter) && !viewed && !self.facts.owned_loops.contains(at) && !self.facts.timed_loops.contains(at)
+        if lent_walk && !self.reads_through_handle(world, walk, scope.function, iter) {
+            let grown = self.emit_stmt_for_grown(world, bindings, body)
+            if grown != null {
+                let name = grown ?? return
+                out.push(f"{self.emit_stmt_local(name)}.reserve(")
+                self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)
+                out.push(".iter().size_hint().0); ")
+            }
+        }
         out.push(f"{allowed}for {bound} in ")
         // **A `for` over a walk with `within:` lists it first** (ADR-async-5
         // D27), and throws `task::TimedOut` there where its deadline ran out.
@@ -1310,7 +1341,9 @@ impl EmitState {
         if timed {
             out.push(")?")
         }
-        if lends && viewed {
+        if lends && values_only {
+            out.push(".values_mut()")
+        } else if lends && viewed {
             out.push(".iter_mut()")
         } else if lends {
             out.push(".iter()")
@@ -1350,14 +1383,61 @@ impl EmitState {
         let mut inside = scope.clone()
         if viewed {
             let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
+            let mut index = 0
             for one in bindings {
-                if emit_text(world, one) != "_" {
+                let marked = !map_view || mut_names[index]
+                index += 1
+                if emit_text(world, one) != "_" && marked {
                     changed.push(one.clone())
                 }
             }
             inside = scope.clone() with { changed: changed }
         }
         self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), inside, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
+    }
+
+    /// The local list a `for` body pushes onto exactly once, at its top level,
+    /// if it is one (#2385): a `Vec`'s `push` on a name that neither the loop
+    /// head nor a `let` of the body shadows, and the only such push there.
+    fn emit_stmt_for_grown(ref self, world: ref EmitWorld, bindings: ref Vec[winnow_grammar::Symbol], body: ref Block) -> String? {
+        let mut grown: String? = null
+        let mut shadowed: Vec[String] = []
+        for one in bindings {
+            shadowed.push(emit_text(world, one))
+        }
+        for stmt in body.stmts {
+            match stmt.node {
+                Stmt::Let { names, .. } => {
+                    for one in names {
+                        shadowed.push(emit_text(world, one))
+                    }
+                },
+                Stmt::Expr(e) => {
+                    match e {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            if emit_text(world, method) == "push" && args.len() == 1 && (self.facts.method_callees[node_key(receiver)]?.clone() ?? "") == "Vec::push" {
+                                match receiver {
+                                    Expr::Variable(v, _) => {
+                                        if grown != null {
+                                            return null
+                                        }
+                                        grown = emit_text(world, v)
+                                    },
+                                    else => {},
+                                }
+                            }
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
+        let name = grown ?? return null
+        if shadowed.contains(name) {
+            return null
+        }
+        return name
     }
 
     /// What a `for` iterates over, written.

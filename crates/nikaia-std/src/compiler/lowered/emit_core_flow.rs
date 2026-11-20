@@ -178,7 +178,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-        for p in params.iter() {
+        names.reserve(params.iter().size_hint().0); for p in params.iter() {
             let p = *p;
             names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
         }
@@ -320,7 +320,7 @@ impl EmitState {
         }
         if from_a_let {
             #[allow(unused_mut)] let mut each: Vec<&'static str> = vec![];
-            for p in params.iter() {
+            each.reserve(params.iter().size_hint().0); for p in params.iter() {
                 let p = *p;
                 each.push("_");
             }

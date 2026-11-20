@@ -19,7 +19,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> 
         BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
         BuildValue::Tuple(parts) => {
             let mut written: Vec<String> = vec![];
-            for held in parts.iter() {
+            written.reserve(parts.iter().size_hint().0); for held in parts.iter() {
                 let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -28,7 +28,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> 
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", variant_path(ty), variant)); }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for held in payload.iter() {
+            written.reserve(payload.iter().size_hint().0); for held in payload.iter() {
                 let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -36,7 +36,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> 
         },
         BuildValue::Struct { name, fields } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (field, held) in fields.iter() {
+            written.reserve(fields.iter().size_hint().0); for (field, held) in fields.iter() {
                 let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
@@ -44,7 +44,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> 
         },
         BuildValue::List(items) => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for held in items.iter() {
+            written.reserve(items.iter().size_hint().0); for held in items.iter() {
                 let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -52,7 +52,7 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &mut dyn FnMut(f64) -> 
         },
         BuildValue::Constant { constructor, parts } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for held in parts.iter() {
+            written.reserve(parts.iter().size_hint().0); for held in parts.iter() {
                 let text = match rust_value(held, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -80,7 +80,7 @@ pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
             },
             BuildValue::Tuple(parts) => {
                 let mut each: Vec<String> = vec![];
-                for part in parts.iter() {
+                each.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let one: Vec<BuildValue> = vec![part.clone()];
                     let held = match rust_array_type(&one) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     each.push(held);
@@ -322,7 +322,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             }
             let some_held: Option<Ty> = Some(held.clone());
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for item in items.iter() {
+            written.reserve(items.iter().size_hint().0); for item in items.iter() {
                 let text = match written_below(state, world, item, (some_held).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
@@ -331,7 +331,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
         BuildValue::Struct { name, fields } => {
             let declared = state.fields_of(world, name);
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (field, held) in fields.iter() {
+            written.reserve(fields.iter().size_hint().0); for (field, held) in fields.iter() {
                 let field_want = const_field_type((declared).as_ref(), field);
                 let text = match written_below(state, world, held, (field_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
@@ -343,7 +343,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
             #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
-            for held in payload.iter() {
+            written.reserve(payload.iter().size_hint().0); for held in payload.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -358,7 +358,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             };
             #[allow(unused_mut)] let mut written: Vec<String> = vec![];
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
-            for held in parts.iter() {
+            written.reserve(parts.iter().size_hint().0); for held in parts.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -415,14 +415,14 @@ impl CheckState {
         }
         let table = match build(&keys) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
         #[allow(unused_mut)] let mut disps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for (d1, d2) in table.disps.iter() {
+        disps.reserve(table.disps.iter().size_hint().0); for (d1, d2) in table.disps.iter() {
             let d1 = nikaia_std::num::value(d1);let d2 = nikaia_std::num::value(d2);
             disps.push(format!("({}, {})", d1, d2));
         }
         #[allow(unused_mut)] let mut written_keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps;
-        for key in table.keys.iter() { written_keys.push(format!("\"{}\"", as_a_literal(key))); }
+        written_keys.reserve(table.keys.iter().size_hint().0); for key in table.keys.iter() { written_keys.push(format!("\"{}\"", as_a_literal(key))); }
         let mut written_values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut values = values; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps; #[allow(unused_mut, clippy::redundant_locals)] let mut written_keys = written_keys;
-        for place in table.order.iter() {
+        written_values.reserve(table.order.iter().size_hint().0); for place in table.order.iter() {
             let place = nikaia_std::num::value(place);
             written_values.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_string()));
         }

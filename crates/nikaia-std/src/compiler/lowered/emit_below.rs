@@ -40,7 +40,7 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for segment in segments.iter() {
+            parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
             }
@@ -272,7 +272,7 @@ impl EmitState {
             if chosen != *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } { return format!("{}::default", chosen); }
         }
         let mut mapped: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for segment in segments.iter() { mapped.push(escaped_name(&self.map_name(trusting, segment))); }
+        mapped.reserve(segments.iter().size_hint().0); for segment in segments.iter() { mapped.push(escaped_name(&self.map_name(trusting, segment))); }
         let joined = nikaia_std::block::Text::from(mapped.join("::"));
         unaliased_in(world.aliases, &joined)
     }

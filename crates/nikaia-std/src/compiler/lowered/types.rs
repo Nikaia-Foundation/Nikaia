@@ -77,8 +77,8 @@ pub(crate) fn known_names(own: &Ledger, library: &Ledger, declared: &collections
 pub(crate) fn generic_names(names: &winnow_grammar::InternerContext, item: &Item) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     match item {
-        Item::Fn { generics, .. } => { for parameter in generics.iter() { out.push(nikaia_std::block::Text::from(names.resolve(parameter.name).to_string())); } },
-        Item::Struct { generics, .. } => { for parameter in generics.iter() { out.push(nikaia_std::block::Text::from(names.resolve(parameter.name).to_string())); } },
+        Item::Fn { generics, .. } => { out.reserve(generics.iter().size_hint().0); for parameter in generics.iter() { out.push(nikaia_std::block::Text::from(names.resolve(parameter.name).to_string())); } },
+        Item::Struct { generics, .. } => { out.reserve(generics.iter().size_hint().0); for parameter in generics.iter() { out.push(nikaia_std::block::Text::from(names.resolve(parameter.name).to_string())); } },
         _ => { },
     }
     out
@@ -104,7 +104,7 @@ pub(crate) fn bounds_in(names: &winnow_grammar::InternerContext, generics: &[Gen
 
 pub(crate) fn declared_once_in(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], out: &mut Vec<Finding>) {
     let mut seen: collections::BTreeMap<String, &'static str> = collections::BTreeMap::new();
-    for item in items.iter() {
+    out.reserve(items.iter().size_hint().0); for item in items.iter() {
         let kind = kind_declared(&item.node);
         if kind.is_empty() { continue; }
         let name = name_declared(names, &item.node);

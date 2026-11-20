@@ -270,12 +270,12 @@ impl SvReplay {
 }
 
 pub(crate) fn sv_unit_chain(entries: &[SvEntry], value: &mut Vec<i64>, lits: &[u32], hints: &[u32], touched: &mut Vec<u32>) -> String {
-    for l in lits.iter() {
+    touched.reserve(lits.iter().size_hint().0); for l in lits.iter() {
         let l = nikaia_std::num::value(l);
         sv_assign(value, l ^ 1u32);
         touched.push(l);
     }
-    for h in hints.iter() {
+    touched.reserve(hints.iter().size_hint().0); for h in hints.iter() {
         let h = nikaia_std::num::value(h);
         let at = h as i64;
         if at >= entries.len() as i64 { return format!("hint {} is no earlier entry", h); }
@@ -319,7 +319,7 @@ pub(crate) fn sv_rel_text(rel: &SvRel) -> String {
 pub(crate) fn sv_check_test_row(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
-    for k in ks.iter() {
+    terms.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: i, k });
         i += 1;
@@ -340,7 +340,7 @@ pub(crate) fn sv_check_test_neg(a: u32) -> u32 { sv_lit(a, true) }
 pub(crate) fn sv_check_test_units(atoms: Vec<SvAtom>, columns: u32) -> SvQuery {
     let mut clauses: Vec<Vec<u32>> = vec![];
     let mut a: u32 = 0u32;
-    for _ in atoms.iter() {
+    clauses.reserve(atoms.iter().size_hint().0); for _ in atoms.iter() {
         clauses.push(vec![sv_check_test_pos(a)]);
         a += 1;
     }

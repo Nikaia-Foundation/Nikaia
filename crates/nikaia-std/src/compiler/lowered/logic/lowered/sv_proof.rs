@@ -390,7 +390,7 @@ impl SvBook {
         if !b.row.cols.is_empty() || b.row.constant < floor { return None; }
         let assumed = match self.log.walk.assumed(&self.log.steps, &sources, &multipliers) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut lits: Vec<u32> = vec![];
-        for l in assumed.iter() {
+        lits.reserve(assumed.iter().size_hint().0); for l in assumed.iter() {
             let l = nikaia_std::num::value(l);
             let negation = if l % 2u32 == 0u32 { l + 1u32 } else { l - 1u32 };
             lits.push(negation);
@@ -437,7 +437,7 @@ pub struct SvExtended {
 
 pub(crate) fn sv_rounded(b: &SvBound, d: i64) -> Option<SvBound> {
     let mut ks: Vec<i64> = vec![];
-    for k in b.row.ks.iter() {
+    ks.reserve(b.row.ks.iter().size_hint().0); for k in b.row.ks.iter() {
         let k = nikaia_std::num::value(k);
         ks.push(k / d);
     }

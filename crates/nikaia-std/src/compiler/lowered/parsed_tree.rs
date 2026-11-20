@@ -21,7 +21,7 @@ pub fn aliases_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerConte
 
 pub(crate) fn grown(ty: &Type, vec: winnow_grammar::Symbol) -> Type {
     let mut generics: Vec<Type> = vec![];
-    for g in ty.generics.iter() { generics.push(grown(g, vec)); }
+    generics.reserve(ty.generics.iter().size_hint().0); for g in ty.generics.iter() { generics.push(grown(g, vec)); }
     let copy = ty.clone();
     if ty.is_slice && !ty.is_mut { return Type { name: vec, generics: generics, is_view: false, is_slice: false, either: false, ..copy }; }
     Type { generics: generics, ..copy }
@@ -29,7 +29,7 @@ pub(crate) fn grown(ty: &Type, vec: winnow_grammar::Symbol) -> Type {
 
 pub(crate) fn grown_fields(fields: &[FieldDef], vec: winnow_grammar::Symbol) -> Vec<FieldDef> {
     let mut out: Vec<FieldDef> = vec![];
-    for field in fields.iter() {
+    out.reserve(fields.iter().size_hint().0); for field in fields.iter() {
         let copy = field.clone();
         out.push(FieldDef { ty: grown(&field.ty, vec), ..copy });
     }
@@ -48,7 +48,7 @@ pub fn grown_items(items: &[Spanned<Item>], vec: winnow_grammar::Symbol) -> Vec<
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 let mut grown_variants: Vec<EnumVariant> = vec![];
-                for variant in variants.iter() {
+                grown_variants.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
                     let copy = variant.clone();
                     grown_variants.push(EnumVariant { fields: grown_variant(&variant.fields, vec), ..copy });
                 }
@@ -66,7 +66,7 @@ pub(crate) fn grown_variant(fields: &VariantFields, vec: winnow_grammar::Symbol)
         VariantFields::Unit => return VariantFields::Unit,
         VariantFields::Tuple(types) => {
             let mut out: Vec<Type> = vec![];
-            for ty in types.iter() { out.push(grown(ty, vec)); }
+            out.reserve(types.iter().size_hint().0); for ty in types.iter() { out.push(grown(ty, vec)); }
             return VariantFields::Tuple(out);
         },
         VariantFields::Named(named) => return VariantFields::Named(grown_fields(named, vec)),

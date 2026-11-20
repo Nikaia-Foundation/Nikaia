@@ -534,15 +534,12 @@ copy nothing, in a loop or out of one.
 `let mut (a, b) = …`, and marks every name in it.
 
 `mut` in front of **one name inside a tuple pattern** - `let (tx, mut rx) = …`,
-`for (k, mut v) in m`, `for (name, (mut line, col)) in places` - is **refused
-now, and possible later** (section 6). It is not refused on purpose: it is
-deferred to keep the pace. The grammar keeps the place: the parser reads the
-`mut` there (one pattern grammar for `let` and `for`, ADR-356) and the refusal
-is a diagnostic of its own, `NK1307`, labelled at the `mut`. Its message says
-the form is not supported yet; its help writes what works today: `mut` in
-front of the whole pattern (`let mut (tx, rx) = …`, `for mut (a, b) in
-pairs`), which marks every name. So no program that compiles today changes
-meaning when the form is added, and no new syntax is needed for it.
+`for (k, mut v) in m`, `for (name, (mut line, col)) in places` - means
+`let mut` on that name alone, and the other names stay plain (section 6,
+built by #1133). The parser reads the `mut` there (one pattern grammar for
+`let` and `for`, ADR-356). A lambda's tuple parameter still takes `mut` only
+in front of the whole pattern: one name marked there is `NK1307`, labelled at
+the `mut`, not supported yet.
 
 ### D25 — Over a place, the element is a `let mut` view of it.
 
@@ -568,10 +565,10 @@ element of a set (`for mut s in seen`) is refused, on purpose, with `NK1306`,
 labelled at the `mut`. Its message says why: the key decides where the entry
 stands in the map (its order, or its hash), so a key changed in place would
 leave it standing in the wrong place. Its help: take the entry out and insert
-it again after the loop; for a map's values, which a loop cannot change in
-place yet (section 6), change `m[k]` in a loop over keys taken before it. Rust
-has no `iter_mut` over a set for the same reason. (`for (mut k, v) in m` is
-`NK1307` first: one name of a tuple, D24.)
+it again after the loop; to change a map's values in place, write `mut` in
+front of the value alone, `for (k, mut v) in m` (section 6). Rust has no
+`iter_mut` over a set for the same reason. `for (mut k, v) in m` marks the key
+and is `NK1306` too.
 
 ### D28 — Each turn is a view's block: D18-D23 hold per turn.
 
@@ -615,12 +612,12 @@ ledger and removes `ref` (#1213).
 
 Part I 6.5 states the take-and-give-back rule for a `mut` parameter **and** a
 `let mut` view, and that a `for mut` element is a `let mut` view of its place;
-Part I 3.3 states D24-D27 and D29, and that one `mut` name in a tuple is not
-supported yet; Part III states `NK1139`'s help, `NK1306` and `NK1307`. A field
+Part I 3.3 states D24-D27 and D29, and that one `mut` name in a tuple marks
+that name alone; Part III states `NK1139`'s help, `NK1306` and `NK1307`. A field
 saved, replaced and restored around a call, and a list taken out of an entry
 and replaced, are written without `.clone()`; an index loop that only touches
-`v[i]` is a `for mut`. A map's `iter_mut()` / `values_mut()` stays open as
-#1133 until section 6's first point is decided. The cost accepted is the
+`v[i]` is a `for mut`. A map's values are written in place by
+`for (k, mut v) in m` (#1133). The cost accepted is the
 reverse trap of section 3: a scratch copy is written `.clone()`.
 
 ## 6. What this does not decide
@@ -635,18 +632,15 @@ reverse trap of section 3: a scratch copy is written `.clone()`.
   which is asked on its own.
 * A `let mut` view of a place, or a `for mut` over a list outside it, inside a
   lambda: the lambda is a function of its own, and its own rules apply.
-* **`mut` in front of one name of a tuple pattern: refused now, possible
-  later.** `let (tx, mut rx) = …`, `for (k, mut v) in m`,
-  `for (name, (mut line, col)) in places` are `NK1307` until it is decided.
-  Deferred to keep the pace, not refused on purpose: the grammar keeps the
-  place (D24), so adding it later breaks nothing. Its reading, when it comes,
-  is the same as `let mut` on that name alone.
-* **Map values written in place**, with the point above. `for (k, mut v) in m`
-  (lowered `m.iter_mut()`) and `for (_, mut v) in m` (`m.values_mut()`) need a
-  `mut` on one name of the pair, since one on the whole head marks the key
-  (D27). No form without it is decided: `for mut v in m.values()` would be a
-  writable view through an adapter, the point below. Until then a map's value
-  is changed by key, `m[k]`, outside a loop over `m`.
+* **`mut` in front of one name of a tuple pattern: built (#1133).**
+  `let (tx, mut rx) = …`, `for (k, mut v) in m`,
+  `for (name, (mut line, col)) in places` mean `let mut` on that name alone.
+  A lambda's tuple parameter is still `NK1307`: not supported yet.
+* **Map values written in place: built (#1133).** `for (k, mut v) in m`
+  lowers to `m.iter_mut()` and `for (_, mut v) in m` to `m.values_mut()`; the
+  key stays a plain name, since `mut` on it is D27's refusal.
+  `for mut v in m.values()` would be a writable view through an adapter, the
+  point below, and is not decided.
 * **Lowering to an index loop** (option 5 for `for mut`) where the body reads
   the list or changes another element, so that only a change of the list's
   length or order stays refused. Until it is decided, D29 holds.

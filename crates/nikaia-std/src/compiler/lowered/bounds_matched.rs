@@ -215,7 +215,7 @@ pub(crate) fn bm_required(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &coll
             }
             let mut conditions: Vec<Vec<logic::SolverTerm>> = vec![];
             let mut whole = true;
-            for text in contract.requires.iter() {
+            conditions.reserve(contract.requires.iter().size_hint().0); for text in contract.requires.iter() {
                 let nodes = read(text, &names);
                 if nodes.is_empty() { whole = false; }
                 conditions.push(nodes);
@@ -244,7 +244,7 @@ pub(crate) fn bm_each(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &collecti
                 }
             }
             let mut options: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
-            for option in signature.config.iter() {
+            options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() {
                 options.push((nikaia_std::block::Text::from(option.name.to_string()), nikaia_std::block::Text::from(option.default.to_string())));
                 names.insert(nikaia_std::block::Text::from(option.name.to_string()));
             }

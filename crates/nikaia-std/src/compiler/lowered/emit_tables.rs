@@ -48,15 +48,15 @@ pub fn emit_tables_borrowing_structs_beside(words: &winnow_grammar::InternerCont
                 for variant in variants.iter() {
                     match &variant.fields {
                         VariantFields::Unit => { },
-                        VariantFields::Tuple(tuple) => { for ty in tuple.iter() { types.push(ty.clone()); } },
-                        VariantFields::Named(named) => { for field in named.iter() { types.push(field.ty.clone()); } },
+                        VariantFields::Tuple(tuple) => { types.reserve(tuple.iter().size_hint().0); for ty in tuple.iter() { types.push(ty.clone()); } },
+                        VariantFields::Named(named) => { types.reserve(named.iter().size_hint().0); for field in named.iter() { types.push(field.ty.clone()); } },
                     }
                 }
             },
             Item::Struct { name, fields, .. } => {
                 let name = *name;
                 declared = Some(name);
-                for field in fields.iter() { types.push(field.ty.clone()); }
+                types.reserve(fields.iter().size_hint().0); for field in fields.iter() { types.push(field.ty.clone()); }
             },
             _ => { },
         }

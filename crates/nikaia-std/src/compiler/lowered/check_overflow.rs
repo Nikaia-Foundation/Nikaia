@@ -86,7 +86,7 @@ impl CheckState {
         let mut waiting: Vec<bool> = vec![];
         let key = span.start as i64;
         let slots = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return waiting };
-        for slot in slots.iter() { waiting.push(slot.refusal.is_some()); }
+        waiting.reserve(slots.iter().size_hint().0); for slot in slots.iter() { waiting.push(slot.refusal.is_some()); }
         waiting
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

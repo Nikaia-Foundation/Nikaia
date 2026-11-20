@@ -239,7 +239,7 @@ pub(crate) fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, com
                 let name = *name;
                 if receiver.is_none() && name.is_some() {
                     let mut held: Vec<String> = vec![];
-                    for option in config.iter() { held.push(view.text(option.name)); }
+                    held.reserve(config.iter().size_hint().0); for option in config.iter() { held.push(view.text(option.name)); }
                     options.insert(view.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }), held);
                 }
             },

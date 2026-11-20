@@ -171,14 +171,14 @@ pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, keeps: &[String], wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-    for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
+    names.reserve(wanted.iter().size_hint().0); for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
     let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if !names.is_empty() { takes = names_listed(&names); }
     let message = format!("`{}` takes {} by position, but you passed {} and {} by position.", key, takes, counted(passed.len() as i64, "named argument"), given.len() as i64);
     let declared = format!("It's declared as `{}{}`.", key, signature.shown(keeps));
     if (unsafe { nikaia_std::proven::add::<i64>(given.len() as i64, passed.len() as i64) }) != wanted.len() as i64 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
     #[allow(unused_mut)] let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
+    texts.reserve(given.iter().size_hint().0); for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
     let mut at = given.len() as i64;
     while at < wanted.len() as i64 {
         let mut found: i64 = -1;
@@ -207,7 +207,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let mut help: String = format!("Call it without arguments: `{}()`.", key);
         if !wanted.is_empty() {
             let mut takes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.shown())); }
+            takes.reserve(wanted.iter().size_hint().0); for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.shown())); }
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
         if !passed.is_empty() {
@@ -531,7 +531,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+            notes.reserve(kept_why.notes.iter().size_hint().0); for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
             help = nikaia_std::block::Text::from(kept_why.help.to_string());
         } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
             notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.shown()));

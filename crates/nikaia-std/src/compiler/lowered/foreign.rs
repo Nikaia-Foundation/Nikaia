@@ -321,7 +321,7 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     let mut wrote: Option<Wrote> = None;
     if at >= 0 && at < args.len() as i64 { wrote = written_root(names, unsafe { nikaia_std::proven::read(&args, (at) as usize) }); }
     let mut literals: Vec<Option<String>> = vec![];
-    for arg in args.iter() {
+    literals.reserve(args.iter().size_hint().0); for arg in args.iter() {
         literals.push(match arg {
             Expr::LitStr { text, .. } => Some(nikaia_std::block::Text::from(text.to_string())),
             _ => None,
@@ -334,7 +334,7 @@ pub fn foreign_own_published(own: &ProjectMembersOwnRust) -> Vec<CheckFinding> {
     let mut out: Vec<CheckFinding> = vec![];
     if own.published.is_empty() { return out; }
     let lines: Vec<String> = own.entries.split("\n").map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
-    for (name, line) in own.published.iter() {
+    out.reserve(own.published.iter().size_hint().0); for (name, line) in own.published.iter() {
         let line = nikaia_std::num::value(line);
         let mut start: i64 = 0;
         let mut end: i64 = 0;
@@ -360,7 +360,7 @@ pub fn foreign_own_refused(written: &[(String, Span)], program: &Program, names:
             Item::Import { path, alias } => {
                 let alias = *alias;
                 let mut parts: Vec<String> = vec![];
-                for p in path.iter() {
+                parts.reserve(path.iter().size_hint().0); for p in path.iter() {
                     let p = *p;
                     parts.push(nikaia_std::block::Text::from(names.resolve(p).to_string()));
                 }

@@ -692,8 +692,10 @@ fix it or wait; **[works]**: use it, do not copy an old way around.
   null,`), and a literal in any file of the package leaves it out: a field
   added to a struct with many literals (`CheckFinding`) gets one, not an
   `edit: null` in each; literals in hand-written Rust still name it;
-* [gap: ADR-views-v4 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
-  and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
+* [works, #1133] `mut` on one name of a tuple marks that name alone:
+  `let (a, mut b) = …`; `for (k, mut v) in m` lowers to `m.iter_mut()`,
+  `for (_, mut v) in m` to `m.values_mut()`; only a lambda's tuple parameter
+  is still `NK1307`;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the
   catch-all arm is `else =>`;
 * collections: [works] `m.iter()`, `for (k, v) in m`, `a.iter().zip(b.iter())`;

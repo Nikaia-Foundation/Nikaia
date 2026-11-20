@@ -38,7 +38,7 @@ pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
     let mut labels: Vec<Marked> = shown.labels.copy_owned();
     if labels.is_empty() { labels.push(Marked { span: shown.span.clone(), word: String::from(""), text: String::from(""), main: true }); }
     let mut placed: Vec<Placed> = vec![];
-    for label in labels.iter() {
+    placed.reserve(labels.iter().size_hint().0); for label in labels.iter() {
         let at = line_column(lines, label.span.start);
         let text = line_of(lines, at.0);
         let found = if label.word.is_empty() { (at.1, spanned_width(lines, &label.span)) } else { word_in(&text, at.1, &label.word) };
@@ -246,7 +246,7 @@ pub(crate) fn rustc_refused(message: &Relayed, at: &str, path: &str, source: &st
             notes.push(format!("rustc output: {}", original));
         },
     }
-    for note in message.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+    notes.reserve(message.notes.iter().size_hint().0); for note in message.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
     let help: String = String::from("This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if message.located {
         let shown = Shown { warning: false, code: String::from("NK1343"), message: String::from("internal compiler error"), notes, help: Some(help), span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: nikaia_std::block::Text::from(message.word.to_string()), text: String::from(""), main: true }], edit: None };

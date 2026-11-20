@@ -81,7 +81,7 @@ pub(crate) fn features_name_ok(name: &str) -> bool {
 
 pub(crate) fn features_lists_checked(features: &[ManifestFeature], package: &str) -> Option<FeaturesRefusal> {
     let mut declared: Vec<String> = vec![];
-    for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
+    declared.reserve(features.iter().size_hint().0); for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
     for feature in features.iter() {
         if !features_name_ok(&feature.name) { return Some(FeaturesRefusal { code: String::from("NK1347"), feature: nikaia_std::block::Text::from(feature.name.to_string()), entry: String::from(""), message: format!("`{}` is not a feature name Cargo accepts: a feature's name is letters, digits and `_`, then also `-`, `+` and `.`.", feature.name), help: None }); }
         if !feature.listed { return Some(FeaturesRefusal { code: String::from("NK1347"), feature: nikaia_std::block::Text::from(feature.name.to_string()), entry: String::from(""), message: format!("The feature `{}` is not a list: a feature lists its roots, and `default` lists features, each as a text in `[...]`.", feature.name), help: None }); }
@@ -100,7 +100,7 @@ pub(crate) fn features_lists_checked(features: &[ManifestFeature], package: &str
 
 pub(crate) fn features_chosen_checked(features: &[ManifestFeature], chosen: &[String]) -> Option<FeaturesRefusal> {
     let mut declared: Vec<String> = vec![];
-    for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
+    declared.reserve(features.iter().size_hint().0); for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
     for name in chosen.iter() {
         if nikaia_std::list::contains(&declared, &name) { continue; }
         let mut help: Option<String> = None;
@@ -249,7 +249,7 @@ pub(crate) fn features_items(lines: &[String]) -> Vec<FeatureItem> {
             let head = nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).split('{').next(), || "");
             header = features_scan_line(head, &mut head_lexer).words;
         }
-        if !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("beside:") && !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("pub use super::__nikaia_reader_") { for word in line.words.iter() { words.push(nikaia_std::block::Text::from(word.to_string())); } }
+        if !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("beside:") && !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("pub use super::__nikaia_reader_") { words.reserve(line.words.iter().size_hint().0); for word in line.words.iter() { words.push(nikaia_std::block::Text::from(word.to_string())); } }
         if lexer.depth == 0 && (line.last == '}' || line.last == ';') {
             let first: i64 = if pending >= 0 { pending } else { current };
             let mut item = features_item(first, &words, &header);
@@ -333,14 +333,14 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
     let mut roots: Vec<i64> = vec![];
     #[allow(unused_mut)] let mut implied: Vec<String> = vec![];
     let mut offered: Vec<String> = vec![nikaia_std::block::Text::from(package.to_string())]; #[allow(unused_mut, clippy::redundant_locals)] let mut implied = implied;
-    for item in items.iter() {
+    offered.reserve(items.iter().size_hint().0); for item in items.iter() {
         if item.public && !item.name.is_empty() && !item.name.starts_with("__") { offered.push(format!("{}::{}", package, item.name)); }
         let path = match features_reader_path(&item.name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         offered.push(format!("{}::{}", package, path));
         let book = nikaia_std::index::or(path.split("::").next(), || "");
         if !offered.contains(&format!("{}::{}", package, book)) { offered.push(format!("{}::{}", package, book)); }
     }
-    for entry in feature.entries.iter() {
+    roots.reserve(feature.entries.iter().size_hint().0); for entry in feature.entries.iter() {
         if nikaia_std::list::contains(&declared, &entry) && !entry.contains("::") && entry != package {
             implied.push(nikaia_std::block::Text::from(entry.to_string()));
             continue;
@@ -363,7 +363,7 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
                 if path == rest || path.starts_with(&*format!("{}::", rest)) { readers.push(at); }
             }
             if !readers.is_empty() {
-                for at in readers.iter() {
+                roots.reserve(readers.iter().size_hint().0); for at in readers.iter() {
                     let at = nikaia_std::num::value(at);
                     roots.push(at);
                 }
@@ -451,7 +451,7 @@ pub(crate) fn features_applied(rust: &str, manifest: &str, features: &[ManifestF
     }
     #[allow(unused_mut)] let mut optional: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     let mut uses: Vec<Vec<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
-    for _ in resolved.iter() { uses.push(vec![]); }
+    uses.reserve(resolved.iter().size_hint().0); for _ in resolved.iter() { uses.push(vec![]); }
     for key in features_dependency_keys(manifest) {
         let word = nikaia_std::block::Text::from(key.replace('-', "_"));
         let mut in_core = false;
@@ -491,7 +491,7 @@ pub(crate) fn features_applied(rust: &str, manifest: &str, features: &[ManifestF
         names.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&resolved, (f) as usize) }.name.to_string()));
         let mut entries: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for edge in edges.iter() { if edge.0 == f { entries.push(format!("\"{}\"", nikaia_std::index::get(&resolved, nikaia_std::index::at(edge.1)).name)); } }
-        for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
+        entries.reserve((*nikaia_std::index::get(&uses, (f) as usize)).iter().size_hint().0); for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
         table = format!("{}{} = [{}]\n", table, unsafe { nikaia_std::proven::read(&resolved, (f) as usize) }.name, nikaia_std::block::Text::from(entries.join(", ")));
     }
     Ok(FeaturesMade { rust: nikaia_std::block::Text::from(lines.join("\n")), table, optional, names, homes })
@@ -549,7 +549,7 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
                     return Some((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(named.trim().to_string())));
                 }
             }
-            for word in item.words.iter() { queue.push(nikaia_std::block::Text::from(word.to_string())); }
+            queue.reserve(item.words.iter().size_hint().0); for word in item.words.iter() { queue.push(nikaia_std::block::Text::from(word.to_string())); }
         }
     }
     None
@@ -562,7 +562,7 @@ pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, ch
         None => reach.default.copy_owned(),
         Some(list) => list.copy_owned(),
     }; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
-    for name in named.iter() { if name == "default" { for listed in reach.default.iter() { wanted.push(nikaia_std::block::Text::from(listed.to_string())); } } else { wanted.push(nikaia_std::block::Text::from(name.to_string())); } }
+    for name in named.iter() { if name == "default" { wanted.reserve(reach.default.iter().size_hint().0); for listed in reach.default.iter() { wanted.push(nikaia_std::block::Text::from(listed.to_string())); } } else { wanted.push(nikaia_std::block::Text::from(name.to_string())); } }
     let mut kept: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
     for at in 0..reach.items.len() as i64 {
         let item = unsafe { nikaia_std::proven::read(&reach.items, (at) as usize) };
@@ -619,22 +619,22 @@ pub(crate) fn features_reach(rust: &str, features: &[ManifestFeature], package: 
         (*unsafe { nikaia_std::proven::slot(&mut items, (at) as usize) }).owners = owners;
     }
     #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
-    for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
+    declared.reserve(features.iter().size_hint().0); for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
     let mut resolved: Vec<FeatureRoots> = vec![];
     let mut default: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-    for feature in features.iter() {
+    resolved.reserve(features.iter().size_hint().0); for feature in features.iter() {
         if feature.name == "default" {
-            for entry in feature.entries.iter() { default.push(nikaia_std::block::Text::from(entry.to_string())); }
+            default.reserve(feature.entries.iter().size_hint().0); for entry in feature.entries.iter() { default.push(nikaia_std::block::Text::from(entry.to_string())); }
             continue;
         }
         resolved.push(features_roots(feature, package, &items, &declared)?);
     }
     let mut reached: Vec<Vec<bool>> = vec![];
-    for one in resolved.iter() {
+    reached.reserve(resolved.iter().size_hint().0); for one in resolved.iter() {
         let mut seeds = one.roots.copy_owned();
         for other in resolved.iter() {
             if nikaia_std::list::contains(&one.implied, &other.name) {
-                for root in other.roots.iter() {
+                seeds.reserve(other.roots.iter().size_hint().0); for root in other.roots.iter() {
                     let root = nikaia_std::num::value(root);
                     seeds.push(root);
                 }

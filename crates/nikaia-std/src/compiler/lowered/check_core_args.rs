@@ -247,7 +247,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
             Ty::Fn { params, is_sync, can_throw, .. } => {
                 let can_throw = *can_throw; let is_sync = *is_sync;
                 wants_fn = true;
-                for p in params.iter() { viewed.push(p.is_a_view()); }
+                viewed.reserve(params.iter().size_hint().0); for p in params.iter() { viewed.push(p.is_a_view()); }
                 let plain: bool = is_sync;
                 wants_pausing_fn = !plain;
                 wants_throwing_fn = can_throw;
@@ -480,7 +480,7 @@ pub(crate) fn check_core_fold_form_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_
         Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
         Expr::Path(segments, _) => {
             let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for segment in segments.iter() {
+            names.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
                 let segment = *segment;
                 names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
             }
@@ -619,7 +619,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
     state.flow.lambda_expected = None;
     let element: Option<Ty> = check_core_args_fn_element((declared).as_ref());
     let mut walked: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for item in items.iter() {
+    walked.reserve(items.iter().size_hint().0); for item in items.iter() {
         if check_core_args_a_closure(item) {
             state.flow.lambda_expected = match element.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -647,7 +647,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
     if a_null {
         let mut arms: Vec<CheckArm<'_>> = vec![];
         let mut i: i64 = 0;
-        for item in items.iter() {
+        arms.reserve(items.iter().size_hint().0); for item in items.iter() {
             arms.push(CheckArm { tail: Some(item), ty: (*unsafe { nikaia_std::proven::read(&walked, (i) as usize) }).clone() });
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }

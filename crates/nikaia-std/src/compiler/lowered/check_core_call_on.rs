@@ -345,7 +345,7 @@ pub(crate) fn check_core_call_on_self_signature(signature: Option<&Signature>, p
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut params: Vec<(String, Ty)> = vec![];
-    for (name, ty) in written.params.iter() { params.push((nikaia_std::block::Text::from(name.to_string()), check_core_call_on_self_as(ty, parameter))); }
+    params.reserve(written.params.iter().size_hint().0); for (name, ty) in written.params.iter() { params.push((nikaia_std::block::Text::from(name.to_string()), check_core_call_on_self_as(ty, parameter))); }
     written.params = params;
     let result: Option<Ty> = match written.result.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -977,7 +977,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     for (name, ty) in state.arguments_of(on) { bound.entry(String::from(name)).or_insert(ty); }
     let patterns = expected_arguments(contract);
     let mut expected: Vec<Ty> = vec![];
-    for ty in patterns.iter() { expected.push(substitute(ty, &bound)); }
+    expected.reserve(patterns.iter().size_hint().0); for ty in patterns.iter() { expected.push(substitute(ty, &bound)); }
     check_core_call_on_extend_literal(key, &bound, args, &mut expected);
     let outer_paused: Vec<i64> = state.flow.paused_args.copy_owned();
     state.flow.paused_args = vec![];
@@ -1129,7 +1129,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let moving = check_core_call_moving_options(&state, contract, &written, &passed);
     if !moving.is_empty() {
         let mut told: Vec<(String, Ty, String)> = vec![];
-        for (name, ty) in moving.iter() { told.push((nikaia_std::block::Text::from(name.to_string()), ty.clone(), format!("passed as the option `{}` of `{}`, which keeps it", name, written))); }
+        told.reserve(moving.iter().size_hint().0); for (name, ty) in moving.iter() { told.push((nikaia_std::block::Text::from(name.to_string()), ty.clone(), format!("passed as the option `{}` of `{}`, which keeps it", name, written))); }
         state.flow.method_moved.insert(id_of(receiver) as i64, told);
     }
     state.a_lookup_key_lent(world, key, on, args, &found);
@@ -1401,7 +1401,7 @@ pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
         Ty::Fn { params, result, is_sync, can_throw, spelled } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut plain: Vec<Ty> = vec![];
-            for p in params.iter() { plain.push(unviewed_type(p)); }
+            plain.reserve(params.iter().size_hint().0); for p in params.iter() { plain.push(unviewed_type(p)); }
             Ty::Fn { params: plain, result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
@@ -1483,9 +1483,9 @@ pub(crate) fn check_core_call_on_parameters_in(state: &CheckState, ty: &Ty) -> c
         match one {
             Ty::Named { ref name, ref args, .. } => {
                 if args.is_empty() && state.type_parameters.contains_key(name) { out.insert(nikaia_std::block::Text::from(name.to_string())); }
-                for arg in args.iter() { stack.push(arg.clone()); }
+                stack.reserve(args.iter().size_hint().0); for arg in args.iter() { stack.push(arg.clone()); }
             },
-            Ty::Tuple(ref parts) => { for part in parts.iter() { stack.push(part.clone()); } },
+            Ty::Tuple(ref parts) => { stack.reserve(parts.iter().size_hint().0); for part in parts.iter() { stack.push(part.clone()); } },
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); stack.push(inner.clone()); },
             _ => { },
         }

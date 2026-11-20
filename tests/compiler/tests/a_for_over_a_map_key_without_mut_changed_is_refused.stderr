@@ -1,0 +1,11 @@
+error[NK1139]: You're changing `k`, which a `for` binds, but the `for` wasn't declared `mut`.
+  --> tests/a_for_over_a_map_key_without_mut_changed_is_refused.nika:8:9
+   |
+ 7 |     for (k, mut v) in m {
+   |          - bound here by the `for`, without `mut`
+ 8 |         k += 1
+   |         ^ changed here
+   |
+   = note: A `for` binding is the element of this turn, and it changes only if the head says `mut`.
+   = help: For a change meant for this turn only, change a copy: `let mut k_own = k.clone()`.
+1 type error

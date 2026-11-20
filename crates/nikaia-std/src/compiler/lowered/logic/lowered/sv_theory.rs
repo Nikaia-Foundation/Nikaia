@@ -98,7 +98,7 @@ pub(crate) fn sv_src_same(a: &SvSrc, b: &SvSrc) -> bool {
 
 pub(crate) fn sv_written(refutation: &LgRefutation, held: &[SvHeld], book: &mut SvBook) -> Option<SvClause> {
     let mut spelled: Vec<SvSpelled> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for step in refutation.steps.iter() {
+    spelled.reserve(refutation.steps.iter().size_hint().0); for step in refutation.steps.iter() {
         let step = *step;
         let made = match step {
             LgStep::Hypothesis(i) => SvSpelled { sources: vec![nikaia_std::index::get(&held, nikaia_std::index::at(i)).src.clone()], multipliers: vec![1] },
@@ -211,12 +211,12 @@ impl SvTh for SvTheory {
     fn check(&mut self, r#final: bool, limit: &LgBudget, book: &mut SvBook) -> SvChecked {
         if !book.reals.is_empty() { return SvChecked::Unknown(LgUnknown::OutsideTheTheory); }
         let mut held: Vec<SvHeld> = vec![];
-        for l in self.trail.iter() {
+        held.reserve(self.trail.iter().size_hint().0); for l in self.trail.iter() {
             let l = nikaia_std::num::value(l);
             let a = match book.asserted(l) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::OutsideTheTheory) };
             held.push(SvHeld { row: a.bound.row, src: a.src });
         }
-        for f in self.facts.iter() {
+        held.reserve(self.facts.iter().size_hint().0); for f in self.facts.iter() {
             let f = nikaia_std::num::value(f);
             let b = match book.bounds.get(&f) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::OutsideTheTheory) };
             held.push(SvHeld { row: b.row.clone(), src: SvSrc::Fact(f) });
@@ -235,7 +235,7 @@ impl SvTh for SvTheory {
             }
         }
         let mut lins: Vec<LgLin> = vec![];
-        for h in held.iter() { lins.push(sv_lin(&h.row, &self.names)); }
+        lins.reserve(held.iter().size_hint().0); for h in held.iter() { lins.push(sv_lin(&h.row, &self.names)); }
         let got = match lg_contradictory(&lins, limit) {
             LgClosed::Refuted(ref refutation) => {
                 let clause = match sv_written(refutation, &held, book) { Some(__nikaia_value) => __nikaia_value, None => return SvChecked::Unknown(LgUnknown::Overflow) };
@@ -319,7 +319,7 @@ pub(crate) fn sv_theory_test_both(name: &str, source: &str) -> String {
 pub(crate) fn sv_theory_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
-    for k in ks.iter() {
+    terms.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: i, k });
         i += 1;
@@ -329,7 +329,7 @@ pub(crate) fn sv_theory_test_row1(ks: &[i64], c: i64) -> SvRow {
 
 pub(crate) fn sv_theory_test_lits_text(ls: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for l in ls.iter() {
+    parts.reserve(ls.iter().size_hint().0); for l in ls.iter() {
         let l = nikaia_std::num::value(l);
         parts.push(format!("{}", l));
     }

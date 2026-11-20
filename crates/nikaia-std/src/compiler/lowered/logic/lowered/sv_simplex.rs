@@ -146,7 +146,7 @@ pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClaus
     if !closes { return None; }
     let assumed = match book.log.walk.assumed(&book.log.steps, &mult.sources, &mult.ms) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut lits: Vec<u32> = vec![];
-    for l in assumed.iter() {
+    lits.reserve(assumed.iter().size_hint().0); for l in assumed.iter() {
         let l = nikaia_std::num::value(l);
         lits.push(sv_sx_not(l));
     }
@@ -183,7 +183,7 @@ pub(crate) fn sv_sx_multipliers(parts: &[SvPart]) -> Option<SvMult> {
     let g = match sv_content(&ms) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if g > 1 {
         let mut reduced: Vec<i64> = vec![];
-        for m in ms.iter() {
+        reduced.reserve(ms.iter().size_hint().0); for m in ms.iter() {
             let m = nikaia_std::num::value(m);
             reduced.push(m / g);
         }
@@ -1153,7 +1153,7 @@ pub struct SvViolation {
 pub(crate) fn sv_simplex_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
-    for k in ks.iter() {
+    terms.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: i, k });
         i += 1;
@@ -1169,7 +1169,7 @@ pub(crate) fn sv_simplex_test_eq(ks: &[i64], c: i64) -> SvAtom { SvAtom { row: s
 
 pub(crate) fn sv_simplex_test_lits_text(ls: &[u32]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for l in ls.iter() {
+    parts.reserve(ls.iter().size_hint().0); for l in ls.iter() {
         let l = nikaia_std::num::value(l);
         parts.push(format!("{}", l));
     }
@@ -1187,7 +1187,7 @@ pub(crate) fn sv_simplex_test_said_by(checked: &SvChecked) -> String {
 
 pub(crate) fn sv_simplex_test_model_text(m: &collections::BTreeMap<String, i64>) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (name, v) in m.iter() {
+    parts.reserve(m.iter().size_hint().0); for (name, v) in m.iter() {
         let v = nikaia_std::num::value(v);
         parts.push(format!("{} = {}", name, v));
     }
@@ -1233,7 +1233,7 @@ pub(crate) fn sv_simplex_test_scenario(title: &str, names: Vec<String>, atoms: V
     match got {
         SvChecked::Conflict(ref c) => {
             let mut hints: Vec<u32> = vec![];
-            for l in c.lits.iter() {
+            hints.reserve(c.lits.iter().size_hint().0); for l in c.lits.iter() {
                 let l = nikaia_std::num::value(l);
                 hints.push(*nikaia_std::index::get(&inputs, nikaia_std::index::at((l / 2u32) as i64)));
             }
@@ -1361,7 +1361,7 @@ pub(crate) fn sv_real_test_answer(source: &str) -> String {
         },
         SvDriven::RealModel(ref values) => {
             #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for (name, v) in values.iter() {
+            parts.reserve(values.iter().size_hint().0); for (name, v) in values.iter() {
                 let v = *v;
                 parts.push(format!("{} = {}", name, sv_rat_text(&v)));
             }
@@ -1403,7 +1403,7 @@ pub(crate) fn sv_real_test_row(ks: &[i64], c: i64) -> SvRow {
 pub(crate) fn sv_real_test_units(atoms: Vec<SvAtom>, columns: u32, reals: Vec<u32>) -> SvQuery {
     let mut clauses: Vec<Vec<u32>> = vec![];
     let mut a: u32 = 0u32;
-    for _ in atoms.iter() {
+    clauses.reserve(atoms.iter().size_hint().0); for _ in atoms.iter() {
         clauses.push(vec![sv_lit(a, false)]);
         a += 1;
     }
@@ -1475,7 +1475,7 @@ pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn sv_cuts_test_row1(ks: &[i64], c: i64) -> SvRow {
     let mut terms: Vec<SvTerm> = vec![];
     let mut i: u32 = 0u32;
-    for k in ks.iter() {
+    terms.reserve(ks.iter().size_hint().0); for k in ks.iter() {
         let k = nikaia_std::num::value(k);
         terms.push(SvTerm { col: i, k });
         i += 1;
@@ -1510,7 +1510,7 @@ pub(crate) fn sv_cuts_test_broken(steps: &[SvStep], how: &str) -> Vec<SvStep> {
     let mut out: Vec<SvStep> = vec![];
     let mut rounds = 0;
     let mut splits = 0;
-    for st in steps.iter() {
+    out.reserve(steps.iter().size_hint().0); for st in steps.iter() {
         let mut next = st.clone();
         match st {
             SvStep::Round(id, d) => {
@@ -1573,7 +1573,7 @@ pub(crate) fn sv_cuts_test_run(title: &str, names: Vec<String>, atoms: Vec<SvAto
     match got {
         SvChecked::Conflict(ref c) => {
             let mut hints: Vec<u32> = vec![];
-            for l in c.lits.iter() {
+            hints.reserve(c.lits.iter().size_hint().0); for l in c.lits.iter() {
                 let l = nikaia_std::num::value(l);
                 hints.push(*nikaia_std::index::get(&inputs, nikaia_std::index::at((l / 2u32) as i64)));
             }

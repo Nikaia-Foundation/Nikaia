@@ -86,13 +86,13 @@ pub(crate) fn code_spelled(names: &winnow_grammar::InternerContext, ty: &Type) -
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
     if (code.param_names.len() as i64) != ty.generics.len() as i64 { return CodeNames::none(); }
     #[allow(unused_mut)] let mut params: Vec<String> = vec![];
-    for one in code.param_names.iter() {
+    params.reserve(code.param_names.iter().size_hint().0); for one in code.param_names.iter() {
         let one = *one;
         let name = match one { Some(__nikaia_value) => __nikaia_value, None => return CodeNames::none() };
         params.push(nikaia_std::block::Text::from(names.resolve(name).to_string()));
     }
     let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
-    for source in code.result_from.iter() {
+    from.reserve(code.result_from.iter().size_hint().0); for source in code.result_from.iter() {
         let source = *source;
         from.push(nikaia_std::block::Text::from(names.resolve(source).to_string()));
     }
@@ -146,7 +146,7 @@ pub(crate) fn self_named(ty: &Ty, owner: &Ty) -> Ty {
 
 pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, types: &[Type]) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
-    for ty in types.iter() { out.push(written_ty(names, aliases, ty)); }
+    out.reserve(types.iter().size_hint().0); for ty in types.iter() { out.push(written_ty(names, aliases, ty)); }
     out
 }
 
@@ -195,7 +195,7 @@ pub(crate) fn declared_function(names: &winnow_grammar::InternerContext, aliases
         mutates = subject.is_mut && subject.is_ref;
     }
     #[allow(unused_mut)] let mut mutable: Vec<String> = vec![];
-    for arg in args.iter() {
+    params.reserve(args.iter().size_hint().0); for arg in args.iter() {
         let arg_name = nikaia_std::block::Text::from(names.resolve(arg.name).to_string());
         let mut ty = written_ty(names, aliases, &arg.ty).parameterise(&parameters);
         match itself {
@@ -206,17 +206,17 @@ pub(crate) fn declared_function(names: &winnow_grammar::InternerContext, aliases
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut bounds: Vec<(String, Vec<String>)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut mutable = mutable;
-    for generic in generics.iter() {
+    bounds.reserve(generics.iter().size_hint().0); for generic in generics.iter() {
         if generic.bounds.is_empty() { continue; }
         let mut written: Vec<String> = vec![];
-        for bound in generic.bounds.iter() {
+        written.reserve(generic.bounds.iter().size_hint().0); for bound in generic.bounds.iter() {
             let bound = *bound;
             written.push(nikaia_std::block::Text::from(names.resolve(bound).to_string()));
         }
         bounds.push((nikaia_std::block::Text::from(names.resolve(generic.name).to_string()), written));
     }
     let mut options: Vec<ConfigContract> = vec![];
-    for option in config.iter() {
+    options.reserve(config.iter().size_hint().0); for option in config.iter() {
         let ty = written_ty(names, aliases, &option.ty).parameterise(&parameters);
         options.push(ConfigContract { name: nikaia_std::block::Text::from(names.resolve(option.name).to_string()), ty, default: default_text(&option.default) });
     }
@@ -228,7 +228,7 @@ pub(crate) fn declared_function(names: &winnow_grammar::InternerContext, aliases
     let mut sync_claim = Sync::No;
     if is_sync { sync_claim = Sync::Asserted; } else if !sync_by.is_empty() {
         let mut lambdas: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for lambda in sync_by.iter() {
+        lambdas.reserve(sync_by.iter().size_hint().0); for lambda in sync_by.iter() {
             let lambda = *lambda;
             lambdas.push(nikaia_std::block::Text::from(names.resolve(lambda).to_string()));
         }
@@ -277,13 +277,13 @@ pub(crate) fn declared_trait_method(names: &winnow_grammar::InternerContext, ali
         params.push((self_name, Ty::Named { name: owner, args: vec![], view: subject.is_ref }));
     }
     let mut mutable: Vec<String> = vec![];
-    for arg in method.args.iter() {
+    params.reserve(method.args.iter().size_hint().0); for arg in method.args.iter() {
         let arg_name = nikaia_std::block::Text::from(names.resolve(arg.name).to_string());
         params.push((nikaia_std::block::Text::from(arg_name.to_string()), written_ty(names, aliases, &arg.ty)));
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut options: Vec<ConfigContract> = vec![];
-    for option in method.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(names.resolve(option.name).to_string()), ty: written_ty(names, aliases, &option.ty), default: default_text(&option.default) }); }
+    options.reserve(method.config.iter().size_hint().0); for option in method.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(names.resolve(option.name).to_string()), ty: written_ty(names, aliases, &option.ty), default: default_text(&option.default) }); }
     let result = optional_ty(names, aliases, (method.ret_type).as_ref());
     let mut contract = FnContract::empty();
     contract.public = public;
@@ -302,7 +302,7 @@ pub(crate) fn optional_ty(names: &winnow_grammar::InternerContext, aliases: &col
 pub(crate) fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, variants: &[EnumVariant], is_public: bool, borrowing: &collections::BTreeSet<String>) -> TypeContract {
     let mut cases: Vec<VariantContract> = vec![];
     let mut tethered: Vec<String> = vec![];
-    for variant in variants.iter() {
+    cases.reserve(variants.iter().size_hint().0); for variant in variants.iter() {
         let mut holds: Vec<FieldContract> = vec![];
         let mut positional = false;
         let mut views = false;
@@ -311,14 +311,14 @@ pub(crate) fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &c
             VariantFields::Tuple(types) => {
                 positional = true;
                 let mut at = 0;
-                for ty in types.iter() {
+                holds.reserve(types.iter().size_hint().0); for ty in types.iter() {
                     holds.push(FieldContract { name: format!("{}", at), ty: written_ty(names, aliases, ty), public: true, default: String::from(""), attributes: vec![] });
                     if holds_view(ty) || names_borrowing(names, ty, borrowing) { views = true; }
                     at = at + 1;
                 }
             },
             VariantFields::Named(fields) => {
-                for field in fields.iter() {
+                holds.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                     holds.push(FieldContract { name: nikaia_std::block::Text::from(names.resolve(field.name).to_string()), ty: written_ty(names, aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] });
                     if holds_view(&field.ty) || names_borrowing(names, &field.ty, borrowing) { views = true; }
                 }
@@ -339,7 +339,7 @@ pub(crate) fn declared_fields(names: &winnow_grammar::InternerContext, aliases: 
     let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
     for generic in generics.iter() { parameters.insert(nikaia_std::block::Text::from(names.resolve(generic.name).to_string())); }
     let mut out: Vec<FieldContract> = vec![];
-    for field in fields.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(names.resolve(field.name).to_string()), ty: written_ty(names, aliases, &field.ty).parameterise(&parameters), public: field.is_public || is_extern, default: String::from(""), attributes: vec![] }); }
+    out.reserve(fields.iter().size_hint().0); for field in fields.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(names.resolve(field.name).to_string()), ty: written_ty(names, aliases, &field.ty).parameterise(&parameters), public: field.is_public || is_extern, default: String::from(""), attributes: vec![] }); }
     out
 }
 

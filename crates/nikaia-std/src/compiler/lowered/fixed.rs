@@ -64,7 +64,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
             while !placed && (d2 as i64) < n {
                 let mut taken: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let mut fits = true;
-                for (at, f1, f2) in (*nikaia_std::index::get(&by_bucket, nikaia_std::index::at(bucket))).iter() {
+                taken.reserve((*nikaia_std::index::get(&by_bucket, nikaia_std::index::at(bucket))).iter().size_hint().0); for (at, f1, f2) in (*nikaia_std::index::get(&by_bucket, nikaia_std::index::at(bucket))).iter() {
                     let at = nikaia_std::num::value(at);let f1 = nikaia_std::num::value(f1);let f2 = nikaia_std::num::value(f2);
                     let slot = runtime::displace(f1, f2, d1, d2) as i64 % n;
                     let mut clash = *nikaia_std::index::get(&slots, nikaia_std::index::at(slot)) >= 0;

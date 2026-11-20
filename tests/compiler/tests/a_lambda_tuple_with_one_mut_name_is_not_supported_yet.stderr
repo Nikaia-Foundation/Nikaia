@@ -1,0 +1,8 @@
+error[NK1307]: `mut` in front of one name of a lambda's tuple parameter isn't supported yet.
+  --> tests/a_lambda_tuple_with_one_mut_name_is_not_supported_yet.nika:5:50
+   |
+ 5 |     let sums: Vec[i64] = pairs.iter().map(fn((a, mut b)) { b += a; b }).collect()
+   |                                                  ^^^ not supported yet
+   |
+   = note: This is not refused on purpose: the form is left for later. In a `let` or a `for` it marks that name alone.
+   = help: Take the tuple whole and bind its parts in the body: `fn(pair) { let (a, mut b) = pair; … }`.

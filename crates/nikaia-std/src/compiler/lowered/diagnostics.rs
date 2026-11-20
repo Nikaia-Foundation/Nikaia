@@ -71,7 +71,7 @@ pub struct DiagnosticsPlaced {
 pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<DiagnosticsPlaced> {
     let starts: Vec<Vec<i64>> = sources.iter().map(|s| { diagnostics_line_starts(s) }).collect::<Vec<_>>();
     let mut out: Vec<DiagnosticsPlaced> = vec![];
-    for one in read.iter() {
+    out.reserve(read.iter().size_hint().0); for one in read.iter() {
         if one.level != "error" && one.level != "warning" { continue; }
         if one.message.starts_with("aborting due to") { continue; }
         let message = in_this_language(&one.message);

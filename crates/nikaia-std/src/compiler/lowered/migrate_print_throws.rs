@@ -208,7 +208,7 @@ pub(crate) fn print_throws_failing(tokens: &[MigrateToken], fns: &[PrintThrowsFn
         if bare.is_some() { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::or(bare, || "").to_string())); } else { free.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     let mut failing: Vec<bool> = vec![];
-    for _f in fns.iter() { failing.push(false); }
+    failing.reserve(fns.iter().size_hint().0); for _f in fns.iter() { failing.push(false); }
     let mut changed = true;
     while changed {
         changed = false;

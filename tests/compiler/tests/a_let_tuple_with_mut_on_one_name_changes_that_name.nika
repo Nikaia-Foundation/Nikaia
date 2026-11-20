@@ -1,0 +1,10 @@
+// `mut` on one name of a tuple pattern is `let mut` on that name alone
+// (ADR-views-v4 section 6, #1133).
+fn main() throws {
+    let (a, mut b) = (1, 2)
+    b += a
+    println(f"{b}")
+    let ((c, mut d), e) = ((10, 20), 30)
+    d += c + e
+    println(f"{c} {d} {e}")
+}

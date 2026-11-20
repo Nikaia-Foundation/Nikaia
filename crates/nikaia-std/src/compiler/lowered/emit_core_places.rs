@@ -546,7 +546,7 @@ impl EmitState {
         }
         walk.trusting = trusting;
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for field in fields.iter() { names.push(emit_text(world, field.name)); }
+        names.reserve(fields.iter().size_hint().0); for field in fields.iter() { names.push(emit_text(world, field.name)); }
         let mut after_one = !fields.is_empty();
         for (field, default, ty) in self.field_defaults(world, &owner) {
             if nikaia_std::list::contains(&names, &field) { continue; }

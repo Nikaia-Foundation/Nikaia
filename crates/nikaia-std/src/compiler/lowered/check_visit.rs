@@ -11,19 +11,19 @@ pub(crate) fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             out.push(func);
-            for arg in args.iter() { out.push(arg); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
             for option in config.iter() { out.extend(check_visit_one(&option.value)); }
         },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             out.push(receiver);
-            for arg in args.iter() { out.push(arg); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
             for option in config.iter() { out.extend(check_visit_one(&option.value)); }
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             out.push(receiver);
-            for arg in args.iter() { out.push(arg); }
+            out.reserve(args.iter().size_hint().0); for arg in args.iter() { out.push(arg); }
             for option in config.iter() { out.extend(check_visit_one(&option.value)); }
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -48,7 +48,7 @@ pub(crate) fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
             out.push(start);
             out.push(end);
         },
-        Expr::Tuple(parts, _) => { for part in parts.iter() { out.push(part); } },
+        Expr::Tuple(parts, _) => { out.reserve(parts.iter().size_hint().0); for part in parts.iter() { out.push(part); } },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             out.push(value);
@@ -70,7 +70,7 @@ pub(crate) fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
             out.push(value);
             out.push(count);
         },
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        Expr::ListLit { items, .. } => { out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push(item); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             out.push(base);

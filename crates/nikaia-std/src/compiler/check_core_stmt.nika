@@ -909,7 +909,7 @@ fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     }
 }
 
-fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
@@ -1146,7 +1146,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A tuple of names takes the value apart** (ADR-291).
     if names.len() >= 2 || shape.len() > 0 {
-        return state.tuple_let(world, names, shape, ty != null, found, value, span)
+        return state.tuple_let(world, names, shape, mutable, mut_names, ty != null, found, value, span)
     }
     let name: String = f"{world.words.resolve(names[0])}"
     // **`let _ = expr` is a statement wearing a `let`** (ADR-291 D7).
@@ -2286,7 +2286,7 @@ fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
 }
 
 /// **`for`** (Part I 3.3).
-fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     // **The methods a `.collect()` walked reach a frame of their own**
     // (`NK1354`, #1975): its steps are asked whether they are pure.
@@ -2423,7 +2423,15 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A key, a set's element and a lending adapter's element take no `mut`**
     // (D4, section 6): `NK1306`, labelled at the `mut`.
-    let unwritable = if mutable { check_core_stmt_unwritable_element(state, world, iter, over) } else { "" }
+    let mut unwritable = if mutable { check_core_stmt_unwritable_element(state, world, iter, over) } else { "" }
+    // **`mut` on a map's value alone writes it in place** (section 6, #1133):
+    // `for (k, mut v) in m` leaves the key unmarked, and `v` is a `let mut`
+    // view of the entry's value, lowered `iter_mut()` (`values_mut()` under
+    // a `_` key).
+    let value_only = unwritable == "map" && mut_names.len() > 0 && !mut_names[0] && shape.len() == 0
+    if value_only {
+        unwritable = ""
+    }
     if unwritable != "" {
         state.a_for_mut_that_cannot_write(unwritable, iter, world, span)
     } else if mutable && lent {
@@ -2431,18 +2439,24 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // the element is a `let mut` view of it** (D2): lowered `iter_mut()`.
         let list: String? = dotted_path(world, iter)
         let mut names: Vec[String] = []
+        let mut index = 0
         for b in bindings {
-            names.push(f"{world.words.resolve(b)}")
+            let marked = mut_names.len() > 0 && mut_names[index]
+            names.push(if marked { f"mut {world.words.resolve(b)}" } else { f"{world.words.resolve(b)}" })
+            index += 1
         }
-        let head: String = if names.len() == 1 { names[0].clone() } else { f"({names.join(", ")})" }
-        if list != null && check_core_stmt_a_list_type(over) {
+        let mut head: String = if names.len() == 1 { names[0].clone() } else { f"({names.join(", ")})" }
+        if mut_names.len() == 0 {
+            head = f"mut {head}"
+        }
+        if list != null && (check_core_stmt_a_list_type(over) || value_only) {
             let written: String = list ?? ""
             let parts: Vec[ref String] = written.split(".").collect()
             let found = state.binding(parts[0]) ?? return check_core_stmt_unit()
             match found.without_mut {
                 null => {
                     mut_view = true
-                    state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
+                    state.facts.mut_view_reads.insert(id_of(iter) as i64, if value_only { "map" } else { "" })
                     // **The list is changed through its elements**: an arm's
                     // part walked so is opened `mut` (#734).
                     state.a_change_noted(f"{parts[0]}")
@@ -2463,6 +2477,10 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         let name: String = f"{world.words.resolve(b)}"
         let element = elements[at].clone()
+        // **A name is `mut` where the head or the name says so** (D24,
+        // section 6, #1133); over a map only the value is a view.
+        let name_mut = mutable && (mut_names.len() == 0 || mut_names[at])
+        let mut_view = mut_view && (!value_only || name_mut)
         at += 1
         let copied = lent && !mut_view && name != "_" && a_copy_by_value(element)
         if copied {
@@ -2505,7 +2523,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         state.declared_binding(id, span, name)
         let mut local = CheckLocal::free(name, bound, id)
-        local.written_mut = mutable
+        local.written_mut = name_mut
         if mut_view {
             local.view_of = dotted_path(world, iter) ?? ""
         }
@@ -2513,7 +2531,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // **A `for` binding changes only with `mut`** (Part I 3.3, #734,
         // ADR-views-v4 D24): its head is a `let`'s pattern, so a change to one
         // without it is `NK1139`.
-        if !mutable {
+        if !name_mut {
             local.without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
         }
         frame.push(local)
@@ -2669,12 +2687,12 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
 fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
-        Stmt::Let { names, shape, mutable, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, deep, ty, value, span),
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span),
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, shape, mutable, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, mutable, iter, body, span),
+        Stmt::For { bindings, shape, mutable, mut_names, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, mutable, mut_names, iter, body, span),
         Stmt::Return(value) => check_core_stmt_return(state, world, host, value, span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),

@@ -522,7 +522,7 @@ pub(crate) fn named_arguments(ty: &Ty) -> Vec<Ty> {
 // this was written - see `contracts::sync`.
 pub(crate) fn refs_of(items: &[Expr]) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
-    for item in items.iter() { out.push(item); }
+    out.reserve(items.iter().size_hint().0); for item in items.iter() { out.push(item); }
     out
 }
 

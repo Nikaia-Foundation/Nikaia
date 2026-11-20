@@ -32,7 +32,7 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
         if held(holds, name) || reach.blocked || reach.through_code.is_empty() { continue; }
         if reaches_one_that_pauses(&reach.calls, holds) { continue; }
         let mut parameters: Vec<String> = vec![];
-        for parameter in reach.through_code.iter() { parameters.push(nikaia_std::block::Text::from(parameter.to_string())); }
+        parameters.reserve(reach.through_code.iter().size_hint().0); for parameter in reach.through_code.iter() { parameters.push(nikaia_std::block::Text::from(parameter.to_string())); }
         out.insert(nikaia_std::block::Text::from(name.to_string()), parameters);
     }
     out
@@ -345,7 +345,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
 
 pub fn unit_pausing(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, wanted: &[String]) -> Vec<bool> {
     let mut answers: Vec<bool> = vec![];
-    for one in wanted.iter() {
+    answers.reserve(wanted.iter().size_hint().0); for one in wanted.iter() {
         let mut pauses = false;
         for item in program.items.iter() {
             match &item.node {
@@ -375,7 +375,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
         if declared.is_sync { allowed.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string())); }
     }
     #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for one in sync_by.iter() {
+    named.reserve(sync_by.iter().size_hint().0); for one in sync_by.iter() {
         let one = *one;
         let parameter = nikaia_std::block::Text::from(names.resolve(one).to_string());
         allowed.insert(nikaia_std::block::Text::from(parameter.to_string()));

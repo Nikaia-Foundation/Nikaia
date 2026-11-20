@@ -137,7 +137,7 @@ impl CheckState {
             return true;
         }
         if (names + owned.len() as i64) == 0 || (unsafe { nikaia_std::proven::add::<i64>(made.len() as i64, owned.len() as i64) }) == 0 { return false; }
-        for node in owned.iter() {
+        viewed.reserve(owned.iter().size_hint().0); for node in owned.iter() {
             let node = nikaia_std::num::value(node);
             self.facts.lent_reads.insert(node);
             viewed.push(node);
