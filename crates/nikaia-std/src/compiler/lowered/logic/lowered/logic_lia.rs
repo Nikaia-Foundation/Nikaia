@@ -100,15 +100,15 @@ pub(crate) fn lg_variable(name: &str) -> LgLin {
     LgLin { terms, constant: 0 }
 }
 
-pub(crate) fn lg_add(a: &LgLin, b: &LgLin) -> Option<LgLin> {
-    let mut terms = a.terms.copy_owned();
+pub(crate) fn lg_add(a: LgLin, b: &LgLin) -> Option<LgLin> {
+    let constant = match a.constant.checked_add(b.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut terms = a.terms;
     for (name, k) in b.terms.iter() {
         let k = nikaia_std::num::value(k);
         let before = nikaia_std::index::or(terms.get(name), || 0);
         let sum = match before.checked_add(k) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if sum == 0 { terms.remove(name); } else { terms.insert(nikaia_std::block::Text::from(name.to_string()), sum); }
     }
-    let constant = match a.constant.checked_add(b.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(LgLin { terms, constant })
 }
 
@@ -125,10 +125,10 @@ pub(crate) fn lg_scale(a: &LgLin, k: i64) -> Option<LgLin> {
 
 pub(crate) fn lg_sub(a: &LgLin, b: &LgLin) -> Option<LgLin> {
     let negated = match lg_scale(b, -1) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    lg_add(a, &negated)
+    lg_add(negated, a)
 }
 
-pub(crate) fn lg_add_constant(a: &LgLin, c: i64) -> LgLin { LgLin { terms: a.terms.copy_owned(), constant: a.constant.saturating_add(c) } }
+pub(crate) fn lg_add_constant(a: LgLin, c: i64) -> LgLin { LgLin { terms: a.terms, constant: a.constant.saturating_add(c) } }
 
 pub(crate) fn lg_gcd(a: i64, b: i64) -> i64 {
     if b == 0 { return a; }
@@ -190,25 +190,29 @@ pub(crate) enum LgFormula {
 }
 
 pub(crate) fn lg_linear(arena: &TermArena, id: i64, why: &mut LgWhy) -> Option<LgLin> {
-    let node = arena.at(id);
+    let node = nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id));
     match node {
-        SolverTerm::Int(n) => Some(lg_constant(n)),
-        SolverTerm::Var(ref name) => Some(lg_variable(name)),
+        SolverTerm::Int(n) => { let n = *n; Some(lg_constant(n)) },
+        SolverTerm::Var(name) => Some(lg_variable(name)),
         SolverTerm::Add(a, b) => {
+            let a = *a; let b = *b;
             let x = match lg_linear(arena, a, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let y = match lg_linear(arena, b, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            lg_overflowed(lg_add(&x, &y), why)
+            lg_overflowed(lg_add(x, &y), why)
         },
         SolverTerm::Sub(a, b) => {
+            let a = *a; let b = *b;
             let x = match lg_linear(arena, a, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let y = match lg_linear(arena, b, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             lg_overflowed(lg_sub(&x, &y), why)
         },
         SolverTerm::Neg(a) => {
+            let a = *a;
             let x = match lg_linear(arena, a, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             lg_overflowed(lg_scale(&x, -1), why)
         },
         SolverTerm::Mul(a, b) => {
+            let a = *a; let b = *b;
             let l = match lg_linear(arena, a, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let r = match lg_linear(arena, b, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if l.terms.is_empty() { lg_overflowed(lg_scale(&r, l.constant), why) } else if r.terms.is_empty() { lg_overflowed(lg_scale(&l, r.constant), why) } else {
@@ -217,6 +221,7 @@ pub(crate) fn lg_linear(arena: &TermArena, id: i64, why: &mut LgWhy) -> Option<L
             }
         },
         SolverTerm::Quot(a, k) => {
+            let k = *k;
             if k <= 0 {
                 why.unknown = LgUnknown::OutsideTheTheory;
                 return None;
@@ -243,12 +248,12 @@ pub(crate) fn lg_compare(arena: &TermArena, a: i64, b: i64, op: i64, holds: bool
     let y = match lg_linear(arena, b, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let a_minus_b = match lg_overflowed(lg_sub(&x, &y), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let b_minus_a = match lg_overflowed(lg_sub(&y, &x), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if kind == 0 { return Some(LgFormula::Le(lg_add_constant(&a_minus_b, 1))); }
+    if kind == 0 { return Some(LgFormula::Le(lg_add_constant(a_minus_b, 1))); }
     if kind == 1 { return Some(LgFormula::Le(a_minus_b)); }
-    if kind == 2 { return Some(LgFormula::Le(lg_add_constant(&b_minus_a, 1))); }
+    if kind == 2 { return Some(LgFormula::Le(lg_add_constant(b_minus_a, 1))); }
     if kind == 3 { return Some(LgFormula::Le(b_minus_a)); }
     if kind == 4 { return Some(LgFormula::And(vec![LgFormula::Le(a_minus_b), LgFormula::Le(b_minus_a)])); }
-    Some(LgFormula::Or(vec![LgFormula::Le(lg_add_constant(&a_minus_b, 1)), LgFormula::Le(lg_add_constant(&b_minus_a, 1))]))
+    Some(LgFormula::Or(vec![LgFormula::Le(lg_add_constant(a_minus_b, 1)), LgFormula::Le(lg_add_constant(b_minus_a, 1))]))
 }
 
 pub(crate) fn lg_negated(op: i64) -> i64 {
@@ -261,18 +266,21 @@ pub(crate) fn lg_negated(op: i64) -> i64 {
 }
 
 pub(crate) fn lg_formula(arena: &TermArena, id: i64, holds: bool, why: &mut LgWhy) -> Option<LgFormula> {
-    let node = arena.at(id);
+    let node = nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id));
     match node {
-        SolverTerm::Bool(b) => { if b == holds { Some(LgFormula::True) } else { Some(LgFormula::False) } },
-        SolverTerm::Not(a) => lg_formula(arena, a, !holds, why),
-        SolverTerm::And(ref parts) => lg_junction(arena, parts, holds, holds, why),
-        SolverTerm::Or(ref parts) => lg_junction(arena, parts, holds, !holds, why),
-        SolverTerm::Le(a, b) => lg_compare(arena, a, b, 1, holds, why),
-        SolverTerm::Lt(a, b) => lg_compare(arena, a, b, 0, holds, why),
-        SolverTerm::Ge(a, b) => lg_compare(arena, a, b, 3, holds, why),
-        SolverTerm::Gt(a, b) => lg_compare(arena, a, b, 2, holds, why),
-        SolverTerm::Eq(a, b) => lg_compare(arena, a, b, 4, holds, why),
-        SolverTerm::Ne(a, b) => lg_compare(arena, a, b, 5, holds, why),
+        SolverTerm::Bool(b) => {
+            let b = *b;
+            if b == holds { Some(LgFormula::True) } else { Some(LgFormula::False) }
+        },
+        SolverTerm::Not(a) => { let a = *a; lg_formula(arena, a, !holds, why) },
+        SolverTerm::And(parts) => lg_junction(arena, parts, holds, holds, why),
+        SolverTerm::Or(parts) => lg_junction(arena, parts, holds, !holds, why),
+        SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 1, holds, why) },
+        SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 0, holds, why) },
+        SolverTerm::Ge(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 3, holds, why) },
+        SolverTerm::Gt(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 2, holds, why) },
+        SolverTerm::Eq(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 4, holds, why) },
+        SolverTerm::Ne(a, b) => { let a = *a; let b = *b; lg_compare(arena, a, b, 5, holds, why) },
         _ => {
             why.unknown = LgUnknown::OutsideTheTheory;
             None
@@ -413,8 +421,8 @@ pub(crate) fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut 
 pub(crate) fn lg_quotient_name(id: i64) -> String { format!("quot#{}", id) }
 
 pub(crate) fn lg_quotient(arena: &TermArena, id: i64, why: &mut LgWhy) -> Option<LgFormula> {
-    match arena.at(id) {
-        SolverTerm::Quot(a, k) => lg_quotient_of(arena, id, a, k, why),
+    match nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id)) {
+        SolverTerm::Quot(a, k) => { let a = *a; let k = *k; lg_quotient_of(arena, id, a, k, why) },
         _ => None,
     }
 }
@@ -424,7 +432,7 @@ pub(crate) fn lg_quotient_of(arena: &TermArena, id: i64, a: i64, k: i64, why: &m
     let kq = match lg_overflowed(lg_scale(&lg_variable(&lg_quotient_name(id)), k), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let e_minus_kq = match lg_overflowed(lg_sub(&e, &kq), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let kq_minus_e = match lg_overflowed(lg_sub(&kq, &e), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let negative = lg_add_constant(&e, 1);
+    let negative = lg_add_constant(e.clone(), 1);
     let not_negative = match lg_overflowed(lg_scale(&e, -1), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let below = match lg_overflowed(lg_add_constant_checked(&e_minus_kq, 1 - k), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let above = match lg_overflowed(lg_add_constant_checked(&kq_minus_e, 1 - k), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -440,7 +448,7 @@ pub(crate) fn lg_add_constant_checked(a: &LgLin, c: i64) -> Option<LgLin> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LgHeld {
-    pub(crate) lin: LgLin,
+    pub(crate) constant: i64,
     pub(crate) step: i64,
     pub(crate) form: Vec<i64>,
 }
@@ -452,22 +460,76 @@ pub(crate) enum LgClosed {
     Unknown(LgUnknown),
 }
 
-pub(crate) fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>, ranks: &collections::BTreeMap<String, i64>) -> LgHeld {
+pub(crate) fn lg_tighten_step(form: Vec<i64>, constant: i64, steps: &mut Vec<LgStep>) -> LgHeld {
     let made = unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) };
     let mut g: i64 = 0;
-    for (_, k) in bound.terms.iter() {
-        let k = nikaia_std::num::value(k);
-        g = lg_gcd(g, k.abs());
+    let mut at: i64 = 1;
+    while ((at) as usize) < form.len() {
+        g = lg_gcd(g, (*unsafe { nikaia_std::proven::read(&form, (at) as usize) }).abs());
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
     }
-    if g <= 1 { return LgHeld { lin: bound.clone(), step: made, form: lg_form_of(&bound.terms, ranks) }; }
-    let tight = lg_tightened(bound);
-    let form = lg_form_of(&tight.terms, ranks);
+    if g <= 1 { return LgHeld { constant, step: made, form }; }
+    let mut tight = form;
+    at = 1;
+    while ((at) as usize) < tight.len() {
+        { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&tight, (at) as usize) } / g; unsafe { nikaia_std::proven::write(&mut tight, (at) as usize, __nikaia_stored) }; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+    }
+    let mut c = constant.div_euclid(g);
+    if constant.rem_euclid(g) != 0 { c += 1; }
     steps.push(LgStep::Tighten(made));
-    LgHeld { lin: tight, step: unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) }, form }
+    LgHeld { constant: c, step: unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) }, form: tight }
+}
+
+pub(crate) fn lg_form_coefficient(form: &[i64], rank: i64) -> i64 {
+    let mut at: i64 = 0;
+    while ((at + 1) as usize) < form.len() {
+        if *unsafe { nikaia_std::proven::read(&form, (at) as usize) } == rank { return *unsafe { nikaia_std::proven::read(&form, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+    }
+    0
+}
+
+pub(crate) fn lg_form_combine(a: &[i64], ka: i64, b: &[i64], kb: i64) -> Option<Vec<i64>> {
+    let mut out: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, b.len() as i64) }));
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < a.len() || ((j) as usize) < b.len() {
+        if ((j) as usize) >= b.len() || ((i) as usize) < a.len() && *unsafe { nikaia_std::proven::read(&a, (i) as usize) } < *unsafe { nikaia_std::proven::read(&b, (j) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            out.push(match (*nikaia_std::index::get(&a, (unsafe { nikaia_std::proven::add::<i64>(i, 1) }) as usize)).checked_mul(ka) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 2) };
+        } else if ((i) as usize) >= a.len() || *unsafe { nikaia_std::proven::read(&b, (j) as usize) } < *unsafe { nikaia_std::proven::read(&a, (i) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+            out.push(match (*nikaia_std::index::get(&b, (unsafe { nikaia_std::proven::add::<i64>(j, 1) }) as usize)).checked_mul(kb) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 2) };
+        } else {
+            let left = match (*nikaia_std::index::get(&a, (unsafe { nikaia_std::proven::add::<i64>(i, 1) }) as usize)).checked_mul(ka) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let right = match (*nikaia_std::index::get(&b, (unsafe { nikaia_std::proven::add::<i64>(j, 1) }) as usize)).checked_mul(kb) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let sum = match left.checked_add(right) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if sum != 0 {
+                out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+                out.push(sum);
+            }
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 2) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 2) };
+        }
+    }
+    Some(out)
+}
+
+pub(crate) fn lg_lin_of_form(form: &[i64], constant: i64, rank_names: &[String]) -> LgLin {
+    let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut at: i64 = 0;
+    while ((at + 1) as usize) < form.len() {
+        terms.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&rank_names, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&form, (at) as usize) }))).to_string()), *unsafe { nikaia_std::proven::read(&form, (nikaia_std::proven::add::<i64>(at, 1)) as usize) });
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+    }
+    LgLin { terms, constant }
 }
 
 pub(crate) fn lg_form_of(terms: &collections::BTreeMap<String, i64>, ranks: &collections::BTreeMap<String, i64>) -> Vec<i64> {
-    let mut out: Vec<i64> = vec![];
+    let mut out: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(2, terms.len() as i64) }));
     for (name, k) in terms.iter() {
         let k = nikaia_std::num::value(k);
         out.push(nikaia_std::index::or(ranks.get(name), || -1));
@@ -491,7 +553,7 @@ pub(crate) fn lg_form_cmp(a: &[i64], b: &[i64]) -> i64 {
 pub(crate) fn lg_place_before(held: &[LgHeld], b: i64, a: i64) -> bool {
     let order = lg_form_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(b)).form, &nikaia_std::index::get(&held, nikaia_std::index::at(a)).form);
     if order != 0 { return order < 0; }
-    (unsafe { nikaia_std::proven::read(&held, (a) as usize) }.lin.constant < unsafe { nikaia_std::proven::read(&held, (b) as usize) }.lin.constant)
+    (unsafe { nikaia_std::proven::read(&held, (a) as usize) }.constant < unsafe { nikaia_std::proven::read(&held, (b) as usize) }.constant)
 }
 
 pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
@@ -511,20 +573,29 @@ pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
 }
 
 pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
-    let mut steps: Vec<LgStep> = vec![];
+    let mut places: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(bounds.len() as i64));
+    for at in 0..bounds.len() as i64 { places.push(at); }
+    lg_contradictory_at(bounds, &places, budget)
+}
+
+pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBudget) -> LgClosed {
+    let mut steps: Vec<LgStep> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(4, places.len() as i64) }));
     #[allow(unused_mut)] let mut round_names: Vec<String> = vec![];
     let mut round_places: Vec<Vec<i64>> = vec![];
-    let mut held: Vec<LgHeld> = vec![];
-    let mut alive: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut held: Vec<LgHeld> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(4, places.len() as i64) }));
+    let mut alive: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(places.len() as i64));
     let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
-    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut rank_names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    for at in places.iter() {
+        let at = nikaia_std::num::value(at);
+        for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !every.contains(name) { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    }
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
     let mut quotients: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for name in every.iter() {
+    for name in every.into_iter() {
         ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);
-        rank_names.push(nikaia_std::block::Text::from(name.to_string()));
         quotients.push(name.starts_with("quot#"));
+        rank_names.push(name);
     }
     let mut present: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut ups: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -535,24 +606,26 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
         downs.push(0);
     }
     let mut index = 0;
-    for bound in bounds.iter() {
+    for at in places.iter() {
+        let at = nikaia_std::num::value(at);
+        let bound = nikaia_std::index::get(&atoms, nikaia_std::index::at(at));
         steps.push(LgStep::Hypothesis(index));
         alive.push(held.len() as i64);
-        held.push(lg_tighten_step(bound, &mut steps, &ranks));
+        held.push(lg_tighten_step(lg_form_of(&bound.terms, &ranks), bound.constant, &mut steps));
         index += 1;
     }
     loop {
         for place in alive.iter() {
             let place = nikaia_std::num::value(place);
-            if nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() && unsafe { nikaia_std::proven::read(&held, (place) as usize) }.lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, unsafe { nikaia_std::proven::read(&held, (place) as usize) }.step)); }
+            if nikaia_std::index::get(&held, nikaia_std::index::at(place)).form.is_empty() && unsafe { nikaia_std::proven::read(&held, (place) as usize) }.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, unsafe { nikaia_std::proven::read(&held, (place) as usize) }.step)); }
         }
-        let mut live: Vec<i64> = vec![];
+        let mut live: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(alive.len() as i64));
         for place in alive.iter() {
             let place = nikaia_std::num::value(place);
-            if !nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() { live.push(place); }
+            if !nikaia_std::index::get(&held, nikaia_std::index::at(place)).form.is_empty() { live.push(place); }
         }
         let ordered = lg_sorted_places(&held, &live);
-        let mut now: Vec<i64> = vec![];
+        let mut now: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(ordered.len() as i64));
         let mut kept: i64 = -1;
         for place in ordered.iter() {
             let place = nikaia_std::num::value(place);
@@ -571,7 +644,7 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
             let place = nikaia_std::num::value(place);
             let form = &nikaia_std::index::get(&held, nikaia_std::index::at(place)).form;
             let mut at: i64 = 0;
-            while ((at + 1) as usize) < form.len() {
+            while at + 1 < form.len() as i64 {
                 let rank = *unsafe { nikaia_std::proven::read(&form, (at) as usize) };
                 let k = *unsafe { nikaia_std::proven::read(&form, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut present, nikaia_std::index::at(rank), __nikaia_stored); }
@@ -607,52 +680,51 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
                 let mut lins: Vec<LgLin> = vec![];
                 for place in places.iter() {
                     let place = nikaia_std::num::value(place);
-                    lins.push(nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.clone());
+                    lins.push(lg_lin_of_form(&nikaia_std::index::get(&held, nikaia_std::index::at(place)).form, unsafe { nikaia_std::proven::read(&held, (place) as usize) }.constant, &rank_names));
                 }
                 round_bounds.push(lins);
             }
             return lg_consistent(&round_names, &round_bounds);
         }
         let mut stop: Vec<LgClosed> = vec![];
-        alive = lg_eliminate(&mut held, &now, nikaia_std::index::get(&rank_names, nikaia_std::index::at(chosen)), budget, &mut steps, &mut round_names, &mut round_places, &ranks, &mut stop);
+        round_names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&rank_names, nikaia_std::index::at(chosen))).to_string()));
+        alive = lg_eliminate(&mut held, &now, chosen, budget, &mut steps, &mut round_places, &mut stop);
         if !stop.is_empty() { return (*unsafe { nikaia_std::proven::read(&stop, (0) as usize) }).clone(); }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], name: &str, budget: &LgBudget, steps: &mut Vec<LgStep>, round_names: &mut Vec<String>, round_places: &mut Vec<Vec<i64>>, ranks: &collections::BTreeMap<String, i64>, stop: &mut Vec<LgClosed>) -> Vec<i64> {
-    let mut without: Vec<i64> = vec![];
-    let mut up: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut down: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut with_places: Vec<i64> = vec![];
+pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], rank: i64, budget: &LgBudget, steps: &mut Vec<LgStep>, round_places: &mut Vec<Vec<i64>>, stop: &mut Vec<LgClosed>) -> Vec<i64> {
+    let mut without: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
+    let mut up: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
+    let mut down: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
+    let mut with_places: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
     for place in now.iter() {
         let place = nikaia_std::num::value(place);
-        let k = nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.get(name);
-        if k.is_none() {
+        let k = lg_form_coefficient(&nikaia_std::index::get(&held, nikaia_std::index::at(place)).form, rank);
+        if k == 0 {
             without.push(place);
             continue;
         }
         with_places.push(place);
-        if nikaia_std::index::or(k, || 0) > 0 { up.push(place); } else { down.push(place); }
+        if k > 0 { up.push(place); } else { down.push(place); }
     }
-    round_names.push(nikaia_std::block::Text::from(name.to_string()));
     round_places.push(with_places);
-    let mut made: Vec<LgHeld> = vec![];
+    let pairs = up.len() as i64 * down.len() as i64;
+    let mut made: Vec<LgHeld> = Vec::with_capacity(nikaia_std::count::of(if pairs < budget.bounds { pairs } else { budget.bounds + 1 }));
     for up_at in up.iter() {
         let up_at = nikaia_std::num::value(up_at);
         let u = nikaia_std::index::get(&held, nikaia_std::index::at(up_at));
         for down_at in down.iter() {
             let down_at = nikaia_std::num::value(down_at);
             let d = nikaia_std::index::get(&held, nikaia_std::index::at(down_at));
-            let a = nikaia_std::index::or(u.lin.terms.get(name), || 0);
-            let b = -nikaia_std::index::or(d.lin.terms.get(name), || 0);
-            let left = lg_scale(&u.lin, b);
-            let right = lg_scale(&d.lin, a);
-            if left.is_none() || right.is_none() { return lg_stopped(stop, LgUnknown::Overflow); }
-            let sum = lg_add(&match left { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, &match right { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) });
-            if sum.is_none() { return lg_stopped(stop, LgUnknown::Overflow); }
+            let a = lg_form_coefficient(&u.form, rank);
+            let b = -lg_form_coefficient(&d.form, rank);
+            let form = match lg_form_combine(&u.form, b, &d.form, a) { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) };
+            let left = match u.constant.checked_mul(b) { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) };
+            let right = match d.constant.checked_mul(a) { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) };
+            let constant = match left.checked_add(right) { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) };
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a });
-            made.push(lg_tighten_step(&match sum { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, steps, ranks));
+            made.push(lg_tighten_step(form, constant, steps));
             if (unsafe { nikaia_std::proven::add::<i64>(without.len() as i64, made.len() as i64) }) > budget.bounds { return lg_stopped(stop, LgUnknown::TooManyBounds); }
         }
     }

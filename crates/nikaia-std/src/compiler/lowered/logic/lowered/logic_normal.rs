@@ -173,17 +173,12 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
         SolverTerm::Other => normal.arena.boolean(false),
         SolverTerm::Var(name) => {
             let known = renamed.get(name);
-            let mut fresh = format!("v{}", renamed.len() as i64);
-            if known.is_some() {
-                fresh = nikaia_std::index::or(match known {
-                    Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
-                    None => None,
-                }, || fresh.into());
-            } else {
-                normal.names.push(nikaia_std::block::Text::from(name.to_string()));
-                renamed.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(fresh.to_string()));
-            }
-            normal.arena.var(&fresh)
+            if known.is_some() { return normal.arena.var(match known { Some(__nikaia_value) => __nikaia_value, None => return -1 }); }
+            let fresh = format!("v{}", renamed.len() as i64);
+            normal.names.push(nikaia_std::block::Text::from(name.to_string()));
+            let made = normal.arena.var(&fresh);
+            renamed.insert(nikaia_std::block::Text::from(name.to_string()), fresh);
+            made
         },
         SolverTerm::Neg(a) => {
             let a = *a;

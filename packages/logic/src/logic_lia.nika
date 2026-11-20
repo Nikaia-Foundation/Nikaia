@@ -155,8 +155,10 @@ fn lg_variable(name: ref String) -> LgLin {
     return LgLin { terms: terms, constant: 0 }
 }
 
-fn lg_add(a: ref LgLin, b: ref LgLin) -> LgLin? {
-    let mut terms = a.terms.clone()
+/// `a + b`, made in `a`'s terms, which it takes (#2382).
+fn lg_add(a: LgLin, b: ref LgLin) -> LgLin? {
+    let constant = a.constant.checked_add(b.constant) ?? return null
+    let mut terms = a.terms
     for (name, k) in b.terms {
         let before = terms.get(name) ?? 0
         let sum = before.checked_add(k) ?? return null
@@ -166,7 +168,6 @@ fn lg_add(a: ref LgLin, b: ref LgLin) -> LgLin? {
             terms.insert(name.clone(), sum)
         }
     }
-    let constant = a.constant.checked_add(b.constant) ?? return null
     return LgLin { terms: terms, constant: constant }
 }
 
@@ -184,11 +185,11 @@ fn lg_scale(a: ref LgLin, k: i64) -> LgLin? {
 
 fn lg_sub(a: ref LgLin, b: ref LgLin) -> LgLin? {
     let negated = lg_scale(b, -1) ?? return null
-    return lg_add(a, negated)
+    return lg_add(negated, a)
 }
 
-fn lg_add_constant(a: ref LgLin, c: i64) -> LgLin {
-    return LgLin { terms: a.terms.clone(), constant: a.constant.saturating_add(c) }
+fn lg_add_constant(a: LgLin, c: i64) -> LgLin {
+    return LgLin { terms: a.terms, constant: a.constant.saturating_add(c) }
 }
 
 fn lg_gcd(a: i64, b: i64) -> i64 {
@@ -273,7 +274,7 @@ enum LgFormula {
 
 /// An integer term as a linear expression.
 fn lg_linear(arena: ref TermArena, id: i64, mut why: LgWhy) -> LgLin? {
-    let node = arena.at(id)
+    let node = arena.nodes[id]
     return match node {
         SolverTerm::Int(n) => lg_constant(n),
         SolverTerm::Var(name) => lg_variable(name),
@@ -381,7 +382,7 @@ fn lg_negated(op: i64) -> i64 {
 
 /// A Boolean term as a formula, or its negation where `holds` is false.
 fn lg_formula(arena: ref TermArena, id: i64, holds: bool, mut why: LgWhy) -> LgFormula? {
-    let node = arena.at(id)
+    let node = arena.nodes[id]
     return match node {
         SolverTerm::Bool(b) => {
             if b == holds {
@@ -592,7 +593,7 @@ fn lg_quotient_name(id: i64) -> String {
 /// `e < 0 → k·q - k + 1 <= e <= k·q` - for each sign ADR-270 D5's extension,
 /// which exists for every `e`, so it makes no satisfiable query unsatisfiable.
 fn lg_quotient(arena: ref TermArena, id: i64, mut why: LgWhy) -> LgFormula? {
-    return match arena.at(id) {
+    return match arena.nodes[id] {
         SolverTerm::Quot(a, k) => lg_quotient_of(arena, id, a, k, why),
         else => null,
     }
@@ -603,7 +604,7 @@ fn lg_quotient_of(arena: ref TermArena, id: i64, a: i64, k: i64, mut why: LgWhy)
     let kq = lg_overflowed(lg_scale(lg_variable(lg_quotient_name(id)), k), why) ?? return null
     let e_minus_kq = lg_overflowed(lg_sub(e, kq), why) ?? return null
     let kq_minus_e = lg_overflowed(lg_sub(kq, e), why) ?? return null
-    let negative = lg_add_constant(e, 1)
+    let negative = lg_add_constant(e.clone(), 1)
     let not_negative = lg_overflowed(lg_scale(e, -1), why) ?? return null
     let below = lg_overflowed(lg_add_constant_checked(e_minus_kq, 1 - k), why) ?? return null
     let above = lg_overflowed(lg_add_constant_checked(kq_minus_e, 1 - k), why) ?? return null
@@ -619,10 +620,12 @@ fn lg_add_constant_checked(a: ref LgLin, c: i64) -> LgLin? {
 }
 
 /// A bound the elimination holds, and the step that made it.
+/// The bound is `form + constant <= 0`: its terms as numbers, made once, the
+/// names never copied (#2382).
 struct LgHeld {
-    lin: LgLin,
+    constant: i64,
     step: i64,
-    /// The bound's form (`lg_form_of`), made once with the bound.
+    /// The bound's form (`lg_form_of`): each name's rank and its coefficient.
     form: Vec[i64],
 }
 
@@ -638,29 +641,94 @@ enum LgClosed {
 }
 
 /// The bound the last step made, tightened to the integers - with a step of its
-/// own where tightening changed it.
-fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep], ranks: ref collections::BTreeMap[String, i64]) -> LgHeld {
+/// own where tightening changed it: `lg_tightened` on a form.
+fn lg_tighten_step(form: Vec[i64], constant: i64, mut steps: Vec[LgStep]) -> LgHeld {
     let made = steps.len() - 1
     // Tightening changes the bound exactly where its coefficients have a
-    // common divisor above one (`lg_tightened`): asked first, so an unchanged
-    // bound is neither rebuilt nor compared (#727).
+    // common divisor above one: asked first, so an unchanged bound is not
+    // rebuilt (#727).
     let mut g = 0
-    for (_, k) in bound.terms {
-        g = lg_gcd(g, k.abs())
+    let mut at = 1
+    while at < form.len() {
+        g = lg_gcd(g, form[at].abs())
+        at += 2
     }
     if g <= 1 {
-        return LgHeld { lin: bound.clone(), step: made, form: lg_form_of(bound.terms, ranks) }
+        return LgHeld { constant: constant, step: made, form: form }
     }
-    let tight = lg_tightened(bound)
-    let form = lg_form_of(tight.terms, ranks)
+    let mut tight = form
+    at = 1
+    while at < tight.len() {
+        tight[at] = tight[at] / g
+        at += 2
+    }
+    // ceil(constant / g)
+    let mut c = constant.div_euclid(g)
+    if constant.rem_euclid(g) != 0 {
+        c += 1
+    }
     steps.push(LgStep::Tighten(made))
-    return LgHeld { lin: tight, step: steps.len() - 1, form: form }
+    return LgHeld { constant: c, step: steps.len() - 1, form: tight }
+}
+
+/// The coefficient of the name ranked `rank` in a form, zero where it has none.
+fn lg_form_coefficient(form: ref Vec[i64], rank: i64) -> i64 {
+    let mut at = 0
+    while at + 1 < form.len() {
+        if form[at] == rank {
+            return form[at + 1]
+        }
+        at += 2
+    }
+    return 0
+}
+
+/// `ka·a + kb·b` of two forms, with `ka` and `kb` not zero, terms that cancel
+/// left out: `lg_add(lg_scale(a, ka), lg_scale(b, kb))` on forms, merged in
+/// rank order.
+fn lg_form_combine(a: ref Vec[i64], ka: i64, b: ref Vec[i64], kb: i64) -> Vec[i64]? {
+    let mut out: Vec[i64] = Vec(capacity: a.len() + b.len())
+    let mut i = 0
+    let mut j = 0
+    while i < a.len() || j < b.len() {
+        if j >= b.len() || (i < a.len() && a[i] < b[j]) {
+            out.push(a[i])
+            out.push(a[i + 1].checked_mul(ka) ?? return null)
+            i += 2
+        } else if i >= a.len() || b[j] < a[i] {
+            out.push(b[j])
+            out.push(b[j + 1].checked_mul(kb) ?? return null)
+            j += 2
+        } else {
+            let left = a[i + 1].checked_mul(ka) ?? return null
+            let right = b[j + 1].checked_mul(kb) ?? return null
+            let sum = left.checked_add(right) ?? return null
+            if sum != 0 {
+                out.push(a[i])
+                out.push(sum)
+            }
+            i += 2
+            j += 2
+        }
+    }
+    return out
+}
+
+/// The bound a form and a constant stand for, its names given back by rank.
+fn lg_lin_of_form(form: ref Vec[i64], constant: i64, rank_names: ref Vec[String]) -> LgLin {
+    let mut terms: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut at = 0
+    while at + 1 < form.len() {
+        terms.insert(rank_names[form[at]].clone(), form[at + 1])
+        at += 2
+    }
+    return LgLin { terms: terms, constant: constant }
 }
 
 /// A bound's form as numbers whose order is `lg_terms_cmp`'s: each name's rank
 /// in `ranks`, which orders the names as text does, and its coefficient.
 fn lg_form_of(terms: ref collections::BTreeMap[String, i64], ranks: ref collections::BTreeMap[String, i64]) -> Vec[i64] {
-    let mut out: Vec[i64] = []
+    let mut out: Vec[i64] = Vec(capacity: 2 * terms.len())
     for (name, k) in terms {
         out.push(ranks.get(name) ?? -1)
         out.push(k)
@@ -696,7 +764,7 @@ fn lg_place_before(held: ref Vec[LgHeld], b: i64, a: i64) -> bool {
     if order != 0 {
         return order < 0
     }
-    return held[a].lin.constant < held[b].lin.constant
+    return held[a].constant < held[b].constant
 }
 
 /// Of the bounds on one form only the strongest counts: `form + c <= 0` with the
@@ -728,28 +796,42 @@ fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64]) -> Vec[i64] {
 /// contradiction it ends on can be traced back to the case's own bounds, and
 /// only the steps on that trace are kept.
 fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
-    let mut steps: Vec[LgStep] = []
+    let mut places: Vec[i64] = Vec(capacity: bounds.len())
+    for at in 0..<bounds.len() {
+        places.push(at)
+    }
+    return lg_contradictory_at(bounds, places, budget)
+}
+
+/// `lg_contradictory` of the bounds at `places` of `atoms`, in that order,
+/// none of them copied (#2382).
+fn lg_contradictory_at(atoms: ref Vec[LgLin], places: ref Vec[i64], budget: ref LgBudget) -> LgClosed {
+    // Room for the case's bounds and a round of combinations, so the lists
+    // seldom grow (#2382).
+    let mut steps: Vec[LgStep] = Vec(capacity: 4 * places.len())
     // Each elimination's name and the bounds that held it, for values later.
     let mut round_names: Vec[String] = []
     let mut round_places: Vec[Vec[i64]] = []
     // Every bound made, never removed: `alive` names the places that hold
     // now, so an elimination copies no bound it keeps (#727).
-    let mut held: Vec[LgHeld] = []
-    let mut alive: Vec[i64] = []
+    let mut held: Vec[LgHeld] = Vec(capacity: 4 * places.len())
+    let mut alive: Vec[i64] = Vec(capacity: places.len())
     // Every name an elimination meets is one of the case's own: ranked once.
     let mut every: collections::BTreeSet[String] = collections::BTreeSet()
-    for bound in bounds {
-        for (name, _) in bound.terms {
-            every.insert(name.clone())
+    for at in places {
+        for (name, _) in atoms[at].terms {
+            if !every.contains(name) {
+                every.insert(name.clone())
+            }
         }
     }
     let mut ranks: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut rank_names: Vec[String] = []
     let mut quotients: Vec[bool] = []
-    for name in every {
+    for name in every.drain() {
         ranks.insert(name.clone(), ranks.len())
-        rank_names.push(name.clone())
         quotients.push(name.starts_with("quot#"))
+        rank_names.push(name)
     }
     // How many bounds each name is above and below in, by its rank: made
     // once, cleared each round (#727).
@@ -762,28 +844,29 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
         downs.push(0)
     }
     let mut index = 0
-    for bound in bounds {
+    for at in places {
+        let bound = atoms[at]
         steps.push(LgStep::Hypothesis(index))
         alive.push(held.len())
-        held.push(lg_tighten_step(bound, steps, ranks))
+        held.push(lg_tighten_step(lg_form_of(bound.terms, ranks), bound.constant, steps))
         index += 1
     }
     while true {
         // A bound with no variables left is a verdict: `c <= 0`.
         for place in alive {
-            if held[place].lin.terms.len() == 0 && held[place].lin.constant > 0 {
+            if held[place].form.len() == 0 && held[place].constant > 0 {
                 return LgClosed::Refuted(lg_traced(steps, held[place].step))
             }
         }
-        let mut live: Vec[i64] = []
+        let mut live: Vec[i64] = Vec(capacity: alive.len())
         for place in alive {
-            if held[place].lin.terms.len() > 0 {
+            if held[place].form.len() > 0 {
                 live.push(place)
             }
         }
         let ordered = lg_sorted_places(held, live)
         // The bounds that count, by their place in `held`.
-        let mut now: Vec[i64] = []
+        let mut now: Vec[i64] = Vec(capacity: ordered.len())
         let mut kept = -1
         for place in ordered {
             if kept >= 0 && lg_form_cmp(held[kept].form, held[place].form) == 0 {
@@ -847,14 +930,15 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             for places in round_places {
                 let mut lins: Vec[LgLin] = []
                 for place in places {
-                    lins.push(held[place].lin.clone())
+                    lins.push(lg_lin_of_form(held[place].form, held[place].constant, rank_names))
                 }
                 round_bounds.push(lins)
             }
             return lg_consistent(round_names, round_bounds)
         }
         let mut stop: Vec[LgClosed] = []
-        alive = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_places, ranks, stop)
+        round_names.push(rank_names[chosen].clone())
+        alive = lg_eliminate(held, now, chosen, budget, steps, round_places, stop)
         if stop.len() > 0 {
             return stop[0].clone()
         }
@@ -864,45 +948,40 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
 /// The bounds that hold once `name` is eliminated: those without it, and each
 /// pair of an upper and a lower bound on it, combined.
 /// The places of `held` that hold afterwards; the bounds made are appended.
-fn lg_eliminate(mut held: Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_places: Vec[Vec[i64]], ranks: ref collections::BTreeMap[String, i64], mut stop: Vec[LgClosed]) -> Vec[i64] {
-    let mut without: Vec[i64] = []
-    let mut up: Vec[i64] = []
-    let mut down: Vec[i64] = []
-    let mut with_places: Vec[i64] = []
+fn lg_eliminate(mut held: Vec[LgHeld], now: ref Vec[i64], rank: i64, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_places: Vec[Vec[i64]], mut stop: Vec[LgClosed]) -> Vec[i64] {
+    let mut without: Vec[i64] = Vec(capacity: now.len())
+    let mut up: Vec[i64] = Vec(capacity: now.len())
+    let mut down: Vec[i64] = Vec(capacity: now.len())
+    let mut with_places: Vec[i64] = Vec(capacity: now.len())
     for place in now {
-        let k = held[place].lin.terms.get(name)
-        if k == null {
+        let k = lg_form_coefficient(held[place].form, rank)
+        if k == 0 {
             without.push(place)
             continue
         }
         with_places.push(place)
-        if (k ?? 0) > 0 {
+        if k > 0 {
             up.push(place)
         } else {
             down.push(place)
         }
     }
-    round_names.push(name.clone())
     round_places.push(with_places)
-    let mut made: Vec[LgHeld] = []
+    let pairs = up.len() * down.len()
+    let mut made: Vec[LgHeld] = Vec(capacity: if pairs < budget.bounds { pairs } else { budget.bounds + 1 })
     for up_at in up {
         let u = held[up_at]
         for down_at in down {
             let d = held[down_at]
-            let a = u.lin.terms.get(name) ?? 0
-            let b = -(d.lin.terms.get(name) ?? 0)
-            // b·u + a·d cancels `name`; both are `<= 0`, so is the sum.
-            let left = lg_scale(u.lin, b)
-            let right = lg_scale(d.lin, a)
-            if left == null || right == null {
-                return lg_stopped(stop, LgUnknown::Overflow)
-            }
-            let sum = lg_add(left ?? return lg_stopped(stop, LgUnknown::Overflow), right ?? return lg_stopped(stop, LgUnknown::Overflow))
-            if sum == null {
-                return lg_stopped(stop, LgUnknown::Overflow)
-            }
+            let a = lg_form_coefficient(u.form, rank)
+            let b = -lg_form_coefficient(d.form, rank)
+            // b·u + a·d cancels the name; both are `<= 0`, so is the sum.
+            let form = lg_form_combine(u.form, b, d.form, a) ?? return lg_stopped(stop, LgUnknown::Overflow)
+            let left = u.constant.checked_mul(b) ?? return lg_stopped(stop, LgUnknown::Overflow)
+            let right = d.constant.checked_mul(a) ?? return lg_stopped(stop, LgUnknown::Overflow)
+            let constant = left.checked_add(right) ?? return lg_stopped(stop, LgUnknown::Overflow)
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a })
-            made.push(lg_tighten_step(sum ?? return lg_stopped(stop, LgUnknown::Overflow), steps, ranks))
+            made.push(lg_tighten_step(form, constant, steps))
             if without.len() + made.len() > budget.bounds {
                 return lg_stopped(stop, LgUnknown::TooManyBounds)
             }

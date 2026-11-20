@@ -201,15 +201,16 @@ fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: coll
         SolverTerm::Int(n) => normal.arena.int(n),
         SolverTerm::Other => normal.arena.boolean(false),
         SolverTerm::Var(name) => {
+            // A name met before is the arena's already: no text made (#2382).
             let known = renamed.get(name)
-            let mut fresh = f"v{renamed.len()}"
             if known != null {
-                fresh = known?.clone() ?? fresh
-            } else {
-                normal.names.push(name.clone())
-                renamed.insert(name.clone(), fresh.clone())
+                return normal.arena.var(known ?? return -1)
             }
-            normal.arena.var(fresh)
+            let fresh = f"v{renamed.len()}"
+            normal.names.push(name.clone())
+            let made = normal.arena.var(fresh)
+            renamed.insert(name.clone(), fresh)
+            made
         },
         SolverTerm::Neg(a) => {
             let x = lg_copy(normal, from, a, renamed, false)
