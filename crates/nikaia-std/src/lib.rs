@@ -132,6 +132,7 @@ pub mod text {
     pub use lowered::*;
     include!("text_float.rs");
     include!("text_normal.rs");
+    include!("text_pos.rs");
     /// The bytes a grammar's `span(p)` covered (ADR-grammar-syntax-v1 D16).
     pub use crate::grammar::Span;
     /// One match of a search, a view of the searched text (ADR-374, without
@@ -583,6 +584,8 @@ pub mod prelude {
     pub use crate::text::TextNormalized as _;
     // A text between quotes as Rust's `{:?}` writes it, `s.quoted()` (#804).
     pub use crate::text::TextQuoted as _;
+    // A text's own positions and the cuts at them, `s.before(p)` (ADR-374).
+    pub use crate::text::TextPositions as _;
     // **How a value goes into text both kinds flow into**
     // ([ADR-282](../../../docs/specification/adr/adr-282.md) D5): the tier
     // pass writes `value.into_either()` (and `into_either_maybe`,

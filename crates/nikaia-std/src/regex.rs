@@ -11,8 +11,8 @@
 //! program's type does not change the day they do. `regex::Dynamic` is the
 //! floor and today the only one.
 //!
-//! **No positions yet**: a match is its text, a view of the searched text;
-//! `start`, `end` and `from:` arrive with ADR-374's `text::Pos`.
+//! **A match is a view of the searched text** with its `start` and `end`,
+//! `text::Pos`es of that text (ADR-374 D2).
 
 use std::marker::PhantomData;
 
@@ -51,11 +51,26 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// **One match, a view of the searched text** (ADR-374's `text::Match`,
-/// without its positions until that is built).
+/// **One match, a view of the searched text** (ADR-374 D2): where it starts
+/// and ends, both positions of that text, and the matched text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Match<'s> {
     text: &'s str,
+    /// The position before the match's first scalar.
+    pub start: crate::text::Pos,
+    /// The position after its last scalar, where a scanner goes on.
+    pub end: crate::text::Pos,
+}
+
+impl<'s> Match<'s> {
+    /// The match of `hay[range]`, whose ends a search found on scalars.
+    pub(crate) fn of(hay: &'s str, range: std::ops::Range<usize>) -> Match<'s> {
+        Match {
+            start: crate::text::Pos::at(range.start),
+            end: crate::text::Pos::at(range.end),
+            text: &hay[range],
+        }
+    }
 }
 
 impl<'s> Match<'s> {
@@ -84,18 +99,14 @@ impl<'s> Captures<'s> {
     pub fn group(&self, i: i64) -> Option<Match<'s>> {
         let i = usize::try_from(i).ok()?;
         let span = self.caps.get_group(i)?;
-        Some(Match {
-            text: &self.hay[span.range()],
-        })
+        Some(Match::of(self.hay, span.range()))
     }
 
     /// The group called `name`, or `None` where it did not take part or no
     /// group has that name.
     pub fn named(&self, name: &str) -> Option<Match<'s>> {
         let span = self.caps.get_group_by_name(name)?;
-        Some(Match {
-            text: &self.hay[span.range()],
-        })
+        Some(Match::of(self.hay, span.range()))
     }
 }
 
@@ -125,9 +136,7 @@ impl Regex<Dynamic> {
     /// The leftmost-first match in `s`, or `None`.
     pub fn find<'s>(&self, s: &'s str) -> Option<Match<'s>> {
         let found = self.inner.find(s)?;
-        Some(Match {
-            text: &s[found.range()],
-        })
+        Some(Match::of(s, found.range()))
     }
 
     /// Every match in `s`, left to right, not overlapping.
@@ -135,9 +144,9 @@ impl Regex<Dynamic> {
     where
         's: 'r,
     {
-        self.inner.find_iter(s).map(move |found| Match {
-            text: &s[found.range()],
-        })
+        self.inner
+            .find_iter(s)
+            .map(move |found| Match::of(s, found.range()))
     }
 
     /// The groups of the leftmost-first match in `s`, or `None`.

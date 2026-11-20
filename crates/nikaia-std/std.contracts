@@ -5421,6 +5421,48 @@ touches = []
 ensures = ["result.len() >= 1"]
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
 
+# **The position before the text's first scalar** (ADR-374 D1).
+[fn."str::start"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref String) -> text::Pos"
+
+# **The position after the text's last scalar** (ADR-374 D1).
+[fn."str::end"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref String) -> text::Pos"
+
+# **The text up to `p`**, a view of it (ADR-374 D3). `p` is a position of this
+# text; until the compiler tracks that (D5), the cut checks its end.
+[fn."str::before"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(self: ref String, p: text::Pos) -> ref(self) String"
+
+# **The text from `p` on**, a view of it (ADR-374 D3).
+[fn."str::after"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(self: ref String, p: text::Pos) -> ref(self) String"
+
+# **The text from `p` up to `q`**, a view of it (ADR-374 D3); `q` before `p`
+# stops the program.
+[fn."str::between"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(self: ref String, p: text::Pos, q: text::Pos) -> ref(self) String"
+
 # The text cut in two at a byte position: what stands before it and what from
 # it on, both views into it. A position off a scalar's start aborts.
 [fn."str::split_at"]
@@ -8271,12 +8313,83 @@ copies = true
 compares = true
 fields = ["pub start: u32", "pub end: u32"]
 
-# One match of a search, a view of the searched text (ADR-374's `text::Match`,
-# without its positions until that is built).
+# **A boundary in one text** ([ADR-374](../../docs/specification/adr/adr-374.md)
+# D1): between two scalars or at either end, handed out by the text itself
+# (`start()`, `end()`, a match). No number becomes one and it takes no
+# arithmetic; two positions of one text compare. Below the language a byte
+# offset.
+[type."text::Pos"]
+pub = true
+crosses = true
+compares = true
+equates = true
+orders = true
+hashes = true
+copies = true
+
+# **A text and a position in it** (ADR-374 D6), a view of the text: what a
+# scanner that keeps its place holds, since a position is no field.
+[type."text::Cursor"]
+pub = true
+
+# A cursor at the start of `text`.
+[fn."text::Cursor"]
+pub = true
+panics = false
+sync = true
+touches = []
+returns = "ref(text)"
+signature = "(text: ref String) -> text::Cursor"
+
+# The position the cursor stands at.
+[fn."text::Cursor::at"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(ref self) -> text::Pos"
+
+# The cursor set to `p`, a position of its text.
+[fn."text::Cursor::go"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(ref mut self, p: text::Pos)"
+
+# **The text from the cursor to the next `needle`**, the cursor moved past it;
+# `null`, the cursor where it was, where none follows. `needle` is a text or
+# one scalar, as `find`'s is.
+[fn."text::Cursor::until"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(ref mut self, needle: ?) -> ref(self) String?"
+
+# The text from the cursor on.
+[fn."text::Cursor::rest"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(ref self) -> ref(self) String"
+
+# The whole text.
+[fn."text::Cursor::text"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(ref self) -> ref(self) String"
+
+# One match of a search, a view of the searched text (ADR-374 D2): `start` and
+# `end` are positions of that text, `end` where a scanner goes on.
 [type."text::Match"]
 pub = true
 copies = true
 compares = true
+fields = ["pub start: text::Pos", "pub end: text::Pos"]
 
 # A pattern known only at run time, compiled: RE2's dialect (D1), a backslash
 # written `\\` (D2). A pattern that does not parse is a `regex::Error` with the

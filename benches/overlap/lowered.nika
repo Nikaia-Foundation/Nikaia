@@ -1,0 +1,149 @@
+// ADR-292 D6's number, end to end: what an `overlap { … }` block costs, not
+// what the `std` function costs.
+//
+// `runtime.sh` measures `nikaia_std` from Rust. This counts a `.nika` program
+// through the whole pipeline - the checker, the emitter, `cargo`, the runtime -
+// at `user-parallelism = "no"`: `pair.nika`, two reads in an `overlap` block,
+// against `sequential.nika`, the same two reads one after the other. Two
+// binaries, and the only difference between them is the block.
+//
+// Both of ADR-303 D3's mechanisms are counted, because D10's decision is about
+// the second one: on the completion path (`io-method = "auto"`) a pair is
+// cheap, and on the fallback (`blocking`) the pair is performed in written
+// order. The fallback's row is therefore the check that the decision is in the
+// code.
+//
+// Counted with callgrind, never timed (docs/measuring.md): instructions and
+// mispredicted branches per pair, the two programs' outputs compared byte for
+// byte first. See README.md.
+//
+//     nikaia run benches/overlap/lowered.nika              20 000 pairs, 5 bytes a file
+//     nikaia run benches/overlap/lowered.nika -- 2000 9    quicker, 9 bytes a file
+//
+// The projects, the inputs and callgrind's output go to target/overlap-bench.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn root() -> String throws {
+	return process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+}
+
+fn write(path: String, text: String) throws {
+	fs::write(path, fs::Root::Anywhere, text)
+}
+
+// The compiler: `$NIKAIA`, else a release build of the repository's own.
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-}").stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+// One program built as its own project, its two input files beside it. What
+// was built is asserted rather than assumed: a count of two identical binaries
+// would be a very stable nothing.
+fn build(nikaia: String, repo: String, out: String, name: String, size: i64) throws {
+	let project = f"{out}/{name}"
+	must(f"mkdir -p {project}/src {project}/run", "mkdir")
+	must(f"cp {repo}/benches/overlap/{name}.nika {project}/src/main.nika", "cp")
+	write(
+		f"{project}/nikaia.toml",
+		f"[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n\n[build]\nuser-parallelism = \"no\"\n\n[build.x86_64-linux]\nopt-level = 3\n",
+	)
+	must(f"cd {project} && {nikaia} build > /dev/null", f"the build of {name}")
+
+	let gen = f"{project}/target/nikaia/gen/{name}/{name}.rs"
+	let has = if sh(f"grep -q 'task::overlap2' {gen}").code == 0 { "yes" } else { "no" }
+	let want = if name == "pair" { "yes" } else { "no" }
+	if has != want {
+		println(f"{name}: task::overlap2 in the emitted Rust: {has}, which is wrong")
+		process::exit(1)
+	}
+	println(f"{name}: task::overlap2 in the emitted Rust: {has}")
+
+	let mut content = String()
+	for _i in 0..<size {
+		content.push_str("x")
+	}
+	for file in ["eins", "zwei"] {
+		write(f"{project}/run/{file}.txt", content)
+	}
+}
+
+// Instructions and mispredicted branches per pair of one program, as two
+// cells, from callgrind's totals (`events: Ir Bc Bcm Bi Bim`).
+fn count(out: String, config: String, name: String, pairs: i64) -> String throws {
+	let file = f"{out}/cg.out"
+	must(
+		f"cd {out}/{name}/run && NIKAIA_RUNTIME_CONFIG={config} timeout -s KILL 3600 valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {out}/{name}/target/nikaia/bin/{name} {pairs} > /dev/null 2>{out}/valgrind.log",
+		f"callgrind of {name}",
+	)
+	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
+	let fields: Vec[String] = totals.split_whitespace().collect()
+	let instructions = text::parse_i64(fields[1]) ?? 0
+	let mispredicted = (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0)
+	return f"{per(instructions, pairs, 10)} | {per(mispredicted, pairs, 100)}"
+}
+
+// `n / pairs`, rounded, with one decimal for `scale` 10 and two for 100.
+fn per(n: i64, pairs: i64, scale: i64) -> String {
+	let scaled = (n * scale + pairs / 2) / pairs
+	let fraction = scaled % scale
+	let pad = if scale == 100 && fraction < 10 { "0" } else { "" }
+	return f"{scaled / scale}.{pad}{fraction}"
+}
+
+fn main() throws {
+	let repo = root()
+	let mut args = cli::args()
+	args.nth(0)
+	let pairs = text::parse_i64(args.nth(0) ?? "20000") ?? 20000
+	let size = text::parse_i64(args.nth(0) ?? "5") ?? 5
+	let out = f"{repo}/target/overlap-bench"
+	must("command -v valgrind", "lowered.nika needs valgrind (callgrind):")
+	must(f"mkdir -p {out}", "mkdir")
+	let nikaia = toolchain(repo.clone())
+
+	println(f"program: benches/overlap/{{pair,sequential}}.nika, {pairs} pairs, {size} bytes/file")
+	println("")
+	for name in ["pair", "sequential"] {
+		build(nikaia, repo, out, name, size)
+	}
+	println("")
+
+	println("| io-method | sequential: instr/pair | mispred/pair | pair: instr/pair | mispred/pair |")
+	println("|---|--:|--:|--:|--:|")
+	for method in ["auto", "blocking"] {
+		let config = f"{out}/nikaia-runtime.toml"
+		write(config, f"io-method = \"{method}\"\nio-workers = 2\n")
+		for name in ["pair", "sequential"] {
+			must(
+				f"cd {out}/{name}/run && NIKAIA_RUNTIME_CONFIG={config} {out}/{name}/target/nikaia/bin/{name} {pairs} > {out}/{name}.out",
+				f"{name} at io-method={method}",
+			)
+		}
+		if sh(f"cmp -s {out}/pair.out {out}/sequential.out").code != 0 {
+			println(f"io-method={method}: the two programs print different things")
+			process::exit(1)
+		}
+		println(f"| {method} | {count(out, config, "sequential", pairs)} | {count(out, config, "pair", pairs)} |")
+	}
+}
