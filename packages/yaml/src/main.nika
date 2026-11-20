@@ -455,7 +455,7 @@ pub grammar Yaml {
 		s:count(" " | "\t") if(s > 0) v:Propped(ds, left, -1) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, -1) Eol Blanks -> { v }
-		| Eol Blanks v:Block(ds, left, -1) -> { v }
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, -1) -> { v }
 		| a:here Eol Blanks -> {
 			Node {
 				start: a,
@@ -495,9 +495,22 @@ pub grammar Yaml {
 	// indentation (`seq-spaces(n, block-out)`).
 	// `k` is the tag a property line above gave it.
 	rule Block(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
-		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
-		| not(Marker) m:count(" ") if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+		not(Marker) m:count(" ") v:BlockAt(ds, left, m, n; c: c, k: k) -> { v }
+	// The same after the `m` spaces of its first line, counted once: by
+	// `Block`, or by `Indentation` below a line that ends (`Eol`).
+	rule BlockAt(ds: Vec[Dir], left: i64, m: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
+		| if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
+		| if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+	// The lines below a line's end that hold nothing but spaces and a
+	// comment, and the spaces of the next line, how many: `Blanks` and the
+	// indentation `Block` counts, with each line's spaces scanned once. On
+	// that next line the step of the fold fails at its first character.
+	rule Indentation -> i64 =
+		m:count(" ") r:fold(BlankThenSpaces, no_line, fn(_a, s) { s }) -> { if r < 0 { m } else { r } }
+	rule BlankThenSpaces -> i64 = (" " | "\t")* Comment? "\n" m:count(" ") -> { m }
+	// No document marker begins a node: one stands at the start of a line.
+	rule Unmarked(m: i64) = if(m > 0) -> { } | not(Marker) -> { }
 	// A node after tabs past the indentation (`s-separate-in-line`): a tab
 	// never indents, so no block collection begins there (`s-indent` is
 	// spaces only), but properties, a block scalar or a flow node may.
@@ -685,7 +698,7 @@ pub grammar Yaml {
 				value: v.value,
 			}
 		}
-		| Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -753,7 +766,7 @@ pub grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Propped(ds, left, m; c: c) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:BlockScalar(m) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, m) Eol Blanks -> { v }
-		| Eol Blanks v:Block(ds, left, m; c: c) -> { v }
+		| Eol i:Indentation Unmarked(i) v:BlockAt(ds, left, i, m; c: c) -> { v }
 		| a:here Eol Blanks -> {
 			Node {
 				start: a,
@@ -2722,6 +2735,11 @@ fn escape_event(v: String) -> String sync {
 
 // The content indentation an indentation indicator `d` gives under a parent
 // at `n`; a document's top node has none (`n` is -1) and counts from 0.
+// The start of `Indentation`'s fold: no blank line read yet.
+fn no_line() -> i64 sync {
+	return -1
+}
+
 fn explicit_indent(n: i64, d: i64) -> i64 sync {
 	if n < 0 {
 		return d

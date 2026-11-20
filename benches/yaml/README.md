@@ -103,9 +103,10 @@ events; its causes, from `callgrind_annotate` of `events.off`, checks off:
   unchecked, would do, but binds no name inside it (Part II 10, the grammar
   table), and the entry's node is needed; with the text not taken, deep
   counts 129.0 million (1.59 times).
-* **The indentation counted twice**: open, about 7 % of deep. `Blanks` stops
-  at a line with content after its spaces, and `Block` counts them again;
-  handing the count over is a change to every rule that reads `Eol Blanks`.
+* **The indentation counted twice**: fixed (#2411). Below a line's end,
+  `Indentation` reads the blank lines and the next line's spaces in one
+  fold and hands the count to `BlockAt`; deep went from 130.0 to 121.2
+  million.
 * **The engine's alternatives**: the choices of `FlowItem` and `FlowAny` and
   `winnow_grammar::rt::expected` are 15 % of deep.
 * **Allocation and the UTF-8 check of slices**: `malloc` and `free` are
