@@ -91,6 +91,9 @@ pub struct ProverState {
     /// **Each statement the checker refused a folded number at with
     /// `NK1116`**, by its start: no overflow is refused there again.
     pub unfit_numbers: collections::BTreeSet[i64],
+    /// The checker's `map_indices`: the base of each index that reads a
+    /// map's key, by its node (ADR-396 D4, #2371).
+    pub map_indices: collections::BTreeSet[i64],
     /// **The `std` entry each method call resolved to**, by its receiver's
     /// node, as the checker's `method_callees` keys it (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
@@ -185,6 +188,7 @@ impl ProverState {
             arithmetic: collections::BTreeMap(),
             divisions: collections::BTreeMap(),
             unfit_numbers: collections::BTreeSet(),
+            map_indices: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
             std_properties: collections::BTreeSet(),
             std_ensured: collections::BTreeMap(),

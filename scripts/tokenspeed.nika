@@ -499,6 +499,10 @@ fn ts_short(location: String, root: String) throws {
     for i in 0..<agents.len() {
         if agents[i].end > agents[best].end { best = i }
     }
+    // `agents` is read from the transcripts (ADR-396 D2, #2371).
+    if best < 0 || best >= agents.len() {
+        return
+    }
     let a = agents[best]
     let gone = ts_gone_in(a, root)
     println(ts_row(ts_day(a.end), a.id.clone(), a.module.clone(), a.turns, a.ctx, gone))

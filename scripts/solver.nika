@@ -360,12 +360,15 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	rels.sort()
 	for rel in rels {
 		let at = rel.rfind("/")
+		// `rels` is read from the disk (ADR-396 D2, #2371).
+		let cut = at ?? 0
+		if cut < 0 || cut > rel.len() { continue }
 		// `f"{base}"`, not `base.to_string()`: the latter makes the
 		// returned tuples `EitherText` and a caller's `Vec[(String,
 		// String)]` fails in rustc (#1311).
 		let group = match at {
 			null => f"{base}",
-			else => f"{base}/{rel[0..<(at ?? 0)]}",
+			else => f"{base}/{rel[0..<cut]}",
 		}
 		out.push((group, f"{trimmed}/{rel}"))
 	}
@@ -1583,7 +1586,10 @@ fn solver_sample(args: Vec[String]) throws {
 		let mut taken = 0
 		for i in 0..<n {
 			if small.len() == 0 { break }
-			let (group, path) = small[i * small.len() / n].clone()
+			// `small` is read from the disk (ADR-396 D2, #2371).
+			let at = i * small.len() / n
+			if at < 0 || at >= small.len() { break }
+			let (group, path) = small[at].clone()
 			let file = f"{path.split("/").last() ?? ""}"
 			fs::create_dir(f"{out}/{group}", fs::Root::Anywhere; recursive: true)
 			fs::copy(path.clone(), f"{out}/{group}/{file}", fs::Root::Anywhere)
@@ -1898,12 +1904,14 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 	if names.len() > 1 { names.push("all") }
 	for g in names {
 		let mut at: Vec[i64] = []
-		for j in 0..<groups.len() {
-			if g == "all" || groups[j] == g { at.push(j) }
-		}
 		let mut split = 0
-		for j in at {
-			if disagree[j] { split += 1 }
+		for j in 0..<groups.len() {
+			if g == "all" || groups[j] == g {
+				at.push(j)
+				// `disagree` is filled from the solvers' answers (ADR-396
+				// D2, #2371).
+				if j < disagree.len() && disagree[j] { split += 1 }
+			}
 		}
 		println(f"{g}: {at.len()} files, disagree {split}")
 		for k in 0..<solvers.len() {

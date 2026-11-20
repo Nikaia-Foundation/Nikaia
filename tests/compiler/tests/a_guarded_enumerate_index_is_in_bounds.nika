@@ -1,0 +1,23 @@
+// An `enumerate`'s index counts from zero (ADR-396 D2, #2371): over a list
+// from outside it is outside, and a guard against another list's length
+// proves the read in bounds, an early `continue` as an `if` around it.
+use std::cli
+
+fn main() throws {
+    let listed: Vec[String] = ["a", "b"]
+    let line = cli::args().nth(1) ?? ""
+    let words: Vec[String] = line.split(" ").collect()
+    for (k, made) in words.iter().enumerate() {
+        if k >= listed.len() {
+            continue
+        }
+        println(listed[k])
+        println(made)
+    }
+    for (k, made) in words.iter().enumerate() {
+        if k < listed.len() {
+            println(listed[k])
+            println(made)
+        }
+    }
+}

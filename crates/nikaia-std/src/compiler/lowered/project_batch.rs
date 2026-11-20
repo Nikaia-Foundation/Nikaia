@@ -69,6 +69,7 @@ pub(crate) async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, 
     let mut modules: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     let mut sources: Vec<fs::Path> = vec![];
     for (k, made) in lowered.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if k >= listed.len() as i64 { continue; }
         let (rust, read) = match made { Some(__nikaia_value) => __nikaia_value, None => continue };
         let module = match project_batch_module(k, &rust) { Some(__nikaia_value) => __nikaia_value, None => continue };
         names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&listed, nikaia_std::index::at(k))).to_string()));

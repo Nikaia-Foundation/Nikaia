@@ -89,6 +89,7 @@ pub fn comptimes_of(
     arithmetic: &BTreeMap<i64, String>,
     divisions: &BTreeMap<i64, String>,
     unfit_numbers: &BTreeSet<i64>,
+    map_indices: &BTreeSet<i64>,
 ) -> Comptimes {
     prove_run::prove_comptimes_of(
         &parsed.program,
@@ -102,6 +103,7 @@ pub fn comptimes_of(
         arithmetic,
         divisions,
         unfit_numbers,
+        map_indices,
     )
 }
 

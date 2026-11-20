@@ -257,7 +257,18 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
             let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words);
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
+        let looped = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
+        if looped { ({ let __nikaia_arg1 = &outside_fills(&stmt.node, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of); prover_filled(scope, __nikaia_arg1) }); }
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition) { return true; }
+        let changes = match &stmt.node {
+            Stmt::Expr(_) => true,
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            Stmt::Let { .. } => !check_visit_stmt_blocks(&stmt.node).is_empty(),
+            Stmt::Assign { .. } => !check_visit_stmt_blocks(&stmt.node).is_empty(),
+            _ => false,
+        };
+        if changes { ({ let __nikaia_arg1 = &outside_fills(&stmt.node, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of); prover_filled(scope, __nikaia_arg1) }); }
         prover_follow_mutables(walk, &stmt.node, &stmt.span, scope, &untracked, &pinned, program, words);
         if !prover_a_branch(&stmt.node) && leaves_stmt(&stmt.node, &mut |e| { prover_throws(e, at, program, words, own, library, &mut &mut *unaliased) }, &mut &mut *holes_of, true) { scope.exact = false; }
     }
@@ -1085,6 +1096,14 @@ pub(crate) fn prover_all_plain(exprs: &[Expr]) -> bool {
     true
 }
 
+pub(crate) fn prover_filled(scope: &mut ProverScope, fills: &collections::BTreeMap<String, String>) {
+    for (n, source) in fills.iter() {
+        scope.tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+        scope.joined.remove(n);
+        if !source.is_empty() { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
@@ -1187,6 +1206,22 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
                         }
                     } else { inner.loose.insert(nikaia_std::block::Text::from(name.to_string())); }
                     if leaves_block(body, &mut |e| { prover_throws(e, at, program, words, own, library, &mut &mut *unaliased) }, &mut &mut *holes_of, false) { inner.loose.insert(name); }
+                }
+            },
+            _ => { },
+        }
+    }
+    if bindings.len() >= 2 {
+        match iter {
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                if words.resolve(method) == "enumerate" && args.is_empty() {
+                    let name = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }).to_string());
+                    inner.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+                    let n = walk.arena.var(&name);
+                    let zero = walk.arena.int(0);
+                    let above = walk.arena.le(zero, n);
+                    inner.facts.push(above);
                 }
             },
             _ => { },
@@ -1859,6 +1894,7 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
     match expr {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            if walk.state.map_indices.contains(&(id_of(base) as i64)) { return; }
             match base {
                 Expr::Variable(name, _) => {
                     let name = *name;

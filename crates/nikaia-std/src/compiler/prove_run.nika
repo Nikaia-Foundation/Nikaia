@@ -77,6 +77,9 @@ pub struct ProveComptimes {
     /// The checker's `unfit_numbers`: each statement `NK1116` refused a
     /// folded number at, by its start.
     pub unfit_numbers: collections::BTreeSet[i64],
+    /// The checker's `map_indices`: the base of each index that reads a
+    /// map's key, by its node (ADR-396 D4, #2371).
+    pub map_indices: collections::BTreeSet[i64],
 }
 
 /// What the walk and its passes made.
@@ -91,10 +94,10 @@ pub struct ProveWalked {
 /// Read off the checker's `comptime_values` (the type below and the literal,
 /// by the start of the item or statement): each one whose type is a whole
 /// number and whose literal an `i64` holds; its `whole_lets`,
-/// `method_callees`, `zero_divisors`, `arithmetic`, `divisions` and `unfit_numbers`, as
+/// `method_callees`, `zero_divisors`, `arithmetic`, `divisions`, `unfit_numbers` and `map_indices`, as
 /// they are.
-pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String], field_owners: ref collections::BTreeMap[i64, String], outside: ref ProverOutside, zero_divisors: ref collections::BTreeSet[i64], arithmetic: ref collections::BTreeMap[i64, String], divisions: ref collections::BTreeMap[i64, String], unfit_numbers: ref collections::BTreeSet[i64]) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone(), field_owners: field_owners.clone(), outside: outside.clone(), zero_divisors: zero_divisors.clone(), arithmetic: arithmetic.clone(), divisions: divisions.clone(), unfit_numbers: unfit_numbers.clone() }
+pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String], field_owners: ref collections::BTreeMap[i64, String], outside: ref ProverOutside, zero_divisors: ref collections::BTreeSet[i64], arithmetic: ref collections::BTreeMap[i64, String], divisions: ref collections::BTreeMap[i64, String], unfit_numbers: ref collections::BTreeSet[i64], map_indices: ref collections::BTreeSet[i64]) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone(), field_owners: field_owners.clone(), outside: outside.clone(), zero_divisors: zero_divisors.clone(), arithmetic: arithmetic.clone(), divisions: divisions.clone(), unfit_numbers: unfit_numbers.clone(), map_indices: map_indices.clone() }
     for (at, (below, written)) in values {
         if !prove_whole(below) {
             continue
@@ -197,6 +200,7 @@ fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref Pr
     state.arithmetic = comptimes.arithmetic.clone()
     state.divisions = comptimes.divisions.clone()
     state.unfit_numbers = comptimes.unfit_numbers.clone()
+    state.map_indices = comptimes.map_indices.clone()
     state.not_run = not_run.clone()
     state.stopped = stopped.clone()
     state.loops_recorded = recorded.clone()

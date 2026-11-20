@@ -4548,20 +4548,19 @@ fn drive_queue_prune(dir: String) throws {
 	let fixed = drive_fixed_on_develop(waiting.clone())
 	let mut gone: Vec[String] = closed.clone()
 	for tag in blocked.clone() { gone.push(tag) }
-	for i in 0..<waiting.len() {
-		if fixed.contains(waiting[i].clone()) { gone.push(waiting_tags[i].clone()) }
+	for (n, tag) in waiting.iter().zip(waiting_tags.iter()) {
+		if fixed.contains(n.clone()) { gone.push(tag.clone()) }
 	}
 	if gone.len() == 0 { return }
 	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, gone))
 	for tag in closed { println(f"DROPPED {tag} closed") }
-	for i in 0..<blocked.len() {
-		let line = blocked_lines[i]
+	for line in blocked_lines {
 		println(line.replace("SKIPPED", "DROPPED"))
 		let words: Vec[String] = line.split(" ").collect()
 		drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line)
 	}
-	for i in 0..<waiting.len() {
-		if fixed.contains(waiting[i].clone()) { println(f"DROPPED {waiting_tags[i]} fixed on develop") }
+	for (n, tag) in waiting.iter().zip(waiting_tags.iter()) {
+		if fixed.contains(n.clone()) { println(f"DROPPED {tag} fixed on develop") }
 	}
 }
 

@@ -377,8 +377,32 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
                 walk.state.before_return.insert(stmt.span.start as i64, returned ?? "")
             }
         }
+        // **A name a block inside fills from outside is outside past it**
+        // (#2371): the walk reads that block in a scope of its own, and a
+        // loop's turn reads before its head what a later turn filled (a
+        // name the loop assigns is unknown at its head, so only a changing
+        // call's receiver stays outside there).
+        let looped = match stmt.node {
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            else => false,
+        }
+        if looped {
+            prover_filled(scope, outside_fills(stmt.node, scope.tainted, scope.sources, words, library, walk.state, holes_of))
+        }
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) {
             return true
+        }
+        let changes = match stmt.node {
+            Stmt::Expr(_) => true,
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            Stmt::Let { .. } => !check_visit_stmt_blocks(stmt.node).is_empty(),
+            Stmt::Assign { .. } => !check_visit_stmt_blocks(stmt.node).is_empty(),
+            else => false,
+        }
+        if changes {
+            prover_filled(scope, outside_fills(stmt.node, scope.tainted, scope.sources, words, library, walk.state, holes_of))
         }
         prover_follow_mutables(walk, stmt.node, stmt.span, scope, untracked, pinned, program, words)
         // A statement that may leave for some states and not for others
@@ -1462,6 +1486,18 @@ fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
     return true
 }
 
+/// **Each name of `fills` is outside from here** (#2371), with the source
+/// it names.
+fn prover_filled(mut scope: ProverScope, fills: ref collections::BTreeMap[String, String]) {
+    for (n, source) in fills {
+        scope.tainted.insert(n.clone())
+        scope.joined.remove(n)
+        if !source.is_empty() {
+            scope.sources.insert(n.clone(), source.clone())
+        }
+    }
+}
+
 /// A `for`: a range's binding is bounded by its ends, every other binding is
 /// a name nothing pins. A `for` over a range whose turn changes whole numbers
 /// the walk follows is the `while` it means (ADR-361 D1): read past it
@@ -1602,6 +1638,24 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], m
                     if leaves_block(body, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) {
                         inner.loose.insert(name)
                     }
+                }
+            },
+            else => {},
+        }
+    }
+    // **An `enumerate`'s index counts from zero** (ADR-396 D2, #2371):
+    // `for (k, x) in xs.iter().enumerate()` knows `0 <= k`, so a guard
+    // `k < other.len()` proves `other[k]`; nothing pins `k` more.
+    if bindings.len() >= 2 {
+        match iter {
+            Expr::MethodCall { method, args, .. } => {
+                if words.resolve(method) == "enumerate" && args.is_empty() {
+                    let name = words.resolve(bindings[0]).clone()
+                    inner.ints.insert(name.clone())
+                    let n = walk.arena.var(name)
+                    let zero = walk.arena.int(0)
+                    let above = walk.arena.le(zero, n)
+                    inner.facts.push(above)
                 }
             },
             else => {},
@@ -2511,7 +2565,11 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
     }
     match expr {
         Expr::Index { base, index, .. } => {
-            // **A map's index reads a key** (ADR-396 D4): it has no bound.
+            // **A map's index reads a key** (ADR-396 D4): it has no bound,
+            // a field's or a call's as a name's (#2371).
+            if walk.state.map_indices.contains(id_of(base) as i64) {
+                return
+            }
             match base {
                 Expr::Variable(name, _) => {
                     if scope.maps.contains(words.resolve(name)) {

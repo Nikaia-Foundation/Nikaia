@@ -345,6 +345,134 @@ pub(crate) fn outside_source_in(exprs: &[Expr], tainted: &collections::BTreeSet<
     None
 }
 
+pub(crate) fn outside_filled(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<(String, String)> {
+    match expr {
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return outside_filled(inner, tainted, sources, words, library, state, &mut &mut *holes_of) },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let name = match receiver {
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+                _ => return None,
+            };
+            let contract = match *nikaia_std::index::get(&library.functions, nikaia_std::index::or(state.method_callees.get(&(id_of(receiver) as i64)), || "")) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if contract.mutates && any_from_outside(args, tainted, words, library, state, &mut &mut *holes_of) { return Some((name, nikaia_std::index::or(outside_source_in(args, tainted, sources, words, library, state, &mut &mut *holes_of), || "".into()))); }
+            return None;
+        },
+        _ => return None,
+    }
+}
+
+pub(crate) fn outside_fills(stmt: &Stmt, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> collections::BTreeMap<String, String> {
+    let mut fills: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut seen = tainted.copy_owned();
+    let mut named = sources.copy_owned();
+    let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
+    outside_fills_stmt(stmt, &mut seen, &mut named, &mut locals, &mut declared, &mut fills, words, library, state, &mut *holes_of);
+    fills
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn outside_fills_block(block: &Block, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, locals: &collections::BTreeSet<String>, fills: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) {
+    let mut seen = tainted.copy_owned();
+    let mut named = sources.copy_owned();
+    let mut inner = locals.copy_owned();
+    let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for stmt in block.stmts.iter() { outside_fills_stmt(&stmt.node, &mut seen, &mut named, &mut inner, &mut declared, fills, words, library, state, &mut &mut *holes_of); }
+    for n in seen.iter() {
+        if !declared.contains(n) && !tainted.contains(n) {
+            tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+            let source = match *nikaia_std::index::get(&named, n) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if source.is_some() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn outside_fills_stmt(stmt: &Stmt, tainted: &mut collections::BTreeSet<String>, sources: &mut collections::BTreeMap<String, String>, locals: &mut collections::BTreeSet<String>, declared: &mut collections::BTreeSet<String>, fills: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            for inner in check_visit_stmt_blocks(stmt) { outside_fills_block(inner, tainted, sources, &locals, fills, words, library, state, &mut &mut *holes_of); }
+            let outside = from_outside(value, &tainted, words, library, state, &mut &mut *holes_of);
+            let source = nikaia_std::index::or(outside_source(value, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
+            for name in names.iter() {
+                let name = *name;
+                let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
+                locals.insert(nikaia_std::block::Text::from(n.to_string()));
+                declared.insert(nikaia_std::block::Text::from(n.to_string()));
+                if outside {
+                    tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+                    if !source.is_empty() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+                } else { tainted.remove(&n); }
+            }
+            return;
+        },
+        Stmt::For { bindings, iter, body, .. } => {
+            let outside = from_outside(iter, &tainted, words, library, state, &mut &mut *holes_of);
+            let source = nikaia_std::index::or(outside_source(iter, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
+            let mut seen = tainted.copy_owned();
+            let mut named = sources.copy_owned();
+            let mut inner = locals.copy_owned();
+            for binding in bindings.iter() {
+                let binding = *binding;
+                let n = nikaia_std::block::Text::from(words.resolve(binding).to_string());
+                inner.insert(nikaia_std::block::Text::from(n.to_string()));
+                if outside {
+                    seen.insert(nikaia_std::block::Text::from(n.to_string()));
+                    if !source.is_empty() { named.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+                } else { seen.remove(&n); }
+            }
+            for _ in 0..2 { outside_fills_block(body, &mut seen, &mut named, &inner, fills, words, library, state, &mut &mut *holes_of); }
+            for n in seen.iter() {
+                if !inner.contains(n) || locals.contains(n) {
+                    if !tainted.contains(n) {
+                        tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+                        let source = match *nikaia_std::index::get(&named, n) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        if source.is_some() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
+                    }
+                }
+            }
+            return;
+        },
+        Stmt::While { body, .. } => {
+            for _ in 0..2 { outside_fills_block(body, tainted, sources, &locals, fills, words, library, state, &mut &mut *holes_of); }
+            return;
+        },
+        Stmt::Assign { target, value, .. } => {
+            match target {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    if from_outside(value, &tainted, words, library, state, &mut &mut *holes_of) {
+                        let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
+                        let source = nikaia_std::index::or(outside_source(value, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
+                        tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+                        if !source.is_empty() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+                        if !locals.contains(&n) { fills.insert(n, source); }
+                    }
+                },
+                _ => { },
+            }
+        },
+        Stmt::Expr(inner) => {
+            let filled = outside_filled(inner, &tainted, &sources, words, library, state, &mut &mut *holes_of);
+            if filled.is_some() {
+                let (n, source) = nikaia_std::index::or(filled, || ("".into(), "".into()));
+                tainted.insert(nikaia_std::block::Text::from(n.to_string()));
+                if !source.is_empty() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+                if !locals.contains(&n) { fills.insert(n, source); }
+            }
+        },
+        _ => { },
+    }
+    for inner in check_visit_stmt_blocks(stmt) { outside_fills_block(inner, tainted, sources, &locals, fills, words, library, state, &mut &mut *holes_of); }
+}
+
 pub(crate) fn outside_field(base: &Expr, name: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, state: &ProverState) -> Option<String> {
     let owner = match state.field_owners.get(&(id_of(base) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let key = format!("{}.{}", owner, words.resolve(name));
@@ -490,7 +618,16 @@ pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key
                 let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
                 prover_outside_result(found, returned, key, &tainted, &sources, &proof, words, library, state, &mut &mut *holes_of);
             },
-            Stmt::Expr(inner) => { if tail && at == last { prover_outside_tail(found, inner, key, tainted, sources, proof, words, library, state, &mut &mut *holes_of); } },
+            Stmt::Expr(inner) => {
+                let filled = outside_filled(inner, &tainted, &sources, words, library, state, &mut &mut *holes_of);
+                if filled.is_some() {
+                    let (n, source) = nikaia_std::index::or(filled, || ("".into(), "".into()));
+                    proof.forget(&n);
+                    if !source.is_empty() { sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
+                    tainted.insert(n);
+                }
+                if tail && at == last { prover_outside_tail(found, inner, key, tainted, sources, proof, words, library, state, &mut &mut *holes_of); }
+            },
             _ => { },
         }
         for expr in check_visit_stmt(&stmt.node) { prover_outside_expr(found, expr, key, &tainted, &sources, &proof, words, library, state, &mut &mut *holes_of); }

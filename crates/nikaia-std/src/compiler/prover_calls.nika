@@ -458,6 +458,165 @@ fn outside_source_in(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[St
     return null
 }
 
+/// **A list or a text a call fills from outside** (ADR-raw-sinks-1 D10,
+/// #2371): `rest.push(a)` with `a` from outside makes `rest` outside, as
+/// `rest = a` does. The name of the receiver a method of `std` that changes
+/// it (`mut self`, `ref mut self`) is handed an outside value, with the
+/// source it names (empty where none is named), else null.
+fn outside_filled(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> (String, String)? {
+    match expr {
+        Expr::Try(inner, _) => return outside_filled(inner, tainted, sources, words, library, state, holes_of),
+        Expr::MethodCall { receiver, args, .. } => {
+            let name = match receiver {
+                Expr::Variable(name, _) => words.resolve(name).clone(),
+                else => return null,
+            }
+            let contract = library.functions[state.method_callees.get(id_of(receiver) as i64) ?? ""] ?? return null
+            if contract.mutates && any_from_outside(args, tainted, words, library, state, holes_of) {
+                return (name, outside_source_in(args, tainted, sources, words, library, state, holes_of) ?? "")
+            }
+            return null
+        },
+        else => return null,
+    }
+}
+
+/// **The names around a statement it fills from outside** (#2371), each
+/// with its source (empty where none is named): an assignment or a
+/// changing call (`outside_filled`) inside its blocks, to a name no `let`
+/// or `for` inside the statement binds. A loop's body is read twice, so a
+/// value a later turn reads is seen. A walk that reads a block in a scope
+/// of its own carries these out of it.
+fn outside_fills(stmt: ref Stmt, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> collections::BTreeMap[String, String] {
+    let mut fills: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut seen = tainted.clone()
+    let mut named = sources.clone()
+    let mut locals: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    outside_fills_stmt(stmt, seen, named, locals, declared, fills, words, library, state, holes_of)
+    return fills
+}
+
+fn outside_fills_block(block: ref Block, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], locals: ref collections::BTreeSet[String], mut fills: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    let mut seen = tainted.clone()
+    let mut named = sources.clone()
+    let mut inner = locals.clone()
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    for stmt in block.stmts {
+        outside_fills_stmt(stmt.node, seen, named, inner, declared, fills, words, library, state, holes_of)
+    }
+    for n in seen {
+        if !declared.contains(n) && !tainted.contains(n) {
+            tainted.insert(n.clone())
+            let source = named[n]?.clone()
+            if source != null {
+                sources.insert(n.clone(), source ?? "")
+            }
+        }
+    }
+}
+
+fn outside_fills_stmt(stmt: ref Stmt, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], mut locals: collections::BTreeSet[String], mut declared: collections::BTreeSet[String], mut fills: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            for inner in check_visit_stmt_blocks(stmt) {
+                outside_fills_block(inner, tainted, sources, locals, fills, words, library, state, holes_of)
+            }
+            let outside = from_outside(value, tainted, words, library, state, holes_of)
+            let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
+            for name in names {
+                let n = words.resolve(name).clone()
+                locals.insert(n.clone())
+                declared.insert(n.clone())
+                if outside {
+                    tainted.insert(n.clone())
+                    if !source.is_empty() {
+                        sources.insert(n.clone(), source.clone())
+                    }
+                } else {
+                    tainted.remove(n)
+                }
+            }
+            return
+        },
+        Stmt::For { bindings, iter, body, .. } => {
+            let outside = from_outside(iter, tainted, words, library, state, holes_of)
+            let source = outside_source(iter, tainted, sources, words, library, state, holes_of) ?? ""
+            let mut seen = tainted.clone()
+            let mut named = sources.clone()
+            let mut inner = locals.clone()
+            for binding in bindings {
+                let n = words.resolve(binding).clone()
+                inner.insert(n.clone())
+                if outside {
+                    seen.insert(n.clone())
+                    if !source.is_empty() {
+                        named.insert(n.clone(), source.clone())
+                    }
+                } else {
+                    seen.remove(n)
+                }
+            }
+            for _ in 0..<2 {
+                outside_fills_block(body, seen, named, inner, fills, words, library, state, holes_of)
+            }
+            for n in seen {
+                if !inner.contains(n) || locals.contains(n) {
+                    if !tainted.contains(n) {
+                        tainted.insert(n.clone())
+                        let source = named[n]?.clone()
+                        if source != null {
+                            sources.insert(n.clone(), source ?? "")
+                        }
+                    }
+                }
+            }
+            return
+        },
+        Stmt::While { body, .. } => {
+            for _ in 0..<2 {
+                outside_fills_block(body, tainted, sources, locals, fills, words, library, state, holes_of)
+            }
+            return
+        },
+        Stmt::Assign { target, value, .. } => {
+            match target {
+                Expr::Variable(name, _) => {
+                    if from_outside(value, tainted, words, library, state, holes_of) {
+                        let n = words.resolve(name).clone()
+                        let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
+                        tainted.insert(n.clone())
+                        if !source.is_empty() {
+                            sources.insert(n.clone(), source.clone())
+                        }
+                        if !locals.contains(n) {
+                            fills.insert(n, source)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        Stmt::Expr(inner) => {
+            let filled = outside_filled(inner, tainted, sources, words, library, state, holes_of)
+            if filled != null {
+                let (n, source) = filled ?? ("", "")
+                tainted.insert(n.clone())
+                if !source.is_empty() {
+                    sources.insert(n.clone(), source.clone())
+                }
+                if !locals.contains(n) {
+                    fills.insert(n, source)
+                }
+            }
+        },
+        else => {},
+    }
+    for inner in check_visit_stmt_blocks(stmt) {
+        outside_fills_block(inner, tainted, sources, locals, fills, words, library, state, holes_of)
+    }
+}
+
 /// **The source of a field a struct literal of the package filled from
 /// outside** (#1573), `Type.field` by the struct the checker read it from;
 /// null for any other field.
@@ -639,6 +798,15 @@ fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref Str
                 prover_outside_result(found, returned, key, tainted, sources, proof, words, library, state, holes_of)
             },
             Stmt::Expr(inner) => {
+                let filled = outside_filled(inner, tainted, sources, words, library, state, holes_of)
+                if filled != null {
+                    let (n, source) = filled ?? ("", "")
+                    proof.forget(n)
+                    if !source.is_empty() {
+                        sources.insert(n.clone(), source.clone())
+                    }
+                    tainted.insert(n)
+                }
                 if tail && at == last {
                     prover_outside_tail(found, inner, key, tainted, sources, proof, words, library, state, holes_of)
                 }
