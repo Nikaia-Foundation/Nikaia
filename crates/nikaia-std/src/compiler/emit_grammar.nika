@@ -332,7 +332,7 @@ impl EmitState {
         let item = host.ty_named(walk, ty)
         out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
-        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"))
+        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), false)
         out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), {each}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
     }
@@ -374,11 +374,12 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
             out.push(" }; ")
         }
-        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+        out.push(emit_stream_batched_start())
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
-        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"))
+        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true)
         out.push(f"let __wg_parsed = {name}::parse_{rule_name}_slice_each(&__wg_source[..], &mut __wg_context, {handed}{each}); ")
-        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n")
+        out.push(emit_stream_batched_end("__wg_error.render(&__wg_source[..])"))
+        out.push(" }\n")
     }
 
     /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
@@ -907,12 +908,34 @@ fn stream_item_rule(world: ref EmitWorld, pattern: ref Pattern) -> String? {
 /// each item, owned, through the walk's channel, and answers `Break` once the
 /// walk dropped its end. An entry whose items are emitted (`emit_stream_rule`)
 /// shows it `Option<Item>`, and only a `Some` is an item.
-fn emit_stream_each(item: ref String, emitting: bool) -> String {
-    let send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }"
+fn emit_stream_each(item: ref String, emitting: bool, batched: bool) -> String {
+    let mut send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }"
+    if batched {
+        send = "{ __wg_batch.push(Ok(__wg_one.clone())); if __wg_batch.len() < 256 { ::std::ops::ControlFlow::Continue(()) } else { match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) } } }"
+    }
     if emitting {
         return f"|__wg_item: &::std::option::Option<{item}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {send}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}"
     }
     return f"|__wg_one: &{item}| {send}"
+}
+
+/// **A walk over a `String` or `Bytes` hands its items over in batches**
+/// (ADR-grammar-typed-read-v1 D7, #2433): the parser's thread collects up to
+/// 256 items into `__wg_batch` (`emit_stream_each`) and sends each full
+/// batch through a channel that holds one, then the rest and the error, if
+/// there is one, at the end; the iterator flattens the batches. Items and
+/// error keep their order, and a walk that stops drops the receiver, so the
+/// next send fails and the parse ends a bounded number of items later. The
+/// opening of the parser's thread:
+fn emit_stream_batched_start() -> String {
+    return "let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(1); ::std::thread::spawn(move || { let mut __wg_batch = ::std::vec::Vec::with_capacity(256); "
+}
+
+/// **The end of a batched walk's thread** (`emit_stream_batched_start`): the
+/// error after the items before it, the last batch, and the flattening
+/// iterator. `rendered` is the failure rendered against the input.
+fn emit_stream_batched_end(rendered: ref String) -> String {
+    return f"if let Err(__wg_error) = __wg_parsed {{ __wg_batch.push(Err(nikaia_std::grammar::ParseError::of({rendered}))); }} if !__wg_batch.is_empty() {{ let _ = __wg_tx.send(__wg_batch); }} }}); __wg_rx.into_iter().flatten()"
 }
 
 /// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-typed-read-v1
