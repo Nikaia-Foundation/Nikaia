@@ -87,7 +87,7 @@ pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn grammar_stream_refusal(entry: &str, span: &Span, why: &str, help: String) -> CheckFinding {
-    let notes: Vec<String> = vec![String::from("A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.")];
+    let notes: Vec<String> = vec![String::from("A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-typed-read-v1 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.")];
     check_refusal("NK1349", span, format!("`{}` is `@stream`, so its body has to repeat one item on a fixed path, but {}.", entry, why), notes, Some(help))
 }
 
@@ -822,7 +822,7 @@ pub(crate) fn grammar_emits_undone(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
         let undone = match grammar_undone_from(world, gram, &name, false, streamed, &mut seen) { Some(__nikaia_value) => __nikaia_value, None => continue };
         for at in emits.iter() {
             let at = *at;
-            let notes: Vec<String> = vec![format!("The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `{}` fails, the parse goes back and tries {}, and the item is already handed over. The compiler does not hold items back to hide that.", name, undone)];
+            let notes: Vec<String> = vec![format!("The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `{}` fails, the parse goes back and tries {}, and the item is already handed over. The compiler does not hold items back to hide that.", name, undone)];
             out.push(check_refusal("NK1370", &at, format!("This `emit` in rule `{}` could be undone: {} can still be tried after it runs.", name, undone), notes, Some(String::from("Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`."))));
         }
     }

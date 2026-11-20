@@ -176,7 +176,7 @@ impl EmitState {
             },
             // Resolved by the copying before any emit (grammar_types.nika).
             Pattern::Choose { .. } => {},
-            // **`members[S](..)` is the call of rules of its own** (ADR-grammar-2
+            // **`members[S](..)` is the call of rules of its own** (ADR-grammar-typed-read-v1
             // D3), written after the grammar's (`emit_members_rules`).
             Pattern::Members { .. } => {
                 out.push(f"__nikaia_members_{walk.grammar_members.len()}")

@@ -8,7 +8,7 @@
 // A record is named `ADR-<topic>-v<n>`: one to three lowercase words joined
 // by `-` and the topic's version (ADR-decision-records-v2), and a topic has
 // one live record. The records from before carry a bare three-digit number
-// or a topic and a count (`ADR-grammar-2`) until a consolidation replaces
+// or a topic and a count (`ADR-views-3`) until a consolidation replaces
 // them; all are checked here.
 //
 // A decision is only citable if the number is stable, so a dangling `D7` is

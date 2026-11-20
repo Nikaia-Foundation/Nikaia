@@ -824,7 +824,7 @@
 4e58fbd4461fefc7cdc2de8d33eddcb44409215ba7efe285c28a364f169815f2 proved R(h1,h15,c1:1:0:1)
 4e68926e4f8851ab00cbb0b29e441e6984947199c3ef09ffeb5a6da7fa22dd07 proved R(h7,h9,h13,c2:1:0:1,c1:1:3:1)
 4e7ce7864d3b436ff8fb75fa26fa2f0ff6c9a0fc9d945256d153d2366e0884a4 proved R(h2,h24,c1:1:0:1)
-4e927b880f8e8b18c6cc88838afd09ed3dcbbf060fb04ca3513e42612f2074cf invariant src/main.nika:2832:2/bounds closed-forms=eq(i@86568,0);guess-and-check=ge(i,0)
+4e927b880f8e8b18c6cc88838afd09ed3dcbbf060fb04ca3513e42612f2074cf invariant src/main.nika:2832:2/bounds closed-forms=eq(i@86561,0);guess-and-check=ge(i,0)
 4eba85362c33bb089ba9f3711e0f1d64457247e916ad8bae9a5d983f826a4ac1 proved R(h0,h2,c1:1:0:1)
 4ebaea56fba67e247703403278e62de6e8a64a89e19b81243889e0af7a808d6e refuted v0=3,v1=3,v2=1,v3=0,v4=1,v5=0,v6=0,v7=0,v8=3,v9=0
 4ebbd0736258aca85485d7a2bc913f5e1774593257f7e34b4625f632107f75d5 refuted v0=0,v1=0,v2=1,v3=0,v4=0
@@ -2407,7 +2407,7 @@ e6aa7ebc826bdd214bdae53d05130718322e003e93dbc122817d573dc3af63fe proved R(h10,h2
 e6c93538c8e1e59c2604f8ffcf70fcc78fd6a74fbea90a8937aa305347ab251d refuted v0=1,v1=1,v10=0,v11=0,v12=1,v13=0,v14=0,v2=1,v3=0,v4=0,v5=0,v6=0,v7=0,v8=1,v9=0
 e6e8f1ede8f4d095c1bda4e235f3f1fce7b575782e27744a2812358cc3c1798b proved R(h2,h6,h7,h9,c0:1:3:1,c2:1:4:1,c1:1:5:1)
 e6ea8f32b9904a433f534df6e935691db511d3b524e4c27fb961e8d84d3177bb proved R(h2,h15,h20,c2:1:0:1,c3:1:1:1)
-e7328b03f46a97857108f9e0b7e71b0c2b2f6bcab8f9c40f5198d79b087de341 invariant src/main.nika:2852:3/bounds closed-forms=eq(e@87055,j);closed-forms=le(e,e@87055);guess-and-check=le(e,j);guess-and-check=ge(e,j#81);guess-and-check=le(e,n);guess-and-check=lt(e,n);guess-and-check=ge(e,0);guess-and-check=lt(e,bs.len%28%29)
+e7328b03f46a97857108f9e0b7e71b0c2b2f6bcab8f9c40f5198d79b087de341 invariant src/main.nika:2852:3/bounds closed-forms=eq(e@87048,j);closed-forms=le(e,e@87048);guess-and-check=le(e,j);guess-and-check=ge(e,j#81);guess-and-check=le(e,n);guess-and-check=lt(e,n);guess-and-check=ge(e,0);guess-and-check=lt(e,bs.len%28%29)
 e7375d79f462e8d9cfac0e3bc6dfd1445ee89ec6aff1e39e153fff4bfdc7a3fc refuted v0=0,v1=0,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0
 e76b31ecf21fdbf9f9e39b361dfbe5ba458fd0de41b68598be5d39bb6d6ec339 refuted v0=0,v1=0,v2=0,v3=1
 e78026a1dc79f5fac418cb371c377d9a1c17b74b928ce82c1b06d1099edea396 proved S4[R(h7,h17,c1:1:0:1)|R(h0,h5,h18,c0:1:2:1,c1:1:3:1)]

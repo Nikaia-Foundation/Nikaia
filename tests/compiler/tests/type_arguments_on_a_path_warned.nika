@@ -1,5 +1,5 @@
 // `path::f[T](…)` where a value argument could have said the type is warned
-// with `NK1233`, as a bare name is (ADR-grammar-2 D11, #514).
+// with `NK1233`, as a bare name is (ADR-grammar-typed-read-v1 D11, #514).
 
 use compiler_tests
 

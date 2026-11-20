@@ -1,5 +1,5 @@
 // **A rule that takes types is copied once per list of type arguments**
-// ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md) D1,
+// ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md) D1,
 // Part II 10.8, *A rule may take types*). Right after parsing, the parser's
 // host (`crates/nikaia/src/parser/mod.rs`, `expand_grammar_types`) rewrites
 // each call `G::read[i64](input)` to the copy's name, `G::read__i64(input)`,
@@ -9,7 +9,7 @@
 // it with the same list. The generic rule itself is not kept (ADR-304 D6), so
 // the checker, the analyses and the emitter only ever see single-type rules.
 //
-// **A copy keeps the arm its type takes** (ADR-grammar-2 D2, D6): a rule body
+// **A copy keeps the arm its type takes** (ADR-grammar-typed-read-v1 D2, D6): a rule body
 // `match T::kind { … }` becomes the alternatives of the one arm `T`'s kind
 // takes, with the names the arm binds (`Maybe(A)`) standing for the parts of
 // the type; a type no arm takes, or one an arm `refuse`s, is refused at the
@@ -95,7 +95,7 @@ struct GrammarTypesWork {
     traits: collections::BTreeSet[String],
     impls: collections::BTreeSet[String],
     /// Each declared struct's type parameters and fields, which a
-    /// `members[S]` builds (ADR-grammar-2 D3).
+    /// `members[S]` builds (ADR-grammar-typed-read-v1 D3).
     structs: collections::BTreeMap[String, (Vec[GenericParam], Vec[FieldDef])],
     from: i64,
     path: Vec[String],
@@ -155,7 +155,7 @@ fn grammar_types_chooses(alts: ref Vec[GrammarAlt]) -> bool {
     return false
 }
 
-/// **Whether a grammar needs the copying** (ADR-grammar-2 D1-D3): a rule
+/// **Whether a grammar needs the copying** (ADR-grammar-typed-read-v1 D1-D3): a rule
 /// that takes types, a `match` on a kind, or a `members[S]`, whose value
 /// rule is copied once per field type.
 fn grammar_types_wanted(def: ref GrammarDef) -> bool {
@@ -408,7 +408,7 @@ fn grammar_types_alts(alts: ref Vec[GrammarAlt], bound: ref collections::BTreeMa
     return out
 }
 
-/// **The arm of a `match` on a kind a copy keeps** (ADR-grammar-2 D2, D6):
+/// **The arm of a `match` on a kind a copy keeps** (ADR-grammar-typed-read-v1 D2, D6):
 /// the first whose kind is the type's, or `else`; its names stand for the
 /// type's parts. No arm, or an arm that is `refuse("why")`, is `NK1250` at
 /// the call; a value other than a type's `::kind` is `NK1310`.
@@ -434,7 +434,7 @@ fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Sp
     }
     let given: Type? = bound.get(subject)?.clone()
     if given == null {
-        grammar_types_refuse(work, "NK1310", span.clone(), f"A `match` in a rule's pattern chooses while the program is built, and `{written}` isn't known then.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2), which is decided while building; a value is only known while the input is read.", "Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`.")
+        grammar_types_refuse(work, "NK1310", span.clone(), f"A `match` in a rule's pattern chooses while the program is built, and `{written}` isn't known then.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v1 D2), which is decided while building; a value is only known while the input is read.", "Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`.")
         return none
     }
     let ty: Type = given ?? return none
@@ -467,12 +467,12 @@ fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Sp
             if case == "" {
                 named = "else"
             }
-            grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: {why}", f"The arm `{named}` of the `match` in `{rule}` refuses it with `refuse(…)` (ADR-grammar-2 D6){reached}.", "Call it with a type the grammar reads.")
+            grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: {why}", f"The arm `{named}` of the `match` in `{rule}` refuses it with `refuse(…)` (ADR-grammar-typed-read-v1 D6){reached}.", "Call it with a type the grammar reads.")
             return none
         }
         return grammar_types_alts(arm.alts, inner, rule, generic, owner, words, intern, work)
     }
-    grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: no arm of the `match` in `{rule}` takes `{kind}`.", f"`{rule}` chooses its pattern by `{written}` (ADR-grammar-2 D6){reached}.", f"Add an arm for `{kind}` to the `match` in `{rule}`, or call it with a type an arm takes.")
+    grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: no arm of the `match` in `{rule}` takes `{kind}`.", f"`{rule}` chooses its pattern by `{written}` (ADR-grammar-typed-read-v1 D6){reached}.", f"Add an arm for `{kind}` to the `match` in `{rule}`, or call it with a type an arm takes.")
     return none
 }
 
@@ -517,7 +517,7 @@ fn grammar_types_put_exprs(exprs: ref Vec[Expr], bound: ref collections::BTreeMa
     return out
 }
 
-/// **The fields a `members[S]` builds** (ADR-grammar-2 D3): each field of
+/// **The fields a `members[S]` builds** (ADR-grammar-typed-read-v1 D3): each field of
 /// the struct `S` with the copy of the value rule for its type, which is
 /// queued. An `S` that isn't a declared struct is `NK1164`, as a type a
 /// rule's `S: Struct` bound refuses; one still a type parameter (in a rule
@@ -527,7 +527,7 @@ fn grammar_types_members(built: ref Type, value: winnow_grammar::Symbol, span: r
     let declared: (Vec[GenericParam], Vec[FieldDef])? = work.structs.get(words.resolve(built.name))?.clone()
     if declared == null {
         let spelled = grammar_types_spelled(words, built)
-        grammar_types_refuse(work, "NK1164", span.clone(), f"`members[{spelled}]` builds a struct, and `{spelled}` isn't one this file declares.", "`members[S]` reads the members of an object into the fields of the struct `S` (ADR-grammar-2 D3); its fields are known only for a struct declared beside the grammar.", "Name a struct declared in the grammar's file.")
+        grammar_types_refuse(work, "NK1164", span.clone(), f"`members[{spelled}]` builds a struct, and `{spelled}` isn't one this file declares.", "`members[S]` reads the members of an object into the fields of the struct `S` (ADR-grammar-typed-read-v1 D3); its fields are known only for a struct declared beside the grammar.", "Name a struct declared in the grammar's file.")
         return out
     }
     let (params, fields) = declared ?? return out
@@ -621,7 +621,7 @@ fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::
             copy.node = Pattern::Call { name: name, args: grammar_types_put_exprs(args, bound, words, intern), config: config2 }
         },
         Pattern::Choose { .. } => {
-            grammar_types_refuse(work, "NK1310", pattern.span.clone(), "A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2).", "Give the `match` a rule of its own, and call that rule here.")
+            grammar_types_refuse(work, "NK1310", pattern.span.clone(), "A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v1 D2).", "Give the `match` a rule of its own, and call that rule here.")
         },
         Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
             let built = grammar_types_put(ty, bound, words)
@@ -654,7 +654,7 @@ fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::
 
 /// **The rules that take types, and whether a rule chooses**: what the
 /// parser's host asks before it walks the program for the calls of a rule
-/// that takes types (ADR-grammar-2 D1-D3). Neither, and nothing is copied.
+/// that takes types (ADR-grammar-typed-read-v1 D1-D3). Neither, and nothing is copied.
 pub struct GrammarTypesGeneric {
     pub rules: collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)],
     pub chooses: bool,
@@ -662,7 +662,7 @@ pub struct GrammarTypesGeneric {
 
 /// Each grammar's rules that take types, by grammar and rule, and whether a
 /// `match` on a kind or a `members[S]` asks for the copying too, also in a
-/// rule that takes no types (ADR-grammar-2 D2, D3).
+/// rule that takes no types (ADR-grammar-typed-read-v1 D2, D3).
 fn grammar_types_generic(items: ref Vec[Spanned[Item]]) -> GrammarTypesGeneric {
     let mut found = GrammarTypesGeneric { rules: collections::BTreeSet(), chooses: false }
     for item in items {
@@ -791,7 +791,7 @@ fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec[Type]) -> Typ
     return Type { name: name, generics: generics, is_view: false, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
 }
 
-/// **A value in a rule's brackets** (`NK1230`, ADR-grammar-2 D1), said at
+/// **A value in a rule's brackets** (`NK1230`, ADR-grammar-typed-read-v1 D1), said at
 /// `span`, the part that is a value: a rule that takes types takes them as a
 /// function's type parameters are written.
 fn grammar_types_value_refused(callee: ref String, span: ref Span) -> GrammarTypesRefusal {
@@ -800,7 +800,7 @@ fn grammar_types_value_refused(callee: ref String, span: ref Span) -> GrammarTyp
         call: -1,
         span: span.clone(),
         message: f"`{callee}` takes a type here, not a value.",
-        note: f"`{callee}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).",
+        note: f"`{callee}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-typed-read-v1 D1).",
         help: f"Write the type: `{callee}[i64](…)`, not a value of it.",
     }
 }
@@ -816,7 +816,7 @@ fn grammar_types_plain(name: winnow_grammar::Symbol, bound: ref collections::BTr
 }
 
 /// **Every call of a rule that takes types made the call of its copy, and the
-/// copies made** (ADR-grammar-2 D1): what the parser does right after the
+/// copies made** (ADR-grammar-typed-read-v1 D1): what the parser does right after the
 /// grammar. Each call `G::read[i64](input)` becomes `G::read__i64(input)`, and
 /// the rules are copied once per list of type arguments, so no later reader
 /// sees a rule that takes types. A value in the brackets is `NK1230`, as a
@@ -857,7 +857,7 @@ fn grammar_types_placed(mut refusal: GrammarTypesRefusal, call_ids: ref Vec[u32]
 }
 
 /// **A copy's actions, guards and bounds with the rule's type parameters
-/// put in** (ADR-grammar-2 D1): a type written in them (`d as T`,
+/// put in** (ADR-grammar-typed-read-v1 D1): a type written in them (`d as T`,
 /// `let x: T`), and a parameter standing as a value's head (`T::kind`,
 /// `T::from(…)`), names the type the copy is for.
 fn grammar_types_put_block(block: ref Block, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Block {

@@ -664,7 +664,7 @@ impl FmtPrinter {
         }
         // A line of a grammar's body that starts a rule starts one, even after
         // `item*`, which is the whole body of an `@stream` entry
-        // (ADR-grammar-2 D7) and only looks like an operator left hanging.
+        // (ADR-grammar-typed-read-v1 D7) and only looks like an operator left hanging.
         let starts_rule = fmt_starts_rule(first.text)
         if self.in_grammar() && starts_rule {
             return inner

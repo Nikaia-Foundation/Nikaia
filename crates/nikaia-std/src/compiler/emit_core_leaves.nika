@@ -578,7 +578,7 @@ impl EmitState {
             return
         }
         // **A `@stream` entry hands its items over one at a time**
-        // (ADR-grammar-2 D7, amended 2026-11-08): the engine's reader runs on
+        // (ADR-grammar-typed-read-v1 D7, amended 2026-11-08): the engine's reader runs on
         // a thread of its own over a copy of the input and hands each item,
         // owned, through a channel that holds none; a walk that stops drops
         // the receiver, `each` answers `Break` and the parse ends there. A

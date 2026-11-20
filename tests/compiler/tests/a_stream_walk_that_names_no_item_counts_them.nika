@@ -1,5 +1,5 @@
 // A `for _ in` over a `@stream` entry whose step can fail (ADR-025 D1,
-// ADR-grammar-2 D7): the step is bound under a hidden name before it is
+// ADR-grammar-typed-read-v1 D7): the step is bound under a hidden name before it is
 // unwrapped, so a walk that names no item counts them.
 
 struct Item {
