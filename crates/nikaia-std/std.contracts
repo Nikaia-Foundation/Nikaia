@@ -6081,6 +6081,14 @@ sync = true
 touches = []
 signature = "() -> i64"
 
+# Give the thread up once (Part II 11.1): a suspension point with no I/O and
+# no time behind it. The task goes behind the ready ones and returns when it
+# is polled again; no `sync` line, like `time::sleep`.
+[fn."task::yield"]
+pub = true
+panics = false
+signature = "()"
+
 # **A scope's tasks borrow** (Part II 12.7): the scope waits for every task
 # started in it, so a task reads the function's values without taking them.
 # What `task::scope` hands its function, to start tasks with.

@@ -1,0 +1,7 @@
+use std::task
+
+fn main() throws {
+	println("before")
+	task::yield()
+	println("after")
+}
