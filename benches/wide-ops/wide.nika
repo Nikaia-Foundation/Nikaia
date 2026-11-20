@@ -1,0 +1,369 @@
+// Issue #876's workloads as today's Nikaia writes them: no `u128` (ADR-315),
+// no named wide operation, so a 64×64 → 128 product is four 32×32 → 64
+// products, a carry is a compare, and a carry-less product is a table walk.
+// `src/main.rs` is the same work in Rust, once with the same algorithm
+// (`emu`) and once with what the hardware offers (`native`), and prints the
+// same line. `bench.nika` builds, compares and counts them (README.md).
+//
+// `wide WORKLOAD N` prints one line, `WORKLOAD N CHECKSUM`.
+
+use std::cli
+use std::text
+
+comptime M32: u64 = 0xffff_ffff
+
+// The inputs: splitmix64, the same stream on both sides.
+struct Rng {
+	state: u64,
+}
+
+impl Rng {
+	fn next(mut self) -> u64 {
+		self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15)
+		let mut z = self.state
+		z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9)
+		z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb)
+		return z ^ (z >> 31)
+	}
+}
+
+// 64 × 64 → 128 from four 32 × 32 → 64 products: `(lo, hi)`.
+fn mul_wide(a: u64, b: u64) -> (u64, u64) {
+	let a0 = a & M32
+	let a1 = a >> 32
+	let b0 = b & M32
+	let b1 = b >> 32
+	let p00 = a0 * b0
+	let p01 = a0 * b1
+	let p10 = a1 * b0
+	let p11 = a1 * b1
+	let mid = (p00 >> 32) + (p01 & M32) + (p10 & M32)
+	let lo = (p00 & M32) | (mid << 32)
+	let hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32)
+	return (lo, hi)
+}
+
+fn fold(h: u64, w: u64) -> u64 {
+	return (h ^ w).wrapping_mul(0x100_0000_01b3)
+}
+
+// 1. A 4096-bit number as 128 limbs of 32 bits, least significant first; a
+// limb pair (2k, 2k+1) is the Rust side's 64-bit limb k.
+comptime LIMBS: i64 = 128
+
+fn random_big(mut rng: Rng) -> Vec[u32] {
+	let mut v: Vec[u32] = []
+	for _i in 0..<LIMBS / 2 {
+		let w = rng.next()
+		v.push(w.truncating_u32())
+		v.push((w >> 32).truncating_u32())
+	}
+	return v
+}
+
+// `a += b` modulo 2^4096.
+fn big_add(mut a: Vec[u32], b: Vec[u32]) {
+	let mut carry: u64 = 0
+	for i in 0..<LIMBS {
+		let s = (a[i] as u64) + (b[i] as u64) + carry
+		a[i] = s.truncating_u32()
+		carry = s >> 32
+	}
+}
+
+// `a * b`, all 256 limbs, schoolbook.
+fn big_mul(a: Vec[u32], b: Vec[u32], mut r: Vec[u32]) {
+	for i in 0..<2 * LIMBS {
+		r[i] = 0
+	}
+	for i in 0..<LIMBS {
+		let mut carry: u64 = 0
+		let ai = a[i] as u64
+		for j in 0..<LIMBS {
+			let t = ai * (b[j] as u64) + (r[i + j] as u64) + carry
+			r[i + j] = t.truncating_u32()
+			carry = t >> 32
+		}
+		r[i + LIMBS] = carry.truncating_u32()
+	}
+}
+
+fn big_sum(a: Vec[u32]) -> u64 {
+	let mut h: u64 = 0
+	for k in 0..<LIMBS / 2 {
+		h = fold(h, (a[2 * k] as u64) | ((a[2 * k + 1] as u64) << 32))
+	}
+	return h
+}
+
+fn bigadd(n: i64) -> u64 {
+	let mut rng = Rng { state: 1 }
+	let mut a = random_big(rng)
+	let mut b = random_big(rng)
+	for _i in 0..<n {
+		big_add(a, b)
+		big_add(b, a)
+	}
+	return big_sum(a) ^ big_sum(b)
+}
+
+fn bigmul(n: i64) -> u64 {
+	let mut rng = Rng { state: 2 }
+	let mut a = random_big(rng)
+	let b = random_big(rng)
+	let mut r: Vec[u32] = [0; 2 * LIMBS]
+	for _i in 0..<n {
+		big_mul(a, b, r)
+		// a = low half + high half, modulo 2^4096
+		let mut carry: u64 = 0
+		for k in 0..<LIMBS {
+			let s = (r[k] as u64) + (r[k + LIMBS] as u64) + carry
+			a[k] = s.truncating_u32()
+			carry = s >> 32
+		}
+	}
+	return big_sum(a)
+}
+
+// 2. Miller-Rabin over 64-bit odd numbers, Montgomery multiplication with the
+// emulated product.
+struct Mont {
+	m: u64,
+	inv: u64,
+	r1: u64,
+	r2: u64,
+}
+
+fn mont_new(m: u64) -> Mont {
+	let mut inv = m
+	for _i in 0..<5 {
+		let two: u64 = 2
+		inv = inv.wrapping_mul(two.wrapping_sub(m.wrapping_mul(inv)))
+	}
+	let zero: u64 = 0
+	let r1 = zero.wrapping_sub(m) % m
+	let mut r2 = r1
+	for _i in 0..<64 {
+		r2 = add_mod(r2, r2, m)
+	}
+	return Mont { m: m, inv: inv, r1: r1, r2: r2 }
+}
+
+fn add_mod(a: u64, b: u64, m: u64) -> u64 {
+	if a >= m - b { return a - (m - b) }
+	return a + b
+}
+
+// a·b·2^-64 mod m.
+fn mont_mul(t: Mont, a: u64, b: u64) -> u64 {
+	let (lo, hi) = mul_wide(a, b)
+	let q = lo.wrapping_mul(t.inv)
+	let (_, h) = mul_wide(q, t.m)
+	if hi < h { return hi.wrapping_sub(h).wrapping_add(t.m) }
+	return hi - h
+}
+
+fn is_prime(n: u64) -> bool {
+	let t = mont_new(n)
+	let mut d = n - 1
+	let mut s = 0
+	while (d & 1) == 0 {
+		d = d >> 1
+		s += 1
+	}
+	let one = t.r1
+	let minus_one = n - t.r1
+	let bases: Vec[u64] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
+	for base in bases {
+		let mut x = one
+		let mut p = mont_mul(t, base, t.r2)
+		let mut e = d
+		while e > 0 {
+			if (e & 1) == 1 { x = mont_mul(t, x, p) }
+			p = mont_mul(t, p, p)
+			e = e >> 1
+		}
+		if x != one && x != minus_one {
+			let mut found = false
+			for _r in 1..<s {
+				x = mont_mul(t, x, x)
+				if x == minus_one {
+					found = true
+					break
+				}
+			}
+			if !found { return false }
+		}
+	}
+	return true
+}
+
+fn mulmod(n: i64) -> u64 {
+	let mut rng = Rng { state: 3 }
+	let mut h: u64 = 0
+	let mut primes: u64 = 0
+	for _i in 0..<n {
+		let c = rng.next() | 0x8000_0000_0000_0001
+		if is_prime(c) {
+			primes += 1
+			h = fold(h, c)
+		}
+	}
+	return fold(h, primes)
+}
+
+// 3. wyhash's mix, chained, and PCG64 (XSL RR 128/64).
+fn wymix(n: i64) -> u64 {
+	let mut h: u64 = 0x2d35_8dcc_aa6c_78a5
+	for i in 0..<n {
+		let x = (i as u64).wrapping_mul(0x8bb8_4b93_962e_acc9)
+		let (lo, hi) = mul_wide(h ^ 0xa076_1d64_78bd_642f, x ^ 0xe703_7ed1_a0b4_28db)
+		h = lo ^ hi
+	}
+	return h
+}
+
+comptime PCG_MUL_HI: u64 = 0x2360_ed05_1fc6_5da4
+comptime PCG_MUL_LO: u64 = 0x4385_df64_9fcc_f645
+comptime PCG_INC_HI: u64 = 0x5851_f42d_4c95_7f2d
+comptime PCG_INC_LO: u64 = 0x1405_7b7e_f767_814f
+
+fn pcg64(n: i64) -> u64 {
+	let mut hi: u64 = 0x0123_4567_89ab_cdef
+	let mut lo: u64 = 0xfedc_ba98_7654_3210
+	let mut sum: u64 = 0
+	for _i in 0..<n {
+		// state = state * MUL + INC modulo 2^128
+		let (plo, phi) = mul_wide(lo, PCG_MUL_LO)
+		let cross = lo.wrapping_mul(PCG_MUL_HI).wrapping_add(hi.wrapping_mul(PCG_MUL_LO))
+		let nlo = plo.wrapping_add(PCG_INC_LO)
+		let carry: u64 = if nlo < plo { 1 } else { 0 }
+		hi = phi.wrapping_add(cross).wrapping_add(PCG_INC_HI).wrapping_add(carry)
+		lo = nlo
+		sum = sum.wrapping_add((hi ^ lo).rotate_right(hi >> 58))
+	}
+	return sum
+}
+
+// 4. CRC-64/ECMA-182 (not reflected, the polynomial below with x^64), a byte
+// table; and a GHASH-style product in GF(2^128) modulo x^128 + x^7 + x^2 + x + 1,
+// not bit-reflected, with a 4-bit table of H.
+comptime CRC_POLY: u64 = 0x42f0_e1eb_a9ea_3693
+comptime DATA_WORDS: i64 = 8192
+
+fn crc64(n: i64) -> u64 {
+	let mut table: Array[u64, 256] = [0; 256]
+	for i in 0..<256 {
+		let mut c = (i as u64) << 56
+		for _k in 0..<8 {
+			if (c >> 63) == 1 {
+				c = (c << 1) ^ CRC_POLY
+			} else {
+				c = c << 1
+			}
+		}
+		table[i] = c
+	}
+	let mut rng = Rng { state: 4 }
+	let mut data: Vec[u64] = []
+	for _i in 0..<DATA_WORDS {
+		data.push(rng.next())
+	}
+	let mut crc: u64 = 0
+	for _pass in 0..<n {
+		for w in data {
+			for k in 0..<8 {
+				let b = (w >> (56 - 8 * k)) & 0xff
+				crc = table[((crc >> 56) ^ b) as i64] ^ (crc << 8)
+			}
+		}
+	}
+	return crc
+}
+
+// The 16 carry-less multiples k·h, k < 16, as (lo, hi).
+fn nibble_table(h: u64) -> Array[u64, 32] {
+	let mut t: Array[u64, 32] = [0; 32]
+	for k in 1..<16 {
+		let mut lo: u64 = 0
+		let mut hi: u64 = 0
+		for bit in 0..<4 {
+			if ((k >> bit) & 1) == 1 {
+				lo = lo ^ (h << bit)
+				if bit > 0 { hi = hi ^ (h >> (64 - bit)) }
+			}
+		}
+		t[2 * k] = lo
+		t[2 * k + 1] = hi
+	}
+	return t
+}
+
+// x ⊗ h through h's table, most significant nibble of x first: (lo, hi).
+fn clmul(t: Array[u64, 32], x: u64) -> (u64, u64) {
+	let mut lo: u64 = 0
+	let mut hi: u64 = 0
+	let mut s = 60
+	while s >= 0 {
+		hi = (hi << 4) | (lo >> 60)
+		lo = lo << 4
+		let k = ((x >> s) & 0xf) as i64
+		lo = lo ^ t[2 * k]
+		hi = hi ^ t[2 * k + 1]
+		s -= 4
+	}
+	return (lo, hi)
+}
+
+// x·0x87, the reduction's step: (lo, hi).
+fn times87(x: u64) -> (u64, u64) {
+	return (x ^ (x << 1) ^ (x << 2) ^ (x << 7), (x >> 63) ^ (x >> 62) ^ (x >> 57))
+}
+
+fn ghash(n: i64) -> u64 {
+	let mut rng = Rng { state: 5 }
+	let h_lo = rng.next()
+	let h_hi = rng.next()
+	let t_lo = nibble_table(h_lo)
+	let t_hi = nibble_table(h_hi)
+	let mut y_lo: u64 = 0
+	let mut y_hi: u64 = 0
+	for _i in 0..<n {
+		let x_lo = y_lo ^ rng.next()
+		let x_hi = y_hi ^ rng.next()
+		// the 256-bit product p3:p2:p1:p0
+		let (a_lo, a_hi) = clmul(t_lo, x_lo)
+		let (b_lo, b_hi) = clmul(t_hi, x_lo)
+		let (c_lo, c_hi) = clmul(t_lo, x_hi)
+		let (d_lo, d_hi) = clmul(t_hi, x_hi)
+		let p0 = a_lo
+		let mut p1 = a_hi ^ b_lo ^ c_lo
+		let mut p2 = b_hi ^ c_hi ^ d_lo
+		let p3 = d_hi
+		let (e_lo, e_hi) = times87(p3)
+		p1 = p1 ^ e_lo
+		p2 = p2 ^ e_hi
+		let (f_lo, f_hi) = times87(p2)
+		y_lo = p0 ^ f_lo
+		y_hi = p1 ^ f_hi
+	}
+	return fold(y_lo, y_hi)
+}
+
+fn main() throws {
+	let mut args = cli::args(trusted: true)
+	args.nth(0)
+	let workload = args.nth(0) ?? "wymix"
+	let n = text::parse_i64(args.nth(0) ?? "1000") ?? 1000
+	let sum = match workload {
+		"bigadd" => bigadd(n),
+		"bigmul" => bigmul(n),
+		"mulmod" => mulmod(n),
+		"wymix" => wymix(n),
+		"pcg64" => pcg64(n),
+		"crc64" => crc64(n),
+		"ghash" => ghash(n),
+		else => panic(f"no workload {workload}"),
+	}
+	println(f"{workload} {n} {sum}")
+}

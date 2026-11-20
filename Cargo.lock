@@ -1140,6 +1140,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "wide-ops-bench"
+version = "0.0.0"
+
+[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

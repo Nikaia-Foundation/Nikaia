@@ -1,0 +1,194 @@
+// Issue #876: what named wide operations (a full 64×64 → 128 product, a carry
+// chain, 128 ÷ 64, a carry-less product) would buy, measured before any
+// decision on them. Each workload is counted three ways:
+//
+// * `wide.nika`, today's Nikaia: 32-bit halves, carries by compare, tables;
+// * Rust `emu`, the same algorithm line for line: against Nikaia it is the
+//   language, not the missing instruction;
+// * Rust `native`, tuned: `u128`, `_addcarry_u64`, `PCLMULQDQ`; for
+//   `mulmod` also `u128rem` (`u128 %`, a call of `__umodti3`) and `div` (one
+//   `DIV r64`, the instruction `wide_rem` would reach).
+//
+// Counted with callgrind, never timed (docs/measuring.md), all outputs
+// compared byte for byte first. Every program runs at N and at 2N, and the
+// table holds the difference per unit of work, so start-up (the runtime, the
+// inputs, the tables) is not in it. See README.md.
+//
+//     nikaia run benches/wide-ops/bench.nika            the table README.md keeps
+//     nikaia run benches/wide-ops/bench.nika -- 0.2     the same at a fifth of N
+//
+// The compiler is `$NIKAIA`, else a release build of the repository's own.
+// Builds, outputs and callgrind's files go to target/wide-ops-bench.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn root() -> String throws {
+	return process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) -> String throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+	return r.stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-}").stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+// Both sides at opt-level 3, no LTO, release's 16 codegen units, the
+// baseline x86-64 CPU: the native variants switch on PCLMULQDQ per function
+// (`#[target_feature]`), as a library with a fallback would.
+fn build(nikaia: String, repo: String, out: String) throws {
+	let project = f"{out}/nika"
+	must(f"mkdir -p {project}/src", "mkdir")
+	must(f"cp {repo}/benches/wide-ops/wide.nika {project}/src/main.nika", "cp")
+	fs::write(
+		f"{project}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"wide\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\n",
+	)
+	must(f"cd {project} && {nikaia} build > /dev/null", "the build of wide.nika")
+	must(
+		f"cargo build -q --release -p wide-ops-bench --manifest-path {repo}/Cargo.toml --target-dir {out}/cargo",
+		"the build of the Rust side",
+	)
+}
+
+// One program's command line, by the row's name.
+fn command(out: String, program: String, workload: String, n: i64) -> String {
+	if program == "nikaia" { return f"{out}/nika/target/nikaia/bin/wide {workload} {n}" }
+	return f"{out}/cargo/release/wide-ops {workload} {program} {n}"
+}
+
+// Instructions and mispredicted branches (conditional and indirect) of one
+// run, from callgrind's totals (`events: Ir Bc Bcm Bi Bim`).
+fn count(out: String, cmd: String) -> (i64, i64) throws {
+	let file = f"{out}/cg.out"
+	must(
+		f"NIKAIA_RUNTIME_CONFIG={out}/io-blocking.toml timeout -s KILL 3600 valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {cmd} > /dev/null 2>{out}/valgrind.log",
+		f"callgrind of {cmd}",
+	)
+	let totals = must(f"grep -E '^(totals|summary):' {file} | head -1", "callgrind's totals")
+	let fields: Vec[String] = totals.split_whitespace().collect()
+	let instructions = text::parse_i64(fields[1]) ?? 0
+	let mispredicted = (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0)
+	return (instructions, mispredicted)
+}
+
+// `n / units`, rounded, with one decimal for `scale` 10 and two for 100.
+fn per(n: i64, units: i64, scale: i64) -> String {
+	let scaled = (n * scale + units / 2) / units
+	let fraction = scaled % scale
+	let pad = if scale == 100 && fraction < 10 { "0" } else { "" }
+	return f"{scaled / scale}.{pad}{fraction}"
+}
+
+struct Workload {
+	name: String,
+	n: i64,
+	// units of work per unit of N
+	units: i64,
+	unit: String,
+	programs: Vec[String],
+}
+
+fn main() throws {
+	let repo = root()
+	let mut args = cli::args()
+	args.nth(0)
+	// a scale for every N, in tenths: `0.2` is 2
+	let tenths = text::parse_i64((args.nth(0) ?? "1").replace(".", "")) ?? 10
+	let scale = if tenths < 10 { tenths } else { tenths * 10 }
+	let out = f"{repo}/target/wide-ops-bench"
+	must("command -v valgrind", "bench.nika needs valgrind (callgrind):")
+	must(f"mkdir -p {out}", "mkdir")
+	fs::write(f"{out}/io-blocking.toml", fs::Root::Anywhere, "io-method = \"blocking\"\n")
+	let nikaia = toolchain(repo.clone())
+	build(nikaia, repo, out)
+
+	let three = ["nikaia", "emu", "native"]
+	let workloads = [
+		Workload {
+			name: "bigadd",
+			n: 5000,
+			units: 2,
+			unit: "4096-bit add",
+			programs: three.clone(),
+		},
+		Workload {
+			name: "bigmul",
+			n: 50,
+			units: 1,
+			unit: "4096×4096-bit mul",
+			programs: three.clone(),
+		},
+		Workload {
+			name: "mulmod",
+			n: 2000,
+			units: 1,
+			unit: "Miller-Rabin test",
+			programs: ["nikaia", "emu", "native", "u128rem", "div"],
+		},
+		Workload { name: "wymix", n: 200000, units: 1, unit: "mix", programs: three.clone() },
+		Workload { name: "pcg64", n: 200000, units: 1, unit: "output", programs: three.clone() },
+		Workload { name: "crc64", n: 10, units: 65536, unit: "byte", programs: three.clone() },
+		Workload {
+			name: "ghash",
+			n: 20000,
+			units: 1,
+			unit: "16-byte block",
+			programs: three.clone(),
+		},
+	]
+
+	println("Instructions and mispredicted branches per unit of work (callgrind, N to 2N):")
+	println("")
+	println("| workload | unit | program | instr/unit | mispred/unit | vs native |")
+	println("|---|---|---|--:|--:|--:|")
+	for w in workloads {
+		let n = if scale < 10 { w.n * scale / 10 } else { w.n * scale / 100 }
+		let n = if n < 1 { 1 } else { n }
+		// the same output from every program, at both sizes
+		for size in [n, 2 * n] {
+			let want = must(command(out, "native", w.name, size), f"{w.name} native")
+			for p in w.programs {
+				let got = must(command(out, p, w.name, size), f"{w.name} {p}")
+				if got != want {
+					println(f"{w.name} {size}: {p} prints `{got}`, native `{want}`")
+					process::exit(1)
+				}
+			}
+		}
+		let units = n * w.units
+		let mut native: i64 = 0
+		let mut rows: Vec[(String, i64)] = []
+		for p in w.programs {
+			let (i1, b1) = count(out, command(out, p, w.name, n))
+			let (i2, b2) = count(out, command(out, p, w.name, 2 * n))
+			if p == "native" { native = i2 - i1 }
+			rows.push((
+				f"| {w.name} | {w.unit} | {p} | {per(i2 - i1, units, 10)} | {per(b2 - b1, units, 100)} |",
+				i2 - i1,
+			))
+		}
+		for (row, cost) in rows {
+			println(f"{row} {per(cost, native, 10)}× |")
+		}
+	}
+}
