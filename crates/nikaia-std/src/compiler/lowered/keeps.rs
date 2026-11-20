@@ -1150,6 +1150,7 @@ pub struct KeepsIndexes<'a, 'a1> {
 pub struct KeepsFound {
     pub key: String,
     pub uses: Uses,
+    pub counted: Vec<String>,
 }
 
 pub(crate) fn by_value(arg: &FnArg) -> bool { !arg.ty.is_view && !arg.mutable }
@@ -1224,12 +1225,14 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
     for view in units.iter() { declare_unit(view.words, view.items, &mut package); }
     let mut impls_of: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     let mut impl_rows: Vec<KeepsImplRow<'_>> = vec![];
+    let mut counted: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     let mut unit: i64 = 0;
     for view in units.iter() {
         for item in view.items.iter() {
             match &item.node {
                 Item::Fn { .. } => {
                     let found = match keeps_uses_of(view, &item.node, None, &ledger, library, &indexes, resolved, &mut |e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if !found.counted.is_empty() { counted.insert(nikaia_std::block::Text::from(found.key.to_string()), found.counted.copy_owned()); }
                     graph.insert(nikaia_std::block::Text::from(found.key.to_string()), found.uses);
                 },
                 Item::Impl { trait_name, target, methods } => {
@@ -1259,6 +1262,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                                 _ => { },
                             }
                         }
+                        if !found.counted.is_empty() { counted.insert(nikaia_std::block::Text::from(found.key.to_string()), found.counted.copy_owned()); }
                         graph.insert(nikaia_std::block::Text::from(found.key.to_string()), found.uses);
                     }
                 },
@@ -1325,6 +1329,24 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
             for parameter in parameters.iter() { list.push(nikaia_std::block::Text::from(parameter.to_string())); }
             contract.keeps = list;
         }
+    }
+    for (name, names) in counted.iter() {
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut params: Vec<(String, Ty)> = vec![];
+        let mut changed = false;
+        for (parameter, ty) in signature.params.iter() {
+            if nikaia_std::list::contains(&names, &parameter) && !nikaia_std::list::contains(&contract.keeps, &parameter) {
+                params.push((nikaia_std::block::Text::from(parameter.to_string()), Ty::Named { name: String::from("Bytes"), args: vec![], view: true }));
+                changed = true;
+            } else { params.push((nikaia_std::block::Text::from(parameter.to_string()), ty.clone())); }
+        }
+        if !changed { continue; }
+        for parameter in names.iter() { if !nikaia_std::list::contains(&contract.keeps, &parameter) { contract.keeps.push(nikaia_std::block::Text::from(parameter.to_string())); } }
+        contract.signature = Some(Signature { bounds: signature.bounds.copy_owned(), params, mutable: signature.mutable.copy_owned(), config: signature.config.copy_owned(), result: match signature.result.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } });
     }
     keeps_by_value(ledger, units, library);
     column
@@ -1574,7 +1596,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item,
             for a in args.iter() { parameters.insert(view.text(a.name)); }
             for c in config.iter() { parameters.insert(view.text(c.name)); }
             if is_method { parameters.insert(String::from("self")); }
-            if parameters.is_empty() { return Some(KeepsFound { key, uses: no_uses() }); }
+            if parameters.is_empty() { return Some(KeepsFound { key, uses: no_uses(), counted: vec![] }); }
             let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
             let mut unkept: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() {
@@ -1626,7 +1648,15 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item,
             }
             if is_method { types.insert(String::from("self"), nikaia_std::block::Text::from(target_name.to_string())); }
             let mut cloned_keeps: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for a in args.iter() { if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" { cloned_keeps.insert(view.text(a.name)); } }
+            let mut plain_bytes: collections::BTreeSet<String> = collections::BTreeSet::new();
+            for a in args.iter() {
+                if !a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" {
+                    if a.ty.is_view { cloned_keeps.insert(view.text(a.name)); } else if !a.mutable {
+                        cloned_keeps.insert(view.text(a.name));
+                        plain_bytes.insert(view.text(a.name));
+                    }
+                }
+            }
             let mut options: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() { if a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() { options.insert(view.text(a.name)); } }
             let mut code_lends: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
@@ -1636,13 +1666,19 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item,
                 for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_lends_at(view.words, &a.ty, at)); }
                 code_lends.insert(view.text(a.name), each);
             }
-            let context = KeepsBody { parameters: parameters.copy_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options, bounds };
+            let mut context = KeepsBody { parameters: parameters.copy_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options, bounds };
             let uses = uses_in(body, view.words, &mut *holes_of, &context, ledger, library);
-            let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for name in uses.kept.iter() { if !unkept.contains(name) { kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
+            #[allow(unused_mut)] let mut counted: Vec<String> = vec![];
+            if plain_bytes.iter().any(|name| { uses.kept.contains(nikaia_std::index::as_text(&name)) }) {
+                for name in plain_bytes.iter() { context.cloned_keeps.remove(name); }
+                let whole = uses_in(body, view.words, &mut *holes_of, &context, ledger, library);
+                for name in plain_bytes.iter() { if uses.kept.contains(name) && !whole.kept.contains(name) && !unkept.contains(name) { counted.push(nikaia_std::block::Text::from(name.to_string())); } }
+            }
+            let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut counted = counted;
+            for name in uses.kept.iter() { if !unkept.contains(name) && !nikaia_std::list::contains(&counted, &name) { kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
             let mut passed: Vec<Passed> = vec![];
             for p in uses.passed.iter() { if !unkept.contains(&p.parameter) { passed.push(Passed { parameter: nikaia_std::block::Text::from(p.parameter.to_string()), callee: nikaia_std::block::Text::from(p.callee.to_string()), at: p.at }); } }
-            return Some(KeepsFound { key, uses: Uses { kept, passed } });
+            return Some(KeepsFound { key, uses: Uses { kept, passed }, counted });
         },
         _ => { return None; },
     }

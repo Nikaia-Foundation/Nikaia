@@ -1,0 +1,53 @@
+// #2367: a plain lent `b: Bytes` is the spelling of `ref Bytes`
+// (ADR-views-3 D15), so keeping a cut or a clone of it keeps it as #2214's
+// `ref Bytes` does (ADR-373 D4): the function takes the `Bytes` with its
+// owner, and the cut or clone is the mapping at a count, not a copy. The
+// file stays mapped while what was kept lives, and the caller still has `b`.
+use std::fs
+
+fn mapped_count(name: String) -> i64 throws {
+    let maps = fs::read_to_string("/proc/self/maps", fs::Root::Anywhere)
+    let mut n = 0
+    for line in maps.split("\n") {
+        if line.ends_with(name) { n += 1 }
+    }
+    return n
+}
+
+fn from_param(b: Bytes, mut out: Vec[Bytes]) {
+    out.push(b[7..<13])
+}
+
+fn a_cut_of_a_cut(b: Bytes, mut out: Vec[Bytes]) {
+    out.push(b[7..<14][0..<4])
+}
+
+fn clone_plain(b: Bytes, mut out: Vec[Bytes]) {
+    out.push(b.clone())
+}
+
+fn cuts(root: ref fs::Root) -> Vec[Bytes] throws {
+    let whole: Bytes = fs::map("page", root)
+    let mut out: Vec[Bytes] = []
+    from_param(whole, out)
+    a_cut_of_a_cut(whole, out)
+    clone_plain(whole, out)
+    println(f"caller still has {whole.len()} bytes")
+    return out
+}
+
+fn show(root: ref fs::Root) throws {
+    let kept = cuts(root)
+    println(f"{kept[0].text()} {kept[1].text()} {kept[2].len()} mapped: {mapped_count("/page")}")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("page", root, "Oslo;3\nRome;9\nmore text to make it a page or so")
+    show(root)
+    println(f"after: {mapped_count("/page")}")
+    let mut out: Vec[Bytes] = []
+    from_param("0123456789abcdef".bytes, out)
+    clone_plain("xyz".bytes, out)
+    println(f"{out[0].text()} {out[1].text()}")
+}
