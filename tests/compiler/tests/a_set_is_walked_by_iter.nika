@@ -1,6 +1,6 @@
 use std::collections
 
-// ADR-collections-2 D3: `iter()` lends a set's elements, smallest first on a
+// ADR-collections-v3 D9: `iter()` lends a set's elements, smallest first on a
 // `BTreeSet`, in no order on a `HashSet` (#1006).
 fn main() throws {
     let mut s: collections::BTreeSet[String] = collections::BTreeSet()

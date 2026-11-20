@@ -1425,7 +1425,7 @@ impl EmitState {
                 return
             }
         }
-        // **`s.extend(xs.clone())` is `s.extend(xs.iter().cloned())`** (ADR-collections-1
+        // **`s.extend(xs.clone())` is `s.extend(xs.iter().cloned())`** (ADR-collections-v3
         // D4): the elements are the copy, and no list is built in between.
         if name == "extend" && args.len() == 1 && receiver != null && self.facts.collection_clones.contains(node_key(args[0])) {
             let target = receiver ?? return
@@ -1440,7 +1440,7 @@ impl EmitState {
                 else => {}
             }
         }
-        // **`m.extend(other.clone())` of a map** (ADR-collections-1 D6, D4):
+        // **`m.extend(other.clone())` of a map** (ADR-collections-v3 D6, D4):
         // each pair is the copy, and no map is built in between.
         if name == "extend" && args.len() == 1 && receiver != null && self.facts.map_clones.contains(node_key(args[0])) {
             let target = receiver ?? return
