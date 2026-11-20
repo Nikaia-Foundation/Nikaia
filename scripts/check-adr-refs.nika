@@ -82,7 +82,7 @@ fn refs_records(root: String, dir: String) -> Vec[String] throws {
     let mut out: Vec[String] = []
     let here = f"{root}/{dir}"
     if !fs::exists(here.clone(), fs::Root::Anywhere) { return out }
-    for entry in fs::read_dir(here, fs::Root::Anywhere) {
+    for entry in fs::read_dir(here, fs::Root::Anywhere; trusted: true) {
         let parts: Vec[String] = entry.to_text().split("/").collect()
         let name = parts[parts.len() - 1]
         if name.starts_with("adr-") && name.ends_with(".md") { out.push(f"{dir}/{name}") }
@@ -114,7 +114,7 @@ fn refs_searched(file: String) -> bool {
 fn refs_walk(root: String, dir: String, mut out: Vec[String]) throws {
     let mut here = root.clone()
     if dir.len() > 0 { here = f"{root}/{dir}" }
-    for entry in fs::read_dir(here, fs::Root::Anywhere) {
+    for entry in fs::read_dir(here, fs::Root::Anywhere; trusted: true) {
         let parts: Vec[String] = entry.to_text().split("/").collect()
         let name = parts[parts.len() - 1]
         if name.starts_with(".") || name == "target" || name == "__pycache__" { continue }
@@ -426,7 +426,7 @@ fn refs_unknown(root: String, files: Vec[String], have: collections::HashMap[Str
 
 fn main() throws {
     let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
+    for a in cli::args(trusted: true) { args.push(a) }
     let mut root: String = "."
     let mut k = 1
     while k < args.len() {
