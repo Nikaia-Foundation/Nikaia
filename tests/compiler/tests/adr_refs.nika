@@ -3,7 +3,9 @@
 // a clean tree, then one with a case per check - a dangling `D7` and `§9`, a
 // note's section cited as authority, two live versions of one topic, a title
 // that disagrees with its name, a record with no index row, a citation of an
-// archived record and a topic name no record carries.
+// archived record and a topic name no record carries. A package's source is
+// searched like a crate's (#2363); a brief or its report, a plan or the
+// record of a run, may quote a name no record carries.
 //
 // The fixture is written here, with `~` for the `-` of its names, and what is
 // shown is written back so: its made-up records would otherwise be findings
@@ -61,6 +63,8 @@ fn main() throws {
     put(tree.clone(), "docs/specification/adr/adr~beta~v1.md", "# ADR~betta~v1: Beta\n")
     put(tree.clone(), "docs/specification/adr/adr~gamma~v1.md", "# ADR~gamma~v1: Unlisted\n")
     put(tree.clone(), "crates/a/src/lib.rs", "// ADR~alpha~v1 D7, ADR~alpha~v1 §9 and ADR~old~v1 D1\n// ADR~alpha~v9 is no record; ADR~alpha~v1x is no name.\n")
+    put(tree.clone(), "packages/p/src/main.nika", "// ADR~alpha~v1 D8 in a package\n")
+    put(tree.clone(), "docs/briefs/a.md.report.md", "Friction: a name such as ADR~topic~1 stands for any record\n")
     put(tree.clone(), "packages/p/src/lib.nika", "// as ADR~old~v1 D1 said\n")
     println("--- one case per check")
     run(repo, nikaia, tree)

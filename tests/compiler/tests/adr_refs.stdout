@@ -5,8 +5,9 @@ every ADR name belongs to one record (2 checked)
 no live file cites an archived record
 exit 0
 --- one case per check
-2 dangling ADR citation(s):
+3 dangling ADR citation(s):
   crates/a/src/lib.rs: ADR~alpha-v1 D7 — no such decision
+  packages/p/src/main.nika: ADR~alpha-v1 D8 — no such decision
   crates/a/src/lib.rs: ADR~alpha-v1 §9 — no such section
 1 ADR(s) citing a section of a notes file as authority:
   docs/specification/adr/adr~alpha-v1.md:7: As handoff.md §3 says.

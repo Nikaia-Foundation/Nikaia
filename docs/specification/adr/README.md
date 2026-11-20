@@ -335,7 +335,12 @@ The partial changes one record made to another before
 [ADR-decision-records-v2](adr-decision-records-v2.md): each pair is listed here,
 so a reader of either finds the other. A `-v` record takes no new row: a change
 makes the next version of the changed topic instead. Records replaced as a whole are not here: they are in
-[`docs/history/adr/`](../../history/adr/).
+[`docs/history/adr/`](../../history/adr/). A consolidation that archives a
+record moves every row naming it, on either side, to the history's
+[displaced table](../../history/adr/README.md#what-the-archived-records-displaced-in-one-another);
+where the other side of a row stays live (an archived record changed a live
+one), the new `-v` record's **Supersedes / Related** line names that change
+(`changes ADR-002 D2 (...)`), since it takes no row here (#2360).
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
