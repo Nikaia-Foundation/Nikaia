@@ -195,7 +195,7 @@ static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 ///
 /// It is a generation and not a queue: each future reads its own reply channel,
 /// and all this has to say is *"something changed, poll again"*.
-static FINISHED: Mutex<u64> = Mutex::new(0);
+static FINISHED: Mutex<i64> = Mutex::new(0);
 static BELL: Condvar = Condvar::new();
 
 /// Rung by an I/O worker, after the operation and before it takes the next one.
@@ -606,7 +606,7 @@ impl Runtime {
     /// to tell the parkers after it has let the ring go, so a ring let go
     /// between the try and the wait still wakes this wait.
     #[cfg(all(target_os = "linux", feature = "async-io"))]
-    fn park_in_ring(&self, since: u64, limit: Option<std::time::Duration>) -> bool {
+    fn park_in_ring(&self, since: i64, limit: Option<std::time::Duration>) -> bool {
         use std::sync::atomic::Ordering;
         let ring = self
             .ring
@@ -1177,7 +1177,7 @@ pub mod io {
 
     /// The count of I/O completions the runtime has seen, read **before** a
     /// poll so that [`park`] cannot wait for a ring that has already been rung.
-    pub fn generation() -> u64 {
+    pub fn generation() -> i64 {
         *super::FINISHED.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -1195,7 +1195,7 @@ pub mod io {
     /// this bell: an I/O worker after an operation, a completion reaped from
     /// the ring (`Runtime::with_ring` counts it), a `Slot` being filled, a task finishing. So this is the one
     /// wait, and `false` means the bound ran out with nothing having moved.
-    pub fn wait_for_bell(since: u64, limit: Option<std::time::Duration>) -> bool {
+    pub fn wait_for_bell(since: i64, limit: Option<std::time::Duration>) -> bool {
         let mut count = super::FINISHED.lock().unwrap_or_else(|e| e.into_inner());
         match limit {
             None => {
@@ -1230,7 +1230,7 @@ pub mod io {
     /// nothing to do. `false` means there is nothing outstanding to wait for,
     /// which tells the executor that waiting would be waiting forever - and a
     /// hang is the worst way to report a defect (§6 step 1).
-    pub fn park(since: u64) -> bool {
+    pub fn park(since: i64) -> bool {
         park_for(since, None)
     }
 
@@ -1249,7 +1249,7 @@ pub mod io {
     /// kernel posting the completion for work it has already accepted. What D5
     /// names as the thing a deadline cannot cover — FFI that blocks the thread
     /// rather than pausing — is unchanged by this.
-    pub fn park_for(since: u64, limit: Option<std::time::Duration>) -> bool {
+    pub fn park_for(since: i64, limit: Option<std::time::Duration>) -> bool {
         let runtime = handle();
         match runtime.files() {
             #[cfg(all(target_os = "linux", feature = "async-io"))]
@@ -1479,56 +1479,11 @@ pub mod io {
 mod tests {
     use super::*;
 
-    // Kept as Rust (#2304), for "Unobservable std tests" (#2088): no test
-    // block reaches what these check. The ring's generation counter and the
-    // runtime's pointer identity have no Nikaia surface; the pair path behind
-    // `fs::read_both` cannot be called from a program (NK1171) and stays for
-    // `benches/overlap` (ADR-303). The tests a program observes moved to
-    // `tests/compiler/tests/rt_*.nika` (#2210); `describe` is a test block of
-    // `runtime/run_config.nika` (#2304).
+    // Kept as Rust (#2304, #2316): the runtime's pointer identity has no
+    // Nikaia surface, and goes with #2319. What the other tests checked is
+    // observed by programs now: `tests/compiler/tests/rt_*.nika` (#2210,
+    // #2316) and the test blocks of `runtime/run_config.nika`.
 
-    /// **An answer another thread reaps moves the generation** (0.0.259).
-    ///
-    /// The ring is one per process and every thread's poll and park takes all
-    /// of its completions off the queue, so a read's answer is often reaped by a
-    /// thread that is not waiting for it. The reader's park then has only the
-    /// generation to learn it by - it waits for a completion that has already
-    /// come otherwise, and where the read needs a second turn that only its own
-    /// poll submits, it waits for ever with the ring's lock held: the arm64 CI
-    /// job hung six hours in
-    /// `fs::many_threads_reading_and_writing_at_once_each_get_their_own_answer`.
-    ///
-    /// So: one read submitted and left alone, another read done start to end
-    /// on a second thread - which reaps both - and the count has to have moved.
-    /// On the fallback path there is no ring and nothing to hold.
-    #[test]
-    fn an_answer_another_thread_reaps_moves_the_generation() {
-        if handle().files() != Files::Completion {
-            return;
-        }
-        let dir = std::env::temp_dir().join(format!("nikaia-reaped-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
-        let (mine, theirs) = (dir.join("mine"), dir.join("theirs"));
-        std::fs::write(&mine, "mine").expect("a file to read");
-        std::fs::write(&theirs, "theirs").expect("another");
-
-        let left_alone = io::reading(&mine);
-        // Long enough for the kernel to have answered it, so the second
-        // thread's reap is the one that takes it off the queue.
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        let since = io::generation();
-        let read = std::thread::spawn(move || exec::block_on(io::reading(&theirs)))
-            .join()
-            .expect("the second thread reads");
-        assert_eq!(read.expect("its read"), b"theirs");
-        assert!(
-            io::generation() > since,
-            "a completion reaped on another thread left the generation where it \
-             was, so a park waiting for it cannot learn it came"
-        );
-        assert_eq!(exec::block_on(left_alone).expect("the first read"), b"mine");
-        std::fs::remove_dir_all(&dir).ok();
-    }
     /// D4, from the only angle a test can see it: the runtime a `std` call
     /// finds is already there, and it is the same one every call finds.
     #[test]
@@ -1537,98 +1492,5 @@ mod tests {
         let second = handle();
         assert!(std::ptr::eq(first, second), "two runtimes started");
         assert!(first.config().io_workers >= 1, "D4: one I/O thread always");
-    }
-
-    /// A pair through a named runtime, so the test can compare two mechanisms
-    /// rather than only whichever one this machine chose.
-    fn read_through(runtime: &Runtime, path: &Path) -> Vec<u8> {
-        match runtime.files() {
-            #[cfg(all(target_os = "linux", feature = "async-io"))]
-            Files::Completion => runtime
-                .with_ring(|ring| ring.read_many(&[path]))
-                .expect("a ring")
-                .pop()
-                .expect("one answer")
-                .expect("read"),
-            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
-            Files::Completion => unreachable!(),
-            Files::Blocking => {
-                let (reply, answer) = std::sync::mpsc::channel();
-                assert!(runtime.workers.send(worker::Op::Read {
-                    path: path.to_path_buf(),
-                    reply
-                }));
-                answer.recv().expect("answered").expect("read")
-            }
-        }
-    }
-
-    /// Both mechanisms answer a pair in the order it was asked for, which is
-    /// what makes the surface one surface.
-    #[test]
-    fn a_pair_is_answered_in_order_on_either_mechanism() {
-        let dir = std::env::temp_dir().join(format!("nikaia-rt-pair-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
-        let (a, b) = (dir.join("eins"), dir.join("zwei"));
-        std::fs::write(&a, "eins").expect("write");
-        std::fs::write(&b, "zwei").expect("write");
-
-        for method in [Method::Auto, Method::Blocking] {
-            let runtime = Runtime::build(
-                UserCode::Sequential,
-                Config {
-                    io_method: method,
-                    io_workers: 2,
-                    ..crate::runtime::run_config::config_default()
-                },
-            );
-            assert_eq!(read_through(&runtime, &a), b"eins", "{method:?}");
-            assert_eq!(read_through(&runtime, &b), b"zwei", "{method:?}");
-            runtime.workers.drain(std::time::Duration::from_secs(5));
-        }
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    /// The pair the **compiler** lowers onto answers the same bytes in the same
-    /// order on either mechanism (ADR-292 D6).
-    ///
-    /// What it costs differs - the completion path overlaps and the fallback
-    /// reads in written order - and what it *means* may not, because the
-    /// program that chose it did not ask for an overlap and must not be able to
-    /// tell that it got one.
-    #[test]
-    fn the_compilers_pair_answers_the_same_either_way() {
-        let dir = std::env::temp_dir().join(format!("nikaia-rt-d10-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
-        let (a, b) = (dir.join("eins"), dir.join("zwei"));
-        std::fs::write(&a, "eins").expect("write");
-        std::fs::write(&b, "zwei zwei").expect("write");
-
-        for method in [Method::Auto, Method::Blocking] {
-            let runtime = Runtime::build(
-                UserCode::Sequential,
-                Config {
-                    io_method: method,
-                    io_workers: 2,
-                    ..crate::runtime::run_config::config_default()
-                },
-            );
-            // Through the public surface, which is what a lowered program
-            // reaches: the runtime it finds is the process's, and this asserts
-            // the answer rather than which runtime answered.
-            let (first, second) = io::read_both(&a, &b);
-            assert_eq!(first.expect("the first read"), b"eins", "{method:?}");
-            assert_eq!(second.expect("the second read"), b"zwei zwei", "{method:?}");
-            // …and a missing file fails in its own half, not in the other's.
-            let (missing, there) = io::read_both(&dir.join("nicht-da"), &a);
-            assert!(missing.is_err(), "{method:?}");
-            assert_eq!(
-                there.expect("the file that is there"),
-                b"eins",
-                "{method:?}"
-            );
-            runtime.workers.drain(std::time::Duration::from_secs(5));
-        }
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

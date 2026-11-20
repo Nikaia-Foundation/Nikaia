@@ -13,6 +13,7 @@
 // documented file has: comments, blank lines, and `key = value` with an
 // optionally quoted value.
 
+use std::fs
 use std::text
 use std::time
 use std::rt
@@ -194,4 +195,48 @@ test "the description names the mechanism that was chosen" {
     let said = runtime.describe()
     assert(said.contains("io-method=auto"))
     assert(said.contains("chose completion") || said.contains("chose blocking"))
+}
+
+/// **An idle pool stays quiet** (#693; `src/rt/pool.rs`, #2316): with no task
+/// and no I/O, a turn that waited out its slice wakes nobody. Before, every
+/// turn rearmed and rang, so `rang` counted one ring per turn per worker.
+///
+/// The other tests run alongside and move the runtime's completion count,
+/// which is a real wake for this pool too: those are subtracted. Their I/O can
+/// still ring the pool more often than it moves the count (on CI: 49 rings for
+/// 24 moves, and 1145 for 886), so the pool is watched for up to ten windows
+/// and must stay quiet in one of them; a pool that wakes itself rings in every
+/// window.
+test "an idle pool does not wake itself" {
+    let pool = rt::pool::Pool::start(2)
+    let mut quiet = false
+    let mut windows = 0
+    while windows < 10 && !quiet {
+        let rang_before = pool.rang()
+        let before = rt::io::generation()
+        time::sleep(300.millis())
+        let rang = pool.rang() - rang_before
+        let mut others = rt::io::generation() - before - rang
+        if others < 0 {
+            others = 0
+        }
+        quiet = rang <= others + 3
+        windows += 1
+    }
+    pool.close()
+    assert(quiet)
+}
+
+/// **The calling thread is never an I/O worker** (ADR-037 D2; `src/rt/worker.rs`,
+/// #2316): a file read through `std`, which under `io-method = "blocking"` is
+/// answered by a worker, leaves the thread that asked as it was.
+test "the calling thread is never an io worker" {
+    let before = rt::worker::on_io_worker()
+    assert(!before)
+    let root = fs::scratch()
+    fs::write("eins", root, "eins")
+    let bytes = fs::read("eins", root)
+    assert(bytes.len() == 4)
+    let after = rt::worker::on_io_worker()
+    assert(!after)
 }

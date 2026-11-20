@@ -690,6 +690,49 @@ sync = true
 touches = []
 signature = "(self: ref rt::Runtime) -> String"
 
+# A pool of `threads` workers for tasks, `0` as many as the machine has, so a
+# test block can watch one of its own. `std`'s own (#2316).
+[type."rt::pool::Pool"]
+pub = false
+
+[fn."rt::pool::Pool::start"]
+pub = false
+panics = false
+sync = true
+signature = "(threads: i64) -> rt::pool::Pool"
+
+# How often an idle turn of the pool woke its workers. `std`'s own (#2316).
+[fn."rt::pool::Pool::rang"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(self: ref rt::pool::Pool) -> i64"
+
+# Stop the pool's workers. `std`'s own (#2316).
+[fn."rt::pool::Pool::close"]
+pub = false
+panics = false
+sync = true
+signature = "(self: ref rt::pool::Pool)"
+
+# The count of I/O completions the runtime has seen. `std`'s own (#2316).
+[fn."rt::io::generation"]
+pub = false
+panics = false
+sync = true
+signature = "() -> i64"
+
+# Whether the calling thread is one of the runtime's I/O workers, which a
+# thread running `std`'s user-facing functions never is (ADR-037 D2). `std`'s
+# own (#2316).
+[fn."rt::worker::on_io_worker"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "() -> bool"
+
 # The whole of standard input, as bytes.
 #
 # It may pause rather than holding the thread it is called on, and it fails

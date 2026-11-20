@@ -328,34 +328,3 @@ pub(super) fn blocking_write(
         .open(path)?;
     file.write_all(bytes)
 }
-
-// Kept as Rust (#2304), for "Unobservable std tests" (#2088): the I/O worker
-// flag is read only by a `debug_assert` in `rt/mod.rs`, and `nikaia run`
-// builds programs with debug assertions off, so no program can see it.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The boundary, from the only side a test can see it from: the calling
-    /// thread is never an I/O worker, and a worker's own loop always is.
-    #[test]
-    fn the_calling_thread_is_never_an_io_worker() {
-        assert!(!on_io_worker());
-        let workers = Workers::start(1);
-
-        // A worker answers, so it ran; and the answer arrived on this thread,
-        // which is not one.
-        let (reply, answer) = channel();
-        let path = std::env::temp_dir().join(format!("nikaia-worker-{}", std::process::id()));
-        std::fs::write(&path, "eins").expect("write");
-        assert!(workers.send(Op::Read {
-            path: path.clone(),
-            reply
-        }));
-        assert_eq!(answer.recv().expect("answered").expect("read"), b"eins");
-        assert!(!on_io_worker());
-
-        assert_eq!(workers.drain(std::time::Duration::from_secs(5)), 0);
-        std::fs::remove_file(&path).ok();
-    }
-}
