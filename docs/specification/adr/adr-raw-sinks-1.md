@@ -312,6 +312,12 @@ directory the program chose, as it does for a file it opens. A whole
 program name from outside, with no clean part before it, stays `NK1308`:
 it is looked up on `PATH` or names any file.
 
+A function hands back its proof (supervisor, 2026-11-20, #2375): a call is
+not outside where every value its function returns is proved, a literal (D10)
+or a guarded name joined to a clean part, whatever its arguments are. One
+returned value from outside makes the call outside, as one arm does for a
+`match`.
+
 Neither proves where a symlink points; under `Dir` the run time check does
 (ADR-108 D3), under `Anywhere` nothing does, as for a literal. A check of the
 file system (`fs::exists`, a `metadata` call) proves nothing: the answer is
