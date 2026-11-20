@@ -13,36 +13,39 @@
 // The fixture is written here, with `~` for the `-` of its citations, and
 // what is shown is written back so: the made-up records 901 and 902 would
 // otherwise be dangling citations to check-adr-refs.nika, which reads tests/.
+use std::env
 use std::fs
 use std::process
 
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3), no outside
+// data where it runs a program (ADR-397 D1).
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
-    if exe.len() > 0 { return exe }
-    return "target/fast/nikaia"
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
 }
 
+// The repository: a test program runs in its package's directory,
+// `tests/compiler`, two below the root; `.` where it is run from the root.
+// Literal paths, so nothing from outside names a file (ADR-raw-sinks-1 D11).
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return if fs::exists("scripts/drive.nika", fs::Root::Dir(".")) { "." } else { "../.." }
 }
 
 fn masked(s: String) -> String {
     return s.replace("ADR-", "ADR~").replace("adr-", "adr~")
 }
 
-fn put(dir: String, file: String, text: String) throws {
-    let path = f"{dir}/{file}".replace("~", "-")
-    process::run("mkdir", ["-p", process::run("dirname", [path.clone()]).stdout.trim().clone()])
-    fs::write(path, fs::Root::Anywhere, text.replace("~", "-"))
+// Writes `file` under `tree`, a root joined to a directory `std` made
+// (ADR-raw-sinks-1 D12, D13), its directories first.
+fn put(tree: fs::Root, file: String, text: String) throws {
+    let path = file.replace("~", "-")
+    let (dir, _) = path.rsplit_once("/") ?? (".", "")
+    fs::create_dir(dir, tree; recursive: true)
+    fs::write(path, tree, text.replace("~", "-"))
 }
 
-fn show(dir: String, file: String) throws {
+fn show(tree: fs::Root, file: String) throws {
     println(f"--- {file}")
-    print(masked(fs::read_to_string(f"{dir}/{file}", fs::Root::Anywhere)))
+    print(masked(fs::read_to_string(file, tree)))
 }
 
 fn run(repo: String, nikaia: String, args: Vec[String]) throws {
@@ -57,21 +60,22 @@ fn run(repo: String, nikaia: String, args: Vec[String]) throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let tree = f"{dir}/tree"
-    let table = f"{dir}/table.txt"
-    fs::write(table.clone(), fs::Root::Anywhere, "# the decisions of 901 move apart; 902 moves whole\n901 D3 -> moved-v1 D1\n901 D4 -> moved-v1 D2\n901 D5 -> other-v1 D7\n902 -> moved-v1\n")
+    let dir = fs::scratch()
+    fs::create_dir("tree", dir; recursive: true)
+    let tree = dir.join("tree")
+    let tree_path = f"{dir.path().display()}/tree"
+    let table = f"{dir.path().display()}/table.txt"
+    fs::write("table.txt", dir, "# the decisions of 901 move apart; 902 moves whole\n901 D3 -> moved-v1 D1\n901 D4 -> moved-v1 D2\n901 D5 -> other-v1 D7\n902 -> moved-v1\n")
     put(tree.clone(), "docs/notes.md", "One: ADR~901 D3.\nList: ADR~901 D3, D4.\nRange: ADR~901 D3-D4, ADR~901 D3–D4.\nOwn: ADR~901's D4.\nWhole: ADR~902, and ADR~902 D6.\nSplit: ADR~901 D3, D5.\nSection: ADR~901 §2.\nUnknown: ADR~901 D9.\nHistory: [ADR~901](../docs/history/adr/adr~901.md) D3.\nAstray: [ADR~901](adr~901.md) D3.\n")
     put(tree.clone(), "docs/specification/adr/adr~903.md", "Links: [ADR~901](adr~901.md) D3, [901](adr~901.md) D4, [902](adr~902.md).\n")
     put(tree.clone(), "crates/a/src/lib.rs", "// ADR~902 D2 and ADR~901 D5\n    // a rule (ADR~901\n    // D4), and more\n// ADR~901 D3,\n// D4 past the break\n")
     put(tree.clone(), "packages/p/src/main.nika", "// ADR~901 D4 in a package\n")
     put(tree.clone(), "docs/history/adr/README.md", "ADR~901 D3 is archived.\n")
     put(tree.clone(), "src/main.nika", "// ADR~901 D3 outside the searched files\n")
-    run(repo.clone(), nikaia.clone(), [table.clone(), "--root", tree.clone(), "--dry-run"])
+    run(repo.clone(), nikaia.clone(), [table.clone(), "--root", tree_path.clone(), "--dry-run"])
     show(tree.clone(), "docs/notes.md")
-    run(repo, nikaia, [table, "--root", tree.clone()])
+    run(repo, nikaia, [table, "--root", tree_path])
     for file in ["docs/notes.md", "docs/specification/adr/adr~903.md", "crates/a/src/lib.rs", "packages/p/src/main.nika", "docs/history/adr/README.md", "src/main.nika"] {
         show(tree.clone(), file.replace("~", "-"))
     }
-    process::run("rm", ["-rf", dir])
 }

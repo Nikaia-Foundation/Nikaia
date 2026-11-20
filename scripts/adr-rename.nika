@@ -37,6 +37,7 @@
 
 use std::cli
 use std::fs
+use std::path
 use std::process
 use std::regex
 use std::text
@@ -139,6 +140,7 @@ fn rename_walk(root: String, dir: String, mut out: Vec[String]) throws {
         if name == ".git" || name == "target" { continue }
         let mut rel = name.clone()
         if dir.len() > 0 { rel = f"{dir}/{name}" }
+        if !path::is_below(rel) { continue }
         if fs::metadata(f"{root}/{rel}", fs::Root::Anywhere).is_dir() {
             rename_walk(root, rel, out)
         } else if rename_searched(rel) {
@@ -260,7 +262,7 @@ fn rename_one(table: Vec[Move], file: String, whole: regex::Regex[regex::Dynamic
 
 fn main() throws {
     let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
+    for a in cli::args(trusted: true) { args.push(a) }
     let mut table_file: String = ""
     let mut root: String = "."
     let mut dry = false

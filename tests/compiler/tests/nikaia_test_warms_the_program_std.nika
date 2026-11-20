@@ -9,16 +9,10 @@ use std::env
 use std::fs
 use std::process
 
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3), no outside
+// data where it runs a program (ADR-397 D1).
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
-	if exe.len() > 0 { return exe }
-	return "target/fast/nikaia"
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
 }
 
 // The user cache `nikaia` uses (`Layout::user_cache_dir`).
@@ -41,17 +35,17 @@ fn warm_at(cache: String, dir: String) -> String throws {
 	return f"{cache}/test-places/{tag}/warm-up/project/src/main.nika"
 }
 
-fn project(tmp: String, name: String, program: String, expected: String) throws {
-	let dir = f"{tmp}/{name}"
-	process::run("mkdir", ["-p", f"{dir}/src", f"{dir}/tests"])
+fn project(tmp: fs::Root, name: String, program: String, expected: String) throws {
+	fs::create_dir(f"{name}/src", tmp; recursive: true)
+	fs::create_dir(f"{name}/tests", tmp; recursive: true)
 	fs::write(
-		f"{dir}/nikaia.toml",
-		fs::Root::Anywhere,
+		f"{name}/nikaia.toml",
+		tmp,
 		f"[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n",
 	)
-	fs::write(f"{dir}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-	fs::write(f"{dir}/tests/{name}.nika", fs::Root::Anywhere, program)
-	fs::write(f"{dir}/tests/{name}.stdout", fs::Root::Anywhere, expected)
+	fs::write(f"{name}/src/main.nika", tmp, "fn main() {}\n")
+	fs::write(f"{name}/tests/{name}.nika", tmp, program)
+	fs::write(f"{name}/tests/{name}.stdout", tmp, expected)
 }
 
 fn tested(tmp: String, name: String) throws {
@@ -75,9 +69,10 @@ fn tested(tmp: String, name: String) throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
+	let base = f"{tmp.path().display()}"
 	project(
-		tmp,
+		tmp.clone(),
 		"starts",
 		"use std::env\nuse std::fs\nuse std::process\n\nfn main() throws {\n    let cache = env::var(\"NIKAIA_CACHE_DIR\") ?? \"\"\n    let trees = process::run(\"ls\", [f\"{cache}/rlib\"]).stdout.trim().len() > 0\n    println(f\"rlib tree: {trees}\")\n    let warm = env::var(\"WARM_AT\") ?? \"\"\n    let found = fs::exists(warm, fs::Root::Anywhere)\n    println(f\"warmed up: {found}\")\n}\n",
 		"rlib tree: true\nwarmed up: true\n",
@@ -88,7 +83,6 @@ fn main() throws {
 		"use std::env\nuse std::fs\n\nfn main() throws {\n    let warm = env::var(\"WARM_AT\") ?? \"\"\n    let found = fs::exists(warm, fs::Root::Anywhere)\n    println(f\"warmed up: {found}\")\n}\n",
 		"warmed up: false\n",
 	)
-	tested(tmp, "starts")
-	tested(tmp, "stays")
-	process::run("rm", ["-rf", tmp])
+	tested(base.clone(), "starts")
+	tested(base, "stays")
 }
