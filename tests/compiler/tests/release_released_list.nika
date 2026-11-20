@@ -17,12 +17,14 @@ fn toolchain(repo: String) -> String throws {
     return f"{repo}/target/fast/nikaia"
 }
 
-// The STOP lines of a dry run, with the temp dir as `T` (the CI line varies).
+// The STOP lines of a dry run, with the temp dir as `T`. The dry run runs in
+// the lane and names it `.`: `release.nika` cuts a line at 160 bytes, and a CI
+// scratch path is long enough to cut the line before the replacement.
 fn stops(nikaia: String, repo: String, dir: String) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/release.nika", "--", "--dry-run", dir.clone()]; dir: repo)
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/release.nika", "--", "--dry-run", "."]; dir: dir)
     let mut shown: String = ""
     for line in out.stdout.split("\n") {
-        if line.starts_with("STOP") || line.starts_with("SKIPPED") { shown = shown + line.replace(dir.clone(), "T") + "\n" }
+        if line.starts_with("STOP") || line.starts_with("SKIPPED") { shown = shown + line.replace("STOP ./", "STOP T/") + "\n" }
     }
     return shown
 }
