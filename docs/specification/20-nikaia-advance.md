@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1483 (Draft)
+**Version:** 0.0.1486 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -810,6 +810,8 @@ The syntax is identical at both values of the option. A function definition carr
 * **At `yes`:** the runtime runs tasks on a pool of worker threads; `user-pool` in the runtime configuration sets their number.
 
 User code is written in direct style: nothing marks where it pauses. The compiler places the suspension points. `await` is not a word of the language, and `async` never marks a function: it starts a task (Part I 8.1.2).
+
+**`task::yield()`** gives the thread up once without waiting for anything. It is a suspension point: the calling task goes behind the tasks that are ready and goes on when it is polled again. It takes no time and says nothing about which task runs in between. At `no` the other ready tasks of the thread run first; at `yes` it hands its worker only to the tasks ready on that worker, and a task on another worker runs at the same time anyway.
 
 ### 11.2. Parallelism via `async`
 Calling a function runs it now. A task that runs concurrently or in parallel is started with `async` (Part I 8.1.2). This section is about the free task, `async(detached)` (Part I 8.2), which may outlive the function that starts it; a child task borrows and is waited for by its group, so the crossing rules below ask only what it hands back (Part III C.5).

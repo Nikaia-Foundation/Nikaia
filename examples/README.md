@@ -126,7 +126,7 @@ that is neither.
 What the bootstrap compiler handles: functions and methods, `impl` blocks, `struct` and `use`
 items, `let`, assignment, `for`, `if`, `return`, calls, field access, indexing, casts, struct
 literals and constructors, lambdas, operators, `throws`/`catch`/`??`, string interpolation — and,
-since [ADR-296](../docs/specification/adr/adr-296.md), the whole `grammar` construct: rules,
+since [ADR-grammar-syntax-v1](../docs/specification/adr/adr-grammar-syntax-v1.md), the whole `grammar` construct: rules,
 patterns, `@frame`, `fold`/`par_fold`, and `dsl … from …` with the driver `user_parallelism` asks for.
 Errors are reported on the `.nika` line that caused them
 ([ADR-300](../docs/specification/adr/adr-300.md)), and since
@@ -331,7 +331,7 @@ parallel section.
 Splitting a buffer at line boundaries into one chunk per core, with each chunk a slice of the
 original, had no spelled-out form.
 
-[ADR-296](../docs/specification/adr/adr-296.md) closes it by **dissolving** it rather than
+[ADR-grammar-parallel-v1](../docs/specification/adr/adr-grammar-parallel-v1.md) closes it by **dissolving** it rather than
 specifying `split_aligned`. A chunking helper asks the user to restate as an argument what the
 grammar already says — that a measurement ends at `"\n"` — and then to hand-write the
 split/parallel/merge pipeline that follows from it. Instead the grammar carries both halves:
@@ -360,7 +360,7 @@ unmap of a large read-only mapping at process exit. Parallelism stays opt-in: a 
 never parallelised behind your back, because a merge over floats would make the answer depend on
 the core count.
 
-**G8 — the default hasher.** Raised by ADR-296, which framed it as a question about the build mode and was
+**G8 — the default hasher.** Raised by the first grammar record, which framed it as a question about the build mode and was
 wrong to. A switch answers "which runtime", never "who supplied these bytes": a single-threaded
 single-threaded server hashing attacker-supplied header names is exactly as vulnerable as a parallel one,
 and a compute job over operator-chosen data has no adversary in either.

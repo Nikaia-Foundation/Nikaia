@@ -1,5 +1,5 @@
 //! A grammar's action may not pause
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md)).
+//! ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md)).
 //!
 //! A rule's action is arbitrary Nikaia, so it may call something that pauses —
 //! and nothing refused it. The emitter wrote `.await` inside the synchronous
@@ -58,7 +58,7 @@ fn a_pausing_call_in_an_action_is_refused() {
 }
 
 /// **A fold's `step` is action code too**
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md)), so the flag is set
+/// ([ADR-grammar-actions-v1](../../../../docs/specification/adr/adr-grammar-actions-v1.md)), so the flag is set
 /// around the pattern's lambdas and not around the block alone.
 #[test]
 fn a_pausing_call_in_a_folds_step_is_refused() {

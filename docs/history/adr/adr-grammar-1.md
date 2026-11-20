@@ -5,7 +5,7 @@
 **Answers:** how a grammar carries a value from one rule to another (YAML's
 indentation, #928), and how a brace after a pattern is read once a bound may
 hold a value (#932)
-**Supersedes / Related:** [ADR-296](../../specification/adr/adr-296.md) D33 (the action as the block
+**Supersedes / Related:** [ADR-296](adr-296.md) D33 (the action as the block
 after the pattern, no arrow: withdrawn by D1); Part I 5.1 (Subject ; Config);
 Part I 2.2 (the integer types; a length is an `i64`); [ADR-037](../../specification/adr/adr-037.md)
 (the target decides nothing about what a program means); [ADR-375](../../specification/adr/adr-375.md)

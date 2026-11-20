@@ -272,7 +272,7 @@ impl EmitState {
             if chosen != *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } { return format!("{}::default", chosen); }
         }
         let mut mapped: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for segment in segments.iter() { mapped.push(self.map_name(trusting, segment)); }
+        for segment in segments.iter() { mapped.push(escaped_name(&self.map_name(trusting, segment))); }
         let joined = nikaia_std::block::Text::from(mapped.join("::"));
         unaliased_in(world.aliases, &joined)
     }

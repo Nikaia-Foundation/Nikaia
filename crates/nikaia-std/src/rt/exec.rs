@@ -656,36 +656,10 @@ impl<T> Future for Waiting<T> {
     }
 }
 
-/// Hand control back to the executor once, so something else may run.
-///
-/// What a suspension point is, with no I/O behind it. `std`'s pausing entries
-/// will return futures of their own (ADR-055 §6 step 3); this is the smallest
-/// one there is, and it is what a test can interleave on.
-pub struct Yield(bool);
-
-impl Yield {
-    pub fn once() -> Yield {
-        Yield(false)
-    }
-}
-
-impl Future for Yield {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<()> {
-        if self.0 {
-            return Poll::Ready(());
-        }
-        self.0 = true;
-        // Wake immediately: this is not a wait, it is a place to be interrupted.
-        context.waker().wake_by_ref();
-        Poll::Pending
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::task::Yield;
     use std::rc::Rc;
 
     /// **A suspension point is a place the executor may run something else** —

@@ -6,7 +6,7 @@
 //! crossover.** This is where a crossover is measured.
 //!
 //! Instructions retired, under callgrind, on the same tree - which is how
-//! ADR-010's hasher was measured (ADR-296) and is the only kind of number
+//! ADR-010's hasher was measured (ADR-grammar-input-v1) and is the only kind of number
 //! this repository has ever accepted. Wall-clock on a shared machine is not a
 //! measurement; an instruction count is deterministic and diffable.
 //!

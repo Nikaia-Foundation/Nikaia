@@ -8,6 +8,22 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1486] — 2026-11-20
+
+**ADR-296 moves to the history once every decision in it has a new record (#2271)**
+- ADR-296 is archived: each of its 42 decisions lives in one of the grammar-*-v1 records, and its full text is in the history.
+
+## [0.0.1485] — 2026-11-20
+
+**Builders' changes (#2183, #2363)**
+- `nikaia fix --only CODE` makes only the edits of the findings `CODE` names (repeatable), so a migration to one new fix-able finding leaves the others' edits out
+- The ADR citation check and adr-rename search packages/; adr-rename lists a link that reaches no record directory; briefs may quote example ADR names.
+
+## [0.0.1484] — 2026-11-20
+
+**The ADR citation check and adr-rename search packages/ too (#2362)**
+- The ADR citation check (scripts/check-adr-refs.nika) and scripts/adr-rename.nika also search packages/, so a package that cites an archived record now fails the check and gets rewritten by the rename tool.
+
 ## [0.0.1483] — 2026-11-20
 
 **The decisions on a grammar entry that takes a type live in one record, ADR-grammar-typed-read-v1 (#2270)**

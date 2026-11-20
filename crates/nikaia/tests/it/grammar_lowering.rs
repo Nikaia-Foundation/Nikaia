@@ -580,7 +580,7 @@ fn one_brc_grammar_half() -> String {
 
 #[test]
 fn the_grammar_half_of_the_1brc_example_lowers() {
-    // ADR-296: the file as a whole does not compile yet - its `impl` blocks,
+    // ADR-grammar-lowering-v1: the file as a whole does not compile yet - its `impl` blocks,
     // `throws`/`catch` and string interpolation are not lowered. Its grammar
     // does, and that is the half this work was about.
     let emitted = emit(&one_brc_grammar_half(), Build::default());

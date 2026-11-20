@@ -228,7 +228,7 @@ same sequence; neither consumes anything its argument does not.
 
 Reproduction: `examples/1brc.nika` with `whole:dec[i32](digit{1,2})`. It compiles
 and runs correctly under `@frame(…, unchecked)`, which is how the measurement in
-[ADR-296](../specification/adr/adr-296.md) was taken.
+[ADR-grammar-parallel-v1](../specification/adr/adr-grammar-parallel-v1.md) was taken.
 
 ---
 

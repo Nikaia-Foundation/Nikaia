@@ -5,8 +5,9 @@
 // (its decisions keep their numbers), a citation whose decisions start on the
 // next comment line (#2298), and what it lists instead of rewriting: a list
 // split over two records, a `§` citation, a decision the table does not name,
-// a list that goes on past a line break. A link to the history's copy, a link that does not
-// reach `docs/specification/adr/` and `docs/history/` stay as they are.
+// a list that goes on past a line break, a link whose path reaches neither
+// record directory (#2363). A package's source is searched like a crate's;
+// a link to the history's copy and `docs/history/` stay as they are.
 // `--dry-run` prints the same and writes nothing.
 //
 // The fixture is written here, with `~` for the `-` of its citations, and
@@ -63,12 +64,13 @@ fn main() throws {
     put(tree.clone(), "docs/notes.md", "One: ADR~901 D3.\nList: ADR~901 D3, D4.\nRange: ADR~901 D3-D4, ADR~901 D3–D4.\nOwn: ADR~901's D4.\nWhole: ADR~902, and ADR~902 D6.\nSplit: ADR~901 D3, D5.\nSection: ADR~901 §2.\nUnknown: ADR~901 D9.\nHistory: [ADR~901](../docs/history/adr/adr~901.md) D3.\nAstray: [ADR~901](adr~901.md) D3.\n")
     put(tree.clone(), "docs/specification/adr/adr~903.md", "Links: [ADR~901](adr~901.md) D3, [901](adr~901.md) D4, [902](adr~902.md).\n")
     put(tree.clone(), "crates/a/src/lib.rs", "// ADR~902 D2 and ADR~901 D5\n    // a rule (ADR~901\n    // D4), and more\n// ADR~901 D3,\n// D4 past the break\n")
+    put(tree.clone(), "packages/p/src/main.nika", "// ADR~901 D4 in a package\n")
     put(tree.clone(), "docs/history/adr/README.md", "ADR~901 D3 is archived.\n")
     put(tree.clone(), "src/main.nika", "// ADR~901 D3 outside the searched files\n")
     run(repo.clone(), nikaia.clone(), [table.clone(), "--root", tree.clone(), "--dry-run"])
     show(tree.clone(), "docs/notes.md")
     run(repo, nikaia, [table, "--root", tree.clone()])
-    for file in ["docs/notes.md", "docs/specification/adr/adr~903.md", "crates/a/src/lib.rs", "docs/history/adr/README.md", "src/main.nika"] {
+    for file in ["docs/notes.md", "docs/specification/adr/adr~903.md", "crates/a/src/lib.rs", "packages/p/src/main.nika", "docs/history/adr/README.md", "src/main.nika"] {
         show(tree.clone(), file.replace("~", "-"))
     }
     process::run("rm", ["-rf", dir])

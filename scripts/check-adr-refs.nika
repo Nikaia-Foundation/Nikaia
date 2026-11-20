@@ -96,6 +96,8 @@ fn refs_records(root: String, dir: String) -> Vec[String] throws {
 fn refs_searched(file: String) -> bool {
     if file.starts_with("docs/history/") || file == self_path() { return false }
     if file.starts_with("crates/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with("/Cargo.toml") }
+    // A package's sources, tests and manifest; not its test data.
+    if file.starts_with("packages/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with(".md") || file.ends_with("/nikaia.toml") || file.ends_with("/Cargo.toml") }
     for dir in ["tests/", "examples/", "benches/", "scripts/", "editors/"] {
         if file.starts_with(dir) { return true }
     }
@@ -398,6 +400,9 @@ fn refs_unknown(root: String, files: Vec[String], have: collections::HashMap[Str
     let name = regex::dynamic("^(" + topic_re() + ")(?:[^A-Za-z0-9_]|$)")
     let mut found: Vec[String] = []
     for file in files {
+        // A brief or its report is a plan or a record of a run, like the
+        // history: it may quote a name of the scheme as an example.
+        if file.starts_with("docs/briefs/") { continue }
         let mut n = 0
         for line in refs_read(root, file.clone()).split("\n") {
             n += 1
